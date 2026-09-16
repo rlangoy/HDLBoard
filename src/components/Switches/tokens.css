@@ -1,0 +1,3 @@
+/* Moved to ../board/tokens.css so every board group shares one scale.
+   This file stays as a forwarder so existing imports keep working. */
+@import '../board/tokens.css';

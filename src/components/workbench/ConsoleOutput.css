@@ -1,0 +1,88 @@
+.wb-console {
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--wb-console-bg);
+  border-top: 1px solid #1e293b;
+}
+
+.wb-console__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid #1e293b;
+  flex: none;
+}
+
+.wb-console__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.wb-console__clear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #334155;
+  background: transparent;
+  color: #cbd5e1;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wb-console__clear:hover {
+  background: #1e293b;
+}
+
+.wb-console__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 16px 14px;
+  font-family: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.wb-console__line {
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wb-console__line.is-success {
+  color: #4ade80;
+}
+
+.wb-console__line.is-error {
+  color: #f87171;
+}
+
+.wb-console__time {
+  color: #64748b;
+}
+
+.wb-icon--trash {
+  width: 10px;
+  height: 11px;
+  position: relative;
+  border: 1.4px solid currentColor;
+  border-top: none;
+  border-radius: 0 0 2px 2px;
+}
+.wb-icon--trash::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -3px;
+  width: 12px;
+  height: 1.4px;
+  background: currentColor;
+}

@@ -1,0 +1,4 @@
+/* The card, bit row and readout used to live here; they are shared
+   board chrome now and moved to ../board/panel.css. Kept as a
+   forwarder so existing imports keep working. */
+@import '../board/panel.css';

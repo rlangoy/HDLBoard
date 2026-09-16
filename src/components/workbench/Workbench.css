@@ -1,0 +1,113 @@
+/* ------------------------------------------------------------------ *
+ * Workbench — the IDE shell from DesignResources/WorkBench.png.
+ *
+ * Unlike the board parts in components/board, this chrome has no
+ * hardware to be measured against, so its tokens are ordinary UI
+ * values rather than ratios of a scale unit. They are still collected
+ * here, once, for the same reason: no magic numbers scattered through
+ * the other files in this folder.
+ * ------------------------------------------------------------------ */
+
+.wb {
+  --wb-header-h: 56px;
+  --wb-console-h: 180px;
+  --wb-sidebar-w: 250px;
+  /* Wide enough for the board's own 2-column grid at size={24} — see
+     the comment on .wb-right below before shrinking this. */
+  --wb-right-w: 760px;
+
+  --wb-border: #e2e8f0;
+  --wb-sidebar-bg: #f8fafc;
+  --wb-hover: #eef2f7;
+  --wb-text: #0f172a;
+  --wb-text-muted: #64748b;
+
+  --wb-accent: #2f6fed;
+  --wb-accent-dark: #1d4ed8;
+  --wb-accent-soft: #e5efff;
+
+  --wb-header-bg: #3f6fc4;
+  --wb-header-bg-dark: #315999;
+
+  --wb-success: #16a34a;
+  --wb-success-dark: #15803d;
+
+  --wb-danger: #ef4444;
+  --wb-danger-dark: #dc2626;
+
+  --wb-console-bg: #0f172a;
+
+  height: 100vh;
+  display: grid;
+  grid-template-rows: var(--wb-header-h) 1fr var(--wb-console-h);
+  font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
+  color: var(--wb-text);
+  background: #ffffff;
+}
+
+.wb-body {
+  grid-row: 2;
+  display: flex;
+  min-height: 0;
+}
+
+/*
+ * The left pane: a tinted strip holding two stacked cards (Simulation,
+ * then Files) rather than one flush panel — matches the reference
+ * Simulate-and-Files-pane mockup. Width, background, the scrollbar and
+ * the border against the editor all live here now; FileExplorer.css's
+ * .wb-files is just the card underneath it.
+ */
+.wb-sidebar {
+  width: var(--wb-sidebar-w);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  overflow-y: auto;
+  background: var(--wb-sidebar-bg);
+  border-right: 1px solid var(--wb-border);
+}
+
+/*
+ * Board's own 2x2 grid (components/board/Board.css) only drops to one
+ * column below a 900px *viewport* width — it has no way to see that
+ * it is sitting in a narrower sidebar. At size={24} its two columns
+ * need ~700px, so this panel is sized to give it that room; below
+ * --wb-narrow the panel shrinks and forces the single-column fallback
+ * itself, rather than letting the board grid overflow it.
+ */
+.wb-right {
+  width: var(--wb-right-w);
+  flex: none;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-left: 1px solid var(--wb-border);
+  background: #ffffff;
+}
+
+.wb-files__hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@media (max-width: 1350px) {
+  .wb {
+    --wb-right-w: 400px;
+  }
+  /* Force the fallback Board.css already defines below 900px viewport
+     width — this panel is that narrow well before the viewport is. */
+  .wb-right .pb-board {
+    grid-template-columns: max-content;
+  }
+}

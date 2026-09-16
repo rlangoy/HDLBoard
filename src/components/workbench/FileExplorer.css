@@ -1,0 +1,239 @@
+.wb-files {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.wb-files__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 10px;
+}
+
+.wb-files__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-files__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+
+.wb-files__upload,
+.wb-files__new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-files__upload {
+  border: 1px solid var(--wb-accent-dark);
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-files__upload:hover {
+  background: var(--wb-accent-dark);
+}
+
+.wb-files__new {
+  border: 1px solid var(--wb-border);
+  background: #ffffff;
+  color: var(--wb-text);
+}
+
+.wb-files__new:hover {
+  background: var(--wb-hover);
+}
+
+.wb-files__tree {
+  padding: 0 8px 16px;
+}
+
+.wb-files__folder-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--wb-text-muted);
+  text-transform: uppercase;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wb-files__folder-label:hover {
+  background: var(--wb-hover);
+}
+
+.wb-files__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+}
+
+.wb-files__file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--wb-text);
+  text-align: left;
+  padding: 6px 8px 6px 30px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wb-files__file:hover {
+  background: var(--wb-hover);
+}
+
+.wb-files__file.is-active {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
+  font-weight: 600;
+}
+
+/* ---- icons ---------------------------------------------------------- */
+
+.wb-icon--upload {
+  width: 12px;
+  height: 12px;
+  position: relative;
+}
+.wb-icon--upload::before {
+  /* the arrow: stem + head, one flat-bottomed pentagon */
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 6px;
+  height: 9px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 45%, 70% 45%, 70% 100%, 30% 100%, 30% 45%, 0 45%);
+}
+.wb-icon--upload::after {
+  /* the tray it lands in */
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.wb-icon--plus {
+  width: 12px;
+  height: 12px;
+  position: relative;
+}
+.wb-icon--plus::before,
+.wb-icon--plus::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+  border-radius: 1px;
+}
+.wb-icon--plus::before {
+  left: 5px;
+  top: 0;
+  width: 2px;
+  height: 12px;
+}
+.wb-icon--plus::after {
+  left: 0;
+  top: 5px;
+  width: 12px;
+  height: 2px;
+}
+
+.wb-icon--chevron {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+  margin-left: 2px;
+}
+.wb-icon--chevron.is-open {
+  transform: rotate(45deg);
+}
+
+.wb-icon--folder {
+  width: 13px;
+  height: 10px;
+  background: #e8b64c;
+  border-radius: 0 2px 2px 2px;
+  position: relative;
+  flex: none;
+}
+.wb-icon--folder::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 6px;
+  height: 2px;
+  background: #e8b64c;
+  border-radius: 2px 2px 0 0;
+}
+
+.wb-icon--folder-outline {
+  width: 15px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid var(--wb-text);
+  border-radius: 0 2px 2px 2px;
+  position: relative;
+}
+.wb-icon--folder-outline::before {
+  content: '';
+  position: absolute;
+  left: -1.5px;
+  top: -3px;
+  width: 7px;
+  height: 3px;
+  border: 1.5px solid var(--wb-text);
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+}
+
+.wb-icon--file {
+  width: 10px;
+  height: 13px;
+  flex: none;
+  border: 1.4px solid #94a3b8;
+  border-radius: 1px 4px 1px 1px;
+  background: #f8fafc;
+}

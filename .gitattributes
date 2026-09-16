@@ -1,0 +1,9 @@
+# Normalise line endings: LF in the repository, native in the working tree.
+# Without this a Windows checkout commits CRLF and every file looks changed
+# on a Linux/macOS clone.
+* text=auto
+
+# Binary assets — never line-ending-converted, never diffed as text.
+*.png binary
+*.jpg binary
+*.ico binary

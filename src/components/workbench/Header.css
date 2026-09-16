@@ -1,0 +1,117 @@
+.wb-header {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--wb-header-h);
+  padding: 0 20px;
+  background: linear-gradient(180deg, var(--wb-header-bg) 0%, var(--wb-header-bg-dark) 100%);
+  color: #ffffff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.15);
+}
+
+.wb-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-header__logo {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  padding: 6px;
+}
+
+.wb-header__logo-cell {
+  background: #ffffff;
+  border-radius: 2px;
+}
+
+.wb-header__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.wb-header__tagline {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-header__dot {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wb-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.wb-header__action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-header__action:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.wb-header__action:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+
+.wb-icon--gear {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  box-shadow:
+    0 -7px 0 -5px currentColor,
+    0 7px 0 -5px currentColor,
+    -7px 0 0 -5px currentColor,
+    7px 0 0 -5px currentColor;
+}
+
+.wb-icon--help {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .wb-header__tagline {
+    display: none;
+  }
+}

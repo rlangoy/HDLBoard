@@ -1,0 +1,192 @@
+/* ------------------------------------------------------------------ *
+ * PB1180 UI — shared design tokens
+ *
+ * All values were sampled from DesignResources/*.png (see
+ * Design_Description.md, "Measured reference geometry").
+ *
+ * --pb-unit is the board scale unit: the width of one switch housing.
+ * EVERY other length — LED size, card padding, font sizes, gaps — is a
+ * fixed multiple of it, so one number rescales a whole panel and keeps
+ * all four panels lining up in the board grid.
+ * ------------------------------------------------------------------ */
+
+.pb-ui {
+  /* --- master scale ------------------------------------------------ */
+  /* Reference PNGs are drawn at 29px; 34px ≈ 1.17x for crisper text.  */
+  --pb-unit: 34px;
+
+  /* Public alias only, for code written against the first version of
+     Switches. Nothing in here uses it; it is API, not dead weight. */
+  --pb-sw-size: var(--pb-unit);
+
+  /* --- switch housing ----------------------------------------------- */
+  /* Measured from DesignResources/Switches_v2.png, whose housing is
+     57 px wide; every ratio below is that width. */
+  --pb-sw-body-w: var(--pb-unit);
+  --pb-sw-body-h: calc(var(--pb-unit) * 2.368); /* 135 / 57 */
+  --pb-sw-body-r: calc(var(--pb-unit) * 0.14); /* 8 / 57 */
+  --pb-sw-body-edge: #b9bdc4; /* the border, kept crisp at 1 px */
+  --pb-sw-body-top: #ffffff; /* face, lit top edge               */
+  --pb-sw-body-upper: #f6f7f9;
+  --pb-sw-body-mid: #ebedf0;
+  --pb-sw-body-low: #e0e3e8; /* face, shaded bottom edge         */
+
+  /* --- switch track: the recessed slot the knob runs in -------------- */
+  --pb-sw-track-w: calc(var(--pb-unit) * 0.667); /* 38 / 57 */
+  --pb-sw-track-h: calc(var(--pb-unit) * 1.421); /* 81 / 57 */
+  --pb-sw-track-top: calc(var(--pb-unit) * 0.491); /* 28 / 57 */
+  --pb-sw-track-r: calc(var(--pb-unit) * 0.14); /* 8 / 57 */
+  --pb-sw-track-hi: #ccd0d5; /* top of the slot, in its own shadow */
+  --pb-sw-track-lo: #d2d6db; /* bottom, catching more light        */
+
+  /* --- switch knob --------------------------------------------------- */
+  --pb-sw-knob-w: calc(var(--pb-unit) * 0.649); /* 37 / 57 */
+  --pb-sw-knob-h: calc(var(--pb-unit) * 0.596); /* 34 / 57 */
+  --pb-sw-knob-r: calc(var(--pb-unit) * 0.123); /* 7 / 57 */
+  --pb-sw-travel: calc(var(--pb-unit) * 0.807); /* 46 / 57 */
+  --pb-sw-knob-top: #212429;
+  --pb-sw-knob-mid: #2b2e32;
+  --pb-sw-knob-lo: #43464b;
+  --pb-sw-knob-bottom: #4f5257;
+
+  /* --- LED ---------------------------------------------------------- */
+  --pb-led-w: calc(var(--pb-unit) * 0.828); /* 24 / 29 */
+  --pb-led-h: calc(var(--pb-unit) * 1.138); /* 33 / 29 */
+  --pb-led-r: calc(var(--pb-unit) * 0.245); /* ~7 / 29 */
+  --pb-led-ring: #757d87; /* dark outer ring of the package   */
+  --pb-led-rim: #e9ecef; /* light plastic rim                */
+  --pb-led-rim-on: #fbe2dc; /* rim tints when the die is lit    */
+  --pb-led-off: #7c8489; /* unlit lens                       */
+  --pb-led-off-hi: #9ba1a5; /* top highlight on the unlit lens  */
+  --pb-led-off-lo: #6b7175; /* bottom / right shadow            */
+  /* lit colours — overridden by .pb-led--green / --amber */
+  --pb-led-core: #fff1ee;
+  --pb-led-mid: #ff6b52;
+  --pb-led-body: #f6210f;
+  --pb-led-edge: #a80b06;
+  --pb-led-glow: 255, 48, 28;
+
+  /* --- the moulded light package, shared by KEY and HEX -------------- */
+  /* Both parts are the same piece of moulded plastic on the board, so
+     they take their face and wall from one place. Measured from
+     PushButtons.png. */
+  --pb-part-face: #dee6ed;
+  --pb-part-face-hi: #eff4f9; /* inner bevel just inside the wall  */
+  --pb-part-edge: #8d99a7; /* wall, upper-left                     */
+  --pb-part-edge-dark: #708094; /* wall, lower-right               */
+
+  /* --- pushbutton (KEY) --------------------------------------------- */
+  --pb-key-w: calc(var(--pb-unit) * 1.862); /* 54 / 29, square */
+  --pb-key-r: calc(var(--pb-unit) * 0.414); /* 12 / 29          */
+  --pb-key-cap: calc(var(--pb-unit) * 1.172); /* 34 / 29, Ø      */
+  --pb-key-pitch: calc(var(--pb-unit) * 2.517); /* 73 / 29       */
+
+  --pb-key-face: var(--pb-part-face);
+  --pb-key-face-hi: var(--pb-part-face-hi);
+  --pb-key-edge: var(--pb-part-edge);
+  --pb-key-edge-dark: var(--pb-part-edge-dark);
+
+  --pb-key-face-down: #9fadba; /* recessed floor when pressed */
+  --pb-key-face-down-hi: #b8c4ce; /* bezel rim still lit      */
+  --pb-key-edge-down: #5d6d7e;
+
+  --pb-key-cap-hi: #4c555f; /* cap, lit side                  */
+  --pb-key-cap-body: #3b444d; /* cap, measured base           */
+  --pb-key-cap-lo: #2f363d; /* cap, shadow side               */
+  --pb-key-cap-rim: #868c90; /* specular line along the top   */
+
+  --pb-key-hover-face: #d2eafc;
+  --pb-key-hover-edge: #1c79ef;
+  --pb-key-hover-glow: 28, 121, 239;
+
+  /* --- 7-segment display (HEX) -------------------------------------- */
+  --pb-hex-w: calc(var(--pb-unit) * 1.862); /* 54 / 29 */
+  --pb-hex-h: calc(var(--pb-unit) * 2.621); /* 76 / 29 */
+  --pb-hex-r: calc(var(--pb-unit) * 0.172); /* 5 / 29   */
+  --pb-hex-pitch: calc(var(--pb-unit) * 2.069); /* 60 / 29 */
+  --pb-hex-digit-w: calc(var(--pb-unit) * 0.931); /* 27 / 29 */
+  --pb-hex-digit-h: calc(var(--pb-unit) * 1.655); /* 48 / 29 */
+  --pb-hex-seg-t: calc(var(--pb-hex-digit-w) * 0.185); /* 5 / 27 */
+  --pb-hex-seg-gap: calc(var(--pb-hex-seg-t) / 4); /* corner clearance */
+  --pb-hex-slant: -9.6deg; /* the digit leans, as on the real part */
+
+  --pb-hex-face: var(--pb-part-face); /* same moulding as the buttons */
+  --pb-hex-face-hi: var(--pb-part-face-hi);
+  --pb-hex-edge: var(--pb-part-edge);
+  --pb-hex-edge-dark: var(--pb-part-edge-dark);
+  --pb-hex-seg-off: #f4f8fc; /* unlit window — near white, lighter
+                                than the package it sits in       */
+  /* Lit is a flat, deep red — no gradient and no halo. Sampled from a
+     photo of the real part, whose segment core sits around
+     rgb(194,29,25) at its darkest and rgb(234,32,30) at its brightest;
+     this is the dark end, because a shaded segment reads as plastic
+     rather than as an emitting die. */
+  --pb-hex-seg-on: #c8211c;
+
+  /* --- shared panel chrome ------------------------------------------ */
+  --pb-pitch: calc(var(--pb-unit) * 1.362); /* column pitch, SW and LEDR */
+  /* Every cell reserves the height of the tallest part on the board —
+     the HEX package — so all four panels come out the same height. The
+     cell adds the index label (0.52) and its gap (0.36) on top. */
+  --pb-row-h: calc(var(--pb-unit) * 2.621);
+  --pb-cell-h: calc(var(--pb-row-h) + var(--pb-unit) * 0.88);
+  --pb-card-pad: calc(var(--pb-unit) * 0.62); /* 18 / 29 */
+  --pb-card-r: calc(var(--pb-unit) * 0.41);
+  --pb-card-bg: #fafcfd;
+
+  --pb-label: #1e3a8a;
+  --pb-readout-bg: #f1f5fb;
+  --pb-readout-border: #dbe5f1;
+  --pb-readout-fg: #1e3a8a;
+
+  --pb-font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial,
+    sans-serif;
+  --pb-font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'SF Mono',
+    'Roboto Mono', monospace;
+
+  --pb-focus: #2563eb;
+
+  /* Optional per-panel overrides. They are not set here: a panel passes
+     one inline when its geometry differs, and the rule that reads it
+     supplies the default — `var(--pb-cell-w, var(--pb-pitch))`. Listed
+     so they are discoverable from this file.
+
+       --pb-cell-w           column width        (KEY, HEX)
+       --pb-part-w           width of the last column's part
+       --pb-index-size       index label size    (KEY, HEX — a word, not
+                                                  a digit, so it sets
+                                                  smaller)
+       --pb-readout-tracking readout letter-spacing (HEX prints grouped
+                                                  hex bytes, not bits)  */
+
+  /* default accent = Switches */
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+/* --- per-group accents (see Design_Description.md § Conventions) ---- */
+
+.pb-ui.pb-accent-switches {
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+.pb-ui.pb-accent-leds {
+  --pb-accent-head: #dbf0ee;
+  --pb-accent-border: #c5e5de;
+  --pb-accent-title: #166534;
+}
+
+.pb-ui.pb-accent-hex {
+  --pb-accent-head: #e2e0fd;
+  --pb-accent-border: #d4cdfb;
+  --pb-accent-title: #5b21b6;
+}
+
+.pb-ui.pb-accent-keys {
+  --pb-accent-head: #daeefe;
+  --pb-accent-border: #b8dcfc;
+  --pb-accent-title: #1e40af;
+}

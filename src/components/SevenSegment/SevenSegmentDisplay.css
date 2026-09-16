@@ -1,0 +1,168 @@
+/* ------------------------------------------------------------------ *
+ * SevenSegmentDisplay — one HEX digit module.
+ *
+ * Anatomy:
+ *   .pb-hex              the moulded package
+ *     .pb-hex__digit     the slanted digit box
+ *       .pb-hex__seg     seven bars, clipped to mitred hexagons
+ *     .pb-hex__dp        the decimal point, moulded in but never lit
+ *
+ * Values from DesignResources/7SegmentDisplays.png:
+ *   package rgb(141,155,171)   rim rgb(96,111,131)
+ *   unlit window near white — lighter than the package, which is why a
+ *   dark digit still shows its ghost, like the real part.
+ *
+ * The package is the same moulding as the pushbutton housings, so its
+ * face, wall and bevel come from the shared --pb-part-* tokens.
+ *
+ * The reference draws every segment lit in pale grey, so it carries no
+ * lit colour to measure. A real HEX display is red, so lit segments are
+ * a flat, deep red here, sampled from a photo of the part.
+ *
+ * The digit leans 9.6°: measured from the reference, where its centre
+ * line shifts 8 px left over the 47 rows from top to bottom.
+ *
+ * Segments are clip-path polygons, not SVG — see Design_Description.md
+ * § 1.2 rule 6. The 45° mitres are expressed as a percentage of each
+ * bar's own long side, so they stay true at any scale, and every bar is
+ * inset by --pb-hex-seg-gap so the seven stay visibly separate the way
+ * they do on the real part.
+ * ------------------------------------------------------------------ */
+
+.pb-hex {
+  box-sizing: border-box;
+  position: relative;
+  display: block;
+  width: var(--pb-hex-w);
+  height: var(--pb-hex-h);
+  border-radius: var(--pb-hex-r);
+  /* Same moulding as the pushbutton housings — same face, same wall,
+     same bevel, because on the board they are the same plastic. */
+  border: 1px solid var(--pb-hex-edge);
+  border-right-color: var(--pb-hex-edge-dark);
+  border-bottom-color: var(--pb-hex-edge-dark);
+  background-color: var(--pb-hex-face);
+  background-image: linear-gradient(
+    160deg,
+    var(--pb-hex-face-hi) 0%,
+    var(--pb-hex-face) 16%,
+    var(--pb-hex-face) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 1px 0 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+/* ------------------------------------------------------------ digit */
+
+.pb-hex__digit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--pb-hex-digit-w);
+  height: var(--pb-hex-digit-h);
+  transform: translate(-50%, -50%) skewX(var(--pb-hex-slant));
+}
+
+.pb-hex__seg {
+  position: absolute;
+  background-color: var(--pb-hex-seg-off);
+  transition: background-color 120ms ease;
+}
+
+/* Lit: one flat red, deliberately unshaded. A real segment is a diffuser
+   lit from behind, so it has no highlight and no falloff — any gradient
+   here makes it read as moulded plastic instead of an emitting die.
+   This is the one place the board's upper-left light does not apply. */
+.pb-hex__seg.is-lit {
+  background-color: var(--pb-hex-seg-on);
+}
+
+/* --- the three horizontal bars: 0 top, 6 middle, 3 bottom ---------- */
+
+/* Inset by half a thickness at each end, so the bar's mitre tip lands
+   exactly where the vertical bars' tips do — that is what opens the
+   diagonal corner gaps in the reference. */
+.pb-hex__seg--h {
+  left: calc(var(--pb-hex-seg-t) / 2);
+  width: calc(100% - var(--pb-hex-seg-t));
+  height: var(--pb-hex-seg-t);
+  /* mitre = half the thickness, as a share of the bar's length */
+  clip-path: polygon(
+    0% 50%,
+    11.4% 0%,
+    88.6% 0%,
+    100% 50%,
+    88.6% 100%,
+    11.4% 100%
+  );
+}
+
+.pb-hex__seg--s0 {
+  top: 0;
+}
+
+.pb-hex__seg--s6 {
+  top: calc(50% - var(--pb-hex-seg-t) / 2);
+}
+
+.pb-hex__seg--s3 {
+  bottom: 0;
+}
+
+/* --- the four vertical bars: 5/1 upper, 4/2 lower ------------------ */
+
+.pb-hex__seg--v {
+  width: var(--pb-hex-seg-t);
+  height: calc(
+    50% - var(--pb-hex-seg-t) / 2 - 2 * var(--pb-hex-seg-gap)
+  );
+  clip-path: polygon(
+    50% 0%,
+    100% 13.2%,
+    100% 86.8%,
+    50% 100%,
+    0% 86.8%,
+    0% 13.2%
+  );
+}
+
+.pb-hex__seg--s5 {
+  left: 0;
+  top: calc(var(--pb-hex-seg-t) / 2 + var(--pb-hex-seg-gap));
+}
+
+.pb-hex__seg--s1 {
+  right: 0;
+  top: calc(var(--pb-hex-seg-t) / 2 + var(--pb-hex-seg-gap));
+}
+
+.pb-hex__seg--s4 {
+  left: 0;
+  top: calc(50% + var(--pb-hex-seg-gap));
+}
+
+.pb-hex__seg--s2 {
+  right: 0;
+  top: calc(50% + var(--pb-hex-seg-gap));
+}
+
+/* --------------------------------------------------- decimal point */
+
+.pb-hex__dp {
+  position: absolute;
+  left: 78.7%;
+  top: 79%;
+  width: calc(var(--pb-hex-w) * 0.11);
+  height: calc(var(--pb-hex-w) * 0.11);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--pb-hex-seg-off);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-hex__seg {
+    transition-duration: 1ms;
+  }
+}
