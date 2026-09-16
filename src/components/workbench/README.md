@@ -39,6 +39,7 @@ hash (`src/ComponentGallery.tsx`).
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
   - [`files.ts`](#filests)
+  - [`icons.tsx`](#iconstsx)
 - [How the simulation sequence works](#how-the-simulation-sequence-works)
 - [How the editor overlay works](#how-the-editor-overlay-works)
 - [Styling](#styling)
@@ -131,17 +132,18 @@ concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
 owned by this component — `FileExplorer` only asks for the click.
 
-**Rename and delete.** Each row reveals a pencil and a trash button on
-hover/focus (`.wb-files__row-actions`, `opacity: 0` until `:hover` /
-`:focus-within` — kept mounted rather than conditionally rendered, so Tab
-can still reach them without a hover first). The pencil, or a double-click
-on the file name, swaps the row's `<button>` for a `<input>` — they can't
-nest, hence the row being a `<div>` wrapping either one, not the button
-itself. Enter or blur commits via `onRename`; Escape discards the draft
-without calling it. Delete confirms with `window.confirm` (a plain browser
-dialog, not a custom one — the whole point being that a destructive,
-unrecoverable action needs a distinct kind of "are you sure" from anything
-else in here) and then calls `onDelete`.
+**Rename and delete.** Each row reveals an edit and a delete button
+(`icons.tsx` — the one place in this folder using real SVG icons rather
+than CSS shapes) on hover/focus (`.wb-files__row-actions`, `opacity: 0`
+until `:hover` / `:focus-within` — kept mounted rather than conditionally
+rendered, so Tab can still reach them without a hover first). The edit
+button, or a double-click on the file name, swaps the row's `<button>` for
+an `<input>` — they can't nest, hence the row being a `<div>` wrapping
+either one, not the button itself. Enter or blur commits via `onRename`;
+Escape discards the draft without calling it. Delete confirms with
+`window.confirm` (a plain browser dialog, not a custom one — the whole
+point being that a destructive, unrecoverable action needs a distinct kind
+of "are you sure" from anything else in here) and then calls `onDelete`.
 
 Both are local to `FileExplorer` only in their *editing* state (`renamingId`
 / `draftName`); the rename and delete themselves are owned by `Workbench`
@@ -250,6 +252,26 @@ tabs open on first load, matching `WorkBench.png`. `TOP_LEVEL_ENTITY`
 (`"top.vhd"`) is what `SimulationCard` shows after "Top:". The VHDL itself
 is plausible, internally consistent course-style code — it is not
 validated against a real compiler, because there isn't one behind this yet.
+
+### `icons.tsx`
+
+`EditIcon`, `DeleteIcon` — `FileExplorer`'s rename/delete row actions. The
+one deliberate exception to this folder's otherwise all-CSS icons (the
+upload arrow, `+`, chevron, folder and file glyphs are all drawn from
+`FileExplorer.css` pseudo-elements, same technique as the board parts):
+these two are real Material Symbols Outlined glyphs (`edit` / `delete`,
+wght 400 / GRAD 0 / opsz 24 / FILL 0), inlined as plain SVG path data
+rather than approximated in CSS shapes, because a hand-drawn trash can at
+this size reads worse than the real icon and getting it convincingly
+right in CSS was not worth the effort the actual glyph already solved.
+Fetched once from Google's static asset host
+(`fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/…`) and
+committed as source — not loaded from a font or CDN at runtime, which
+would break the "no runtime deps beyond React" / fully-local guarantee in
+the top-level README. `fill="currentColor"` on the `<svg>` is what lets
+each icon inherit its button's colour, including the red hover state on
+delete (`.wb-files__row-action--danger`), the same way every CSS-drawn
+icon in this folder already does.
 
 ## How the simulation sequence works
 

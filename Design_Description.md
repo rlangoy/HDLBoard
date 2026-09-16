@@ -181,7 +181,9 @@ UI/
          ├─ SimulationCard.tsx / .css  Start/Stop + status, in the sidebar
          ├─ ConsoleOutput.tsx / .css the GHDL Output/Status log
          ├─ vhdlHighlight.ts    line-based VHDL tokenizer for the editor
-         └─ files.ts            the starter project shown in the tree
+         ├─ files.ts            the starter project shown in the tree
+         └─ icons.tsx           edit/delete — real SVG, the one exception
+                                 to this folder's CSS-only icons
 ```
 
 `workbench/` is IDE chrome, not a hardware part: it has no reference render
