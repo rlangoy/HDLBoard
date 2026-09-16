@@ -35,11 +35,11 @@ export function FileExplorer({ files, activeFileId, onSelect, onUpload, onNewFil
       <div className="wb-files__actions">
         <button type="button" className="wb-files__upload" onClick={onUpload}>
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-          Upload VHDL File
+          <span className="wb-files__label-text">Upload VHDL File</span>
         </button>
         <button type="button" className="wb-files__new" onClick={onNewFile}>
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
-          New File
+          <span className="wb-files__label-text">New File</span>
         </button>
       </div>
 
@@ -58,7 +58,7 @@ export function FileExplorer({ files, activeFileId, onSelect, onUpload, onNewFil
               >
                 <span className={cx('wb-icon wb-icon--chevron', !isCollapsed && 'is-open')} aria-hidden="true" />
                 <span className="wb-icon wb-icon--folder" aria-hidden="true" />
-                {folder}/
+                <span className="wb-files__label-text">{folder}/</span>
               </button>
               {!isCollapsed && (
                 <ul className="wb-files__list" role="group">
@@ -72,7 +72,7 @@ export function FileExplorer({ files, activeFileId, onSelect, onUpload, onNewFil
                         onClick={() => onSelect(f.id)}
                       >
                         <span className="wb-icon wb-icon--file" aria-hidden="true" />
-                        {f.name}
+                        <span className="wb-files__label-text">{f.name}</span>
                       </button>
                     </li>
                   ))}

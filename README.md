@@ -42,6 +42,10 @@ is an image, an SVG, or a canvas drawing. See
 
 - **File explorer** — a `vhdl/` / `work/` project tree with upload
   (reads real `.vhd`/`.vhdl` files via the File API) and new-file actions.
+- **Resizable panes** — drag the handles either side of the editor to
+  resize the file panel and the board panel; both stay within the browser
+  window as you resize, shrinking together (or giving way to whichever one
+  you're actively dragging) rather than overflowing it.
 - **Tabbed code editor** — closable tabs, line numbers, and VHDL syntax
   highlighting (keywords, types, comments, strings, numbers), built on a
   real, editable `<textarea>` — not a static preview.
@@ -62,7 +66,6 @@ is an image, an SVG, or a canvas drawing. See
 ## Installation
 
 ```bash
-cd de1socSim
 npm install
 ```
 

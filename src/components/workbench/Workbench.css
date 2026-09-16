@@ -43,6 +43,10 @@
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
   background: #ffffff;
+  /* The sidebar and board panel widths below are reconciled in JS against
+     the body's measured width (see Workbench.tsx's applyLayout) so they
+     always fit; this is the hard backstop in case they ever don't. */
+  overflow-x: hidden;
 }
 
 .wb-body {
@@ -52,42 +56,88 @@
 }
 
 /*
+ * Drag handles either side of the editor — one resizes .wb-sidebar, the
+ * other .wb-right (Workbench.tsx's handleSidebarResizerPointerDown /
+ * handleBoardResizerPointerDown). Both panels' widths are set inline from
+ * that drag state, not from --wb-sidebar-w / --wb-right-w below — those
+ * vars only supply the initial/no-JS width.
+ */
+.wb-resizer {
+  flex: none;
+  width: 10px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A visible 2px grip line at rest, so the handle reads as draggable
+   without needing to hover blind over an invisible strip first. */
+.wb-resizer::after {
+  content: '';
+  width: 2px;
+  height: 100%;
+  background: var(--wb-border);
+}
+
+.wb-resizer:hover::after,
+.wb-resizer:active::after {
+  background: var(--wb-accent);
+}
+
+.wb-resizer:hover,
+.wb-resizer:active {
+  background: var(--wb-accent-soft);
+}
+
+/*
  * The left pane: a tinted strip holding two stacked cards (Simulation,
  * then Files) rather than one flush panel — matches the reference
- * Simulate-and-Files-pane mockup. Width, background, the scrollbar and
- * the border against the editor all live here now; FileExplorer.css's
- * .wb-files is just the card underneath it.
+ * Simulate-and-Files-pane mockup. Width, background and the scrollbar
+ * all live here now; FileExplorer.css's .wb-files is just the card
+ * underneath it. The border against the editor is the .wb-resizer grip
+ * line above, not a border here — a plain border would double up with it.
  */
 .wb-sidebar {
   width: var(--wb-sidebar-w);
   flex: none;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 14px;
   overflow-y: auto;
   background: var(--wb-sidebar-bg);
-  border-right: 1px solid var(--wb-border);
 }
 
 /*
  * Board's own 2x2 grid (components/board/Board.css) only drops to one
  * column below a 900px *viewport* width — it has no way to see that
- * it is sitting in a narrower sidebar. At size={24} its two columns
- * need ~700px, so this panel is sized to give it that room; below
- * --wb-narrow the panel shrinks and forces the single-column fallback
- * itself, rather than letting the board grid overflow it.
+ * it is sitting in a narrower panel. At size={24} its two columns need
+ * ~700px, so this panel defaults to --wb-right-w (its width is then
+ * reconciled in JS against the sidebar's drag and the body's measured
+ * width — see Workbench.tsx's applyLayout); once JS shrinks it below
+ * that threshold, .wb-right--narrow forces the single-column fallback
+ * itself, rather than letting the board grid overflow it. overflow-x is
+ * a backstop for the same reason .wb has it above. No border-left here —
+ * the .wb-resizer grip line on this panel's left edge is that border.
  */
 .wb-right {
   width: var(--wb-right-w);
   flex: none;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-left: 1px solid var(--wb-border);
   background: #ffffff;
+}
+
+.wb-right--narrow .pb-board {
+  grid-template-columns: max-content;
 }
 
 .wb-files__hidden-input {
@@ -99,15 +149,4 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
-}
-
-@media (max-width: 1350px) {
-  .wb {
-    --wb-right-w: 400px;
-  }
-  /* Force the fallback Board.css already defines below 900px viewport
-     width — this panel is that narrow well before the viewport is. */
-  .wb-right .pb-board {
-    grid-template-columns: max-content;
-  }
 }

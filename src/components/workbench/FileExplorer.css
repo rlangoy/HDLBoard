@@ -1,6 +1,8 @@
 .wb-files {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
   background: #ffffff;
   border: 1px solid var(--wb-border);
   border-radius: 12px;
@@ -34,6 +36,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 0;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -72,6 +75,7 @@
   align-items: center;
   gap: 6px;
   width: 100%;
+  min-width: 0;
   border: none;
   background: transparent;
   font: inherit;
@@ -83,6 +87,16 @@
   padding: 7px 8px;
   border-radius: 6px;
   cursor: pointer;
+}
+
+/* Lets the row itself (a flex item with intrinsic text-width protection)
+   shrink below its own content width, so it's this span that truncates
+   at narrow sidebar widths instead of the row resisting the shrink. */
+.wb-files__label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .wb-files__folder-label:hover {
@@ -100,6 +114,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   border: none;
   background: transparent;
   font: inherit;

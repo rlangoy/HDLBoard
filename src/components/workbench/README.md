@@ -52,11 +52,13 @@ hash (`src/ComponentGallery.tsx`).
 Workbench                              (CSS grid: header / body / console)
 ├─ Header                              (grid row 1, full width)
 └─ .wb-body                            (grid row 2, flex row)
-   ├─ .wb-sidebar                      (fixed width, tinted strip, scrolls as one)
+   ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
    │  ├─ SimulationCard                (card: Start/Stop + status)
    │  └─ FileExplorer                  (card: Upload/New File + the vhdl/work tree)
+   ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
    ├─ CodeEditor                       (flex: 1 — takes the remaining width)
-   └─ .wb-right                        (fixed width panel)
+   ├─ .wb-resizer                      (drag handle — resizes .wb-right)
+   └─ .wb-right                        (draggable width panel)
       └─ Board                        (LEDs + HEX on top, SW + KEY underneath)
 └─ ConsoleOutput                       (grid row 3, full width)
 ```
@@ -127,6 +129,13 @@ concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
 owned by this component — `FileExplorer` only asks for the click.
 
+Folder and file names are wrapped in `.wb-files__label-text`
+(`overflow: hidden; text-overflow: ellipsis`), and every row/button it sits
+in carries `min-width: 0` — without both, a long filename resists the flex
+row's ability to shrink below its own text width, which visually fights
+the sidebar's resize handle (see "Resizing" below) even though the
+sidebar's own box did shrink underneath it.
+
 ### `<CodeEditor>`
 
 ```tsx
@@ -169,6 +178,11 @@ Start when `stopped` or `compiling`, and Stop once `running`; the status
 dot's colour and pulse follow `status` the same way. `Workbench` decides
 what `status` means and owns the elapsed-time interval — this component
 only formats and renders the number it's given.
+
+The title, status label and footer line all use the same
+`.wb-simcard__label-text` truncation treatment as `FileExplorer`'s file
+names, for the same reason — the "Top: <file>" line in particular can run
+long enough to otherwise resist the sidebar shrinking.
 
 ### `<ConsoleOutput>`
 
@@ -278,16 +292,53 @@ parallel structure to `board/tokens.css`'s `.pb-ui` scope, not a reuse of
 it — the two token sets serve different things (measured hardware geometry
 vs. ordinary UI values) and are kept separate on purpose.
 
-One layout detail worth knowing before changing panel widths:
-`Board`'s 2-column grid (`components/board/Board.css`) only drops to a
-single column below a **900px viewport width** — it has no way to know it is
-sitting inside a narrower sidebar. At the `size={24}` this page passes, the
-two columns need roughly 700px, so `.wb-right` is sized (`--wb-right-w:
-760px`) to give it that room, and a `@media (max-width: 1350px)` rule in
-`Workbench.css` shrinks the panel *and* forces `.pb-board`'s
-`grid-template-columns` back to one column, rather than letting the grid
-overflow its container. If you resize the board (`size={…}` on `<Board>`),
-re-check that math — it does not resize itself automatically.
+### Resizing
+
+Both side panels are draggable, each via its own `.wb-resizer` handle:
+`.wb-sidebar` from the one between it and the editor
+(`handleSidebarResizerPointerDown`), `.wb-right` from the one on its own
+left edge (`handleBoardResizerPointerDown`). Neither width is applied
+directly from the drag delta: every move of either handle, and every resize
+of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout`, which
+
+- clamps the sidebar's requested width between `SIDEBAR_MIN_W` /
+  `SIDEBAR_MAX_W`, and the board's between `BOARD_MIN_W` / `BOARD_MAX_W`,
+  independently, then
+- if both requested widths together don't leave the editor `EDITOR_MIN_W`,
+  shrinks one or both panels via its `shrinkFirst` argument: during an
+  active drag, whichever panel *isn't* the one being dragged gives way
+  first (so the panel you're actively resizing tracks the pointer
+  exactly), falling back to the dragged one too if that's still not
+  enough; on a plain window resize (no active drag — the `ResizeObserver`
+  callback passes no `shrinkFirst`, so it defaults to `'proportional'`),
+  both panels give way together, split in proportion to how much each has
+  left above its own minimum. Giving one panel strict priority on a window
+  resize (rather than splitting proportionally) leaves the *other* one
+  looking frozen — it won't shrink at all until the prioritized one has
+  already been squeezed to its floor, which can be a wide range of window
+  widths if that panel had been dragged wider than its default.
+
+Each panel remembers the user's actual last-requested width in a ref
+(`desiredSidebarWidth` / `desiredBoardWidth`) separately from its rendered,
+possibly-clamped state — so dragging the sidebar wide, which shrinks the
+board out of the way, doesn't forget the board's preferred width: drag the
+sidebar back and the board grows back to it.
+
+This is what keeps either panel from ever being pushed outside the browser
+window by the other — they shrink instead, in JS, rather than relying on
+flexbox to shrink a `flex: none` panel (which it won't).
+
+One layout detail this feeds into: `Board`'s 2-column grid
+(`components/board/Board.css`) only drops to a single column below a
+**900px viewport width** — it has no way to know it is sitting inside a
+narrower panel, especially now that panel's width moves independently of
+the viewport. At the `size={24}` this page passes, the two columns need
+roughly 700px (`BOARD_NARROW_W` in `Workbench.tsx`), so once `applyLayout`
+shrinks `.wb-right` below that, it adds the `.wb-right--narrow` class, which
+forces `.pb-board`'s `grid-template-columns` back to one column itself
+(`Workbench.css`), rather than letting the grid overflow its container. If
+you resize the board (`size={…}` on `<Board>`), re-check that threshold —
+it does not resize itself automatically.
 
 ## Known limitations
 

@@ -44,7 +44,7 @@ export function SimulationCard({ status, elapsedSeconds, topFile, onStart, onSto
         <h2 className="wb-simcard__title">Simulation</h2>
         <span className={cx('wb-simcard__status', `is-${status}`)}>
           <span className="wb-simcard__dot" aria-hidden="true" />
-          {STATUS_LABEL[status]}
+          <span className="wb-simcard__label-text">{STATUS_LABEL[status]}</span>
         </span>
       </div>
 
@@ -60,7 +60,7 @@ export function SimulationCard({ status, elapsedSeconds, topFile, onStart, onSto
 
       <div className="wb-simcard__meta">
         <span className="wb-icon wb-icon--clock" aria-hidden="true" />
-        <span>
+        <span className="wb-simcard__label-text">
           Elapsed: {formatElapsed(elapsedSeconds)} <span className="wb-simcard__sep">|</span> Top:{' '}
           <strong className="wb-simcard__top">{topFile}</strong>
         </span>
