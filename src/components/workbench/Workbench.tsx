@@ -288,6 +288,17 @@ export function Workbench() {
     }
   };
 
+  const handleRenameFile = (id: string, name: string) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
+  };
+
+  const handleDeleteFile = (id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+    // Also closes the tab, if it had one open — same "next tab takes over"
+    // logic as a plain close, since a deleted file can't stay open.
+    handleCloseTab(id);
+  };
+
   const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl') => {
     const id = `file-${nextFileSeq++}`;
     setFiles((prev) => [...prev, { id, name, folder, content }]);
@@ -386,6 +397,8 @@ export function Workbench() {
             onSelect={handleOpenFile}
             onUpload={handleUploadClick}
             onNewFile={handleNewFile}
+            onRename={handleRenameFile}
+            onDelete={handleDeleteFile}
           />
           <input
             ref={uploadInputRef}

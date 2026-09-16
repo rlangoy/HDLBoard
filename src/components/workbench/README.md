@@ -119,6 +119,8 @@ interface FileExplorerProps {
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
 }
 ```
 
@@ -128,6 +130,25 @@ concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `Workbench` opens it as a tab if it isn't already and makes it active.
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
 owned by this component — `FileExplorer` only asks for the click.
+
+**Rename and delete.** Each row reveals a pencil and a trash button on
+hover/focus (`.wb-files__row-actions`, `opacity: 0` until `:hover` /
+`:focus-within` — kept mounted rather than conditionally rendered, so Tab
+can still reach them without a hover first). The pencil, or a double-click
+on the file name, swaps the row's `<button>` for a `<input>` — they can't
+nest, hence the row being a `<div>` wrapping either one, not the button
+itself. Enter or blur commits via `onRename`; Escape discards the draft
+without calling it. Delete confirms with `window.confirm` (a plain browser
+dialog, not a custom one — the whole point being that a destructive,
+unrecoverable action needs a distinct kind of "are you sure" from anything
+else in here) and then calls `onDelete`.
+
+Both are local to `FileExplorer` only in their *editing* state (`renamingId`
+/ `draftName`); the rename and delete themselves are owned by `Workbench`
+(`handleRenameFile`, `handleDeleteFile`), same as every other file mutation.
+`handleDeleteFile` reuses `handleCloseTab`'s "hand off to the next tab"
+logic — a deleted file cannot stay open — so deleting the active file
+behaves exactly like closing its tab, plus removing it from `files`.
 
 Folder and file names are wrapped in `.wb-files__label-text`
 (`overflow: hidden; text-overflow: ellipsis`), and every row/button it sits

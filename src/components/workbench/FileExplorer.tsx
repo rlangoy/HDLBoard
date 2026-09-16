@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import type { VhdlFile } from './files';
 import './FileExplorer.css';
@@ -9,6 +9,8 @@ export interface FileExplorerProps {
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
 }
 
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
@@ -18,11 +20,48 @@ const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
  * (`vhdl/` for the design, `work/` for the testbench) matching
  * `DesignResources/WorkBench.png`.
  */
-export function FileExplorer({ files, activeFileId, onSelect, onUpload, onNewFile }: FileExplorerProps) {
+export function FileExplorer({
+  files,
+  activeFileId,
+  onSelect,
+  onUpload,
+  onNewFile,
+  onRename,
+  onDelete,
+}: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState('');
 
   const toggleFolder = (folder: string) => {
     setCollapsed((prev) => ({ ...prev, [folder]: !prev[folder] }));
+  };
+
+  const startRename = (f: VhdlFile) => {
+    setRenamingId(f.id);
+    setDraftName(f.name);
+  };
+
+  const commitRename = (id: string) => {
+    const name = draftName.trim();
+    setRenamingId(null);
+    if (name) onRename(id, name);
+  };
+
+  const handleRenameKeyDown = (e: KeyboardEvent<HTMLInputElement>, id: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename(id);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setRenamingId(null);
+    }
+  };
+
+  const handleDelete = (f: VhdlFile) => {
+    if (window.confirm(`Delete ${f.name}? This cannot be undone.`)) {
+      onDelete(f.id);
+    }
   };
 
   return (
@@ -64,16 +103,58 @@ export function FileExplorer({ files, activeFileId, onSelect, onUpload, onNewFil
                 <ul className="wb-files__list" role="group">
                   {inFolder.map((f) => (
                     <li key={f.id}>
-                      <button
-                        type="button"
-                        role="treeitem"
-                        aria-selected={f.id === activeFileId}
-                        className={cx('wb-files__file', f.id === activeFileId && 'is-active')}
-                        onClick={() => onSelect(f.id)}
+                      <div
+                        className={cx('wb-files__row', f.id === activeFileId && 'is-active')}
                       >
-                        <span className="wb-icon wb-icon--file" aria-hidden="true" />
-                        <span className="wb-files__label-text">{f.name}</span>
-                      </button>
+                        {renamingId === f.id ? (
+                          <span className="wb-files__file wb-files__file--editing">
+                            <span className="wb-icon wb-icon--file" aria-hidden="true" />
+                            <input
+                              type="text"
+                              className="wb-files__rename-input"
+                              value={draftName}
+                              autoFocus
+                              onFocus={(e) => e.currentTarget.select()}
+                              onChange={(e) => setDraftName(e.target.value)}
+                              onKeyDown={(e) => handleRenameKeyDown(e, f.id)}
+                              onBlur={() => commitRename(f.id)}
+                              aria-label={`Rename ${f.name}`}
+                            />
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            role="treeitem"
+                            aria-selected={f.id === activeFileId}
+                            className="wb-files__file"
+                            onClick={() => onSelect(f.id)}
+                            onDoubleClick={() => startRename(f)}
+                          >
+                            <span className="wb-icon wb-icon--file" aria-hidden="true" />
+                            <span className="wb-files__label-text">{f.name}</span>
+                          </button>
+                        )}
+                        {renamingId !== f.id && (
+                          <span className="wb-files__row-actions">
+                            <button
+                              type="button"
+                              className="wb-files__row-action"
+                              aria-label={`Rename ${f.name}`}
+                              onClick={() => startRename(f)}
+                            >
+                              <span className="wb-icon wb-icon--rename" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="wb-files__row-action wb-files__row-action--danger"
+                              aria-label={`Delete ${f.name}`}
+                              onClick={() => handleDelete(f)}
+                            >
+                              <span className="wb-icon wb-icon--trash" aria-hidden="true" />
+                            </button>
+                          </span>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

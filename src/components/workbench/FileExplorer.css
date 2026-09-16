@@ -109,11 +109,29 @@
   padding: 0 0 4px;
 }
 
+/* Row = the selectable file button plus its rename/delete actions, so the
+   actions can sit outside the <button> (an <input> can't nest inside one)
+   while still sharing one hover/focus-revealed affordance. */
+.wb-files__row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.wb-files__row:hover,
+.wb-files__row:focus-within {
+  background: var(--wb-hover);
+}
+
+.wb-files__row.is-active {
+  background: var(--wb-accent-soft);
+}
+
 .wb-files__file {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1;
   min-width: 0;
   border: none;
   background: transparent;
@@ -121,19 +139,75 @@
   font-size: 13.5px;
   color: var(--wb-text);
   text-align: left;
-  padding: 6px 8px 6px 30px;
+  padding: 6px 4px 6px 30px;
   border-radius: 6px;
   cursor: pointer;
 }
 
-.wb-files__file:hover {
-  background: var(--wb-hover);
-}
-
-.wb-files__file.is-active {
-  background: var(--wb-accent-soft);
+.wb-files__row.is-active .wb-files__file {
   color: var(--wb-accent-dark);
   font-weight: 600;
+}
+
+.wb-files__file--editing {
+  cursor: text;
+}
+
+.wb-files__rename-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--wb-text);
+  background: #ffffff;
+  border: 1px solid var(--wb-accent);
+  border-radius: 4px;
+  padding: 3px 6px;
+  margin-right: 4px;
+}
+
+.wb-files__rename-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--wb-accent-soft);
+}
+
+/* Hidden until the row is hovered/focused, rather than unmounted, so
+   Tab can still reach them from the keyboard without a hover first. */
+.wb-files__row-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding-right: 6px;
+  opacity: 0;
+}
+
+.wb-files__row:hover .wb-files__row-actions,
+.wb-files__row:focus-within .wb-files__row-actions {
+  opacity: 1;
+}
+
+.wb-files__row-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-files__row-action:hover {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--wb-text);
+}
+
+.wb-files__row-action--danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--wb-danger-dark);
 }
 
 /* ---- icons ---------------------------------------------------------- */
@@ -251,4 +325,53 @@
   border: 1.4px solid #94a3b8;
   border-radius: 1px 4px 1px 1px;
   background: #f8fafc;
+}
+
+/* Pencil: a flat bar with one end cut to a point (clip-path, same
+   technique as wb-icon--upload's arrowhead), rotated to point up-right. */
+.wb-icon--rename {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  position: relative;
+}
+.wb-icon--rename::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 12px;
+  height: 4px;
+  background: currentColor;
+  clip-path: polygon(0% 20%, 75% 20%, 100% 50%, 75% 80%, 0% 80%);
+  transform: rotate(-45deg);
+  transform-origin: 0 50%;
+}
+
+/* Trash can: lid line + tapered body. */
+.wb-icon--trash {
+  width: 11px;
+  height: 12px;
+  flex: none;
+  position: relative;
+}
+.wb-icon--trash::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 13px;
+  height: 1.6px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.wb-icon--trash::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 3px;
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  clip-path: polygon(6% 0%, 94% 0%, 88% 100%, 12% 100%);
 }
