@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import type { VhdlFile } from './files';
+import { DeleteIcon, EditIcon } from './icons';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -142,7 +143,7 @@ export function FileExplorer({
                               aria-label={`Rename ${f.name}`}
                               onClick={() => startRename(f)}
                             >
-                              <span className="wb-icon wb-icon--rename" aria-hidden="true" />
+                              <EditIcon className="wb-files__row-icon" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -150,7 +151,7 @@ export function FileExplorer({
                               aria-label={`Delete ${f.name}`}
                               onClick={() => handleDelete(f)}
                             >
-                              <span className="wb-icon wb-icon--trash" aria-hidden="true" />
+                              <DeleteIcon className="wb-files__row-icon" aria-hidden="true" />
                             </button>
                           </span>
                         )}

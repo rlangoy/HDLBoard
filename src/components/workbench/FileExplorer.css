@@ -327,51 +327,12 @@
   background: #f8fafc;
 }
 
-/* Pencil: a flat bar with one end cut to a point (clip-path, same
-   technique as wb-icon--upload's arrowhead), rotated to point up-right. */
-.wb-icon--rename {
-  width: 12px;
-  height: 12px;
+/* Rename/delete: real Material Symbols Outlined glyphs (icons.tsx), not
+   built from CSS shapes like the rest of this file's icons — see the
+   comment there for why. `fill: currentColor` on the <svg> is what makes
+   them track the button's colour, .wb-files__row-action / --danger below. */
+.wb-files__row-icon {
+  width: 16px;
+  height: 16px;
   flex: none;
-  position: relative;
-}
-.wb-icon--rename::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  width: 12px;
-  height: 4px;
-  background: currentColor;
-  clip-path: polygon(0% 20%, 75% 20%, 100% 50%, 75% 80%, 0% 80%);
-  transform: rotate(-45deg);
-  transform-origin: 0 50%;
-}
-
-/* Trash can: lid line + tapered body. */
-.wb-icon--trash {
-  width: 11px;
-  height: 12px;
-  flex: none;
-  position: relative;
-}
-.wb-icon--trash::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  top: 0;
-  width: 13px;
-  height: 1.6px;
-  background: currentColor;
-  border-radius: 1px;
-}
-.wb-icon--trash::after {
-  content: '';
-  position: absolute;
-  left: 1px;
-  top: 3px;
-  width: 9px;
-  height: 9px;
-  background: currentColor;
-  clip-path: polygon(6% 0%, 94% 0%, 88% 100%, 12% 100%);
 }
