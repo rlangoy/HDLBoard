@@ -433,7 +433,7 @@ export function Workbench() {
                 <Leds value={sw} />
                 <SevenSegmentDisplays value={numberToDisplays(dec, 6)} />
                 <Switches value={sw} onChange={setSw} />
-                <Pushbuttons value={key} onChange={setKey} />
+                <Pushbuttons value={key} onChange={setKey} showHint={false} />
               </Board>
             </div>
           </div>
