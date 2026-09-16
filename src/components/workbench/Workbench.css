@@ -11,10 +11,10 @@
 .wb {
   --wb-header-h: 56px;
   --wb-console-h: 180px;
-  --wb-sidebar-w: 250px;
+  --wb-sidebar-w: 278px;
   /* Wide enough for the board's own 2-column grid at size={24} — see
      the comment on .wb-right below before shrinking this. */
-  --wb-right-w: 760px;
+  --wb-right-w: 792px;
 
   --wb-border: #e2e8f0;
   --wb-sidebar-bg: #f8fafc;
@@ -49,9 +49,18 @@
   overflow-x: hidden;
 }
 
+/*
+ * min-width: 0 is load-bearing. As a grid item this defaults to
+ * min-width: auto — its min-content width — and because every pane inside
+ * is `flex: none`, that min-content is the panes' full combined width. The
+ * row would then refuse to shrink below it, so the width applyLayout
+ * measures here would be that frozen sum rather than the space actually
+ * available, and the reconciliation below would never see a window resize.
+ */
 .wb-body {
   grid-row: 2;
   display: flex;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -92,6 +101,16 @@
   background: var(--wb-accent-soft);
 }
 
+/* Set on <body> for the duration of a drag (Workbench.tsx's beginResize). */
+.wb-is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.wb-is-resizing * {
+  cursor: col-resize !important;
+}
+
 /*
  * The left pane: a tinted strip holding two stacked cards (Simulation,
  * then Files) rather than one flush panel — matches the reference
@@ -104,6 +123,9 @@
   width: var(--wb-sidebar-w);
   flex: none;
   min-width: 0;
+  /* border-box so the width Workbench.tsx sets is the width on screen —
+     the layout arithmetic there budgets in rendered pixels. */
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -113,22 +135,17 @@
 }
 
 /*
- * Board's own 2x2 grid (components/board/Board.css) only drops to one
- * column below a 900px *viewport* width — it has no way to see that
- * it is sitting in a narrower panel. At size={24} its two columns need
- * ~700px, so this panel defaults to --wb-right-w (its width is then
- * reconciled in JS against the sidebar's drag and the body's measured
- * width — see Workbench.tsx's applyLayout); once JS shrinks it below
- * that threshold, .wb-right--narrow forces the single-column fallback
- * itself, rather than letting the board grid overflow it. overflow-x is
- * a backstop for the same reason .wb has it above. No border-left here —
- * the .wb-resizer grip line on this panel's left edge is that border.
+ * The board pane. It never scrolls and the board inside it never reflows:
+ * the parts keep one fixed arrangement and are scaled to fit whatever
+ * width the drag/window leaves (Workbench.tsx's board-fit effect). No
+ * border-left here — the .wb-resizer grip line on this panel's left edge
+ * is that border.
  */
 .wb-right {
   width: var(--wb-right-w);
   flex: none;
-  overflow-y: auto;
-  overflow-x: auto;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -136,8 +153,29 @@
   background: #ffffff;
 }
 
-.wb-right--narrow .pb-board {
-  grid-template-columns: max-content;
+.wb-board-fit {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Out of flow, so the board's natural (pre-scale) size can't push the
+   pane's own scroll size around. */
+.wb-board-fit__inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+/* Board.css drops to a single column below a 900px *viewport* width. In
+   here the scale handles a narrow pane instead, so the 2x2 arrangement
+   holds at every size — the whole point of scaling rather than reflowing.
+   Standalone Board users (the gallery) keep the stacking fallback. */
+.wb-board-fit .pb-board {
+  grid-template-columns: max-content max-content;
+  row-gap: calc(var(--pb-unit) * 0.34);
 }
 
 .wb-files__hidden-input {

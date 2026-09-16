@@ -189,6 +189,17 @@ to measure geometry from, so § 1.2 and § 4 do not apply to it — only § 1.1
 and § 1.3. It is a consumer of the board layer, exactly like `App.tsx`,
 just promoted to the app's main page.
 
+Its one genuinely tricky piece is the resizable three-pane row, whose rules
+are set out in `workbench/README.md` § Resizing. The short version, because
+all three were bugs first: a draggable pane gets **no fixed maximum** (a cap
+means the divider cannot be dragged back to where it sat once the window
+grows); the flex row needs **`min-width: 0`** or, as a grid item, it refuses
+to shrink below its panes' combined width and the layout code silently
+measures a frozen number; and the panes are **`border-box`**, because the
+layout code budgets in rendered pixels and padding outside that number goes
+unbudgeted. § 4.7.1 covers the separate question of fitting the board
+*inside* that pane.
+
 `SevenSegmentDisplay` rather than `7SegmentDisplay`: a JavaScript
 identifier cannot start with a digit, and a React component must be
 capitalised to be treated as a component at all.
@@ -489,12 +500,47 @@ nothing about the panels inside it, so any subset or order works. What makes
 the columns line up inside the cards is § 4.8, not this file.
 
 Below 900 px the two columns stack rather than overflow, and the row gap takes
-the larger of the two values since it becomes the only gap.
+the larger of the two values since it becomes the only gap. That fallback is
+keyed to the **viewport**, which is all a standalone `Board` can see; a `Board`
+sitting in a pane whose width moves independently of the window needs § 4.7.1
+instead.
 
 Note the folder: `Board.tsx` lives in `components/board/` rather than a
 `components/Board/` of its own. On Windows those are the same directory, and a
 case-only difference between two sibling folders is a bug that only shows up on
 one person's machine.
+
+#### 4.7.1 Fitting a board to a container — reflow vs. scale
+
+There are two ways to make the board survive a container smaller than its
+natural size, and they answer different questions:
+
+| | Stacking (§ 4.7) | Scaling |
+|---|---|---|
+| What gives | the arrangement | the size |
+| Parts stay | full size, reordered | in place, smaller |
+| Keyed to | viewport width | the container's measured box |
+| Used by | standalone `Board`, the gallery | the Workbench board pane |
+
+The Workbench scales. Its pane is user-resizable independently of the window,
+and the point of the panel is that a student can see `LEDR <= SW;` — bit *n*
+above bit *n* across all four cards (§ 4.8). Restacking moves those
+relationships around; scaling preserves them exactly. So the pane never
+scrolls and never restacks: the board is laid out once at `size={24}` and
+`transform: scale(k)`-ed to fit, `k = min(paneW / naturalW, paneH / naturalH)`.
+
+**Why a transform rather than a smaller `--pb-unit`.** The unit is the right
+knob for *choosing* a size (§ 5.1), but it is not a fit-to-box knob, because
+convention 1 exempts hairlines: the 1–2 px borders and shadows in
+`ToggleSwitch.css`, `Led.css` and `panel.css` do not scale with it. Halve the
+unit and the parts halve while their outlines do not, so at small sizes the
+chrome swamps the part it outlines. A transform scales every length uniformly,
+hairlines included, which is the one case where scaling the rendered result
+beats rescaling the geometry.
+
+It is also loop-free to measure: `offsetWidth` / `offsetHeight` and
+`ResizeObserver`'s `contentRect` all report the *untransformed* layout box, so
+reading the natural size never sees the scale that was just applied to it.
 
 ### 4.8 Row geometry, shared by all groups
 
@@ -534,6 +580,10 @@ wins and the convention is the thing that needs fixing.
    labels, padding, readout. Never hard-code a px value in a component
    stylesheet except 1 px hairlines and border widths.
    (`--pb-sw-size` is kept as an alias for `--pb-unit`.)
+   That hairline exemption is the knob's one limit: it picks a size well, but
+   it will not fit a board to an arbitrary box, because the hairlines stay put
+   while everything around them shrinks. Fitting to a measured container is a
+   `transform` instead — § 4.7.1.
 2. **Tokens live in `board/tokens.css`**, scoped to the `.pb-ui` class. Every
    component root gets `pb-ui` so the tokens resolve without a global reset.
    Accents are applied by adding `pb-accent-<group>`:
@@ -674,7 +724,9 @@ It has no `onChange`: on a real board these are driven by the design.
 </Board>
 ```
 
-`children` in reading order, plus `size`. Nothing else — it is a grid.
+`children` in reading order, plus `size`. Nothing else — it is a grid. It does
+not fit itself to its container: `size` picks the geometry, and a caller that
+needs the board to track a resizable box scales it from outside (§ 4.7.1).
 
 ### Parts
 

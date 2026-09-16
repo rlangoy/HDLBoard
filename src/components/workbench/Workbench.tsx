@@ -27,18 +27,25 @@ function timestamp(): string {
 
 let nextFileSeq = 1;
 
-// Sidebar drag bounds and the space the editor and board panel each need to
-// stay usable — see the "Resizing" note in this folder's README before
-// changing these.
-const SIDEBAR_MIN_W = 180;
-const SIDEBAR_MAX_W = 480;
-const SIDEBAR_DEFAULT_W = 250;
+// The space each pane needs to stay usable, and the width each starts at —
+// see the "Resizing" note in this folder's README before changing these.
+// These are *rendered* widths: both side panes are border-box, so the width
+// set here is the width measured on screen, padding included.
+//
+// There is deliberately no maximum for either side pane. A fixed ceiling is
+// what stops a divider being dragged back to where it sat before the window
+// grew: widen the window and the pane stays pinned at its cap while the
+// editor swallows the new space, so the divider can never travel back. Each
+// pane's real ceiling is whatever the other two panes' minimums leave, which
+// applyLayout works out per call.
+const SIDEBAR_MIN_W = 208;
+const SIDEBAR_DEFAULT_W = 278;
 const EDITOR_MIN_W = 200;
-const BOARD_MIN_W = 260;
-const BOARD_MAX_W = 760;
-// Below this the board's 2-column grid can't fit — see Board.css's own
-// 900px viewport fallback, which this mirrors at the panel's own width.
-const BOARD_NARROW_W = 700;
+const BOARD_MIN_W = 200;
+const BOARD_DEFAULT_W = 792;
+// The two .wb-resizer handles, which sit between the panes and take width
+// of their own (Workbench.css keeps them at 10px each).
+const CHROME_W = 20;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -81,9 +88,39 @@ export function Workbench() {
   // regains room, instead of staying stuck at a once-clamped size.
   const bodyRef = useRef<HTMLDivElement>(null);
   const desiredSidebarWidth = useRef(SIDEBAR_DEFAULT_W);
-  const desiredBoardWidth = useRef(BOARD_MAX_W);
+  const desiredBoardWidth = useRef(BOARD_DEFAULT_W);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_W);
-  const [boardWidth, setBoardWidth] = useState(BOARD_MAX_W);
+  const [boardWidth, setBoardWidth] = useState(BOARD_DEFAULT_W);
+
+  // The board keeps one fixed 2x2 arrangement at one fixed internal size and
+  // is scaled to whatever the pane currently gives it, so the parts never
+  // reflow or get scrolled out of reach. `offsetWidth`/`offsetHeight` are
+  // the untransformed layout size, and ResizeObserver likewise reports the
+  // untransformed box, so measuring here can't feed back into the scale.
+  const boardViewportRef = useRef<HTMLDivElement>(null);
+  const boardScalerRef = useRef<HTMLDivElement>(null);
+  const [boardScale, setBoardScale] = useState(1);
+
+  useEffect(() => {
+    const viewport = boardViewportRef.current;
+    const scaler = boardScalerRef.current;
+    if (!viewport || !scaler) return;
+
+    const fit = () => {
+      const naturalW = scaler.offsetWidth;
+      const naturalH = scaler.offsetHeight;
+      if (!naturalW || !naturalH) return;
+      const { width, height } = viewport.getBoundingClientRect();
+      if (!width || !height) return;
+      setBoardScale(Math.min(width / naturalW, height / naturalH));
+    };
+
+    const observer = new ResizeObserver(fit);
+    observer.observe(viewport);
+    observer.observe(scaler);
+    fit();
+    return () => observer.disconnect();
+  }, []);
 
   // `shrinkFirst` says which panel gives way when both requested widths
   // don't fit alongside the editor's minimum:
@@ -104,10 +141,16 @@ export function Workbench() {
       shrinkFirst: 'sidebar' | 'board' | 'proportional' = 'proportional',
     ) => {
       if (containerWidth <= 0) return;
-      let sidebar = clamp(desiredSidebar, SIDEBAR_MIN_W, SIDEBAR_MAX_W);
-      let board = clamp(desiredBoard, BOARD_MIN_W, BOARD_MAX_W);
+      // What is left for the three panes once the drag handles take theirs.
+      const room = containerWidth - CHROME_W;
+      // Each pane may claim anything the other two don't need, so a pane can
+      // always be dragged back out to where the window allows.
+      const sidebarMax = Math.max(SIDEBAR_MIN_W, room - BOARD_MIN_W - EDITOR_MIN_W);
+      const boardMax = Math.max(BOARD_MIN_W, room - SIDEBAR_MIN_W - EDITOR_MIN_W);
+      let sidebar = clamp(desiredSidebar, SIDEBAR_MIN_W, sidebarMax);
+      let board = clamp(desiredBoard, BOARD_MIN_W, boardMax);
 
-      const overflow = sidebar + board + EDITOR_MIN_W - containerWidth;
+      const overflow = sidebar + board + EDITOR_MIN_W - room;
       if (overflow > 0) {
         if (shrinkFirst === 'proportional') {
           const sidebarRoom = sidebar - SIDEBAR_MIN_W;
@@ -155,45 +198,55 @@ export function Workbench() {
     return () => observer.disconnect();
   }, [applyLayout]);
 
-  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+  // Pointer capture keeps the whole drag bound to the handle: without it the
+  // cursor reverts to whatever the pointer happens to be over mid-drag (the
+  // editor's text I-beam, most obviously), which reads as the drag having
+  // dropped. `.wb-is-resizing` holds the col-resize cursor and suppresses
+  // text selection across the page for the same reason.
+  const beginResize = (
+    e: ReactPointerEvent<HTMLDivElement>,
+    onDelta: (deltaX: number, containerWidth: number) => void,
+  ) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = sidebarWidth;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    document.body.classList.add('wb-is-resizing');
 
     const onMove = (ev: PointerEvent) => {
-      const containerWidth = bodyRef.current?.getBoundingClientRect().width ?? 0;
-      const next = startWidth + (ev.clientX - startX);
-      desiredSidebarWidth.current = next;
-      applyLayout(containerWidth, next, desiredBoardWidth.current, 'board');
+      onDelta(ev.clientX - startX, bodyRef.current?.getBoundingClientRect().width ?? 0);
     };
     const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+      document.body.classList.remove('wb-is-resizing');
+      handle.releasePointerCapture(e.pointerId);
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  };
+
+  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const startWidth = sidebarWidth;
+    beginResize(e, (deltaX, containerWidth) => {
+      const next = startWidth + deltaX;
+      desiredSidebarWidth.current = next;
+      applyLayout(containerWidth, next, desiredBoardWidth.current, 'board');
+    });
   };
 
   // This handle sits on the board panel's left edge, so dragging it left
   // (negative clientX delta) should grow the board — the opposite sign
   // from the sidebar handle, which grows its panel by dragging right.
   const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const startX = e.clientX;
     const startWidth = boardWidth;
-
-    const onMove = (ev: PointerEvent) => {
-      const containerWidth = bodyRef.current?.getBoundingClientRect().width ?? 0;
-      const next = startWidth - (ev.clientX - startX);
+    beginResize(e, (deltaX, containerWidth) => {
+      const next = startWidth - deltaX;
       desiredBoardWidth.current = next;
       applyLayout(containerWidth, desiredSidebarWidth.current, next, 'sidebar');
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    });
   };
 
   const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
@@ -369,16 +422,21 @@ export function Workbench() {
           onPointerDown={handleBoardResizerPointerDown}
         />
 
-        <div
-          className={`wb-right${boardWidth < BOARD_NARROW_W ? ' wb-right--narrow' : ''}`}
-          style={{ width: boardWidth }}
-        >
-          <Board size={24}>
-            <Leds value={sw} />
-            <SevenSegmentDisplays value={numberToDisplays(dec, 6)} />
-            <Switches value={sw} onChange={setSw} />
-            <Pushbuttons value={key} onChange={setKey} />
-          </Board>
+        <div className="wb-right" style={{ width: boardWidth }}>
+          <div className="wb-board-fit" ref={boardViewportRef}>
+            <div
+              className="wb-board-fit__inner"
+              ref={boardScalerRef}
+              style={{ transform: `scale(${boardScale})` }}
+            >
+              <Board size={24}>
+                <Leds value={sw} />
+                <SevenSegmentDisplays value={numberToDisplays(dec, 6)} />
+                <Switches value={sw} onChange={setSw} />
+                <Pushbuttons value={key} onChange={setKey} />
+              </Board>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -301,9 +301,10 @@ left edge (`handleBoardResizerPointerDown`). Neither width is applied
 directly from the drag delta: every move of either handle, and every resize
 of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout`, which
 
-- clamps the sidebar's requested width between `SIDEBAR_MIN_W` /
-  `SIDEBAR_MAX_W`, and the board's between `BOARD_MIN_W` / `BOARD_MAX_W`,
-  independently, then
+- clamps each panel's requested width between its own minimum and a
+  *computed* ceiling — whatever the other two panes don't need,
+  `room - otherPaneMin - EDITOR_MIN_W`, where `room` is the measured width
+  less the two handles (`CHROME_W`) — then
 - if both requested widths together don't leave the editor `EDITOR_MIN_W`,
   shrinks one or both panels via its `shrinkFirst` argument: during an
   active drag, whichever panel *isn't* the one being dragged gives way
@@ -328,17 +329,59 @@ This is what keeps either panel from ever being pushed outside the browser
 window by the other — they shrink instead, in JS, rather than relying on
 flexbox to shrink a `flex: none` panel (which it won't).
 
-One layout detail this feeds into: `Board`'s 2-column grid
-(`components/board/Board.css`) only drops to a single column below a
-**900px viewport width** — it has no way to know it is sitting inside a
-narrower panel, especially now that panel's width moves independently of
-the viewport. At the `size={24}` this page passes, the two columns need
-roughly 700px (`BOARD_NARROW_W` in `Workbench.tsx`), so once `applyLayout`
-shrinks `.wb-right` below that, it adds the `.wb-right--narrow` class, which
-forces `.pb-board`'s `grid-template-columns` back to one column itself
-(`Workbench.css`), rather than letting the grid overflow its container. If
-you resize the board (`size={…}` on `<Board>`), re-check that threshold —
-it does not resize itself automatically.
+Three things here are load-bearing, and each was a bug before it was a rule:
+
+**No fixed maximum for either side panel.** The ceilings are computed, not
+constants. A fixed cap silently breaks the divider: widen the window and the
+capped panel stays put while the editor swallows all the new space, so the
+divider can no longer be dragged back to the screen position it held before
+— there is no width that puts it there. The panel also starts pinned against
+its own cap if the default equals it, which makes dragging outwards look
+dead. Bound a panel by what the *other* panes need, never by a number.
+
+**`min-width: 0` on `.wb-body`.** It is a grid item, so it defaults to
+`min-width: auto` — its min-content width — and since every pane inside is
+`flex: none`, that min-content is the panes' full combined width. Without
+the override the row will not shrink below that sum, so the width
+`applyLayout` measures is a frozen number rather than the space actually
+available, it concludes everything fits, and *no reconciliation happens at
+all* on a window resize. `.wb`'s `overflow-x: hidden` then quietly clips the
+board panel off the right edge, which looks enough like a moving divider to
+hide the fault.
+
+**The side panels are `border-box`.** `applyLayout` budgets in rendered
+pixels, so the width it sets has to be the width on screen. While they were
+content-box their padding (14px and 16px a side) sat outside that number and,
+with the two 10px handles, 80px of the row went unbudgeted — enough to
+squeeze the editor to 120px against a declared `EDITOR_MIN_W` of 200. The
+`*_DEFAULT_W` constants include the padding for this reason; changing a
+panel's padding means changing them to match.
+
+### Fitting the board to its pane
+
+The board pane never scrolls and the board inside it never reflows. The
+parts keep one fixed 2×2 arrangement at one fixed internal size
+(`size={24}`), and `.wb-board-fit__inner` is scaled with a CSS `transform`
+to whatever the pane currently gives it, so the parts' positions relative
+to each other are identical at every pane width — only the scale changes.
+
+The scale is `min(paneW / naturalW, paneH / naturalH)`, recomputed by a
+`ResizeObserver` on both the pane and the board (Workbench.tsx's board-fit
+effect). Measuring can't feed back into the scale: `offsetWidth` /
+`offsetHeight` and `ResizeObserver`'s `contentRect` all report the
+*untransformed* layout box, which the `transform` never changes.
+
+`transform` rather than shrinking `--pb-unit`, because a good deal of the
+part chrome is hardcoded 1–2px borders and shadows
+(`Switches/ToggleSwitch.css`, `Leds/Led.css`, `board/panel.css`). Those do
+not scale with the unit, so a smaller unit would leave chunky borders on
+shrunken parts; a transform scales every one of them uniformly.
+
+`Board`'s own single-column fallback below a **900px viewport width**
+(`components/board/Board.css`) is therefore overridden in here
+(`.wb-board-fit .pb-board` in `Workbench.css`) — the scale handles a narrow
+pane instead. Standalone `Board` users, such as the gallery, keep the
+stacking fallback.
 
 ## Known limitations
 
