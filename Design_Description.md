@@ -1,8 +1,8 @@
 # PB1180 UI — Design Description
 
-Working notes for the browser-side board mock used in **PB1180 Programmerbare
-logiske kretser**. Read this before touching a component; update it whenever a
-decision changes.
+Working notes for the browser-side board components used in **PB1180
+Programmerbare logiske kretser**. Read this before touching a component;
+update it whenever a decision changes.
 
 The goal is a panel that looks like the real DE-series board hardware and
 carries the same signal names students use in VHDL (`SW`, `LEDR`, `HEX`,
@@ -113,6 +113,14 @@ buried in a source file.
 | `SevenSegmentDisplays` (`HEX[5:0]`) | `DesignResources/7SegmentDisplays.png` + `7SegmentDisplay_maping.png` + `7SegmentDisplay_pin_assignment.png` | **done** |
 | `Board` (2×2 grid) | `DesignResources/Component_grouping.png` | **done** |
 
+The components are finished. What drives them is not: the Workbench still
+shows a **mock**, where `LEDR` is wired straight to `SW` and the 7-segment
+displays show the switch value in hex. Replacing that with a real GHDL
+simulation is specified in
+[`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) and is not
+built yet. Nothing in that work changes a component — see § 5 convention 11
+for the boundary it has to respect.
+
 ---
 
 ## 3. Project layout
@@ -121,6 +129,7 @@ buried in a source file.
 UI/
 ├─ README.md                    how to USE the components
 ├─ Design_Description.md        ← this file: how they are BUILT
+├─ ghdl_implementation_plan.md  the GHDL backend work order — not built yet
 ├─ DesignResources/             ← reference renders (do not edit)
 ├─ Examples/                    built demos + reference comparisons
 ├─ docs/                        screenshots used by README.md
@@ -133,6 +142,7 @@ UI/
 ├─ tools/
 │  ├─ screenshot.mjs            visual check helper (playwright)
 │  └─ bundle.mjs                inline a build into one .html for Examples/
+├─ server/                      GHDL backend, Node + TS — planned, not built
 └─ src/
    ├─ main.tsx
    ├─ index.css                 gallery page only — not part of any component
@@ -182,8 +192,10 @@ UI/
          ├─ ConsoleOutput.tsx / .css the GHDL Output/Status log
          ├─ vhdlHighlight.ts    line-based VHDL tokenizer for the editor
          ├─ files.ts            the starter project shown in the tree
-         └─ icons.tsx           edit/delete — real SVG, the one exception
-                                 to this folder's CSS-only icons
+         ├─ icons.tsx           edit/delete — real SVG, the one exception
+         │                       to this folder's CSS-only icons
+         └─ ghdlClient.ts       the simulator's WebSocket client — planned,
+                                 the only file that speaks to the backend
 ```
 
 `workbench/` is IDE chrome, not a hardware part: it has no reference render
@@ -640,6 +652,38 @@ wins and the convention is the thing that needs fixing.
    `prefers-reduced-motion`.
 10. **No images, no SVG, no canvas.** The hardware look is pure CSS gradients
     so it stays crisp at any scale and any DPR.
+11. **Outputs come from the simulator, never from the inputs.** A panel that
+    shows `LEDR` or `HEX` renders whatever `value` it is handed and has no
+    opinion about where that came from. In an app with a simulator attached,
+    that value is what the VHDL drove. Wiring an output panel's `value` to an
+    input panel's state — `<Leds value={sw} />` — is a **mock**, and it is
+    only ever acceptable in a demo that says so.
+
+### Why convention 11 is worth stating
+
+It looks like a restatement of convention 6, and it is not. Convention 6 is
+about *interaction*: an output must not be clickable. Convention 11 is about
+*data flow*, and it exists because the mock's failure mode is unusually
+nasty.
+
+`<Leds value={sw} />` is indistinguishable from a working simulator for as
+long as the design under test happens to be `LEDR <= SW`. Flip a switch, the
+right LED lights, everything looks correct — whether or not a single byte
+ever reached the simulator. A backend that is wired up wrongly, or not at
+all, presents exactly as one that works. The bug is invisible until someone
+runs a design where `LEDR` is *not* `SW`, by which point it is load-bearing.
+
+So the rule is: an app with a simulator holds output state of its own, seeded
+blank, written only by the simulator. If nothing is driving it, the board
+stays dark — which is the truth, and which makes the first correctly-lit LED
+mean something.
+
+`ghdl_implementation_plan.md` § 0 makes cutting this mock the first phase of
+that work, before any backend code, for this reason.
+
+Convention 7 already anticipated the end state: *"The simulator will drive
+them controlled."* That is the mechanism — `value` + no `onChange` on the
+output panels — and nothing in the components has to change to support it.
 
 ---
 
@@ -650,7 +694,10 @@ import { Switches, ToggleSwitch, numberToBits } from './components/Switches';
 import { Leds, Led } from './components/Leds';
 import { Pushbuttons, Pushbutton } from './components/Pushbuttons';
 
-// LEDR <= SW;
+// LEDR <= SW; — a demo of the component API, and a mock. Sharing one
+// vector between an input and an output panel is fine here, where the
+// point is to show the props; it is convention 11's counter-example, and
+// it must not be how an app with a simulator attached drives its board.
 const [sw, setSw] = useState(numberToBits(0b0000110101, 10));
 <Switches value={sw} onChange={setSw} />
 <Leds value={sw} />
@@ -839,7 +886,22 @@ prints. `SEGMENT_PATTERNS` is the table itself.
   or does active-low stay a `KEY`-only idea? Nothing needs it yet.
 - Should a lit LED have any animation (a short ramp, or a flicker at high
   toggle rates)? Right now it is a 140 ms cross-fade, which reads well at
-  human speeds but will smear if a simulation drives it fast.
+  human speeds but will smear if a simulation drives it fast. **This stops
+  being hypothetical once `ghdl_implementation_plan.md` lands** — a real
+  simulation pushes board snapshots on its own cadence, and a design that
+  toggles an LED faster than the cross-fade will render as a dim smear
+  rather than as blinking. Measure it against a real fast-toggling design
+  before changing the value; the answer may be that the cross-fade shortens
+  only above some update rate.
+- Does a board output need a third, **undefined** state? GHDL reports
+  `'U'`/`'X'`/`'Z'` for a signal before reset settles or for an output no
+  design drives, but `Bit` is strictly `0 | 1`, so today those can only be
+  shown as "off". The reference implementation this project draws on renders
+  them pink. Adding it means a tri-state `Bit` through every panel's props
+  plus a new documented visual in § 4 — real work, and worth doing only if
+  students turn out to be confused by a dark board that is actually
+  undriven. `ghdl_implementation_plan.md` § 8.4 ships the simpler coercion
+  first, deliberately.
 - Should `Pushbuttons` model contact bounce? A real `KEY` bounces for a few
   ms, which is exactly the thing a debounce exercise is about — but a mock
   that bounces by default would make every other demo flaky. If it is wanted,
