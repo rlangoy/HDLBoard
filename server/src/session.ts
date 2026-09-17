@@ -6,7 +6,7 @@
  * real WebSocket.
  */
 
-import { promises as fs, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
+import { promises as fs, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -76,6 +76,16 @@ export class Session {
   private outputPollTimer: NodeJS.Timeout | null = null;
   private pacingTimer: NodeJS.Timeout | null = null;
   private runStartTime = 0;
+  /**
+   * Bumped per run so `heartbeatPath()` is unique to it. Deleting a shared
+   * heartbeat file instead would be a race, not a fix: `RESET` kills the
+   * old process and starts the new one synchronously, so the old one can
+   * still write once between the delete and the new run's first pacing
+   * read — and that one stale value stalls the new run (§ 5.9/§ 5.11).
+   * A name it cannot know makes the collision impossible rather than
+   * unlikely.
+   */
+  private runSeq = 0;
   private lastSentState: string | null = null;
   private destroyed = false;
 
@@ -93,7 +103,7 @@ export class Session {
   }
 
   private heartbeatPath(): string {
-    return join(this.dir, 'heartbeat.txt');
+    return join(this.dir, `heartbeat-${this.runSeq}.txt`);
   }
 
   async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
@@ -188,6 +198,17 @@ export class Session {
 
   private startRun(): void {
     this.lastSentState = null;
+    // These outlive a single run — they live in the session's temp
+    // directory, and a re-`RUN`/`RESET` reuses it. Inheriting them is not
+    // cosmetic: the pacing loop (§ 5.9) reads the heartbeat as "how far
+    // this run has got", so a stale one reports the *previous* run's
+    // simulated time and stalls the fresh process for exactly as long as
+    // that run lasted (§ 5.11). The heartbeat gets a per-run name rather
+    // than a delete, since the old process may outlive the delete by a
+    // few ms; `output.txt` is shared but milder — one stale board state,
+    // corrected by this run's first real one.
+    this.runSeq++;
+    rmSync(this.outputPath(), { force: true });
     const handle = startPersistentRun(
       this.dir,
       TB_ENTITY,
