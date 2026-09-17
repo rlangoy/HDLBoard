@@ -62,7 +62,7 @@ wss.on('connection', (ws: WebSocket) => {
           send({ verb: 'ERROR', stage: 'protocol', text: 'RUN sent before HELLO.' });
           break;
         }
-        session.handleRun(frame.files).catch((e) => {
+        session.handleRun(frame.files, frame.topFile).catch((e) => {
           send({ verb: 'ERROR', stage: 'internal', text: `Internal server error:\n${String(e)}` });
         });
         break;

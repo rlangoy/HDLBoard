@@ -47,7 +47,7 @@ export class Session {
     return join(this.dir, 'output.txt');
   }
 
-  async handleRun(files: VhdlFileInput[]): Promise<void> {
+  async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
     this.stopRun('stopped');
     this.state = 'compiling';
 
@@ -92,7 +92,7 @@ export class Session {
       }
     }
 
-    const top = findTopEntity(files);
+    const top = findTopEntity(files, topFile);
     if ('message' in top) {
       this.send({ verb: 'ERROR', stage: 'elaborate', text: top.message });
       this.state = 'stopped';

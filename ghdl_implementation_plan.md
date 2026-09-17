@@ -535,7 +535,7 @@ body        = *OCTET          ; everything after the first LF, verbatim
 | Verb | Args | Body | Meaning | Proposal § 4 equivalent |
 |---|---|---|---|---|
 | `HELLO` | version | — | First frame. `1` today. | — |
-| `RUN` | — | the VHDL project | Analyze, elaborate, start. | `compile` + `start` |
+| `RUN` | top file name (optional) | the VHDL project | Analyze, elaborate, start. | `compile` + `start` |
 | `STIM` | 14 chars `[01]{14}` | — | New `SW`/`KEY` state. | `input` |
 | `RESET` | — | — | Restart simulation from t=0, same compiled design. | `reset` |
 | `STOP` | — | — | Stop simulating; connection stays open. | `stop` |
@@ -572,6 +572,22 @@ RUN
   use, and analyzing both would give GHDL two testbenches.
 - A file whose own first line looks like `@@FILE …@@` is rejected with
   `ERROR protocol` rather than silently mis-split.
+
+**`RUN`'s inline arg — an explicit top file.** Added after the Files panel
+grew a "set as top" control (a blue dot in front of the current top
+`vhdl/` file, a gray circle on every other — click one to switch): the
+frontend sends that file's *name* as `RUN`'s inline argument,
+`RUN DE1_SoC.vhd\n@@FILE …`. This is not cosmetic — the backend elaborates
+whichever entity that specific file declares, overriding § 7.3's
+board-port-matching heuristic rather than falling back to it. Omitted
+(no dot has ever been touched, or the named file wasn't actually among
+the submitted ones — deleted client-side after being marked top, say),
+the heuristic still runs exactly as originally specified. Verified with
+two files declaring identical board ports but opposite logic
+(`LEDR <= SW` vs. `LEDR <= not SW`, which a score-based heuristic alone
+cannot distinguish): the explicit hint reliably picks the one actually
+named, confirmed against the real simulated `LEDR` value, not just that
+the right frame went out.
 
 ### 6.4 Server → client
 
@@ -669,10 +685,14 @@ Two adaptations:
 
 - **Finding the top entity.** The reference assumes one file. Here, scan all
   submitted files for entities and pick the one whose port names best match
-  § 3.2's set. Do **not** assume the last file, and do not require a
-  particular filename. If nothing matches, `ERROR elaborate` with a message
-  naming the expected ports — this is a case a student will hit by
-  misspelling `LEDR`, and the error must say so.
+  § 3.2's set — *unless* `RUN` named an explicit top file (§ 6.3), in
+  which case that file's own declared entity wins outright, without being
+  scored against the board interface at all. Do **not** assume the last
+  file, and do not require a particular filename absent that hint. If
+  nothing matches (no explicit hint, and no entity scores above zero),
+  `ERROR elaborate` with a message naming the expected ports — this is a
+  case a student will hit by misspelling `LEDR`, and the error must say
+  so.
 - **Optional ports.** `buildPortMap()` emits associations only for declared
   ports (`tbTemplate.js:21-33`). Unconnected outputs read `'X'` on the wire
   and render blank.

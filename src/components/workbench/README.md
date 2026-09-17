@@ -132,6 +132,8 @@ interface FileExplorerProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onFilesDropped: (files: FileList) => void;
+  topFileId: string | null;
+  onSetTopFile: (id: string) => void;
 }
 ```
 
@@ -167,6 +169,28 @@ matters beyond not repeating code: a native file picker's `accept=".vhd,
 deliver, so `readAndAddFiles` is where non-VHDL files actually get
 rejected (a red console line, `Skipped <name>: not a .vhd/.vhdl file.`),
 regardless of which path they arrived by.
+
+**The top file.** Every `vhdl/` row (never `work/` — a testbench isn't a
+candidate; see below) gets a small dot before its name: a blue
+`.wb-files__top-dot.is-top` for whichever file's `id` equals `topFileId`,
+a gray `.wb-files__top-dot` for every other. It's a sibling of the
+file-select `<button>`, not nested inside it — an interactive element
+can't nest inside another one, which is the same reason the rename
+`<input>` replaces that button rather than sitting inside it. The current
+top's dot is `disabled`: there's nothing a second click on it would do,
+single-select is `Workbench` owning one `topFileId`, not anything
+enforced here. Clicking any other file's dot calls `onSetTopFile(id)`
+directly — no need to first open/select that file, per the request this
+was built from.
+
+`Workbench` sends the top file's `name` as `RUN`'s optional inline arg
+(`ghdl_implementation_plan.md` § 6.3) so the backend elaborates *that*
+entity specifically, rather than guessing from board-port matches — this
+is not cosmetic. Confirmed with two files declaring the same board ports
+but opposite logic (`LEDR <= SW` vs. `LEDR <= not SW`): switching which
+one is marked top and clicking Start changes which one GHDL actually
+runs, verified against the real simulated LED state, not just the UI's
+own dot.
 
 **Rename and delete.** Each row reveals an edit and a delete button
 (`icons.tsx` — the one place in this folder using real SVG icons rather
@@ -236,7 +260,7 @@ type SimStatus = 'stopped' | 'compiling' | 'running';
 interface SimulationCardProps {
   status: SimStatus;
   elapsedSeconds: number;
-  topFile: string;          // TOP_LEVEL_ENTITY from files.ts — "DE1_SoC.vhd"
+  topFile: string;          // whichever vhdl/ file has the blue dot right now
   onStart: () => void;
   onStop: () => void;
 }
@@ -245,7 +269,9 @@ interface SimulationCardProps {
 The card at the top of the sidebar: a circular play glyph and "Simulation"
 heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
-line reading `Elapsed: HH:MM:SS | Top: DE1_SoC.vhd`.
+line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` tracks
+whichever `vhdl/` file currently has the blue dot in `<FileExplorer>`
+(above) — not a fixed label.
 
 Purely presentational: the button is disabled while `compiling`, shows
 Start when `stopped` or `compiling`, and Stop once `running`; the status
@@ -300,8 +326,11 @@ extend the highlighter.
 (`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
 `utility_pkg.vhd` under `vhdl/`, `tb_de1_soc.vhd` under `work/`).
 `DEFAULT_OPEN_TABS` is the four tabs open on first load, matching
-`WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is what
-`SimulationCard` shows after "Top:". `DE1_SoC.vhd` declares the real
+`WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is only the
+*initial* top file — `Workbench`'s `topFileId` starts pointed at whichever
+starter file has this name, then moves independently once a user clicks
+another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhd`
+declares the real
 DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY`, `LEDR`, `HEX0..HEX5` —
 `ghdl_implementation_plan.md` § 3.2), not stand-ins for them, and is
 verified against the real GHDL toolchain, not just plausible-looking:

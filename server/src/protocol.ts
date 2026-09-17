@@ -23,7 +23,11 @@ export type DoneReason = 'stopped' | 'max-cycles' | 'closed';
 
 export type ClientFrame =
   | { verb: 'HELLO'; version: string }
-  | { verb: 'RUN'; files: VhdlFileInput[] }
+  // `topFile`: the submitted file whose declared entity should be
+  // elaborated as top, e.g. from a "set as top" click in the Files
+  // panel. Optional — omitted, the backend falls back to matching board
+  // ports across every submitted entity (§ 7.3's original heuristic).
+  | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string }
   | { verb: 'STIM'; bits: string }
   | { verb: 'RESET' }
   | { verb: 'STOP' }
@@ -110,7 +114,7 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       if (files.length === 0) {
         return { message: 'RUN body contains no @@FILE ...@@ sections' };
       }
-      return { verb: 'RUN', files };
+      return { verb: 'RUN', files, topFile: inline || undefined };
     }
     case 'STIM': {
       if (!new RegExp(`^[01]{${STIM_LENGTH}}$`).test(inline)) {
@@ -139,7 +143,8 @@ export function encodeClientFrame(frame: ClientFrame): string {
       const body = frame.files
         .map((f) => `@@FILE ${f.name}@@\n${f.content}`)
         .join('\n');
-      return `RUN\n${body}`;
+      const head = frame.topFile ? `RUN ${frame.topFile}` : 'RUN';
+      return `${head}\n${body}`;
     }
     case 'STIM':
       return `STIM ${frame.bits}`;

@@ -133,12 +133,19 @@ export class GhdlClient {
     }
   }
 
-  /** Filters to `folder === 'vhdl'` and builds the `@@FILE ...@@`-framed body (§ 6.3). */
-  run(files: VhdlFile[]): void {
+  /**
+   * Filters to `folder === 'vhdl'` and builds the `@@FILE ...@@`-framed
+   * body (§ 6.3). `topFileName`, when given (the file currently marked
+   * as top in the Files panel), is sent as `RUN`'s inline arg so the
+   * backend elaborates that file's entity rather than guessing from
+   * board-port matches — see `portDetect.ts`'s `findTopEntity`.
+   */
+  run(files: VhdlFile[], topFileName?: string): void {
     const ws = this.ensureSocket();
     const vhdlFiles = files.filter((f) => f.folder === 'vhdl');
     const body = vhdlFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
-    const send = () => ws.send(`RUN\n${body}`);
+    const head = topFileName ? `RUN ${topFileName}` : 'RUN';
+    const send = () => ws.send(`${head}\n${body}`);
     if (ws.readyState === WebSocket.OPEN) send();
     else ws.addEventListener('open', () => { ws.send(`HELLO ${PROTOCOL_VERSION}`); send(); }, { once: true });
   }

@@ -78,6 +78,14 @@ export function Workbench() {
   const [openTabs, setOpenTabs] = useState<string[]>(DEFAULT_OPEN_TABS);
   const [activeTabId, setActiveTabId] = useState<string | null>(DEFAULT_OPEN_TABS[0] ?? null);
 
+  // The vhdl/ file GHDL elaborates as top-level (FileExplorer's blue dot),
+  // independent of which tab is open/active — starts on whichever starter
+  // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
+  // showed as a static label before this was selectable.
+  const [topFileId, setTopFileId] = useState<string | null>(
+    () => STARTER_FILES.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
+  );
+
   const [status, setStatus] = useState<SimStatus>('stopped');
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
@@ -375,7 +383,16 @@ export function Workbench() {
     // Also closes the tab, if it had one open — same "next tab takes over"
     // logic as a plain close, since a deleted file can't stay open.
     handleCloseTab(id);
+    // A deleted top file can't stay top either — hand the role to
+    // whatever vhdl/ file is first afterward, or to nothing if that was
+    // the last one (handleStart already tolerates topFileId being null,
+    // same as it did before any file was ever marked top).
+    if (id === topFileId) {
+      setTopFileId(files.find((f) => f.id !== id && f.folder === 'vhdl')?.id ?? null);
+    }
   };
+
+  const handleSetTopFile = (id: string) => setTopFileId(id);
 
   const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl') => {
     const id = `file-${nextFileSeq++}`;
@@ -444,7 +461,8 @@ export function Workbench() {
     setElapsedSeconds(0);
     setStatus('compiling');
     blankBoard();
-    getClient().run(files);
+    const topFile = files.find((f) => f.id === topFileId);
+    getClient().run(files, topFile?.name);
   };
 
   const handleStop = () => {
@@ -470,7 +488,7 @@ export function Workbench() {
           <SimulationCard
             status={status}
             elapsedSeconds={elapsedSeconds}
-            topFile={TOP_LEVEL_ENTITY}
+            topFile={files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY}
             onStart={handleStart}
             onStop={handleStop}
           />
@@ -483,6 +501,8 @@ export function Workbench() {
             onRename={handleRenameFile}
             onDelete={handleDeleteFile}
             onFilesDropped={handleFilesDropped}
+            topFileId={topFileId}
+            onSetTopFile={handleSetTopFile}
           />
           <input
             ref={uploadInputRef}

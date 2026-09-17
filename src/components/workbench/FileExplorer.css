@@ -177,6 +177,56 @@
   font-weight: 600;
 }
 
+/* A `vhdl/` row's top-dot button (below) already supplies the row's
+   left indent, so the file button's own 30px doesn't stack on top of it
+   — every other row (work/, which has no dot) keeps the base 30px. */
+.wb-files__file--has-top-dot {
+  padding-left: 4px;
+}
+
+/* Which `vhdl/` file GHDL elaborates as top-level — a blue dot; every
+   other `vhdl/` file gets a gray circle in the same spot, clickable to
+   make it the new top (only one at a time, enforced by Workbench owning
+   a single topFileId, not by anything here). Disabled rather than
+   unclickable-but-styled-as-clickable when it's already top: there is
+   nothing a second click on the current top would do. */
+.wb-files__top-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wb-files__top-dot:disabled {
+  cursor: default;
+}
+
+.wb-files__top-dot:not(:disabled):hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.wb-files__top-dot-glyph {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wb-border);
+}
+
+.wb-files__top-dot.is-top .wb-files__top-dot-glyph {
+  background: var(--wb-accent);
+  box-shadow: 0 0 0 2px var(--wb-accent-soft);
+}
+
+.wb-files__top-dot:not(:disabled):hover .wb-files__top-dot-glyph {
+  background: var(--wb-text-muted);
+}
+
 .wb-files__file--editing {
   cursor: text;
 }

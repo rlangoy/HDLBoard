@@ -14,6 +14,9 @@ export interface FileExplorerProps {
   onDelete: (id: string) => void;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList) => void;
+  /** The `vhdl/` file GHDL elaborates as top-level — a blue dot, vs. every other `vhdl/` file's gray circle. */
+  topFileId: string | null;
+  onSetTopFile: (id: string) => void;
 }
 
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
@@ -32,6 +35,8 @@ export function FileExplorer({
   onRename,
   onDelete,
   onFilesDropped,
+  topFileId,
+  onSetTopFile,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -151,8 +156,29 @@ export function FileExplorer({
                       <div
                         className={cx('wb-files__row', f.id === activeFileId && 'is-active')}
                       >
+                        {folder === 'vhdl' && (
+                          <button
+                            type="button"
+                            className={cx('wb-files__top-dot', f.id === topFileId && 'is-top')}
+                            aria-pressed={f.id === topFileId}
+                            aria-label={
+                              f.id === topFileId
+                                ? `${f.name} is the top-level file`
+                                : `Set ${f.name} as the top-level file`
+                            }
+                            disabled={f.id === topFileId}
+                            onClick={() => onSetTopFile(f.id)}
+                          >
+                            <span className="wb-files__top-dot-glyph" aria-hidden="true" />
+                          </button>
+                        )}
                         {renamingId === f.id ? (
-                          <span className="wb-files__file wb-files__file--editing">
+                          <span
+                            className={cx(
+                              'wb-files__file wb-files__file--editing',
+                              folder === 'vhdl' && 'wb-files__file--has-top-dot',
+                            )}
+                          >
                             <span className="wb-icon wb-icon--file" aria-hidden="true" />
                             <input
                               type="text"
@@ -171,7 +197,7 @@ export function FileExplorer({
                             type="button"
                             role="treeitem"
                             aria-selected={f.id === activeFileId}
-                            className="wb-files__file"
+                            className={cx('wb-files__file', folder === 'vhdl' && 'wb-files__file--has-top-dot')}
                             onClick={() => onSelect(f.id)}
                             onDoubleClick={() => startRename(f)}
                           >

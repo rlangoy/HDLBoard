@@ -135,8 +135,38 @@ export interface TopEntityError {
  * whose ports best match the board's own names (§ 3.2) — the top entity
  * is identified by its interface, not by filename or file order, since
  * `RUN`'s files are not guaranteed to arrive top-entity-last (§ 6.3).
+ *
+ * `preferredFileName`, when given (a "set as top" click in the Files
+ * panel — `RUN`'s optional inline arg), skips the scoring entirely and
+ * elaborates whichever entity that specific file declares — a student's
+ * explicit choice overrides the auto-detect heuristic, not the other way
+ * round. Falls through to auto-detect only if that file wasn't actually
+ * submitted (deleted client-side after being marked top, say), never
+ * silently for a file that exists but scores 0 — an explicit choice that
+ * doesn't match any board port is still the student's entity to see fail
+ * at elaboration with a real GHDL error, not quietly swapped out.
  */
-export function findTopEntity(files: VhdlFileInput[]): TopEntity | TopEntityError {
+export function findTopEntity(
+  files: VhdlFileInput[],
+  preferredFileName?: string,
+): TopEntity | TopEntityError {
+  if (preferredFileName) {
+    const preferred = files.find((f) => f.name === preferredFileName);
+    if (preferred) {
+      const names = findEntityNames(preferred.content);
+      if (names.length === 0) {
+        return {
+          message: `${preferredFileName} is marked as the top file, but no 'entity ... is' declaration was found in it.`,
+        };
+      }
+      // A file conventionally declares one entity; the first declared is
+      // its own, primary one — a later declaration in the same file (rare,
+      // but legal VHDL) is more likely a locally-scoped helper.
+      const name = names[0];
+      return { name, ports: detectPorts(preferred.content, name) };
+    }
+  }
+
   const candidates: TopEntity[] = [];
   for (const file of files) {
     for (const name of findEntityNames(file.content)) {
