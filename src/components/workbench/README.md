@@ -131,6 +131,7 @@ interface FileExplorerProps {
   onNewFile: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onFilesDropped: (files: FileList) => void;
 }
 ```
 
@@ -140,6 +141,32 @@ concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `Workbench` opens it as a tab if it isn't already and makes it active.
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
 owned by this component — `FileExplorer` only asks for the click.
+
+**Drag-and-drop.** The whole panel (`<aside className="wb-files">`, not
+just the tree) is a drop target — `onDragEnter`/`onDragOver`/`onDragLeave`/
+`onDrop` all live on the root element, and a translucent
+`.wb-files__drop-hint` overlay (`position: absolute; inset: 0`, needs the
+root's `position: relative`) covers it while a file is dragged over.
+`onDragOver` calling `e.preventDefault()` is not optional — a browser
+treats a drop target as declining the drop, and never fires `onDrop` at
+all, unless something in the drag sequence calls that. The highlight is a
+ref-counted `dragDepth` (an integer, not a boolean): entering a child
+element fires that child's `dragenter` and the parent's `dragleave` in the
+same tick (before the child's own `dragenter` — the browser doesn't
+guarantee an order that makes a boolean safe), so naively setting the
+highlight false on any `dragleave` flickers it off and on as the pointer
+crosses every row underneath it while still over the panel. `e.dataTransfer
+.types.includes('Files')` gates all four handlers so dragging page text or
+another element over the panel is inert.
+
+`onFilesDropped` hands the raw `FileList` straight to `Workbench`, which
+already owns file-reading (`readAndAddFiles`, shared with the `<input
+type="file">` picker) — `FileExplorer` does no reading itself. This
+matters beyond not repeating code: a native file picker's `accept=".vhd,
+.vhdl"` only filters what the *dialog* shows, never what a drop can
+deliver, so `readAndAddFiles` is where non-VHDL files actually get
+rejected (a red console line, `Skipped <name>: not a .vhd/.vhdl file.`),
+regardless of which path they arrived by.
 
 **Rename and delete.** Each row reveals an edit and a delete button
 (`icons.tsx` — the one place in this folder using real SVG icons rather
@@ -178,13 +205,28 @@ interface CodeEditorProps {
   onCloseTab: (id: string) => void;
   onAddTab: () => void;            // the tab strip's "+"
   onChange: (id: string, content: string) => void;
+  onFilesDropped: (files: FileList) => void;
 }
 ```
 
 The tab strip plus one editing surface for the active tab. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
 textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
-open" placeholder rather than an empty editor.
+open" placeholder rather than an empty editor — which is itself a valid
+drop target (below), a quick way back to a non-empty project.
+
+**Drag-and-drop.** Same mechanism and `onFilesDropped` contract as
+`<FileExplorer>` (see its own entry above for the ref-counted `dragDepth`
+reasoning) — dropped files are *imported into the project*, not inserted
+as text. That second part needs active prevention: a plain `<textarea>`'s
+default behavior for a dropped file is to insert its content (or, in some
+browsers, its path) as text at the drop position, and `onDragOver`'s
+`e.preventDefault()` is what suppresses that, same call that also makes
+`onDrop` fire at all. Verified in a real browser, not assumed: dropping
+directly onto the textarea imports the file and leaves whatever was
+already being edited completely untouched. The whole `.wb-editor` root —
+tab strip, the open file, and the empty state — is one drop target, so
+where exactly the pointer lands doesn't matter.
 
 ### `<SimulationCard>`
 

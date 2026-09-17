@@ -46,9 +46,10 @@ is an image, an SVG, or a canvas drawing. See
 
 ## Features
 
-- **File explorer** — a `vhdl/` / `work/` project tree with upload
-  (reads real `.vhd`/`.vhdl` files via the File API), new-file, rename, and
-  delete actions (the last two on hover, or double-click a name to rename).
+- **File explorer** — a `vhdl/` / `work/` project tree with upload (a
+  picker, or drag-and-drop `.vhd`/`.vhdl` files straight onto the panel),
+  new-file, rename, and delete actions (the last two on hover, or
+  double-click a name to rename).
 - **Resizable panes** — drag the handles either side of the editor to
   resize the file panel and the board panel; both stay within the browser
   window as you resize, shrinking together (or giving way to whichever one

@@ -1,9 +1,66 @@
 .wb-editor {
+  position: relative; /* anchors .wb-editor__drop-hint */
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   background: #ffffff;
+}
+
+/* Drag-and-drop: dropping anywhere on the editor pane (tabs, the open
+   file, or the "No file open" empty state) imports the file(s) into the
+   project, the same as a drop on the Files panel — see FileExplorer.css
+   for the matching treatment there and why dragDepth is a ref-counted
+   integer rather than a boolean. */
+.wb-editor.is-drag-over {
+  box-shadow: inset 0 0 0 2px var(--wb-accent);
+}
+
+.wb-editor__drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(229, 239, 255, 0.92); /* --wb-accent-soft, translucent */
+  color: var(--wb-accent-dark);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none; /* drag events are handled on .wb-editor itself */
+}
+
+.wb-editor__drop-hint .wb-icon--upload {
+  color: var(--wb-accent-dark);
+}
+
+.wb-icon--upload {
+  width: 14px;
+  height: 14px;
+  position: relative;
+}
+.wb-icon--upload::before {
+  /* the arrow: stem + head, one flat-bottomed pentagon */
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 0;
+  width: 7px;
+  height: 10.5px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 45%, 70% 45%, 70% 100%, 30% 100%, 30% 45%, 0 45%);
+}
+.wb-icon--upload::after {
+  /* the tray it lands in */
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 14px;
+  height: 2.3px;
+  background: currentColor;
+  border-radius: 1px;
 }
 
 /* ---- tab strip ------------------------------------------------------ */

@@ -391,19 +391,32 @@ export function Workbench() {
 
   const handleUploadClick = () => uploadInputRef.current?.click();
 
-  const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
-    const list = e.target.files;
-    if (!list) return;
-    Array.from(list).forEach((file) => {
+  // Shared by the hidden <input type="file"> (a real picker, filtered to
+  // .vhd/.vhdl by its own `accept`) and drag-and-drop onto the Files
+  // panel (below) — a browser drop is not filtered by `accept` at all, so
+  // this is the one place non-VHDL files actually get rejected, with a
+  // console line explaining why rather than silently reading garbage in.
+  const readAndAddFiles = (incoming: Iterable<File>) => {
+    for (const file of incoming) {
+      if (!/\.(vhdl?|vhd)$/i.test(file.name)) {
+        appendLog(`Skipped ${file.name}: not a .vhd/.vhdl file.`, 'error');
+        continue;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         const folder: VhdlFile['folder'] = /^tb_/i.test(file.name) ? 'work' : 'vhdl';
         addFile(file.name, String(reader.result ?? ''), folder);
       };
       reader.readAsText(file);
-    });
+    }
+  };
+
+  const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) readAndAddFiles(e.target.files);
     e.target.value = '';
   };
+
+  const handleFilesDropped = (list: FileList) => readAndAddFiles(list);
 
   const handleContentChange = (id: string, content: string) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));
@@ -469,6 +482,7 @@ export function Workbench() {
             onNewFile={handleNewFile}
             onRename={handleRenameFile}
             onDelete={handleDeleteFile}
+            onFilesDropped={handleFilesDropped}
           />
           <input
             ref={uploadInputRef}
@@ -495,6 +509,7 @@ export function Workbench() {
           onCloseTab={handleCloseTab}
           onAddTab={handleNewFile}
           onChange={handleContentChange}
+          onFilesDropped={handleFilesDropped}
         />
 
         <div

@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import type { VhdlFile } from './files';
 import { DeleteIcon, EditIcon } from './icons';
@@ -12,6 +12,8 @@ export interface FileExplorerProps {
   onNewFile: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
+  onFilesDropped: (files: FileList) => void;
 }
 
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
@@ -29,10 +31,40 @@ export function FileExplorer({
   onNewFile,
   onRename,
   onDelete,
+  onFilesDropped,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
+  // A ref-counted depth rather than a plain boolean: dragging over a child
+  // element fires dragleave on the parent before dragenter on the child,
+  // so a naive "set false on dragleave" flickers the highlight off and on
+  // as the pointer crosses every row underneath it.
+  const [dragDepth, setDragDepth] = useState(0);
+
+  const handleDragEnter = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragDepth((d) => d + 1);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault(); // required for onDrop to fire at all
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragDepth((d) => Math.max(0, d - 1));
+  };
+
+  const handleDrop = (e: DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    setDragDepth(0);
+    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+  };
 
   const toggleFolder = (folder: string) => {
     setCollapsed((prev) => ({ ...prev, [folder]: !prev[folder] }));
@@ -66,7 +98,19 @@ export function FileExplorer({
   };
 
   return (
-    <aside className="wb-files">
+    <aside
+      className={cx('wb-files', dragDepth > 0 && 'is-drag-over')}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragDepth > 0 && (
+        <div className="wb-files__drop-hint" aria-hidden="true">
+          <span className="wb-icon wb-icon--upload" aria-hidden="true" />
+          Drop .vhd / .vhdl files
+        </div>
+      )}
       <div className="wb-files__header">
         <span className="wb-icon wb-icon--folder-outline" aria-hidden="true" />
         <h2 className="wb-files__title">Files</h2>

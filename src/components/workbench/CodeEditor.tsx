@@ -1,4 +1,4 @@
-import { useRef, type UIEvent } from 'react';
+import { useRef, useState, type DragEvent, type UIEvent } from 'react';
 import { cx } from '../board';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
@@ -16,6 +16,8 @@ export interface CodeEditorProps {
   onCloseTab: (id: string) => void;
   onAddTab: () => void;
   onChange: (id: string, content: string) => void;
+  /** Files dropped anywhere on the editor pane — imported the same way a drop on the Files panel is. */
+  onFilesDropped: (files: FileList) => void;
 }
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
@@ -55,7 +57,15 @@ function HighlightedLine({ line }: { line: string }) {
  * overlay technique, so typing, selection and the caret are all native
  * while the visible text is coloured.
  */
-export function CodeEditor({ tabs, activeTabId, onSelectTab, onCloseTab, onAddTab, onChange }: CodeEditorProps) {
+export function CodeEditor({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onAddTab,
+  onChange,
+  onFilesDropped,
+}: CodeEditorProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -72,8 +82,54 @@ export function CodeEditor({ tabs, activeTabId, onSelectTab, onCloseTab, onAddTa
     }
   };
 
+  // Same ref-counted-depth technique as FileExplorer's drop zone, and for
+  // the same reason (a child's dragenter and the parent's dragleave fire
+  // in the same tick, so a boolean flickers while crossing rows/lines
+  // underneath the pointer). Dropped files are imported exactly like a
+  // drop on the Files panel — this pane does not try to insert file
+  // content at the caret, which is what a plain <textarea> would
+  // otherwise do with a dropped file by default.
+  const [dragDepth, setDragDepth] = useState(0);
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragDepth((d) => d + 1);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault(); // required for onDrop to fire, and stops the
+    // textarea's own default (inserting the dropped file as text)
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragDepth((d) => Math.max(0, d - 1));
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragDepth(0);
+    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+  };
+
   return (
-    <div className="wb-editor">
+    <div
+      className={cx('wb-editor', dragDepth > 0 && 'is-drag-over')}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragDepth > 0 && (
+        <div className="wb-editor__drop-hint" aria-hidden="true">
+          <span className="wb-icon wb-icon--upload" aria-hidden="true" />
+          Drop .vhd / .vhdl files
+        </div>
+      )}
       <div className="wb-editor__tabs" role="tablist">
         {tabs.map((tab) => (
           <div
