@@ -181,7 +181,12 @@ top's dot is `disabled`: there's nothing a second click on it would do,
 single-select is `Workbench` owning one `topFileId`, not anything
 enforced here. Clicking any other file's dot calls `onSetTopFile(id)`
 directly — no need to first open/select that file, per the request this
-was built from.
+was built from. Each dot also carries a native `title` tooltip — "Top-File"
+on the current one, "Set Top-File" on every other — which a browser shows
+on hover regardless of `disabled` (unlike a click or focus ring, `title`
+isn't suppressed by it); `aria-label` carries the fuller, file-named
+version of the same thing for screen readers, since the two audiences
+want different amounts of detail from the same hover.
 
 `Workbench` sends the top file's `name` as `RUN`'s optional inline arg
 (`ghdl_implementation_plan.md` § 6.3) so the backend elaborates *that*

@@ -166,6 +166,7 @@ export function FileExplorer({
                                 ? `${f.name} is the top-level file`
                                 : `Set ${f.name} as the top-level file`
                             }
+                            title={f.id === topFileId ? 'Top-File' : 'Set Top-File'}
                             disabled={f.id === topFileId}
                             onClick={() => onSetTopFile(f.id)}
                           >
