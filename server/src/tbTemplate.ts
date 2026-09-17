@@ -25,10 +25,11 @@ const HEX_NAMES = ['hex0', 'hex1', 'hex2', 'hex3', 'hex4', 'hex5'] as const;
 function buildPortMap(ports: ReadonlySet<string>): string {
   const known: Array<[string, string]> = [
     ['clock_50', 'clk_sig'],
+    ['clock_500hz', 'clk500_sig'],
     ['sw', 'sw_sig'],
-    ['key', 'key_sig'],
+    ['key_n', 'key_sig'],
     ['ledr', 'ledr_sig'],
-    ...HEX_NAMES.map((h): [string, string] => [h, `${h}_sig`]),
+    ...HEX_NAMES.map((h): [string, string] => [`${h}_n`, `${h}_sig`]),
     ['rst', 'rst_sig'],
   ];
   const assocs = known
@@ -40,13 +41,13 @@ function buildPortMap(ports: ReadonlySet<string>): string {
 
 /**
  * `rst` is not a DE1-SoC pin (§ 3.2) — a legacy file that declares it
- * gets it wired from `not KEY(0)` when the entity also has `key`, so
- * older files still elaborate; with no `key` to source it from, it is
+ * gets it wired from `not KEY_N(0)` when the entity also has `key_n`, so
+ * older files still elaborate; with no `key_n` to source it from, it is
  * tied permanently deasserted rather than left floating.
  */
 function buildRstDrive(ports: ReadonlySet<string>): string {
   if (!ports.has('rst')) return '';
-  return ports.has('key')
+  return ports.has('key_n')
     ? "\n  rst_sig <= not key_sig(0);"
     : "\n  rst_sig <= '0';";
 }
@@ -54,6 +55,7 @@ function buildRstDrive(ports: ReadonlySet<string>): string {
 export function generateTestbench(entityName: string, ports: ReadonlySet<string>): string {
   const portMap = buildPortMap(ports);
   const rstDrive = buildRstDrive(ports);
+  const hasClock50 = ports.has('clock_50');
 
   return `library ieee;
 use ieee.std_logic_1164.all;
@@ -61,9 +63,10 @@ use std.textio.all;
 
 entity ${TB_ENTITY} is
   generic (
-    input_file  : string  := "";
-    output_file : string  := "";
-    poll_cycles : integer := 50
+    input_file       : string  := "";
+    output_file      : string  := "";
+    poll_interval_ns : integer := 1000;
+    heartbeat_file   : string  := ""
   );
 end entity;
 
@@ -72,11 +75,12 @@ architecture sim of ${TB_ENTITY} is
   -- the entity actually declares — buildPortMap() above only connects the
   -- ones that exist. Defaults are each signal's electrically "off" value,
   -- so an unassociated output reads as blank on the wire, not undefined.
-  signal clk_sig  : std_logic := '0';
-  signal rst_sig  : std_logic := '0';
-  signal sw_sig   : std_logic_vector(9 downto 0) := (others => '0');
-  signal key_sig  : std_logic_vector(3 downto 0) := (others => '1');
-  signal ledr_sig : std_logic_vector(9 downto 0) := (others => '0');
+  signal clk_sig    : std_logic := '0';
+  signal clk500_sig : std_logic := '0';
+  signal rst_sig    : std_logic := '0';
+  signal sw_sig     : std_logic_vector(9 downto 0) := (others => '0');
+  signal key_sig    : std_logic_vector(3 downto 0) := (others => '1');
+  signal ledr_sig   : std_logic_vector(9 downto 0) := (others => '0');
   signal hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig
     : std_logic_vector(6 downto 0) := (others => '1');
 
@@ -104,16 +108,61 @@ begin
 
   uut: entity work.${entityName}${portMap};
 ${rstDrive}
-
-  -- Free-running clock. Never blocks, never waits on I/O — the property
-  -- the Phase 2 spike exists to prove is achievable (§ 5.4.1). Doubles as
-  -- both the DUT's CLOCK_50 (when declared) and the poll loop's own
-  -- timing reference, so there is always something to poll cycles
-  -- against even for a design with no clock port at all.
+${
+  hasClock50
+    ? `
+  -- Free-running clock, only instantiated when the entity actually
+  -- declares CLOCK_50 (§ 5.8) — its own 20 ns period is what makes a
+  -- design that depends on it need millions of edges per visible change
+  -- (§ 5.5). The \`io\` process below no longer rides on this clock's
+  -- edges for its own timing (§ 5.8): this process exists solely to
+  -- drive the DUT's own CLOCK_50 input.
   clkgen : process
   begin
     clk_sig <= '0'; wait for 10 ns;
     clk_sig <= '1'; wait for 10 ns;
+  end process;
+`
+    : ''
+}
+  -- CLOCK_500Hz: not a real DE1-SoC pin (§ 3.2) — a simulator-only
+  -- convenience, already divided down to a human-visible rate, so a
+  -- design can be genuinely sequential (a counter, a debouncer, a
+  -- blinking LED) without hand-writing a 50 MHz divider, which would be
+  -- correct but impractical to run interactively (§ 5.5). Runs
+  -- unconditionally, like clkgen when present — 500 Hz is cheap enough on
+  -- its own (§ 5.8) that there is nothing to gain by making this process
+  -- itself conditional on the entity declaring it.
+  clk500gen : process
+  begin
+    clk500_sig <= '0'; wait for 1 ms;
+    clk500_sig <= '1'; wait for 1 ms;
+  end process;
+
+  -- Real-time pacing heartbeat (§ 5.9): reports this session's own
+  -- simulated-time progress to the Node side every 20 ms of simulated
+  -- time, so a session that would otherwise run far ahead of wall-clock
+  -- time (§ 5.8's fix made this the common case for anything not
+  -- declaring CLOCK_50) can be throttled (SIGSTOP/SIGCONT) back toward
+  -- it — a design's timing in the simulator is then a real prediction of
+  -- its timing on actual hardware, not an accident of how many events
+  -- GHDL happened to process per real second.
+  heartbeat : process
+    file fhb : text;
+    variable status : file_open_status;
+    variable l : line;
+  begin
+    loop
+      wait for 20 ms;
+      if heartbeat_file'length > 0 then
+        file_open(status, fhb, heartbeat_file, write_mode);
+        if status = open_ok then
+          write(l, now / 1 ms);
+          writeline(fhb, l);
+          file_close(fhb);
+        end if;
+      end if;
+    end loop;
   end process;
 
   io : process
@@ -126,9 +175,11 @@ ${rstDrive}
     variable now  : string(1 to 52);
   begin
     loop
-      for i in 1 to poll_cycles loop
-        wait until rising_edge(clk_sig);
-      end loop;
+      -- A plain time-based wait, not clock edges (§ 5.8) — this process
+      -- has nothing to do with whatever clock, if any, the DUT itself
+      -- runs on; tying it to CLOCK_50's own 20 ns period was what made a
+      -- CLOCK_500Hz-only (or clockless) design pay CLOCK_50's cost anyway.
+      wait for poll_interval_ns * 1 ns;
 
       -- STIM's own wire format (§ 6.3): SW9..SW0, KEY3..KEY0, 14 bits.
       -- A missing file (no STIM sent yet this session) is not an error —

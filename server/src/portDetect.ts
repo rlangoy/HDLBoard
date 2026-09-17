@@ -16,17 +16,22 @@ import type { VhdlFileInput } from './protocol.js';
 /** The DE1-SoC board ports this backend knows how to wire up (§ 3.2). */
 export const BOARD_PORTS = [
   'clock_50',
+  // Simulator-only convenience, not a real board pin (§ 3.2 / § 5.5):
+  // an already-divided 500 Hz clock, hardwired in the generated
+  // testbench, so a design can react at a human-visible rate without
+  // hand-writing (and interactively simulating) a 50 MHz divider.
+  'clock_500hz',
   'sw',
-  'key',
+  'key_n',
   'ledr',
-  'hex0',
-  'hex1',
-  'hex2',
-  'hex3',
-  'hex4',
-  'hex5',
+  'hex0_n',
+  'hex1_n',
+  'hex2_n',
+  'hex3_n',
+  'hex4_n',
+  'hex5_n',
   // Legacy tolerance (§ 3.2): older files may declare `rst`, wired from
-  // `not key(0)` in the generated testbench when both are present.
+  // `not key_n(0)` in the generated testbench when both are present.
   'rst',
 ] as const;
 

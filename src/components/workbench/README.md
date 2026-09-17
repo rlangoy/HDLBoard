@@ -327,18 +327,24 @@ extend the highlighter.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the six-file starter project shown in the tree
-(`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
-`utility_pkg.vhd` under `vhdl/`, `tb_de1_soc.vhd` under `work/`).
+`STARTER_FILES: VhdlFile[]` — the seven-file starter project shown in the
+tree (`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
+`utility_pkg.vhd`, `blinkTest.vhdl` under `vhdl/`, `tb_de1_soc.vhd` under
+`work/`). `blinkTest.vhdl` is a standalone example (its own `blinkTest`
+entity, not wired into `DE1_SoC.vhd`) demonstrating `CLOCK_500Hz`
+(§ 3.2/§ 5.7) — mark it top via its Files-panel dot to run it on its own.
 `DEFAULT_OPEN_TABS` is the four tabs open on first load, matching
 `WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is only the
 *initial* top file — `Workbench`'s `topFileId` starts pointed at whichever
 starter file has this name, then moves independently once a user clicks
 another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhd`
 declares the real
-DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY`, `LEDR`, `HEX0..HEX5` —
-`ghdl_implementation_plan.md` § 3.2), not stand-ins for them, and is
-verified against the real GHDL toolchain, not just plausible-looking:
+DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY_N`, `LEDR`,
+`HEX0_N..HEX5_N` — `ghdl_implementation_plan.md` § 3.2), not stand-ins for
+them — `KEY_N`/`HEX0_N..HEX5_N` are this course's own naming convention
+rather than the board's literal pin names (`KEY`/`HEX0..HEX5`), the one
+exception to that otherwise-literal contract; see § 3.2's note. Verified
+against the real GHDL toolchain, not just plausible-looking:
 `ghdl -a`/`-e`/`-r --std=08` were run by hand against every `vhdl/` file
 and the `work/` testbench before this was called done.
 
@@ -427,6 +433,24 @@ for whether a simulation is actually running. `onError` and `onClosed`
 blank the board for the same reason: nothing is currently driving it.
 `elapsedSeconds` is *not* reset on Stop — it holds the last run's duration
 until the next Start zeroes it, the way a stopwatch would.
+
+**Two ways a session can end on its own, not just via Stop.** `onDone`'s
+`reason` distinguishes them: `'stopped'` (the user clicked it, either
+mode) from `'completed'` — only reachable for a portless entity marked
+top (`ghdl_implementation_plan.md` § 5.6's "batch mode": no board ports
+at all means no wrapper, no polling loop keeping the session alive
+forever on purpose, so it can — and does — finish by itself once
+quiescent. A normal board design never produces `'completed'`; its
+wrapper loops unconditionally forever, which is the correct behavior for
+something meant to keep reacting to switches until told to stop.
+`'completed'` gets its own green console line ("Simulation complete.")
+rather than sharing "Simulation stopped." with a user-initiated end —
+the two mean different things and reads as such.
+
+Every `report`/`assert` the design's own process calls arrives as an
+ordinary `LOG` line too, in both modes — real GHDL output, not
+summarized or filtered, the same console line format a local terminal
+`ghdl -r` would show.
 
 ## How the editor overlay works
 
@@ -563,10 +587,22 @@ stacking fallback.
   and are lost on reload. Nothing is written to disk on the frontend side;
   the backend's per-session temp directory is deleted when the tab closes
   (`ghdl_implementation_plan.md` § 7.2).
-- **A clock-rate limit, not a bug.** A hardware-accurate 50 MHz clock
-  divider needs millions of simulated cycles per visible change —
-  impractical to run interactively regardless of tuning. See
-  `ghdl_implementation_plan.md` § 5.5.
+- **A clock-rate limit for board designs, not a bug.** A hardware-accurate
+  50 MHz clock divider on a real `SW`/`LEDR`-style design needs millions
+  of simulated cycles per visible change — impractical to run
+  interactively regardless of tuning. See `ghdl_implementation_plan.md`
+  § 5.5. This does *not* apply to a portless testbench (batch mode,
+  § 5.6) — those run at GHDL's native speed, no board-clock wrapper in
+  the way. A board design can sidestep it too: declare the optional
+  `CLOCK_500Hz` port (§ 5.7/§ 3.2) and the testbench wires it to an
+  already-divided, hardwired 500 Hz clock — genuinely sequential logic
+  (a counter, a debouncer, a blinking LED) without hand-writing and then
+  interactively simulating a 50 MHz divider. Not a real DE1-SoC pin, so a
+  design using it needs its own divider swapped back in before it will
+  synthesize on real hardware. Paced to real time (§ 5.9), not just fast:
+  a design's own `CLOCK_500Hz`-based timing genuinely predicts what it
+  would look like on the board, not an accident of how many events GHDL
+  happened to process per real second.
 - **Settings and Help do nothing.** They're chrome from the reference render
   with no feature behind them yet.
 - **Not rendered-checked against `WorkBench.png`.** Build and typecheck are

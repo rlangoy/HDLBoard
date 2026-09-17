@@ -19,7 +19,10 @@ export interface VhdlFileInput {
 }
 
 export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal';
-export type DoneReason = 'stopped' | 'max-cycles' | 'closed';
+// 'completed': a batch-mode (portless-entity) run reached its own natural
+// end on its own — distinct from 'stopped' (the user clicked Stop) so the
+// frontend can tell "your design finished" from "you ended the session".
+export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed';
 
 export type ClientFrame =
   | { verb: 'HELLO'; version: string }
@@ -189,7 +192,7 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
     }
     case 'DONE': {
       const reason = inline as DoneReason;
-      if (!['stopped', 'max-cycles', 'closed'].includes(reason)) {
+      if (!['stopped', 'completed', 'max-cycles', 'closed'].includes(reason)) {
         return { message: `DONE has an unknown reason: ${JSON.stringify(inline)}` };
       }
       return { verb: 'DONE', reason };

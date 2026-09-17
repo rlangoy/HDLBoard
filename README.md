@@ -65,6 +65,10 @@ is an image, an SVG, or a canvas drawing. See
   simulating your VHDL, not mirrored from the switches. See
   [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 6 for the
   wire protocol between the two.
+- **`report`/`assert` output** — printed to the console panel live, in
+  either a board design or a plain, portless testbench (select it as the
+  top file — the dot in the Files panel — and it runs directly, at
+  GHDL's normal speed, finishing on its own once it's done).
 - **Component gallery** — every board part in every state, side by side
   with the reference renders, at the `#gallery` route.
 
@@ -248,12 +252,24 @@ de1socSim/
   close the tab.
 - **No persistence.** Reloading the page resets everything to the starter
   project; a closed tab ends the simulation session.
-- **A clock-rate limit, not a bug.** A design that divides a real 50 MHz
-  clock down the honest way (e.g. to blink an LED once a second) needs
-  millions of simulated cycles for one visible change — interactive mode
-  is fast for combinational and small-sequential designs, and currently
-  impractical for a literal hardware-accurate clock divider. See
-  [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 5.5.
+- **A clock-rate limit for board designs, not a bug.** A design that
+  divides a real 50 MHz clock down the honest way (e.g. to blink an LED
+  once a second) needs millions of simulated cycles for one visible
+  change — interactive mode is fast for combinational and
+  small-sequential board designs, and currently impractical for a
+  literal hardware-accurate clock divider. See
+  [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 5.5. A
+  plain, portless testbench (no board ports at all) isn't affected by
+  this — see the next bullet. Nor is a design that declares the optional
+  `CLOCK_500Hz` port instead of dividing `CLOCK_50` itself — the
+  testbench hardwires it to an already-divided, always-running 500 Hz
+  clock, so sequential logic can react at a human-visible rate without
+  the divider (§ 5.7). It's a simulator convenience, not a real
+  DE1-SoC pin, so it needs to come back out before the design targets
+  real hardware. This runs genuinely in real time, not fast-forwarded —
+  a design's timing in the simulator predicts its timing on the actual
+  board (§ 5.9), so a divider meant to blink an LED once a minute really
+  takes about a minute here too.
 - Full details in
   [`src/components/workbench/README.md`](src/components/workbench/README.md#known-limitations).
 

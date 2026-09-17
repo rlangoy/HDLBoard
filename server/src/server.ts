@@ -15,12 +15,19 @@ const PROTOCOL_VERSION = '1';
 const MAX_SESSIONS = parseInt(process.env.GHDL_MAX_SESSIONS ?? '32', 10);
 
 const wss = new WebSocketServer({ port: PORT, path: WSPATH, host: '0.0.0.0' });
-let activeSessions = 0;
+/**
+ * Every live session, so shutdown can reach them. Without this, killing
+ * the backend (`stop.sh`, Ctrl-C, a restart) left each session's `ghdl -r`
+ * child orphaned and spinning at 100 % CPU forever — the wrapper loops on
+ * purpose (§ 5), so nothing ever ends it on its own, and § 7.2's teardown
+ * only ever fired on a WebSocket close. Real incident, § 5.10.
+ */
+const sessions = new Set<Session>();
 
 console.log(`de1soc-sim GHDL backend listening on ws://0.0.0.0:${PORT}${WSPATH}`);
 
 wss.on('connection', (ws: WebSocket) => {
-  if (activeSessions >= MAX_SESSIONS) {
+  if (sessions.size >= MAX_SESSIONS) {
     ws.send(
       encodeServerFrame({
         verb: 'ERROR',
@@ -31,13 +38,13 @@ wss.on('connection', (ws: WebSocket) => {
     ws.close();
     return;
   }
-  activeSessions++;
 
   let helloed = false;
   const send = (frame: ServerFrame) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(encodeServerFrame(frame));
   };
   const session = new Session(send);
+  sessions.add(session);
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
@@ -81,10 +88,35 @@ wss.on('connection', (ws: WebSocket) => {
     }
   });
 
+  // `error` is normally followed by `close`, so this fires twice without
+  // the Set's own idempotence doing the work: `delete` returning false is
+  // what tells the second call there is nothing left to tear down.
   const teardown = () => {
-    activeSessions--;
+    if (!sessions.delete(session)) return;
     session.destroy();
   };
   ws.on('close', teardown);
   ws.on('error', teardown);
 });
+
+/**
+ * A signalled backend must not outlive its GHDL children (§ 5.10). Node's
+ * default SIGTERM/SIGINT disposition exits immediately without unwinding
+ * anything, which is exactly how `stop.sh` (a plain `kill`) used to strand
+ * them. Killing each child is synchronous, so it completes before the exit
+ * below regardless of what the socket close is doing.
+ */
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — destroying ${sessions.size} session(s) before exit.`);
+  for (const session of sessions) session.destroy();
+  sessions.clear();
+  wss.close(() => process.exit(0));
+  // A socket that never finishes closing must not hold the process open.
+  setTimeout(() => process.exit(0), 1000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

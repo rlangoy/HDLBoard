@@ -24,14 +24,14 @@ entity DE1_SoC is
     port (
         CLOCK_50 : in  std_logic;
         SW       : in  std_logic_vector(9 downto 0);
-        KEY      : in  std_logic_vector(3 downto 0);
+        KEY_N    : in  std_logic_vector(3 downto 0);
         LEDR     : out std_logic_vector(9 downto 0);
-        HEX0     : out std_logic_vector(6 downto 0);
-        HEX1     : out std_logic_vector(6 downto 0);
-        HEX2     : out std_logic_vector(6 downto 0);
-        HEX3     : out std_logic_vector(6 downto 0);
-        HEX4     : out std_logic_vector(6 downto 0);
-        HEX5     : out std_logic_vector(6 downto 0)
+        HEX0_N   : out std_logic_vector(6 downto 0);
+        HEX1_N   : out std_logic_vector(6 downto 0);
+        HEX2_N   : out std_logic_vector(6 downto 0);
+        HEX3_N   : out std_logic_vector(6 downto 0);
+        HEX4_N   : out std_logic_vector(6 downto 0);
+        HEX5_N   : out std_logic_vector(6 downto 0)
     );
 end entity;
 
@@ -42,12 +42,12 @@ begin
 
     -- Blank until you add your own 7-segment logic (see display7seg.vhd)
     -- — active low, so all-ones is "off".
-    HEX0 <= (others => '1');
-    HEX1 <= (others => '1');
-    HEX2 <= (others => '1');
-    HEX3 <= (others => '1');
-    HEX4 <= (others => '1');
-    HEX5 <= (others => '1');
+    HEX0_N <= (others => '1');
+    HEX1_N <= (others => '1');
+    HEX2_N <= (others => '1');
+    HEX3_N <= (others => '1');
+    HEX4_N <= (others => '1');
+    HEX5_N <= (others => '1');
 end architecture;
 `;
 
@@ -150,6 +150,61 @@ package body utility_pkg is
 end package body;
 `;
 
+const BLINK_TEST_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+-- The real DE1-SoC top-level interface: these are the board's own pin
+-- names, not a stand-in for them, so this file can go straight into
+-- Quartus with only a pin assignment added. Every port here is optional
+-- for the simulator — a design that only declares SW and LEDR is a
+-- perfectly normal first lab.
+entity blinkTest is
+    port (
+        CLOCK_500Hz : in  std_logic;
+        SW          : in  std_logic_vector(9 downto 0);
+        KEY_N       : in  std_logic_vector(3 downto 0);
+        LEDR        : out std_logic_vector(9 downto 0);
+        HEX0_N      : out std_logic_vector(6 downto 0);
+        HEX1_N      : out std_logic_vector(6 downto 0);
+        HEX2_N      : out std_logic_vector(6 downto 0);
+        HEX3_N      : out std_logic_vector(6 downto 0);
+        HEX4_N      : out std_logic_vector(6 downto 0);
+        HEX5_N      : out std_logic_vector(6 downto 0)
+    );
+end entity;
+
+architecture rtl of blinkTest is
+
+    -- 500 Hz clock -> 500 cycles per second
+    -- For 2 Hz blink (LED toggles every 250 ms):
+    -- Toggle period = 1 / (2 * 2 Hz) = 250 ms
+    -- Cycles per toggle = 0.25 s * 500 = 125
+    constant TOGGLE_COUNT : integer := 125;
+
+    signal counter   : integer range 0 to TOGGLE_COUNT - 1 := 0;
+    signal led_state : std_logic := '0';
+
+begin
+
+    process(CLOCK_500Hz)
+    begin
+        if rising_edge(CLOCK_500Hz) then
+            if counter = TOGGLE_COUNT - 1 then
+                counter   <= 0;
+                led_state <= not led_state;
+            else
+                counter <= counter + 1;
+            end if;
+        end if;
+    end process;
+
+    -- Drive all 10 LEDs with the same blinking signal
+    LEDR <= (others => led_state);
+
+end architecture;
+`;
+
 const TB_DE1_SOC_VHD = `library ieee;
 use ieee.std_logic_1164.all;
 
@@ -171,14 +226,14 @@ begin
         port map (
             CLOCK_50 => clock_50,
             SW       => sw,
-            KEY      => key,
+            KEY_N    => key,
             LEDR     => ledr,
-            HEX0     => hex0,
-            HEX1     => hex1,
-            HEX2     => hex2,
-            HEX3     => hex3,
-            HEX4     => hex4,
-            HEX5     => hex5
+            HEX0_N   => hex0,
+            HEX1_N   => hex1,
+            HEX2_N   => hex2,
+            HEX3_N   => hex3,
+            HEX4_N   => hex4,
+            HEX5_N   => hex5
         );
 
     stim : process is
@@ -196,6 +251,7 @@ export const STARTER_FILES: VhdlFile[] = [
   { id: 'leds', name: 'leds.vhd', folder: 'vhdl', content: LEDS_VHD },
   { id: 'buttons', name: 'buttons.vhd', folder: 'vhdl', content: BUTTONS_VHD },
   { id: 'utility_pkg', name: 'utility_pkg.vhd', folder: 'vhdl', content: UTILITY_PKG_VHD },
+  { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'tb_de1_soc', name: 'tb_de1_soc.vhd', folder: 'work', content: TB_DE1_SOC_VHD },
 ];
 

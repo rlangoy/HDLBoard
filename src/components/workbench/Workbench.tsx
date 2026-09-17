@@ -336,10 +336,16 @@ export function Workbench() {
           setStatus('stopped');
           blankBoard();
         },
-        onDone: () => {
+        onDone: (reason) => {
           stopElapsedTimer();
           setStatus('stopped');
-          appendLog('Simulation stopped.');
+          // 'completed': a portless testbench (batch mode, no board
+          // polling — server/src/session.ts) reached its own natural end
+          // on its own, distinct from the user clicking Stop — the green
+          // tone matches 'Simulation running ...' above, since this is
+          // the design finishing correctly, not being interrupted.
+          if (reason === 'completed') appendLog('Simulation complete.', 'success');
+          else appendLog('Simulation stopped.');
           blankBoard();
         },
         onClosed: () => {

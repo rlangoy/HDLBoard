@@ -218,23 +218,24 @@ nothing consumed it. GHDL will consume it, and the six-displays-from-a-
 Adopt the **real DE1-SoC top-level interface**. This is the single most
 valuable thing the proposal contributes: its § 11.2 and § 13 argue the same
 file should work on the web simulator and on real hardware. Using the
-hardware's own pin names is what makes that literally true — a student can
-take their `DE1_SoC.vhd` to Quartus, add a pin assignment file, and program
-the board.
+hardware's own pin names is what makes that literally true for most of the
+contract — a student can take their `DE1_SoC.vhd` to Quartus, add a pin
+assignment file, and program the board. `KEY_N`/`HEX0_N`…`HEX5_N` are the
+one deliberate exception — see the bullet below.
 
 ```vhdl
 entity DE1_SoC is
     port (
         CLOCK_50 : in  std_logic;
         SW       : in  std_logic_vector(9 downto 0);
-        KEY      : in  std_logic_vector(3 downto 0);
+        KEY_N    : in  std_logic_vector(3 downto 0);
         LEDR     : out std_logic_vector(9 downto 0);
-        HEX0     : out std_logic_vector(6 downto 0);
-        HEX1     : out std_logic_vector(6 downto 0);
-        HEX2     : out std_logic_vector(6 downto 0);
-        HEX3     : out std_logic_vector(6 downto 0);
-        HEX4     : out std_logic_vector(6 downto 0);
-        HEX5     : out std_logic_vector(6 downto 0)
+        HEX0_N   : out std_logic_vector(6 downto 0);
+        HEX1_N   : out std_logic_vector(6 downto 0);
+        HEX2_N   : out std_logic_vector(6 downto 0);
+        HEX3_N   : out std_logic_vector(6 downto 0);
+        HEX4_N   : out std_logic_vector(6 downto 0);
+        HEX5_N   : out std_logic_vector(6 downto 0)
     );
 end entity;
 ```
@@ -247,13 +248,31 @@ Rules the backend enforces against it:
 - **Case does not matter.** VHDL identifiers are case-insensitive; port
   detection lowercases before matching, so `LEDR`, `ledr` and `LedR` are one
   port.
-- **No reset port.** Reset is `KEY(0)` by convention, in the student's own
+- **No reset port.** Reset is `KEY_N(0)` by convention, in the student's own
   VHDL, exactly as on hardware. The backend does not synthesise one.
 - **Legacy tolerance.** If an entity declares `rst`, the testbench drives it
-  from `not KEY(0)` so older files still elaborate. Document it as legacy;
+  from `not KEY_N(0)` so older files still elaborate. Document it as legacy;
   do not teach it.
-- **`HEX` is six 7-bit ports, active low**, matching `segments.ts`'s
-  documented `SEGMENT_PATTERNS` (`0` lights a segment) and the real part.
+- **`HEX0_N`…`HEX5_N` are six 7-bit ports, active low**, matching
+  `segments.ts`'s documented `SEGMENT_PATTERNS` (`0` lights a segment) and
+  the real part.
+- **`CLOCK_500Hz` is optional, and is not a real board pin.** Shipped
+  2026-09-17 as the resolution to § 5.5's clock-rate constraint: an
+  already-divided, hardwired 500 Hz `in std_logic`, so a design can be
+  genuinely sequential — a counter, a debouncer, a blinking LED — without
+  hand-writing a 50 MHz divider, which is correct but impractical to run
+  interactively (§ 5.5). Purely a simulator convenience; a design that
+  declares it will not synthesize against a real DE1-SoC pin assignment
+  unmodified, and the starter/course material should say so wherever it
+  is taught, not just here.
+- **`KEY_N`/`HEX0_N`…`HEX5_N`, not `KEY`/`HEX0`…`HEX5`.** Renamed
+  2026-09-17, at the course's request — the real DE1-SoC pins are still
+  plain `KEY`/`HEX0`…`HEX5` (§ 3.1); the `_N` suffix is a course convention
+  making each signal's active-low polarity explicit in its own name, not
+  a hardware fact. Unlike the rest of this contract, a design that declares
+  these needs the suffix stripped (or a thin renaming wrapper) before it
+  synthesizes against a real DE1-SoC pin assignment unmodified — the same
+  caveat as `CLOCK_500Hz` above, for a different reason.
 
 ### 3.3 Required change to `files.ts` (Phase 1)
 
@@ -482,10 +501,364 @@ thousands of cycles, and unusable for 50 MHz-scale dividers. Options:
    good engineering practice anyway and costs one line in the starter.
 3. **Drive `CLOCK_50` at a rate that makes dividers visible** and accept the
    simulation is not timing-accurate to hardware.
+4. **Add a second, already-divided clock port, independent of `CLOCK_50`.**
+   Doesn't touch `CLOCK_50`'s own rate (so nothing about how a real
+   50 MHz divider behaves changes, timing-accuracy included) and needs no
+   curriculum change — a design opts in by declaring the extra port, or
+   doesn't. Shipped as `CLOCK_500Hz`, § 5.7/§ 3.2.
 
-**Recommendation: 1 + 2.** Document the limit, and make the starter's
-example use a named divide constant so the pattern is in front of the
-student from day one. See § 12.
+**Recommendation: 1 + 2, plus 4 once it existed to recommend.** Document
+the limit, and make the starter's example use a named divide constant so
+the pattern is in front of the student from day one; § 5.6 covers what
+changed once `CLOCK_500Hz` shipped. See § 12.
+
+### 5.6 Batch mode — the same constraint, a different trigger, actually fixed
+
+Shipped 2026-09-17, after a user hit a variant of this constraint that
+wasn't the one this section originally anticipated: a **portless**
+testbench (an entity with no ports at all — the classic self-contained
+`process` that generates its own stimuli and `report`s its results, not a
+board design missing a port by accident) submitted through the "set as
+top" control (§ 8.1's dot). Wrapped in the usual persistent testbench,
+its `wait for 10 ms;` calls took **~7 real seconds each** — measured,
+not estimated — because the wrapper's own 20 ns polling clock (§ 5.2, on
+by design so board input polling has something to schedule against) has
+nothing to do with the submitted design at all, yet GHDL still has to
+process every one of its ~1,000,000 toggles to let 10 ms of *anyone's*
+simulated time elapse. § 5.5's fix (1 + 2, document and teach a small
+divide constant) doesn't apply here — there is no divider to make
+smaller, because there is no board interface in the picture at all.
+
+**The fix:** when `findTopEntity` resolves a top with **zero ports**
+(`portDetect.ts`), `session.ts` skips the wrapper and persistent mode
+entirely and runs the submitted entity directly —
+`ghdl -e/-r --std=08 <entityName>`, no generics, no polling. This is not
+a smaller version of the same architecture; it is a different one,
+because a portless entity's whole reason for existing is to supply its
+*own* stimuli, so wrapping it in anything is redundant at best (nothing
+to connect) and wrong at worst (see `ghdl.ts`'s `runBatch` doc comment).
+Confirmed empirically, not just architecturally: the same testbench that
+took ~7 s per `wait for 10 ms` under the wrapper completed **11 report
+lines in 93 ms total** run this way (§ 10, batch-mode suite) — because an
+unwrapped `wait for <duration>` with nothing else scheduled in between
+costs GHDL almost nothing regardless of the duration's size; the earlier
+cost was entirely the wrapper's, never the design's own.
+
+**A second, related symptom this also fixes:** in persistent mode, a
+session never signals "finished" — the wrapper's own `clkgen`/`io`
+processes loop unconditionally forever (§ 7.2), which is exactly right
+for a board design (the point is to keep reacting to switches until the
+user says stop) but meant a portless testbench's own `report`-then-`wait;`
+completion never reached the frontend, leaving Start/Stop stuck on "Stop"
+indefinitely. Running unwrapped, the process now genuinely exits on its
+own once quiescent, and a new `DONE completed` reason (§ 6.4, distinct
+from user-initiated `stopped`) tells the frontend so — verified with a
+process that finishes on its own (`DONE completed`, correct) and,
+separately, one deliberately interrupted mid-run with `STOP`
+(`DONE stopped`, its later `report` never reached, confirming it was
+actually killed and not just outrun).
+
+Also newly wired, and load-bearing for the above: `report`/`assert`
+output. GHDL writes it to stdout, and the persistent run's process
+handle had never captured stdout at all before this — silently
+discarding it regardless of timing. Now forwarded live, one `LOG` frame
+per line, in both modes (`ghdl.ts`'s `RunHandle`/`BatchHandle` both
+expose `onOutput`). Safe to forward unfiltered: the generated wrapper
+testbench itself never writes to stdout (its result line goes to
+`output_file`, a real file, specifically so the two can never be
+confused — § 7.2), so every line that arrives this way is the
+student's own design, never internal plumbing.
+
+**Bounded differently than the persistent case.** `BATCH_TIMEOUT_MS`
+(60 s) kills a batch run that never reaches quiescence — a real
+possibility now that nothing else keeps holding worse code up. The
+persistent mode has no such bound because running forever is the
+point; a batch run finishing is the point, so one that doesn't needs a
+backstop the polling loop never did.
+
+### 5.7 `CLOCK_500Hz` — option 4, shipped
+
+Requested and shipped 2026-09-17: § 5.5's option 4, added to the list
+retroactively rather than presented as though it had been there from the
+start. A second, independent, always-hardwired clock signal —
+`clk500_sig`, its own free-running `process` at a 2 ms period (1 ms
+high, 1 ms low) in `tbTemplate.ts` — associated into the port map only
+when the entity declares `CLOCK_500Hz`, following the exact optional-port
+pattern every other signal already uses (§ 7.3). `CLOCK_50`'s own
+`clk_sig` and period are completely untouched — this does not make a
+50 MHz divider any more or less practical (§ 5.5 still applies to one in
+full), it adds a way to sidestep needing one at all for a design that
+just wants *a* human-visible clock.
+
+**Deliberately unconditional, unlike the association itself.** The
+`clk500gen` process always runs, whether or not the current entity
+declares the port — matching `clkgen`'s own existing always-on pattern,
+and cheap for the same kind of reason: 500 Hz (2 ms period) is trivial
+next to `CLOCK_50`'s already-dominant ~20 ns one, so making it
+conditional would save negligible cost for real added complexity (an
+if/else over which processes exist at all, rather than just over what
+they connect to).
+
+**Verified as the interactive capability it exists to provide, not just
+that it compiles.** A design declaring *only* `CLOCK_500Hz` and `LEDR` —
+no `CLOCK_50`, no switches — toggling its own output on every clock edge:
+the first `STATE` change arrived at **723 ms of real time** (raw protocol
+test) and, separately, confirmed in the real browser with LED-on-count
+sampled every 400 ms over 2.4 s, oscillating **0 → 10 → 0** with no input
+touched at all. This is the decisive case § 5.5 established as
+impractical under `CLOCK_50` alone (minutes per visible change) — the
+same shape of design, now interactive.
+
+**This verification had a real gap, found the same day by an actual
+user.** Toggling on *every* edge only needs 1 ms of simulated time —
+small enough that a cost this section didn't measure stayed hidden. A
+design counting more than a couple of `CLOCK_500Hz` edges (a divide-by-N
+blink, the whole point of a "genuinely sequential" design per § 3.2) hit
+the same multi-minute wall § 5.5 describes, unchanged. § 5.8 covers what
+was actually wrong and how it was fixed.
+
+---
+
+### 5.8 `clkgen` was unconditional — fixed, along with what it exposed
+
+Found 2026-09-17, minutes after § 5.7 shipped: a user built exactly the
+design § 5.7 promises `CLOCK_500Hz` makes practical — a divide-by-125
+counter toggling an LED every 250 ms — and it never toggled once in
+25 seconds of real time. The design's logic was correct. The wrapper was
+the problem, and it was the same problem § 5.5/§ 5.6 already solved for
+board designs and batch mode, reintroduced by `CLOCK_500Hz` itself.
+
+**Root cause: `clkgen` (`clk_sig`, `CLOCK_50`'s ~20 ns-period generator)
+ran unconditionally, in every session, whether or not the entity declared
+`CLOCK_50` at all** — `tbTemplate.ts`'s `io` process counted `clk_sig`
+edges (`poll_cycles`) as its own polling cadence, "so there is always
+something to poll cycles against even for a design with no clock port at
+all" (the comment this section retires). GHDL is a discrete-event
+simulator: an unconditional `wait for 10 ns;` loop is a live, permanently
+scheduled process regardless of whether anything reads the signal it
+drives, and processing its ~50 million edges/second (of simulated time)
+is what costs real wall-clock time — not the DUT's own logic. A design
+using only `CLOCK_500Hz` still paid `CLOCK_50`'s full tax, just delayed
+until its counter needed more than one or two `clk500_sig` edges to
+produce a visible change. 250 ms of simulated time at that unconditional
+20 ns-edge rate is the same order of magnitude of real time § 5.5 always
+described for a literal 50 MHz divider — `CLOCK_500Hz` hadn't removed the
+constraint for this shape of design, only hidden it behind however many
+`CLOCK_500Hz` edges came before the first count wraps.
+
+**The fix, in `tbTemplate.ts`:**
+
+1. `clkgen` (and `clk_sig`'s generator process) is now emitted **only
+   when the entity actually declares `CLOCK_50`** — `hasClock50 =
+   ports.has('clock_50')`, gating the whole process block, not just the
+   port association. A session with no `CLOCK_50` port now has zero
+   `clk_sig` event volume at all.
+2. The `io` process's own polling cadence no longer counts anyone's clock
+   edges. It does a plain `wait for poll_interval_ns * 1 ns;` — a fixed
+   simulated-time interval, unrelated to whatever clock (if any) the DUT
+   itself runs on. The `poll_cycles` generic (edge count) is replaced by
+   `poll_interval_ns` (a duration); `ghdl.ts`'s `-gpoll_cycles=` flag and
+   `session.ts`'s constant were renamed to match.
+
+**A second, smaller cost this fix exposed, fixed the same session.**
+`poll_interval_ns` inherited the old cadence's *numeric* value unchanged
+(1000, at 1 ns/unit instead of 1 ns/`clk_sig` edge — both worked out to
+1 us). That was fine when `clk_sig`'s own cost dwarfed everything else;
+once step 1 above removed that cost for a `CLOCK_500Hz`-only or clockless
+design, the `io` process's own **file_open on every wakeup, unconditional
+on whether anything changed** (§ 6.3's "missing input file is not an
+error" bullet) became the new bottleneck: a 250 ms toggle interval at a
+1 us poll cadence is 250,000 file-open/close pairs, and each one costs
+real syscall time. `POLL_INTERVAL_NS` (`session.ts`) is now **1 ms**, not
+1 us — 1000× fewer wakeups, still far finer than `OUTPUT_POLL_MS` (§ 7.2,
+80 ms, the Node side's own re-read cadence) or anything a human notices.
+
+**Verified, not just reasoned through** — the same divide-by-125 design
+that never toggled once in 25 s of real time before this fix now toggles
+roughly every 150–350 ms (raw protocol test, 25 s sample, ~110 toggles;
+some jitter from `OUTPUT_POLL_MS` and process scheduling, close to the
+design's own 250 ms target) — and a `CLOCK_50`-declaring board design
+(the full starter interface, `SW`→`LEDR`) was re-verified unaffected:
+same `ghdl -a`/`-e` clean compile, same functional switch→`LEDR` response
+over a live WebSocket session, `clkgen` still present and still driving
+`CLOCK_50` exactly as before. § 5.5's constraint is unchanged and still
+applies in full to any design that actually declares and divides
+`CLOCK_50` — this section only closes the gap `CLOCK_500Hz` was supposed
+to close and initially didn't.
+
+**This fix had a gap too, found the same day.** Removing `clkgen`'s
+unconditional cost made a `CLOCK_500Hz`-only design *fast* — it never
+made it *accurate*. § 5.9 covers a second user report, minutes later,
+that a design whose own math meant a 10-minute toggle was toggling every
+~7 seconds instead.
+
+---
+
+### 5.9 Real-time pacing — § 5.8 was fast, not honest
+
+Found 2026-09-17, minutes after § 5.8 shipped: a user's own divide-by-N
+`CLOCK_500Hz` counter, designed for a 10-second toggle, toggled roughly
+every 10 seconds — but their *next* design, a divide-by-300000 counter
+whose own math means a real 10-*minute* toggle on actual hardware,
+toggled every ~7 seconds in the simulator. § 5.8 made `CLOCK_500Hz`
+designs finish quickly; it never made them finish at the *right* speed.
+GHDL still ran every session as fast as it could — § 5.8 just removed
+`clkgen`'s artificial floor on that speed, so a long design now
+compressed however many events it needed into however little real time
+GHDL happened to take, an emergent, machine- and design-dependent ratio
+with no relationship to what the same VHDL would actually do on a real
+board. That's a correctness problem, not a performance one: a student
+timing a debounce or a blink against what they see in the simulator would
+learn the wrong number.
+
+**The fix: pace the simulation to real time, not just remove artificial
+slowness.** GHDL has no built-in wall-clock-synchronized run mode, and
+standard VHDL has no way to read the OS clock or block on anything but
+simulated time — so pacing has to happen from outside, by suspending and
+resuming the OS process itself.
+
+1. **A heartbeat, from the VHDL side** (`tbTemplate.ts`). A new
+   unconditional `heartbeat` process, present in every board-mode session
+   regardless of which clocks the entity declares, writes `now / 1 ms`
+   (the session's own simulated-time progress, as a plain integer count
+   of milliseconds) to a new `heartbeat_file` generic every 20 ms of
+   *simulated* time — coarse enough not to reintroduce § 5.8's own
+   unconditional-I/O-per-wakeup cost at this interval, fine enough to
+   give real-time pacing something to correct against well inside one
+   human-perceptible tick.
+2. **A pacing loop, from the Node side** (`session.ts`'s `startPacing`).
+   Every `PACING_CHECK_MS` (5 ms) of *real* time, read the heartbeat and
+   compare it to real elapsed time since the run started. If the
+   simulation is ahead by more than `PACING_SLACK_MS` (30 ms), `SIGSTOP`
+   the GHDL process for **exactly that much drift** — not a capped
+   partial correction — then `SIGCONT` and check again.
+3. **`kill()` resumes before it terminates** (`ghdl.ts`). A process
+   suspended by `SIGSTOP` doesn't act on `SIGTERM` until it's running
+   again (Linux signal semantics), so `kill()` now sends `SIGCONT` first,
+   unconditionally, before `SIGTERM` — otherwise Stop/Reset could wait
+   out whatever pacing window happened to be in progress instead of
+   taking effect immediately.
+
+**The first version of this fix used a capped correction
+(`PACING_MAX_STOP_MS = 250`) and didn't work** — found before it shipped,
+by actually measuring, not by reasoning about the code. A capped pause
+only ever pays down part of each cycle's drift, and since GHDL's own
+unthrottled speed (measured independently at roughly 90× real time for a
+`CLOCK_500Hz`-only design, itself bounded by the heartbeat's own 20 ms-sim
+polling cost) reaccumulates far more drift per `PACING_CHECK_MS` window
+than a 250 ms pause can repay, the result converges to a smaller, equally
+arbitrary compression ratio instead of 1:1 — exactly the class of bug
+this section exists to fix, reintroduced by an unprincipled constant.
+Removing the cap (§ 5.9, `session.ts`) fixed it. A coarser
+`PACING_CHECK_MS` (50 ms, the first value tried) was *also* too imprecise
+on its own even with the cap removed: at ~90× native speed a 50 ms free-run
+window can span most of a short toggle period in one uncorrected burst,
+producing visibly uneven spacing between individual toggles. 5 ms brought
+the burst size down enough to converge cleanly; this is a real,
+measured trade-off between correction granularity and per-check overhead
+(a synchronous heartbeat-file read plus a signal pair, 200×/second, for
+the life of every board-mode session), not a value derived from first
+principles.
+
+**Verified, not just reasoned through.** A design scaled to a 2.5 s
+target (2500 simulated-ms per toggle, the same shape as the reported
+bug at a testable size) toggled at 2083, 2724, 2323, 2566, 2645 ms real
+intervals across a 13 s sample — averaging ~2470 ms against the 2500 ms
+target, close enough that the remaining gap is measurement jitter, not
+a systemic bias. The user's own reported design (the literal
+divide-by-300000, 600-simulated-second counter) was re-run for 20 real
+seconds and confirmed to **not** toggle early, matching the "close to a
+real 600 s" expectation rather than § 5.8's ~7 s result (the full 600 s
+was not waited out in verification — a 20 s absence-of-early-toggle
+check plus the scaled design's own measured ~1 % convergence error is
+the evidence this rests on, not a literal 10-minute observation). Stop
+sent deliberately mid-pause-window returned `DONE` in 1 ms, confirming
+the `kill()` fix. A `CLOCK_50`-declaring board design (the full starter
+interface) was re-run unaffected: same switch→`LEDR` functional
+behaviour, same latency profile as before this section — GHDL is
+already at or below real-time speed for that shape of design (§ 5.5),
+so the pacing loop always measures non-positive drift and never engages.
+
+**A cost, accepted rather than hidden.** The pacing loop runs
+continuously for the life of every board-mode session, `CLOCK_50`-only
+sessions included, even though those never trigger a single pause —
+200 heartbeat-file reads and drift comparisons per real second, for as
+long as a student leaves a simulation running. Cheap in isolation (a
+small synchronous file read); not measured against `MAX_SESSIONS`'
+concurrency ceiling (§ 11) together, which would be the thing to check
+before treating this as free at scale.
+
+---
+
+### 5.10 Orphaned GHDL children — the bug that faked a regression
+
+Found 2026-09-17, reported as "blinkTest takes several seconds to start
+blinking". It didn't. The design was correct, the pacing (§ 5.9) was
+correct, and a cold measurement of the exact starter project proved it:
+**88 ms** to `READY` (six files analyzed and elaborated) and a first
+blink at **250 ms**, matching the design's own 250 ms target. What was
+actually wrong was the machine.
+
+**Two `ghdl -r` processes, orphaned and spinning at 99.9 % CPU each, for
+40 and 65 minutes.** `ps` found them immediately once the symptom was
+treated as "too slow" rather than "starts late":
+
+```
+PID    PPID STAT  ELAPSED %CPU COMMAND
+211658    1 R    01:05:33 99.9 ghdl-mcode -r ... -gpoll_cycles=50
+223047    1 R       40:43 99.9 ghdl-mcode -r ... -gpoll_interval_ns=1000
+```
+
+`PPID 1` is the tell, and so is the flag on the first one: `poll_cycles`
+was renamed to `poll_interval_ns` by § 5.8, so that process had outlived
+the very backend build that spawned it. With two cores pinned, the
+session under test ran roughly 5× slow — toggling every ~1200 ms against
+its 250 ms target, which reads exactly like "it takes several seconds to
+get going".
+
+**Root cause: a session was only ever torn down by its own WebSocket
+closing.** § 7.2's rule — "a dropped connection must never leave GHDL
+running" — was implemented and correct, but it covers only the connection
+dying, not the *backend* dying. `stop.sh` sends a plain `kill` (SIGTERM),
+and Node's default disposition for that is to exit immediately without
+unwinding anything, so every `./stop.sh`, every restart, and every Ctrl-C
+stranded each live session's child. Board mode's wrapper loops forever on
+purpose (§ 5), so nothing else was ever going to end them: they are
+specifically the kind of process that cannot notice it has been orphaned.
+This backend had restarted many times during a long working session, so
+the orphans accumulated.
+
+**The fix, in `server.ts`:** a `Set<Session>` registry (the sessions were
+previously reachable only from inside each connection's own closure, so
+there was nothing to iterate), plus `SIGTERM`/`SIGINT` handlers that
+destroy every live session before exiting. Killing each child is
+synchronous, so it completes regardless of what the socket close is
+doing; a 1 s `unref`'d timer keeps a socket that never finishes closing
+from holding the process — and its temp dirs — open. The `activeSessions`
+counter it replaced had its own latent bug: `teardown` was registered on
+both `close` and `error`, and an `error` is normally followed by a
+`close`, so it decremented twice per failed connection. The `Set` makes
+that self-correcting (`delete` returning false is what tells the second
+call there is nothing to do).
+
+**Verified by reproducing the leak, not by reading the diff.** With a
+client deliberately left connected and a simulation running, the backend
+was sent the same signal `stop.sh` sends. Before: an orphan. After:
+`SIGTERM received — destroying 1 session(s) before exit.` in the log,
+`pgrep ghdl-mcode` empty, and the session's temp directory gone too (the
+async `fs.rm` completes inside the shutdown window). The ten stale
+`/tmp/de1soc-sim-*` directories that had accumulated from earlier kills
+were cleaned up by hand; nothing removes those retroactively.
+
+**What this says about the earlier sections.** § 5.8 and § 5.9 were both
+measured on this machine while at least one orphan was already running.
+Their *conclusions* hold — the ratios each reports are large enough that
+a constant-factor CPU tax doesn't change the finding, and § 5.9's target
+convergence was confirmed again afterwards — but their absolute numbers
+were taken on a contended machine and are pessimistic by some unknown
+factor. The lesson is cheaper to state than it was to learn: when a
+timing measurement disagrees with a timing prediction, check what else
+is on the CPU before concluding anything about the code.
 
 ---
 
@@ -598,7 +971,7 @@ the right frame went out.
 | `STATE` | 52 chars `[01X]{52}` | — | Board outputs. | `output` |
 | `LOG` | — | free text | Console line. | `status` |
 | `ERROR` | stage | error text | Failure, classified. | `error` |
-| `DONE` | reason | — | Session ended: `stopped`/`max-cycles`/`closed`. | `status` |
+| `DONE` | reason | — | Session ended: `stopped`/`completed`/`max-cycles`/`closed`. | `status` |
 | `PONG` | — | — | Answer to `PING`. | — |
 
 **`STATE` layout** — 10 + 6×7 = **52 characters**:
@@ -622,6 +995,11 @@ Polarity is carried as-is, with no inversion anywhere: `SW`/`LEDR` active
 high, `KEY` and `HEX` segments active low. GHDL, the wire, and the board
 components already agree, so no layer translates. `'X'` covers any
 std_logic value that is not `'0'`/`'1'` (see § 8.4).
+
+**`completed` vs. `stopped`.** Only batch mode (§ 5.6) can produce
+`completed` — a persistent board session never reaches it on its own,
+since its wrapper is designed not to (§ 7.2). `stopped` covers every
+user-initiated end, in either mode.
 
 ### 6.5 Error stages
 
@@ -651,10 +1029,10 @@ One runtime dependency: `ws`.
 
 | File | Responsibility |
 |---|---|
-| `server.ts` | WebSocket server, connection accept, session registry, `MAX_SESSIONS` |
+| `server.ts` | WebSocket server, connection accept, session registry (`Set<Session>`, also the `MAX_SESSIONS` count), signal-handled shutdown (§ 5.10) |
 | `protocol.ts` | The **only** place § 6 is implemented. Encode/decode frames. No GHDL, no sockets — pure functions, unit-testable. |
 | `session.ts` | One per connection: temp dir, state machine, lifecycle |
-| `ghdl.ts` | Spawning GHDL; analyze, elaborate, run. Timeouts. |
+| `ghdl.ts` | Spawning GHDL; analyze, elaborate, both run modes (persistent § 5, batch § 5.6). Timeouts, stdout/stderr capture. |
 | `tbTemplate.ts` | Generates the testbench from the detected port set |
 
 Keeping `protocol.ts` free of I/O is what makes § 10.2's tests possible
@@ -664,15 +1042,47 @@ without a socket or a GHDL install.
 
 ```ts
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
+type SessionMode = 'board' | 'batch' | null;   // § 5.6
 ```
 
 - Temp dir per session via `fs.mkdtemp`, GHDL's `cwd` always that directory,
   never the repo. Removed on teardown.
-- `destroy()` on both `close` and `error`: kill any child process, clear
-  timers, `fs.rm` the directory. A dropped connection must never leave GHDL
-  running.
+- `destroy()` on both `close` and `error`: kill any child process (either
+  mode's), clear timers, `fs.rm` the directory. A dropped connection must
+  never leave GHDL running. Registered once per session against
+  `server.ts`'s `Set`, so `error`-then-`close` tears down once, not twice.
+- **Neither may the backend's own death** (§ 5.10). `server.ts` keeps every
+  live session in a `Set` and destroys them all on `SIGTERM`/`SIGINT` —
+  a dropped *connection* was covered from the start; a killed *backend*
+  (`stop.sh`, a restart, Ctrl-C) was not, and stranded board mode's
+  deliberately-infinite wrapper children at 100 % CPU indefinitely.
 - No session survives reconnect — consistent with the Workbench's existing
   "no persistence" behaviour.
+- **`OUTPUT_POLL_MS` (80 ms)** — how often the Node side re-reads
+  `output.txt` for a change, in board mode. The floor on end-to-end
+  responsiveness regardless of how fast the VHDL side itself updates the
+  file (§ 5.8) — no reason for the testbench's own polling to run finer
+  than this.
+- `mode` decides which of `run`/`batchRun` (and which handlers) are live —
+  `board`'s wrapper loops forever on purpose (§ 5), so only `batch` can
+  ever reach `DONE completed` on its own. A `RUN` can switch a session
+  from one mode to the other mid-session; the previous run is torn down
+  (its own `DONE stopped`) before the new one starts, same as re-`RUN`ning
+  within one mode already did.
+- **Exit-event identity, not just state.** Both `run.onExit` and
+  `batchRun.done` are resolved against the *specific handle* that
+  registered them (`this.run !== handle` / `this.batchRun !== handle`),
+  not just `this.state`. `kill()` (Stop/Reset/a new RUN) clears the field
+  synchronously, but the killed child's own exit event is necessarily
+  asynchronous — if a new run has already started by the time it arrives,
+  a plain state check reads 'running' again (the *new* run's) and would
+  misattribute the stale exit to it.
+- **Real-time pacing (§ 5.9)**, board mode only. `startRun` also starts a
+  self-rescheduling `startPacing` loop, identity-checked against the same
+  `handle` at every step for the same reason as `onExit` above. Torn down
+  in the same three places `run`/`outputPollTimer` already are
+  (`stopActive`, `destroy`, the run's own `onExit`) — a fourth place to
+  remember, not a new pattern.
 
 ### 7.3 Port detection
 
@@ -922,6 +1332,51 @@ obvious in a browser.
 5. **Fresh clone.** `git clone`, `npm install` at root and in `server/`,
    `./start.sh`, full round trip. Not "it worked on the machine that built
    it".
+6. **Batch mode (§ 5.6), added post-ship, held to the same standard.**
+   The user's own reported testbench, run for real: `READY`→11 `LOG`
+   lines→`DONE completed` in under 100 ms, not estimated from reading the
+   code. `DONE reason` distinguishes a run that finished on its own from
+   one a `STOP` interrupted mid-way (a CPU-bound loop with no `wait`, so
+   simulated-time tricks like `wait for 10 sec` can't fake "still
+   running" — confirmed those cost GHDL nothing when nothing else is
+   scheduled in between, which is also *why* batch mode fixes the timing
+   problem). Switching modes across two `RUN`s on one connection (board →
+   batch → board again), and the identity-checked exit handling in § 7.2,
+   both exercised directly — the second was a latent race in the
+   *original* persistent-mode code, found and fixed only because writing
+   the equivalent batch-mode check first made the gap in the older code
+   obvious.
+7. **The `clkgen`/`CLOCK_500Hz` fix (§ 5.8), same day, same standard.**
+   The reporting user's own design (a divide-by-125 `CLOCK_500Hz` counter)
+   run against the pre-fix build first, to confirm the failure for real —
+   25 s of real time, zero toggles — before touching any code. Re-run
+   against the fix: toggling every ~150–350 ms, a 25 s sample, ~110
+   toggles logged with timestamps. A `CLOCK_50`-declaring board design
+   (the full starter interface) re-run the same way to confirm it: still
+   `ghdl -a`/`-e` clean, `clkgen` still present in its output, switch→
+   `LEDR` still functionally correct over a live session.
+8. **Real-time pacing (§ 5.9), same day again.** The first implementation
+   (a capped correction) shipped internally, tested, and failed — a
+   scaled 2.5 s-target design measured at ~1.9 s average, not close
+   enough — caught before it reached the user, not after. The fix
+   (uncapped correction, a finer check interval) re-measured on the same
+   scaled design: 2083, 2724, 2323, 2566, 2645 ms across five toggles,
+   averaging ~2470 ms against the 2500 ms target. Stop sent deliberately
+   during an active pause window returned `DONE` in 1 ms. The reported
+   design itself (600 s target) run for 20 s and confirmed not to
+   toggle early — the full 600 s was not waited out; § 5.9 states
+   plainly what is and isn't covered by that. A `CLOCK_50` board design
+   re-run unaffected: pacing measures non-positive drift for it and
+   never engages.
+9. **Orphaned children (§ 5.10) — the leak reproduced before it was
+   fixed.** A client deliberately held open with a simulation running,
+   then the backend sent the same `SIGTERM` `stop.sh` sends. Before the
+   fix: a `PPID 1` `ghdl-mcode` still spinning after the backend was
+   gone. After: `SIGTERM received — destroying 1 session(s) before exit.`
+   in the log, `pgrep ghdl-mcode` empty, temp directory removed too.
+   Also worth keeping as a habit rather than a test: `ps --sort=-pcpu`
+   before trusting any timing measurement on this machine — § 5.10's
+   whole investigation started as a false regression report.
 
 > A note for whoever runs the Playwright tests here: in this project's
 > headless setup, `ResizeObserver` callbacks are not delivered unless frames
@@ -937,8 +1392,13 @@ Running student-submitted VHDL through a real compiler is the feature; it
 cannot be designed away. What is controllable:
 
 - **No shell interpolation.** `spawn(cmd, argsArray)` (§ 7.4).
-- **Bounds:** per-process wall-clock timeout, `MAX_SESSIONS`, and — if
-  Candidate B — `MAX_CYCLES`.
+- **Bounds:** per-process wall-clock timeout, `MAX_SESSIONS`. A batch run
+  (§ 5.6) needs its own explicit timeout (`BATCH_TIMEOUT_MS`) that the
+  persistent mode doesn't: the polling wrapper's own infinite loop kept
+  a runaway design alive on purpose before, which — for a batch run,
+  with no such wrapper — is exactly the failure mode this timeout exists
+  to catch instead (a process with no `wait` at all, or one waiting on a
+  condition that never becomes true).
 - **Filesystem isolation:** per-session `mkdtemp`, removed on teardown.
 - **Validate at the boundary:** reject malformed `STIM` and oversized `RUN`
   bodies before touching disk. The protocol is unauthenticated; anything
@@ -955,17 +1415,22 @@ cannot be designed away. What is controllable:
 | # | Decision | Status |
 |---|---|---|
 | 1 | **Simulation strategy** (§ 5) | **Closed 2026-09-17 — Candidate A** (persistent process). See § 5.4.1 for the spike evidence. |
-| 2 | **Clock-rate handling** (§ 5.5) | Open. Recommendation: document the limit, and put a named divide constant in the starter so the pattern is taught. |
+| 2 | **Clock-rate handling** (§ 5.5) | **Closed 2026-09-17 — option 4 shipped as `CLOCK_500Hz`** (§ 5.7/§ 3.2): an already-divided, hardwired 500 Hz port, additive — nothing about a design's own `CLOCK_50`-based divider changes, and it is still slow for exactly the reason § 5.5 describes. Option 2 (teach a simulation-friendly divide constant in the starter) is still open on its own, now lower-priority: `CLOCK_500Hz` covers the common case (wanting *a* visible clock, not specifically a *derived-from-50 MHz* one) without touching course material at all. |
 | 3 | **`'X'` rendering** (§ 8.4) | Closed — coerce to `0`. Internal, no course-material impact. |
 | 4 | **Starter rewrite scope** (§ 3.3) | **Done** — `DE1_SoC.vhd`, real pin names, `btn` removed. Verified with `ghdl -a`/`-e`/`-r` on every starter file, including the offline testbench (Phase 1). |
 | 5 | **Waveform capture** | Out of scope. The reference built it, then deleted it as unused. Revisit only if asked. |
+| 6 | **`KEY`/`HEX0`…`HEX5` → `KEY_N`/`HEX0_N`…`HEX5_N`** (§ 3.2) | **Closed 2026-09-17**, at the course's request — a course convention, not a correction: the real DE1-SoC pins keep their plain names (§ 3.1), so this is the one part of § 3.2's contract that a design must rename before it synthesizes unmodified, same caveat as `CLOCK_500Hz`. Backend port-matching, the starter project, and this doc's Appendix A were all updated and re-verified against real GHDL together. |
+| 7 | **`clkgen` unconditional, defeating `CLOCK_500Hz`** (§ 5.8) | **Found and closed 2026-09-17**, same day as decision 2, by an actual user hitting it. Not a new decision so much as decision 2 not actually being finished: `clkgen` now only exists when `CLOCK_50` is declared, and the `io` process's polling no longer rides its edges. Re-verified: the user's own repro (never toggled in 25 s before) now toggles every ~150–350 ms against a 250 ms target; a `CLOCK_50`-declaring board design re-checked unaffected. |
+| 8 | **Simulator timing didn't predict hardware timing** (§ 5.9) | **Found and closed 2026-09-17**, minutes after decision 7, by the same user's next design. Decision 7 made `CLOCK_500Hz` designs fast; a design whose own math meant a 10-minute toggle was toggling every ~7 s instead — an emergent, unprincipled compression ratio, not real-time behaviour. Fixed with a VHDL-side heartbeat plus Node-side `SIGSTOP`/`SIGCONT` pacing, explicitly chosen (§ 5.9, `AskUserQuestion`) over leaving `CLOCK_500Hz` fast-forwarded. Re-verified: a scaled 2.5 s-target design converged to ~2470 ms average; the reported design confirmed not toggling early; Stop mid-pause returned in 1 ms; `CLOCK_50` designs unaffected (pacing never engages — already at or below real-time speed). |
 
-Decision 2 is the only one still open, and it changes what students see —
-**confirm it before implementing a fix**, rather than picking one silently.
-It does not block anything else in this plan: the starter runs correctly
-today, it just means a 50 MHz-scale clock divider won't visibly react in an
-interactive session (§ 5.5), which is already documented behavior, not a
-defect introduced by leaving this open.
+| 9 | **Backend death orphaned its GHDL children** (§ 5.10) | **Found and closed 2026-09-17**, reported as a *third* timing complaint that turned out not to be a timing bug at all: two orphans from earlier restarts were pinning two cores, making a correct design measure ~5× slow. § 7.2's "a dropped connection must never leave GHDL running" only ever covered the connection dying. `server.ts` now keeps a session registry and destroys it on `SIGTERM`/`SIGINT`. Also fixed a latent double-decrement in the `error`-then-`close` teardown path it replaced. |
+
+All nine are closed or explicitly out of scope. Whether to also add the
+divide-constant teaching pattern from § 5.5's option 2 remains a live,
+lower-priority question — it changes course material (what the starter
+teaches), so it still warrants confirmation before doing it, unlike
+`CLOCK_500Hz`, which changed only the board interface the backend
+already owns.
 
 ---
 
@@ -1001,9 +1466,9 @@ flushed within one poll interval, and the process stays `R`/100 % CPU
 No test runner exists yet in either package, so rather than add one for
 a handful of pure functions, verification was direct: `generateTestbench()`
 was run for four port-set scenarios (full interface, `SW`/`LEDR`-only,
-legacy `rst` with `KEY`, legacy `rst` without `KEY`) and each output was
+legacy `rst` with `KEY_N`, legacy `rst` without `KEY_N`) and each output was
 compiled — `ghdl -a`/`-e` — against a matching hand-written DUT. All four
-elaborate clean. (The first attempt at the `rst`-without-`KEY` case used
+elaborate clean. (The first attempt at the `rst`-without-`KEY_N` case used
 the wrong DUT fixture — a copy-paste error in the *test*, not the
 generator — caught because the elaboration error named the exact
 mismatch; corrected and re-verified.) A full run-time round trip (not
@@ -1089,18 +1554,20 @@ use std.textio.all;
 
 entity de1soc_sim_tb is
   generic (
-    input_file  : string  := "";
-    output_file : string  := "";
-    poll_cycles : integer := 50
+    input_file       : string  := "";
+    output_file      : string  := "";
+    poll_interval_ns : integer := 1000;
+    heartbeat_file   : string  := ""
   );
 end entity;
 
 architecture sim of de1soc_sim_tb is
-  signal clk_sig  : std_logic := '0';
-  signal rst_sig  : std_logic := '0';
-  signal sw_sig   : std_logic_vector(9 downto 0) := (others => '0');
-  signal key_sig  : std_logic_vector(3 downto 0) := (others => '1');
-  signal ledr_sig : std_logic_vector(9 downto 0) := (others => '0');
+  signal clk_sig    : std_logic := '0';
+  signal clk500_sig : std_logic := '0';
+  signal rst_sig    : std_logic := '0';
+  signal sw_sig     : std_logic_vector(9 downto 0) := (others => '0');
+  signal key_sig    : std_logic_vector(3 downto 0) := (others => '1');
+  signal ledr_sig   : std_logic_vector(9 downto 0) := (others => '0');
   signal hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig
     : std_logic_vector(6 downto 0) := (others => '1');
 
@@ -1129,26 +1596,68 @@ begin
   uut: entity work.DE1_SoC
     port map (
       clock_50 => clk_sig,
+      clock_500hz => clk500_sig,
       sw => sw_sig,
-      key => key_sig,
+      key_n => key_sig,
       ledr => ledr_sig,
-      hex0 => hex0_sig,
-      hex1 => hex1_sig,
-      hex2 => hex2_sig,
-      hex3 => hex3_sig,
-      hex4 => hex4_sig,
-      hex5 => hex5_sig
+      hex0_n => hex0_sig,
+      hex1_n => hex1_sig,
+      hex2_n => hex2_sig,
+      hex3_n => hex3_sig,
+      hex4_n => hex4_sig,
+      hex5_n => hex5_sig
     );
 
-  -- Free-running clock. Never blocks, never waits on I/O — the property
-  -- the Phase 2 spike (§ 5.4.1) proved achievable. Doubles as both the
-  -- DUT's CLOCK_50 (when declared) and the poll loop's own timing
-  -- reference, so there is always something to poll cycles against even
-  -- for a design with no clock port at all.
+  -- Free-running clock, only instantiated when the entity actually
+  -- declares CLOCK_50 (§ 5.8) — its own 20 ns period is what makes a
+  -- design that depends on it need millions of edges per visible change
+  -- (§ 5.5). The `io` process below no longer rides on this clock's
+  -- edges for its own timing (§ 5.8): this process exists solely to
+  -- drive the DUT's own CLOCK_50 input.
   clkgen : process
   begin
     clk_sig <= '0'; wait for 10 ns;
     clk_sig <= '1'; wait for 10 ns;
+  end process;
+
+  -- CLOCK_500Hz: not a real DE1-SoC pin (§ 3.2) — a simulator-only
+  -- convenience, already divided down to a human-visible rate, so a
+  -- design can be genuinely sequential (a counter, a debouncer, a
+  -- blinking LED) without hand-writing a 50 MHz divider, which would be
+  -- correct but impractical to run interactively (§ 5.5). Runs
+  -- unconditionally, like clkgen when present — 500 Hz is cheap enough on
+  -- its own (§ 5.8) that there is nothing to gain by making this process
+  -- itself conditional on the entity declaring it.
+  clk500gen : process
+  begin
+    clk500_sig <= '0'; wait for 1 ms;
+    clk500_sig <= '1'; wait for 1 ms;
+  end process;
+
+  -- Real-time pacing heartbeat (§ 5.9): reports this session's own
+  -- simulated-time progress to the Node side every 20 ms of simulated
+  -- time, so a session that would otherwise run far ahead of wall-clock
+  -- time (§ 5.8's fix made this the common case for anything not
+  -- declaring CLOCK_50) can be throttled (SIGSTOP/SIGCONT) back toward
+  -- it — a design's timing in the simulator is then a real prediction of
+  -- its timing on actual hardware, not an accident of how many events
+  -- GHDL happened to process per real second.
+  heartbeat : process
+    file fhb : text;
+    variable status : file_open_status;
+    variable l : line;
+  begin
+    loop
+      wait for 20 ms;
+      if heartbeat_file'length > 0 then
+        file_open(status, fhb, heartbeat_file, write_mode);
+        if status = open_ok then
+          write(l, now / 1 ms);
+          writeline(fhb, l);
+          file_close(fhb);
+        end if;
+      end if;
+    end loop;
   end process;
 
   io : process
@@ -1161,9 +1670,11 @@ begin
     variable now  : string(1 to 52);
   begin
     loop
-      for i in 1 to poll_cycles loop
-        wait until rising_edge(clk_sig);
-      end loop;
+      -- A plain time-based wait, not clock edges (§ 5.8) — this process
+      -- has nothing to do with whatever clock, if any, the DUT itself
+      -- runs on; tying it to CLOCK_50's own 20 ns period was what made a
+      -- CLOCK_500Hz-only (or clockless) design pay CLOCK_50's cost anyway.
+      wait for poll_interval_ns * 1 ns;
 
       -- STIM's own wire format (§ 6.3): SW9..SW0, KEY3..KEY0, 14 bits.
       -- A missing file (no STIM sent yet this session) is not an error —
@@ -1214,8 +1725,12 @@ end architecture;
 
 A legacy entity declaring `rst` additionally gets one concurrent
 assignment after the `uut` instantiation — `rst_sig <= not key_sig(0);`
-when `key` is also declared, `rst_sig <= '0';` when it isn't (§ 5.6) — the
-only other way the generated file varies from this.
+when `key_n` is also declared, `rst_sig <= '0';` when it isn't (§ 3.2's
+"Legacy tolerance" rule) — one of two other ways the generated file
+varies from this, `CLOCK_500Hz` (§ 5.7) aside: the other is `clkgen`
+itself, present above only because this example declares `CLOCK_50` —
+an entity that doesn't gets no `clkgen` process at all, not just no
+association (§ 5.8).
 
 ---
 
