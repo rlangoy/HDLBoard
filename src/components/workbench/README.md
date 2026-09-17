@@ -2,9 +2,11 @@
 
 The app's main page — a VHDL "IDE" shell built to match a reference
 `WorkBench.png` mockup of a DE1-SoC-style board IDE: a file tree, a tabbed
-syntax-highlighted VHDL editor, Start/Stop simulation controls, a
-GHDL-style console, and the real DE1-SoC board mock from
-[`components/board`](../board) wired up and live.
+syntax-highlighted VHDL editor, Start/Stop simulation controls, a real GHDL
+console, and the real DE1-SoC board from [`components/board`](../board),
+driven by an actual GHDL simulation over WebSocket
+(`ghdlClient.ts`; see [`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md)
+for the backend and wire protocol behind it).
 
 > This copy of the project does not include the `DesignResources/`
 > reference renders the components were originally measured against — see
@@ -14,15 +16,21 @@ GHDL-style console, and the real DE1-SoC board mock from
 It is rendered by default at `npm run dev` (see [`App.tsx`](../../App.tsx)).
 The original per-component gallery this project's top-level
 [`README.md`](../../../README.md) documents still exists, at the `#gallery`
-hash (`src/ComponentGallery.tsx`).
+hash (`src/ComponentGallery.tsx`); the gallery has no backend of its own —
+only the Workbench talks to GHDL.
 
-> **There is no real GHDL, compiler, or file system behind this.** Starting a
-> simulation plays a scripted console sequence on a timer; uploading or
-> creating a file reads it into React state with `FileReader`, nothing is
-> written to disk. It exists to *look and behave* like the workbench in the
-> reference render, not to compile VHDL. Wiring a real toolchain in behind it
-> — a GHDL binary, a WebSocket, whatever the project ends up using — is future
-> work; see "Known limitations" below for exactly where that wiring would go.
+> **The backend (`../../../server/`) must be running for Start to do
+> anything** — `npm run dev` alone starts only this frontend. Run
+> `../../../start.sh` instead to bring both up together, or see the
+> top-level README's "Running it" section. Without a backend, the failure
+> is near-instant, not a hang: on `localhost` a refused WebSocket
+> connection closes within milliseconds, not after some slow timeout —
+> verified by actually stopping the backend and clicking Start, not
+> assumed. `ghdlClient.ts` reports it explicitly (`ERROR internal, "Could
+> not reach the GHDL backend at …"`) precisely because that fast, silent
+> close was initially indistinguishable from a normal Stop with an empty
+> console — a real gap this same testing pass found and closed, not a
+> hypothetical one.
 
 ---
 
@@ -40,7 +48,8 @@ hash (`src/ComponentGallery.tsx`).
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
   - [`files.ts`](#filests)
   - [`icons.tsx`](#iconstsx)
-- [How the simulation sequence works](#how-the-simulation-sequence-works)
+  - [`ghdlClient.ts`](#ghdlclientts)
+- [How the simulation actually runs](#how-the-simulation-actually-runs)
 - [How the editor overlay works](#how-the-editor-overlay-works)
 - [Styling](#styling)
 - [Known limitations](#known-limitations)
@@ -185,7 +194,7 @@ type SimStatus = 'stopped' | 'compiling' | 'running';
 interface SimulationCardProps {
   status: SimStatus;
   elapsedSeconds: number;
-  topFile: string;          // TOP_LEVEL_ENTITY from files.ts — "top.vhd"
+  topFile: string;          // TOP_LEVEL_ENTITY from files.ts — "DE1_SoC.vhd"
   onStart: () => void;
   onStop: () => void;
 }
@@ -194,7 +203,7 @@ interface SimulationCardProps {
 The card at the top of the sidebar: a circular play glyph and "Simulation"
 heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
-line reading `Elapsed: HH:MM:SS | Top: top.vhd`.
+line reading `Elapsed: HH:MM:SS | Top: DE1_SoC.vhd`.
 
 Purely presentational: the button is disabled while `compiling`, shows
 Start when `stopped` or `compiling`, and Stop once `running`; the status
@@ -246,12 +255,16 @@ extend the highlighter.
 ### `files.ts`
 
 `STARTER_FILES: VhdlFile[]` — the six-file starter project shown in the tree
-(`top.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`, `utility_pkg.vhd`
-under `vhdl/`, `tb_top.vhd` under `work/`). `DEFAULT_OPEN_TABS` is the four
-tabs open on first load, matching `WorkBench.png`. `TOP_LEVEL_ENTITY`
-(`"top.vhd"`) is what `SimulationCard` shows after "Top:". The VHDL itself
-is plausible, internally consistent course-style code — it is not
-validated against a real compiler, because there isn't one behind this yet.
+(`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
+`utility_pkg.vhd` under `vhdl/`, `tb_de1_soc.vhd` under `work/`).
+`DEFAULT_OPEN_TABS` is the four tabs open on first load, matching
+`WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is what
+`SimulationCard` shows after "Top:". `DE1_SoC.vhd` declares the real
+DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY`, `LEDR`, `HEX0..HEX5` —
+`ghdl_implementation_plan.md` § 3.2), not stand-ins for them, and is
+verified against the real GHDL toolchain, not just plausible-looking:
+`ghdl -a`/`-e`/`-r --std=08` were run by hand against every `vhdl/` file
+and the `work/` testbench before this was called done.
 
 ### `icons.tsx`
 
@@ -273,32 +286,71 @@ each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn
 icon in this folder already does.
 
-## How the simulation sequence works
+### `ghdlClient.ts`
 
-`Workbench.handleStart`:
+```ts
+export class GhdlClient {
+  constructor(url: string, handlers: GhdlClientHandlers);
+  run(files: VhdlFile[]): void;
+  stim(sw: BitVector, key: BitVector): void;
+  reset(): void;
+  stop(): void;
+  close(): void;
+}
+```
 
-1. Sets `status` to `'compiling'` and logs the GHDL version line.
-2. Schedules one `Compiling vhdl/<name>.vhd ...` line per file in the
-   `vhdl/` folder, ~180 ms apart, via `window.setTimeout`.
-3. Schedules `Elaborating design ...`, then `Simulation started (run -all) ...`.
-4. Finally sets `status` to `'running'`, logs `Simulation running ...` in
-   the success tone, and starts a one-second `setInterval` that ticks
-   `elapsedSeconds` up — this is what `SimulationCard`'s "Elapsed:" reads.
+The only file in this app that speaks WebSocket to the GHDL backend — full
+wire protocol, backend design, and what was actually verified (not just
+planned) are in
+[`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md) § 6.
+`Workbench` calls this; nothing else touches `WebSocket` directly.
 
-`handleStop` clears every pending timer (`timers.current`, cleared on
-unmount too) and the elapsed-time interval, and logs `Simulation stopped.`.
+One `head-line`/`body` split (`text.indexOf('\n')`) is the entire parser —
+there is no protocol library, matching the plan's design goal of a
+command grammar simple enough to need none. Mirrors
+`server/src/protocol.ts`'s grammar independently rather than importing it:
+this is a separate npm package, running in the browser, and cannot import
+a Node-side file.
+
+## How the simulation actually runs
+
+`Workbench` holds one `GhdlClient` (`ghdlClient.ts`), created lazily on
+first Start rather than on mount — opening the page never opens a socket
+nobody asked for. Full wire protocol and backend design:
+[`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md) § 6.
+
+`handleStart`:
+
+1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, blanks the
+   board (`blankBoard()` — LEDs off, HEX blank; see
+   `Design_Description.md` § 5 convention 11), and calls
+   `client.run(files)`, which filters to `folder === 'vhdl'` and sends
+   them as one `RUN` frame.
+2. The backend's `LOG`/`ERROR` frames drive `appendLog` directly — GHDL's
+   own output (or, on failure, GHDL's own error text with file:line)
+   reaches the console verbatim, not a scripted approximation of it.
+3. On `READY`, `status` becomes `'running'`, the elapsed-time interval
+   starts, and the client immediately sends one `STIM` of the *current*
+   `SW`/`KEY` state — read from `swRef`/`keyRef`, not the `sw`/`key`
+   state variables directly, because the client's handlers are captured
+   once when it's constructed and would otherwise see a permanently stale
+   closure. Without this, switches flipped *before* Start had no effect
+   until the user touched one again after — a real bug this session's
+   own end-to-end testing caught, not something anticipated in advance.
+4. Every `STATE` frame updates `ledState`/`hexState` — the *only* place
+   either is written once a session exists. `SW`/`KEY` changes
+   (`handleSwChange`/`handleKeyChange`) send a fresh `STIM` on every
+   change, passing the *next* value, never the `sw`/`key` state variable
+   (React state isn't updated synchronously, so the stale value would
+   leave the board permanently one flip behind).
+
+`handleStop` sends `STOP` and nothing else — `status`/log/board-blanking
+all happen when the backend's own `DONE` frame arrives (`onDone`), not
+optimistically on click, so the backend stays the single source of truth
+for whether a simulation is actually running. `onError` and `onClosed`
+blank the board for the same reason: nothing is currently driving it.
 `elapsedSeconds` is *not* reset on Stop — it holds the last run's duration
-until the next Start zeroes it, the way a stopwatch would. Because every
-step is a
-`setTimeout` against the *current* `files` list at the moment Start was
-clicked, editing a file's content while "compiling" does not retroactively
-change what gets logged for that run — the same way a real compile wouldn't
-see edits made after it started.
-
-This is the seam where a real backend would attach: replace the body of
-`handleStart`/`handleStop` with whatever actually invokes GHDL (a local
-process, a WebSocket to a server, WASM — out of scope here), and keep
-appending to `logLines` / setting `status` the same way.
+until the next Start zeroes it, the way a stopwatch would.
 
 ## How the editor overlay works
 
@@ -428,10 +480,17 @@ stacking fallback.
 
 ## Known limitations
 
-- **No real GHDL.** See "How the simulation sequence works" above.
+- **A backend is required.** GHDL runs server-side (`server/`), not in the
+  browser — `npm run dev` alone starts only this frontend; see "How the
+  simulation actually runs" above and the top-level README's "Running it".
 - **No persistence.** Files, tabs and console output all live in React state
-  and are lost on reload. Nothing is written to disk, and "Upload" only
-  reads a file into memory.
+  and are lost on reload. Nothing is written to disk on the frontend side;
+  the backend's per-session temp directory is deleted when the tab closes
+  (`ghdl_implementation_plan.md` § 7.2).
+- **A clock-rate limit, not a bug.** A hardware-accurate 50 MHz clock
+  divider needs millions of simulated cycles per visible change —
+  impractical to run interactively regardless of tuning. See
+  `ghdl_implementation_plan.md` § 5.5.
 - **Settings and Help do nothing.** They're chrome from the reference render
   with no feature behind them yet.
 - **Not rendered-checked against `WorkBench.png`.** Build and typecheck are

@@ -12,40 +12,42 @@ export interface VhdlFile {
   content: string;
 }
 
-const TOP_VHD = `library ieee;
+const DE1_SOC_VHD = `library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 
-entity top is
+-- The real DE1-SoC top-level interface: these are the board's own pin
+-- names, not a stand-in for them, so this file can go straight into
+-- Quartus with only a pin assignment added. Every port here is optional
+-- for the simulator — a design that only declares SW and LEDR is a
+-- perfectly normal first lab.
+entity DE1_SoC is
     port (
-        clk : in  std_logic;
-        rst : in  std_logic;
-
-        -- I/O to the board
-        led : out std_logic_vector(9 downto 0);
-        hex : out std_logic_vector(6 downto 0);
-        sw  : in  std_logic_vector(9 downto 0);
-        key : in  std_logic_vector(3 downto 0);
-        btn : in  std_logic_vector(3 downto 0)
+        CLOCK_50 : in  std_logic;
+        SW       : in  std_logic_vector(9 downto 0);
+        KEY      : in  std_logic_vector(3 downto 0);
+        LEDR     : out std_logic_vector(9 downto 0);
+        HEX0     : out std_logic_vector(6 downto 0);
+        HEX1     : out std_logic_vector(6 downto 0);
+        HEX2     : out std_logic_vector(6 downto 0);
+        HEX3     : out std_logic_vector(6 downto 0);
+        HEX4     : out std_logic_vector(6 downto 0);
+        HEX5     : out std_logic_vector(6 downto 0)
     );
 end entity;
 
-architecture rtl of top is
-    signal led_reg : std_logic_vector(9 downto 0);
+architecture rtl of DE1_SoC is
 begin
-    -- Example: copy switches to leds
-    process(clk, rst) is
-    begin
-        if rst = '1' then
-            led_reg <= (others => '0');
-        elsif rising_edge(clk) then
-            led_reg <= sw;
-        end if;
-    end process;
+    -- LEDR <= SW; the first thing every student wires up.
+    LEDR <= SW;
 
-    led <= led_reg;
-
-    -- Add your own logic for 7-seg, buttons etc.
+    -- Blank until you add your own 7-segment logic (see display7seg.vhd)
+    -- — active low, so all-ones is "off".
+    HEX0 <= (others => '1');
+    HEX1 <= (others => '1');
+    HEX2 <= (others => '1');
+    HEX3 <= (others => '1');
+    HEX4 <= (others => '1');
+    HEX5 <= (others => '1');
 end architecture;
 `;
 
@@ -148,53 +150,56 @@ package body utility_pkg is
 end package body;
 `;
 
-const TB_TOP_VHD = `library ieee;
+const TB_DE1_SOC_VHD = `library ieee;
 use ieee.std_logic_1164.all;
 
-entity tb_top is
+-- A student's own offline testbench (work/) — separate from, and never
+-- sent to, the interactive board simulator, which generates its own.
+entity tb_de1_soc is
 end entity;
 
-architecture sim of tb_top is
-    signal clk : std_logic := '0';
-    signal rst : std_logic := '1';
-    signal sw  : std_logic_vector(9 downto 0) := (others => '0');
-    signal key : std_logic_vector(3 downto 0) := (others => '1');
-    signal btn : std_logic_vector(3 downto 0) := (others => '1');
-    signal led : std_logic_vector(9 downto 0);
-    signal hex : std_logic_vector(6 downto 0);
+architecture sim of tb_de1_soc is
+    signal clock_50 : std_logic := '0';
+    signal sw       : std_logic_vector(9 downto 0) := (others => '0');
+    signal key      : std_logic_vector(3 downto 0) := (others => '1');
+    signal ledr     : std_logic_vector(9 downto 0);
+    signal hex0, hex1, hex2, hex3, hex4, hex5 : std_logic_vector(6 downto 0);
 begin
-    clk <= not clk after 10 ns;
+    clock_50 <= not clock_50 after 10 ns;
 
-    uut : entity work.top
+    uut : entity work.DE1_SoC
         port map (
-            clk => clk,
-            rst => rst,
-            led => led,
-            hex => hex,
-            sw  => sw,
-            key => key,
-            btn => btn
+            CLOCK_50 => clock_50,
+            SW       => sw,
+            KEY      => key,
+            LEDR     => ledr,
+            HEX0     => hex0,
+            HEX1     => hex1,
+            HEX2     => hex2,
+            HEX3     => hex3,
+            HEX4     => hex4,
+            HEX5     => hex5
         );
 
     stim : process is
     begin
         wait for 20 ns;
-        rst <= '0';
+        sw <= "0000000001";
         wait;
     end process;
 end architecture;
 `;
 
 export const STARTER_FILES: VhdlFile[] = [
-  { id: 'top', name: 'top.vhd', folder: 'vhdl', content: TOP_VHD },
+  { id: 'de1_soc', name: 'DE1_SoC.vhd', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'display7seg', name: 'display7seg.vhd', folder: 'vhdl', content: DISPLAY7SEG_VHD },
   { id: 'leds', name: 'leds.vhd', folder: 'vhdl', content: LEDS_VHD },
   { id: 'buttons', name: 'buttons.vhd', folder: 'vhdl', content: BUTTONS_VHD },
   { id: 'utility_pkg', name: 'utility_pkg.vhd', folder: 'vhdl', content: UTILITY_PKG_VHD },
-  { id: 'tb_top', name: 'tb_top.vhd', folder: 'work', content: TB_TOP_VHD },
+  { id: 'tb_de1_soc', name: 'tb_de1_soc.vhd', folder: 'work', content: TB_DE1_SOC_VHD },
 ];
 
-export const DEFAULT_OPEN_TABS = ['top', 'display7seg', 'leds', 'buttons'];
+export const DEFAULT_OPEN_TABS = ['de1_soc', 'display7seg', 'leds', 'buttons'];
 
 /** The top-level entity a simulation run elaborates — shown in the Simulation card. */
-export const TOP_LEVEL_ENTITY = 'top.vhd';
+export const TOP_LEVEL_ENTITY = 'DE1_SoC.vhd';

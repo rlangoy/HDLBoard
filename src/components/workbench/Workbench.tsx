@@ -6,18 +6,31 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Board, bitsToNumber, zeroBits, type BitVector } from '../board';
+import { Board, zeroBits, type BitVector } from '../board';
 import { Leds } from '../Leds';
 import { Pushbuttons } from '../Pushbuttons';
 import { Switches } from '../Switches';
-import { SevenSegmentDisplays, numberToDisplays } from '../SevenSegment';
+import {
+  SevenSegmentDisplays,
+  blankSegments,
+  type SegmentVector,
+} from '../SevenSegment';
 import { Header } from './Header';
 import { FileExplorer } from './FileExplorer';
 import { CodeEditor } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
+import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import './Workbench.css';
+
+// The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
+// overridable at build time so a deployment can point at a different
+// backend without editing source. The host is never hardcoded (§ 6.4):
+// ghdlBackendUrl() resolves it from whatever host the page was loaded
+// from, so the LAN access this repo's own README documents for the Vite
+// dev server works for the backend too, with no extra configuration.
+const GHDL_WS_PORT = Number(import.meta.env.VITE_GHDL_WS_PORT ?? 9010);
 
 function timestamp(): string {
   const d = new Date();
@@ -54,10 +67,11 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
  * driving a live DE1-SoC board mock and GHDL console on the right, laid
  * out to match `DesignResources/WorkBench.png`.
  *
- * There is no real GHDL behind this — compiling and running are a
- * scripted console sequence — but every board panel is the real,
- * working component from `components/board`, `Switches`, `Leds`,
- * `Pushbuttons` and `SevenSegment`.
+ * `LEDR`/`HEX` are driven by a real GHDL simulation over WebSocket
+ * (`ghdlClient.ts`, ghdl_implementation_plan.md) — never by `SW`/`KEY`
+ * directly (Design_Description.md § 5 convention 11). Every board panel
+ * is the real, working component from `components/board`, `Switches`,
+ * `Leds`, `Pushbuttons` and `SevenSegment`.
  */
 export function Workbench() {
   const [files, setFiles] = useState<VhdlFile[]>(STARTER_FILES);
@@ -67,14 +81,28 @@ export function Workbench() {
   const [status, setStatus] = useState<SimStatus>('stopped');
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
-  const timers = useRef<number[]>([]);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimer = useRef<number | null>(null);
 
   const [sw, setSw] = useState<BitVector>(() => zeroBits(10));
   const [key, setKey] = useState<BitVector>(() => [1, 1, 1, 1]);
-  const dec = bitsToNumber(sw);
+  // Mirrors of sw/key for the GhdlClient's handlers to read (below): those
+  // handlers are captured once, when the client is lazily constructed, so
+  // reading `sw`/`key` directly there would see whatever they were at that
+  // moment forever after — a stale closure. Refs are updated synchronously
+  // in handleSwChange/handleKeyChange and always read current.
+  const swRef = useRef(sw);
+  const keyRef = useRef(key);
+
+  // Board outputs are driven by the simulation backend, never by the
+  // inputs. Until GHDL is wired up they stay at their blank values — see
+  // ghdl_implementation_plan.md § 0 for why that is the correct state
+  // (Design_Description.md § 5 convention 11).
+  const [ledState, setLedState] = useState<BitVector>(() => zeroBits(10));
+  const [hexState, setHexState] = useState<SegmentVector[]>(() =>
+    Array.from({ length: 6 }, () => blankSegments()),
+  );
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -254,11 +282,6 @@ export function Workbench() {
     setLogLines((prev) => [...prev, { id: logSeq.current, time: timestamp(), text, tone }]);
   }, []);
 
-  const clearTimers = () => {
-    timers.current.forEach((id) => window.clearTimeout(id));
-    timers.current = [];
-  };
-
   const stopElapsedTimer = () => {
     if (elapsedTimer.current !== null) {
       window.clearInterval(elapsedTimer.current);
@@ -266,10 +289,65 @@ export function Workbench() {
     }
   };
 
+  // Nothing is simulating: the honest board state, per Design_Description.md
+  // § 5 convention 11. Used whenever a session isn't actively running —
+  // before Start, and after Stop/error/disconnect — never only on mount.
+  const blankBoard = useCallback(() => {
+    setLedState(zeroBits(10));
+    setHexState(Array.from({ length: 6 }, () => blankSegments()));
+  }, []);
+
+  // One GhdlClient per Workbench instance, created lazily on first Start
+  // rather than on mount, so opening the page never opens a socket the
+  // student hasn't asked for yet. `onState` is the only path that ever
+  // writes ledState/hexState to anything other than blank — see the
+  // file-top comment and Design_Description.md § 5 convention 11.
+  const clientRef = useRef<GhdlClient | null>(null);
+  const getClient = useCallback((): GhdlClient => {
+    if (!clientRef.current) {
+      clientRef.current = new GhdlClient(ghdlBackendUrl(GHDL_WS_PORT), {
+        onReady: () => {
+          setStatus('running');
+          appendLog('Simulation running ...', 'success');
+          elapsedTimer.current = window.setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+          // A fresh session's testbench starts with SW/KEY at their own
+          // declared defaults, not wherever the board's switches actually
+          // sit — sync the current input state immediately so a design
+          // that reacts combinationally shows the right thing before the
+          // user touches anything.
+          clientRef.current?.stim(swRef.current, keyRef.current);
+        },
+        onState: (ledr, hex) => {
+          setLedState(ledr);
+          setHexState(hex);
+        },
+        onLog: (text) => appendLog(text),
+        onError: (stage, text) => {
+          appendLog(`${stage} error:\n${text}`, 'error');
+          stopElapsedTimer();
+          setStatus('stopped');
+          blankBoard();
+        },
+        onDone: () => {
+          stopElapsedTimer();
+          setStatus('stopped');
+          appendLog('Simulation stopped.');
+          blankBoard();
+        },
+        onClosed: () => {
+          stopElapsedTimer();
+          setStatus('stopped');
+          blankBoard();
+        },
+      });
+    }
+    return clientRef.current;
+  }, [appendLog, blankBoard]);
+
   useEffect(
     () => () => {
-      clearTimers();
       stopElapsedTimer();
+      clientRef.current?.close();
     },
     [],
   );
@@ -331,44 +409,36 @@ export function Workbench() {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));
   };
 
+  // The next value is sent, never the `sw`/`key` state variable — React
+  // state isn't updated synchronously, so sending the stale closure value
+  // here would make the board always one flip behind (§ 8.3). The refs
+  // are updated here too, synchronously, so onReady's stim() above always
+  // sees the latest positions regardless of render timing.
+  const handleSwChange = (next: BitVector) => {
+    setSw(next);
+    swRef.current = next;
+    getClient().stim(next, key);
+  };
+
+  const handleKeyChange = (next: BitVector) => {
+    setKey(next);
+    keyRef.current = next;
+    getClient().stim(sw, next);
+  };
+
   const handleStart = () => {
-    clearTimers();
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');
-    appendLog('GHDL 0.37.0 (Debian 12.2.0-1)');
-
-    const vhdlFiles = files.filter((f) => f.folder === 'vhdl');
-    let delay = 220;
-    vhdlFiles.forEach((f) => {
-      timers.current.push(
-        window.setTimeout(() => appendLog(`Compiling vhdl/${f.name} ...`), delay),
-      );
-      delay += 180;
-    });
-
-    timers.current.push(window.setTimeout(() => appendLog('Elaborating design ...'), delay));
-    delay += 220;
-
-    timers.current.push(
-      window.setTimeout(() => appendLog('Simulation started (run -all) ...'), delay),
-    );
-    delay += 160;
-
-    timers.current.push(
-      window.setTimeout(() => {
-        appendLog('Simulation running ...', 'success');
-        setStatus('running');
-        elapsedTimer.current = window.setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
-      }, delay),
-    );
+    blankBoard();
+    getClient().run(files);
   };
 
   const handleStop = () => {
-    clearTimers();
-    stopElapsedTimer();
-    appendLog('Simulation stopped.');
-    setStatus('stopped');
+    // Status/log transition happens on the backend's own DONE frame
+    // (getClient()'s onDone), not optimistically here — the backend is
+    // the single source of truth for whether a simulation is running.
+    getClient().stop();
   };
 
   const handleClearConsole = () => setLogLines([]);
@@ -443,10 +513,10 @@ export function Workbench() {
               style={{ transform: `scale(${boardScale})` }}
             >
               <Board size={24}>
-                <Leds value={sw} />
-                <SevenSegmentDisplays value={numberToDisplays(dec, 6)} />
-                <Switches value={sw} onChange={setSw} />
-                <Pushbuttons value={key} onChange={setKey} showHint={false} />
+                <Leds value={ledState} />
+                <SevenSegmentDisplays value={hexState} />
+                <Switches value={sw} onChange={handleSwChange} />
+                <Pushbuttons value={key} onChange={handleKeyChange} showHint={false} />
               </Board>
             </div>
           </div>

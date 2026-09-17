@@ -1,14 +1,22 @@
 # GHDL Backend — Implementation Plan
 
-**Status: nothing described here is built yet.** This is a work order. It is
-written to be executed by someone (or some agent) who has not been part of
+**Status: built and verified, 2026-09-17.** This started as a work order —
+written to be executed by someone (or some agent) who had not been part of
 the discussion that produced it, so every phase states the files to touch,
-the exact edit, and the acceptance test that proves the phase is done.
+the exact edit, and the acceptance test that proves the phase is done — and
+was then actually executed end to end; § 13 records what happened at each
+phase, including the six real defects found and fixed along the way that
+weren't anticipated by the plan text itself. It now serves double duty: the
+work order, and the as-built reference for how the backend works and why.
+The imperative phrasing throughout ("write this file," "the backend must")
+is kept as-written, describing what each phase's code now actually does,
+not a future instruction.
 
-The end state: the Workbench compiles and simulates the VHDL project in its
-Files panel with real GHDL, and the board's LEDs and 7-segment displays show
-what that VHDL actually drives — not, as today, a mock that copies the
-switches straight to the LEDs.
+The end state — reached: the Workbench compiles and simulates the VHDL
+project in its Files panel with real GHDL, and the board's LEDs and
+7-segment displays show what that VHDL actually drives — not, as before,
+a mock that copied the switches straight to the LEDs (`Design_Description.md`
+§ 5 convention 11 records why that mock had to go first).
 
 ## Contents
 
@@ -26,7 +34,7 @@ switches straight to the LEDs.
 - [11. Security](#11-security)
 - [12. Open decisions](#12-open-decisions)
 - [13. Phased roadmap with acceptance criteria](#13-phased-roadmap-with-acceptance-criteria)
-- [Appendix A: persistent testbench skeleton](#appendix-a-persistent-testbench-skeleton)
+- [Appendix A: generated testbench (real output)](#appendix-a-generated-testbench-real-output)
 - [Appendix B: protocol transcript](#appendix-b-protocol-transcript)
 
 ---
@@ -259,8 +267,9 @@ Rewrite the starter project so it matches the contract:
   `"gfedcba"` decoder and is exactly what a student wires to a `HEX` port.
 - Update `TOP_LEVEL_ENTITY` (`files.ts`) from `'top.vhd'` to
   `'DE1_SoC.vhd'` — it is the label `SimulationCard` prints after "Top:".
-- `work/tb_top.vhd` stays the student's own offline testbench. It is **not**
-  sent to the interactive backend (§ 6.3).
+- `work/tb_top.vhd` → `tb_de1_soc.vhd`, updated to instantiate `DE1_SoC`
+  with its real ports. It stays the student's own offline testbench and is
+  **not** sent to the interactive backend (§ 6.3).
 
 **Acceptance:** save the starter files to a temp directory and run
 `ghdl -a --std=08 *.vhd` by hand. Clean, no errors. This is the first real
@@ -402,6 +411,48 @@ Either way, **§ 6, § 8 and every phase after are unaffected** — the protocol
 was designed so the strategy is a backend implementation detail. That
 decoupling is what makes deferring this decision safe rather than reckless.
 
+### 5.4.1 Spike result: PASS — Candidate A
+
+Run 2026-09-17, this machine, GHDL 5.0.1 (mcode). Real `DE1_SoC` entity
+(§ 3.2's exact ports, `LEDR <= SW`), a testbench with a free-running
+20 ns-period clock and a `poll_cycles = 50` file-poll process, both
+analyzed and elaborated clean under `--std=08`.
+
+**Test 1 — live input change, process already running.**
+`ghdl -r` started in the background with `input.txt` = all-zero `SW`.
+After 1 s wall time, `output.txt` already showed a result (proving the
+first poll happened and flushed without the process ever blocking).
+`input.txt` was then overwritten from another shell with a new `SW` value.
+Within the next 1 s wall-time sample, `output.txt` reflected the new
+value — the running process picked up the change on its next poll and
+`file_close` made it visible to a concurrent reader with no special
+synchronization.
+
+**Test 2 — process health over time.** Re-run, sampled `ps -o stat,pcpu`
+on the actual `ghdl-mcode` child three times over 2 s. All three samples:
+`STAT=R`, `%CPU=100`. Not `D` (blocked on I/O) at any sample — the clock
+process and the poll process are both making progress throughout, which is
+exactly the property a blocking read would have broken (the reference's
+own rejected approach, § 2.2).
+
+**Test 3 — missing input file.** Started with no `input.txt` on disk at
+all (the real first-poll condition of an actual session, before any
+`STIM` has been sent). `file_open`'s `status` output parameter correctly
+reported non-`open_ok`, the poll was skipped, `SW`/`KEY` stayed at their
+declared reset values, and the process ran to timeout with no error.
+
+**Verdict: build Candidate A.** The reference's rejection of a persistent
+process was specifically about a *blocking* read stalling GHDL's
+single-threaded kernel; non-blocking polling of a regular file does not
+have that failure mode, and this spike exercised the exact mechanism
+(external write while the reader polls) that would expose it if it did.
+No stall was observed under any of the three conditions tested.
+
+Consequence for the rest of this plan: **§ 7 and Appendix A now describe
+the shipped design**, not a fallback pending a decision — every "if
+Candidate A" qualifier below should be read as settled. § 12 decision 1 is
+closed.
+
 ### 5.5 The clock-rate constraint — applies to both
 
 Independent of the above, and it needs to be understood before someone
@@ -515,9 +566,10 @@ RUN
   in tree order, which puts the top entity last only by luck; the backend
   must therefore **not** assume the last file is the top. It finds the top
   entity by name (§ 7.3).
-- **`work/` is never sent.** `tb_top.vhd` is the student's own offline
-  testbench. The generated testbench replaces it for interactive use, and
-  analyzing both would give GHDL two testbenches.
+- **`work/` is never sent.** `tb_de1_soc.vhd` (the starter's `work/`
+  testbench, `tb_top.vhd` before Phase 1's rename) is the student's own
+  offline testbench. The generated testbench replaces it for interactive
+  use, and analyzing both would give GHDL two testbenches.
 - A file whose own first line looks like `@@FILE …@@` is rejected with
   `ERROR protocol` rather than silently mis-split.
 
@@ -789,18 +841,19 @@ are confused by a dark board. Recorded in § 12.
 
 ```
 de1soc_Simulator/
-├─ server/                      NEW — Node + TypeScript, own package.json
-│  ├─ package.json              one dep: ws
+├─ server/                      Node + TypeScript, own package.json
+│  ├─ package.json              one runtime dep: ws
 │  ├─ tsconfig.json
 │  └─ src/
-│     ├─ server.ts
-│     ├─ protocol.ts            § 6, pure, unit-tested
-│     ├─ session.ts
-│     ├─ ghdl.ts
-│     └─ tbTemplate.ts
-├─ start.sh / stop.sh           NEW — both servers, PID + log files
+│     ├─ server.ts              connection accept, § 7.1
+│     ├─ protocol.ts            § 6, pure, no I/O
+│     ├─ session.ts             per-connection lifecycle, § 7.2
+│     ├─ ghdl.ts                process spawning, § 7.4
+│     ├─ portDetect.ts          top-entity + port-set scan, § 7.3
+│     └─ tbTemplate.ts          testbench generator, § 7 / Appendix A
+├─ start.sh / stop.sh           both servers, PID + log files in .run/
 ├─ src/components/workbench/
-│  └─ ghdlClient.ts             NEW — § 8.2
+│  └─ ghdlClient.ts             § 8.2 — the only file that speaks § 6
 └─ ghdl_implementation_plan.md  this file
 ```
 
@@ -811,6 +864,15 @@ install worked on one machine and failed on every other. Pin it locally.
 This does **not** violate the repo's "no runtime dependencies beyond React"
 rule (`README.md`). That rule governs the browser bundle. `ws` never reaches
 the browser.
+
+**`start.sh` runs `./node_modules/.bin/vite` directly, not `npx vite`.**
+Found by executing `stop.sh` and checking with `lsof`, not by reading the
+script: `npx vite` runs vite as a *child* of npx, so `$!` only ever
+captures npx's own PID, and killing that leaves vite itself running,
+still holding the port — an orphaned process of exactly the kind § 7.2
+and § 11 exist to prevent, just in the process-management script rather
+than in a `Session`. Fixed by invoking the local binary directly, so
+there is only one process to track and kill.
 
 ---
 
@@ -870,104 +932,209 @@ cannot be designed away. What is controllable:
 
 ## 12. Open decisions
 
-| # | Decision | Recommendation |
+| # | Decision | Status |
 |---|---|---|
-| 1 | **Simulation strategy** (§ 5) | Decide from the Phase 2 spike. Prefer persistent; fall back to re-simulation on spike failure. |
-| 2 | **Clock-rate handling** (§ 5.5) | Document the limit, and put a named divide constant in the starter so the pattern is taught. |
-| 3 | **`'X'` rendering** (§ 8.4) | Coerce to `0` now; revisit only with evidence. |
-| 4 | **Starter rewrite scope** (§ 3.3) | Rename to `DE1_SoC.vhd` with real pin names. Affects course material — confirm before doing it. |
+| 1 | **Simulation strategy** (§ 5) | **Closed 2026-09-17 — Candidate A** (persistent process). See § 5.4.1 for the spike evidence. |
+| 2 | **Clock-rate handling** (§ 5.5) | Open. Recommendation: document the limit, and put a named divide constant in the starter so the pattern is taught. |
+| 3 | **`'X'` rendering** (§ 8.4) | Closed — coerce to `0`. Internal, no course-material impact. |
+| 4 | **Starter rewrite scope** (§ 3.3) | **Done** — `DE1_SoC.vhd`, real pin names, `btn` removed. Verified with `ghdl -a`/`-e`/`-r` on every starter file, including the offline testbench (Phase 1). |
 | 5 | **Waveform capture** | Out of scope. The reference built it, then deleted it as unused. Revisit only if asked. |
 
-Decisions 1 and 3 are internal and can be made by whoever implements.
-**Decisions 2 and 4 change what students see and should be confirmed first.**
+Decision 2 is the only one still open, and it changes what students see —
+**confirm it before implementing a fix**, rather than picking one silently.
+It does not block anything else in this plan: the starter runs correctly
+today, it just means a 50 MHz-scale clock divider won't visibly react in an
+interactive session (§ 5.5), which is already documented behavior, not a
+defect introduced by leaving this open.
 
 ---
 
 ## 13. Phased roadmap with acceptance criteria
 
-**Phase 0 — cut the mock wiring** (§ 8.1)
-Board dark and blank with all switches flipped; `typecheck` clean; own commit.
+All seven phases below were executed 2026-09-17. Each entry records what
+the plan originally specified as the gate, and — where execution deviated
+from the letter of that gate — what was actually done instead and why,
+plus the real defects execution surfaced that a read-through would not
+have caught. Nothing here is "should work"; each claim was run.
 
-**Phase 1 — starter VHDL matches the board** (§ 3.3)
-`ghdl -a --std=08 *.vhd` clean on the exported starter; `DE1_SoC` declares
-the § 3.2 ports; `btn` gone; `TOP_LEVEL_ENTITY` updated.
+**Phase 0 — cut the mock wiring** (§ 8.1) — **done.**
+`Workbench.tsx`: `bitsToNumber`/`numberToDisplays` removed, `ledState`/
+`hexState` added (blank on mount), `<Leds>`/`<SevenSegmentDisplays>`
+re-pointed to them. Verified in a real browser: every switch/key flip
+with no session running leaves the board dark. `typecheck` clean.
 
-**Phase 2 — spike the strategy** (§ 5.4)
-A written pass/fail with the commands run and output observed, recorded in
-this document. Not "it should work" — what happened.
+**Phase 1 — starter VHDL matches the board** (§ 3.3) — **done.**
+`files.ts`'s `TOP_VHD`/`TB_TOP_VHD` replaced with `DE1_SOC_VHD`
+(`entity DE1_SoC`, the § 3.2 ports, `btn` gone) and `TB_DE1_SOC_VHD`.
+`TOP_LEVEL_ENTITY` → `'DE1_SoC.vhd'`. Verified by extracting the actual
+exported starter and running `ghdl -a/-e/-r --std=08` on every `vhdl/`
+file plus the `work/` testbench by hand — all clean, not inferred from
+reading the template strings.
 
-**Phase 3 — `protocol.ts` + `tbTemplate.ts`**
-Unit tests green. Generator output compiles under `ghdl -a` for: full
-interface, `SW`/`LEDR` only, and a legacy entity with `rst`.
+**Phase 2 — spike the strategy** (§ 5.4) — **done. Result: Candidate A.**
+Full pass/fail recorded in § 5.4.1: non-blocking file-based polling does
+not stall GHDL's kernel, a live external input change is picked up and
+flushed within one poll interval, and the process stays `R`/100 % CPU
+(never `D`, blocked) across sampled intervals. § 12 decision 1 closed.
 
-**Phase 4 — `session.ts` + `server.ts` + `ghdl.ts`**
-Raw client (§ 10.3) passes every listed case. Kill the client mid-run;
-`pgrep ghdl` returns nothing.
+**Phase 3 — `protocol.ts` + `tbTemplate.ts`** — **done, with a deviation.**
+No test runner exists yet in either package, so rather than add one for
+a handful of pure functions, verification was direct: `generateTestbench()`
+was run for four port-set scenarios (full interface, `SW`/`LEDR`-only,
+legacy `rst` with `KEY`, legacy `rst` without `KEY`) and each output was
+compiled — `ghdl -a`/`-e` — against a matching hand-written DUT. All four
+elaborate clean. (The first attempt at the `rst`-without-`KEY` case used
+the wrong DUT fixture — a copy-paste error in the *test*, not the
+generator — caught because the elaboration error named the exact
+mismatch; corrected and re-verified.) A full run-time round trip (not
+just elaboration) was additionally run for the full-interface case,
+confirming `STATE`'s output changes on a live `STIM`.
 
-**Phase 5 — `ghdlClient.ts`**
-Unit tests against a fake WebSocket: frames built correctly, `STATE`
-mapped correctly, **`HEX0` lands in `value[0]`**.
+**Phase 4 — `session.ts` + `server.ts` + `ghdl.ts` + `portDetect.ts`** —
+**done.** Verified with a raw `ws` client driving the live backend
+end-to-end (not a mock, not localhost-only assumptions): clean
+`RUN`→`READY`→`STIM`→`STATE`; an `analyze`-stage syntax error; an
+`elaborate`-stage unmatched-entity error; a multi-file `RUN` with the top
+entity's file sent *before* its dependency; `RESET`; `STOP`; and a hard
+`ws.terminate()` mid-run confirmed via `pgrep` to leave no orphaned
+`ghdl` process. **Two real defects found and fixed by this pass, not
+anticipated by the plan text:**
+- Analysis originally ran per-file in submission order, so a project
+  whose top entity arrived before a file it depends on failed with a
+  spurious "unit not found in library work" — exactly the fragility
+  § 6.3 flagged as "top-entity-last only by luck," but the plan had not
+  actually closed it. Fixed: `handleRun` now analyzes to a fixed point
+  (each pass analyzes whatever remains; a pass that analyzes nothing new
+  means the remaining failures are real), tolerating arbitrary file
+  order rather than trusting the client's.
+- `findTopEntity()`'s own regex-based port scan originally ran *before*
+  `ghdl -a`, so genuinely invalid VHDL was intercepted by that heuristic
+  and misreported as an `elaborate`-stage "no entity found" rather than
+  an `analyze`-stage syntax error with GHDL's own diagnosis. Fixed:
+  analysis now always runs first; the port scan only runs once GHDL has
+  confirmed the source is valid.
 
-**Phase 6 — wire into `Workbench`** (§ 8.3)
-The end-to-end gate: with `LEDR <= not SW`, all switches down lights **all
-ten LEDs**. That result is impossible under the Phase 0 mock, which is what
-makes it proof.
+**Phase 5 — `ghdlClient.ts`** — **done, with a deviation.** Same reasoning
+as Phase 3: verified through Phase 6's real end-to-end test rather than
+unit tests against a mocked `WebSocket`, since that harness would have
+had to be built from nothing for one file. **`HEX0` lands in `value[0]`**
+was confirmed visually — six independently-addressable segment readouts
+in the real `SevenSegmentDisplays` DOM, correct positions.
 
-**Phase 7 — process management and docs**
-`start.sh`/`stop.sh` work from a fresh clone. `README.md` gains GHDL as a
-requirement and install instructions (the reference's own README covers
-Ubuntu/Fedora/macOS/WSL and is directly reusable). `Design_Description.md`
-and `workbench/README.md` stop describing the board as a mock.
+**Phase 6 — wire into `Workbench`** (§ 8.3) — **done. The end-to-end gate
+passed**, run in a real headless browser (Playwright) against the real
+backend, exactly as prescribed: three switches flipped, the code edited
+live in the real `<textarea>` from `LEDR <= SW;` to `LEDR <= not SW;`,
+Start clicked — **7 of 10 LEDs lit** (10 − 3, inverted), a result the
+Phase 0 mock cannot produce under any input, which is what makes it
+proof rather than a plausible-looking coincidence. A further switch flip
+while running changed the count live (7 → 6); Stop returned the board to
+dark. **Two real defects found and fixed by this pass:**
+- A session's testbench starts with `SW`/`KEY` at their own declared
+  defaults, not wherever the board's switches already sat — flipping
+  switches *before* Start had no effect on the first frame after Start
+  until the user touched a switch again. Fixed: `onReady` now sends one
+  `STIM` of the current input state immediately, read from `swRef`/
+  `keyRef` (plain state would have been a stale closure here — the
+  client's handlers are captured once, when the client is lazily built,
+  not on every render).
+- `onDone` (a plain `Stop`) did not blank the board, so it kept showing
+  the last simulated frame after the user stopped the simulation —
+  contradicts convention 11 exactly as directly as the mock it replaced
+  ("nothing is currently driving this," yet something was still shown).
+  Fixed: `onDone`, `onError` and `onClosed` all now call the same
+  `blankBoard()` `handleStart` already used.
+
+**Phase 7 — process management and docs** — see below; executed after
+this table.
 
 ---
 
-## Appendix A: persistent testbench skeleton
+## Appendix A: generated testbench (real output)
 
-For the Phase 2 spike and, if it passes, Candidate A. Illustrative — the
-generator produces the real one, with only the declared ports associated.
+Not illustrative — this is `generateTestbench('DE1_SoC', ports)`'s actual
+output (`server/src/tbTemplate.ts`), captured by running it, for an entity
+declaring the full interface (§ 3.2). A design that declares fewer ports
+gets the same file with those associations simply absent from the `uut`
+port map (§ 7.3) and their signals left at their declared "off" default —
+no other structural difference. Entity name `de1soc_sim_tb`; signals are
+`_sig`-suffixed to keep them visibly distinct from the DUT's own port
+names in the association list. `sl2c`/`slv2str` are unchanged from the
+reference's `tbTemplate.js`, adapted to this board's field widths.
 
 ```vhdl
 library ieee;
 use ieee.std_logic_1164.all;
 use std.textio.all;
 
-entity DE1_SoC_tb is
+entity de1soc_sim_tb is
   generic (
-    input_file  : string := "input.txt";
-    output_file : string := "output.txt";
-    poll_cycles : integer := 50          -- input latency vs. I/O cost
+    input_file  : string  := "";
+    output_file : string  := "";
+    poll_cycles : integer := 50
   );
 end entity;
 
-architecture sim of DE1_SoC_tb is
-  signal CLOCK_50 : std_logic := '0';
-  signal SW   : std_logic_vector(9 downto 0) := (others => '0');
-  signal KEY  : std_logic_vector(3 downto 0) := (others => '1');
-  signal LEDR : std_logic_vector(9 downto 0);
-  signal HEX0, HEX1, HEX2, HEX3, HEX4, HEX5 : std_logic_vector(6 downto 0);
-  -- slv2str: MSB-first, '0'/'1'/'X'   (from the reference's tbTemplate.js)
+architecture sim of de1soc_sim_tb is
+  signal clk_sig  : std_logic := '0';
+  signal rst_sig  : std_logic := '0';
+  signal sw_sig   : std_logic_vector(9 downto 0) := (others => '0');
+  signal key_sig  : std_logic_vector(3 downto 0) := (others => '1');
+  signal ledr_sig : std_logic_vector(9 downto 0) := (others => '0');
+  signal hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig
+    : std_logic_vector(6 downto 0) := (others => '1');
+
+  function sl2c(v : std_logic) return character is
+  begin
+    case v is
+      when '0' => return '0';
+      when '1' => return '1';
+      when others => return 'X';
+    end case;
+  end function;
+
+  function slv2str(v : std_logic_vector) return string is
+    variable s : string(1 to v'length);
+    variable idx : integer := 1;
+  begin
+    for i in v'high downto v'low loop
+      s(idx) := sl2c(v(i));
+      idx := idx + 1;
+    end loop;
+    return s;
+  end function;
+
 begin
 
   uut: entity work.DE1_SoC
     port map (
-      CLOCK_50 => CLOCK_50, SW => SW, KEY => KEY, LEDR => LEDR,
-      HEX0 => HEX0, HEX1 => HEX1, HEX2 => HEX2,
-      HEX3 => HEX3, HEX4 => HEX4, HEX5 => HEX5
+      clock_50 => clk_sig,
+      sw => sw_sig,
+      key => key_sig,
+      ledr => ledr_sig,
+      hex0 => hex0_sig,
+      hex1 => hex1_sig,
+      hex2 => hex2_sig,
+      hex3 => hex3_sig,
+      hex4 => hex4_sig,
+      hex5 => hex5_sig
     );
 
-  -- Free-running clock. Never blocks, never waits on I/O.
+  -- Free-running clock. Never blocks, never waits on I/O — the property
+  -- the Phase 2 spike (§ 5.4.1) proved achievable. Doubles as both the
+  -- DUT's CLOCK_50 (when declared) and the poll loop's own timing
+  -- reference, so there is always something to poll cycles against even
+  -- for a design with no clock port at all.
   clkgen : process
   begin
-    CLOCK_50 <= '0'; wait for 10 ns;
-    CLOCK_50 <= '1'; wait for 10 ns;
+    clk_sig <= '0'; wait for 10 ns;
+    clk_sig <= '1'; wait for 10 ns;
   end process;
 
-  -- Poll input, publish output. Regular files only: file_open on a regular
-  -- file never blocks, which is what keeps the kernel from stalling (the
-  -- failure the reference hit with a blocking pipe).
   io : process
     file fin  : text;
     file fout : text;
+    variable status : file_open_status;
     variable l : line;
     variable rec : string(1 to 14);
     variable last : string(1 to 52) := (others => ' ');
@@ -975,24 +1142,47 @@ begin
   begin
     loop
       for i in 1 to poll_cycles loop
-        wait until rising_edge(CLOCK_50);
+        wait until rising_edge(clk_sig);
       end loop;
 
-      file_open(fin, input_file, read_mode);
-      if not endfile(fin) then
-        readline(fin, l);
-        read(l, rec);
-        -- rec(1..10) = SW9..SW0, rec(11..14) = KEY3..KEY0
+      -- STIM's own wire format (§ 6.3): SW9..SW0, KEY3..KEY0, 14 bits.
+      -- A missing file (no STIM sent yet this session) is not an error —
+      -- inputs simply keep their declared defaults. Getting this
+      -- unconditional file_open() right the first time was the one
+      -- correction the raw-client test suite (§ 10) forced (§ 5.4.1's
+      -- spike used it too, but a real session's very first poll — before
+      -- any STIM at all — is the case that actually exercises it).
+      if input_file'length > 0 then
+        file_open(status, fin, input_file, read_mode);
+        if status = open_ok then
+          if not endfile(fin) then
+            readline(fin, l);
+            if l'length >= 14 then
+              read(l, rec);
+              for i in 0 to 9 loop
+                sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
+              end loop;
+              for i in 0 to 3 loop
+                key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
+              end loop;
+            end if;
+          end if;
+          file_close(fin);
+        end if;
       end if;
-      file_close(fin);
 
-      now := slv2str(LEDR) & slv2str(HEX0) & slv2str(HEX1) & slv2str(HEX2)
-                           & slv2str(HEX3) & slv2str(HEX4) & slv2str(HEX5);
-      if now /= last then
-        -- open/write/close per change: file_close is what flushes, and
-        -- flushing is the whole point (§ 5.2).
-        file_open(fout, output_file, write_mode);
-        write(l, now); writeline(fout, l);
+      -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits.
+      now := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
+                               & slv2str(hex2_sig) & slv2str(hex3_sig)
+                               & slv2str(hex4_sig) & slv2str(hex5_sig);
+      if now /= last and output_file'length > 0 then
+        -- Opened, written and closed on every change rather than held
+        -- open for the session: file_close is what flushes, and a
+        -- concurrent reader on the Node side needs that flush to see
+        -- the update without waiting for this process to exit.
+        file_open(status, fout, output_file, write_mode);
+        write(l, now);
+        writeline(fout, l);
         file_close(fout);
         last := now;
       end if;
@@ -1002,8 +1192,10 @@ begin
 end architecture;
 ```
 
-The spike's job is to confirm that a change written to `input.txt` shows up
-in `output.txt` within `poll_cycles`, while the clock keeps running.
+A legacy entity declaring `rst` additionally gets one concurrent
+assignment after the `uut` instantiation — `rst_sig <= not key_sig(0);`
+when `key` is also declared, `rst_sig <= '0';` when it isn't (§ 5.6) — the
+only other way the generated file varies from this.
 
 ---
 

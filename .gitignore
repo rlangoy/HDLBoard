@@ -4,3 +4,6 @@ dist/
 .vite/
 screenshot*.png
 out*.png
+
+# start.sh/stop.sh PID + log tracking (ghdl_implementation_plan.md § 7)
+.run/

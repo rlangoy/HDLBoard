@@ -113,13 +113,14 @@ buried in a source file.
 | `SevenSegmentDisplays` (`HEX[5:0]`) | `DesignResources/7SegmentDisplays.png` + `7SegmentDisplay_maping.png` + `7SegmentDisplay_pin_assignment.png` | **done** |
 | `Board` (2×2 grid) | `DesignResources/Component_grouping.png` | **done** |
 
-The components are finished. What drives them is not: the Workbench still
-shows a **mock**, where `LEDR` is wired straight to `SW` and the 7-segment
-displays show the switch value in hex. Replacing that with a real GHDL
-simulation is specified in
-[`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) and is not
-built yet. Nothing in that work changes a component — see § 5 convention 11
-for the boundary it has to respect.
+The components are finished, and so is what drives them: `LEDR`/`HEX` are
+now driven by a real GHDL simulation of whatever VHDL is open in the
+editor, over a WebSocket backend — specified and built per
+[`ghdl_implementation_plan.md`](ghdl_implementation_plan.md). Not one
+component changed to support it; see § 5 convention 11 for the boundary
+that made that possible, and the mock it replaced (`<Leds value={sw} />`)
+worth knowing about even though it's gone, since it's the failure mode to
+avoid if this ever gets touched again.
 
 ---
 
@@ -129,7 +130,7 @@ for the boundary it has to respect.
 UI/
 ├─ README.md                    how to USE the components
 ├─ Design_Description.md        ← this file: how they are BUILT
-├─ ghdl_implementation_plan.md  the GHDL backend work order — not built yet
+├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
 ├─ DesignResources/             ← reference renders (do not edit)
 ├─ Examples/                    built demos + reference comparisons
 ├─ docs/                        screenshots used by README.md
@@ -886,13 +887,13 @@ prints. `SEGMENT_PATTERNS` is the table itself.
   or does active-low stay a `KEY`-only idea? Nothing needs it yet.
 - Should a lit LED have any animation (a short ramp, or a flicker at high
   toggle rates)? Right now it is a 140 ms cross-fade, which reads well at
-  human speeds but will smear if a simulation drives it fast. **This stops
-  being hypothetical once `ghdl_implementation_plan.md` lands** — a real
-  simulation pushes board snapshots on its own cadence, and a design that
-  toggles an LED faster than the cross-fade will render as a dim smear
-  rather than as blinking. Measure it against a real fast-toggling design
-  before changing the value; the answer may be that the cross-fade shortens
-  only above some update rate.
+  human speeds but will smear if a simulation drives it fast. **No longer
+  hypothetical** — a real simulation (`ghdl_implementation_plan.md`) now
+  pushes board snapshots roughly every poll interval (§ 5.4.1), and a
+  design that toggles an LED faster than the cross-fade will render as a
+  dim smear rather than as blinking. Measure it against a real
+  fast-toggling design before changing the value; the answer may be that
+  the cross-fade shortens only above some update rate.
 - Does a board output need a third, **undefined** state? GHDL reports
   `'U'`/`'X'`/`'Z'` for a signal before reset settles or for an output no
   design drives, but `Bit` is strictly `0 | 1`, so today those can only be
