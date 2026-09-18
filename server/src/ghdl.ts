@@ -49,15 +49,6 @@ export function runCmd(
 
 export interface RunHandle {
   kill(): void;
-  /**
-   * Suspends/resumes the OS process outright (`SIGSTOP`/`SIGCONT`), not
-   * anything VHDL-level — how `session.ts`'s real-time pacing (§ 5.9)
-   * throttles a simulation that's running ahead of wall-clock time back
-   * toward it. Safe to call `resume()` when not paused, or repeatedly;
-   * both are plain signal deliveries, not stateful on this side.
-   */
-  pause(): void;
-  resume(): void;
   onExit(cb: (code: number | null, stderr: string) => void): void;
   /**
    * One call per complete line of the simulation's own stdout — the
@@ -92,7 +83,9 @@ export function startPersistentRun(
   inputFile: string,
   outputFile: string,
   pollIntervalNs: number,
+  minDwellNs: number,
   heartbeatFile: string,
+  pacingFile: string,
 ): RunHandle {
   const child = spawn(
     'ghdl',
@@ -103,7 +96,9 @@ export function startPersistentRun(
       `-ginput_file=${inputFile}`,
       `-goutput_file=${outputFile}`,
       `-gpoll_interval_ns=${pollIntervalNs}`,
+      `-gmin_dwell_ns=${minDwellNs}`,
       `-gheartbeat_file=${heartbeatFile}`,
+      `-gpacing_file=${pacingFile}`,
     ],
     { cwd },
   );
@@ -126,27 +121,10 @@ export function startPersistentRun(
     kill: () => {
       child.stdout.removeAllListeners();
       child.stderr.removeAllListeners();
-      // SIGCONT first: a process paused mid-throttle (§ 5.9) won't act on
-      // SIGTERM until it's running again — on Linux, a stop-disposition
-      // signal blocks delivery of most others to a stopped process, so
-      // skipping this would leave Stop/Reset waiting out whatever pacing
-      // window happened to be in progress instead of taking effect at once.
-      child.kill('SIGCONT');
+      // A process held by pacing (§ 5.13) is blocked in a FIFO read, which
+      // SIGTERM interrupts like any other syscall — no SIGCONT dance needed
+      // now that pacing no longer stops the process outright.
       child.kill('SIGTERM');
-    },
-    pause: () => {
-      try {
-        child.kill('SIGSTOP');
-      } catch {
-        // Already exited — nothing to pause.
-      }
-    },
-    resume: () => {
-      try {
-        child.kill('SIGCONT');
-      } catch {
-        // Already exited — nothing to resume.
-      }
     },
     onExit: (cb) => exitCbs.push(cb),
     onOutput: (cb) => outputCbs.push(cb),

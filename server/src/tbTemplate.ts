@@ -6,10 +6,13 @@
  * and publishing `LEDR`/`HEX0..HEX5` to an output file whenever they
  * change.
  *
- * The input/output file formats are deliberately identical to the wire
- * protocol's own `STIM`/`STATE` payloads (§ 6.3/§ 6.4) — 14 bits in,
- * 52 bits out, same bit order — so the Node side of this backend can pass
- * those lines through close to verbatim, with no reformatting step.
+ * The input file is a queue, not a snapshot (§ 5.13): one `<seq> <bits>`
+ * line per not-yet-acknowledged `STIM`, applied here one per poll, oldest
+ * first. The output file is `<bits> <seq>` — `STATE`'s 52 bits plus the
+ * last applied `seq`, which is how the Node side knows what it may drop
+ * from the queue. The bit fields themselves keep the wire protocol's own
+ * `STIM`/`STATE` payload order (§ 6.3/§ 6.4), so they pass through
+ * verbatim.
  *
  * Only ports the entity actually declares are wired into the port map
  * (§ 7.3); everything else keeps its testbench-side default, which is
@@ -66,7 +69,9 @@ entity ${TB_ENTITY} is
     input_file       : string  := "";
     output_file      : string  := "";
     poll_interval_ns : integer := 1000;
-    heartbeat_file   : string  := ""
+    min_dwell_ns     : integer := 0;
+    heartbeat_file   : string  := "";
+    pacing_file      : string  := ""
   );
 end entity;
 
@@ -143,15 +148,28 @@ ${
   -- simulated-time progress to the Node side every 20 ms of simulated
   -- time, so a session that would otherwise run far ahead of wall-clock
   -- time (§ 5.8's fix made this the common case for anything not
-  -- declaring CLOCK_50) can be throttled (SIGSTOP/SIGCONT) back toward
-  -- it — a design's timing in the simulator is then a real prediction of
-  -- its timing on actual hardware, not an accident of how many events
-  -- GHDL happened to process per real second.
+  -- declaring CLOCK_50) is held back toward it — a design's timing in
+  -- the simulator is then a real prediction of its timing on actual
+  -- hardware, not an accident of how many events GHDL happened to process
+  -- per real second.
+  --
+  -- The holding back happens here, not by the Node side stopping this
+  -- process (§ 5.13): after each 20 ms step this blocks on one line from
+  -- pacing_file, a FIFO the Node side writes one line into per 20 ms of
+  -- real time. A late Node side can therefore only ever slow the
+  -- simulation, never let it run ahead — which SIGSTOP-after-the-fact
+  -- could, by as much as the Node event loop happened to be stalled.
   heartbeat : process
-    file fhb : text;
+    file fhb   : text;
+    file fpace : text;
     variable status : file_open_status;
     variable l : line;
+    variable paced : boolean := false;
   begin
+    if pacing_file'length > 0 then
+      file_open(status, fpace, pacing_file, read_mode);
+      paced := status = open_ok;
+    end if;
     loop
       wait for 20 ms;
       if heartbeat_file'length > 0 then
@@ -162,6 +180,9 @@ ${
           file_close(fhb);
         end if;
       end if;
+      if paced then
+        readline(fpace, l);
+      end if;
     end loop;
   end process;
 
@@ -171,8 +192,14 @@ ${
     variable status : file_open_status;
     variable l : line;
     variable rec : string(1 to 14);
+    variable sep : character;
+    variable seq : integer;
+    variable ok  : boolean;
+    variable applied_seq : integer := 0;
+    variable applied_at  : time := 0 ns;
     variable last : string(1 to 52) := (others => ' ');
-    variable now  : string(1 to 52);
+    variable last_seq : integer := -1;
+    variable now_bits : string(1 to 52);
   begin
     loop
       -- A plain time-based wait, not clock edges (§ 5.8) — this process
@@ -181,42 +208,55 @@ ${
       -- CLOCK_500Hz-only (or clockless) design pay CLOCK_50's cost anyway.
       wait for poll_interval_ns * 1 ns;
 
-      -- STIM's own wire format (§ 6.3): SW9..SW0, KEY3..KEY0, 14 bits.
-      -- A missing file (no STIM sent yet this session) is not an error —
-      -- inputs simply keep their declared defaults.
-      if input_file'length > 0 then
+      -- A queue of \`<seq> <SW9..SW0 KEY3..KEY0>\` lines, oldest first
+      -- (§ 5.13). At most one is applied per poll, and not before the
+      -- previous one has held for min_dwell_ns — so a press and release
+      -- that reached the Node side together (a stalled event loop, a slow
+      -- machine) still arrive here as two transitions with a real, visible
+      -- gap between them, instead of the release overwriting the press
+      -- before it was ever sampled. A missing file (no STIM sent yet this
+      -- session) is not an error — inputs keep their declared defaults.
+      if input_file'length > 0 and now - applied_at >= min_dwell_ns * 1 ns then
         file_open(status, fin, input_file, read_mode);
         if status = open_ok then
-          if not endfile(fin) then
+          while not endfile(fin) loop
             readline(fin, l);
-            if l'length >= 14 then
-              read(l, rec);
-              for i in 0 to 9 loop
-                sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
-              end loop;
-              for i in 0 to 3 loop
-                key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
-              end loop;
-            end if;
-          end if;
+            read(l, seq, ok);
+            next when not ok or seq <= applied_seq;
+            read(l, sep, ok);
+            next when not ok or l'length < 14;
+            read(l, rec);
+            for i in 0 to 9 loop
+              sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
+            end loop;
+            for i in 0 to 3 loop
+              key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
+            end loop;
+            applied_seq := seq;
+            applied_at := now;
+            exit;
+          end loop;
           file_close(fin);
         end if;
       end if;
 
-      -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits.
-      now := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
-                               & slv2str(hex2_sig) & slv2str(hex3_sig)
-                               & slv2str(hex4_sig) & slv2str(hex5_sig);
-      if now /= last and output_file'length > 0 then
+      -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits,
+      -- then the last applied input seq — the Node side's acknowledgement.
+      now_bits := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
+                                    & slv2str(hex2_sig) & slv2str(hex3_sig)
+                                    & slv2str(hex4_sig) & slv2str(hex5_sig);
+      if (now_bits /= last or applied_seq /= last_seq) and output_file'length > 0 then
         -- Opened, written and closed on every change rather than held
         -- open for the session: file_close is what flushes, and a
         -- concurrent reader on the Node side needs that flush to see
         -- the update without waiting for this process to exit.
         file_open(status, fout, output_file, write_mode);
-        write(l, now);
+        write(l, now_bits & ' ');
+        write(l, applied_seq);
         writeline(fout, l);
         file_close(fout);
-        last := now;
+        last := now_bits;
+        last_seq := applied_seq;
       end if;
     end loop;
   end process;

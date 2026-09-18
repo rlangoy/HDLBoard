@@ -1008,7 +1008,83 @@ still sampled rather than queued — a press-and-release shorter than
 ~7 ms of real time would still be missed. That is far below human
 clicking range (49 clicks/second passed), but it is a real limit, and
 programmatic stimulus finer than that needs a transition queue rather
-than a faster sample.
+than a faster sample. (§ 5.13 added that queue.)
+
+### 5.13 A slow, CPU-capped machine: stale build, coalesced clicks, runaway pacing
+
+Reported 2026-09-18, the same day as § 5.12, from a slower,
+resource-limited machine (a 2-vCPU Alpine VM): `keyCouter2Led.vhdl`, a
+`falling_edge(KEY_N(0))` counter, "does not recognize all the times the
+push-button was pushed" — the symptom § 5.12 had just closed on a faster
+PC.
+
+**Cause 1 — the fix was never running.** `server/dist/` is gitignored,
+so pulling § 5.12's commit updated `session.ts` but not the JavaScript
+`start.sh` actually runs; it only checked that `dist/` *existed*. The
+running backend still had `POLL_INTERVAL_NS = 1_000_000` and
+`OUTPUT_POLL_MS = 80`. Measured against that stale build: 20 clicks at
+~24/s registered **2**. `start.sh` now rebuilds whenever any file in
+`server/src` is newer than `server/dist/server.js`.
+
+**Cause 2 — a snapshot input file coalesces clicks under stalls.** With the
+rebuilt backend, clicks at a steady cadence all registered, but a press
+and release arriving back-to-back (0 ms apart) registered **14 of 20**.
+On this machine that is not a synthetic case: while a `CLOCK_50`
+simulation pins one core, *every* process's timer and socket wakeups are
+delayed by up to ~1 s (a 10 ms `setTimeout` in an unrelated process
+measured a 998 ms median; idle, 10.6 ms). This is the hypervisor's timer
+delivery to the idle vCPU, not anything this code does: a sleeping
+process there often wakes only when some *other* event happens (with a
+50 ms periodic load alongside, the 10 ms timer fired every 51.6 ms). A
+backend woken once a second finds the press *and* the release waiting,
+and with `input.txt` holding only the latest state, the release
+overwrote the press before GHDL ever sampled it.
+
+Fix: `input.txt` is now a **queue**. Each `STIM` becomes a
+`<seq> <14 bits>` line; the `io` process applies at most one per poll,
+oldest first, each held for at least `min_dwell_ns` (one poll, 10 us =
+500 clock edges, with `CLOCK_50`; 4 ms — two `CLOCK_500Hz` rising edges —
+without), and reports the last applied `seq` after `STATE`'s 52 bits in
+`output.txt`. The Node side drops acknowledged entries from the queue. `seq`
+is per session, never reset per run, so an ack from a killed process can't
+be mistaken for its replacement's; a new run's queue starts as the one
+current input state (what `input.txt` surviving across runs gave for free
+in § 5.11).
+
+**Cause 3 — pacing that trusts a timer can run away.** § 5.9's pacing
+stopped GHDL *after* its heartbeat showed it ahead of real time, checked
+every 5 ms. With Node's timers firing a second late, a clockless design
+(which runs far faster than real time unpaced) got **63 s of simulated
+time ahead in ~3 s**, and the correction then paused it, inputs and all,
+for a full minute. On the unmodified code a `CLOCK_500Hz`-sampled counter
+registered **1 of 10** clicks held for 300 ms each. Pacing is now inverted:
+the heartbeat process blocks on a line from a per-run FIFO after every
+20 ms of simulated time, and the Node side writes one line per 20 ms of
+real time elapsed. A late Node side can then only *delay* the
+simulation, never let it get ahead. `SIGSTOP`/`SIGCONT`, and `kill()`'s
+`SIGCONT`-first workaround, are gone; `SIGTERM` interrupts the blocked
+read like any syscall. Grants outstanding are capped at 1000 (one byte
+each) so a `CLOCK_50` design, which consumes them slowly, can never fill
+the FIFO; the fd is non-blocking besides.
+
+**Verified on the reporting machine** (a harness driving the real
+WebSocket protocol, counting what `LEDR` reports):
+
+| | before | after |
+|---|---|---|
+| `CLOCK_50` counter, ~24 clicks/s (stale build) | 2 of 20 | **20 of 20** |
+| `CLOCK_50` counter, press+release 0 ms apart | 14 of 20 | **20 of 20** |
+| `CLOCK_50` counter, 5 ms holds (~86 clicks/s) | — | **20 of 20** |
+| `CLOCK_500Hz` counter, 300 ms holds | 1 of 10 | **10 of 10** |
+| `CLOCK_500Hz` counter, 0 ms / 1 ms holds (~250/s) | 0 of 20 | **20 of 20** |
+| `blinkTest.vhdl`, 250 ms target | — | mean **249 ms** |
+| Stop while running | — | `DONE` in 2 ms, no GHDL left |
+
+**What this does not fix.** The ~1 s wakeup stalls themselves are the
+VM's and remain while a `CLOCK_50` design runs: presses are no longer
+lost, but on such a machine the LEDs can still update up to ~1 s late.
+Clockless (`CLOCK_500Hz`) designs, which are now paced rather than
+spinning, don't trigger them (timers measured 10.5 ms during one).
 
 ---
 
@@ -1548,6 +1624,14 @@ obvious in a browser.
     assert the count equals the clicks issued. And when claiming an
     improvement, measure the "before" by restoring the old constant and
     rebuilding — an inferred baseline is not a measured one.
+12. **Input survives a stalled backend (§ 5.13).** Send each press and its
+    release in the same event-loop turn (0 ms apart) and assert every
+    one is counted, for a `falling_edge(KEY_N(0))` counter with `CLOCK_50`
+    and a `CLOCK_500Hz`-sampled one — this is what a loaded machine
+    produces, and a snapshot input file fails it. Check pacing can't run
+    away: the heartbeat must never exceed real time elapsed by more than
+    one 20 ms step. Run on the slowest machine in reach, and confirm
+    `server/dist` matches `server/src` before measuring anything.
 
 > A note for whoever runs the Playwright tests here: in this project's
 > headless setup, `ResizeObserver` callbacks are not delivered unless frames
@@ -1600,7 +1684,9 @@ cannot be designed away. What is controllable:
 
 | 11 | **Poll interval denominated in the wrong clock** (§ 5.12) | **Found and closed 2026-09-18**, from a report that the board reacted far slower than the `hdlsim` reference and dropped fast button presses. One cause, two symptoms: `poll_interval_ns` is simulated time, a student is in real time, and with `clkgen` running the exchange rate is ~0.0015x — so a 1 ms interval sampled inputs every ~685 ms. Now chosen per regime (10 us with `CLOCK_50`, 1 ms without), measured free in the first and necessary in the second; `OUTPUT_POLL_MS` 80 → 20 ms. Latency 1312 → 29 ms; the reported counter went from 1-of-10 clicks to 10-of-10 at up to 49 clicks/second. |
 
-All eleven are closed or explicitly out of scope. Whether to also add the
+| 12 | **Clicks lost on a slow, CPU-capped machine** (§ 5.13) | **Found and closed 2026-09-18.** Three causes: a stale gitignored `server/dist` (`start.sh` now rebuilds when `server/src` is newer); a snapshot `input.txt` letting a release overwrite its press when a stalled backend received both together (now a sequenced, acknowledged queue with a minimum dwell); and `SIGSTOP` pacing that let a clockless design run 60 s ahead when Node's timers fired late (now GHDL blocks on a per-run FIFO of real-time grants). Every case measured goes to all clicks counted; `blinkTest` 249 ms against 250 ms. |
+
+All twelve are closed or explicitly out of scope. Whether to also add the
 divide-constant teaching pattern from § 5.5's option 2 remains a live,
 lower-priority question — it changes course material (what the starter
 teaches), so it still warrants confirmation before doing it, unlike
@@ -1732,11 +1818,17 @@ entity de1soc_sim_tb is
     input_file       : string  := "";
     output_file      : string  := "";
     poll_interval_ns : integer := 1000;
-    heartbeat_file   : string  := ""
+    min_dwell_ns     : integer := 0;
+    heartbeat_file   : string  := "";
+    pacing_file      : string  := ""
   );
 end entity;
 
 architecture sim of de1soc_sim_tb is
+  -- Testbench-side signals for every board direction, regardless of which
+  -- the entity actually declares — buildPortMap() above only connects the
+  -- ones that exist. Defaults are each signal's electrically "off" value,
+  -- so an unassociated output reads as blank on the wire, not undefined.
   signal clk_sig    : std_logic := '0';
   signal clk500_sig : std_logic := '0';
   signal rst_sig    : std_logic := '0';
@@ -1783,6 +1875,7 @@ begin
       hex5_n => hex5_sig
     );
 
+
   -- Free-running clock, only instantiated when the entity actually
   -- declares CLOCK_50 (§ 5.8) — its own 20 ns period is what makes a
   -- design that depends on it need millions of edges per visible change
@@ -1813,15 +1906,28 @@ begin
   -- simulated-time progress to the Node side every 20 ms of simulated
   -- time, so a session that would otherwise run far ahead of wall-clock
   -- time (§ 5.8's fix made this the common case for anything not
-  -- declaring CLOCK_50) can be throttled (SIGSTOP/SIGCONT) back toward
-  -- it — a design's timing in the simulator is then a real prediction of
-  -- its timing on actual hardware, not an accident of how many events
-  -- GHDL happened to process per real second.
+  -- declaring CLOCK_50) is held back toward it — a design's timing in
+  -- the simulator is then a real prediction of its timing on actual
+  -- hardware, not an accident of how many events GHDL happened to process
+  -- per real second.
+  --
+  -- The holding back happens here, not by the Node side stopping this
+  -- process (§ 5.13): after each 20 ms step this blocks on one line from
+  -- pacing_file, a FIFO the Node side writes one line into per 20 ms of
+  -- real time. A late Node side can therefore only ever slow the
+  -- simulation, never let it run ahead — which SIGSTOP-after-the-fact
+  -- could, by as much as the Node event loop happened to be stalled.
   heartbeat : process
-    file fhb : text;
+    file fhb   : text;
+    file fpace : text;
     variable status : file_open_status;
     variable l : line;
+    variable paced : boolean := false;
   begin
+    if pacing_file'length > 0 then
+      file_open(status, fpace, pacing_file, read_mode);
+      paced := status = open_ok;
+    end if;
     loop
       wait for 20 ms;
       if heartbeat_file'length > 0 then
@@ -1832,6 +1938,9 @@ begin
           file_close(fhb);
         end if;
       end if;
+      if paced then
+        readline(fpace, l);
+      end if;
     end loop;
   end process;
 
@@ -1841,8 +1950,14 @@ begin
     variable status : file_open_status;
     variable l : line;
     variable rec : string(1 to 14);
+    variable sep : character;
+    variable seq : integer;
+    variable ok  : boolean;
+    variable applied_seq : integer := 0;
+    variable applied_at  : time := 0 ns;
     variable last : string(1 to 52) := (others => ' ');
-    variable now  : string(1 to 52);
+    variable last_seq : integer := -1;
+    variable now_bits : string(1 to 52);
   begin
     loop
       -- A plain time-based wait, not clock edges (§ 5.8) — this process
@@ -1851,46 +1966,55 @@ begin
       -- CLOCK_500Hz-only (or clockless) design pay CLOCK_50's cost anyway.
       wait for poll_interval_ns * 1 ns;
 
-      -- STIM's own wire format (§ 6.3): SW9..SW0, KEY3..KEY0, 14 bits.
-      -- A missing file (no STIM sent yet this session) is not an error —
-      -- inputs simply keep their declared defaults. Getting this
-      -- unconditional file_open() right the first time was the one
-      -- correction the raw-client test suite (§ 10) forced (§ 5.4.1's
-      -- spike used it too, but a real session's very first poll — before
-      -- any STIM at all — is the case that actually exercises it).
-      if input_file'length > 0 then
+      -- A queue of `<seq> <SW9..SW0 KEY3..KEY0>` lines, oldest first
+      -- (§ 5.13). At most one is applied per poll, and not before the
+      -- previous one has held for min_dwell_ns — so a press and release
+      -- that reached the Node side together (a stalled event loop, a slow
+      -- machine) still arrive here as two transitions with a real, visible
+      -- gap between them, instead of the release overwriting the press
+      -- before it was ever sampled. A missing file (no STIM sent yet this
+      -- session) is not an error — inputs keep their declared defaults.
+      if input_file'length > 0 and now - applied_at >= min_dwell_ns * 1 ns then
         file_open(status, fin, input_file, read_mode);
         if status = open_ok then
-          if not endfile(fin) then
+          while not endfile(fin) loop
             readline(fin, l);
-            if l'length >= 14 then
-              read(l, rec);
-              for i in 0 to 9 loop
-                sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
-              end loop;
-              for i in 0 to 3 loop
-                key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
-              end loop;
-            end if;
-          end if;
+            read(l, seq, ok);
+            next when not ok or seq <= applied_seq;
+            read(l, sep, ok);
+            next when not ok or l'length < 14;
+            read(l, rec);
+            for i in 0 to 9 loop
+              sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
+            end loop;
+            for i in 0 to 3 loop
+              key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
+            end loop;
+            applied_seq := seq;
+            applied_at := now;
+            exit;
+          end loop;
           file_close(fin);
         end if;
       end if;
 
-      -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits.
-      now := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
-                               & slv2str(hex2_sig) & slv2str(hex3_sig)
-                               & slv2str(hex4_sig) & slv2str(hex5_sig);
-      if now /= last and output_file'length > 0 then
+      -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits,
+      -- then the last applied input seq — the Node side's acknowledgement.
+      now_bits := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
+                                    & slv2str(hex2_sig) & slv2str(hex3_sig)
+                                    & slv2str(hex4_sig) & slv2str(hex5_sig);
+      if (now_bits /= last or applied_seq /= last_seq) and output_file'length > 0 then
         -- Opened, written and closed on every change rather than held
         -- open for the session: file_close is what flushes, and a
         -- concurrent reader on the Node side needs that flush to see
         -- the update without waiting for this process to exit.
         file_open(status, fout, output_file, write_mode);
-        write(l, now);
+        write(l, now_bits & ' ');
+        write(l, applied_seq);
         writeline(fout, l);
         file_close(fout);
-        last := now;
+        last := now_bits;
+        last_seq := applied_seq;
       end if;
     end loop;
   end process;

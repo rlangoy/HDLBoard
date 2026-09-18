@@ -6,8 +6,9 @@
  * real WebSocket.
  */
 
-import { promises as fs, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { promises as fs, closeSync, constants as fsConstants, mkdtempSync, openSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCmd, runBatch, startPersistentRun, type BatchHandle, type RunHandle } from './ghdl.js';
@@ -40,6 +41,23 @@ const TB_ENTITY = 'de1soc_sim_tb';
 const POLL_INTERVAL_NS_WITH_CLOCK50 = 10_000;
 const POLL_INTERVAL_NS_DEFAULT = 1_000_000;
 /**
+ * Minimum simulated time each queued input transition is held before the
+ * next is applied (§ 5.13). Only matters when transitions arrive faster
+ * than one per poll — i.e. a press and release that reached this process
+ * together — since a real human press lasts far longer than either value.
+ * With CLOCK_50 one poll (10 us) is already 500 clock edges. Without it,
+ * 4 ms spans two rising edges of CLOCK_500Hz, so a design that samples
+ * KEY_N on that clock still sees every queued press.
+ */
+const MIN_DWELL_NS_WITH_CLOCK50 = POLL_INTERVAL_NS_WITH_CLOCK50;
+const MIN_DWELL_NS_DEFAULT = 4_000_000;
+/**
+ * Bound on not-yet-acknowledged transitions (§ 5.13). Far above anything a
+ * person can click within one acknowledgement round trip; exists only so
+ * a stalled simulation can't make input.txt grow without limit.
+ */
+const MAX_STIM_QUEUE = 256;
+/**
  * How often the Node side re-reads output.txt for a change (§ 7.2). Once
  * § 5.12 cut the VHDL side's own sampling to milliseconds, this became the
  * dominant term in switch-to-LED latency; it is a small read of a small
@@ -47,18 +65,26 @@ const POLL_INTERVAL_NS_DEFAULT = 1_000_000;
  */
 const OUTPUT_POLL_MS = 20;
 /**
- * Real-time pacing (§ 5.9). GHDL runs a session's own simulated time as
- * fast as it can — without this, a design not declaring CLOCK_50 finishes
- * in a handful of real seconds regardless of how much simulated time (a
- * literal 10 real-hardware minutes, say) it represents, which doesn't
- * predict the design's actual timing on the board. These throttle the
- * persistent process (SIGSTOP/SIGCONT) back toward 1:1 with real time
- * whenever the testbench's own heartbeat (`tbTemplate.ts`) reports it's
- * running ahead.
+ * Real-time pacing (§ 5.9, reworked in § 5.13). GHDL runs a session's own
+ * simulated time as fast as it can — without this, a design not declaring
+ * CLOCK_50 finishes in a handful of real seconds regardless of how much
+ * simulated time (a literal 10 real-hardware minutes, say) it represents,
+ * which doesn't predict the design's actual timing on the board.
+ *
+ * The testbench blocks after every `PACING_STEP_MS` of simulated time
+ * until this side writes one line into its pacing FIFO, and this side
+ * writes one line per `PACING_STEP_MS` of real time. Must match the
+ * `wait for 20 ms` in `tbTemplate.ts`'s heartbeat process.
  */
-const PACING_CHECK_MS = 5;
-/** Below this much drift, don't bother pausing — not worth the syscalls. */
-const PACING_SLACK_MS = 30;
+const PACING_STEP_MS = 20;
+/** How often grants are topped up. Lateness here only slows the simulation. */
+const PACING_CHECK_MS = 10;
+/**
+ * Bound on grants written but not yet consumed — a CLOCK_50 design runs
+ * far behind real time and consumes them slowly — so the FIFO's kernel
+ * buffer (64 KiB on Linux, one byte per grant) can never fill.
+ */
+const PACING_MAX_OUTSTANDING = 1000;
 /** Bound on ghdl -a / -e — these are expected to finish in seconds (§ 7.4). */
 const BUILD_TIMEOUT_MS = 30_000;
 /**
@@ -90,6 +116,7 @@ export class Session {
   private batchRun: BatchHandle | null = null;
   private outputPollTimer: NodeJS.Timeout | null = null;
   private pacingTimer: NodeJS.Timeout | null = null;
+  private pacingFd: number | null = null;
   private runStartTime = 0;
   /**
    * Bumped per run so `heartbeatPath()` is unique to it. Deleting a shared
@@ -103,6 +130,15 @@ export class Session {
   private runSeq = 0;
   /** Set per `RUN` from the detected port set — see § 5.12. */
   private pollIntervalNs = POLL_INTERVAL_NS_DEFAULT;
+  private minDwellNs = MIN_DWELL_NS_DEFAULT;
+  /**
+   * `STIM`s the running testbench has not yet acknowledged, oldest first
+   * (§ 5.13). `stimSeq` is per session, never per run, so an ack from a
+   * just-killed process can't be mistaken for one from its replacement.
+   */
+  private stimQueue: Array<{ seq: number; bits: string }> = [];
+  private stimSeq = 0;
+  private lastStimBits: string | null = null;
   private lastSentState: string | null = null;
   private destroyed = false;
 
@@ -121,6 +157,10 @@ export class Session {
 
   private heartbeatPath(): string {
     return join(this.dir, `heartbeat-${this.runSeq}.txt`);
+  }
+
+  private pacingPath(): string {
+    return join(this.dir, `pacing-${this.runSeq}.fifo`);
   }
 
   async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
@@ -213,9 +253,9 @@ export class Session {
     // Same condition `tbTemplate.ts` uses to decide whether `clkgen` exists
     // at all (§ 5.8) — which is what decides how fast simulated time runs,
     // and so which interval keeps real-time responsiveness sane (§ 5.12).
-    this.pollIntervalNs = top.ports.has('clock_50')
-      ? POLL_INTERVAL_NS_WITH_CLOCK50
-      : POLL_INTERVAL_NS_DEFAULT;
+    const hasClock50 = top.ports.has('clock_50');
+    this.pollIntervalNs = hasClock50 ? POLL_INTERVAL_NS_WITH_CLOCK50 : POLL_INTERVAL_NS_DEFAULT;
+    this.minDwellNs = hasClock50 ? MIN_DWELL_NS_WITH_CLOCK50 : MIN_DWELL_NS_DEFAULT;
     this.startRun();
   }
 
@@ -232,13 +272,27 @@ export class Session {
     // corrected by this run's first real one.
     this.runSeq++;
     rmSync(this.outputPath(), { force: true });
+    // A fresh process starts having applied nothing, so the queue restarts
+    // as the one current input state rather than replaying the old run's
+    // backlog — what `input.txt` surviving across runs used to give for
+    // free (§ 5.11), now that it holds transitions instead of a snapshot.
+    this.stimQueue = this.lastStimBits ? [{ seq: ++this.stimSeq, bits: this.lastStimBits }] : [];
+    this.writeStimQueue();
+    // Opened read-write and non-blocking before GHDL starts: read-write so
+    // this open doesn't wait for a reader and GHDL's own read-mode open
+    // doesn't wait for a writer; non-blocking so a full FIFO could never
+    // stall this event loop (PACING_MAX_OUTSTANDING keeps it from filling).
+    execFileSync('mkfifo', [this.pacingPath()]);
+    this.pacingFd = openSync(this.pacingPath(), fsConstants.O_RDWR | fsConstants.O_NONBLOCK);
     const handle = startPersistentRun(
       this.dir,
       TB_ENTITY,
       this.inputPath(),
       this.outputPath(),
       this.pollIntervalNs,
+      this.minDwellNs,
       this.heartbeatPath(),
+      this.pacingPath(),
     );
     this.run = handle;
     this.startPacing(handle);
@@ -292,60 +346,64 @@ export class Session {
     } catch {
       return; // Nothing written yet.
     }
-    const line = text.split('\n')[0]?.trim() ?? '';
-    if (line.length !== STATE_LENGTH || line === this.lastSentState) return;
-    this.lastSentState = line;
-    this.send({ verb: 'STATE', bits: line });
+    const [bits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
+    if (bits.length !== STATE_LENGTH) return;
+    const ack = parseInt(ackText, 10);
+    if (!Number.isNaN(ack) && this.stimQueue.length > 0 && this.stimQueue[0].seq <= ack) {
+      this.stimQueue = this.stimQueue.filter((s) => s.seq > ack);
+      this.writeStimQueue();
+    }
+    if (bits === this.lastSentState) return;
+    this.lastSentState = bits;
+    this.send({ verb: 'STATE', bits });
   }
 
   /**
-   * Real-time pacing (§ 5.9) — a self-rescheduling check, not `setInterval`,
-   * so a pause-then-resume cycle's own timing doesn't fight a fixed tick.
-   * Identity-checked against `handle` at every step, same pattern as
-   * `startRun`'s `onExit`: `stopActive`/a new `RUN` can supersede this run
-   * asynchronously, and a stale tick must not act on (or pause!) whatever
-   * replaced it.
+   * Real-time pacing (§ 5.13): tops the testbench's pacing FIFO up to one
+   * grant per `PACING_STEP_MS` of real time since the run started. Grants
+   * only ever let the simulation proceed, so a tick that fires late (a
+   * loaded or CPU-capped machine) holds the simulation back instead of
+   * letting it run ahead — the failure mode of § 5.9's pause-when-ahead
+   * design, which on such a machine let a clockless design get a minute
+   * ahead and then froze it, inputs and all, for that minute.
+   * Identity-checked against `handle`, same pattern as `startRun`'s
+   * `onExit`: a stale tick must not act on whatever replaced this run.
    */
   private startPacing(handle: RunHandle): void {
     this.runStartTime = Date.now();
+    let granted = 0;
     const tick = () => {
-      if (this.run !== handle) return;
-      let simMs: number | null = null;
+      if (this.run !== handle || this.pacingFd === null) return;
+      let consumed = 0;
       try {
         const n = parseInt(readFileSync(this.heartbeatPath(), 'utf8').trim(), 10);
-        if (!Number.isNaN(n)) simMs = n;
+        if (!Number.isNaN(n)) consumed = Math.floor(n / PACING_STEP_MS);
       } catch {
-        // No heartbeat yet — nothing to correct against this tick.
+        // No heartbeat yet — nothing consumed.
       }
-      if (simMs !== null) {
-        const drift = simMs - (Date.now() - this.runStartTime);
-        if (drift > PACING_SLACK_MS) {
-          // Full drift, not a capped partial correction: GHDL runs at
-          // whatever multiple of real time the design's own event volume
-          // happens to produce (§ 5.8) — a capped pause only ever closes
-          // part of the gap each cycle, so drift re-accumulates faster
-          // than it's paid down and convergence never reaches 1:1, just a
-          // smaller, equally arbitrary compression ratio. Stop stays
-          // responsive regardless of how long this pause runs: `kill()`
-          // resumes the process before signalling it (§ 5.9, `ghdl.ts`).
-          handle.pause();
-          this.pacingTimer = setTimeout(() => {
-            if (this.run !== handle) return;
-            handle.resume();
-            this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
-          }, drift);
-          return;
+      const due = Math.floor((Date.now() - this.runStartTime) / PACING_STEP_MS);
+      const target = Math.min(due, consumed + PACING_MAX_OUTSTANDING);
+      if (target > granted) {
+        try {
+          granted += writeSync(this.pacingFd, '\n'.repeat(target - granted));
+        } catch {
+          // EAGAIN: FIFO full — retry next tick.
         }
       }
       this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
     };
-    this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
+    tick();
   }
 
   private stopPacing(): void {
     if (this.pacingTimer) {
       clearTimeout(this.pacingTimer);
       this.pacingTimer = null;
+    }
+    if (this.pacingFd !== null) {
+      closeSync(this.pacingFd);
+      this.pacingFd = null;
+      rmSync(this.pacingPath(), { force: true });
     }
   }
 
@@ -396,11 +454,23 @@ export class Session {
 
   handleStim(bits: string): void {
     if (this.state !== 'running' || this.mode !== 'board') return;
+    if (bits === this.lastStimBits) return;
+    this.lastStimBits = bits;
+    // Queued, not overwritten (§ 5.13): a press and its release can reach
+    // this process in the same event-loop turn on a loaded machine, and a
+    // snapshot file would let the release replace the press before GHDL
+    // ever sampled it — a lost click.
+    this.stimQueue.push({ seq: ++this.stimSeq, bits });
+    if (this.stimQueue.length > MAX_STIM_QUEUE) this.stimQueue.splice(0, this.stimQueue.length - MAX_STIM_QUEUE);
+    this.writeStimQueue();
+  }
+
+  private writeStimQueue(): void {
     // Write-then-rename: input.txt is read concurrently by the running
     // GHDL process, and a rename within the same directory is atomic on
-    // POSIX, so the reader never observes a partially-written line.
+    // POSIX, so the reader never observes a partially-written queue.
     const tmp = `${this.inputPath()}.tmp`;
-    writeFileSync(tmp, `${bits}\n`);
+    writeFileSync(tmp, this.stimQueue.map((s) => `${s.seq} ${s.bits}\n`).join(''));
     renameSync(tmp, this.inputPath());
   }
 

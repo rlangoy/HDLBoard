@@ -41,9 +41,13 @@ if [ ! -d server/node_modules ]; then
   echo "server/node_modules missing — run 'npm install' inside server/ first." >&2
   exit 1
 fi
-if [ ! -d server/dist ]; then
-  echo "server/dist missing — run 'npm run build' inside server/ first." >&2
-  exit 1
+# server/dist is gitignored, so a `git pull` updates server/src but not
+# the JavaScript actually run — a stale build silently runs old behaviour
+# (ghdl_implementation_plan.md § 5.13). Rebuild whenever any source file
+# is newer than the build, or the build is missing.
+if [ ! -f server/dist/server.js ] || [ -n "$(find server/src -newer server/dist/server.js -print -quit)" ]; then
+  echo "server/dist missing or older than server/src — rebuilding backend..."
+  (cd server && npm run build) || { echo "Backend build failed." >&2; exit 1; }
 fi
 
 start_one "backend" .run/backend.pid .run/backend.log \
