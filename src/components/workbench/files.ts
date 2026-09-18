@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /* ------------------------------------------------------------------ *
  * Starter project shown in the Files panel — a plausible small design
  * (top-level entity, two helper modules, a package and a testbench) so

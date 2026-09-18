@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /* ------------------------------------------------------------------ *
  * A small VHDL tokenizer for the code editor's syntax colouring.
  *

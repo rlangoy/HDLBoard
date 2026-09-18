@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
 .wb-editor {
   position: relative; /* anchors .wb-editor__drop-hint */
   flex: 1;

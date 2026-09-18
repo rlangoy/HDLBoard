@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * Generates the persistent-process testbench — the shipped design per the
  * Phase 2 spike (../../ghdl_implementation_plan.md § 5.4.1). Elaborated

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * The wire protocol between the Workbench and this backend —
  * ../../ghdl_implementation_plan.md § 6. Pure functions only: no socket,

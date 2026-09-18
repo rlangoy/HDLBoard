@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-2.0-only
+-- Copyright (C) 2026 Rune Langøy
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;

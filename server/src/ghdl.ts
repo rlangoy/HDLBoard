@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * Spawning and managing GHDL child processes.
  * ../../ghdl_implementation_plan.md § 7.4 / § 11 (security).

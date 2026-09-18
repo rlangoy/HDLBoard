@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 import { useMemo, type CSSProperties, type HTMLAttributes } from 'react';
 import { BitRow, Panel, Readout, cx, scaleStyle } from '../board';
 import { SevenSegmentDisplay } from './SevenSegmentDisplay';

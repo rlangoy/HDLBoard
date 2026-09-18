@@ -1,5 +1,7 @@
 # PB1180 UI — Design Description
 
+> Licensed under the [GNU General Public License v2.0](LICENSE).
+
 Working notes for the browser-side board components used in **PB1180
 Programmerbare logiske kretser**. Read this before touching a component;
 update it whenever a decision changes.

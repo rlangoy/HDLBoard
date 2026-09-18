@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import type { VhdlFile } from './files';

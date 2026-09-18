@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cx, scaleStyle, type Bit } from '../board';
 import { segmentsToPattern, type SegmentVector } from './segments';

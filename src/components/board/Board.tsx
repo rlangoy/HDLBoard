@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cx, scaleStyle } from './Panel';
 import './tokens.css';

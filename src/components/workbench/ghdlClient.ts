@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * The Workbench's WebSocket client for the GHDL backend —
  * ../../../ghdl_implementation_plan.md § 6, § 8.2. The only file in this

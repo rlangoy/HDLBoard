@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 import { LOGO_DATA_URI } from './logo';
 import './Header.css';
 

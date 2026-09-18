@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * WebSocket server entry point — ../../ghdl_implementation_plan.md § 7.1,
  * § 5.8, § 11. Accepts connections, speaks HELLO/WELCOME, and dispatches

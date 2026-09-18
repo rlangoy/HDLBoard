@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 export { Pushbuttons, Pushbuttons as default } from './Pushbuttons';
 export type { PushbuttonsProps } from './Pushbuttons';
 

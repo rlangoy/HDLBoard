@@ -280,5 +280,6 @@ simulator for the DE1-SoC board, backed by real GHDL, so students can see
 `LEDR <= SW;` and similar constructs actually behave the way the real
 board would, without needing hardware in hand.
 
-No license has been specified yet — add one before distributing this
-outside the course.
+## License
+
+Licensed under the [GNU General Public License v2.0](LICENSE).

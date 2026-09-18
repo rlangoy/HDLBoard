@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
 /* ------------------------------------------------------------------ *
  * Shared card chrome — used by every board group (Switches, LEDs,
  * 7-segment, Pushbuttons). Only the three --pb-accent-* tokens change

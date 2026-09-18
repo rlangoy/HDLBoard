@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
 /**
  * One Session per WebSocket connection — ../../ghdl_implementation_plan.md
  * § 7.2. Owns a temp directory, the elaborated design, and (once running)
