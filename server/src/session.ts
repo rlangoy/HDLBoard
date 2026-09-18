@@ -18,19 +18,34 @@ import { STATE_LENGTH, type ServerFrame, type VhdlFileInput } from './protocol.j
 const TB_ENTITY = 'de1soc_sim_tb';
 /**
  * How often (simulated time) the generated testbench's `io` process
- * re-reads the input file / re-checks for output changes (§ 5.8) — a
- * plain time-based interval, decoupled from any clock the DUT itself
- * runs on. 1 ms, not 1 us: this process does a real file_open on every
- * wakeup regardless of whether anything changed, and unlike a clock
- * edge that cost is real wall-clock time, not simulated time — 1 us was
- * inherited unchanged from the old clk_sig-edge-counted cadence and
- * became the new bottleneck once clk_sig's own cost was removed for
- * designs that don't declare CLOCK_50 (§ 5.8). 1 ms is still far below
- * OUTPUT_POLL_MS (below) and any human-perceptible latency.
+ * re-reads the input file and re-checks for output changes (§ 5.8). The
+ * interval is in *simulated* time but what a student feels is *real*
+ * time, and the exchange rate between the two differs by three orders of
+ * magnitude depending on one thing: whether `clkgen` exists (§ 5.12).
+ *
+ * With `CLOCK_50` declared, a 20 ns-period clock dominates everything and
+ * simulated time crawls — measured at ~0.0015x real — so a 1 ms interval
+ * samples input only about every 685 ms of real time, which is both the
+ * "reacts slowly" latency and, worse, slow enough to miss a button press
+ * entirely. A finer interval is close to free there, because the clock,
+ * not this process, is what costs: 1 ms/100 us/10 us/1 us all measured the
+ * same simulated-time throughput.
+ *
+ * Without `CLOCK_50` the exchange rate inverts — simulated time runs at or
+ * above real time (§ 5.9 paces it back down) — and the same 1 us interval
+ * measured 0.15x real time, i.e. this process becomes the bottleneck all
+ * over again (§ 5.8). Hence two values, chosen so that *real*-time
+ * responsiveness lands in the same few-milliseconds range either way.
  */
-const POLL_INTERVAL_NS = 1_000_000;
-/** How often the Node side re-reads output.txt for a change (§ 7.2). */
-const OUTPUT_POLL_MS = 80;
+const POLL_INTERVAL_NS_WITH_CLOCK50 = 10_000;
+const POLL_INTERVAL_NS_DEFAULT = 1_000_000;
+/**
+ * How often the Node side re-reads output.txt for a change (§ 7.2). Once
+ * § 5.12 cut the VHDL side's own sampling to milliseconds, this became the
+ * dominant term in switch-to-LED latency; it is a small read of a small
+ * file, so paying it more often is the cheapest latency left to buy.
+ */
+const OUTPUT_POLL_MS = 20;
 /**
  * Real-time pacing (§ 5.9). GHDL runs a session's own simulated time as
  * fast as it can — without this, a design not declaring CLOCK_50 finishes
@@ -86,6 +101,8 @@ export class Session {
    * unlikely.
    */
   private runSeq = 0;
+  /** Set per `RUN` from the detected port set — see § 5.12. */
+  private pollIntervalNs = POLL_INTERVAL_NS_DEFAULT;
   private lastSentState: string | null = null;
   private destroyed = false;
 
@@ -193,6 +210,12 @@ export class Session {
 
     this.send({ verb: 'LOG', text: 'GHDL 5.0.1 (mcode)' });
     this.mode = 'board';
+    // Same condition `tbTemplate.ts` uses to decide whether `clkgen` exists
+    // at all (§ 5.8) — which is what decides how fast simulated time runs,
+    // and so which interval keeps real-time responsiveness sane (§ 5.12).
+    this.pollIntervalNs = top.ports.has('clock_50')
+      ? POLL_INTERVAL_NS_WITH_CLOCK50
+      : POLL_INTERVAL_NS_DEFAULT;
     this.startRun();
   }
 
@@ -214,7 +237,7 @@ export class Session {
       TB_ENTITY,
       this.inputPath(),
       this.outputPath(),
-      POLL_INTERVAL_NS,
+      this.pollIntervalNs,
       this.heartbeatPath(),
     );
     this.run = handle;

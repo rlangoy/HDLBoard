@@ -862,6 +862,156 @@ is on the CPU before concluding anything about the code.
 
 ---
 
+### 5.11 Per-run state in a per-session directory
+
+Reported 2026-09-17, and the part of § 5.10 that wasn't the machine: *"the
+effect is seen when the simulation is started the second time with changed
+values."* § 5.10's orphans were real and did account for the general
+slowness, but they were not the whole report — there was a second, exact,
+reproducible stall underneath them, and it only ever appeared on the
+**second** run of a session.
+
+**Reproduced before touching anything.** One connection, one design, run
+for 8 s; then a second `RUN` on the *same* connection with a changed
+`TOGGLE_COUNT`:
+
+```
+run 1 (250 ms target)  READY +47ms   first blink  +771ms
+run 2 (500 ms target)  READY +130ms  first blink +8329ms   <-- 8 s, not 0.5 s
+```
+
+The stall is not merely large, it is *exactly the previous run's
+duration*. That identity is the diagnosis: the pacing loop (§ 5.9) reads
+`heartbeat.txt` as "how far along is this run", the heartbeat file lives
+in the **session's** temp directory while a heartbeat describes a single
+**run**, and a re-`RUN`/`RESET` reuses that directory. So the new run's
+very first pacing tick read the *old* run's final simulated time,
+computed ~8000 ms of drift, and duly `SIGSTOP`ped a process that had
+barely started — doing precisely what § 5.9 asks of it, with a number
+that had nothing to do with the run it was pacing.
+
+**Fixed by making the collision impossible, not unlikely.** The obvious
+repair — delete the heartbeat when starting a run — is a race rather than
+a fix: `RESET` kills the old process and starts the new one
+*synchronously*, and `kill()` only signals, so the old process can still
+write one more heartbeat in the window between the delete and the new
+run's first read. Instead the heartbeat now carries a per-run sequence
+number in its name (`heartbeat-<n>.txt`, `session.ts`'s `runSeq`), which
+the old process cannot know and therefore cannot write to. `output.txt`
+is still shared and is simply removed at the start of each run — same
+class of staleness (the previous run's final board state, republished as
+this one's), but self-correcting within one poll, so it doesn't warrant
+a second naming scheme. `input.txt` is deliberately left alone: switch
+positions surviving a re-Start is the *correct* behaviour, and the
+frontend re-sends `STIM` on `READY` anyway (§ 8).
+
+**Verified on both paths that reach `startRun`.** Re-`RUN` after an 8 s
+first run: **8329 ms → 687 ms** to first blink, against that design's own
+500 ms target (562 ms after `READY`). `RESET` after an 8 s first run:
+first blink **90 ms** later, where the stale heartbeat would have bought
+another 8 s stall.
+
+**Why every earlier test missed it.** Every raw-protocol test written for
+§ 5.6 through § 5.10 opened a fresh connection and issued exactly one
+`RUN`. That is the shape that exercises the code but not the *state*:
+everything session-scoped — the temp directory and every file in it —
+was structurally guaranteed to be pristine. The bug lived entirely in
+the transition between runs, which no test had ever performed. Worth
+remembering next time something is "verified": a test that never repeats
+an action cannot observe what that action leaves behind.
+
+---
+
+### 5.12 A poll interval in the wrong unit
+
+Reported 2026-09-18, as two complaints that turned out to be one bug:
+`DE1_SoC.vhd` (`LEDR <= SW`) "reacts very slowly — slower than
+[tapec.uv.es/pardo/hdlsim](https://tapec.uv.es/pardo/hdlsim), which does
+the same thing", and a `KEY_N`-driven counter that "does not always
+recognize the button clicks if I click too fast".
+
+**Measured first.** Same design, differing only in whether `CLOCK_50` is
+declared, ten `STIM`→`STATE` round trips each:
+
+| design | median latency | simulated time advance |
+|---|---|---|
+| with `CLOCK_50` | **1312 ms** | 0.0015x real |
+| without `CLOCK_50` | 271 ms | ~1x (paced, § 5.9) |
+
+The second column is the whole story. With `clkgen` running, four seconds
+of real time did not reach **20 ms** of simulated time — the first
+heartbeat never even appeared.
+
+**Root cause: `poll_interval_ns` is denominated in simulated time, but a
+student acts in real time.** § 5.8 set it to 1 ms and § 5.9 made that
+honest for designs where simulated time tracks the wall clock. For a
+`CLOCK_50` design it never did: at 0.0015x, one simulated millisecond is
+about **685 ms of real time**, so the `io` process samples `SW`/`KEY_N`
+roughly three times a minute. That is the "reacts slowly" latency
+directly, and it is also why clicks vanish — `input.txt` holds the
+*current* state, not a queue of transitions, so any press *and* release
+falling inside one 685 ms window is never observed as an edge at all.
+`falling_edge(KEY_N(0))` cannot fire for a transition the simulation
+never saw.
+
+**Why the reference is faster, and why that isn't a fairer comparison
+than it looks.** `hdlsim` is Candidate B (§ 5.3): it re-simulates from
+t=0 for a short simulated span on each input change. It never simulates
+wall-clock-scale durations of a 50 MHz clock, so `CLOCK_50` costs it
+nothing. Candidate A pays `clkgen` continuously for as long as the
+session is open. That trade was made deliberately (§ 5.4.1) and still
+holds — but it means this backend's I/O path has to be tuned for a regime
+the reference never enters.
+
+**The fix: pick the interval for the regime the design will actually run
+in.** Both halves measured, not assumed:
+
+| poll interval | with `CLOCK_50` | without `CLOCK_50` (unpaced) |
+|---|---|---|
+| 1 ms | 0.00146x | 7.60x |
+| 100 us | 0.00144x | — |
+| 10 us | 0.00144x | — |
+| 1 us | 0.00146x | **0.15x** |
+
+With the clock running, polling a thousand times finer is *free* — the
+clock dominates so completely that the extra file I/O doesn't register.
+Without it, the same change costs a factor of 50 and makes this process
+the bottleneck all over again, which is precisely § 5.8's bug. So
+`session.ts` now chooses: **10 us when `CLOCK_50` is declared, 1 ms
+otherwise** — the same condition `tbTemplate.ts` already uses to decide
+whether `clkgen` exists — so that *real*-time responsiveness lands in the
+same few-milliseconds range in both regimes. `OUTPUT_POLL_MS` drops from
+80 ms to 20 ms in the same pass: once the VHDL side samples in
+milliseconds, the Node side's own re-read became the dominant term.
+
+**Verified against the reported symptoms, before and after.**
+
+| | before | after |
+|---|---|---|
+| `STIM`→`STATE`, `CLOCK_50` | median 1312 ms | **median 29 ms** |
+| `STIM`→`STATE`, clockless | median 271 ms | median 54 ms |
+| counter, 5 clicks/s | 1 of 10 registered | **10 of 10** |
+| counter, 12 clicks/s | 1 of 10 registered | **10 of 10** |
+| counter, 25 clicks/s | — | **10 of 10** |
+| counter, 49 clicks/s | — | **10 of 10** |
+
+The "before" row is a real measurement, taken by putting the old constant
+back and rebuilding, not an inference from the new one. § 5.9's pacing was
+re-checked in the same pass and is unaffected: `blinkTest.vhdl` still
+averages 248 ms against its 250 ms target.
+
+**What this does not fix.** § 5.5 stands untouched: a `CLOCK_50` design's
+simulated time still advances ~700x slower than real time, so a
+hardware-accurate 50 MHz divider remains impractical. This bought
+responsiveness in the *I/O path*, not simulation speed. And input is
+still sampled rather than queued — a press-and-release shorter than
+~7 ms of real time would still be missed. That is far below human
+clicking range (49 clicks/second passed), but it is a real limit, and
+programmatic stimulus finer than that needs a transition queue rather
+than a faster sample.
+
+---
+
 ## 6. Wire protocol
 
 ### 6.1 Why this shape
@@ -1377,6 +1527,27 @@ obvious in a browser.
    Also worth keeping as a habit rather than a test: `ps --sort=-pcpu`
    before trusting any timing measurement on this machine — § 5.10's
    whole investigation started as a false regression report.
+10. **Second-run state (§ 5.11) — the case the other nine never ran.**
+    Every test above opens a fresh connection and issues one `RUN`, which
+    cannot observe anything a run leaves behind in its session directory.
+    The regression test for this is therefore shaped differently on
+    purpose: **one connection, two runs**, the first left running long
+    enough (8 s) that inheriting its state is unmistakable, then timed to
+    first blink against the second design's own target. Run it for both
+    paths that reach `startRun` — a re-`RUN` and a `RESET` — since they
+    differ in whether the old process is still dying when the new one
+    starts.
+11. **Interactive responsiveness (§ 5.12), measured in both regimes.**
+    Two numbers, because one of them hides the bug: `STIM`→`STATE` median
+    latency, and *simulated-time advance per real second* (the heartbeat
+    gives it directly). Always take both with and without `CLOCK_50`
+    declared — the whole defect was that the second regime looked fine
+    while the first was 45x worse. Edge capture gets its own test, since
+    latency being acceptable does not imply transitions survive: drive a
+    `falling_edge(KEY_N(0))` counter at 5, 12, 25 and 49 clicks/second and
+    assert the count equals the clicks issued. And when claiming an
+    improvement, measure the "before" by restoring the old constant and
+    rebuilding — an inferred baseline is not a measured one.
 
 > A note for whoever runs the Playwright tests here: in this project's
 > headless setup, `ResizeObserver` callbacks are not delivered unless frames
@@ -1425,7 +1596,11 @@ cannot be designed away. What is controllable:
 
 | 9 | **Backend death orphaned its GHDL children** (§ 5.10) | **Found and closed 2026-09-17**, reported as a *third* timing complaint that turned out not to be a timing bug at all: two orphans from earlier restarts were pinning two cores, making a correct design measure ~5× slow. § 7.2's "a dropped connection must never leave GHDL running" only ever covered the connection dying. `server.ts` now keeps a session registry and destroys it on `SIGTERM`/`SIGINT`. Also fixed a latent double-decrement in the `error`-then-`close` teardown path it replaced. |
 
-All nine are closed or explicitly out of scope. Whether to also add the
+| 10 | **Per-run state kept per session** (§ 5.11) | **Found and closed 2026-09-17**, from the same report as decision 9 — the orphans were real but were not the whole story, and the remainder reproduced exactly: a second `RUN` on one session stalled for precisely the first run's duration, because the pacing heartbeat is per-run state living in a per-session directory. The heartbeat now carries a per-run name (deleting it would be a race on the `RESET` path, not a fix); `output.txt` is cleared per run; `input.txt` deliberately survives. |
+
+| 11 | **Poll interval denominated in the wrong clock** (§ 5.12) | **Found and closed 2026-09-18**, from a report that the board reacted far slower than the `hdlsim` reference and dropped fast button presses. One cause, two symptoms: `poll_interval_ns` is simulated time, a student is in real time, and with `clkgen` running the exchange rate is ~0.0015x — so a 1 ms interval sampled inputs every ~685 ms. Now chosen per regime (10 us with `CLOCK_50`, 1 ms without), measured free in the first and necessary in the second; `OUTPUT_POLL_MS` 80 → 20 ms. Latency 1312 → 29 ms; the reported counter went from 1-of-10 clicks to 10-of-10 at up to 49 clicks/second. |
+
+All eleven are closed or explicitly out of scope. Whether to also add the
 divide-constant teaching pattern from § 5.5's option 2 remains a live,
 lower-priority question — it changes course material (what the starter
 teaches), so it still warrants confirmation before doing it, unlike
