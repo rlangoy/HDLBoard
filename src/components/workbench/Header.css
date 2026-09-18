@@ -21,18 +21,7 @@
   flex: none;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.18);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 3px;
-  padding: 6px;
-}
-
-.wb-header__logo-cell {
-  background: #ffffff;
-  border-radius: 2px;
+  display: block;
 }
 
 .wb-header__title {

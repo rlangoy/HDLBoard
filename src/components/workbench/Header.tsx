@@ -1,3 +1,4 @@
+import { LOGO_DATA_URI } from './logo';
 import './Header.css';
 
 /**
@@ -9,12 +10,7 @@ export function Header() {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
-        <span className="wb-header__logo" aria-hidden="true">
-          <span className="wb-header__logo-cell" />
-          <span className="wb-header__logo-cell" />
-          <span className="wb-header__logo-cell" />
-          <span className="wb-header__logo-cell" />
-        </span>
+        <img src={LOGO_DATA_URI} alt="" className="wb-header__logo" />
         <span className="wb-header__title">VHDL Simulator</span>
         <span className="wb-header__tagline">
           GHDL <span className="wb-header__dot">•</span> Web IDE{' '}

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">VHDL USN Electronics Logo</title>
+  <desc id="desc">A simple circular dark teal emblem with USN, a microchip labeled VHDL, and four yellow circuit nodes.</desc>
+  <defs>
+    <clipPath id="round"><circle cx="512" cy="512" r="470"/></clipPath>
+  </defs>
+
+  <!-- Main emblem -->
+  <circle cx="512" cy="512" r="470" fill="#07506A"/>
+
+  <g clip-path="url(#round)" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Upper-left / upper-right circuit traces -->
+    <path d="M365 410H285L225 350H155"/>
+    <path d="M659 410H739L799 350H869"/>
+    <!-- Lower-left / lower-right circuit traces -->
+    <path d="M365 614H285L225 674H155"/>
+    <path d="M659 614H739L799 674H869"/>
+
+    <!-- Chip side pins -->
+    <path d="M365 475H315"/>
+    <path d="M365 535H315"/>
+    <path d="M659 475H709"/>
+    <path d="M659 535H709"/>
+  </g>
+
+  <!-- Circuit nodes -->
+  <g fill="#FFC20A" stroke="#FFFFFF" stroke-width="16">
+    <circle cx="145" cy="340" r="34"/>
+    <circle cx="879" cy="340" r="34"/>
+    <circle cx="145" cy="684" r="34"/>
+    <circle cx="879" cy="684" r="34"/>
+  </g>
+
+  <!-- USN mark -->
+  <text x="512" y="305" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="700"
+        letter-spacing="-12" fill="#FFFFFF">USN</text>
+
+  <!-- Microcontroller package -->
+  <g>
+    <rect x="365" y="390" width="294" height="294" rx="42" fill="#FFFFFF"/>
+
+    <!-- Top pins -->
+    <g fill="#FFFFFF">
+      <rect x="405" y="345" width="30" height="58" rx="15"/>
+      <rect x="465" y="345" width="30" height="58" rx="15"/>
+      <rect x="525" y="345" width="30" height="58" rx="15"/>
+      <rect x="585" y="345" width="30" height="58" rx="15"/>
+      <!-- Bottom pins -->
+      <rect x="405" y="661" width="30" height="58" rx="15"/>
+      <rect x="465" y="661" width="30" height="58" rx="15"/>
+      <rect x="525" y="661" width="30" height="58" rx="15"/>
+      <rect x="585" y="661" width="30" height="58" rx="15"/>
+      <!-- Side pins -->
+      <rect x="320" y="435" width="58" height="30" rx="15"/>
+      <rect x="320" y="495" width="58" height="30" rx="15"/>
+      <rect x="646" y="435" width="58" height="30" rx="15"/>
+      <rect x="646" y="495" width="58" height="30" rx="15"/>
+    </g>
+
+    <!-- VHDL lettering -->
+    <text x="512" y="570" text-anchor="middle"
+          font-family="Arial, Helvetica, sans-serif" font-size="104" font-weight="800"
+          letter-spacing="-5" fill="#07506A">VHDL</text>
+  </g>
+</svg>

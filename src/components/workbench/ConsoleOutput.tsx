@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { cx } from '../board';
+import { DeleteIcon } from './icons';
 import './ConsoleOutput.css';
 
 export interface ConsoleLine {
@@ -27,7 +28,7 @@ export function ConsoleOutput({ lines, onClear }: ConsoleOutputProps) {
       <div className="wb-console__header">
         <h2 className="wb-console__title">GHDL Output / Status</h2>
         <button type="button" className="wb-console__clear" onClick={onClear}>
-          <span className="wb-icon wb-icon--trash" aria-hidden="true" />
+          <DeleteIcon className="wb-console__clear-icon" aria-hidden="true" />
           Clear
         </button>
       </div>
