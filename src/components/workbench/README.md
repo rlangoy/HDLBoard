@@ -327,12 +327,15 @@ extend the highlighter.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the seven-file starter project shown in the
+`STARTER_FILES: VhdlFile[]` — the eight-file starter project shown in the
 tree (`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
-`utility_pkg.vhd`, `blinkTest.vhdl` under `vhdl/`, `tb_de1_soc.vhd` under
-`work/`). `blinkTest.vhdl` is a standalone example (its own `blinkTest`
-entity, not wired into `DE1_SoC.vhd`) demonstrating `CLOCK_500Hz`
-(§ 3.2/§ 5.7) — mark it top via its Files-panel dot to run it on its own.
+`utility_pkg.vhd`, `blinkTest.vhdl`, `keyCouter2Led.vhdl` under `vhdl/`,
+`tb_de1_soc.vhd` under `work/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
+are both standalone examples (their own `blinkTest`/`counter8` entities,
+not wired into `DE1_SoC.vhd`) — mark either top via its Files-panel dot to
+run it on its own. `blinkTest.vhdl` demonstrates `CLOCK_500Hz`
+(§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a `CLOCK_50`/`KEY_N`-driven
+up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets) displayed on `LEDR`.
 `DEFAULT_OPEN_TABS` is the four tabs open on first load, matching
 `WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is only the
 *initial* top file — `Workbench`'s `topFileId` starts pointed at whichever

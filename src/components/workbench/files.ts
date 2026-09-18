@@ -205,6 +205,39 @@ begin
 end architecture;
 `;
 
+const KEY_COUNTER_2_LED_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity counter8 is
+    port (
+        CLOCK_50 : in  std_logic;
+        KEY_N    : in  std_logic_vector(3 downto 0);
+        LEDR     : out std_logic_vector(9 downto 0)
+    );
+end entity counter8;
+
+architecture rtl of counter8 is
+    signal count : unsigned(7 downto 0) := (others => '0');
+
+
+begin
+
+    process (CLOCK_50, KEY_N)
+    begin
+       if falling_edge(KEY_N(1)) then
+                count <= (others => '0');          -- KEY_N(1): reset
+       elsif falling_edge(KEY_N(0)) then
+                count <= count + 1;                -- KEY_N(0): count up
+       end if;
+    end process;
+
+    LEDR(7 downto 0) <= std_logic_vector(count);
+    LEDR(9 downto 8) <= (others => '0');           -- unused LEDs off
+
+end architecture rtl;
+`;
+
 const TB_DE1_SOC_VHD = `library ieee;
 use ieee.std_logic_1164.all;
 
@@ -252,6 +285,7 @@ export const STARTER_FILES: VhdlFile[] = [
   { id: 'buttons', name: 'buttons.vhd', folder: 'vhdl', content: BUTTONS_VHD },
   { id: 'utility_pkg', name: 'utility_pkg.vhd', folder: 'vhdl', content: UTILITY_PKG_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
+  { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
   { id: 'tb_de1_soc', name: 'tb_de1_soc.vhd', folder: 'work', content: TB_DE1_SOC_VHD },
 ];
 
