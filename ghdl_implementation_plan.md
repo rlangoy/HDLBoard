@@ -1086,6 +1086,35 @@ lost, but on such a machine the LEDs can still update up to ~1 s late.
 Clockless (`CLOCK_500Hz`) designs, which are now paced rather than
 spinning, don't trigger them (timers measured 10.5 ms during one).
 
+### 5.14 § 5.13's queue corrupted `STATE` for a design that settles
+
+Reported 2026-09-18, right after § 5.13 shipped: the counter and
+`blinkTest.vhdl` worked, but `DE1_SoC.vhd` (`LEDR <= SW`) never showed a
+switch on the LEDs. Reproduced with the full starter project and
+`DE1_SoC.vhd` as top: 0 of 3 switch patterns reached `LEDR` in 80 s.
+
+**Cause.** The `io` process used one `line` variable both to parse
+`input.txt` and to build `output.txt`. Skipping an already-applied queue
+entry (`next when seq <= applied_seq`) leaves the unread remainder of that
+entry, ` <14 bits>`, in the line, and the next `write` appended `STATE`
+after it: `output.txt` read ` 11111111111111 1111…` (67 bits, then the
+seq). The Node side rightly rejects a line that isn't 52 bits, so no
+`STATE` was sent, and because the ack was unparseable the queue was never
+trimmed, so every later poll skipped entries and corrupted the line
+again. The board was frozen for good. A counter escaped it only because
+each new press rewrote the line soon after. `LEDR <= SW` settles, so the
+corrupt line stayed.
+
+**Fix.** Separate `lin`/`lout` line variables. **Verified:** 5 of 5
+switch patterns reach `LEDR` within 20–40 ms, a burst of 30 random
+patterns sent back-to-back ends on the last one in 80 ms with a
+well-formed `output.txt`, and § 5.13's counter (40 of 40) and `blinkTest`
+(249 ms mean) checks were re-run unchanged.
+
+**Lesson for § 10 item 12:** test a design whose outputs *settle*, not only
+ones that keep changing. A corrupt output line that gets rewritten
+immediately can hide the bug.
+
 ---
 
 ## 6. Wire protocol
@@ -1948,7 +1977,11 @@ begin
     file fin  : text;
     file fout : text;
     variable status : file_open_status;
-    variable l : line;
+    -- Separate lines for reading and writing: a queue entry skipped
+    -- part-way through parsing leaves its unread remainder in its line,
+    -- and sharing one with the output would prepend that to STATE (§ 5.14).
+    variable lin  : line;
+    variable lout : line;
     variable rec : string(1 to 14);
     variable sep : character;
     variable seq : integer;
@@ -1978,12 +2011,12 @@ begin
         file_open(status, fin, input_file, read_mode);
         if status = open_ok then
           while not endfile(fin) loop
-            readline(fin, l);
-            read(l, seq, ok);
+            readline(fin, lin);
+            read(lin, seq, ok);
             next when not ok or seq <= applied_seq;
-            read(l, sep, ok);
-            next when not ok or l'length < 14;
-            read(l, rec);
+            read(lin, sep, ok);
+            next when not ok or lin'length < 14;
+            read(lin, rec);
             for i in 0 to 9 loop
               sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
             end loop;
@@ -2009,9 +2042,9 @@ begin
         -- concurrent reader on the Node side needs that flush to see
         -- the update without waiting for this process to exit.
         file_open(status, fout, output_file, write_mode);
-        write(l, now_bits & ' ');
-        write(l, applied_seq);
-        writeline(fout, l);
+        write(lout, now_bits & ' ');
+        write(lout, applied_seq);
+        writeline(fout, lout);
         file_close(fout);
         last := now_bits;
         last_seq := applied_seq;

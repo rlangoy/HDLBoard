@@ -190,7 +190,11 @@ ${
     file fin  : text;
     file fout : text;
     variable status : file_open_status;
-    variable l : line;
+    -- Separate lines for reading and writing: a queue entry skipped
+    -- part-way through parsing leaves its unread remainder in its line,
+    -- and sharing one with the output would prepend that to STATE (§ 5.14).
+    variable lin  : line;
+    variable lout : line;
     variable rec : string(1 to 14);
     variable sep : character;
     variable seq : integer;
@@ -220,12 +224,12 @@ ${
         file_open(status, fin, input_file, read_mode);
         if status = open_ok then
           while not endfile(fin) loop
-            readline(fin, l);
-            read(l, seq, ok);
+            readline(fin, lin);
+            read(lin, seq, ok);
             next when not ok or seq <= applied_seq;
-            read(l, sep, ok);
-            next when not ok or l'length < 14;
-            read(l, rec);
+            read(lin, sep, ok);
+            next when not ok or lin'length < 14;
+            read(lin, rec);
             for i in 0 to 9 loop
               sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
             end loop;
@@ -251,9 +255,9 @@ ${
         -- concurrent reader on the Node side needs that flush to see
         -- the update without waiting for this process to exit.
         file_open(status, fout, output_file, write_mode);
-        write(l, now_bits & ' ');
-        write(l, applied_seq);
-        writeline(fout, l);
+        write(lout, now_bits & ' ');
+        write(lout, applied_seq);
+        writeline(fout, lout);
         file_close(fout);
         last := now_bits;
         last_seq := applied_seq;
