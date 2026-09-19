@@ -13,19 +13,9 @@ actual GHDL simulation of whatever VHDL is open in the editor.
 
 ---
 
-## Contents
+![The DE1-SoC VHDL Workbench running DE1_SoC.vhdl: the editor and file tree on the left, and the board's LEDs, 7-segment displays, switches and pushbuttons on the right, with five switches up and their LEDs lit.](docs/images/workbench.png)
 
-- [Overview](#overview)
-- [Features](#features)
-- [Windows installer](#windows-installer)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Running it](#running-it)
-- [Available scripts](#available-scripts)
-- [Project structure](#project-structure)
-- [Documentation](#documentation)
-- [Known limitations](#known-limitations)
-- [About](#about)
+*The Workbench running a real GHDL simulation: `LEDR <= SW;` with five switches flipped up.*
 
 ## Overview
 
@@ -44,6 +34,13 @@ Every board part — switch, LED, pushbutton, 7-segment digit — is drawn in
 pure CSS from pixel measurements of the reference hardware renders; nothing
 is an image, an SVG, or a canvas drawing. See
 [`Design_Description.md`](Design_Description.md) for exactly how, and why.
+
+## About
+
+Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
+simulator for the DE1-SoC board, backed by real GHDL, so students can see
+`LEDR <= SW;` and similar constructs actually behave the way the real
+board would, without needing hardware in hand.
 
 ## Features
 
@@ -344,13 +341,6 @@ de1socSim/
   [Windows installer](#windows-installer).
 - Full details in
   [`src/components/workbench/README.md`](src/components/workbench/README.md#known-limitations).
-
-## About
-
-Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
-simulator for the DE1-SoC board, backed by real GHDL, so students can see
-`LEDR <= SW;` and similar constructs actually behave the way the real
-board would, without needing hardware in hand.
 
 ## License
 
