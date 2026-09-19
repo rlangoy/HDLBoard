@@ -176,16 +176,14 @@
   --pb-accent-title: #1e40af;
 }
 
-.pb-ui.pb-accent-leds {
+.pb-ui.pb-accent-leds,
+.pb-ui.pb-accent-hex {
+  /* LEDR and HEX are the board's outputs, so they share one frame colour
+     (the LEDs' green); the two inputs — switches and keys — are the
+     blues. */
   --pb-accent-head: #dbf0ee;
   --pb-accent-border: #c5e5de;
   --pb-accent-title: #166534;
-}
-
-.pb-ui.pb-accent-hex {
-  --pb-accent-head: #e2e0fd;
-  --pb-accent-border: #d4cdfb;
-  --pb-accent-title: #5b21b6;
 }
 
 .pb-ui.pb-accent-keys {

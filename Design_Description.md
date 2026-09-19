@@ -111,8 +111,8 @@ buried in a source file.
 |---|---|---|
 | `Switches` (`SW[9:0]`) | `DesignResources/Switches_v2.png` | **done** |
 | `Leds` (`LEDR[9:0]`) | `DesignResources/LEDs.png` | **done** |
-| `Pushbuttons` (`KEY[3:0]`) | `DesignResources/PushButtons.png` + `PushButtonStates.png` | **done** |
-| `SevenSegmentDisplays` (`HEX[5:0]`) | `DesignResources/7SegmentDisplays.png` + `7SegmentDisplay_maping.png` + `7SegmentDisplay_pin_assignment.png` | **done** |
+| `Pushbuttons` (`KEY_N[3:0]`) | `DesignResources/PushButtons.png` + `PushButtonStates.png` | **done** |
+| `SevenSegmentDisplays` (`HEXn_N[6:0]`) | `DesignResources/7SegmentDisplays.png` + `7SegmentDisplay_maping.png` + `7SegmentDisplay_pin_assignment.png` | **done** |
 | `Board` (2×2 grid) | `DesignResources/Component_grouping.png` | **done** |
 
 The components are finished, and so is what drives them: `LEDR`/`HEX` are
@@ -177,13 +177,13 @@ UI/
       │  ├─ index.ts
       │  ├─ Pushbutton.tsx      one momentary pushbutton
       │  ├─ Pushbutton.css
-      │  └─ Pushbuttons.tsx     the KEY[3:0] panel
+      │  └─ Pushbuttons.tsx     the KEY_N[3:0] panel
       ├─ SevenSegment/
       │  ├─ index.ts
       │  ├─ segments.ts         the decoder table + bit↔segment mapping
       │  ├─ SevenSegmentDisplay.tsx   one HEX module
       │  ├─ SevenSegmentDisplay.css
-      │  └─ SevenSegmentDisplays.tsx  the HEX[5:0] panel
+      │  └─ SevenSegmentDisplays.tsx  the HEXn_N[6:0] panel
       └─ workbench/             the app shell — DesignResources/WorkBench.png
          ├─ index.ts
          ├─ Workbench.tsx       the main page; owns all its state
@@ -609,10 +609,14 @@ wins and the convention is the thing that needs fixing.
    |---|---|---|---|---|
    | Switches | `pb-accent-switches` | `#deeffd` | `#d5e9fd` | `#1e40af` |
    | LEDs | `pb-accent-leds` | `#dbf0ee` | `#c5e5de` | `#166534` |
-   | 7-segment | `pb-accent-hex` | `#e2e0fd` | `#d4cdfb` | `#5b21b6` |
+   | 7-segment | `pb-accent-hex` | `#dbf0ee` | `#c5e5de` | `#166534` |
    | Pushbuttons | `pb-accent-keys` | `#daeefe` | `#b8dcfc` | `#1e40af` |
 
-   (All four are measured from their own reference renders.)
+   (Switches, LEDs and Pushbuttons are measured from their own reference
+   renders. The 7-segment row deliberately reuses the LEDs' colours — LEDR and
+   HEX are the board's outputs, so they share one frame colour, and the two
+   inputs are the blues.) Panel titles name the entity port: `LEDR[9:0]`,
+   `HEXn_N[6:0]`, `SW[9:0]`, `KEY_N[3:0]`.
 3. **Class naming:** `pb-<block>__<element>`, state classes `is-*`. Shared
    chrome is `pb-panel*`, `pb-bank*`, `pb-readout*`, `pb-board`.
    Four tokens exist only as *optional* overrides — a panel passes one

@@ -43,7 +43,11 @@ export interface PushbuttonsProps extends NativeProps {
   onChange?: (next: BitVector, changedIndex: number) => void;
   /** Signal name used in the title, labels and readout. Default `"KEY"`. */
   name?: string;
-  /** Override the card title. Default: `` `Pushbuttons (KEY[3:0])` ``. */
+  /**
+   * Override the card title. Default: `` `Pushbuttons (KEY_N[3:0])` `` —
+   * the entity port name, so the `_N` of an active-low signal is in the
+   * heading (with `activeLow` off it reads `KEY[3:0]`).
+   */
   title?: string;
   /**
    * `true` (default): pressed reads `0`, as on the DE-board. Set false
@@ -121,7 +125,10 @@ export function Pushbuttons({
     [bits, isControlled, onChange, restBit],
   );
 
-  const heading = title ?? `Pushbuttons (${name}[${count - 1}:0])`;
+  // The heading names the entity port, not the silkscreen label: on the
+  // DE1-SoC the active-low KEYs are the `KEY_N` port.
+  const port = activeLow ? `${name}_N` : name;
+  const heading = title ?? `Pushbuttons (${port}[${count - 1}:0])`;
 
   // KEY columns are wider than the shared pitch — four buttons, not ten,
   // so there is nothing for them to line up with.

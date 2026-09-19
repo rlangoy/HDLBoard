@@ -61,8 +61,8 @@ is an image, an SVG, or a canvas drawing. See
 - **Simulation controls** — Start/Stop drives a real `ghdl -a`/`-e`/`-r`
   compile → elaborate → run sequence, with GHDL's own output (or error
   text, file:line included) in the console panel.
-- **Live DE1-SoC board** — `SW[9:0]` and `KEY[3:0]` are genuinely
-  clickable inputs; `LEDR[9:0]` and `HEX[5:0]` are driven by GHDL actually
+- **Live DE1-SoC board** — `SW[9:0]` and `KEY_N[3:0]` are genuinely
+  clickable inputs; `LEDR[9:0]` and `HEX0_N`…`HEX5_N` are driven by GHDL actually
   simulating your VHDL, not mirrored from the switches. See
   [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 6 for the
   wire protocol between the two.
@@ -290,8 +290,8 @@ de1socSim/
       ├─ board/                 shared card chrome, grid layout, bit helpers
       ├─ Switches/               SW[9:0]
       ├─ Leds/                   LEDR[9:0]
-      ├─ Pushbuttons/            KEY[3:0]
-      ├─ SevenSegment/           HEX[5:0]
+      ├─ Pushbuttons/            KEY_N[3:0]
+      ├─ SevenSegment/           HEXn_N[6:0]
       └─ workbench/              the IDE shell, including ghdlClient.ts —
                                   see its own README below
 ```

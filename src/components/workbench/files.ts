@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Rune Langøy
 
 /* ------------------------------------------------------------------ *
- * Starter project shown in the Files panel — a plausible small design
- * (top-level entity, two helper modules, a package and a testbench) so
- * the workbench opens looking like a project mid-course, not empty.
+ * Starter project shown in the Files panel — the DE1-SoC top-level
+ * entity plus a few small example designs, so the workbench opens
+ * looking like a project mid-course, not empty.
  * ------------------------------------------------------------------ */
 
 export interface VhdlFile {
@@ -43,69 +43,14 @@ begin
     -- LEDR <= SW; the first thing every student wires up.
     LEDR <= SW;
 
-    -- Blank until you add your own 7-segment logic (see display7seg.vhd)
-    -- — active low, so all-ones is "off".
+    -- Blank until you add your own 7-segment logic — active low, so
+    -- all-ones is "off".
     HEX0_N <= (others => '1');
     HEX1_N <= (others => '1');
     HEX2_N <= (others => '1');
     HEX3_N <= (others => '1');
     HEX4_N <= (others => '1');
     HEX5_N <= (others => '1');
-end architecture;
-`;
-
-const DISPLAY7SEG_VHD = `library ieee;
-use ieee.std_logic_1164.all;
-
-entity display7seg is
-    port (
-        nibble : in  std_logic_vector(3 downto 0);
-        seg    : out std_logic_vector(6 downto 0)
-    );
-end entity;
-
-architecture rtl of display7seg is
-begin
-    -- Active low: '0' lights a segment; MSB-first "gfedcba"
-    process(nibble) is
-    begin
-        case nibble is
-            when "0000" => seg <= "1000000"; -- 0
-            when "0001" => seg <= "1111001"; -- 1
-            when "0010" => seg <= "0100100"; -- 2
-            when "0011" => seg <= "0110000"; -- 3
-            when "0100" => seg <= "0011001"; -- 4
-            when "0101" => seg <= "0010010"; -- 5
-            when "0110" => seg <= "0000010"; -- 6
-            when "0111" => seg <= "1111000"; -- 7
-            when "1000" => seg <= "0000000"; -- 8
-            when "1001" => seg <= "0011000"; -- 9, open tail
-            when "1010" => seg <= "0001000"; -- A
-            when "1011" => seg <= "0000011"; -- b
-            when "1100" => seg <= "1000110"; -- C
-            when "1101" => seg <= "0100001"; -- d
-            when "1110" => seg <= "0000110"; -- E
-            when "1111" => seg <= "0001110"; -- F
-            when others => seg <= "1111111";
-        end case;
-    end process;
-end architecture;
-`;
-
-const LEDS_VHD = `library ieee;
-use ieee.std_logic_1164.all;
-
-entity leds is
-    port (
-        sw  : in  std_logic_vector(9 downto 0);
-        led : out std_logic_vector(9 downto 0)
-    );
-end entity;
-
-architecture rtl of leds is
-begin
-    -- LEDR <= SW, the first thing every student wires up
-    led <= sw;
 end architecture;
 `;
 
@@ -130,27 +75,6 @@ begin
         end if;
     end process;
 end architecture;
-`;
-
-const UTILITY_PKG_VHD = `library ieee;
-use ieee.std_logic_1164.all;
-
-package utility_pkg is
-    function hex7seg(nibble : std_logic_vector(3 downto 0))
-        return std_logic_vector;
-end package;
-
-package body utility_pkg is
-    function hex7seg(nibble : std_logic_vector(3 downto 0))
-        return std_logic_vector is
-    begin
-        case nibble is
-            when "0000" => return "1000000";
-            when "0001" => return "1111001";
-            when others => return "1111111";
-        end case;
-    end function;
-end package body;
 `;
 
 const BLINK_TEST_VHD = `library ieee;
@@ -241,58 +165,14 @@ begin
 end architecture rtl;
 `;
 
-const TB_DE1_SOC_VHD = `library ieee;
-use ieee.std_logic_1164.all;
-
--- A student's own offline testbench (work/) — separate from, and never
--- sent to, the interactive board simulator, which generates its own.
-entity tb_de1_soc is
-end entity;
-
-architecture sim of tb_de1_soc is
-    signal clock_50 : std_logic := '0';
-    signal sw       : std_logic_vector(9 downto 0) := (others => '0');
-    signal key      : std_logic_vector(3 downto 0) := (others => '1');
-    signal ledr     : std_logic_vector(9 downto 0);
-    signal hex0, hex1, hex2, hex3, hex4, hex5 : std_logic_vector(6 downto 0);
-begin
-    clock_50 <= not clock_50 after 10 ns;
-
-    uut : entity work.DE1_SoC
-        port map (
-            CLOCK_50 => clock_50,
-            SW       => sw,
-            KEY_N    => key,
-            LEDR     => ledr,
-            HEX0_N   => hex0,
-            HEX1_N   => hex1,
-            HEX2_N   => hex2,
-            HEX3_N   => hex3,
-            HEX4_N   => hex4,
-            HEX5_N   => hex5
-        );
-
-    stim : process is
-    begin
-        wait for 20 ns;
-        sw <= "0000000001";
-        wait;
-    end process;
-end architecture;
-`;
-
 export const STARTER_FILES: VhdlFile[] = [
-  { id: 'de1_soc', name: 'DE1_SoC.vhd', folder: 'vhdl', content: DE1_SOC_VHD },
-  { id: 'display7seg', name: 'display7seg.vhd', folder: 'vhdl', content: DISPLAY7SEG_VHD },
-  { id: 'leds', name: 'leds.vhd', folder: 'vhdl', content: LEDS_VHD },
+  { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'buttons', name: 'buttons.vhd', folder: 'vhdl', content: BUTTONS_VHD },
-  { id: 'utility_pkg', name: 'utility_pkg.vhd', folder: 'vhdl', content: UTILITY_PKG_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
-  { id: 'tb_de1_soc', name: 'tb_de1_soc.vhd', folder: 'work', content: TB_DE1_SOC_VHD },
 ];
 
-export const DEFAULT_OPEN_TABS = ['de1_soc', 'display7seg', 'leds', 'buttons'];
+export const DEFAULT_OPEN_TABS = ['de1_soc', 'buttons'];
 
 /** The top-level entity a simulation run elaborates — shown in the Simulation card. */
-export const TOP_LEVEL_ENTITY = 'DE1_SoC.vhd';
+export const TOP_LEVEL_ENTITY = 'DE1_SoC.vhdl';

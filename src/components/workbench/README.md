@@ -138,7 +138,8 @@ interface FileExplorerProps {
 ```
 
 Renders the `vhdl/` and `work/` folders from `files`, grouped by each file's
-`folder`. Folders are collapsible (own local `collapsed` state — purely a UI
+`folder`; a folder with no files is not drawn, so `work/` only appears once a
+`tb_*` file has been uploaded (the starter project has none). Folders are collapsible (own local `collapsed` state — purely a UI
 concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `Workbench` opens it as a tab if it isn't already and makes it active.
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
@@ -327,20 +328,19 @@ extend the highlighter.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the eight-file starter project shown in the
-tree (`DE1_SoC.vhd`, `display7seg.vhd`, `leds.vhd`, `buttons.vhd`,
-`utility_pkg.vhd`, `blinkTest.vhdl`, `keyCouter2Led.vhdl` under `vhdl/`,
-`tb_de1_soc.vhd` under `work/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
+`STARTER_FILES: VhdlFile[]` — the four-file starter project shown in the
+tree (`DE1_SoC.vhdl`, `buttons.vhd`, `blinkTest.vhdl`, `keyCouter2Led.vhdl`,
+all under `vhdl/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
 are both standalone examples (their own `blinkTest`/`counter8` entities,
 not wired into `DE1_SoC.vhd`) — mark either top via its Files-panel dot to
 run it on its own. `blinkTest.vhdl` demonstrates `CLOCK_500Hz`
 (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a `CLOCK_50`/`KEY_N`-driven
 up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets) displayed on `LEDR`.
-`DEFAULT_OPEN_TABS` is the four tabs open on first load, matching
-`WorkBench.png`. `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhd"`) is only the
+`DEFAULT_OPEN_TABS` is the two tabs open on first load (`DE1_SoC.vhdl` and
+`buttons.vhd`). `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhdl"`) is only the
 *initial* top file — `Workbench`'s `topFileId` starts pointed at whichever
 starter file has this name, then moves independently once a user clicks
-another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhd`
+another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhdl`
 declares the real
 DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY_N`, `LEDR`,
 `HEX0_N..HEX5_N` — `ghdl_implementation_plan.md` § 3.2), not stand-ins for

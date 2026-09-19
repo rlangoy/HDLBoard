@@ -25,9 +25,10 @@ export interface FileExplorerProps {
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
 
 /**
- * The "Files" panel: upload / new-file actions above a two-folder tree
- * (`vhdl/` for the design, `work/` for the testbench) matching
- * `DesignResources/WorkBench.png`.
+ * The "Files" panel: upload / new-file actions above the folder tree —
+ * `vhdl/` for the design and `work/` for an uploaded `tb_*` testbench.
+ * A folder with no files is not drawn, so the starter project shows only
+ * `vhdl/`.
  */
 export function FileExplorer({
   files,

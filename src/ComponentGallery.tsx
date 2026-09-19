@@ -41,7 +41,7 @@ export default function ComponentGallery() {
     <div className="demo">
       <h1 className="demo__h1">PB1180 UI — board components</h1>
       <p className="demo__lead">
-        <code>SW[9:0]</code>, <code>LEDR[9:0]</code> and <code>KEY[3:0]</code>, drawn{' '}
+        <code>SW[9:0]</code>, <code>LEDR[9:0]</code> and <code>KEY_N[3:0]</code>, drawn{' '}
         to match{' '}
         <code>DesignResources/</code>. Pure CSS — no images, no SVG. Click a
         switch, or tab to one and press <kbd>Space</kbd>.

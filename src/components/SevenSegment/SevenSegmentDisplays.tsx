@@ -30,7 +30,12 @@ export interface SevenSegmentDisplaysProps extends NativeProps {
   activeLow?: boolean;
   /** Signal name used in the title, labels and readout. Default `"HEX"`. */
   name?: string;
-  /** Override the card title. Default: `` `7-Segment Displays (HEX[5:0])` ``. */
+  /**
+   * Override the card title. Default: `` `7-Segment Displays (HEXn_N[6:0])` ``
+   * — the entity port pattern (`HEX0_N` … `HEX5_N`, each 7 segment bits),
+   * with `n` standing for the display number. With `activeLow` off the
+   * `_N` is dropped.
+   */
   title?: string;
   /** Draw the card chrome. Default `true`. */
   framed?: boolean;
@@ -74,7 +79,11 @@ export function SevenSegmentDisplays({
     );
   }, [count, value]);
 
-  const heading = title ?? `7-Segment Displays (${name}[${count - 1}:0])`;
+  // The heading names the entity port pattern, not the display row: each
+  // display is its own 7-bit port (`HEX0_N` … `HEX5_N` on the DE1-SoC),
+  // which `n` stands for — so it is the segment range that is shown.
+  const port = `${name}n${activeLow ? '_N' : ''}`;
+  const heading = title ?? `7-Segment Displays (${port}[${SEGMENT_COUNT - 1}:0])`;
 
   // HEX columns have their own pitch, and the readout prints six hex
   // bytes rather than single bits, so it needs tighter tracking.
