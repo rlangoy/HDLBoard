@@ -7,6 +7,24 @@ commands, and pass/fail gates.
 
 Repo root: `de1soc_Simulator/`.
 
+> **Status: done** — branch `windows-installer`. Kept for the reasoning
+> and the gate definitions. Two snippets below are now known to be wrong;
+> following them verbatim reproduces bugs that were already fixed:
+>
+> - **WO-2** says to pass `''` as the `pacingFile` argument. Do not pass
+>   it at all — GHDL rejects an empty generic value with `missing value in
+>   generic override option`. `startPersistentRun` omits the flag instead.
+> - **WO-3's `isMainModule` line** never matches on Windows: `argv[1]` is
+>   `C:\…` while `import.meta.url` is `file:///C:/…`. Use
+>   `pathToFileURL(process.argv[1]).href`.
+>
+> Also missing from these orders: `renameSync` over a file another process
+> holds open is `EPERM` on Windows, which hits `writeStimQueue` constantly
+> under load (1584 times in a 15 s stress run). See `session.ts`.
+>
+> WO-12 is the only work order not fully closed — the Linux paced-timing
+> check and the clean-VM pass still need their own machines.
+
 **Revised after a source review.** Five findings (plan §0) reordered
 this list and deleted one work order outright. If you have seen an
 earlier version of this file: the licensing work order is gone (already

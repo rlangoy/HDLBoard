@@ -1,10 +1,34 @@
 # Windows Installer — Implementation Plan
 
-Status: **planning only — no implementation started.** Revised after a
-code review of the actual `server/` and `src/` sources; §0 lists what
-that review changed. The development order in §2 is the operative part
-of this document — it changed substantially, because the review found
-the project's first real task is not packaging at all.
+Status: **implemented** — branch `windows-installer`. The plan is kept as
+written, for its rationale; §0's findings F1–F5 are what the work was
+checked against, and all five held up. The development order in §2 is
+what was followed.
+
+Three things the plan did not anticipate, recorded here so this document
+does not mislead whoever reads it next:
+
+- **`pacing_file=""` cannot be passed as an argument.** GHDL rejects an
+  empty generic value outright — `missing value in generic override
+  option` — so `-gpacing_file` is *omitted* instead, falling back to the
+  generic's own declared `""` default in `tbTemplate.ts`. The effect is
+  exactly what F1 intended; only the mechanism differs.
+- **`renameSync` over an open file is `EPERM` on Windows.** Not a POSIX
+  dependency the source review was looking for, and invisible until the
+  packaged build: the running testbench reopens `input.txt` on every
+  poll, and an instrumented 15 s stress run hit **1584** contentions —
+  each an uncaught throw out of a timer callback. Now retried with a
+  bounded synchronous backoff in `session.ts`.
+- **WO-3's `isMainModule` guard is wrong on Windows.** Comparing
+  `import.meta.url` against a concatenated `` `file://${process.argv[1]}` ``
+  never matches there, because argv[1] is `C:\…` whose URL form is
+  `file:///C:/…`. It needs `pathToFileURL`, or the backend silently
+  refuses to start as a script.
+
+Two gates in §9 remain open, both needing machines unavailable during
+implementation: the **Linux paced-timing regression check** (the
+regression F1's fix most endangers) and the **clean non-admin Windows VM**
+pass, including SmartScreen's exact wording.
 
 Decision: package the DE1-SoC VHDL Workbench as an **Electron** desktop
 app for Windows, built with **electron-builder** (NSIS → one
@@ -23,7 +47,7 @@ keep working exactly as they do now (§8 is the enforced list).
 | Node runtime | **None to vendor** — Electron embeds its own |
 | Frontend delivery | **Served over `http://127.0.0.1:9010` by the backend itself**, not `loadFile()` — forced by finding F2 (§0) |
 | Backend delivery | **esbuild-bundled to one file** with `ws` inlined — forced by finding F3 (§0) |
-| Windows real-time pacing | **Off for v1** (`pacing_file=""`), a code path the generated testbench already supports — forced by finding F1 (§0) |
+| Windows real-time pacing | **Off for v1** (`-gpacing_file` omitted, not passed empty — see the status note), a code path the generated testbench already supports — forced by finding F1 (§0) |
 | Workbench's own license | **GPL-2.0-only** — already implemented in the repo (finding F5) |
 
 ---
