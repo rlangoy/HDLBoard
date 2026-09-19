@@ -81,6 +81,13 @@ export interface RunHandle {
    * confused with this), so every line here is the student's own design.
    */
   onOutput(cb: (line: string) => void): void;
+  /**
+   * Writes `lines` newline-terminated lines into the process's stdin — the
+   * pacing grants when the testbench was generated with
+   * `pacingFromStdin` (Windows; see session.ts's `PACING`). A no-op once
+   * the process has gone.
+   */
+  grantPacing(lines: number): void;
 }
 
 /** Buffers arbitrary chunks and emits one callback per complete line. */
@@ -121,11 +128,12 @@ export function startPersistentRun(
       `-gpoll_interval_ns=${pollIntervalNs}`,
       `-gmin_dwell_ns=${minDwellNs}`,
       `-gheartbeat_file=${heartbeatFile}`,
-      // Omitted rather than passed empty when pacing is off (Windows —
-      // see session.ts's PACED): `-gpacing_file=` with no value is a hard
-      // "missing value in generic override option" from GHDL, not an
-      // empty string. The generic's own declared default in tbTemplate.ts
-      // is already `""`, which is exactly the disabled state.
+      // Omitted rather than passed empty when there is no FIFO (Windows,
+      // which paces through stdin instead — see session.ts's PACING):
+      // `-gpacing_file=` with no value is a hard "missing value in generic
+      // override option" from GHDL, not an empty string. The generic's own
+      // declared default in tbTemplate.ts is already `""`, which is exactly
+      // the "no FIFO" state.
       ...(pacingFile ? [`-gpacing_file=${pacingFile}`] : []),
     ],
     { cwd },
@@ -133,6 +141,12 @@ export function startPersistentRun(
 
   let stderr = '';
   child.stderr.on('data', (d) => (stderr += d));
+  // stdin is only ever written for stdin pacing, but the stream exists
+  // either way, and a write to a process that has just exited (Stop/Reset
+  // race a pacing tick) surfaces as an `error` event — EPIPE on POSIX,
+  // EOF/EPERM on Windows. Unhandled, that is an uncaught exception in the
+  // backend, so it is swallowed: the exit itself is reported via `close`.
+  child.stdin.on('error', () => {});
 
   const outputCbs: Array<(line: string) => void> = [];
   const emitOutput = lineSplitter((line) => {
@@ -156,6 +170,9 @@ export function startPersistentRun(
     },
     onExit: (cb) => exitCbs.push(cb),
     onOutput: (cb) => outputCbs.push(cb),
+    grantPacing: (lines) => {
+      if (lines > 0 && child.stdin.writable) child.stdin.write('\n'.repeat(lines));
+    },
   };
 }
 

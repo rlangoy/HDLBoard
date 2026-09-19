@@ -58,10 +58,44 @@ function buildRstDrive(ports: ReadonlySet<string>): string {
     : "\n  rst_sig <= '0';";
 }
 
-export function generateTestbench(entityName: string, ports: ReadonlySet<string>): string {
+export interface TestbenchOptions {
+  /**
+   * Take the pacing grants from the process's standard input instead of a
+   * FIFO named by `pacing_file` — the Windows path, where there is no
+   * `mkfifo` (session.ts's `PACING`). Off by default, and while it is off
+   * the generated VHDL is byte-for-byte what it was before this option
+   * existed, so POSIX output cannot change by accident.
+   *
+   * A read from stdin blocks exactly as a FIFO read does — the Node side
+   * writes one line per `PACING_STEP_MS` of real time into the child's
+   * stdin pipe — and that is the whole property pacing needs (§ 5.13): a
+   * late Node side can only ever slow the simulation down. The design
+   * itself never reads stdin (it has no business doing so), so the
+   * testbench owns the stream outright.
+   */
+  pacingFromStdin?: boolean;
+}
+
+export function generateTestbench(
+  entityName: string,
+  ports: ReadonlySet<string>,
+  options: TestbenchOptions = {},
+): string {
   const portMap = buildPortMap(ports);
   const rstDrive = buildRstDrive(ports);
   const hasClock50 = ports.has('clock_50');
+  const stdinPacing = options.pacingFromStdin === true;
+  // The three places the heartbeat process differs between the two pacing
+  // sources. The FIFO strings are the original text, verbatim.
+  const pacedInit = stdinPacing ? 'true' : 'false';
+  const pacingOpen = stdinPacing
+    ? ''
+    : `    if pacing_file'length > 0 then
+      file_open(status, fpace, pacing_file, read_mode);
+      paced := status = open_ok;
+    end if;
+`;
+  const pacingRead = stdinPacing ? 'readline(std.textio.input, l);' : 'readline(fpace, l);';
 
   return `library ieee;
 use ieee.std_logic_1164.all;
@@ -167,13 +201,9 @@ ${
     file fpace : text;
     variable status : file_open_status;
     variable l : line;
-    variable paced : boolean := false;
+    variable paced : boolean := ${pacedInit};
   begin
-    if pacing_file'length > 0 then
-      file_open(status, fpace, pacing_file, read_mode);
-      paced := status = open_ok;
-    end if;
-    loop
+${pacingOpen}    loop
       wait for 20 ms;
       if heartbeat_file'length > 0 then
         file_open(status, fhb, heartbeat_file, write_mode);
@@ -184,7 +214,7 @@ ${
         end if;
       end if;
       if paced then
-        readline(fpace, l);
+        ${pacingRead}
       end if;
     end loop;
   end process;

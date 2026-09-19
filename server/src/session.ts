@@ -89,29 +89,33 @@ const PACING_CHECK_MS = 10;
  */
 const PACING_MAX_OUTSTANDING = 1000;
 /**
- * Whether real-time pacing is available at all on this platform.
+ * Where the testbench's pacing grants (above) come from on this platform.
  *
- * The mechanism above is FIFO semantics end to end, and Windows has
- * neither half of it: `mkfifo` is not a command there (an immediate
- * `ENOENT` — the first thing that fails), and Node's `fs` does not
- * support `O_NONBLOCK`. A regular file cannot stand in, because the
+ * `'fifo'` (POSIX) is § 5.13's original mechanism, untouched: a FIFO made
+ * with `mkfifo`, named to the testbench by its `pacing_file` generic.
+ *
+ * Windows cannot do that. `mkfifo` is not a command there (an immediate
+ * `ENOENT` — the first thing that fails), and Node's `fs` does not support
+ * `O_NONBLOCK`. A regular file cannot stand in either, because the
  * testbench's backpressure is `readline` *blocking* at end-of-file, and a
  * regular file's `readline` returns instead of blocking — pacing would
- * silently stop pacing rather than fail loudly.
+ * silently stop pacing rather than fail loudly. (v1 shipped exactly that
+ * way — unpaced — and a `CLOCK_500Hz` design blinked faster than the real
+ * board.)
  *
- * So Windows runs unpaced, via a path the generated testbench already
- * supports: `tbTemplate.ts` guards the whole mechanism on
- * `pacing_file'length > 0`, so passing `''` disables it in the VHDL with
- * no template change. The cost is real and is documented for students in
- * the README — unpaced, simulated time runs as fast as GHDL manages, so a
- * `CLOCK_500Hz` design blinks faster here than on the board. POSIX is
- * untouched and keeps § 5.9's guarantee that simulator timing predicts
- * board timing.
+ * `'stdin'` (Windows) keeps the property that matters — a read that blocks
+ * until the Node side has written one line — but takes it from the one
+ * pipe every child process already has: the testbench is generated to
+ * `readline(std.textio.input, ...)`, and this side writes the grants into
+ * the child's stdin. No named pipe, no `O_NONBLOCK`, no file the two sides
+ * must agree on; and nothing else in the design ever reads stdin. The
+ * generic `pacing_file` stays empty in this mode.
  *
- * Windows named pipes (`\\.\pipe\…` via Node's `net`) are the upgrade
- * path if GHDL's `file_open` turns out to open them with blocking reads.
+ * Everything POSIX-side is guarded on `PACING === 'fifo'`, so it cannot be
+ * reached on Windows — and the `'stdin'` path is never reached on POSIX,
+ * where the generated VHDL is also unchanged (`TestbenchOptions`).
  */
-const PACED = process.platform !== 'win32';
+const PACING: 'fifo' | 'stdin' = process.platform === 'win32' ? 'stdin' : 'fifo';
 /**
  * Backing store for the one-millisecond synchronous sleep in
  * `renameOverOpenFile`. `Atomics.wait` needs a `SharedArrayBuffer`-backed
@@ -259,7 +263,7 @@ export class Session {
       return;
     }
 
-    const tbSource = generateTestbench(top.name, top.ports);
+    const tbSource = generateTestbench(top.name, top.ports, { pacingFromStdin: PACING === 'stdin' });
     writeFileSync(join(this.dir, `${TB_ENTITY}.vhdl`), tbSource);
 
     let r = await runCmd(getGhdlExe(), ['-a', '--std=08', `${TB_ENTITY}.vhdl`], this.dir, BUILD_TIMEOUT_MS);
@@ -316,7 +320,7 @@ export class Session {
     // this open doesn't wait for a reader and GHDL's own read-mode open
     // doesn't wait for a writer; non-blocking so a full FIFO could never
     // stall this event loop (PACING_MAX_OUTSTANDING keeps it from filling).
-    if (PACED) {
+    if (PACING === 'fifo') {
       execFileSync('mkfifo', [this.pacingPath()]);
       this.pacingFd = openSync(this.pacingPath(), fsConstants.O_RDWR | fsConstants.O_NONBLOCK);
     }
@@ -328,11 +332,13 @@ export class Session {
       this.pollIntervalNs,
       this.minDwellNs,
       this.heartbeatPath(),
-      // Empty disables the testbench's pacing block entirely (see PACED).
-      PACED ? this.pacingPath() : '',
+      // Empty: no FIFO. With stdin pacing the testbench reads its grants
+      // from stdin instead (see PACING) and never opens `pacing_file`.
+      PACING === 'fifo' ? this.pacingPath() : '',
     );
     this.run = handle;
-    if (PACED) this.startPacing(handle);
+    if (PACING === 'fifo') this.startPacing(handle);
+    else this.startStdinPacing(handle);
     // Identity-checked against `handle`, not just `this.destroyed`/
     // `this.state`: `kill()` (Stop/Reset/a new RUN) sets `this.run = null`
     // synchronously, but the killed child's own `close` event is
@@ -426,6 +432,44 @@ export class Session {
         } catch {
           // EAGAIN: FIFO full — retry next tick.
         }
+      }
+      this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
+    };
+    tick();
+  }
+
+  /**
+   * `startPacing`, for `PACING === 'stdin'` (Windows): the same schedule —
+   * one grant per `PACING_STEP_MS` of real time since the run started,
+   * never more than `PACING_MAX_OUTSTANDING` ahead of what the testbench
+   * has consumed — delivered through the child's stdin instead of a FIFO.
+   * Kept separate rather than folded into `startPacing` so the POSIX path
+   * above stays exactly as it was verified.
+   *
+   * There is no EAGAIN to handle: the write is a Node stream write, queued
+   * in memory if the OS pipe is full (bounded by the outstanding cap, at
+   * one byte per grant), so it can neither block the event loop nor fail
+   * for want of room.
+   */
+  private startStdinPacing(handle: RunHandle): void {
+    this.runStartTime = Date.now();
+    let granted = 0;
+    const tick = () => {
+      if (this.run !== handle) return;
+      let consumed = 0;
+      try {
+        const n = parseInt(readFileSync(this.heartbeatPath(), 'utf8').trim(), 10);
+        if (!Number.isNaN(n)) consumed = Math.floor(n / PACING_STEP_MS);
+      } catch {
+        // No heartbeat yet, or GHDL has the file open mid-write (Windows
+        // refuses a read of a file held open for writing more readily than
+        // POSIX does) — either way, treat it as nothing consumed yet.
+      }
+      const due = Math.floor((Date.now() - this.runStartTime) / PACING_STEP_MS);
+      const target = Math.min(due, consumed + PACING_MAX_OUTSTANDING);
+      if (target > granted) {
+        handle.grantPacing(target - granted);
+        granted = target;
       }
       this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
     };

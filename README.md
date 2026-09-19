@@ -107,18 +107,14 @@ The most common failure is port `9010` already being in use — usually a
 second copy of the app, or a `start.sh` left running — and the app says
 so in a dialog rather than failing silently.
 
-> [!IMPORTANT]
-> **Simulations run unpaced on Windows.** On Linux the simulator holds
-> simulated time to real time, so a design's timing in the simulator
-> predicts its timing on the real board. That mechanism needs a POSIX
-> FIFO, which Windows has no equivalent of, so the Windows build lets
-> GHDL run as fast as it can instead.
->
-> A `CLOCK_500Hz` design therefore runs noticeably faster here than on a
-> real DE1-SoC — `blinkTest.vhdl`, written to blink at 2 Hz, is measured
-> at roughly twice that. **Logic and behaviour are unaffected; only the
-> speed you observe it at.** If you are checking a design's real timing,
-> use the Linux setup or the board.
+> [!NOTE]
+> **Simulations are paced to real time on Windows too.** As on Linux, the
+> simulator holds simulated time to real time, so a design's timing in
+> the simulator predicts its timing on the real board — `blinkTest.vhdl`
+> blinks at 2 Hz here, as it does on a DE1-SoC. Windows has no POSIX FIFO,
+> so the Windows build delivers the pacing signal through the simulation
+> process's standard input instead; see
+> [`winInstaller/README.md`](winInstaller/README.md).
 
 ### Building the installer yourself
 
@@ -338,9 +334,9 @@ de1socSim/
   real hardware. This runs genuinely in real time, not fast-forwarded —
   a design's timing in the simulator predicts its timing on the actual
   board (§ 5.9), so a divider meant to blink an LED once a minute really
-  takes about a minute here too. **Except on Windows**, where the pacing
-  mechanism's POSIX FIFO has no equivalent and simulations run unpaced —
-  see [Windows installer](#windows-installer).
+  takes about a minute here too. On Windows the same pacing is delivered
+  through the simulation's standard input rather than a FIFO — see
+  [Windows installer](#windows-installer).
 - Full details in
   [`src/components/workbench/README.md`](src/components/workbench/README.md#known-limitations).
 

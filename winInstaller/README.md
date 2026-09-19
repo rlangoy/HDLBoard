@@ -57,14 +57,19 @@ is reported in a dialog rather than worked around.
 sits outside `app.asar`, so a backend shipped there cannot resolve `ws`
 from inside the archive. Bundling removes the lookup.
 
-**Simulations run unpaced on Windows.** Real-time pacing needs a POSIX
-FIFO (`mkfifo`, `O_NONBLOCK`), neither of which Windows has, and a
-regular file cannot substitute because the testbench's backpressure is
-`readline` *blocking* at EOF. The generated testbench already disables
-the whole mechanism when its `pacing_file` generic is empty, so Windows
-takes that path. POSIX behaviour is untouched. Timing therefore does not
-predict board timing on Windows — documented for students in the root
-README.
+**Simulations are paced to real time on Windows through stdin.** Real-time
+pacing (the testbench blocks after every 20 ms of simulated time until the
+backend grants the next step) was built on a POSIX FIFO (`mkfifo`,
+`O_NONBLOCK`), which Windows does not have, and a regular file cannot
+substitute because the testbench's backpressure is `readline` *blocking*
+at EOF. Windows therefore takes the grants from the one pipe every child
+process already has: the testbench is generated with
+`readline(std.textio.input, …)` (`generateTestbench(…, { pacingFromStdin:
+true })`) and `session.ts` writes one line per 20 ms of real time into
+GHDL's stdin (`PACING === 'stdin'`). The POSIX path — the FIFO, and the
+generated VHDL — is unchanged and is selected by `process.platform`.
+Measured on the packaged app with the bundled GHDL 5.0.1: `blinkTest.vhdl`
+toggles its LEDs every 250 ms (2 Hz) over a 32 s run, matching the board.
 
 ## Layout
 
@@ -150,11 +155,8 @@ electron-builder picks them up with no config change.
 
 ## Known gaps
 
-- **Unpaced timing on Windows** (above). Windows named pipes via Node's
-  `net` module are the obvious upgrade if GHDL's VHDL `file_open` turns
-  out to open them with blocking reads — untested.
-- **The POSIX pacing path has not been re-verified on Linux** since these
-  changes. It is guarded by `process.platform !== 'win32'` and is
-  unchanged by inspection, but the plan calls for confirming a slow
-  divider still takes real time by watching a clock. Do that before
-  trusting a release.
+- **The POSIX pacing path was re-checked only at session level.** Under
+  Linux (GHDL 4.1 mcode) `blinkTest.vhdl` still toggles every ~250 ms
+  through the FIFO, and the VHDL generated for POSIX is byte-identical to
+  before the stdin change. A full `./start.sh` + browser run on a Linux
+  machine has not been repeated — do that before trusting a release.
