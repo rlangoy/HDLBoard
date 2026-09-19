@@ -1117,6 +1117,38 @@ well-formed `output.txt`, and § 5.13's counter (40 of 40) and `blinkTest`
 ones that keep changing. A corrupt output line that gets rewritten
 immediately can hide the bug.
 
+### 5.15 Windows: pacing through stdin
+
+§ 5.13's pacing needs the testbench to block in `readline` until the Node
+side writes a grant, and it got that from a FIFO. Windows has no
+`mkfifo`, Node's `fs` has no `O_NONBLOCK` there, and a regular file cannot
+stand in (`readline` at end-of-file returns instead of blocking, so
+pacing would silently stop pacing). The first Windows release therefore
+ran **unpaced**, and a `CLOCK_500Hz` design such as `blinkTest` blinked
+several times too fast.
+
+**Fix.** Keep the one property that matters — a read that blocks until
+the backend has written a line — and take it from a pipe every child
+process already has. On `win32` the generated testbench reads its grants
+with `readline(std.textio.input, l)`, and `session.ts` writes one line per
+`PACING_STEP_MS` of real time into GHDL's stdin
+(`RunHandle.grantPacing()`), on the same schedule and with the same
+outstanding-grant cap as the FIFO version. Windows named pipes were the
+alternative; stdin needs no extra file, no `file_open` of a pipe path and
+no second side to agree on a name, and nothing in the design reads stdin.
+
+**Nothing changes on POSIX.** `PACING` is `'fifo'` there, the
+FIFO code is untouched, and `generateTestbench()`'s stdin behaviour sits
+behind an option that defaults to off — the POSIX-generated VHDL
+(including Appendix A) is byte-for-byte what it was.
+
+**Verified.** Linux, GHDL 4.1 mcode, `blinkTest` through `Session`: FIFO
+250.0 ms mean toggle interval, stdin mode 249.7 ms, and the unpaced
+control 55 ms. Windows, the packaged Electron app with the bundled GHDL
+5.0.1, over the real WebSocket: 249.9 ms mean across a 32 s continuous run
+(250.1 ms after the 22 s mark, so the outstanding-grant cap never stalls
+it), a `RESET` mid-run restarts cleanly, and no gap exceeded 285 ms.
+
 ---
 
 ## 6. Wire protocol

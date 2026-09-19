@@ -119,9 +119,7 @@ function buildMenu(logPath) {
                 'Built for PB1180 Programmerbare logiske kretser at USN.\n\n' +
                 'This program is free software under the GNU General Public\n' +
                 'License v2.0. It bundles GHDL (GPL-2.0) — see the ghdl\\COPYING\n' +
-                'file in the installation directory.\n\n' +
-                'Note: simulations run unpaced on Windows, so timing does not\n' +
-                'match the real board. See the README for details.',
+                'file in the installation directory.',
             });
           },
         },

@@ -22,6 +22,13 @@ Repo root: `de1soc_Simulator/`.
 > holds open is `EPERM` on Windows, which hits `writeStimQueue` constantly
 > under load (1584 times in a 15 s stress run). See `session.ts`.
 >
+> **WO-2 (pacing off) is superseded.** Windows now paces to real time
+> through the child's stdin instead of running unpaced — see
+> `ghdl_implementation_plan.md` §5.15 and the note at the top of
+> `implementation_plan_win_installer.md`. Do not re-apply WO-2's
+> `paced = process.platform !== 'win32'` guard; `session.ts` now selects
+> `PACING = 'fifo' | 'stdin'` by platform instead.
+>
 > WO-12 is the only work order not fully closed — the Linux paced-timing
 > check and the clean-VM pass still need their own machines.
 

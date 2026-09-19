@@ -62,15 +62,3 @@ Electron
   installed in the LICENSES.chromium.html and LICENSE.electron.txt files
   in the installation directory.
 
-
--------------------------------------------------------------------------
-A NOTE ON SIMULATION TIMING ON WINDOWS
--------------------------------------------------------------------------
-
-On Windows this version runs simulations UNPACED: the simulation advances
-as fast as GHDL can compute it, rather than being held to real time.
-
-A design driven by CLOCK_500Hz will therefore appear to run faster here
-than it does on a real DE1-SoC board, or than it does in the Linux version
-of this tool. Logic and behaviour are unaffected -- only the speed at
-which you see it happen. See the README for details.

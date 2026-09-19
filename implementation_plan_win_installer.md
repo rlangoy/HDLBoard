@@ -5,6 +5,15 @@ written, for its rationale; §0's findings F1–F5 are what the work was
 checked against, and all five held up. The development order in §2 is
 what was followed.
 
+> **Superseded after v1: F1's "Windows runs unpaced" decision no longer
+> holds.** Windows is now paced to real time like POSIX, through the
+> simulation process's **stdin** rather than a FIFO or a Windows named
+> pipe (§5.15 of `ghdl_implementation_plan.md`). Read every "unpaced on
+> Windows" statement below — F1's resolution, the pacing rows in the
+> decisions table and phase gates, the README caveat — as describing
+> v1 only. Measured on the packaged app with the bundled GHDL 5.0.1,
+> `blinkTest.vhdl` toggles every 249.9 ms over a 32 s run.
+
 Three things the plan did not anticipate, recorded here so this document
 does not mislead whoever reads it next:
 
