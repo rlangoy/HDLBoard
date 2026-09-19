@@ -73,7 +73,7 @@ winInstaller/
 ├─ README.md                 this file
 ├─ build.ps1                 the whole build flow
 ├─ fetch-ghdl.ps1            pinned, checksum-verified GHDL download
-├─ make-icon.cjs             renders icon.ico from the project logo (run by Electron)
+├─ make-assets.cjs           renders icon.ico + installerSidebar.bmp (run by Electron)
 ├─ electron/
 │  ├─ package.json           electron + electron-builder + esbuild
 │  ├─ electron-builder.yml   NSIS target, extraResources, per-user install
@@ -81,6 +81,8 @@ winInstaller/
 │  ├─ build-backend.mjs      the esbuild step
 │  ├─ build/
 │  │  ├─ icon.ico            generated; safe to delete, build.ps1 remakes it
+│  │  ├─ installerSidebar.bmp  generated; wizard welcome/finish panel
+│  │  ├─ installer.nsh       custom NSIS hook — removes $INSTDIR on uninstall
 │  │  └─ license.txt         Workbench + GHDL notices, shown by the installer
 │  └─ resources/             gitignored — assembled by build.ps1, never hand-edited
 ├─ vendor/ghdl/              gitignored — populated by fetch-ghdl.ps1

@@ -51,6 +51,12 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   license: build/license.txt
+  # Welcome/finish panel, generated from the project logo by
+  # make-assets.cjs. uninstallerSidebar defaults to this same file.
+  installerSidebar: build/installerSidebar.bmp
+  # customUnInstall — removes the install directory itself, which
+  # electron-builder's uninstaller otherwise leaves behind empty.
+  include: build/installer.nsh
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: DE1-SoC Workbench
