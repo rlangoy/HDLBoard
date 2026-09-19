@@ -1,10 +1,8 @@
 # DE1-SoC VHDL Workbench
 
-A browser-based VHDL IDE and simulator for the DE1-SoC board — a file tree,
-a tabbed syntax-highlighted editor, Start/Stop simulation controls, a real
-GHDL console, and a pixel-accurate, fully interactive rendering of the
-board's switches, LEDs, pushbuttons and 7-segment displays, driven by an
-actual GHDL simulation of whatever VHDL is open in the editor.
+A VHDL IDE and simulator for the DE1-SoC board, using GHDL to simulate VHDL code and providing an interactive virtual representation of the board.
+
+The application can run as a standalone Windows program or on a server and be accessed through a web browser.
 
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white&labelColor=20232A)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white&labelColor=20232A)
