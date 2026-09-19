@@ -40,6 +40,7 @@ only the Workbench talks to GHDL.
 - [Components](#components)
   - [`<Workbench>`](#workbench-1)
   - [`<Header>`](#header)
+  - [`<AboutDialog>`, `<SettingsDialog>` and `<HelpDialog>`](#aboutdialog-settingsdialog-and-helpdialog)
   - [`<FileExplorer>`](#fileexplorer)
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
@@ -47,6 +48,8 @@ only the Workbench talks to GHDL.
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
   - [`files.ts`](#filests)
+  - [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)
+  - [`helpResources.ts`](#helpresourcests)
   - [`icons.tsx`](#iconstsx)
   - [`ghdlClient.ts`](#ghdlclientts)
 - [How the simulation actually runs](#how-the-simulation-actually-runs)
@@ -117,8 +120,46 @@ nothing to document as an API. Read the source for the handlers
 
 ### `<Header>`
 
-Static chrome: logo, title, tagline, and the Settings/Help buttons (neither
-opens anything — there is nothing behind them yet). No props.
+Chrome: logo, title, tagline, and the Settings, Help and About buttons. It
+owns no state; `<Workbench>` passes `onSettings`, `onHelp` and `onAbout` (all
+optional), which open the three dialogs below.
+
+### `<AboutDialog>`, `<SettingsDialog>` and `<HelpDialog>`
+
+Three modal dialogs, all `{ open, onClose }` and all built on the shared
+`<Dialog>` shell (see [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)).
+`<Workbench>` keeps a single `dialog: 'about' | 'settings' | 'help' | null`
+state, so at most one is open.
+
+- **About** — the project's public face: the GitHub repository address
+  (`REPO_URL`), the copyright notice (`Copyright © 2026 Rune Langøy`), the
+  licence (free software, GPL-2.0), the version (injected at build time as
+  `__APP_VERSION__` from `package.json` by `vite.config.ts`), credit to GHDL,
+  the statement that it was developed at USN – University of South-Eastern
+  Norway for use in its entry course on VHDL programming, and the
+  **"ABSOLUTELY NO WARRANTY — use it at your own risk"** notice. Opened from
+  the header's About button, or from outside React by the desktop app's native
+  Help → About menu item (`winInstaller/electron/main.js` dispatches
+  `ABOUT_EVENT` on `window`, which `<Workbench>` listens for).
+- **Settings** — there are no settings yet, and the dialog says so. Instead it
+  invites users to file suggestions and bug reports as GitHub issues: "Report
+  a bug" and "Suggest an improvement" open `ISSUES_URL/new` with a prefilled
+  title, and "Browse existing issues" opens the issue list. The links open in
+  a new tab in a browser and in the user's default browser in the desktop app
+  (Electron's `setWindowOpenHandler` / `will-navigate` hand `https:` URLs to
+  `shell.openExternal`).
+- **Help** — a wide dialog in two parts. First, *the board's signal names*:
+  a table of the `DE1_SoC` entity's ports (`CLOCK_50`, `CLOCK_500Hz`, `SW`,
+  `KEY_N`, `LEDR`, `HEXn_N`) with direction, the panel each is shown as and
+  what it means, then a plain-language guide to the naming (`_N` = active low,
+  the `n` in `HEXn_N`, `[3:0]` bit ranges), a small figure of the board's
+  segment numbering with a worked `"1111001"` example, and a note on what to
+  change before taking a design to the real board (drop `_N`, remove
+  `CLOCK_500Hz`). Second, *Learn VHDL*: one cheat sheet, up to five guides and
+  courses ranked best first (numbered), and two references (the DE1-SoC manual
+  and GHDL). The port table and segment figure are in `HelpDialog.tsx` and
+  must be kept in step with `DE1_SoC.vhdl` (`files.ts`) and
+  `SevenSegment/segments.ts`; the links are data in `helpResources.ts`.
 
 ### `<FileExplorer>`
 
@@ -328,16 +369,16 @@ extend the highlighter.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the four-file starter project shown in the
-tree (`DE1_SoC.vhdl`, `buttons.vhd`, `blinkTest.vhdl`, `keyCouter2Led.vhdl`,
-all under `vhdl/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
+`STARTER_FILES: VhdlFile[]` — the three-file starter project shown in the
+tree (`DE1_SoC.vhdl`, `blinkTest.vhdl`, `keyCouter2Led.vhdl`, all under
+`vhdl/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
 are both standalone examples (their own `blinkTest`/`counter8` entities,
 not wired into `DE1_SoC.vhd`) — mark either top via its Files-panel dot to
 run it on its own. `blinkTest.vhdl` demonstrates `CLOCK_500Hz`
 (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a `CLOCK_50`/`KEY_N`-driven
 up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets) displayed on `LEDR`.
-`DEFAULT_OPEN_TABS` is the two tabs open on first load (`DE1_SoC.vhdl` and
-`buttons.vhd`). `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhdl"`) is only the
+`DEFAULT_OPEN_TABS` is the one tab open on first load (`DE1_SoC.vhdl`).
+`TOP_LEVEL_ENTITY` (`"DE1_SoC.vhdl"`) is only the
 *initial* top file — `Workbench`'s `topFileId` starts pointed at whichever
 starter file has this name, then moves independently once a user clicks
 another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhdl`
@@ -350,6 +391,35 @@ exception to that otherwise-literal contract; see § 3.2's note. Verified
 against the real GHDL toolchain, not just plausible-looking:
 `ghdl -a`/`-e`/`-r --std=08` were run by hand against every `vhdl/` file
 and the `work/` testbench before this was called done.
+
+### `Dialog.tsx` and `project.ts`
+
+`Dialog.tsx` is the modal shell all three dialogs share (`size="wide"` gives the
+Help dialog its 760 px width instead of 560 px): a blue header band (icon
+badge, title, subtitle, coloured from the header's `--wb-header-bg`), a
+scrolling body, and a Close button. Escape or a click on the backdrop closes
+it; focus starts on Close, Tab wraps inside the dialog, and focus returns to
+the element that opened it. It carries `role="dialog"` / `aria-modal` and is
+labelled by its title (and described by `describedBy`, when given). Its styles
+live in `Dialog.css`, along with the shared callout and link-button styles;
+each dialog adds its own small stylesheet.
+
+`project.ts` holds the constants the dialogs and the desktop menu need to
+agree on: `REPO_URL` (`https://github.com/rlangoy/de1soc_Simulator`),
+`ISSUES_URL`, `GHDL_URL`, and `ABOUT_EVENT` (`'de1soc:show-about'` — keep it in
+step with `winInstaller/electron/main.js`). Change the repository address in
+this one place.
+
+### `helpResources.ts`
+
+The Help dialog's links, as typed data: `CHEAT_SHEET` (exactly one),
+`GUIDES` (at most five, **ordered best first** — the dialog numbers them in
+array order) and `REFERENCES` (the board manual and GHDL). Each entry has a
+title, URL, source, kind and a one-sentence description written for this
+dialog. All URLs were opened and checked when added; to change the list, edit
+the arrays and keep the cheat sheet single and the guides to five. Use `https:`
+links only — the desktop app opens those in the user's browser and ignores
+other schemes.
 
 ### `icons.tsx`
 
@@ -606,8 +676,10 @@ stacking fallback.
   a design's own `CLOCK_500Hz`-based timing genuinely predicts what it
   would look like on the board, not an accident of how many events GHDL
   happened to process per real second.
-- **Settings and Help do nothing.** They're chrome from the reference render
-  with no feature behind them yet.
+- **Settings has no settings.** The button opens a dialog that says so and
+  points users at GitHub issues for suggestions and bug reports; real options
+  (theme, font size, …) can replace it later. The desktop app's About menu
+  path (`ABOUT_EVENT`) is only exercised in a real Electron run.
 - **Not rendered-checked against `WorkBench.png`.** Build and typecheck are
   clean, and the layout math above was checked by hand, but no automated
   browser was available in the environment this was built in (no

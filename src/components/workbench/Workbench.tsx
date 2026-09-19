@@ -19,6 +19,10 @@ import {
   type SegmentVector,
 } from '../SevenSegment';
 import { Header } from './Header';
+import { AboutDialog } from './AboutDialog';
+import { SettingsDialog } from './SettingsDialog';
+import { HelpDialog } from './HelpDialog';
+import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { CodeEditor } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
@@ -88,6 +92,16 @@ export function Workbench() {
   const [topFileId, setTopFileId] = useState<string | null>(
     () => STARTER_FILES.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
   );
+
+  // The one open dialog, if any. About can also be opened from outside
+  // React — the desktop app's native Help > About menu item fires
+  // ABOUT_EVENT on window — so it shows the same dialog as the header.
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | null>(null);
+  useEffect(() => {
+    const openAbout = () => setDialog('about');
+    window.addEventListener(ABOUT_EVENT, openAbout);
+    return () => window.removeEventListener(ABOUT_EVENT, openAbout);
+  }, []);
 
   const [status, setStatus] = useState<SimStatus>('stopped');
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
@@ -490,7 +504,14 @@ export function Workbench() {
 
   return (
     <div className="wb">
-      <Header />
+      <Header
+        onSettings={() => setDialog('settings')}
+        onHelp={() => setDialog('help')}
+        onAbout={() => setDialog('about')}
+      />
+      <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
+      <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
+      <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
 
       <div className="wb-body" ref={bodyRef}>
         <div className="wb-sidebar" style={{ width: sidebarWidth }}>

@@ -109,18 +109,15 @@ function buildMenu(logPath) {
         },
         {
           label: 'About',
+          // The dialog is the renderer's own (AboutDialog.tsx) — the same
+          // one its header button opens — so the menu just asks it to
+          // show. The event name is ABOUT_EVENT in src/.../project.ts.
           click: () => {
-            dialog.showMessageBox({
-              type: 'info',
-              title: 'DE1-SoC VHDL Workbench',
-              message: `DE1-SoC VHDL Workbench ${app.getVersion()}`,
-              detail:
-                'A VHDL IDE and DE1-SoC board simulator backed by real GHDL.\n\n' +
-                'Built for PB1180 Programmerbare logiske kretser at USN.\n\n' +
-                'This program is free software under the GNU General Public\n' +
-                'License v2.0. It bundles GHDL (GPL-2.0) — see the ghdl\\COPYING\n' +
-                'file in the installation directory.',
-            });
+            if (mainWindow) {
+              mainWindow.webContents
+                .executeJavaScript("window.dispatchEvent(new CustomEvent('de1soc:show-about'))")
+                .catch(() => {});
+            }
           },
         },
       ],
@@ -196,6 +193,23 @@ app.whenReady().then(async () => {
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // Links in the app (the About and Settings dialogs point at GitHub)
+  // belong in the user's own browser. Left alone, Electron would open them
+  // in a second app window — or navigate this one away from the Workbench.
+  const openInBrowser = (url) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+  };
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openInBrowser(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`http://127.0.0.1:${PORT}/`)) {
+      event.preventDefault();
+      openInBrowser(url);
+    }
   });
 
   await mainWindow.loadURL(`http://127.0.0.1:${PORT}/`);

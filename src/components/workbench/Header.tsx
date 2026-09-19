@@ -4,12 +4,22 @@
 import { LOGO_DATA_URI } from './logo';
 import './Header.css';
 
+export interface HeaderProps {
+  /** Opens the Settings dialog. */
+  onSettings?: () => void;
+  /** Opens the Help dialog. */
+  onHelp?: () => void;
+  /** Opens the About dialog. */
+  onAbout?: () => void;
+}
+
 /**
  * The workbench's top bar — product name, the tool badges it composes
- * (GHDL, the web IDE shell, the DE1-SoC board style), and the two
- * always-present chrome actions.
+ * (GHDL, the web IDE shell, the DE1-SoC board style), and the
+ * always-present chrome actions (Settings, Help, About), each of which
+ * opens a dialog owned by `<Workbench>`.
  */
-export function Header() {
+export function Header({ onSettings, onHelp, onAbout }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
@@ -21,15 +31,21 @@ export function Header() {
         </span>
       </div>
       <div className="wb-header__actions">
-        <button type="button" className="wb-header__action">
+        <button type="button" className="wb-header__action" onClick={onSettings}>
           <span className="wb-icon wb-icon--gear" aria-hidden="true" />
           Settings
         </button>
-        <button type="button" className="wb-header__action">
+        <button type="button" className="wb-header__action" onClick={onHelp}>
           <span className="wb-icon wb-icon--help" aria-hidden="true">
             ?
           </span>
           Help
+        </button>
+        <button type="button" className="wb-header__action" onClick={onAbout}>
+          <span className="wb-icon wb-icon--help" aria-hidden="true">
+            i
+          </span>
+          About
         </button>
       </div>
     </header>

@@ -1,0 +1,211 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* ------------------------------------------------------------------ *
+ * Shared modal shell for the About, Settings and Help dialogs. Rendered
+ * inside .wb, so it inherits the --wb-* tokens from Workbench.css; the
+ * header band reuses the top bar's blue so the two read as one product.
+ * ------------------------------------------------------------------ */
+
+.wb-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  animation: wb-dialog-fade 140ms ease-out;
+}
+
+.wb-dialog {
+  width: min(560px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  color: var(--wb-text);
+  border-radius: 14px;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.35),
+    0 0 0 1px rgba(15, 23, 42, 0.08);
+  animation: wb-dialog-rise 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.wb-dialog--wide {
+  width: min(760px, 100%);
+}
+
+/* ------------------------------------------------------------- hero */
+
+.wb-dialog__hero {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 28px;
+  background: linear-gradient(180deg, var(--wb-header-bg) 0%, var(--wb-header-bg-dark) 100%);
+  color: #ffffff;
+}
+
+.wb-dialog__badge {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  padding: 8px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 14px;
+  color: var(--wb-header-bg-dark);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+
+.wb-dialog__badge > img,
+.wb-dialog__badge > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wb-dialog__heading {
+  min-width: 0;
+}
+
+.wb-dialog__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.wb-dialog__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------- body */
+
+.wb-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 28px 8px;
+}
+
+.wb-dialog__lead {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.wb-dialog a {
+  color: var(--wb-accent-dark);
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+.wb-dialog a:hover {
+  text-decoration: underline;
+}
+
+.wb-dialog a:focus-visible,
+.wb-dialog__close:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+/* A callout: the one thing in a dialog a reader must not miss. Amber for
+   a warning (About's no-warranty notice), blue for a hint. */
+.wb-dialog__callout {
+  padding: 14px 16px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  color: #78350f;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.wb-dialog__callout p {
+  margin: 0;
+}
+
+.wb-dialog__callout p + p {
+  margin-top: 6px;
+}
+
+.wb-dialog__callout-title {
+  margin-bottom: 6px !important;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b45309;
+}
+
+.wb-dialog__callout--info {
+  background: var(--wb-accent-soft);
+  border-color: #bfd5fb;
+  border-left-color: var(--wb-accent);
+  color: #1e3a8a;
+}
+
+.wb-dialog__callout--info .wb-dialog__callout-title {
+  color: var(--wb-accent-dark);
+}
+
+/* ------------------------------------------------------------ footer */
+
+.wb-dialog__footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 28px 20px;
+}
+
+.wb-dialog__close {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 22px;
+  background: var(--wb-accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-dialog__close:hover {
+  background: var(--wb-accent-dark);
+}
+
+@keyframes wb-dialog-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes wb-dialog-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-dialog__backdrop,
+  .wb-dialog {
+    animation: none;
+  }
+}

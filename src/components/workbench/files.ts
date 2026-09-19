@@ -54,29 +54,6 @@ begin
 end architecture;
 `;
 
-const BUTTONS_VHD = `library ieee;
-use ieee.std_logic_1164.all;
-
-entity buttons is
-    port (
-        clk  : in  std_logic;
-        key  : in  std_logic_vector(3 downto 0);
-        held : out std_logic_vector(3 downto 0)
-    );
-end entity;
-
-architecture rtl of buttons is
-begin
-    -- KEY is active low: '0' means held
-    process(clk) is
-    begin
-        if rising_edge(clk) then
-            held <= not key;
-        end if;
-    end process;
-end architecture;
-`;
-
 const BLINK_TEST_VHD = `library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -167,12 +144,11 @@ end architecture rtl;
 
 export const STARTER_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
-  { id: 'buttons', name: 'buttons.vhd', folder: 'vhdl', content: BUTTONS_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
 ];
 
-export const DEFAULT_OPEN_TABS = ['de1_soc', 'buttons'];
+export const DEFAULT_OPEN_TABS = ['de1_soc'];
 
 /** The top-level entity a simulation run elaborates — shown in the Simulation card. */
 export const TOP_LEVEL_ENTITY = 'DE1_SoC.vhdl';

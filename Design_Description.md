@@ -188,13 +188,19 @@ UI/
          ├─ index.ts
          ├─ Workbench.tsx       the main page; owns all its state
          ├─ Workbench.css       grid shell + the ordinary (non-hardware) tokens
-         ├─ Header.tsx / .css
+         ├─ Header.tsx / .css   logo, title, Settings + Help + About buttons
+         ├─ Dialog.tsx / .css   the modal shell shared by the three dialogs
+         ├─ AboutDialog.tsx / .css     repo, copyright, licence, no-warranty
+         ├─ SettingsDialog.tsx / .css  "no settings yet — file an issue"
+         ├─ HelpDialog.tsx / .css      board signal names + VHDL learning links
+         ├─ helpResources.ts    the Help links: 1 cheat sheet, 5 ranked guides
+         ├─ project.ts          REPO_URL, ISSUES_URL, ABOUT_EVENT
          ├─ FileExplorer.tsx / .css   the Files panel + tree
          ├─ CodeEditor.tsx / .css    tabs + a highlighted textarea overlay
          ├─ SimulationCard.tsx / .css  Start/Stop + status, in the sidebar
          ├─ ConsoleOutput.tsx / .css the GHDL Output/Status log
          ├─ vhdlHighlight.ts    line-based VHDL tokenizer for the editor
-         ├─ files.ts            the starter project shown in the tree
+         ├─ files.ts            the three-file starter project shown in the tree
          ├─ icons.tsx           edit/delete — real SVG, the one exception
          │                       to this folder's CSS-only icons
          └─ ghdlClient.ts       the simulator's WebSocket client — planned,

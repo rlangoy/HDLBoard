@@ -1,0 +1,92 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The Settings dialog's own pieces; the shell is in Dialog.css. */
+
+.wb-settings__empty {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-settings__empty strong {
+  color: var(--wb-text);
+}
+
+.wb-settings__heading {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-settings__help {
+  margin-bottom: 18px;
+}
+
+.wb-settings__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* `.wb-dialog a` (Dialog.css) makes every link blue; the buttons set
+   their own colours, so they need the extra class to win. */
+.wb-dialog a.wb-settings__action {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--wb-text);
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.wb-dialog a.wb-settings__action:hover {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  text-decoration: none;
+}
+
+.wb-dialog a.wb-settings__action--primary {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-dialog a.wb-settings__action--primary:hover {
+  border-color: var(--wb-accent-dark);
+  background: var(--wb-accent-dark);
+}
+
+.wb-settings__action-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wb-settings__action-text {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--wb-text-muted);
+}
+
+.wb-dialog a.wb-settings__action--primary .wb-settings__action-text {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.wb-settings__browse {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+@media (max-width: 520px) {
+  .wb-settings__actions {
+    grid-template-columns: 1fr;
+  }
+}

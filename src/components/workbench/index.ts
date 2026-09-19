@@ -3,6 +3,14 @@
 
 export { Workbench } from './Workbench';
 export { Header } from './Header';
+export type { HeaderProps } from './Header';
+export { AboutDialog } from './AboutDialog';
+export type { AboutDialogProps } from './AboutDialog';
+export { SettingsDialog } from './SettingsDialog';
+export type { SettingsDialogProps } from './SettingsDialog';
+export { HelpDialog } from './HelpDialog';
+export type { HelpDialogProps } from './HelpDialog';
+export { REPO_URL, ISSUES_URL } from './project';
 export { FileExplorer } from './FileExplorer';
 export type { FileExplorerProps } from './FileExplorer';
 export { CodeEditor } from './CodeEditor';
