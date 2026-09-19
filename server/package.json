@@ -1,7 +1,7 @@
 {
   "name": "de1soc-sim-server",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "GPL-2.0-only",
   "description": "GHDL backend for the DE1-SoC Workbench — see ../ghdl_implementation_plan.md",

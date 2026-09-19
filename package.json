@@ -1,7 +1,7 @@
 {
   "name": "de1soc-sim",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "GPL-2.0-only",
   "description": "DE1-SoC VHDL Workbench — a browser IDE shell around DE-board style UI components (Switches, LEDs, 7-segment, Pushbuttons)",
