@@ -90,15 +90,17 @@ if (-not (Test-Path (Join-Path $ElectronDir "node_modules"))) {
   }
 }
 
-# --- 4. Icon -------------------------------------------------------------
-Step "Application icon"
-$iconPath = Join-Path $ElectronDir "build\icon.ico"
-if (-not (Test-Path $iconPath)) {
-  Write-Host "  rendering icon.ico from the project logo"
-  & (Join-Path $ElectronDir "node_modules\.bin\electron.cmd") (Join-Path $WinDir "make-icon.cjs")
-  if (-not (Test-Path $iconPath)) { throw "icon generation failed" }
+# --- 4. Branding assets --------------------------------------------------
+Step "Branding assets"
+$iconPath    = Join-Path $ElectronDir "build\icon.ico"
+$sidebarPath = Join-Path $ElectronDir "build\installerSidebar.bmp"
+if ((-not (Test-Path $iconPath)) -or (-not (Test-Path $sidebarPath))) {
+  Write-Host "  rendering icon.ico + installerSidebar.bmp from the project logo"
+  & (Join-Path $ElectronDir "node_modules\.bin\electron.cmd") (Join-Path $WinDir "make-assets.cjs")
+  if (-not (Test-Path $iconPath))    { throw "icon generation failed" }
+  if (-not (Test-Path $sidebarPath)) { throw "sidebar generation failed" }
 } else {
-  Write-Host "  using existing build\icon.ico"
+  Write-Host "  using existing build\icon.ico and build\installerSidebar.bmp"
 }
 
 # --- 5. Assemble resources/ ---------------------------------------------
