@@ -1,0 +1,18 @@
+{
+  "name": "de1soc-workbench-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-2.0-only",
+  "description": "Windows desktop shell for the DE1-SoC VHDL Workbench — packages the frontend, the GHDL backend, and GHDL itself into one installer",
+  "author": "Rune Langøy",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2"
+  }
+}
