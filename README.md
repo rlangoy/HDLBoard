@@ -118,13 +118,18 @@ so in a dialog rather than failing silently.
 
 ### Building the installer yourself
 
-On a Windows machine with Node 18+:
+On a Windows machine with Node 18+, from the `de1soc_Simulator` folder:
 
 ```powershell
-winInstaller\build.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File winInstaller\build.ps1
 ```
 
-That fetches and checksum-verifies GHDL, builds the frontend and the
+(`-ExecutionPolicy Bypass` avoids the "running scripts is disabled on this
+system" error; where scripts are allowed, plain `winInstaller\build.ps1`
+does the same.) Close a running Workbench first, since it locks files the
+build overwrites.
+
+The script fetches and checksum-verifies GHDL, builds the frontend and the
 backend, bundles them with Electron, and writes the installer to
 `winInstaller\output\`. See
 [`winInstaller/README.md`](winInstaller/README.md) for the details.

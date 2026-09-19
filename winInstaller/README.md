@@ -14,8 +14,14 @@ behave exactly as they did before.
 On Windows, with Node 18+:
 
 ```powershell
-winInstaller\build.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File winInstaller\build.ps1
 ```
+
+Run it from the repository root (`de1soc_Simulator`).
+`-ExecutionPolicy Bypass` avoids the "running scripts is disabled on this
+system" error; plain `winInstaller\build.ps1` does the same where scripts
+are allowed. Close a running Workbench first — it locks files the build
+overwrites.
 
 Output lands in `winInstaller\output\DE1-SoC Workbench-Setup-<version>.exe`
 (~89 MB; ~324 MB installed).
