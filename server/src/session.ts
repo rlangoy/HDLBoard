@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runCmd, runBatch, startPersistentRun, type BatchHandle, type RunHandle } from './ghdl.js';
+import { getGhdlExe, runCmd, runBatch, startPersistentRun, type BatchHandle, type RunHandle } from './ghdl.js';
 import { findTopEntity } from './portDetect.js';
 import { generateTestbench } from './tbTemplate.js';
 import { STATE_LENGTH, type ServerFrame, type VhdlFileInput } from './protocol.js';
@@ -88,6 +88,37 @@ const PACING_CHECK_MS = 10;
  * buffer (64 KiB on Linux, one byte per grant) can never fill.
  */
 const PACING_MAX_OUTSTANDING = 1000;
+/**
+ * Whether real-time pacing is available at all on this platform.
+ *
+ * The mechanism above is FIFO semantics end to end, and Windows has
+ * neither half of it: `mkfifo` is not a command there (an immediate
+ * `ENOENT` — the first thing that fails), and Node's `fs` does not
+ * support `O_NONBLOCK`. A regular file cannot stand in, because the
+ * testbench's backpressure is `readline` *blocking* at end-of-file, and a
+ * regular file's `readline` returns instead of blocking — pacing would
+ * silently stop pacing rather than fail loudly.
+ *
+ * So Windows runs unpaced, via a path the generated testbench already
+ * supports: `tbTemplate.ts` guards the whole mechanism on
+ * `pacing_file'length > 0`, so passing `''` disables it in the VHDL with
+ * no template change. The cost is real and is documented for students in
+ * the README — unpaced, simulated time runs as fast as GHDL manages, so a
+ * `CLOCK_500Hz` design blinks faster here than on the board. POSIX is
+ * untouched and keeps § 5.9's guarantee that simulator timing predicts
+ * board timing.
+ *
+ * Windows named pipes (`\\.\pipe\…` via Node's `net`) are the upgrade
+ * path if GHDL's `file_open` turns out to open them with blocking reads.
+ */
+const PACED = process.platform !== 'win32';
+/**
+ * Backing store for the one-millisecond synchronous sleep in
+ * `renameOverOpenFile`. `Atomics.wait` needs a `SharedArrayBuffer`-backed
+ * array and never actually observes a change here — the timeout is the
+ * only exit, which is precisely the "sleep without yielding" wanted.
+ */
+const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
 /** Bound on ghdl -a / -e — these are expected to finish in seconds (§ 7.4). */
 const BUILD_TIMEOUT_MS = 30_000;
 /**
@@ -192,7 +223,7 @@ export class Session {
     while (pending.size > 0) {
       let progressed = false;
       for (const name of [...pending.keys()]) {
-        const r = await runCmd('ghdl', ['-a', '--std=08', name], this.dir, BUILD_TIMEOUT_MS);
+        const r = await runCmd(getGhdlExe(), ['-a', '--std=08', name], this.dir, BUILD_TIMEOUT_MS);
         if (r.code === 0) {
           pending.delete(name);
           progressed = true;
@@ -231,14 +262,14 @@ export class Session {
     const tbSource = generateTestbench(top.name, top.ports);
     writeFileSync(join(this.dir, `${TB_ENTITY}.vhdl`), tbSource);
 
-    let r = await runCmd('ghdl', ['-a', '--std=08', `${TB_ENTITY}.vhdl`], this.dir, BUILD_TIMEOUT_MS);
+    let r = await runCmd(getGhdlExe(), ['-a', '--std=08', `${TB_ENTITY}.vhdl`], this.dir, BUILD_TIMEOUT_MS);
     if (r.code !== 0) {
       this.send({ verb: 'ERROR', stage: 'internal', text: `Internal testbench build error:\n${r.err}` });
       this.state = 'stopped';
       return;
     }
 
-    r = await runCmd('ghdl', ['-e', '--std=08', TB_ENTITY], this.dir, BUILD_TIMEOUT_MS);
+    r = await runCmd(getGhdlExe(), ['-e', '--std=08', TB_ENTITY], this.dir, BUILD_TIMEOUT_MS);
     if (r.code !== 0) {
       this.send({
         verb: 'ERROR',
@@ -285,8 +316,10 @@ export class Session {
     // this open doesn't wait for a reader and GHDL's own read-mode open
     // doesn't wait for a writer; non-blocking so a full FIFO could never
     // stall this event loop (PACING_MAX_OUTSTANDING keeps it from filling).
-    execFileSync('mkfifo', [this.pacingPath()]);
-    this.pacingFd = openSync(this.pacingPath(), fsConstants.O_RDWR | fsConstants.O_NONBLOCK);
+    if (PACED) {
+      execFileSync('mkfifo', [this.pacingPath()]);
+      this.pacingFd = openSync(this.pacingPath(), fsConstants.O_RDWR | fsConstants.O_NONBLOCK);
+    }
     const handle = startPersistentRun(
       this.dir,
       TB_ENTITY,
@@ -295,10 +328,11 @@ export class Session {
       this.pollIntervalNs,
       this.minDwellNs,
       this.heartbeatPath(),
-      this.pacingPath(),
+      // Empty disables the testbench's pacing block entirely (see PACED).
+      PACED ? this.pacingPath() : '',
     );
     this.run = handle;
-    this.startPacing(handle);
+    if (PACED) this.startPacing(handle);
     // Identity-checked against `handle`, not just `this.destroyed`/
     // `this.state`: `kill()` (Stop/Reset/a new RUN) sets `this.run = null`
     // synchronously, but the killed child's own `close` event is
@@ -417,7 +451,7 @@ export class Session {
    * in between the same two points; the analysis loop above is shared.
    */
   private async runElaborateAndBatch(entityName: string): Promise<void> {
-    const r = await runCmd('ghdl', ['-e', '--std=08', entityName], this.dir, BUILD_TIMEOUT_MS);
+    const r = await runCmd(getGhdlExe(), ['-e', '--std=08', entityName], this.dir, BUILD_TIMEOUT_MS);
     if (r.code !== 0) {
       this.send({ verb: 'ERROR', stage: 'elaborate', text: r.err });
       this.state = 'stopped';
@@ -474,7 +508,49 @@ export class Session {
     // POSIX, so the reader never observes a partially-written queue.
     const tmp = `${this.inputPath()}.tmp`;
     writeFileSync(tmp, this.stimQueue.map((s) => `${s.seq} ${s.bits}\n`).join(''));
-    renameSync(tmp, this.inputPath());
+    this.renameOverOpenFile(tmp, this.inputPath());
+  }
+
+  /**
+   * `renameSync`, retried — because the atomicity the method above relies
+   * on is POSIX-only.
+   *
+   * Windows refuses to replace a file while another process holds it
+   * open, and the running testbench reopens `input.txt` on every poll
+   * (every 10 us or 1 ms of simulated time), so the two collide with
+   * `EPERM` sooner or later. Observed in the packaged app: a switch flip
+   * threw out of the `pollOutput` timer, which is an unhandled rejection
+   * away from taking the backend down.
+   *
+   * Retrying rather than writing in place is the point: an in-place write
+   * is exactly the torn read the temp-file dance exists to prevent. GHDL
+   * holds the file open only for the microseconds it takes to read a
+   * handful of lines, so the contended window is far shorter than one
+   * retry step, and in practice the first retry succeeds.
+   *
+   * Giving up is survivable and deliberately quiet: the queue is still in
+   * memory, and the next `STIM` or acknowledgement rewrites it. A dropped
+   * write costs at worst one input update; a thrown error costs the
+   * session.
+   */
+  private renameOverOpenFile(from: string, to: string): void {
+    const MAX_ATTEMPTS = 50;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        renameSync(from, to);
+        return;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        const contended = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!contended || attempt >= MAX_ATTEMPTS) {
+          if (!contended) throw e;
+          return; // Gave up; the next write will carry the same queue.
+        }
+        // A synchronous sleep, because the whole point is to not yield to
+        // an event loop that could start another write in between.
+        Atomics.wait(SLEEP_SIGNAL, 0, 0, 1);
+      }
+    }
   }
 
   handleReset(): void {

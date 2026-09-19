@@ -17,6 +17,7 @@ actual GHDL simulation of whatever VHDL is open in the editor.
 
 - [Overview](#overview)
 - [Features](#features)
+- [Windows installer](#windows-installer)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Running it](#running-it)
@@ -72,6 +73,66 @@ is an image, an SVG, or a canvas drawing. See
 - **Component gallery** — every board part in every state, side by side
   with the reference renders, at the `#gallery` route.
 
+## Windows installer
+
+On Windows there is a **one-file installer** that needs nothing
+preinstalled — no Node, no GHDL, no WSL. It bundles the Workbench, its
+backend, and GHDL 5.0.1 itself, and installs for the current user only,
+so it never asks for an administrator password.
+
+This is the path for students. Everything below this section is for
+running the project from source, on any platform.
+
+1. Download `DE1-SoC Workbench-Setup-<version>.exe`.
+2. Run it. Windows SmartScreen will warn that the publisher is unknown —
+   the installer is not code-signed, since a certificate is hard to
+   justify for a course tool. Choose **More info → Run anyway**.
+3. Accept the license page (it carries both the Workbench's GPL-2.0
+   notice and GHDL's own attribution), pick a folder if you want to
+   change it, and install.
+4. Launch **DE1-SoC Workbench** from the Start menu or the desktop
+   shortcut.
+
+The window is the same Workbench you get in a browser — the desktop build
+runs the backend in-process and serves the frontend to itself on
+`127.0.0.1:9010`, so nothing is reimplemented and nothing is exposed to
+the network.
+
+**Uninstall** from Settings → Apps, or with
+`Uninstall DE1-SoC Workbench.exe` in the installation folder.
+
+If it does not start, **Help → Open Logs Folder** holds `backend.log`,
+which records the resolved GHDL path and anything the backend printed.
+The most common failure is port `9010` already being in use — usually a
+second copy of the app, or a `start.sh` left running — and the app says
+so in a dialog rather than failing silently.
+
+> [!IMPORTANT]
+> **Simulations run unpaced on Windows.** On Linux the simulator holds
+> simulated time to real time, so a design's timing in the simulator
+> predicts its timing on the real board. That mechanism needs a POSIX
+> FIFO, which Windows has no equivalent of, so the Windows build lets
+> GHDL run as fast as it can instead.
+>
+> A `CLOCK_500Hz` design therefore runs noticeably faster here than on a
+> real DE1-SoC — `blinkTest.vhdl`, written to blink at 2 Hz, is measured
+> at roughly twice that. **Logic and behaviour are unaffected; only the
+> speed you observe it at.** If you are checking a design's real timing,
+> use the Linux setup or the board.
+
+### Building the installer yourself
+
+On a Windows machine with Node 18+:
+
+```powershell
+winInstaller\build.ps1
+```
+
+That fetches and checksum-verifies GHDL, builds the frontend and the
+backend, bundles them with Electron, and writes the installer to
+`winInstaller\output\`. See
+[`winInstaller/README.md`](winInstaller/README.md) for the details.
+
 ## Prerequisites
 
 | Tool | Purpose | Minimum |
@@ -110,7 +171,11 @@ brew install ghdl
 <details>
 <summary><b>Installing GHDL — Windows</b></summary>
 
-Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu and
+If you only want to *use* the Workbench, you do not need this at all —
+the [Windows installer](#windows-installer) bundles GHDL.
+
+To develop the project on Windows, use
+[WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu and
 follow the Ubuntu instructions above (recommended — `start.sh`/`stop.sh`
 assume a POSIX environment), or install a native build from the
 [official releases](https://github.com/ghdl/ghdl/releases).
@@ -216,6 +281,10 @@ de1socSim/
 │  └─ bundle.mjs                inline a build into one self-contained .html
 ├─ server/                      the GHDL backend — its own Node.js project
 │  └─ src/                      protocol, session, GHDL process management
+├─ winInstaller/                the Windows desktop build (additive — see its README)
+│  ├─ build.ps1                 builds the installer end to end
+│  ├─ fetch-ghdl.ps1            downloads + checksums the vendored GHDL
+│  └─ electron/                 Electron shell, its own standalone Node project
 └─ src/
    ├─ main.tsx
    ├─ index.css
@@ -269,7 +338,9 @@ de1socSim/
   real hardware. This runs genuinely in real time, not fast-forwarded —
   a design's timing in the simulator predicts its timing on the actual
   board (§ 5.9), so a divider meant to blink an LED once a minute really
-  takes about a minute here too.
+  takes about a minute here too. **Except on Windows**, where the pacing
+  mechanism's POSIX FIFO has no equivalent and simulations run unpaced —
+  see [Windows installer](#windows-installer).
 - Full details in
   [`src/components/workbench/README.md`](src/components/workbench/README.md#known-limitations).
 

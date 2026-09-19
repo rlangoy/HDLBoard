@@ -12,6 +12,26 @@
 
 import { spawn } from 'node:child_process';
 
+/**
+ * Which GHDL to run. `'ghdl'` means "whatever is on PATH", which is what
+ * every non-desktop deployment wants and what the environment variable
+ * lets an operator override. The packaged Windows app is the case that
+ * needs more: it ships its own GHDL under `resources/ghdl/` and must not
+ * depend on the student having installed one, so Electron passes that
+ * absolute path to `startBackend()`, which calls `setGhdlExe()` before
+ * anything can spawn.
+ */
+let ghdlExe = process.env.GHDL_EXE ?? 'ghdl';
+
+export function setGhdlExe(path: string): void {
+  ghdlExe = path;
+}
+
+/** The resolved executable — `session.ts` passes this to `runCmd`. */
+export function getGhdlExe(): string {
+  return ghdlExe;
+}
+
 export interface CmdResult {
   code: number;
   out: string;
@@ -91,7 +111,7 @@ export function startPersistentRun(
   pacingFile: string,
 ): RunHandle {
   const child = spawn(
-    'ghdl',
+    ghdlExe,
     [
       '-r',
       '--std=08',
@@ -101,7 +121,12 @@ export function startPersistentRun(
       `-gpoll_interval_ns=${pollIntervalNs}`,
       `-gmin_dwell_ns=${minDwellNs}`,
       `-gheartbeat_file=${heartbeatFile}`,
-      `-gpacing_file=${pacingFile}`,
+      // Omitted rather than passed empty when pacing is off (Windows —
+      // see session.ts's PACED): `-gpacing_file=` with no value is a hard
+      // "missing value in generic override option" from GHDL, not an
+      // empty string. The generic's own declared default in tbTemplate.ts
+      // is already `""`, which is exactly the disabled state.
+      ...(pacingFile ? [`-gpacing_file=${pacingFile}`] : []),
     ],
     { cwd },
   );
@@ -163,7 +188,7 @@ export interface BatchHandle {
  * loop with no `wait`) has nothing else to save it from a hang.
  */
 export function runBatch(cwd: string, entityName: string, onOutput: (line: string) => void, timeoutMs: number): BatchHandle {
-  const child = spawn('ghdl', ['-r', '--std=08', entityName], { cwd });
+  const child = spawn(ghdlExe, ['-r', '--std=08', entityName], { cwd });
 
   let stderr = '';
   let timedOut = false;
