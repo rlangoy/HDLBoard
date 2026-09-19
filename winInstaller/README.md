@@ -87,6 +87,30 @@ winInstaller/
 └─ output/                   gitignored — Setup.exe lands here
 ```
 
+## Which `node_modules` / `dist` belongs to what
+
+Building the installer runs the two source projects' own npm builds, so
+afterwards the repo has three `node_modules` and several build folders.
+Only the ones under `winInstaller/` are Electron's:
+
+| Path | Belongs to | Holds |
+|---|---|---|
+| `node_modules/`, `dist/` | **the frontend** | React, Vite, TypeScript, Playwright; and the Vite build |
+| `server/node_modules/`, `server/dist/` | **the backend** | `ws`; and the compiled TypeScript |
+| `winInstaller/electron/node_modules/` | **Electron** | electron, electron-builder, esbuild |
+| `winInstaller/electron/resources/` | **Electron** | the assembled frontend + backend bundle + GHDL |
+| `winInstaller/vendor/`, `winInstaller/output/` | **Electron** | the downloaded GHDL; the built `Setup.exe` |
+
+Two names in the *root* `node_modules` look like Electron but are not:
+`esbuild` is Vite's own internal bundler, and `electron-to-chromium` is a
+browserslist version-lookup table with no Electron code in it.
+
+The root folders cannot be relocated under `winInstaller/`: npm and
+Node's module resolution both require `node_modules` to sit next to its
+`package.json`, and `dist/` is consumed by `npm run preview`,
+`tools/bundle.mjs` and `start.sh`. All of the genuinely Electron-specific
+output is already confined to `winInstaller/` and gitignored.
+
 ## Vendored GHDL and GPL-2.0
 
 The bundled build is **GHDL 5.0.1, mcode, ucrt64** — the
