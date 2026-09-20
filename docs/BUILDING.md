@@ -14,7 +14,11 @@ needs none of this.
 Nothing else, and no external services: the backend runs on your machine or
 LAN and nothing leaves it.
 
-Install GHDL, then check with `ghdl --version`:
+Install Node.js from [nodejs.org](https://nodejs.org/). GHDL you can leave to
+`scripts/start.sh`, which installs it on first run — so on Linux and macOS you
+can skip ahead to [Install and run](#install-and-run). To install it yourself
+instead, or if your platform isn't one the script covers, use the command for
+your platform and check it with `ghdl --version`:
 
 | Platform | Command |
 |---|---|
@@ -26,11 +30,39 @@ Install GHDL, then check with `ghdl --version`:
 ## Install and run
 
 ```bash
-npm install                                              # frontend
-cd server && npm install && npm run build && cd ..       # backend
-
 ./scripts/start.sh        # both servers  ➜  http://localhost:5173/
 ./scripts/stop.sh         # stop them
+```
+
+Before starting anything, `start.sh` makes sure the prerequisites are there:
+
+- **GHDL** — if it isn't on `PATH`, the script prints the install command for
+  your package manager (`apt-get`, `dnf`, `pacman`, `zypper`, `apk` or `brew`,
+  with `sudo` where needed) and asks before running it.
+- **npm dependencies** — runs `npm install` in the repository root and in
+  `server/` when `node_modules` is missing, or when a `package.json` /
+  `package-lock.json` is newer than it, which is what a `git pull` leaves
+  behind.
+- **The backend build** — rebuilds `server/dist/` when it's missing or older
+  than `server/src/`.
+
+All of it is idempotent, so a second run just confirms and starts. Node.js is
+the exception: npm is what installs everything else, so the script only checks
+for Node 18+ and points at [nodejs.org](https://nodejs.org/) if it's missing or
+too old.
+
+Two environment variables adjust that behaviour:
+
+| Variable | Effect |
+|---|---|
+| `HDLBOARD_SKIP_INSTALL=1` | Check only — report anything missing and exit instead of installing |
+| `HDLBOARD_ASSUME_YES=1` | Don't prompt before installing GHDL (needed for non-interactive runs, which otherwise refuse) |
+
+Doing it by hand instead is still just the two npm projects:
+
+```bash
+npm install                                              # frontend
+cd server && npm install && npm run build && cd ..       # backend
 ```
 
 `scripts/start.sh` honours `STATIC_PORT` and `GHDL_WS_PORT`

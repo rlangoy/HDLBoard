@@ -1618,9 +1618,9 @@ obvious in a browser.
    decisive test is **`LEDR <= not SW`** — it passes only if the backend is
    genuinely driving the board, because the Phase 0 mock could never produce
    it. Make this the regression test.
-5. **Fresh clone.** `git clone`, `npm install` at root and in `server/`,
-   `./scripts/start.sh`, full round trip. Not "it worked on the machine that built
-   it".
+5. **Fresh clone.** `git clone`, then `./scripts/start.sh` alone — it installs
+   GHDL and both `node_modules` trees itself — and a full round trip. Not "it
+   worked on the machine that built it".
 6. **Batch mode (§ 5.6), added post-ship, held to the same standard.**
    The user's own reported testbench, run for real: `READY`→11 `LOG`
    lines→`DONE completed` in under 100 ms, not estimated from reading the
