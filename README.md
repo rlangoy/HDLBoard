@@ -14,7 +14,7 @@ Write VHDL and watch it run on a virtual board — flip switches, light LEDs, se
 
 ## Installing
 
-**Windows** — download the installer from the
+**Windows App** — download the installer from the
 [Releases page](https://github.com/rlangoy/HDLBoard/releases) and run it.<br>
 The installer is not code-signed, so Windows SmartScreen will show a warning: choose **More info → Run anyway**.
 
