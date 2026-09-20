@@ -36,6 +36,7 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 ## Documentation
 
 - [`BUILDING.md`](docs/BUILDING.md) — compile, run and package
+- [`HOSTING.md`](docs/HOSTING.md) — host it yourself on Linux, macOS or WSL
 - [`Design_Description.md`](docs/Design_Description.md) — how the board components are built, plus features and known limitations
 - [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build

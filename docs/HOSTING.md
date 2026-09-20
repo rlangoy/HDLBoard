@@ -1,0 +1,468 @@
+# Web Hosting — host HDLBoard yourself
+
+How to run HDLBoard on a machine of your own so that other people open it in
+a browser: a classroom PC serving a lab, a VM, a spare laptop on the same
+network. If you only want it on your *own* desktop, the
+[Windows installer](../README.md#installing) is simpler, and
+[`BUILDING.md`](BUILDING.md) covers a plain developer checkout.
+
+Instructions below for **Debian**, **Ubuntu**, **Alpine Linux**, **macOS**
+and **Windows (via WSL2)**.
+
+---
+
+## 1. How it fits together
+
+HDLBoard is two processes, and a browser that talks to both:
+
+```
+   browser                         host machine
+  ┌─────────┐   HTTP :5173        ┌──────────────────────────────┐
+  │         │ ───────────────────▶│  the page (static files)     │
+  │  page   │                     │  dist/  —  any web server    │
+  │         │   WebSocket :9010   ├──────────────────────────────┤
+  │  board  │ ◀──────────────────▶│  node server/dist/server.js  │
+  └─────────┘   /ghdlsim          │       └─ spawns ghdl         │
+                                  └──────────────────────────────┘
+```
+
+**The one rule that decides your whole setup:** the page builds its backend
+URL as `ws://<the host you typed in the address bar>:<port>/ghdlsim`
+(`src/components/workbench/ghdlClient.ts:33`), where the port is baked in at
+build time (default `9010`). So:
+
+- the backend port must be reachable **from each student's browser**, not just
+  from the host — opening only the page port gets you a permanently dark board;
+- the hostname takes care of itself: whatever address the page was loaded
+  from is the address the socket uses, so nothing needs configuring per client;
+- one port for everything is possible, with a reverse proxy — see
+  [§ 6](#6-one-port-with-a-reverse-proxy).
+
+---
+
+## 2. Requirements
+
+| | Needed | Notes |
+|---|---|---|
+| **OS** | Linux, macOS, or Windows with WSL2 | `scripts/start.sh` / `stop.sh` are POSIX shell; Windows hosts run them inside WSL |
+| **[Node.js](https://nodejs.org/)** | 18+ (20+ recommended) | Runs the backend and builds the page |
+| **[GHDL](https://ghdl.github.io/ghdl/)** | any build supporting `--std=08` and `-g<name>=<value>` | Verified against 5.0.1 and 6.0.0, mcode |
+| **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend) |
+| **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` process |
+| **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the browser tab closes |
+
+Nothing else, and no external services or accounts: everything stays on your
+machine and your network.
+
+**Sizing.** The backend accepts 32 concurrent sessions by default
+(`GHDL_MAX_SESSIONS`) and refuses the 33rd with a clear message rather than
+melting. A session only costs CPU while its simulation is actually running,
+so a 4-core machine comfortably serves a class of 20–30 students editing and
+running in bursts. Raise or lower the cap to match the hardware.
+
+---
+
+## 3. Read this before you expose it
+
+The backend compiles and runs VHDL that anyone who can reach the port sends
+it. GHDL is a real compiler and VHDL-2008 has real file I/O, so **anyone who
+can reach the backend can run code as the user the backend runs as.** Each
+session gets its own temp directory and simulations are killed after a
+timeout, but that is scheduling hygiene, not a sandbox. There is no
+authentication and no TLS.
+
+Host it accordingly:
+
+- **Good:** a classroom LAN, a lab VLAN, a VPN, a machine you'd hand students
+  a shell on anyway.
+- **Not good:** a public IP, a cloud VM with an open security group, a port
+  forwarded from your home router.
+
+If it must sit somewhere less trusted, run it as a dedicated unprivileged user
+(§ 5.3 does this) inside a container or VM you can throw away, and put a VPN
+or an authenticating proxy in front.
+
+---
+
+## 4. Install the prerequisites
+
+Pick your platform. Each ends with the same two checks:
+
+```bash
+node -v      # v18 or newer
+ghdl --version
+```
+
+### Debian
+
+Debian 12 (bookworm) and newer package both:
+
+```bash
+sudo apt update
+sudo apt install -y nodejs npm ghdl git
+```
+
+On Debian 11 (bullseye) `apt`'s Node is 12 — too old. Install a current one
+from [NodeSource](https://github.com/nodesource/distributions) instead:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+### Ubuntu
+
+Ubuntu 24.04 packages a new enough Node:
+
+```bash
+sudo apt update
+sudo apt install -y nodejs npm ghdl git
+```
+
+On 22.04 that gives you Node 12, which is too old — install GHDL from `apt` as
+above, but Node from [NodeSource](https://github.com/nodesource/distributions)
+or [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+GHDL from `apt` is fine on every supported release; check `node -v` before
+moving on.
+
+### Alpine Linux
+
+Node is packaged; **GHDL is not** (checked against 3.24 main and community),
+so build it — Alpine has the Ada compiler GHDL needs:
+
+```bash
+sudo apk add nodejs npm git build-base gcc-gnat zlib-dev
+
+git clone https://github.com/ghdl/ghdl ~/ghdl-src
+cd ~/ghdl-src
+./configure --prefix=/usr/local          # mcode backend, the default
+make
+sudo make install
+cd - && ghdl --version
+```
+
+A minimal Alpine has `doas` rather than `sudo` — substitute it, or
+`apk add sudo` first. The build takes a few minutes. Don't reach for the binaries on GHDL's
+releases page: they're linked against glibc and Alpine is musl, so they need
+a glibc shim to run at all and misbehave in ways that look like compiler bugs.
+If you'd rather not build, run HDLBoard in a Debian container on the Alpine
+host instead.
+
+### macOS
+
+With [Homebrew](https://brew.sh/):
+
+```bash
+brew install node ghdl git
+```
+
+Both are current formulas. Apple silicon and Intel are both fine.
+
+### Windows (WSL2)
+
+`start.sh`/`stop.sh` are POSIX shell, so host from WSL — the Windows machine
+still serves the LAN, the processes just live in the Linux VM.
+
+In PowerShell as administrator:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Reboot if asked, open the **Ubuntu** terminal, and follow the
+[Ubuntu](#ubuntu) steps above inside it. Then make WSL reachable from the
+network — this is the step people miss, because WSL2 sits behind its own NAT:
+
+**Either** turn on mirrored networking (Windows 11 22H2+), which makes WSL
+share the Windows network stack so nothing else is needed. Create or edit
+`C:\Users\<you>\.wslconfig`:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+then `wsl --shutdown` and reopen the terminal.
+
+**Or** forward the two ports by hand, in an administrator PowerShell, after
+starting HDLBoard:
+
+```powershell
+$wsl = (wsl hostname -I).Trim().Split()[0]
+netsh interface portproxy add v4tov4 listenport=5173 listenaddress=0.0.0.0 connectport=5173 connectaddress=$wsl
+netsh interface portproxy add v4tov4 listenport=9010 listenaddress=0.0.0.0 connectport=9010 connectaddress=$wsl
+New-NetFirewallRule -DisplayName "HDLBoard" -Direction Inbound -Protocol TCP -LocalPort 5173,9010 -Action Allow
+```
+
+WSL's IP changes on every reboot, so with port forwarding you re-run those
+first two lines after each restart. Mirrored networking avoids that, and is
+worth preferring on a machine that gets rebooted.
+
+---
+
+## 5. Get it running
+
+```bash
+git clone https://github.com/rlangoy/HDLBoard.git
+cd HDLBoard
+```
+
+### 5.1 Quick — the dev server
+
+Good for a lab session you start in the morning and stop in the afternoon:
+
+```bash
+./scripts/start.sh
+```
+
+That installs any missing npm dependencies (and offers to install GHDL if you
+skipped § 4), builds the backend, and starts both processes bound to
+`0.0.0.0`. Students open `http://<your-ip>:5173/`. Logs are in `.run/*.log`;
+`./scripts/stop.sh` stops both.
+
+It's the Vite dev server, so it rebuilds on file changes and does more work
+per request than it needs to — fine for a class, not what you want running
+for months.
+
+### 5.2 Production — build once, serve static
+
+Build the page, then serve `dist/` with any web server:
+
+```bash
+npm install
+npm run build                      # → dist/, self-contained, relative paths
+
+cd server && npm install && npm run build && cd ..
+node server/dist/server.js         # the backend, port 9010
+```
+
+`dist/` is plain files with relative asset paths, so it can live at any URL
+path. An nginx server block for it:
+
+```nginx
+server {
+    listen 80;
+    server_name hdlboard.example.lan;
+    root /srv/HDLBoard/dist;
+    index index.html;
+    location / { try_files $uri $uri/ /index.html; }
+}
+```
+
+Clients then use port 80 for the page and 9010 for the board. To put both on
+port 80, see [§ 6](#6-one-port-with-a-reverse-proxy).
+
+### 5.3 Keep the backend running
+
+**systemd** (Debian, Ubuntu) — `/etc/systemd/system/hdlboard.service`:
+
+```ini
+[Unit]
+Description=HDLBoard GHDL backend
+After=network.target
+
+[Service]
+Type=simple
+User=hdlboard
+WorkingDirectory=/srv/HDLBoard
+ExecStart=/usr/bin/node /srv/HDLBoard/server/dist/server.js
+Environment=GHDL_WS_PORT=9010
+Environment=GHDL_MAX_SESSIONS=32
+Restart=on-failure
+# Modest hardening: the backend needs only its own tree and a temp dir.
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo useradd --system --home /srv/HDLBoard hdlboard
+sudo systemctl enable --now hdlboard
+sudo journalctl -u hdlboard -f
+```
+
+**OpenRC** (Alpine) — `/etc/init.d/hdlboard`, then `chmod +x` it:
+
+```sh
+#!/sbin/openrc-run
+name="hdlboard"
+command="/usr/bin/node"
+command_args="/srv/HDLBoard/server/dist/server.js"
+command_user="hdlboard"
+directory="/srv/HDLBoard"
+supervisor="supervise-daemon"
+export GHDL_WS_PORT=9010
+
+depend() { need net; }
+```
+
+```bash
+sudo rc-update add hdlboard default
+sudo rc-service hdlboard start
+```
+
+**launchd** (macOS) — `~/Library/LaunchAgents/lan.hdlboard.plist` with a
+`ProgramArguments` array of `/opt/homebrew/bin/node` and the absolute path to
+`server/dist/server.js`, `RunAtLoad` true, then
+`launchctl load ~/Library/LaunchAgents/lan.hdlboard.plist`.
+
+The page itself needs no service — nginx, or whatever static server you
+already run, handles it.
+
+---
+
+## 6. One port, with a reverse proxy
+
+Two open ports is the default because the page and the backend are separate
+servers. You can collapse them into one by telling the build that the backend
+lives on the web port, and having the web server proxy `/ghdlsim` to it:
+
+```bash
+VITE_GHDL_WS_PORT=80 npm run build     # bake port 80 into the page
+```
+
+```nginx
+server {
+    listen 80;
+    server_name hdlboard.example.lan;
+    root /srv/HDLBoard/dist;
+    index index.html;
+
+    location / { try_files $uri $uri/ /index.html; }
+
+    location /ghdlsim {
+        proxy_pass http://127.0.0.1:9010;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 1d;          # simulations idle between frames
+    }
+}
+```
+
+Now only port 80 has to be open, and 9010 can be bound to loopback by a
+firewall rule. `proxy_read_timeout` matters: the default 60 s closes a socket
+that's merely waiting for the student to flip a switch.
+
+**HTTPS does not work as shipped.** The page always builds a `ws://` URL, and
+browsers block a plain WebSocket from an `https://` page, so a TLS front end
+gets you a dark board. It's a one-line change if you need it —
+`src/components/workbench/ghdlClient.ts:33`:
+
+```ts
+const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+return `${scheme}://${window.location.hostname}:${port}/ghdlsim`;
+```
+
+Rebuild, then terminate TLS at nginx and proxy `/ghdlsim` exactly as above.
+That change isn't in the repository; you're maintaining a local patch.
+
+---
+
+## 7. Configuration reference
+
+Backend, read at startup:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `GHDL_WS_PORT` | `9010` | Port the backend listens on |
+| `GHDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
+| `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
+
+`scripts/start.sh`:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `STATIC_PORT` | `5173` | Port for the page |
+| `GHDL_WS_PORT` | `9010` | Passed through to the backend |
+| `HDLBOARD_SKIP_INSTALL` | unset | `1` = check for prerequisites, never install |
+| `HDLBOARD_ASSUME_YES` | unset | `1` = install GHDL without prompting |
+
+Frontend, read at **build** time only:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `VITE_GHDL_WS_PORT` | `9010` | Backend port the page will connect to |
+
+**Changing the backend port means changing it in two places:** rebuild the
+page with `VITE_GHDL_WS_PORT=<n> npm run build` *and* start the backend with
+`GHDL_WS_PORT=<n>`. They are compiled in independently, and a mismatch shows
+up only as a board that never lights.
+
+---
+
+## 8. Open the firewall
+
+Substitute your own ports if you changed them.
+
+```bash
+# Debian / Ubuntu (ufw)
+sudo ufw allow 5173/tcp && sudo ufw allow 9010/tcp
+
+# Alpine (awall/iptables)
+sudo iptables -A INPUT -p tcp -m multiport --dports 5173,9010 -j ACCEPT
+sudo rc-service iptables save
+```
+
+macOS prompts on first launch — allow `node` to accept incoming connections;
+the setting lives in **System Settings → Network → Firewall → Options**.
+Windows is the `New-NetFirewallRule` line in [§ 4](#windows-wsl2).
+
+---
+
+## 9. Check it works
+
+From the host:
+
+```bash
+curl -I http://localhost:5173/                 # 200
+curl -i  http://localhost:9010/ghdlsim         # 426 Upgrade Required — correct
+```
+
+`426` is the backend saying "this port speaks WebSocket": it means the backend
+is up, not that something is broken.
+
+Then from **another machine**, open `http://<host-ip>:5173/`, and load a
+design that proves the round trip — `LEDR <= SW;` — press **Start**, and flip
+a switch. If the LEDs follow the switches, the page, the backend and GHDL are
+all working together. Nothing else tests all three at once.
+
+---
+
+## 10. Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| Page loads, board stays dark, console says the backend is unreachable | The backend port isn't open to the client. The page port being open is not enough — see [§ 1](#1-how-it-fits-together) |
+| Works on the host, not from other machines | Firewall ([§ 8](#8-open-the-firewall)), or WSL networking ([§ 4](#windows-wsl2)) |
+| Board dark only over HTTPS | Mixed content — [§ 6](#6-one-port-with-a-reverse-proxy) |
+| `ghdl not found on PATH` | GHDL isn't installed, or isn't on the service user's `PATH` — set `GHDL_EXE` to its absolute path |
+| `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010`, or an earlier run — `./scripts/stop.sh` |
+| `Too many concurrent sessions` | The `GHDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
+| Simulation stops after 60 s | A batch run hit its timeout — usually a process with no `wait`, not a hosting problem |
+| Page is stale after `git pull` | Rebuild: `npm run build`, and restart the backend. `start.sh` rebuilds the backend for you, not a production `dist/` |
+
+Logs: `.run/backend.log` and `.run/frontend.log` under `scripts/start.sh`,
+`journalctl -u hdlboard` under systemd, `rc-service hdlboard status` under
+OpenRC.
+
+---
+
+## See also
+
+- [`BUILDING.md`](BUILDING.md) — building from source and the dev workflow
+- [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the backend's
+  wire protocol, session model and limits
+- [`Design_Description.md`](Design_Description.md) — the board components and
+  known limitations

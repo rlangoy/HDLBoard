@@ -130,6 +130,8 @@ backend, bundles them with Electron, and writes
 
 ## Project structure and design docs
 
+- [`HOSTING.md`](HOSTING.md) — running it as a server other people reach in a
+  browser: requirements, per-platform setup, ports, firewall and hardening.
 - [`Design_Description.md`](Design_Description.md) — how the board components
   are built and why; § 11 has the current repository layout.
 - [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the GHDL
