@@ -296,18 +296,28 @@ runs as its own user, from its own directory, and a missing one fails the
 start with little explanation.
 
 **1. Create the user and deploy the tree.** Alpine has busybox `adduser`, not
-`useradd` (that's the `shadow` package, not installed by default):
+`useradd` (that's the `shadow` package, not installed by default). Run it as
+**one** command, not as six pasted `sudo` lines — a multi-line paste into a
+terminal that's about to prompt for a sudo password routinely executes the
+first line and silently discards the rest:
 
 ```bash
-sudo addgroup -S hdlboard
-sudo adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologin -G hdlboard hdlboard
+SRC=~/HDLBoard            # your checkout, already built — § 5.2 first
 
-sudo install -d -o hdlboard -g hdlboard /srv/HDLBoard
-sudo cp -a ~/HDLBoard/. /srv/HDLBoard/          # a built checkout — § 5.2 first
-sudo chown -R hdlboard:hdlboard /srv/HDLBoard
-
-sudo install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
+sudo sh -eu <<SETUP
+getent group hdlboard >/dev/null || addgroup -S hdlboard
+id hdlboard >/dev/null 2>&1 || adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologin -G hdlboard hdlboard
+install -d -o hdlboard -g hdlboard /srv/HDLBoard
+cp -a "$SRC/." /srv/HDLBoard/
+chown -R hdlboard:hdlboard /srv/HDLBoard
+install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
+SETUP
 ```
+
+`-e` stops at the first real error instead of carrying on, and the
+`getent`/`id` guards make it safe to re-run: a second attempt skips what
+already exists rather than failing with `addgroup: group 'hdlboard' in use`
+and taking the rest of the block down with it.
 
 Check all of it landed before going on — **every one of these must print, and
 if any of them doesn't, fix that before writing the service file**, because
@@ -386,6 +396,7 @@ four ways it goes wrong:
 | `chdir: No such file or directory` | `/srv/HDLBoard` doesn't exist, or `directory=` points somewhere else |
 | Service runs, but every simulation reports GHDL missing | GHDL isn't reachable by the service user — see below |
 | `stopped` after a reboot, and no `/var/log/hdlboard.log` at all | It never started node. Step 1 didn't complete — check `id hdlboard` and `ls /srv/HDLBoard/server/dist/server.js` |
+| `addgroup: group 'hdlboard' in use`, and nothing after it ran | A partly-completed earlier attempt. Re-run step 1's block as written — the guards make it idempotent |
 | `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 5.2, then copy again |
 
 **A GHDL under someone's home directory won't do.** A service's PATH is only
