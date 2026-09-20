@@ -1559,7 +1559,7 @@ are confused by a dark board. Recorded in § 12.
 ## 9. Project layout
 
 ```
-de1soc_Simulator/
+HDLBoard/
 ├─ server/                      Node + TypeScript, own package.json
 │  ├─ package.json              one runtime dep: ws
 │  ├─ tsconfig.json
@@ -1866,7 +1866,7 @@ output (`server/src/tbTemplate.ts`), captured by running it, for an entity
 declaring the full interface (§ 3.2). A design that declares fewer ports
 gets the same file with those associations simply absent from the `uut`
 port map (§ 7.3) and their signals left at their declared "off" default —
-no other structural difference. Entity name `de1soc_sim_tb`; signals are
+no other structural difference. Entity name `hdl_board_tb`; signals are
 `_sig`-suffixed to keep them visibly distinct from the DUT's own port
 names in the association list. `sl2c`/`slv2str` are unchanged from the
 reference's `tbTemplate.js`, adapted to this board's field widths.
@@ -1876,7 +1876,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use std.textio.all;
 
-entity de1soc_sim_tb is
+entity hdl_board_tb is
   generic (
     input_file       : string  := "";
     output_file      : string  := "";
@@ -1887,7 +1887,7 @@ entity de1soc_sim_tb is
   );
 end entity;
 
-architecture sim of de1soc_sim_tb is
+architecture sim of hdl_board_tb is
   -- Testbench-side signals for every board direction, regardless of which
   -- the entity actually declares — buildPortMap() above only connects the
   -- ones that exist. Defaults are each signal's electrically "off" value,

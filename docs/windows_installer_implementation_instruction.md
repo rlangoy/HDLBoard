@@ -5,7 +5,7 @@ Companion to `implementation_plan_win_installer.md` — that file explains
 *why*; this file is *what to do, in order*, with concrete paths,
 commands, and pass/fail gates.
 
-Repo root: `de1soc_Simulator/`.
+Repo root: `HDLBoard/`.
 
 > **Status: done** — branch `windows-installer`. Kept for the reasoning
 > and the gate definitions. Two snippets below are now known to be wrong;

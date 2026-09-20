@@ -39,7 +39,7 @@ implementation: the **Linux paced-timing regression check** (the
 regression F1's fix most endangers) and the **clean non-admin Windows VM**
 pass, including SmartScreen's exact wording.
 
-Decision: package the DE1-SoC VHDL Workbench as an **Electron** desktop
+Decision: package HDLBoard as an **Electron** desktop
 app for Windows, built with **electron-builder** (NSIS → one
 `Setup.exe`). Everything for this lives under **`winInstaller/`**, with
 all Electron-specific source in its own subfolder,
@@ -411,8 +411,8 @@ ever distributed beyond students running it locally.)
 ## 6. electron-builder configuration
 
 ```yaml
-appId: no.usn.de1soc-workbench
-productName: DE1-SoC Workbench
+appId: no.usn.hdl-board
+productName: HDLBoard
 directories:
   output: ../output
 files: [main.js]
