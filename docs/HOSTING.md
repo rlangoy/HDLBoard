@@ -260,6 +260,11 @@ port 80, see [§ 6](#6-one-port-with-a-reverse-proxy).
 
 ### 5.3 Keep the backend running
 
+Everything in this section starts the **backend only**. The backend speaks
+WebSocket and nothing else — a browser pointed at it gets `426 Upgrade
+Required`, not a page. Serving the page is a separate job, and until you do
+it there is no site to open: see [§ 5.4](#54-serve-the-page).
+
 **systemd** (Debian, Ubuntu) — `/etc/systemd/system/hdlboard.service`:
 
 ```ini
@@ -421,13 +426,53 @@ runlevel by default. On a host where the network is managed by something not
 registered with OpenRC, drop that line, or the service waits for a dependency
 that never starts.
 
+**5. Serve the page.** `rc-status` showing `hdlboard [ started ]` means the
+backend is up; it does not mean there's a website. Install a static server
+and point it at the `dist/` you deployed:
+
+```bash
+sudo apk add nginx
+
+sudo sh -eu <<'CONF'
+cat > /etc/nginx/http.d/hdlboard.conf <<'NGINX'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    root /srv/HDLBoard/dist;
+    index index.html;
+    location / { try_files $uri $uri/ /index.html; }
+}
+NGINX
+rm -f /etc/nginx/http.d/default.conf
+nginx -t
+CONF
+
+sudo rc-update add nginx default
+sudo rc-service nginx start
+```
+
+Then `http://<host-ip>/` is the page and port 9010 is the board — both have
+to be reachable from the client, per [§ 1](#1-how-it-fits-together). Alpine's
+nginx runs as the `nginx` user, which only needs to read `/srv/HDLBoard/dist`;
+the `install -d` in step 1 already leaves it world-readable.
+
 **launchd** (macOS) — `~/Library/LaunchAgents/lan.hdlboard.plist` with a
 `ProgramArguments` array of `/opt/homebrew/bin/node` and the absolute path to
 `server/dist/server.js`, `RunAtLoad` true, then
 `launchctl load ~/Library/LaunchAgents/lan.hdlboard.plist`.
 
-The page itself needs no service — nginx, or whatever static server you
-already run, handles it.
+### 5.4 Serve the page
+
+The backend has no web page in it, so one of these has to be running too:
+
+| | |
+|---|---|
+| **nginx** (or any static server) | Serves the `dist/` from [§ 5.2](#52-production--build-once-serve-static). The production answer; the OpenRC walkthrough's step 5 above has a complete Alpine recipe, and the same `server {}` block works under Debian, Ubuntu and macOS |
+| **`scripts/start.sh`** | Serves the page *and* the backend, via the Vite dev server ([§ 5.1](#51-quick--the-dev-server)). Fine for a lab session, not for a machine that runs unattended — and don't run it alongside the service, they'd both want port 9010 |
+
+A backend with no page in front of it is the most common way this setup looks
+finished and isn't: `rc-status`/`systemctl` says started, the port answers
+`426`, and a browser still gets nothing.
 
 ---
 
