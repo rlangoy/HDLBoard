@@ -291,25 +291,77 @@ sudo systemctl enable --now hdlboard
 sudo journalctl -u hdlboard -f
 ```
 
-**OpenRC** (Alpine) — `/etc/init.d/hdlboard`, then `chmod +x` it:
+**OpenRC** (Alpine) — three steps, and none of them is optional: the service
+runs as its own user, from its own directory, and a missing one fails the
+start with little explanation.
+
+**1. Create the user and deploy the tree.** Alpine has busybox `adduser`, not
+`useradd` (that's the `shadow` package, not installed by default):
+
+```bash
+sudo addgroup -S hdlboard
+sudo adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologin -G hdlboard hdlboard
+
+sudo install -d -o hdlboard -g hdlboard /srv/HDLBoard
+sudo cp -a ~/HDLBoard/. /srv/HDLBoard/          # a built checkout — § 5.2 first
+sudo chown -R hdlboard:hdlboard /srv/HDLBoard
+
+sudo install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
+```
+
+**2. Write `/etc/init.d/hdlboard`** and `sudo chmod +x` it:
 
 ```sh
 #!/sbin/openrc-run
-name="hdlboard"
+name="HDLBoard GHDL backend"
+description="WebSocket backend that compiles and runs VHDL with GHDL"
+
 command="/usr/bin/node"
 command_args="/srv/HDLBoard/server/dist/server.js"
-command_user="hdlboard"
+command_user="hdlboard:hdlboard"
 directory="/srv/HDLBoard"
 supervisor="supervise-daemon"
-export GHDL_WS_PORT=9010
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/hdlboard.log"
+error_log="/var/log/hdlboard.log"
 
-depend() { need net; }
+# The daemon's environment. A plain `export` at the top of this file is not
+# how you set it — pass it to the supervisor, which is what actually spawns
+# node. A service's PATH is only /sbin:/usr/sbin:/bin:/usr/bin, so GHDL
+# installed anywhere else (a source build in /usr/local, or under a user's
+# ~/.local) needs GHDL_EXE with an absolute path.
+supervise_daemon_args="--env GHDL_WS_PORT=9010 --env GHDL_MAX_SESSIONS=32"
+#supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl"
+
+depend() {
+	need net
+}
 ```
+
+**3. Enable, start, check:**
 
 ```bash
 sudo rc-update add hdlboard default
 sudo rc-service hdlboard start
+sudo rc-service hdlboard status
+curl -i http://localhost:9010/ghdlsim     # 426 Upgrade Required = working
+tail -f /var/log/hdlboard.log
 ```
+
+If the start fails, the log is the first place to look — and these are the
+four ways it goes wrong:
+
+| Message | Cause |
+|---|---|
+| `unable to create control fifo: Permission denied` | Not run as root — `supervise-daemon` needs it. Use `sudo` |
+| a `--user` or `chown` failure, service never starts | Step 1 skipped: the `hdlboard` user doesn't exist |
+| `chdir: No such file or directory` | `/srv/HDLBoard` doesn't exist, or `directory=` points somewhere else |
+| Service runs, but every simulation reports GHDL missing | GHDL isn't on the service PATH — uncomment the `GHDL_EXE` line, with the output of `command -v ghdl` |
+
+`need net` resolves to Alpine's `networking` service, which is in the `boot`
+runlevel by default. On a host where the network is managed by something not
+registered with OpenRC, drop that line, or the service waits for a dependency
+that never starts.
 
 **launchd** (macOS) — `~/Library/LaunchAgents/lan.hdlboard.plist` with a
 `ProgramArguments` array of `/opt/homebrew/bin/node` and the absolute path to
