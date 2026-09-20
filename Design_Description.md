@@ -1,4 +1,4 @@
-# PB1180 UI — Design Description
+# HDLBoard — Design Description
 
 > Licensed under the [GNU General Public License v2.0](LICENSE).
 
@@ -18,7 +18,7 @@ this document is downstream of.
 > **Note on this copy:** this document is included here for the design
 > rationale and the measured ratios in § 4. The `DesignResources/` reference
 > renders it cites by filename are not bundled in this project — they live
-> alongside the original component library this Workbench was built from.
+> alongside the original component library HDLBoard was built from.
 
 ---
 

@@ -68,7 +68,7 @@ Root project:
 | `npm run preview` | Serve the last `dist/` build |
 | `npm run typecheck` | Type-check only |
 | `npm run shot` | Screenshot a selector from `vite preview` on port 4173 (needs `npx playwright install chromium`) |
-| `npm run demo` | Build, then inline into one self-contained `Examples/board_demo.html` |
+| `npm run demo` | Build, then inline into one self-contained `Examples/board_demo.html` (the folder is created on demand and gitignored) |
 
 `server/` is a separate npm project, run from inside `server/`:
 

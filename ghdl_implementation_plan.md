@@ -1523,8 +1523,8 @@ export class GhdlClient {
 `ws://${window.location.hostname}:${GHDL_WS_PORT}/ghdlsim`
 ```
 
-so the LAN access this repo's `README.md` already documents
-(`http://192.168.0.198:5173/`) reaches the backend too, with no config.
+so the LAN access `BUILDING.md` already documents
+(`http://<host-ip>:5173/`) reaches the backend too, with no config.
 
 ### 8.3 Phase 6 — wiring into `Workbench.tsx`
 
