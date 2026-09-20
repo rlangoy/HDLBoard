@@ -1,6 +1,6 @@
 # GHDL Backend — Implementation Plan
 
-> Licensed under the [GNU General Public License v2.0](LICENSE).
+> Licensed under the [GNU General Public License v2.0](../LICENSE).
 
 **Status: built and verified, 2026-09-17.** This started as a work order —
 written to be executed by someone (or some agent) who had not been part of

@@ -3,7 +3,7 @@
 
 /**
  * The Workbench's WebSocket client for the GHDL backend —
- * ../../../ghdl_implementation_plan.md § 6, § 8.2. The only file in this
+ * ../../../docs/ghdl_implementation_plan.md § 6, § 8.2. The only file in this
  * app that speaks the wire protocol; `Workbench.tsx` calls this, never
  * `WebSocket` directly.
  *

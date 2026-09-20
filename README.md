@@ -31,13 +31,13 @@ npm install && (cd server && npm install && npm run build)
 ## Compiling
 
 Building from source, running the dev server, and producing the Windows
-installer are covered in [**BUILDING.md**](BUILDING.md).
+installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 
 ## Documentation
 
-- [`BUILDING.md`](BUILDING.md) — compile, run and package
-- [`Design_Description.md`](Design_Description.md) — how the board components are built, plus features and known limitations
-- [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — how the GHDL backend works
+- [`BUILDING.md`](docs/BUILDING.md) — compile, run and package
+- [`Design_Description.md`](docs/Design_Description.md) — how the board components are built, plus features and known limitations
+- [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
 
 ## About

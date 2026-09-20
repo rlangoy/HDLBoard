@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * WebSocket server entry point — ../../ghdl_implementation_plan.md § 7.1,
+ * WebSocket server entry point — ../../docs/ghdl_implementation_plan.md § 7.1,
  * § 5.8, § 11. Accepts connections, speaks HELLO/WELCOME, and dispatches
  * everything else to a per-connection Session.
  *

@@ -1,7 +1,7 @@
 # Building HDLBoard from source
 
 This is for developing HDLBoard, or running it in a browser from a checkout.
-If you only want to *use* it, the [Windows installer](README.md#installing)
+If you only want to *use* it, the [Windows installer](../README.md#installing)
 needs none of this.
 
 ## Prerequisites
@@ -94,7 +94,7 @@ a running HDLBoard first — it locks files the build overwrites.
 The script fetches and checksum-verifies GHDL, builds the frontend and the
 backend, bundles them with Electron, and writes
 `winInstaller\output\HDLBoard-Setup-<version>.exe`. Details:
-[`winInstaller/README.md`](winInstaller/README.md).
+[`winInstaller/README.md`](../winInstaller/README.md).
 
 ## Project structure and design docs
 
@@ -102,5 +102,5 @@ backend, bundles them with Electron, and writes
   are built and why; § 11 has the current repository layout.
 - [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the GHDL
   backend: wire protocol, simulation strategy, generated testbench.
-- [`src/components/workbench/README.md`](src/components/workbench/README.md)
+- [`src/components/workbench/README.md`](../src/components/workbench/README.md)
   — how the workbench page itself is put together.

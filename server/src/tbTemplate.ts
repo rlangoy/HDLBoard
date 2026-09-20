@@ -3,7 +3,7 @@
 
 /**
  * Generates the persistent-process testbench — the shipped design per the
- * Phase 2 spike (../../ghdl_implementation_plan.md § 5.4.1). Elaborated
+ * Phase 2 spike (../../docs/ghdl_implementation_plan.md § 5.4.1). Elaborated
  * once per session; a single `ghdl -r` then free-runs for the life of the
  * session, polling a small input file for `SW`/`KEY` on a fixed cadence
  * and publishing `LEDR`/`HEX0..HEX5` to an output file whenever they

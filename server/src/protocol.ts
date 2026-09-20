@@ -3,7 +3,7 @@
 
 /**
  * The wire protocol between the HDLBoard frontend and this backend —
- * ../../ghdl_implementation_plan.md § 6. Pure functions only: no socket,
+ * ../../docs/ghdl_implementation_plan.md § 6. Pure functions only: no socket,
  * no filesystem, no GHDL. That is what makes this module unit-testable in
  * isolation and is the one place the grammar is implemented on the
  * backend side (the frontend's ghdlClient.ts implements the same grammar

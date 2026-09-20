@@ -5,24 +5,24 @@ The app's main page — a VHDL "IDE" shell built to match a reference
 syntax-highlighted VHDL editor, Start/Stop simulation controls, a real GHDL
 console, and the real DE1-SoC board from [`components/board`](../board),
 driven by an actual GHDL simulation over WebSocket
-(`ghdlClient.ts`; see [`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md)
+(`ghdlClient.ts`; see [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md)
 for the backend and wire protocol behind it).
 
 > This copy of the project does not include the `DesignResources/`
 > reference renders the components were originally measured against — see
-> [`Design_Description.md`](../../../Design_Description.md) § 4 for the
+> [`Design_Description.md`](../../../docs/Design_Description.md) § 4 for the
 > measurements themselves.
 
 It is rendered by default at `npm run dev` (see [`App.tsx`](../../App.tsx)).
 The original per-component gallery (see
-[`BUILDING.md`](../../../BUILDING.md)) still exists, at the `#gallery`
+[`BUILDING.md`](../../../docs/BUILDING.md)) still exists, at the `#gallery`
 hash (`src/ComponentGallery.tsx`); the gallery has no backend of its own —
 only the Workbench talks to GHDL.
 
 > **The backend (`../../../server/`) must be running for Start to do
 > anything** — `npm run dev` alone starts only this frontend. Run
 > `../../../start.sh` instead to bring both up together, or see the
-> "Install and run" section of [`BUILDING.md`](../../../BUILDING.md). Without a backend, the failure
+> "Install and run" section of [`BUILDING.md`](../../../docs/BUILDING.md). Without a backend, the failure
 > is near-instant, not a hang: on `localhost` a refused WebSocket
 > connection closes within milliseconds, not after some slow timeout —
 > verified by actually stopping the backend and clicking Start, not
@@ -458,7 +458,7 @@ export class GhdlClient {
 The only file in this app that speaks WebSocket to the GHDL backend — full
 wire protocol, backend design, and what was actually verified (not just
 planned) are in
-[`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md) § 6.
+[`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 `Workbench` calls this; nothing else touches `WebSocket` directly.
 
 One `head-line`/`body` split (`text.indexOf('\n')`) is the entire parser —
@@ -473,7 +473,7 @@ a Node-side file.
 `Workbench` holds one `GhdlClient` (`ghdlClient.ts`), created lazily on
 first Start rather than on mount — opening the page never opens a socket
 nobody asked for. Full wire protocol and backend design:
-[`ghdl_implementation_plan.md`](../../../ghdl_implementation_plan.md) § 6.
+[`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
 `handleStart`:
 
@@ -657,7 +657,7 @@ stacking fallback.
 - **A backend is required.** GHDL runs server-side (`server/`), not in the
   browser — `npm run dev` alone starts only this frontend; see "How the
   simulation actually runs" above and "Install and run" in
-  [`BUILDING.md`](../../../BUILDING.md).
+  [`BUILDING.md`](../../../docs/BUILDING.md).
 - **No persistence.** Files, tabs and console output all live in React state
   and are lost on reload. Nothing is written to disk on the frontend side;
   the backend's per-session temp directory is deleted when the tab closes

@@ -3,7 +3,7 @@
 
 /**
  * Finds the top entity among a multi-file VHDL project and the set of
- * board ports it actually declares — ../../ghdl_implementation_plan.md
+ * board ports it actually declares — ../../docs/ghdl_implementation_plan.md
  * § 7.3. Adapted from the reference implementation's detectEntityName()/
  * detectPorts() (../../../vhdlsim/tapec.uv.es/pardo/hdlsim/server/server.js),
  * retargeted at this board's port names (§ 3.2) and generalized to scan

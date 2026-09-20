@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "license": "GPL-2.0-only",
-  "description": "GHDL backend for HDLBoard — see ../ghdl_implementation_plan.md",
+  "description": "GHDL backend for HDLBoard — see ../docs/ghdl_implementation_plan.md",
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/server.js",

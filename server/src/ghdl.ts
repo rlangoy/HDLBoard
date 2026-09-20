@@ -3,7 +3,7 @@
 
 /**
  * Spawning and managing GHDL child processes.
- * ../../ghdl_implementation_plan.md § 7.4 / § 11 (security).
+ * ../../docs/ghdl_implementation_plan.md § 7.4 / § 11 (security).
  *
  * `spawn(cmd, argsArray, { cwd })` only, everywhere — never a shell
  * string. No source content, filename, or generic value is ever

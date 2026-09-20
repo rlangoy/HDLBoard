@@ -1,6 +1,6 @@
 # HDLBoard — Design Description
 
-> Licensed under the [GNU General Public License v2.0](LICENSE).
+> Licensed under the [GNU General Public License v2.0](../LICENSE).
 
 Working notes for the browser-side board components used in **PB1180
 Programmerbare logiske kretser**. Read this before touching a component;
@@ -999,9 +999,12 @@ top level. Component folders under `src/components/` are as in § 3.
 ```
 HDLBoard/
 ├─ README.md                    what it is, and how to install it
-├─ BUILDING.md                  compiling and running from source
-├─ Design_Description.md        ← this file: how the components are BUILT
-├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
+├─ docs/
+│  ├─ BUILDING.md               compiling and running from source
+│  ├─ Design_Description.md     ← this file: how the components are BUILT
+│  ├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
+│  ├─ implementation_plan_win_installer.md, windows_installer_…  installer plan
+│  └─ images/                   README screenshot
 ├─ start.sh / stop.sh           run both servers as a pair
 ├─ index.html, package.json, tsconfig*.json, vite.config.ts
 ├─ tools/

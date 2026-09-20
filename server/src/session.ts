@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * One Session per WebSocket connection — ../../ghdl_implementation_plan.md
+ * One Session per WebSocket connection — ../../docs/ghdl_implementation_plan.md
  * § 7.2. Owns a temp directory, the elaborated design, and (once running)
  * the persistent GHDL process for it. Nothing here touches the socket
  * directly; `send` is a callback so this class stays testable without a
