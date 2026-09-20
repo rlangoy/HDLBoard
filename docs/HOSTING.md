@@ -142,13 +142,15 @@ sudo apk add nodejs npm git build-base gcc-gnat zlib-dev
 git clone https://github.com/ghdl/ghdl ~/ghdl-src
 cd ~/ghdl-src
 ./configure --prefix=/usr/local          # mcode backend, the default
-make
+make -j$(nproc)
 sudo make install
 cd - && ghdl --version
 ```
 
 A minimal Alpine has `doas` rather than `sudo` — substitute it, or
-`apk add sudo` first. The build takes a few minutes. Don't reach for the binaries on GHDL's
+`apk add sudo` first. The build takes a few minutes (it clones GHDL's
+development branch; tested with `7.0.0-dev`, and simulations run correctly
+on it). Don't reach for the binaries on GHDL's
 releases page: they're linked against glibc and Alpine is musl, so they need
 a glibc shim to run at all and misbehave in ways that look like compiler bugs.
 If you'd rather not build, run HDLBoard in a Debian container on the Alpine
@@ -247,7 +249,7 @@ path. An nginx server block for it:
 
 ```nginx
 server {
-    listen 80;
+    listen 5173;
     server_name hdlboard.example.lan;
     root /srv/HDLBoard/dist;
     index index.html;
@@ -255,8 +257,8 @@ server {
 }
 ```
 
-Clients then use port 80 for the page and 9010 for the board. To put both on
-port 80, see [§ 6](#6-one-port-with-a-reverse-proxy).
+Clients then use port 5173 for the page and 9010 for the board (the same
+ports as `scripts/start.sh`). To put both on port 80, see [§ 6](#6-one-port-with-a-reverse-proxy).
 
 ### 5.3 Keep the backend running
 
@@ -317,7 +319,7 @@ id hdlboard >/dev/null 2>&1 || adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologi
 install -d -o hdlboard -g hdlboard /srv/HDLBoard
 cp -a "$SRC/." /srv/HDLBoard/
 chown -R hdlboard:hdlboard /srv/HDLBoard
-install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
+[ -e /var/log/hdlboard.log ] || install -m 644 -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
 SETUP
 ```
 
@@ -331,9 +333,13 @@ Three things make that safe to run, and to re-run:
   su`.
 - **The first line checks before anything is created**, so a wrong path costs
   you an error message rather than a half-built setup.
-- **`-e` and the `getent`/`id` guards.** The run stops at the first real
-  error, and a second attempt skips what already exists instead of failing
-  with `addgroup: group 'hdlboard' in use` and taking the rest down with it.
+- **`-e` and the `getent`/`id`/`[ -e ]` guards.** The run stops at the first
+  real error, and a second attempt skips what already exists instead of
+  failing with `addgroup: group 'hdlboard' in use` and taking the rest down
+  with it — or, for the log, emptying it (`install` on an existing file
+  truncates it).
+- **Re-running is also how you redeploy.** After a `git pull` and a rebuild
+  (§ 5.2), run the block again and `sudo rc-service hdlboard restart`.
 
 Check all of it landed before going on — **every one of these must print, and
 if any of them doesn't, fix that before writing the service file**, because
@@ -368,9 +374,10 @@ error_log="/var/log/hdlboard.log"
 
 # The daemon's environment. A plain `export` at the top of this file is not
 # how you set it — pass it to the supervisor, which is what actually spawns
-# node. A service's PATH is only /sbin:/usr/sbin:/bin:/usr/bin, so GHDL
-# installed anywhere else (a source build in /usr/local, or under a user's
-# ~/.local) needs GHDL_EXE with an absolute path.
+# node. A service's PATH is /bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:
+# /usr/local/sbin, so the source build from § 4 (in /usr/local) is found as
+# it is. GHDL installed anywhere else (/opt, or under a user's ~/.local)
+# needs GHDL_EXE with an absolute path.
 supervise_daemon_args="--env GHDL_WS_PORT=9010 --env GHDL_MAX_SESSIONS=32"
 #supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl"
 
@@ -385,9 +392,13 @@ depend() {
 sudo rc-update add hdlboard default
 sudo rc-service hdlboard start
 sudo rc-service hdlboard status
-curl -i http://localhost:9010/ghdlsim     # 426 Upgrade Required = working
-tail -f /var/log/hdlboard.log
+curl -si http://localhost:9010/ghdlsim | head -1     # 426 Upgrade Required = working
+cat /var/log/hdlboard.log                            # "… listening on ws://0.0.0.0:9010/ghdlsim"
 ```
+
+`rc-service … status` and even `start` report success while node is
+crash-looping (`supervise-daemon` respawns it up to five times), so the log
+line above — not `[ ok ]` — is what tells you it's really up.
 
 **4. Confirm it comes back on its own.** `rc-update add` only registers the
 service; it doesn't prove it can start unattended. After a reboot:
@@ -403,11 +414,11 @@ the usual finding is that `addgroup` succeeded and `adduser` didn't, so the
 group exists but the user doesn't.
 
 If the start fails, the log is the first place to look — and these are the
-four ways it goes wrong:
+ways it goes wrong:
 
 | Message | Cause |
 |---|---|
-| `unable to create control fifo: Permission denied` | Not run as root — `supervise-daemon` needs it. Use `sudo` |
+| `failed to acquire lock: Permission denied` | Not run as root — `supervise-daemon` needs it. Use `sudo` |
 | a `--user` or `chown` failure, service never starts | Step 1 skipped: the `hdlboard` user doesn't exist |
 | `chdir: No such file or directory` | `/srv/HDLBoard` doesn't exist, or `directory=` points somewhere else |
 | Service runs, but every simulation reports GHDL missing | GHDL isn't reachable by the service user — see below |
@@ -415,9 +426,9 @@ four ways it goes wrong:
 | `addgroup: group 'hdlboard' in use`, and nothing after it ran | A partly-completed earlier attempt. Re-run step 1's block as written — the guards make it idempotent |
 | `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 5.2, then copy again |
 
-**A GHDL under someone's home directory won't do.** A service's PATH is only
-`/sbin:/usr/sbin:/bin:/usr/bin`, so anything elsewhere needs `GHDL_EXE` with
-an absolute path — and that still isn't enough if GHDL was unpacked into a
+**A GHDL under someone's home directory won't do.** A service's PATH doesn't
+include home directories, so it needs `GHDL_EXE` with an absolute path — and
+that still isn't enough if GHDL was unpacked into a
 home directory, because the upstream tarball's launcher resolves `$HOME`:
 
 ```console
@@ -447,8 +458,8 @@ sudo apk add nginx
 sudo sh -eu <<'CONF'
 cat > /etc/nginx/http.d/hdlboard.conf <<'NGINX'
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen 5173 default_server;
+    listen [::]:5173 default_server;
     root /srv/HDLBoard/dist;
     index index.html;
     location / { try_files $uri $uri/ /index.html; }
@@ -462,10 +473,35 @@ sudo rc-update add nginx default
 sudo rc-service nginx start
 ```
 
-Then `http://<host-ip>/` is the page and port 9010 is the board — both have
+Then `http://<host-ip>:5173/` is the page and port 9010 is the board — both have
 to be reachable from the client, per [§ 1](#1-how-it-fits-together). Alpine's
 nginx runs as the `nginx` user, which only needs to read `/srv/HDLBoard/dist`;
 the `install -d` in step 1 already leaves it world-readable.
+
+**6. Check stop and restart.** Both services should go down and come back
+on command. `curl` prints `000` (exit status 7) when nothing is listening:
+
+```bash
+probe() {
+  echo "page  :5173 $(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/)"       # 200
+  echo "board :9010 $(curl -s -o /dev/null -w '%{http_code}' http://localhost:9010/ghdlsim)" # 426
+}
+
+probe                                           # 200 and 426: both up
+sudo rc-service hdlboard stop; sudo rc-service nginx stop
+probe                                           # 000 and 000: both gone
+netstat -ltn | grep -E ':(5173|9010) ' || echo "no listeners"
+sudo rc-service hdlboard start; sudo rc-service nginx start; sleep 1
+probe                                           # 200 and 426 again
+```
+
+The `sleep` matters: `start` returns as soon as node is spawned, before it has
+bound the port, so an immediate probe can show the board as `000` for a moment
+even though nothing is wrong.
+
+`restart` does the same in one step and gives node a new PID. The log shows
+`SIGTERM received — shutting down` on each stop, followed by a fresh
+`listening on …` line. (Busybox has `netstat` but not `ss`.)
 
 **launchd** (macOS) — `~/Library/LaunchAgents/lan.hdlboard.plist` with a
 `ProgramArguments` array of `/opt/homebrew/bin/node` and the absolute path to
@@ -576,10 +612,16 @@ Substitute your own ports if you changed them.
 # Debian / Ubuntu (ufw)
 sudo ufw allow 5173/tcp && sudo ufw allow 9010/tcp
 
-# Alpine (awall/iptables)
+# Alpine — a stock install has no firewall, so there's nothing to open.
+# If you run one, install iptables, allow the ports, and load the rules at boot:
+sudo apk add iptables
 sudo iptables -A INPUT -p tcp -m multiport --dports 5173,9010 -j ACCEPT
 sudo rc-service iptables save
+sudo rc-update add iptables
 ```
+
+If you enable a default-drop policy, allow `22` first or you'll lock yourself
+out. (Using the one-port setup of § 6? Open `80` instead of both.)
 
 macOS prompts on first launch — allow `node` to accept incoming connections;
 the setting lives in **System Settings → Network → Firewall → Options**.
@@ -614,7 +656,7 @@ all working together. Nothing else tests all three at once.
 | Works on the host, not from other machines | Firewall ([§ 8](#8-open-the-firewall)), or WSL networking ([§ 4](#windows-wsl2)) |
 | Board dark only over HTTPS | Mixed content — [§ 6](#6-one-port-with-a-reverse-proxy) |
 | `ghdl not found on PATH` | GHDL isn't installed, or isn't on the service user's `PATH` — set `GHDL_EXE` to its absolute path |
-| `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010`, or an earlier run — `./scripts/stop.sh` |
+| `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
 | `Too many concurrent sessions` | The `GHDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
 | Simulation stops after 60 s | A batch run hit its timeout — usually a process with no `wait`, not a hosting problem |
 | Page is stale after `git pull` | Rebuild: `npm run build`, and restart the backend. `start.sh` rebuilds the backend for you, not a production `dist/` |
