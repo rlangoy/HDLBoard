@@ -307,9 +307,11 @@ terminal that's about to prompt for a sudo password routinely executes the
 first line and silently discards the rest:
 
 ```bash
-SRC=~/HDLBoard            # your checkout, already built — § 5.2 first
+cd ~/HDLBoard             # your checkout — it must already be built, § 5.2
+SRC=$PWD                  # an absolute path, resolved before sudo sees it
 
 sudo sh -eu <<SETUP
+[ -f "$SRC/server/dist/server.js" ] || { echo "not a built checkout: $SRC" >&2; exit 1; }
 getent group hdlboard >/dev/null || addgroup -S hdlboard
 id hdlboard >/dev/null 2>&1 || adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologin -G hdlboard hdlboard
 install -d -o hdlboard -g hdlboard /srv/HDLBoard
@@ -319,10 +321,17 @@ install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
 SETUP
 ```
 
-`-e` stops at the first real error instead of carrying on, and the
-`getent`/`id` guards make it safe to re-run: a second attempt skips what
-already exists rather than failing with `addgroup: group 'hdlboard' in use`
-and taking the rest of the block down with it.
+Three things make that safe to run, and to re-run:
+
+- **`cd` first, `$PWD` second.** Don't write `~/HDLBoard` into the block. `~`
+  is resolved by whoever is running it, so from a root shell (`sudo su`) it
+  becomes `/root/HDLBoard` and the copy fails with
+  `cp: can't stat '/root/HDLBoard/.'`.
+- **The first line checks before anything is created**, so a wrong path costs
+  you an error message rather than a half-built setup.
+- **`-e` and the `getent`/`id` guards.** The run stops at the first real
+  error, and a second attempt skips what already exists instead of failing
+  with `addgroup: group 'hdlboard' in use` and taking the rest down with it.
 
 Check all of it landed before going on — **every one of these must print, and
 if any of them doesn't, fix that before writing the service file**, because
