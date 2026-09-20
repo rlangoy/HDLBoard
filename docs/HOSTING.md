@@ -307,11 +307,11 @@ terminal that's about to prompt for a sudo password routinely executes the
 first line and silently discards the rest:
 
 ```bash
-cd ~/HDLBoard             # your checkout — it must already be built, § 5.2
+cd /path/to/HDLBoard      # your checkout, spelled out — it must be built, § 5.2
 SRC=$PWD                  # an absolute path, resolved before sudo sees it
 
 sudo sh -eu <<SETUP
-[ -f "$SRC/server/dist/server.js" ] || { echo "not a built checkout: $SRC" >&2; exit 1; }
+[ -f "$SRC/server/dist/server.js" ] || { echo "not a built checkout: $SRC — cd into your checkout first" >&2; exit 1; }
 getent group hdlboard >/dev/null || addgroup -S hdlboard
 id hdlboard >/dev/null 2>&1 || adduser -S -D -H -h /srv/HDLBoard -s /sbin/nologin -G hdlboard hdlboard
 install -d -o hdlboard -g hdlboard /srv/HDLBoard
@@ -323,10 +323,12 @@ SETUP
 
 Three things make that safe to run, and to re-run:
 
-- **`cd` first, `$PWD` second.** Don't write `~/HDLBoard` into the block. `~`
-  is resolved by whoever is running it, so from a root shell (`sudo su`) it
-  becomes `/root/HDLBoard` and the copy fails with
-  `cp: can't stat '/root/HDLBoard/.'`.
+- **Spell the path out; don't use `~` anywhere here.** `~` is whoever's home
+  the shell belongs to, so in a root shell (`sudo su`) it's `/root`: a `~`
+  inside the block copies from `/root/HDLBoard`, and a `cd ~/HDLBoard` fails
+  and silently leaves you somewhere else, which `$PWD` then picks up. Run
+  this from your own shell with `sudo`, as written, rather than from `sudo
+  su`.
 - **The first line checks before anything is created**, so a wrong path costs
   you an error message rather than a half-built setup.
 - **`-e` and the `getent`/`id` guards.** The run stops at the first real
