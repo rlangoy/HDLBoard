@@ -19,14 +19,7 @@ Write VHDL and watch it run on a virtual board — flip switches, light LEDs, se
 The installer is not code-signed, so Windows SmartScreen will show a warning: choose **More info → Run anyway**.
 
 **Web Hosting** — host HDLBoard yourself (Linux or WSL) and open it in a browser.<br>
-Requires [Node.js](https://nodejs.org/) 18+ and [GHDL](https://github.com/ghdl/ghdl)
-on your `PATH`.
-
-```bash
-git clone https://github.com/rlangoy/HDLBoard.git
-cd HDLBoard
-./scripts/start.sh          # ➜ http://localhost:5173/
-```
+Requirements and step-by-step installation: [**HOSTING.md**](docs/HOSTING.md).
 
 ## Compiling
 
