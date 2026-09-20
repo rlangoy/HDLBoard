@@ -309,6 +309,21 @@ sudo chown -R hdlboard:hdlboard /srv/HDLBoard
 sudo install -o hdlboard -g hdlboard /dev/null /var/log/hdlboard.log
 ```
 
+Check all of it landed before going on — **every one of these must print, and
+if any of them doesn't, fix that before writing the service file**, because
+the failure otherwise surfaces much later as a service that silently refuses
+to start:
+
+```bash
+id hdlboard                                     # the user, not just the group
+ls -ld /srv/HDLBoard                            # owned by hdlboard
+ls -l /srv/HDLBoard/server/dist/server.js       # the built backend
+```
+
+That last one is the one people miss: `cp -a` of an unbuilt checkout copies a
+tree with no `server/dist/`, and the service then starts node against a file
+that isn't there.
+
 **2. Write `/etc/init.d/hdlboard`** and `sudo chmod +x` it:
 
 ```sh
@@ -348,6 +363,19 @@ curl -i http://localhost:9010/ghdlsim     # 426 Upgrade Required = working
 tail -f /var/log/hdlboard.log
 ```
 
+**4. Confirm it comes back on its own.** `rc-update add` only registers the
+service; it doesn't prove it can start unattended. After a reboot:
+
+```bash
+rc-status default          # hdlboard should say [ started ]
+```
+
+If it says `stopped` and `/var/log/hdlboard.log` doesn't exist, the service
+never got as far as running node — that is the signature of an incomplete
+step 1, not of a boot problem. Re-run the three checks at the end of step 1;
+the usual finding is that `addgroup` succeeded and `adduser` didn't, so the
+group exists but the user doesn't.
+
 If the start fails, the log is the first place to look — and these are the
 four ways it goes wrong:
 
@@ -356,7 +384,26 @@ four ways it goes wrong:
 | `unable to create control fifo: Permission denied` | Not run as root — `supervise-daemon` needs it. Use `sudo` |
 | a `--user` or `chown` failure, service never starts | Step 1 skipped: the `hdlboard` user doesn't exist |
 | `chdir: No such file or directory` | `/srv/HDLBoard` doesn't exist, or `directory=` points somewhere else |
-| Service runs, but every simulation reports GHDL missing | GHDL isn't on the service PATH — uncomment the `GHDL_EXE` line, with the output of `command -v ghdl` |
+| Service runs, but every simulation reports GHDL missing | GHDL isn't reachable by the service user — see below |
+| `stopped` after a reboot, and no `/var/log/hdlboard.log` at all | It never started node. Step 1 didn't complete — check `id hdlboard` and `ls /srv/HDLBoard/server/dist/server.js` |
+| `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 5.2, then copy again |
+
+**A GHDL under someone's home directory won't do.** A service's PATH is only
+`/sbin:/usr/sbin:/bin:/usr/bin`, so anything elsewhere needs `GHDL_EXE` with
+an absolute path — and that still isn't enough if GHDL was unpacked into a
+home directory, because the upstream tarball's launcher resolves `$HOME`:
+
+```console
+$ env HOME=/srv/HDLBoard ~/.local/bin/ghdl --version
+… /srv/HDLBoard/.local/opt/ghdl/…/ld-linux-x86-64.so.2: not found
+```
+
+The service user has its own `$HOME`, so the launcher looks in the wrong
+place and every simulation fails while the backend itself looks healthy.
+Install GHDL somewhere system-wide — `/usr/local` from the source build in
+[§ 4](#alpine-linux), or move the unpacked tree to `/opt/ghdl` and rewrite its
+launcher with absolute paths — or, on a single-user machine, skip the
+dedicated account and run the service as the user that owns the GHDL install.
 
 `need net` resolves to Alpine's `networking` service, which is in the `boot`
 runlevel by default. On a host where the network is managed by something not
