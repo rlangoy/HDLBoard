@@ -15,21 +15,18 @@ Write VHDL and watch it run on a virtual board — flip switches, light LEDs, se
 ## Installing
 
 **Windows** — download the installer from the
-[**Releases page**](https://github.com/rlangoy/HDLBoard/releases) and run it.
-It bundles everything (no Node, GHDL or WSL needed) and installs for the
-current user without administrator rights. The installer is not code-signed,
-so Windows SmartScreen will warn: choose **More info → Run anyway**.
+[Releases page](https://github.com/rlangoy/HDLBoard/releases) and run it.<br>
+The installer is not code-signed, so Windows SmartScreen will show a warning: choose **More info → Run anyway**.
 
-**In a browser** — needs [Node.js](https://nodejs.org/) 18+. Clone the
-repository, then:
+**Web Hosting** — host HDLBoard yourself (Linux or WSL) and open it in a browser.<br>
+Requires [Node.js](https://nodejs.org/) 18+ and [GHDL](https://github.com/ghdl/ghdl)
+on your `PATH`.
 
 ```bash
+git clone https://github.com/rlangoy/HDLBoard.git
+cd HDLBoard
 ./scripts/start.sh          # ➜ http://localhost:5173/
 ```
-
-The script installs what's missing: `npm install` for the frontend and the
-backend, and [GHDL](https://ghdl.github.io/ghdl/) through your package manager
-(it shows the command and asks first). Later runs skip straight to starting.
 
 ## Compiling
 
