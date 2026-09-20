@@ -1,8 +1,6 @@
-# DE1-SoC VHDL Workbench
+# HDLBoard — VHDL IDE with live board I/O simulation
 
-A VHDL IDE and simulator for the DE1-SoC board, using GHDL to simulate VHDL code and providing an interactive virtual representation of the board.
-
-The application can run as a standalone Windows program or on a server and be accessed through a web browser.
+Write VHDL and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL, it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
 
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white&labelColor=20232A)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white&labelColor=20232A)
