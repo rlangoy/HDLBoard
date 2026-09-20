@@ -3,10 +3,10 @@
 # tracked by PID so this script won't double-start or fail to find a
 # running instance — ghdl_implementation_plan.md § 7 / § 9.
 #
-# Usage:   ./start.sh
-# Config:  STATIC_PORT=8080 GHDL_WS_PORT=9090 ./start.sh
+# Usage:   ./scripts/start.sh   (from the repository root, or anywhere)
+# Config:  STATIC_PORT=8080 GHDL_WS_PORT=9090 ./scripts/start.sh
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."   # repository root
 
 STATIC_PORT="${STATIC_PORT:-5173}"
 export GHDL_WS_PORT="${GHDL_WS_PORT:-9010}"
@@ -33,7 +33,7 @@ start_one() {
 }
 
 if ! command -v ghdl >/dev/null 2>&1; then
-  echo "ghdl not found on PATH — install it first (see README.md)." >&2
+  echo "ghdl not found on PATH — install it first (see docs/BUILDING.md)." >&2
   exit 1
 fi
 
@@ -71,5 +71,5 @@ via this machine's IP instead of localhost — the frontend resolves the
 backend host from whatever host the page was loaded from, so this needs
 no extra configuration (ghdl_implementation_plan.md § 6.4).
 
-Stop with ./stop.sh
+Stop with ./scripts/stop.sh
 EOF

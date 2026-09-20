@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stops whatever ./start.sh started, by PID. Safe to run when nothing is
+# Stops whatever ./scripts/start.sh started, by PID. Safe to run when nothing is
 # running — it just reports that.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."   # repository root
 
 stop_one() {
   local name="$1" pidfile="$2"

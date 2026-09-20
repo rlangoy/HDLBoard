@@ -1005,7 +1005,7 @@ HDLBoard/
 │  ├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
 │  ├─ implementation_plan_win_installer.md, windows_installer_…  installer plan
 │  └─ images/                   README screenshot
-├─ start.sh / stop.sh           run both servers as a pair
+├─ scripts/                     start.sh / stop.sh: run both servers as a pair
 ├─ index.html, package.json, tsconfig*.json, vite.config.ts
 ├─ tools/
 │  ├─ screenshot.mjs            visual-check helper (Playwright)

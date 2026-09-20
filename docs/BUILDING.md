@@ -21,7 +21,7 @@ Install GHDL, then check with `ghdl --version`:
 | Ubuntu / Debian | `sudo apt install ghdl` |
 | Fedora | `sudo dnf install ghdl` |
 | macOS | `brew install ghdl` |
-| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu (recommended — `start.sh`/`stop.sh` assume POSIX), or a native build from the [GHDL releases](https://github.com/ghdl/ghdl/releases) |
+| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu (recommended — `scripts/start.sh`/`scripts/stop.sh` assume POSIX), or a native build from the [GHDL releases](https://github.com/ghdl/ghdl/releases) |
 
 ## Install and run
 
@@ -29,12 +29,12 @@ Install GHDL, then check with `ghdl --version`:
 npm install                                              # frontend
 cd server && npm install && npm run build && cd ..       # backend
 
-./start.sh        # both servers  ➜  http://localhost:5173/
-./stop.sh         # stop them
+./scripts/start.sh        # both servers  ➜  http://localhost:5173/
+./scripts/stop.sh         # stop them
 ```
 
-`start.sh` honours `STATIC_PORT` and `GHDL_WS_PORT`
-(`STATIC_PORT=8080 GHDL_WS_PORT=9090 ./start.sh`). Logs land in `.run/*.log`
+`scripts/start.sh` honours `STATIC_PORT` and `GHDL_WS_PORT`
+(`STATIC_PORT=8080 GHDL_WS_PORT=9090 ./scripts/start.sh`). Logs land in `.run/*.log`
 and PIDs in `.run/*.pid`, so it won't double-start.
 
 Frontend only, with hot reload (the board stays dark — Start needs the

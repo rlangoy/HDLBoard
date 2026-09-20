@@ -25,7 +25,7 @@ Clone the repository, then:
 
 ```bash
 npm install && (cd server && npm install && npm run build)
-./start.sh          # ➜ http://localhost:5173/
+./scripts/start.sh          # ➜ http://localhost:5173/
 ```
 
 ## Compiling

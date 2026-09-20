@@ -90,7 +90,7 @@ function showPortInUseDialog() {
     `HDLBoard needs port ${PORT}, but something else is already listening on it.\n\n` +
       'The usual causes are:\n' +
       `  • another copy of this app is already running — look for it in the taskbar;\n` +
-      `  • a development server (start.sh, or "node server/dist/server.js") is running.\n\n` +
+      `  • a development server (scripts/start.sh, or "node server/dist/server.js") is running.\n\n` +
       'Close whichever applies and start the app again.',
   );
 }

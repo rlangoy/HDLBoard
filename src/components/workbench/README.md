@@ -21,7 +21,7 @@ only the Workbench talks to GHDL.
 
 > **The backend (`../../../server/`) must be running for Start to do
 > anything** — `npm run dev` alone starts only this frontend. Run
-> `../../../start.sh` instead to bring both up together, or see the
+> `../../../scripts/start.sh` instead to bring both up together, or see the
 > "Install and run" section of [`BUILDING.md`](../../../docs/BUILDING.md). Without a backend, the failure
 > is near-instant, not a hang: on `localhost` a refused WebSocket
 > connection closes within milliseconds, not after some slow timeout —

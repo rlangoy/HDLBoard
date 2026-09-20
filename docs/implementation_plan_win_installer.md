@@ -46,7 +46,7 @@ all Electron-specific source in its own subfolder,
 **`winInstaller/electron/`**.
 
 **This is additive.** `npm run dev`, `npm run build`/`preview`,
-`./start.sh`/`./stop.sh`, LAN access, `#gallery`, and `npm run demo` all
+`./scripts/start.sh`/`./scripts/stop.sh`, LAN access, `#gallery`, and `npm run demo` all
 keep working exactly as they do now (§8 is the enforced list).
 
 | Decision | Choice |
@@ -275,7 +275,7 @@ on POSIX, behave **byte-identically to today**. Plus whatever else
 Phase 0 turned up.
 
 **Exit gate:** on Linux, paced behaviour unchanged (verify a slow
-divider still takes real time, and `./start.sh`/`./stop.sh` work as
+divider still takes real time, and `./scripts/start.sh`/`./scripts/stop.sh` work as
 before); on Windows, the same design simulates unpaced without error.
 Both verified by running, not inspection.
 
@@ -289,7 +289,7 @@ Three narrowly-scoped changes, all additive:
 2. GHDL executable resolution threaded through all six F4 sites.
 3. HTTP static serving + WS `upgrade` on one port, per F2.
 
-**Exit gate:** `./start.sh` behaves exactly as before (two-port, LAN
+**Exit gate:** `./scripts/start.sh` behaves exactly as before (two-port, LAN
 mode, hot reload untouched), *and* the new single-port mode serves the
 built frontend plus WS together — verified by pointing a plain browser
 at `http://127.0.0.1:9010/` and simulating a design there, with no
@@ -437,7 +437,7 @@ Re-verified at every phase gate, not just at the end:
 
 - `npm run dev` — Vite dev server, hot reload.
 - `npm run build` / `npm run preview`.
-- `./start.sh` / `./stop.sh`, two-port (`STATIC_PORT`, `GHDL_WS_PORT`)
+- `./scripts/start.sh` / `./scripts/stop.sh`, two-port (`STATIC_PORT`, `GHDL_WS_PORT`)
   LAN-accessible mode, **with pacing intact on POSIX**.
 - `#gallery`, and `npm run demo` / `tools/bundle.mjs`.
 - `node server/dist/server.js` standalone, unchanged in behaviour.

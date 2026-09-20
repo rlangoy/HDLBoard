@@ -823,7 +823,7 @@ closing.** § 7.2's rule — "a dropped connection must never leave GHDL
 running" — was implemented and correct, but it covers only the connection
 dying, not the *backend* dying. `stop.sh` sends a plain `kill` (SIGTERM),
 and Node's default disposition for that is to exit immediately without
-unwinding anything, so every `./stop.sh`, every restart, and every Ctrl-C
+unwinding anything, so every `./scripts/stop.sh`, every restart, and every Ctrl-C
 stranded each live session's child. Board mode's wrapper loops forever on
 purpose (§ 5), so nothing else was ever going to end them: they are
 specifically the kind of process that cannot notice it has been orphaned.
@@ -1570,7 +1570,7 @@ de1soc_Simulator/
 │     ├─ ghdl.ts                process spawning, § 7.4
 │     ├─ portDetect.ts          top-entity + port-set scan, § 7.3
 │     └─ tbTemplate.ts          testbench generator, § 7 / Appendix A
-├─ start.sh / stop.sh           both servers, PID + log files in .run/
+├─ scripts/start.sh, stop.sh    both servers, PID + log files in .run/
 ├─ src/components/workbench/
 │  └─ ghdlClient.ts             § 8.2 — the only file that speaks § 6
 └─ ghdl_implementation_plan.md  this file
@@ -1619,7 +1619,7 @@ obvious in a browser.
    genuinely driving the board, because the Phase 0 mock could never produce
    it. Make this the regression test.
 5. **Fresh clone.** `git clone`, `npm install` at root and in `server/`,
-   `./start.sh`, full round trip. Not "it worked on the machine that built
+   `./scripts/start.sh`, full round trip. Not "it worked on the machine that built
    it".
 6. **Batch mode (§ 5.6), added post-ship, held to the same standard.**
    The user's own reported testbench, run for real: `READY`→11 `LOG`

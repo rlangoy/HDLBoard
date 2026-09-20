@@ -6,7 +6,7 @@ GHDL itself — so a student needs nothing preinstalled and no
 administrator rights.
 
 Everything here is **additive**. `npm run dev`, `npm run build`,
-`./start.sh`/`./stop.sh`, LAN access, `#gallery` and `npm run demo` all
+`./scripts/start.sh`/`./scripts/stop.sh`, LAN access, `#gallery` and `npm run demo` all
 behave exactly as they did before.
 
 ## Building
@@ -121,7 +121,7 @@ browserslist version-lookup table with no Electron code in it.
 The root folders cannot be relocated under `winInstaller/`: npm and
 Node's module resolution both require `node_modules` to sit next to its
 `package.json`, and `dist/` is consumed by `npm run preview`,
-`tools/bundle.mjs` and `start.sh`. All of the genuinely Electron-specific
+`tools/bundle.mjs` and `scripts/start.sh`. All of the genuinely Electron-specific
 output is already confined to `winInstaller/` and gitignored.
 
 ## Vendored GHDL and GPL-2.0
@@ -164,5 +164,5 @@ electron-builder picks them up with no config change.
 - **The POSIX pacing path was re-checked only at session level.** Under
   Linux (GHDL 4.1 mcode) `blinkTest.vhdl` still toggles every ~250 ms
   through the FIFO, and the VHDL generated for POSIX is byte-identical to
-  before the stdin change. A full `./start.sh` + browser run on a Linux
+  before the stdin change. A full `./scripts/start.sh` + browser run on a Linux
   machine has not been repeated — do that before trusting a release.

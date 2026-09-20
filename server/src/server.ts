@@ -8,7 +8,7 @@
  *
  * Two deployments, one code path:
  *
- *  - **Server mode** (`./start.sh`, `node dist/server.js`) — WebSocket
+ *  - **Server mode** (`./scripts/start.sh`, `node dist/server.js`) — WebSocket
  *    only, bound to `0.0.0.0` so the LAN can reach it, with the frontend
  *    served separately by Vite on its own port. This is the default and
  *    behaves exactly as it always has.

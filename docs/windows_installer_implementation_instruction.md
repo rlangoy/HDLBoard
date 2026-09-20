@@ -46,7 +46,7 @@ done in the repo), and three work orders now precede any packaging work.
    phase on a failed gate.
 3. **Plan §7's "must keep working" list is a constraint.** Any work
    order touching `server/` re-runs: root `npm run build`, `cd server &&
-   npm run build`, and a `./start.sh` → simulate → `./stop.sh` smoke
+   npm run build`, and a `./scripts/start.sh` → simulate → `./scripts/stop.sh` smoke
    test on Linux. Fix regressions in the work order that caused them.
 4. **Proceed on documented defaults** (GHDL 5.0.1 mcode win64,
    dependency pins, minor config-key renames). Note the choice; don't
@@ -122,7 +122,7 @@ guards on `pacing_file'length > 0`.
 **Gate (both platforms):**
 - Windows: sample design simulates end-to-end in a browser; switches
   drive `LEDR`/`HEX`; no error; stopping leaves no orphaned `ghdl.exe`.
-- Linux: `./start.sh` → simulate → `./stop.sh` unchanged, **and** pacing
+- Linux: `./scripts/start.sh` → simulate → `./scripts/stop.sh` unchanged, **and** pacing
   still real-time (a slow divider still takes real seconds — this is the
   regression that matters most; verify by watching a clock, not by
   reading the diff).
@@ -161,7 +161,7 @@ process-wide handlers it never sends. `stop()` must perform exactly
 today's `shutdown()` teardown (every session destroyed, `wss.close()`).
 
 **Gate:** `node server/dist/server.js` logs and behaves identically;
-`./start.sh`/`./stop.sh` unchanged; Ctrl-C still kills in-flight `ghdl`
+`./scripts/start.sh`/`./scripts/stop.sh` unchanged; Ctrl-C still kills in-flight `ghdl`
 children (check the process list — this is the incident
 `ghdl_implementation_plan.md` §5.10 documents, so verify it, don't
 assume). Plus: a throwaway script calling `startBackend({}).stop()`
@@ -206,7 +206,7 @@ This is the work order that makes Electron possible without touching
 **Gate:** `startBackend({ serveDir: '<repo>/dist', port: 9010 })`, then a
 plain browser at `http://127.0.0.1:9010/` loads the Workbench and
 simulates a design over `ws://127.0.0.1:9010/ghdlsim` — **with no
-Electron involved**. Separately, `./start.sh` still works in two-port
+Electron involved**. Separately, `./scripts/start.sh` still works in two-port
 LAN mode. Proving F2's fix in a browser here means WO-6 debugs one new
 thing instead of two.
 
