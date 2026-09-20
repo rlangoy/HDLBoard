@@ -1,10 +1,10 @@
 {
-  "name": "de1soc-sim",
+  "name": "hdl-board",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "license": "GPL-2.0-only",
-  "description": "DE1-SoC VHDL Workbench — a browser IDE shell around DE-board style UI components (Switches, LEDs, 7-segment, Pushbuttons)",
+  "description": "HDLBoard — Write VHDL and watch it run: a browser IDE shell around DE-board style UI components (Switches, LEDs, 7-segment, Pushbuttons)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

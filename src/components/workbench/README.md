@@ -14,15 +14,15 @@ for the backend and wire protocol behind it).
 > measurements themselves.
 
 It is rendered by default at `npm run dev` (see [`App.tsx`](../../App.tsx)).
-The original per-component gallery this project's top-level
-[`README.md`](../../../README.md) documents still exists, at the `#gallery`
+The original per-component gallery (see
+[`BUILDING.md`](../../../BUILDING.md)) still exists, at the `#gallery`
 hash (`src/ComponentGallery.tsx`); the gallery has no backend of its own —
 only the Workbench talks to GHDL.
 
 > **The backend (`../../../server/`) must be running for Start to do
 > anything** — `npm run dev` alone starts only this frontend. Run
 > `../../../start.sh` instead to bring both up together, or see the
-> top-level README's "Running it" section. Without a backend, the failure
+> "Install and run" section of [`BUILDING.md`](../../../BUILDING.md). Without a backend, the failure
 > is near-instant, not a hang: on `localhost` a refused WebSocket
 > connection closes within milliseconds, not after some slow timeout —
 > verified by actually stopping the backend and clicking Start, not
@@ -405,8 +405,9 @@ live in `Dialog.css`, along with the shared callout and link-button styles;
 each dialog adds its own small stylesheet.
 
 `project.ts` holds the constants the dialogs and the desktop menu need to
-agree on: `REPO_URL` (`https://github.com/rlangoy/de1soc_Simulator`),
-`ISSUES_URL`, `GHDL_URL`, and `ABOUT_EVENT` (`'de1soc:show-about'` — keep it in
+agree on: `APP_NAME` (`HDLBoard`), `APP_TAGLINE` (`Write VHDL and watch it run`),
+`REPO_URL` (`https://github.com/rlangoy/HDLBoard`), `ISSUES_URL`, `GHDL_URL`,
+and `ABOUT_EVENT` (`'hdl-board:show-about'` — keep it in
 step with `winInstaller/electron/main.js`). Change the repository address in
 this one place.
 
@@ -435,8 +436,8 @@ right in CSS was not worth the effort the actual glyph already solved.
 Fetched once from Google's static asset host
 (`fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/…`) and
 committed as source — not loaded from a font or CDN at runtime, which
-would break the "no runtime deps beyond React" / fully-local guarantee in
-the top-level README. `fill="currentColor"` on the `<svg>` is what lets
+would break the "no runtime deps beyond React" / fully-local guarantee
+this project makes. `fill="currentColor"` on the `<svg>` is what lets
 each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn
 icon in this folder already does.
@@ -655,7 +656,8 @@ stacking fallback.
 
 - **A backend is required.** GHDL runs server-side (`server/`), not in the
   browser — `npm run dev` alone starts only this frontend; see "How the
-  simulation actually runs" above and the top-level README's "Running it".
+  simulation actually runs" above and "Install and run" in
+  [`BUILDING.md`](../../../BUILDING.md).
 - **No persistence.** Files, tabs and console output all live in React state
   and are lost on reload. Nothing is written to disk on the frontend side;
   the backend's per-session temp directory is deleted when the tab closes

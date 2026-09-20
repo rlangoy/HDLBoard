@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { LOGO_DATA_URI } from './logo';
+import { APP_NAME, APP_TAGLINE } from './project';
 import './Header.css';
 
 export interface HeaderProps {
@@ -14,21 +15,18 @@ export interface HeaderProps {
 }
 
 /**
- * The workbench's top bar — product name, the tool badges it composes
- * (GHDL, the web IDE shell, the DE1-SoC board style), and the
- * always-present chrome actions (Settings, Help, About), each of which
- * opens a dialog owned by `<Workbench>`.
+ * The workbench's top bar — the product name and tagline, reading as the
+ * same one line the window title bar carries, and the always-present
+ * chrome actions (Settings, Help, About), each of which opens a dialog
+ * owned by `<Workbench>`.
  */
 export function Header({ onSettings, onHelp, onAbout }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
         <img src={LOGO_DATA_URI} alt="" className="wb-header__logo" />
-        <span className="wb-header__title">VHDL Simulator</span>
-        <span className="wb-header__tagline">
-          GHDL <span className="wb-header__dot">•</span> Web IDE{' '}
-          <span className="wb-header__dot">•</span> DE1-SoC Style
-        </span>
+        <span className="wb-header__title">{APP_NAME}</span>
+        <span className="wb-header__tagline">&mdash; {APP_TAGLINE}</span>
       </div>
       <div className="wb-header__actions">
         <button type="button" className="wb-header__action" onClick={onSettings}>

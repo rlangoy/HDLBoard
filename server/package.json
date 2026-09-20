@@ -1,10 +1,10 @@
 {
-  "name": "de1soc-sim-server",
+  "name": "hdl-board-server",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "license": "GPL-2.0-only",
-  "description": "GHDL backend for the DE1-SoC Workbench — see ../ghdl_implementation_plan.md",
+  "description": "GHDL backend for HDLBoard — see ../ghdl_implementation_plan.md",
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/server.js",

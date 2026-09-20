@@ -1,9 +1,9 @@
 {
-  "name": "de1soc-workbench-desktop",
+  "name": "hdl-board-desktop",
   "private": true,
   "version": "1.0.0",
   "license": "GPL-2.0-only",
-  "description": "Windows desktop shell for the DE1-SoC VHDL Workbench — packages the frontend, the GHDL backend, and GHDL itself into one installer",
+  "description": "Windows desktop shell for HDLBoard — packages the frontend, the GHDL backend, and GHDL itself into one installer",
   "author": "Rune Langøy",
   "main": "main.js",
   "scripts": {

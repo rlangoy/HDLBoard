@@ -13,7 +13,7 @@
  * Electron is already a build dependency here and is a full Chromium, so
  * it rasterises the SVG with no extra toolchain and no browser download —
  * and with the same renderer the app itself uses, so the branding cannot
- * drift from the logo the Workbench shows in its header.
+ * drift from the logo HDLBoard shows in its header.
  *
  * Both containers are written by hand because both are trivial, and the
  * alternative is an image-conversion dependency for two files:
@@ -125,7 +125,7 @@ function buildBmp(width, height, bgra) {
 // Loaded via pathToFileURL, not loadFile(): the latter left the Windows
 // path's backslashes unconverted (`file:///C:\Users\...`), which is a
 // malformed URL and fails the same way.
-const scratch = mkdtempSync(join(tmpdir(), 'de1soc-assets-'));
+const scratch = mkdtempSync(join(tmpdir(), 'hdl-board-assets-'));
 
 async function render(win, html, settleMs = 600) {
   const page = join(scratch, `page-${Date.now()}.html`);
@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
       <div style="
         margin-top:${18 * SIDEBAR_SCALE}px;
         font-size:${13 * SIDEBAR_SCALE}px;font-weight:700;letter-spacing:.2px;
-        text-align:center;line-height:1.3;">DE1-SoC<br>VHDL Workbench</div>
+        text-align:center;line-height:1.3;">HDLBoard<br>Write VHDL and watch it run</div>
       <div style="
         margin-top:${7 * SIDEBAR_SCALE}px;
         font-size:${8 * SIDEBAR_SCALE}px;opacity:.75;text-align:center;">

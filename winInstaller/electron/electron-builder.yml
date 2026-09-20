@@ -4,8 +4,8 @@
 # Packaging for the Windows desktop build. Everything under `resources/`
 # is produced by ../build.ps1 and is gitignored — never hand-edited.
 
-appId: no.usn.de1soc-workbench
-productName: DE1-SoC Workbench
+appId: no.usn.hdl-board
+productName: HDLBoard
 copyright: Copyright (C) 2026 Rune Langøy
 
 directories:
@@ -30,7 +30,7 @@ extraResources:
   - from: resources/ghdl
     to: ghdl
 
-# The Workbench's own GPL-2.0 text, installed so license.txt's reference
+# HDLBoard's own GPL-2.0 text, installed so license.txt's reference
 # to it is true.
 extraFiles:
   - from: ../../LICENSE
@@ -59,7 +59,7 @@ nsis:
   include: build/installer.nsh
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: DE1-SoC Workbench
+  shortcutName: HDLBoard
   artifactName: ${productName}-Setup-${version}.${ext}
   # Leaving a stale install behind would strand an old GHDL copy and an
   # old frontend that the new backend might not match.

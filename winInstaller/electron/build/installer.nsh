@@ -42,7 +42,7 @@
   ; -Command: an inline command has to survive both NSIS string escaping
   ; and PowerShell quoting at once, and an earlier attempt that did so
   ; silently did nothing at all. A path argument has no such hazard.
-  FileOpen $1 "$TEMP\de1soc-cleanup.ps1" w
+  FileOpen $1 "$TEMP\hdl-board-cleanup.ps1" w
   FileWrite $1 "$$dir = '$INSTDIR'$\r$\n"
   FileWrite $1 "$$deadline = (Get-Date).AddMinutes(20)$\r$\n"
   FileWrite $1 "while ((Get-Date) -lt $$deadline) {$\r$\n"
@@ -58,5 +58,5 @@
   ; are the problem.
   FileWrite $1 "Remove-Item -LiteralPath $$PSCommandPath -Force -EA 0$\r$\n"
   FileClose $1
-  ExecShell "" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$TEMP\de1soc-cleanup.ps1"' SW_HIDE
+  ExecShell "" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$TEMP\hdl-board-cleanup.ps1"' SW_HIDE
 !macroend

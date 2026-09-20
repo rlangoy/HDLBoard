@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Electron main process for the DE1-SoC VHDL Workbench desktop app.
+ * Electron main process for the HDLBoard desktop app.
  *
  * The whole architecture is three lines of intent: start the existing
  * backend in-process, have it serve the existing frontend over loopback
@@ -80,14 +80,14 @@ function initLogging() {
       }
     };
   }
-  console.log(`--- DE1-SoC Workbench ${app.getVersion()} starting (packaged=${app.isPackaged}) ---`);
+  console.log(`--- HDLBoard ${app.getVersion()} starting (packaged=${app.isPackaged}) ---`);
   return logPath;
 }
 
 function showPortInUseDialog() {
   dialog.showErrorBox(
     'Port 9010 is already in use',
-    `The DE1-SoC Workbench needs port ${PORT}, but something else is already listening on it.\n\n` +
+    `HDLBoard needs port ${PORT}, but something else is already listening on it.\n\n` +
       'The usual causes are:\n' +
       `  • another copy of this app is already running — look for it in the taskbar;\n` +
       `  • a development server (start.sh, or "node server/dist/server.js") is running.\n\n` +
@@ -115,7 +115,7 @@ function buildMenu(logPath) {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents
-                .executeJavaScript("window.dispatchEvent(new CustomEvent('de1soc:show-about'))")
+                .executeJavaScript("window.dispatchEvent(new CustomEvent('hdl-board:show-about'))")
                 .catch(() => {});
             }
           },
@@ -156,7 +156,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error(`backend failed to start: ${err && err.stack ? err.stack : String(err)}`);
     if (err && err.code === 'EADDRINUSE') showPortInUseDialog();
-    else dialog.showErrorBox('The Workbench could not start', `${String(err)}\n\nLog: ${logPath}`);
+    else dialog.showErrorBox('HDLBoard could not start', `${String(err)}\n\nLog: ${logPath}`);
     app.quit();
     return;
   }
@@ -180,7 +180,7 @@ app.whenReady().then(async () => {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1e1e1e',
-    title: 'DE1-SoC VHDL Workbench',
+    title: 'HDLBoard — Write VHDL and watch it run',
     show: false,
     webPreferences: {
       // The renderer is a plain web app talking over a WebSocket; it has
@@ -197,7 +197,7 @@ app.whenReady().then(async () => {
 
   // Links in the app (the About and Settings dialogs point at GitHub)
   // belong in the user's own browser. Left alone, Electron would open them
-  // in a second app window — or navigate this one away from the Workbench.
+  // in a second app window — or navigate this one away from HDLBoard.
   const openInBrowser = (url) => {
     if (/^https:\/\//i.test(url)) shell.openExternal(url);
   };

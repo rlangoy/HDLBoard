@@ -23,7 +23,7 @@
  * unconnected output reads as blank rather than undefined (Appendix B).
  */
 
-const TB_ENTITY = 'de1soc_sim_tb';
+const TB_ENTITY = 'hdl_board_tb';
 
 const HEX_NAMES = ['hex0', 'hex1', 'hex2', 'hex3', 'hex4', 'hex5'] as const;
 

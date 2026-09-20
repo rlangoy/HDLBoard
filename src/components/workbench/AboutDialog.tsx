@@ -3,7 +3,7 @@
 
 import { Dialog } from './Dialog';
 import { LOGO_DATA_URI } from './logo';
-import { GHDL_URL, REPO_URL } from './project';
+import { APP_NAME, GHDL_URL, REPO_URL } from './project';
 import './AboutDialog.css';
 
 export interface AboutDialogProps {
@@ -21,15 +21,15 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="DE1-SoC VHDL Workbench"
+      title={APP_NAME}
       subtitle={`Version ${__APP_VERSION__}`}
       icon={<img src={LOGO_DATA_URI} alt="" />}
       describedBy="wb-about-notice"
     >
       <p className="wb-dialog__lead">
-        A VHDL IDE and DE1-SoC board simulator. Your designs run on real GHDL,
-        with the board&rsquo;s switches, buttons, LEDs and 7-segment displays on
-        screen.
+        Write VHDL and watch it run on a virtual board. Your designs run on
+        real GHDL, with the board&rsquo;s switches, buttons, LEDs and 7-segment
+        displays on screen.
       </p>
 
       <dl className="wb-about__facts">

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The wire protocol between the Workbench and this backend —
+ * The wire protocol between the HDLBoard frontend and this backend —
  * ../../ghdl_implementation_plan.md § 6. Pure functions only: no socket,
  * no filesystem, no GHDL. That is what makes this module unit-testable in
  * isolation and is the one place the grammar is implemented on the

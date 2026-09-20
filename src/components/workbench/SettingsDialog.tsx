@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { Dialog } from './Dialog';
-import { ISSUES_URL } from './project';
+import { APP_NAME, ISSUES_URL } from './project';
 import './SettingsDialog.css';
 
 export interface SettingsDialogProps {
@@ -34,12 +34,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       open={open}
       onClose={onClose}
       title="Settings"
-      subtitle="DE1-SoC VHDL Workbench"
+      subtitle={APP_NAME}
       icon={<GearIcon />}
     >
       <p className="wb-dialog__lead wb-settings__empty">
-        <strong>No settings are available for now.</strong> The Workbench works
-        out of the box &mdash; nothing needs configuring yet :)
+        <strong>No settings are available for now.</strong> {APP_NAME} works out
+        of the box &mdash; nothing needs configuring yet :)
       </p>
 
       <section className="wb-settings__help" aria-labelledby="wb-settings-help">

@@ -244,8 +244,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   });
 
   httpServer.listen(port, host, () => {
-    console.log(`de1soc-sim GHDL backend listening on ws://${host}:${port}${WSPATH}`);
-    if (serveDir) console.log(`de1soc-sim serving frontend from ${serveDir} on http://${host}:${port}/`);
+    console.log(`hdl-board GHDL backend listening on ws://${host}:${port}${WSPATH}`);
+    if (serveDir) console.log(`hdl-board serving frontend from ${serveDir} on http://${host}:${port}/`);
   });
 
   let stopped = false;

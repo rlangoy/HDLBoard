@@ -19,7 +19,7 @@ import { findTopEntity } from './portDetect.js';
 import { generateTestbench } from './tbTemplate.js';
 import { STATE_LENGTH, type ServerFrame, type VhdlFileInput } from './protocol.js';
 
-const TB_ENTITY = 'de1soc_sim_tb';
+const TB_ENTITY = 'hdl_board_tb';
 /**
  * How often (simulated time) the generated testbench's `io` process
  * re-reads the input file and re-checks for output changes (§ 5.8). The
@@ -182,7 +182,7 @@ export class Session {
 
   constructor(send: (frame: ServerFrame) => void) {
     this.send = send;
-    this.dir = mkdtempSync(join(tmpdir(), 'de1soc-sim-'));
+    this.dir = mkdtempSync(join(tmpdir(), 'hdl-board-'));
   }
 
   private inputPath(): string {

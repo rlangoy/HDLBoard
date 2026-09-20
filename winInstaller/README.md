@@ -1,6 +1,6 @@
 # Windows installer
 
-Packages the DE1-SoC VHDL Workbench as an Electron desktop app and builds
+Packages HDLBoard as an Electron desktop app and builds
 a single NSIS `Setup.exe` that bundles the frontend, the backend, and
 GHDL itself — so a student needs nothing preinstalled and no
 administrator rights.
@@ -17,13 +17,13 @@ On Windows, with Node 18+:
 powershell -NoProfile -ExecutionPolicy Bypass -File winInstaller\build.ps1
 ```
 
-Run it from the repository root (`de1soc_Simulator`).
+Run it from the repository root (`HDLBoard`).
 `-ExecutionPolicy Bypass` avoids the "running scripts is disabled on this
 system" error; plain `winInstaller\build.ps1` does the same where scripts
-are allowed. Close a running Workbench first — it locks files the build
+are allowed. Close a running HDLBoard first — it locks files the build
 overwrites.
 
-Output lands in `winInstaller\output\DE1-SoC Workbench-Setup-<version>.exe`
+Output lands in `winInstaller\output\HDLBoard-Setup-<version>.exe`
 (~89 MB; ~324 MB installed).
 
 | Flag | Effect |
@@ -94,7 +94,7 @@ winInstaller/
 │  │  ├─ icon.ico            generated; safe to delete, build.ps1 remakes it
 │  │  ├─ installerSidebar.bmp  generated; wizard welcome/finish panel
 │  │  ├─ installer.nsh       custom NSIS hook — removes $INSTDIR on uninstall
-│  │  └─ license.txt         Workbench + GHDL notices, shown by the installer
+│  │  └─ license.txt         HDLBoard + GHDL notices, shown by the installer
 │  └─ resources/             gitignored — assembled by build.ps1, never hand-edited
 ├─ vendor/ghdl/              gitignored — populated by fetch-ghdl.ps1
 └─ output/                   gitignored — Setup.exe lands here
@@ -146,7 +146,7 @@ the build:
   `resources\ghdl\lib\ghdl\src\ieee2008\LICENSE`.
 
 GHDL is `spawn()`ed as a separate process, not linked, so it imposes no
-license constraint on the Workbench's own code — which is GPL-2.0-only
+license constraint on HDLBoard's own code — which is GPL-2.0-only
 anyway, by choice. Compiled student designs never leave the machine, so
 no distribution event arises for them. *(Not legal advice; worth a real
 review before distributing beyond students running it locally.)*

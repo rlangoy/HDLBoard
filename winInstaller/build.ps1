@@ -5,7 +5,7 @@
 #
 #   winInstaller\build.ps1
 #
-# Produces winInstaller\output\DE1-SoC Workbench-Setup-<version>.exe
+# Produces winInstaller\output\HDLBoard-Setup-<version>.exe
 #
 # The two source projects are built by their own npm scripts and are never
 # reached into for anything else: this script consumes only their build

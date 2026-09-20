@@ -919,3 +919,104 @@ prints. `SEGMENT_PATTERNS` is the table itself.
   ms, which is exactly the thing a debounce exercise is about — but a mock
   that bounces by default would make every other demo flaky. If it is wanted,
   it belongs behind an explicit `bounceMs` prop, off by default.
+
+---
+
+## 9. Product features
+
+What HDLBoard does, at the level the README used to spell out. The
+component work in §§ 1–7 is one half of it; this is the other.
+
+- **File explorer** — a `vhdl/` / `work/` project tree with upload (a
+  picker, or drag-and-drop `.vhd`/`.vhdl` files onto the panel), new-file,
+  rename and delete (the last two on hover, or double-click a name to
+  rename).
+- **Resizable panes** — drag the handles either side of the editor to
+  resize the file panel and the board panel; both stay within the window,
+  shrinking together (or giving way to whichever one is being dragged)
+  rather than overflowing it.
+- **Tabbed code editor** — closable tabs, line numbers and VHDL syntax
+  highlighting (keywords, types, comments, strings, numbers), built on a
+  real, editable `<textarea>`, not a static preview.
+- **Simulation controls** — Start/Stop drives a real `ghdl -a` / `-e` /
+  `-r` compile → elaborate → run sequence, with GHDL's own output (or error
+  text, file:line included) in the console panel.
+- **Live DE1-SoC board** — `SW[9:0]` and `KEY_N[3:0]` are genuinely
+  clickable inputs; `LEDR[9:0]` and `HEX0_N`…`HEX5_N` are driven by GHDL
+  actually simulating the VHDL, not mirrored from the switches (wire
+  protocol: `ghdl_implementation_plan.md` § 6).
+- **`report` / `assert` output** — printed to the console live, in either a
+  board design or a plain, portless testbench (select it as the top file —
+  the dot in the Files panel — and it runs directly at GHDL's normal speed,
+  finishing on its own).
+- **Component gallery** — every board part in every state, beside the
+  reference renders, at the `#gallery` route.
+- **Windows desktop build** — a one-file installer that bundles the
+  frontend, the backend and GHDL (`winInstaller/README.md`). The desktop app
+  serves the same frontend to itself on `127.0.0.1:9010`; nothing is
+  reimplemented and nothing is exposed to the network.
+- **LAN access** — in the browser build both servers bind to `0.0.0.0`, and
+  the backend host is resolved relative to the hostname the page was loaded
+  from, so another device on the network can use the host's IP with no
+  configuration change.
+
+One backend process runs **one GHDL process continuously** for the whole
+session rather than restarting it per switch flip, polling for switch/button
+changes and pushing `LEDR`/`HEX` back over a WebSocket
+(`ghdl_implementation_plan.md` § 5). Simulated time is held to real time, on
+Windows too (there via the simulation's standard input instead of a POSIX
+FIFO), so a design's timing in the simulator predicts its timing on the real
+board — `blinkTest.vhdl` blinks at 2 Hz in both.
+
+## 10. Known limitations
+
+- **No file system on disk.** Uploaded files and edits are held in memory on
+  both ends; nothing is written beyond a per-session temp directory on the
+  backend, deleted when the tab closes.
+- **No persistence.** Reloading resets everything to the starter project; a
+  closed tab ends the simulation session.
+- **A clock-rate limit for board designs, not a bug.** A design that divides
+  a real 50 MHz clock down the honest way (e.g. to blink an LED once a
+  second) needs millions of simulated cycles for one visible change.
+  Interactive mode is fast for combinational and small sequential designs
+  and currently impractical for a literal hardware-accurate clock divider
+  (`ghdl_implementation_plan.md` § 5.5). Two things are not affected:
+  - a plain, portless testbench, which runs at GHDL's normal speed;
+  - a design that declares the optional `CLOCK_500Hz` port instead of
+    dividing `CLOCK_50` itself — the testbench hardwires it to an
+    already-divided, always-running 500 Hz clock (§ 5.7). It is a
+    simulator convenience, not a real DE1-SoC pin, so it must come back out
+    before the design targets real hardware. It runs in genuine real time,
+    not fast-forwarded: a divider meant to blink an LED once a minute really
+    takes about a minute (§ 5.9).
+- Further detail: `src/components/workbench/README.md`, *Known limitations*.
+
+## 11. Repository layout (current)
+
+§ 3 above predates the backend and the Windows build; this is the current
+top level. Component folders under `src/components/` are as in § 3.
+
+```
+HDLBoard/
+├─ README.md                    what it is, and how to install it
+├─ BUILDING.md                  compiling and running from source
+├─ Design_Description.md        ← this file: how the components are BUILT
+├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
+├─ start.sh / stop.sh           run both servers as a pair
+├─ index.html, package.json, tsconfig*.json, vite.config.ts
+├─ tools/
+│  ├─ screenshot.mjs            visual-check helper (Playwright)
+│  └─ bundle.mjs                inline a build into one self-contained .html
+├─ server/                      the GHDL backend — its own Node.js project
+│  └─ src/                      protocol, session, GHDL process management
+├─ winInstaller/                the Windows desktop build (additive)
+│  ├─ build.ps1                 builds the installer end to end
+│  ├─ fetch-ghdl.ps1            downloads + checksums the vendored GHDL
+│  └─ electron/                 Electron shell, its own standalone project
+└─ src/
+   ├─ main.tsx, index.css
+   ├─ App.tsx                   Workbench, or the gallery at #gallery
+   ├─ ComponentGallery.tsx      every component/state, for visual checks
+   └─ components/               board/, Switches/, Leds/, Pushbuttons/,
+                                SevenSegment/, workbench/
+```
