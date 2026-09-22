@@ -133,6 +133,18 @@ moving on.
 
 ### Alpine Linux
 
+Everything on this page, in one command — packages, GHDL, the build, nginx,
+the OpenRC service, and checks that each part works:
+
+```bash
+wget -O alpineInstall.sh https://raw.githubusercontent.com/rlangoy/HDLBoard/main/scripts/alpineInstall.sh
+less alpineInstall.sh            # it runs as root — read it first
+sudo sh alpineInstall.sh
+```
+
+Safe to re-run: a second run updates the checkout, rebuilds and restarts. The
+rest of this section, and [§ 5](#5-get-it-running), are what it does by hand.
+
 Node is packaged; **GHDL is not** (checked against 3.24 main and community),
 so build it — Alpine has the Ada compiler GHDL needs:
 
