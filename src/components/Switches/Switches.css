@@ -1,7 +1,0 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (C) 2026 Rune Langøy */
-
-/* The card, bit row and readout used to live here; they are shared
-   board chrome now and moved to ../board/panel.css. Kept as a
-   forwarder so existing imports keep working. */
-@import '../board/panel.css';

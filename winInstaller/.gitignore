@@ -1,8 +1,0 @@
-# Populated by fetch-ghdl.ps1 — a 55 MB third-party binary tree, never committed.
-vendor/
-
-# Populated by build.ps1 from the two projects' build output — never hand-edited.
-electron/resources/
-
-electron/node_modules/
-output/
