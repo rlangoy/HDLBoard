@@ -1,4 +1,4 @@
-# HDLBoard — Write VHDL and watch it run
+# HDLBoard - Write VHDL and watch it run
 
 Write VHDL and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL, it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
 
