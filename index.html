@@ -4,12 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>HDLBoard — Write VHDL and watch it run</title>
-<meta name="description" content="A free, browser-based playground for learning VHDL. Write real code, simulate it with GHDL, and watch it run on a virtual DE1-SoC board." />
+<meta name="description" content="A free, browser-based playground for learning VHDL. Write real code, simulate it with GHDL, and watch it run on a virtual FPGA-Dev board." />
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="styles.css" />
 
 <meta property="og:title" content="HDLBoard — Write VHDL and watch it run" />
-<meta property="og:description" content="A free, browser-based playground for learning VHDL, simulated for real with GHDL, on a virtual DE1-SoC board." />
+<meta property="og:description" content="A free, browser-based playground for learning VHDL, simulated for real with GHDL, on a virtual FPGA-Dev board." />
 <meta property="og:image" content="assets/workbench.png" />
 <meta property="og:type" content="website" />
 </head>
@@ -52,7 +52,7 @@
         languages. Type real <abbr title="VHSIC Hardware Description Language">VHDL</abbr>
         in your browser, simulate it with the open-source
         <a href="https://github.com/ghdl/ghdl" target="_blank" rel="noopener">GHDL</a> compiler,
-        and watch the result play out on a virtual DE1-SoC board — flip switches,
+        and watch the result play out on a virtual FPGA-Dev board — flip switches,
         press buttons, and see the LEDs and seven-segment displays react exactly
         like the real hardware would.
       </p>
@@ -66,7 +66,7 @@
 
       <figure class="hero-shot">
         <img src="assets/workbench.png" width="1600" height="1000" loading="eager"
-             alt="HDLBoard running DE1_SoC.vhd: a file tree and VHDL editor on the left, and the virtual DE1-SoC board with switches, LEDs and seven-segment displays on the right." />
+             alt="HDLBoard running DE1_SoC.vhd: a file tree and VHDL editor on the left, and the virtual FPGA-Dev board with switches, LEDs and seven-segment displays on the right." />
         <figcaption>The workbench — files on the left, the VHDL editor in the middle, the live board on the right.</figcaption>
       </figure>
     </div>
@@ -86,8 +86,8 @@
           <p>A language for describing digital circuits — what connects to what, and how it should behave — instead of a sequence of steps to run.</p>
         </div>
         <div class="glossary-item">
-          <h3>DE1-SoC</h3>
-          <p>A popular FPGA development board used in many university courses, with switches, buttons, LEDs and seven-segment displays to wire up.</p>
+          <h3>FPGA-Dev board</h3>
+          <p>The general-purpose FPGA development board this simulator models, with switches, buttons, LEDs and seven-segment displays to wire up.</p>
         </div>
         <div class="glossary-item">
           <h3>GHDL</h3>
@@ -123,7 +123,7 @@
           <div class="feature-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M7 10v4M11 9v5M15 11v3M19 10v4"/></svg>
           </div>
-          <h3>A live DE1-SoC board</h3>
+          <h3>A live FPGA-Dev board</h3>
           <p>Clickable switches and pushbuttons, LEDs and seven-segment displays — all driven live by your simulation, exactly like the real board.</p>
         </div>
 
@@ -213,7 +213,7 @@
         <p>
           HDLBoard was built for <strong>PB1180 Programmerbare logiske kretser</strong>
           at USN, so students can see things like <code>LEDR &lt;= SW;</code> actually
-          behave the way the real DE1-SoC board would — without needing hardware in hand.
+          behave the way the real FPGA-Dev board would — without needing hardware in hand.
           The full source is public: explore it, open an issue, or send a pull request.
         </p>
         <a class="btn btn-primary" href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener">
@@ -226,7 +226,7 @@
         <div><dt>Frontend</dt><dd>React + TypeScript</dd></div>
         <div><dt>Editor</dt><dd>Custom, with VHDL syntax highlighting</dd></div>
         <div><dt>Simulation</dt><dd>GHDL, over a WebSocket backend</dd></div>
-        <div><dt>Hardware model</dt><dd>Virtual DE1-SoC board</dd></div>
+        <div><dt>Hardware model</dt><dd>Virtual FPGA-Dev board</dd></div>
         <div><dt>License</dt><dd>GPL-2.0</dd></div>
       </dl>
     </div>
