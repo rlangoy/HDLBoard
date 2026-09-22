@@ -30,10 +30,13 @@
     </label>
 
     <nav class="site-nav" aria-label="Primary">
-      <a href="#features">Features</a>
       <a href="#how-it-works">How it works</a>
-      <a href="#get-started">Get started</a>
-      <a href="#open-source">GitHub</a>
+      <a href="#features">Features</a>
+      <a class="nav-github" href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener" aria-label="HDLBoard on GitHub (opens in a new tab)">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        <span>GitHub</span>
+        <svg class="ext-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M6.22 8.72a.75.75 0 0 0 1.06 1.06l5.22-5.22v1.69a.75.75 0 0 0 1.5 0v-3.5a.75.75 0 0 0-.75-.75h-3.5a.75.75 0 0 0 0 1.5h1.69L6.22 8.72Z"/><path fill="currentColor" d="M3.75 2A1.75 1.75 0 0 0 2 3.75v8.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 12.25v-3.5a.75.75 0 0 0-1.5 0v3.5a.25.25 0 0 1-.25.25h-8.5a.25.25 0 0 1-.25-.25v-8.5a.25.25 0 0 1 .25-.25h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
+      </a>
       <a class="btn btn-primary btn-nav" href="#get-started">Get Started</a>
     </nav>
   </div>
@@ -56,19 +59,44 @@
         press buttons, and see the LEDs and seven-segment displays react exactly
         like the real hardware would.
       </p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#get-started">Get Started</a>
-        <a class="btn btn-secondary" href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener">
-          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          View on GitHub
-        </a>
+
+      <div class="how" id="how-it-works" aria-labelledby="how-heading">
+        <h2 id="how-heading">How it works</h2>
+        <ol class="how-flow">
+          <li>
+            <span class="how-step">1</span>
+            <h3>Write</h3>
+            <p>Edit VHDL source files in the browser.</p>
+          </li>
+          <li>
+            <span class="how-step">2</span>
+            <h3>Simulate</h3>
+            <p>GHDL compiles and runs your design.</p>
+          </li>
+          <li>
+            <span class="how-step">3</span>
+            <h3>Watch it respond</h3>
+            <p>Results are drawn live onto the virtual board.</p>
+          </li>
+          <li>
+            <span class="how-step">4</span>
+            <h3>Interact</h3>
+            <p>Flip switches and press buttons, and see the design react.</p>
+          </li>
+        </ol>
       </div>
 
       <figure class="hero-shot">
         <img src="assets/workbench.png" width="1600" height="1000" loading="eager"
              alt="HDLBoard running DE1_SoC.vhd: a file tree and VHDL editor on the left, and the virtual FPGA-Dev board with switches, LEDs and seven-segment displays on the right." />
-        <figcaption>The workbench — files on the left, the VHDL editor in the middle, the live board on the right.</figcaption>
       </figure>
+
+      <p class="how-note">
+        The editor runs entirely in your browser, but the actual compiling and
+        simulating happens in a small backend service that runs GHDL for you.
+        That's why HDLBoard needs to be installed or self-hosted, rather than
+        running end-to-end on a page like this one.
+      </p>
     </div>
   </section>
 
@@ -136,41 +164,6 @@
         </div>
 
       </div>
-    </div>
-  </section>
-
-  <!-- ============ HOW IT WORKS ============ -->
-  <section class="how" id="how-it-works" aria-labelledby="how-heading">
-    <div class="wrap">
-      <h2 id="how-heading">How it works</h2>
-      <ol class="how-flow">
-        <li>
-          <span class="how-step">1</span>
-          <h3>Write</h3>
-          <p>Edit VHDL source files in the browser.</p>
-        </li>
-        <li>
-          <span class="how-step">2</span>
-          <h3>Simulate</h3>
-          <p>GHDL compiles and runs your design.</p>
-        </li>
-        <li>
-          <span class="how-step">3</span>
-          <h3>Watch it respond</h3>
-          <p>Results are drawn live onto the virtual board.</p>
-        </li>
-        <li>
-          <span class="how-step">4</span>
-          <h3>Interact</h3>
-          <p>Flip switches and press buttons, and see the design react.</p>
-        </li>
-      </ol>
-      <p class="how-note">
-        The editor runs entirely in your browser, but the actual compiling and
-        simulating happens in a small backend service that runs GHDL for you.
-        That's why HDLBoard needs to be installed or self-hosted, rather than
-        running end-to-end on a page like this one.
-      </p>
     </div>
   </section>
 
