@@ -3,225 +3,132 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HDLBoard — Write VHDL and watch it run</title>
-<meta name="description" content="A free, browser-based playground for learning VHDL. Write real code, simulate it with GHDL, and watch it run on a virtual FPGA-Dev board." />
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<title>HDLBoard — Write VHDL. Watch it light up.</title>
+<meta name="description" content="A free, open-source virtual FPGA board for learning VHDL. Flip switches, press buttons and see your design come alive — no hardware needed." />
+<link rel="icon" href="assets/favicon.svg?v=3" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
 
-<meta property="og:title" content="HDLBoard — Write VHDL and watch it run" />
-<meta property="og:description" content="A free, browser-based playground for learning VHDL, simulated for real with GHDL, on a virtual FPGA-Dev board." />
+<meta property="og:title" content="HDLBoard — Write VHDL. Watch it light up." />
+<meta property="og:description" content="A free, open-source virtual FPGA board for learning VHDL. No hardware needed." />
 <meta property="og:image" content="assets/workbench.png" />
 <meta property="og:type" content="website" />
 </head>
-<body>
+<body id="top">
 
 <a class="skip-link" href="#main">Skip to content</a>
 
 <header class="site-header">
-  <div class="wrap header-inner">
-    <a class="brand" href="#top">
-      <img src="assets/favicon.svg" alt="" width="24" height="24" />
-      <span>HDLBoard</span>
-    </a>
-
-    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true" />
-    <label for="nav-toggle" class="nav-burger" aria-label="Open menu">
-      <span></span><span></span><span></span>
-    </label>
-
-    <nav class="site-nav" aria-label="Primary">
-      <a href="#how-it-works">How it works</a>
-      <a href="#features">Features</a>
-      <a class="nav-github" href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener" aria-label="HDLBoard on GitHub (opens in a new tab)">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-        <span>GitHub</span>
-        <svg class="ext-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M6.22 8.72a.75.75 0 0 0 1.06 1.06l5.22-5.22v1.69a.75.75 0 0 0 1.5 0v-3.5a.75.75 0 0 0-.75-.75h-3.5a.75.75 0 0 0 0 1.5h1.69L6.22 8.72Z"/><path fill="currentColor" d="M3.75 2A1.75 1.75 0 0 0 2 3.75v8.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 12.25v-3.5a.75.75 0 0 0-1.5 0v3.5a.25.25 0 0 1-.25.25h-8.5a.25.25 0 0 1-.25-.25v-8.5a.25.25 0 0 1 .25-.25h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
+  <div class="wrap">
+    <nav class="site-nav" aria-label="Main">
+      <a class="brand" href="#top">
+        <img src="assets/favicon.svg?v=3" alt="" width="34" height="34" />
+        <span>HDLBoard</span>
       </a>
-      <a class="btn btn-primary btn-nav" href="#get-started">Get Started</a>
+      <div class="nav-links">
+        <a class="nav-link" href="https://github.com/rlangoy/HDLBoard"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span>GitHub</span></a>
+        <a class="btn btn-primary btn-sm" href="https://github.com/rlangoy/HDLBoard/releases">Downloads</a>
+      </div>
     </nav>
   </div>
 </header>
 
-<main id="main">
+<section class="hero">
+  <div class="wrap">
 
-  <!-- ============ HERO ============ -->
-  <section class="hero" id="top">
-    <div class="wrap hero-inner">
-      <p class="eyebrow">Free &amp; open source · built for PB1180 at USN</p>
-      <h1>HDLBoard</h1>
-      <p class="hero-tagline">Write VHDL. Watch it run.</p>
-      <p class="hero-copy">
-        HDLBoard is a friendly way to get started with hardware description
-        languages. Type real <abbr title="VHSIC Hardware Description Language">VHDL</abbr>
-        in your browser, simulate it with the open-source
-        <a href="https://github.com/ghdl/ghdl" target="_blank" rel="noopener">GHDL</a> compiler,
-        and watch the result play out on a virtual FPGA-Dev board — flip switches,
-        press buttons, and see the LEDs and seven-segment displays react exactly
-        like the real hardware would.
-      </p>
-
-      <div class="how" id="how-it-works" aria-labelledby="how-heading">
-        <h2 id="how-heading">How it works</h2>
-        <ol class="how-flow">
-          <li>
-            <span class="how-step">1</span>
-            <h3>Write</h3>
-            <p>Edit VHDL source files in the browser.</p>
-          </li>
-          <li>
-            <span class="how-step">2</span>
-            <h3>Simulate</h3>
-            <p>GHDL compiles and runs your design.</p>
-          </li>
-          <li>
-            <span class="how-step">3</span>
-            <h3>Watch it respond</h3>
-            <p>Results are drawn live onto the virtual board.</p>
-          </li>
-          <li>
-            <span class="how-step">4</span>
-            <h3>Interact</h3>
-            <p>Flip switches and press buttons, and see the design react.</p>
-          </li>
-        </ol>
-      </div>
-
-      <figure class="hero-shot">
-        <img src="assets/workbench.png" width="1600" height="1000" loading="eager"
-             alt="HDLBoard running DE1_SoC.vhd: a file tree and VHDL editor on the left, and the virtual FPGA-Dev board with switches, LEDs and seven-segment displays on the right." />
-      </figure>
-
-      <p class="how-note">
-        The editor runs entirely in your browser, but the actual compiling and
-        simulating happens in a small backend service that runs GHDL for you.
-        That's why HDLBoard needs to be installed or self-hosted, rather than
-        running end-to-end on a page like this one.
-      </p>
-    </div>
-  </section>
-
-  <!-- ============ NEW HERE ============ -->
-  <section class="glossary" id="new-here" aria-labelledby="glossary-heading">
-    <div class="wrap">
-      <h2 id="glossary-heading">New to FPGAs? Four terms and you're set</h2>
-      <div class="glossary-grid">
-        <div class="glossary-item">
-          <h3>FPGA</h3>
-          <p>A chip you rewire with code instead of a soldering iron. Rather than running instructions like a CPU, it <em>becomes</em> the circuit you describe.</p>
-        </div>
-        <div class="glossary-item">
-          <h3>VHDL</h3>
-          <p>A language for describing digital circuits — what connects to what, and how it should behave — instead of a sequence of steps to run.</p>
-        </div>
-        <div class="glossary-item">
-          <h3>FPGA-Dev board</h3>
-          <p>The general-purpose FPGA development board this simulator models, with switches, buttons, LEDs and seven-segment displays to wire up.</p>
-        </div>
-        <div class="glossary-item">
-          <h3>GHDL</h3>
-          <p>A free, open-source tool that compiles VHDL and simulates it, so you can check your circuit's behavior before it ever touches real hardware.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ FEATURES ============ -->
-  <section class="features" id="features" aria-labelledby="features-heading">
-    <div class="wrap">
-      <h2 id="features-heading">What you get</h2>
-      <div class="feature-grid">
-
-        <div class="feature-card">
-          <div class="feature-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v16H4z"/><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/></svg>
-          </div>
-          <h3>A real VHDL editor</h3>
-          <p>Write and organize VHDL files directly in your browser, with syntax highlighting that keeps your code readable as it grows.</p>
-        </div>
-
-        <div class="feature-card">
-          <div class="feature-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M5 4v16l14-8z"/></svg>
-          </div>
-          <h3>Real GHDL simulation</h3>
-          <p>Your design is compiled and simulated by GHDL itself — not an approximation — with its own console output and errors, file and line included.</p>
-        </div>
-
-        <div class="feature-card">
-          <div class="feature-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M7 10v4M11 9v5M15 11v3M19 10v4"/></svg>
-          </div>
-          <h3>A live FPGA-Dev board</h3>
-          <p>Clickable switches and pushbuttons, LEDs and seven-segment displays — all driven live by your simulation, exactly like the real board.</p>
-        </div>
-
-        <div class="feature-card">
-          <div class="feature-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M12 12v9M4 7.5l8 4.5 8-4.5"/></svg>
-          </div>
-          <h3>Built for learning</h3>
-          <p>Multiple files per project, real-time pacing so timing behaves like it would on real hardware, and testbench <code>report</code>/<code>assert</code> output right in the console.</p>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ GET STARTED ============ -->
-  <section class="get-started" id="get-started" aria-labelledby="get-started-heading">
-    <div class="wrap">
-      <h2 id="get-started-heading">Get started</h2>
-      <p class="section-lede">Pick whichever fits — trying it on your own machine, or setting it up for a classroom.</p>
-
-      <div class="start-grid">
-        <div class="start-card">
-          <h3>Windows App</h3>
-          <p>Download the installer and run it. The simplest way to try HDLBoard on your own computer.</p>
-          <a class="link-arrow" href="https://github.com/rlangoy/HDLBoard/releases" target="_blank" rel="noopener">Download the installer →</a>
-        </div>
-        <div class="start-card">
-          <h3>Host it yourself</h3>
-          <p>Run HDLBoard on Linux, macOS or WSL so a whole classroom can open it in a browser.</p>
-          <a class="link-arrow" href="https://github.com/rlangoy/HDLBoard/blob/main/docs/HOSTING.md" target="_blank" rel="noopener">Read the hosting guide →</a>
-        </div>
-        <div class="start-card">
-          <h3>Build from source</h3>
-          <p>Compile the project yourself, run the dev server, or build the Windows installer.</p>
-          <a class="link-arrow" href="https://github.com/rlangoy/HDLBoard/blob/main/docs/BUILDING.md" target="_blank" rel="noopener">Read the build guide →</a>
-        </div>
-      </div>
-
-      <p class="start-footnote">
-        Curious how the virtual board itself is built? See the
-        <a href="https://github.com/rlangoy/HDLBoard/blob/main/docs/Design_Description.md" target="_blank" rel="noopener">design description</a>.
-      </p>
-    </div>
-  </section>
-
-  <!-- ============ OPEN SOURCE ============ -->
-  <section class="open-source" id="open-source" aria-labelledby="open-source-heading">
-    <div class="wrap os-inner">
-      <div class="os-text">
-        <h2 id="open-source-heading">Open source, made for the classroom</h2>
-        <p>
-          HDLBoard was built for <strong>PB1180 Programmerbare logiske kretser</strong>
-          at USN, so students can see things like <code>LEDR &lt;= SW;</code> actually
-          behave the way the real FPGA-Dev board would — without needing hardware in hand.
-          The full source is public: explore it, open an issue, or send a pull request.
-        </p>
-        <a class="btn btn-primary" href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener">
-          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          View source on GitHub
+    <div class="hero-text">
+      <h1><span>Write VHDL.</span> <span>Watch it light up.</span></h1>
+      <p class="lede">A virtual FPGA board on your screen. Flip switches, press buttons and see your design come alive. No hardware needed.</p>
+      <div class="actions">
+        <a class="btn btn-primary btn-lg btn-glow" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.0.0/HDLBoard-Setup-1.0.0.exe">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn btn-outline btn-lg" href="https://github.com/rlangoy/HDLBoard">
+          <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          View on GitHub
         </a>
       </div>
+    </div>
 
-      <dl class="tech-list">
-        <div><dt>Frontend</dt><dd>React + TypeScript</dd></div>
-        <div><dt>Editor</dt><dd>Custom, with VHDL syntax highlighting</dd></div>
-        <div><dt>Simulation</dt><dd>GHDL, over a WebSocket backend</dd></div>
-        <div><dt>Hardware model</dt><dd>Virtual FPGA-Dev board</dd></div>
-        <div><dt>License</dt><dd>GPL-2.0</dd></div>
-      </dl>
+    <img class="hero-shot" src="assets/workbench.png" width="1433" height="848" loading="eager"
+         alt="HDLBoard with a VHDL file open in the editor and the virtual board showing lit LEDs, switches, 7-segment displays and pushbuttons" />
+  </div>
+</section>
+
+<main id="main">
+
+  <section class="band" aria-label="Highlights">
+    <div class="wrap band-grid">
+      <div class="band-item">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        <h3>No hardware needed</h3>
+        <p>Everything happens on screen, so you can practise anywhere.</p>
+      </div>
+      <div class="band-item">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 6 2 12 8 18"/><polyline points="16 6 22 12 16 18"/></svg>
+        <h3>Real VHDL</h3>
+        <p>The same code you would put on a real FPGA, simulated by GHDL.</p>
+      </div>
+      <div class="band-item">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+        <h3>Free for everyone</h3>
+        <p>Open source, and free to use at home or in class.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="wrap split-grid">
+      <div class="split-media">
+        <img src="assets/board-closeup.png" width="606" height="382" loading="lazy"
+             alt="Close-up of the virtual board: three red LEDs lit by the matching switches" />
+      </div>
+      <div class="split-text">
+        <h2>Flip a switch. Your design reacts.</h2>
+        <p>Switches, pushbuttons, LEDs and 7-segment displays respond to your VHDL while it runs. It feels like the real board, without one on your desk.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="classroom">
+    <div class="wrap center">
+      <h2>Made for the classroom</h2>
+      <p>Built at USN for students taking their first steps in FPGA design. Install it on your own PC, or host one copy and let the whole class use it in the browser.</p>
+      <div class="actions">
+        <a class="btn btn-primary btn-lg" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.0.0/HDLBoard.ova">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+          Download VirtualBox image
+        </a>
+        <a class="btn btn-ghost-dark btn-lg" href="https://github.com/rlangoy/HDLBoard/blob/main/docs/HOSTING.md">Read the hosting guide</a>
+      </div>
+      <p class="dl-note">VirtualBox .ova · 330 MB</p>
+    </div>
+  </section>
+
+  <section class="how" id="how-it-works" aria-labelledby="how-heading">
+    <div class="wrap center">
+      <h2 id="how-heading">How it works</h2>
+      <ol class="steps">
+        <li><span class="step-num">1</span><h3>Write</h3><p>Edit VHDL source files in the browser.</p></li>
+        <li><span class="step-num">2</span><h3>Simulate</h3><p>GHDL compiles and runs your design.</p></li>
+        <li><span class="step-num">3</span><h3>Watch it respond</h3><p>Results are drawn live onto the virtual board.</p></li>
+        <li><span class="step-num">4</span><h3>Interact</h3><p>Flip switches and press buttons, and see the design react.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="github">
+    <div class="wrap center">
+      <span class="logo-tile"><img src="assets/favicon.svg?v=3" alt="" width="48" height="48" /></span>
+      <h2>Open source on GitHub</h2>
+      <p>Read the code, report an issue or help make HDLBoard better. Guides and documentation live in the repository.</p>
+      <a class="btn btn-light btn-lg" href="https://github.com/rlangoy/HDLBoard">
+          <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          View on GitHub
+        </a>
     </div>
   </section>
 
@@ -229,17 +136,12 @@
 
 <footer class="site-footer">
   <div class="wrap footer-inner">
-    <div class="footer-brand">
-      <img src="assets/favicon.svg" alt="" width="20" height="20" />
-      <span>HDLBoard</span>
-    </div>
+    <span>HDLBoard is free software, licensed under GPL-2.0.</span>
     <nav class="footer-links" aria-label="Footer">
-      <a href="https://github.com/rlangoy/HDLBoard" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/rlangoy/HDLBoard/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
-      <a href="https://github.com/rlangoy/HDLBoard/releases" target="_blank" rel="noopener">Download</a>
-      <a href="https://github.com/rlangoy/HDLBoard/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      <a href="https://github.com/rlangoy/HDLBoard">GitHub</a>
+      <a href="https://github.com/rlangoy/HDLBoard/releases">Releases</a>
+      <a href="https://github.com/rlangoy/HDLBoard/blob/main/LICENSE">License</a>
     </nav>
-    <p class="footer-tagline">Built for learning, experimenting and developing VHDL designs.</p>
   </div>
 </footer>
 
