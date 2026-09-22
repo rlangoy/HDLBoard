@@ -44,6 +44,28 @@ command -v rc-update >/dev/null 2>&1 || die "OpenRC not found — this installer
 info "Alpine $(cat /etc/alpine-release), $(apk --print-arch)"
 
 # --- 2. Node --------------------------------------------------------------
+# npm is the one package this needs from Alpine's community repository, and a
+# fresh setup-alpine leaves community commented out — so on a clean machine
+# 'apk add npm' fails with "npm (no such package)". Enable it by deriving the
+# URL from the first enabled main line, so it matches the mirror and release
+# already in use.
+step "Enabling Alpine's community repository"
+REPOS=/etc/apk/repositories
+if grep -qE '^[[:space:]]*(https?://|/)[^[:space:]]*/community/?[[:space:]]*$' "$REPOS"; then
+	info "already enabled"
+else
+	main=$(grep -E '^[[:space:]]*(https?://|/)[^[:space:]]*/main/?[[:space:]]*$' "$REPOS" | head -1 | tr -d '[:space:]')
+	[ -n "$main" ] || die "no enabled 'main' repository in $REPOS to derive community from — add one (setup-apkrepos)"
+	main="${main%/}"
+	community="${main%/main}/community"
+	# Appending to a file with no trailing newline would glue this onto the
+	# last line and break both.
+	[ -z "$(tail -c1 "$REPOS")" ] || echo >> "$REPOS"
+	echo "$community" >> "$REPOS"
+	info "enabled $community"
+fi
+apk update --no-progress >/dev/null || die "apk update failed — is this machine online?"
+
 step "Installing Node.js and git"
 apk add --no-progress nodejs npm git >/dev/null
 command -v node >/dev/null 2>&1 || die "node still not on PATH after 'apk add nodejs'"

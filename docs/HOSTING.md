@@ -149,6 +149,8 @@ Node is packaged; **GHDL is not** (checked against 3.24 main and community),
 so build it — Alpine has the Ada compiler GHDL needs:
 
 ```bash
+sudo setup-apkrepos -o          # enable community: npm lives there, and a fresh install leaves it off
+sudo apk update
 sudo apk add nodejs npm git build-base gcc-gnat zlib-dev
 
 git clone https://github.com/ghdl/ghdl ~/ghdl-src
@@ -158,6 +160,11 @@ make -j$(nproc)
 sudo make install
 cd - && ghdl --version
 ```
+
+Skip the first line and `apk add` fails with `npm (no such package)`: `npm`
+is the only package here from the *community* repository, and `setup-alpine`
+writes that repository commented out. `setup-apkrepos -o` adds a community
+line for each enabled main one, matching the mirror you already use.
 
 A minimal Alpine has `doas` rather than `sudo` — substitute it, or
 `apk add sudo` first. The build takes a few minutes (it clones GHDL's
