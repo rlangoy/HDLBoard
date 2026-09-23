@@ -53,6 +53,20 @@ const SIDEBAR_SCALE = 3;
 const BRAND_DARK = '#07506A'; // the logo's own circle colour
 const BRAND_LIGHT = '#0A6B8C';
 
+// The same two-tone split the header renders (src/components/workbench/
+// logo.tsx's HeaderLogo): the chip/pins silhouette solid, the "H" cut out
+// as its own subpath rather than left as a hole in one compound path —
+// see that file for why. Duplicated here (not imported) because this
+// script runs under plain Electron/Node, not the Vite/TS build.
+const LOGO_BODY_PATH =
+  'M8 4h16a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM8 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM20 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM12 27v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-4zM24 27v4a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-4zM5 12H1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h4zM5 24H1a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4zM27 8h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM27 20h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4z';
+const LOGO_H_PATH = 'M8 8v16h4v-6h8v6h4V8h-4v6h-8V8z';
+const TWO_TONE_LOGO_SVG =
+  `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">` +
+  `<path fill="#ffffff" d="${LOGO_BODY_PATH}"/>` +
+  `<path fill="#000000" d="${LOGO_H_PATH}"/>` +
+  `</svg>`;
+
 function buildIco(pngs) {
   const HEADER = 6;
   const ENTRY = 16;
@@ -192,9 +206,9 @@ app.whenReady().then(async () => {
     webPreferences: { offscreen: true },
   });
 
-  // The logo's own disc is BRAND_DARK, so it would vanish against a flat
-  // brand background — the white ring behind it is what keeps the emblem
-  // readable rather than decorative.
+  // Same two-tone logo the app header shows (white chip/pins, black "H"),
+  // straight on the brand gradient — matching the header's own dark
+  // backdrop, so no white ring is needed to keep it readable here either.
   const sidebarHtml = `<!doctype html><html><body style="margin:0">
     <div style="
       width:${w}px;height:${h}px;
@@ -202,11 +216,9 @@ app.whenReady().then(async () => {
       display:flex;flex-direction:column;align-items:center;justify-content:center;
       font-family:'Segoe UI',Arial,sans-serif;color:#fff;">
       <div style="
-        width:${86 * SIDEBAR_SCALE}px;height:${86 * SIDEBAR_SCALE}px;
-        border-radius:50%;background:#fff;
-        display:flex;align-items:center;justify-content:center;
-        box-shadow:0 ${2 * SIDEBAR_SCALE}px ${10 * SIDEBAR_SCALE}px rgba(0,0,0,.25);">
-        <div style="width:${78 * SIDEBAR_SCALE}px;height:${78 * SIDEBAR_SCALE}px">${svg}</div>
+        width:${90 * SIDEBAR_SCALE}px;height:${90 * SIDEBAR_SCALE}px;
+        filter:drop-shadow(0 ${2 * SIDEBAR_SCALE}px ${10 * SIDEBAR_SCALE}px rgba(0,0,0,.35));">
+        ${TWO_TONE_LOGO_SVG}
       </div>
       <div style="
         margin-top:${18 * SIDEBAR_SCALE}px;
