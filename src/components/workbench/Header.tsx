@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { LOGO_DATA_URI } from './logo';
+import { HeaderLogo } from './logo';
 import { GearIcon } from './icons';
 import { APP_NAME, APP_TAGLINE } from './project';
 import './Header.css';
@@ -25,7 +25,7 @@ export function Header({ onSettings, onHelp, onAbout }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
-        <img src={LOGO_DATA_URI} alt="" className="wb-header__logo" />
+        <HeaderLogo />
         <span className="wb-header__title">{APP_NAME}</span>
         <span className="wb-header__tagline">&mdash; {APP_TAGLINE}</span>
       </div>
