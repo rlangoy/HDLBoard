@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>HDLBoard</title>
+  <!-- One path: chip body and 8 pins wind clockwise, the H winds the other way, so it is a real hole.
+       32-unit grid: every edge lands on whole pixels at 16, 32 and 48 px. -->
+  <path d="M8 4h16a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM8 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM20 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM12 27v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-4zM24 27v4a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-4zM5 12H1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h4zM5 24H1a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4zM27 8h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM27 20h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM8 8v16h4v-6h8v6h4V8h-4v6h-8V8z"/>
+</svg>
