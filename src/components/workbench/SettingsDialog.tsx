@@ -2,22 +2,13 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { Dialog } from './Dialog';
+import { GearIcon } from './icons';
 import { APP_NAME, ISSUES_URL } from './project';
 import './SettingsDialog.css';
 
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
-}
-
-/** A gear, drawn to sit in the dialog's white badge. */
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4 1.9 1.5a7.6 7.6 0 0 0 0 3l-1.9 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4z" />
-    </svg>
-  );
 }
 
 const NEW_ISSUE = `${ISSUES_URL}/new`;

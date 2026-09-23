@@ -25,6 +25,10 @@
   width: 32px;
   height: 32px;
   display: block;
+  /* The header band is always dark, regardless of system theme, so the
+     logo is forced to solid white here rather than following the SVG's
+     own light/dark fill. */
+  filter: brightness(0) invert(1);
 }
 
 .wb-header__title {
@@ -76,13 +80,13 @@
 .wb-icon--gear {
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  box-shadow:
-    0 -7px 0 -5px currentColor,
-    0 7px 0 -5px currentColor,
-    -7px 0 0 -5px currentColor,
-    7px 0 0 -5px currentColor;
+  display: inline-flex;
+}
+
+.wb-icon--gear svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .wb-icon--help {

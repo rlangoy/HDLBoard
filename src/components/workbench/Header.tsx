@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { LOGO_DATA_URI } from './logo';
+import { GearIcon } from './icons';
 import { APP_NAME, APP_TAGLINE } from './project';
 import './Header.css';
 
@@ -30,7 +31,9 @@ export function Header({ onSettings, onHelp, onAbout }: HeaderProps) {
       </div>
       <div className="wb-header__actions">
         <button type="button" className="wb-header__action" onClick={onSettings}>
-          <span className="wb-icon wb-icon--gear" aria-hidden="true" />
+          <span className="wb-icon wb-icon--gear" aria-hidden="true">
+            <GearIcon />
+          </span>
           Settings
         </button>
         <button type="button" className="wb-header__action" onClick={onHelp}>
