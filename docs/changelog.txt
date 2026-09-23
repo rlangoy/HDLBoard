@@ -1,0 +1,1 @@
+2026-09-23 - Replaced src/Images/vhdl_usn_logo.svg with src/Images/hdlboard_logo.svg (new HDLBoard logo), updated logo.ts and winInstaller/make-assets.cjs references, and regenerated the Windows installer's icon.ico and installerSidebar.bmp from the new logo.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import logoSvg from '../../Images/vhdl_usn_logo.svg?raw';
+import logoSvg from '../../Images/hdlboard_logo.svg?raw';
 
 /**
  * `?raw` pulls the SVG in as a plain string at build time — not a

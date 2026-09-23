@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Renders the installer's branding from src/Images/vhdl_usn_logo.svg:
+ * Renders the installer's branding from src/Images/hdlboard_logo.svg:
  *
  *   electron/build/icon.ico            app + installer icon, 7 sizes
  *   electron/build/installerSidebar.bmp  NSIS welcome/finish panel, 164x314
@@ -32,7 +32,7 @@ const { pathToFileURL } = require('node:url');
 
 const here = __dirname;
 const repoRoot = resolve(here, '..');
-const svgPath = join(repoRoot, 'src', 'Images', 'vhdl_usn_logo.svg');
+const svgPath = join(repoRoot, 'src', 'Images', 'hdlboard_logo.svg');
 const buildDir = join(here, 'electron', 'build');
 const icoPath = join(buildDir, 'icon.ico');
 const bmpPath = join(buildDir, 'installerSidebar.bmp');
