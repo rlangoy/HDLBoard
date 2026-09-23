@@ -1,3 +1,4 @@
+2026-09-23 - Bumped version to 1.0.1 (app, server and desktop package.json + lockfiles); rebuilt the Windows installer as HDLBoard-Setup-1.0.1.exe.
 2026-09-23 - Replaced src/Images/vhdl_usn_logo.svg with src/Images/hdlboard_logo.svg (new HDLBoard logo), updated logo.ts and winInstaller/make-assets.cjs references, and regenerated the Windows installer's icon.ico and installerSidebar.bmp from the new logo.
 2026-09-23 - Header logo now renders two-tone (white chip body, black H) instead of following system light/dark, so it stays legible on the always-dark header band; the Settings gear icon now matches the Settings dialog's icon and is sized to match the Help/About icons.
 2026-09-23 - Replaced the Files panel's header icon with a custom document glyph (src/Images/files_ico.svg, inlined as FilesIcon in icons.tsx).

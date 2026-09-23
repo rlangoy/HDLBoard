@@ -1,7 +1,7 @@
 {
   "name": "hdl-board",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "GPL-2.0-only",
   "description": "HDLBoard — Write VHDL and watch it run: a browser IDE shell around DE-board style UI components (Switches, LEDs, 7-segment, Pushbuttons)",

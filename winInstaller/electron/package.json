@@ -1,7 +1,7 @@
 {
   "name": "hdl-board-desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "GPL-2.0-only",
   "description": "Windows desktop shell for HDLBoard — packages the frontend, the GHDL backend, and GHDL itself into one installer",
   "author": "Rune Langøy",

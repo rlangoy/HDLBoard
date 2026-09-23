@@ -1,7 +1,7 @@
 {
   "name": "hdl-board-server",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "license": "GPL-2.0-only",
   "description": "GHDL backend for HDLBoard — see ../docs/ghdl_implementation_plan.md",
