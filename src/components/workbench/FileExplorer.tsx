@@ -4,7 +4,7 @@
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import type { VhdlFile } from './files';
-import { DeleteIcon, EditIcon } from './icons';
+import { DeleteIcon, EditIcon, FilesIcon } from './icons';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -121,7 +121,7 @@ export function FileExplorer({
         </div>
       )}
       <div className="wb-files__header">
-        <span className="wb-icon wb-icon--folder-outline" aria-hidden="true" />
+        <FilesIcon className="wb-icon wb-icon--files" aria-hidden="true" />
         <h2 className="wb-files__title">Files</h2>
       </div>
 

@@ -379,24 +379,11 @@
   border-radius: 2px 2px 0 0;
 }
 
-.wb-icon--folder-outline {
+.wb-icon--files {
   width: 15px;
-  height: 12px;
+  height: 15px;
   flex: none;
-  border: 1.5px solid var(--wb-text);
-  border-radius: 0 2px 2px 2px;
-  position: relative;
-}
-.wb-icon--folder-outline::before {
-  content: '';
-  position: absolute;
-  left: -1.5px;
-  top: -3px;
-  width: 7px;
-  height: 3px;
-  border: 1.5px solid var(--wb-text);
-  border-bottom: none;
-  border-radius: 2px 2px 0 0;
+  color: var(--wb-text);
 }
 
 .wb-icon--file {
