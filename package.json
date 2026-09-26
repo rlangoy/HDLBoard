@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "shot": "node tools/screenshot.mjs",
-    "demo": "npm run build && node tools/bundle.mjs Examples/board_demo.html"
+    "demo": "npm run build && node tools/bundle.mjs Examples/board_demo.html",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -23,6 +24,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "playwright": "^1.49.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }
