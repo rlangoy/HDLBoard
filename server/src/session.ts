@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchHandle, RunHandle } from './runtime.js';
+import { createOutputLimiter, type OutputLimiter } from './outputLimiter.js';
 import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
@@ -38,6 +39,8 @@ const MAX_STIM_QUEUE = 256;
  * file, so paying it more often is the cheapest latency left to buy.
  */
 const OUTPUT_POLL_MS = 20;
+/** How often a finished flood window is checked for its summary line (`outputLimiter.ts`). */
+const LIMITER_FLUSH_MS = 250;
 /**
  * Real-time pacing (§ 5.9, reworked in § 5.13). GHDL runs a session's own
  * simulated time as fast as it can — without this, a design not declaring
@@ -108,6 +111,8 @@ export class Session {
   private stimSeq = 0;
   private lastStimBits: string | null = null;
   private lastSentState: string | null = null;
+  private limiter: OutputLimiter | null = null;
+  private limiterTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
 
   constructor(send: (frame: ServerFrame) => void) {
@@ -224,6 +229,7 @@ export class Session {
       this.state = 'stopped';
       this.stopOutputPolling();
       this.stopPacing();
+      this.endOutput();
       if (!wasRunning) return;
       // A board design that ends the simulation itself (Verilog's `$finish`) is a
       // completed run, not a crash: the student asked for it.
@@ -235,12 +241,44 @@ export class Session {
     // (the generated testbench itself never writes to stdout, so
     // everything that arrives here is the student's own `report`/
     // `assert`, never internal plumbing).
-    handle.onOutput((line) => {
-      if (line.trim().length > 0) this.send({ verb: 'LOG', text: line });
-    });
+    this.beginOutput();
+    handle.onOutput((line) => this.forwardOutputLine(line));
     this.state = 'running';
     this.send({ verb: 'READY' });
     this.startOutputPolling();
+  }
+
+  /**
+   * The simulator's own output — a design's `$display`/`report` text — goes through a
+   * per-run line budget so a design that prints on every clock edge cannot flood the
+   * socket and the console (`outputLimiter.ts`). Both run kinds share these three.
+   */
+  private beginOutput(): void {
+    this.endOutput();
+    this.limiter = createOutputLimiter(Date.now);
+    this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
+  }
+
+  private forwardOutputLine(line: string): void {
+    if (line.trim().length > 0) this.sendLogLines(this.limiter?.accept(line) ?? []);
+  }
+
+  /** Reports what the budget dropped in the last window, then stops budgeting. */
+  private endOutput(): void {
+    this.stopLimiterTimer();
+    if (this.limiter) this.sendLogLines(this.limiter.finish());
+    this.limiter = null;
+  }
+
+  private stopLimiterTimer(): void {
+    if (this.limiterTimer) {
+      clearInterval(this.limiterTimer);
+      this.limiterTimer = null;
+    }
+  }
+
+  private sendLogLines(lines: readonly string[]): void {
+    for (const text of lines) this.send({ verb: 'LOG', text });
   }
 
   private startOutputPolling(): void {
@@ -363,9 +401,8 @@ export class Session {
   }
 
   private startBatchRun(engine: SimEngine, plan: RunPlan): void {
-    const handle = engine.startBatchRun(plan, (line) => {
-      if (line.trim().length > 0) this.send({ verb: 'LOG', text: line });
-    }, BATCH_TIMEOUT_MS);
+    this.beginOutput();
+    const handle = engine.startBatchRun(plan, (line) => this.forwardOutputLine(line), BATCH_TIMEOUT_MS);
     this.batchRun = handle;
     this.state = 'running';
     this.send({ verb: 'READY' });
@@ -375,6 +412,7 @@ export class Session {
       this.batchRun = null;
       const wasRunning = this.state === 'running';
       this.state = 'stopped';
+      this.endOutput();
       if (!wasRunning) return; // already reported via handleStop's own DONE
       if (timedOut) {
         this.send({
@@ -469,6 +507,7 @@ export class Session {
   private stopActive(reason: 'stopped' | null): void {
     this.stopOutputPolling();
     this.stopPacing();
+    this.endOutput();
     if (this.run) {
       this.run.kill();
       this.run = null;
@@ -487,6 +526,7 @@ export class Session {
     this.destroyed = true;
     this.stopOutputPolling();
     this.stopPacing();
+    this.stopLimiterTimer();
     if (this.run) this.run.kill();
     if (this.batchRun) this.batchRun.kill();
     void fs.rm(this.dir, { recursive: true, force: true }).catch(() => {});
