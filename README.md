@@ -35,6 +35,25 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 - [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
 
+## Credits
+
+HDLBoard stands on the work of others. Thank you to all of these projects and their contributors:
+
+| Component | Used for | License |
+|---|---|---|
+| [GHDL](https://github.com/ghdl/ghdl) | Analyses, elaborates and simulates VHDL | GPL-2.0 |
+| [Icarus Verilog](https://github.com/steveicarus/iverilog) | Compiles and simulates Verilog. The Windows build uses the [MSYS2](https://www.msys2.org/) packages, with GNU Readline, zlib, bzip2, termcap, winpthreads and the GCC runtime | GPL-2.0-or-later (Readline GPL-3.0-or-later; GCC runtime with the Runtime Library Exception) |
+| [React](https://react.dev/) | The user interface | MIT |
+| [ws](https://github.com/websockets/ws) | The WebSocket link between browser and simulator | MIT |
+| [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows desktop app | MIT (Chromium: BSD-style) |
+| [electron-builder](https://www.electron.build/) and [NSIS](https://nsis.sourceforge.io/) | The Windows installer | MIT; zlib/libpng-style |
+| [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |
+| [Playwright](https://playwright.dev/) | The screenshot helper in `tools/` (development only) | Apache-2.0 |
+
+The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
+DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/); HDLBoard is an independent
+teaching tool and is not affiliated with or endorsed by Terasic.
+
 ## About
 
 Built for **PB1180 Programmerbare logiske kretser** at USN — a browser

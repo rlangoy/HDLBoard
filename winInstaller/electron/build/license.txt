@@ -86,6 +86,16 @@ Icarus Verilog
       <installation directory>esources\iverilog\VERSION.txt
 
 
+React and ws
+------------
+
+  The user interface is built with React and ReactDOM (MIT License,
+  Copyright (c) Meta Platforms, Inc. and affiliates), https://react.dev/.
+  The WebSocket link between the interface and the simulators uses ws
+  (MIT License, Copyright (c) Einar Otto Stangvik and contributors),
+  https://github.com/websockets/ws. Both are bundled into the application.
+
+
 Electron
 --------
 

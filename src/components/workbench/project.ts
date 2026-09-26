@@ -17,6 +17,13 @@ export const ISSUES_URL = `${REPO_URL}/issues`;
 export const GHDL_URL = 'https://github.com/ghdl/ghdl';
 export const ICARUS_URL = 'https://github.com/steveicarus/iverilog';
 
+/** Other components HDLBoard is built with — credited in the About dialog and the README. */
+export const REACT_URL = 'https://react.dev/';
+export const WS_URL = 'https://github.com/websockets/ws';
+export const ELECTRON_URL = 'https://www.electronjs.org/';
+export const VITE_URL = 'https://vite.dev/';
+export const TYPESCRIPT_URL = 'https://www.typescriptlang.org/';
+
 /**
  * Dispatched on `window` to open the About dialog from outside React. The
  * desktop app's native Help → About menu item (winInstaller/electron/
