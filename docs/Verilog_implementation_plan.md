@@ -1068,8 +1068,8 @@ installer gates are the same machines; combine them). Install, then:
 
 | Id | Action | Expected |
 |---|---|---|
-| V-1 | Launch HDLBoard | Starter project shows `vhdl/` only |
-| V-2 | Drag `DE1_SoC.v` onto the Files panel | Appears under a new `verilog/` folder |
+| V-1 | Launch HDLBoard | Starter project shows `vhdl/` and `verilog/` |
+| V-2 | Drag a `.v` file (e.g. a renamed copy of `DE1_SoC.v`) onto the Files panel | Appears under `verilog/` |
 | V-3 | Click its dot to make it top; Start | Console: `Icarus Verilog version 13.0 …`, then `Simulation running ...` |
 | V-4 | Flip switches | LEDs follow the switches; displays stay blank |
 | V-5 | Drop `keyCouter2Led.v`, make it top, Start; press KEY0 three times | `LEDR[7:0]` = 3; press KEY1 → 0 |
