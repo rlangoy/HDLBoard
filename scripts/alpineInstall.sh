@@ -95,6 +95,14 @@ else
 	command -v ghdl >/dev/null 2>&1 || die "GHDL installed but not on PATH"
 	info "built and installed: $(ghdl --version | head -1)"
 fi
+# Icarus Verilog is packaged for Alpine (community), so no source build.
+step "Installing Icarus Verilog"
+if command -v iverilog >/dev/null 2>&1; then
+	info "already installed: $(iverilog -V 2>/dev/null | head -1)"
+else
+	apk add --no-progress iverilog >/dev/null || die "could not install iverilog with apk"
+	info "installed: $(iverilog -V 2>/dev/null | head -1)"
+fi
 # Pin the absolute path of the GHDL we just found. OpenRC does put
 # /usr/local/bin on a service's PATH (see _LOCAL_PREFIX in
 # /usr/libexec/rc/sh/functions.sh), so a source build needs no help — but a

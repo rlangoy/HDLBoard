@@ -47,6 +47,7 @@ build time (default `9010`). So:
 | **OS** | Linux, macOS, or Windows with WSL2 | `scripts/start.sh` / `stop.sh` are POSIX shell; Windows hosts run them inside WSL |
 | **[Node.js](https://nodejs.org/)** | 18+ (20+ recommended) | Runs the backend and builds the page |
 | **[GHDL](https://ghdl.github.io/ghdl/)** | any build supporting `--std=08` and `-g<name>=<value>` | Verified against 5.0.1 and 6.0.0, mcode |
+| **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Every Verilog session forks its own `vvp` |
 | **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend) |
 | **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` process |
 | **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the browser tab closes |
@@ -99,7 +100,7 @@ Debian 12 (bookworm) and newer package both:
 
 ```bash
 sudo apt update
-sudo apt install -y nodejs npm ghdl git
+sudo apt install -y nodejs npm ghdl iverilog git
 ```
 
 On Debian 11 (bullseye) `apt`'s Node is 12 — too old. Install a current one
@@ -116,7 +117,7 @@ Ubuntu 24.04 packages a new enough Node:
 
 ```bash
 sudo apt update
-sudo apt install -y nodejs npm ghdl git
+sudo apt install -y nodejs npm ghdl iverilog git
 ```
 
 On 22.04 that gives you Node 12, which is too old — install GHDL from `apt` as
@@ -180,7 +181,7 @@ host instead.
 With [Homebrew](https://brew.sh/):
 
 ```bash
-brew install node ghdl git
+brew install node ghdl icarus-verilog git
 ```
 
 Both are current formulas. Apple silicon and Intel are both fine.

@@ -35,6 +35,15 @@ describe('classifyCompileFailure', () => {
   });
 });
 
+describe('classifyCompileFailure — simulator missing', () => {
+  test('a program that cannot be started is an internal error that says how to fix it', () => {
+    const failure = classifyCompileFailure('Error: spawn iverilog ENOENT', -2);
+    assert.equal(failure.stage, 'internal');
+    assert.match(failure.text, /Icarus Verilog .* not found/);
+    assert.match(failure.text, /IVERILOG_DIR/);
+  });
+});
+
 describe('extractBanner', () => {
   test('takes the first line of the version output verbatim', () => {
     const output = `${BANNER_13}\n\nCopyright (c) 2000-2026 Stephen Williams (steve@icarus.com)\n`;

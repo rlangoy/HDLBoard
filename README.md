@@ -1,14 +1,14 @@
 # HDLBoard - Write VHDL and watch it run
 
-Write VHDL and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL, it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
+Write VHDL or Verilog and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL (VHDL) and Icarus Verilog (Verilog), it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
 
 ![HDLBoard running DE1_SoC.vhdl: the editor and file tree on the left, and the board's LEDs, 7-segment displays, switches and pushbuttons on the right, with five switches up and their LEDs lit.](docs/images/workbench.png)
 
 ## Features
 
-- **Real simulation** — your VHDL runs on [GHDL](https://github.com/ghdl/ghdl), not an approximation; GHDL's own output and errors (file:line included) appear in the console.
+- **Real simulation** — your VHDL runs on [GHDL](https://github.com/ghdl/ghdl) and your Verilog on [Icarus Verilog](https://github.com/steveicarus/iverilog), not an approximation; the simulator's own output and errors (file:line included) appear in the console. Drop a `.v` file, mark it as top, and Start runs the Verilog engine.
 - **A live DE1-SoC board** — clickable switches and pushbuttons, with LEDs and 7-segment displays driven by the simulation.
-- **A small IDE** — file explorer with upload and drag-and-drop, tabbed editor with VHDL syntax highlighting, resizable panes.
+- **A small IDE** — file explorer with upload and drag-and-drop, tabbed editor (VHDL syntax highlighting), resizable panes.
 - **Testbenches too** — `report` and `assert` output prints live from a plain, portless testbench.
 - **Real-time pacing** — simulated time tracks real time, so a design's timing here predicts its timing on the board.
 

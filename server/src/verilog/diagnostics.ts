@@ -23,8 +23,16 @@ export interface CompileFailure {
  */
 const ELABORATION_MARKERS: readonly RegExp[] = [/error\(s\) during elaboration/, /Unable to find the root module/];
 
+/** Node's message when the program itself cannot be started, e.g. `Error: spawn iverilog ENOENT`. */
+const PROGRAM_NOT_FOUND = /spawn .* ENOENT/;
+
+const MISSING_SIMULATOR_TEXT =
+  'Icarus Verilog (iverilog) was not found, so Verilog designs cannot run. ' +
+  'Install it (Linux: the "iverilog" package of your package manager; the Windows app bundles it), or set IVERILOG_DIR / IVERILOG_EXE.';
+
 export function classifyCompileFailure(stderr: string, exitCode: number): CompileFailure {
   const text = stderr.trim();
+  if (PROGRAM_NOT_FOUND.test(text)) return { stage: 'internal', text: MISSING_SIMULATOR_TEXT };
   if (text === '') {
     return { stage: 'analyze', text: `iverilog failed with exit code ${exitCode} and printed nothing.` };
   }

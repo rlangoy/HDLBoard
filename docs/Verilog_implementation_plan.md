@@ -2,11 +2,13 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: researched, spiked, reviewed (revision 3) — not implemented, 2026-09-26.**
-Nothing in `src/`, `server/` or `winInstaller/` has been changed by this
-document. Every "measured" claim was run on the development machine (Windows 11
+**Status: implemented on branch `feature/verilog-backend` (2026-09-26); phases A–H built, phase I
+(quality verification) and the manual gates (Linux 12.0/13.0, clean-VM installer run, V-9) still open.**
+This document was written before the code; § 4 is the record of the measurements it rests on. Every "measured" claim was run on the development machine (Windows 11
 Pro 10.0.26200, x64) against real Icarus Verilog binaries; § 4 is the record.
 Where something could only be read, or was not tested, the text says so.
+
+**Deviations from the plan as built** (small, deliberate): the compile-every-fixture check of C5 moved to D2; process code is split into `verilog/process.ts` (compile) and `verilog/run.ts` (vvp); pure language rules live in `engines/language.ts` and the registry in `engines/selectEngine.ts`; the bundled tree is flat (`resources/iverilog`, run with `-B`/`-M`), not `bin/`+`lib/`; I-V12's runaway case is `initial forever` (Icarus rejects a zero-delay `always` at compile time); a missing or declined Icarus install on Linux warns rather than stops `start.sh` (VHDL still runs); the flood limiter is checked per run (I-V21 for both engines); E-8 renames of `tb_*.vhd` go to `work/`; G5 (installed self-test) was not built.
 
 **The end state:** a student drops or uploads a `.v` file, it lands in a new
 **`verilog/`** folder, and when a file in that folder is the selected top-level
