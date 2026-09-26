@@ -13,16 +13,19 @@ import { fileURLToPath } from 'node:url';
 
 export type FixtureLanguage = 'vhdl' | 'verilog';
 
+/** A subdirectory of `tests/fixtures/`: the two languages, plus captured `iverilog -tstub` output. */
+export type FixtureDirectory = FixtureLanguage | 'stub';
+
 /** From `server/dist/testSupport/` up to the repository root, then into the fixtures. */
 const FIXTURE_ROOT = fileURLToPath(new URL('../../../tests/fixtures/', import.meta.url));
 
-export function fixturePath(language: FixtureLanguage, fileName: string): string {
-  return join(FIXTURE_ROOT, language, fileName);
+export function fixturePath(directory: FixtureDirectory, fileName: string): string {
+  return join(FIXTURE_ROOT, directory, fileName);
 }
 
 /** Fixture text with LF line endings, whatever the checkout's native ones are. */
-export function readFixture(language: FixtureLanguage, fileName: string): string {
-  return readFileSync(fixturePath(language, fileName), 'utf8').replace(/\r\n/g, '\n');
+export function readFixture(directory: FixtureDirectory, fileName: string): string {
+  return readFileSync(fixturePath(directory, fileName), 'utf8').replace(/\r\n/g, '\n');
 }
 
 export function scenarioFilePath(): string {

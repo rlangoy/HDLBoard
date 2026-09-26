@@ -1,0 +1,43 @@
+root module = DE1_SoC
+scope: DE1_SoC (0 parameters, 10 signals, 1 logic) module DE1_SoC time units = 1e0
+ time precision = 1e0
+  tri unsigned input logic CLOCK_50[word=0, adr=0]  <width=1> <discipline=NONE> nexus=000001e55115ffb8
+      SIG DE1_SoC.CLOCK_50 word=0 (HiZ0, HiZ1)
+  tri unsigned output logic[6:0] HEX0_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e55115ffe8
+      SIG DE1_SoC.HEX0_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned output logic[6:0] HEX1_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e551160018
+      SIG DE1_SoC.HEX1_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned output logic[6:0] HEX2_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e551160048
+      SIG DE1_SoC.HEX2_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned output logic[6:0] HEX3_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e551160078
+      SIG DE1_SoC.HEX3_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned output logic[6:0] HEX4_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e5511600a8
+      SIG DE1_SoC.HEX4_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned output logic[6:0] HEX5_N[word=0, adr=0]  <width=7> <discipline=NONE> nexus=000001e5511600d8
+      SIG DE1_SoC.HEX5_N word=0 (HiZ0, HiZ1)
+      const-1111111 (strong0, strong1, width=7)
+  tri unsigned input logic[3:0] KEY_N[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000001e551160108
+      SIG DE1_SoC.KEY_N word=0 (HiZ0, HiZ1)
+  tri unsigned output logic[9:0] LEDR[word=0, adr=0]  <width=10> <discipline=NONE> nexus=000001e551160138
+      SIG DE1_SoC.LEDR word=0 (HiZ0, HiZ1)
+      LOG DE1_SoC._ivl_0[0] (strong0, strong1)
+  tri unsigned input logic[9:0] SW[word=0, adr=0]  <width=10> <discipline=NONE> nexus=000001e551160168
+      SIG DE1_SoC.SW word=0 (HiZ0, HiZ1)
+      LOG DE1_SoC._ivl_0[1] (HiZ0, HiZ1)
+  bufz _ivl_0 <width=10>
+    <Delays...>
+    0: 000001e551160138 <drive0/1 = 6/6>
+    1: 000001e551160168
+end scope DE1_SoC
+# There are 6 constants detected
+constant 1111111 at ..\verilog\DE1_SoC.v:23
+constant 1111111 at ..\verilog\DE1_SoC.v:24
+constant 1111111 at ..\verilog\DE1_SoC.v:25
+constant 1111111 at ..\verilog\DE1_SoC.v:26
+constant 1111111 at ..\verilog\DE1_SoC.v:27
+constant 1111111 at ..\verilog\DE1_SoC.v:28
