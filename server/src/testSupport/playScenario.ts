@@ -10,7 +10,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { matchesExpectation } from './boardState.js';
+import { matchesExpectation, type BoardState } from './boardState.js';
 import type { ScenarioStep } from './scenarios.js';
 import type { WsTestClient } from './WsTestClient.js';
 
@@ -37,6 +37,13 @@ async function playStep(client: WsTestClient, step: ScenarioStep): Promise<void>
   }
 }
 
-export async function playBoardScenario(client: WsTestClient, steps: readonly ScenarioStep[]): Promise<void> {
-  for (const step of steps) await playStep(client, step);
+/** Plays every step and returns the board as it stood when each one was satisfied — what parity tests compare. */
+export async function playBoardScenario(client: WsTestClient, steps: readonly ScenarioStep[]): Promise<BoardState[]> {
+  const reached: BoardState[] = [];
+  for (const step of steps) {
+    await playStep(client, step);
+    const state = client.latestBoardState();
+    if (state) reached.push(state);
+  }
+  return reached;
 }
