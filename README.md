@@ -32,12 +32,13 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 - [`HOSTING.md`](docs/HOSTING.md) — host it yourself on Linux, macOS or WSL
 - [`Design_Description.md`](docs/Design_Description.md) — how the board components are built, plus features and known limitations
 - [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
+- [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
 
 ## About
 
 Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
-simulator for the DE1-SoC board, backed by real GHDL, so students can see
+simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so students can see
 `LEDR <= SW;` and similar constructs actually behave the way the real
 board would, without needing hardware in hand.
 
