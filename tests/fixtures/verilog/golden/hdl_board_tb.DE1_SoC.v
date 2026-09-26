@@ -7,7 +7,6 @@ module hdl_board_tb;
   reg  [3:0]  key_sig    = 4'hF;
   wire [9:0]  ledr_sig;
   wire [6:0]  hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig;
-  
 
   DE1_SoC uut (.CLOCK_50(clk_sig), .SW(sw_sig), .KEY_N(key_sig), .LEDR(ledr_sig), .HEX0_N(hex0_sig), .HEX1_N(hex1_sig), .HEX2_N(hex2_sig), .HEX3_N(hex3_sig), .HEX4_N(hex4_sig), .HEX5_N(hex5_sig));
 
