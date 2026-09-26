@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchHandle, RunHandle } from './runtime.js';
+import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import type { BoardFiles, RunPlan, SimEngine } from './engines/types.js';
@@ -223,9 +224,11 @@ export class Session {
       this.state = 'stopped';
       this.stopOutputPolling();
       this.stopPacing();
-      if (wasRunning && code !== 0) {
-        this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
-      }
+      if (!wasRunning) return;
+      // A board design that ends the simulation itself (Verilog's `$finish`) is a
+      // completed run, not a crash: the student asked for it.
+      if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
+      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
     });
     // The design's own report/assert output — GHDL writes this to
     // stdout, not the result file, so it needs its own forwarding path
@@ -259,7 +262,8 @@ export class Session {
     } catch {
       return; // Nothing written yet.
     }
-    const [bits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
+    const [rawBits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
+    const bits = normaliseBoardBits(rawBits);
     if (bits.length !== STATE_LENGTH) return;
     const ack = parseInt(ackText, 10);
     if (!Number.isNaN(ack) && this.stimQueue.length > 0 && this.stimQueue[0].seq <= ack) {
