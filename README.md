@@ -35,6 +35,13 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 - [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
 
+## About
+
+Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
+simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so students can see
+`LEDR <= SW;` and similar constructs actually behave the way the real
+board would, without needing hardware in hand.
+
 ## Credits
 
 HDLBoard stands on the work of others. Thank you to all of these projects and their contributors:
@@ -53,13 +60,6 @@ HDLBoard stands on the work of others. Thank you to all of these projects and th
 The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
 DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/); HDLBoard is an independent
 teaching tool and is not affiliated with or endorsed by Terasic.
-
-## About
-
-Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
-simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so students can see
-`LEDR <= SW;` and similar constructs actually behave the way the real
-board would, without needing hardware in hand.
 
 ## License
 
