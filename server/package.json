@@ -9,7 +9,8 @@
     "build": "tsc -b",
     "start": "node dist/server.js",
     "dev": "tsc -b && node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --no-error-on-unmatched-pattern src/verilog src/engines src/runtime.ts src/outputLimiter.ts src/testSupport"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -17,6 +18,8 @@
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.12",
-    "typescript": "^5.6.3"
+    "eslint": "^9.39.5",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.70.1"
   }
 }
