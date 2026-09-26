@@ -250,40 +250,6 @@ const KEY_COUNTER_2_LED_V = `module counter8 (
 endmodule
 `;
 
-const TB_COUNTER8_V = `// Self-checking testbench: no ports, so it runs on its own (batch mode).
-module tb_counter8;
-    reg        CLOCK_50 = 1'b0;
-    reg  [3:0] KEY_N    = 4'b1111;
-    wire [9:0] LEDR;
-
-    counter8 dut (.CLOCK_50(CLOCK_50), .KEY_N(KEY_N), .LEDR(LEDR));
-
-    always #10 CLOCK_50 = ~CLOCK_50;
-
-    task press(input integer key);
-        begin
-            KEY_N[key] = 1'b0;
-            #100;
-            KEY_N[key] = 1'b1;
-            #100;
-        end
-    endtask
-
-    initial begin
-        #100;
-        press(0);
-        press(0);
-        press(0);
-        $display("count after 3 presses = %0d", LEDR[7:0]);
-        press(1);
-        $display("count after reset     = %0d", LEDR[7:0]);
-        if (LEDR[7:0] === 8'd0) $display("PASS");
-        else                    $display("FAIL");
-        $finish;
-    end
-endmodule
-`;
-
 export const STARTER_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
@@ -291,7 +257,6 @@ export const STARTER_FILES: VhdlFile[] = [
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
-  { id: 'tb_counter8_v', name: 'tb_counter8.v', folder: 'verilog', content: TB_COUNTER8_V },
 ];
 
 export const DEFAULT_OPEN_TABS = ['de1_soc'];

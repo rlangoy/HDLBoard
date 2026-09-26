@@ -17,6 +17,9 @@ const fixtureTexts = import.meta.glob<string>('../../../tests/fixtures/{vhdl,ver
   eager: true,
 });
 
+/** Fixtures the tests use that are deliberately not part of the starter project. */
+const TEST_ONLY_FIXTURES: ReadonlySet<string> = new Set(['tb_counter8.v']);
+
 const withLfLineEndings = (text: string) => text.replace(/\r\n/g, '\n');
 
 /** The fixtures of one language folder, by file name. */
@@ -38,8 +41,9 @@ describe.each(['vhdl', 'verilog'] as const)('the %s test fixtures', (folder) => 
     },
   );
 
-  test('include no design that is not a starter', () => {
+  test('include no design that is not a starter (bar the test-only ones)', () => {
     const starterNames = starters.map((starter) => starter.name).sort();
-    expect([...fixtures.keys()].sort()).toEqual(starterNames);
+    const fixtureNames = [...fixtures.keys()].filter((name) => !TEST_ONLY_FIXTURES.has(name)).sort();
+    expect(fixtureNames).toEqual(starterNames);
   });
 });
