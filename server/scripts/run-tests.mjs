@@ -39,6 +39,16 @@ function selectTests(kind) {
     .filter((path) => isIntegrationTest(path) === wantIntegration);
 }
 
+/**
+ * Unit tests are independent and run in parallel. Integration tests are not: they share
+ * machine-wide resources — the process list (a teardown test counts `ghdl`/`vvp`
+ * processes, which another file's simulator runs would disturb) and loopback ports —
+ * so they run one file at a time.
+ */
+function concurrencyFlags(kind) {
+  return kind === 'integration' ? ['--test-concurrency=1'] : [];
+}
+
 function main(kind) {
   if (kind !== 'unit' && kind !== 'integration') {
     console.error('usage: node scripts/run-tests.mjs unit|integration');
@@ -49,7 +59,7 @@ function main(kind) {
     console.log(`No ${kind} tests found under ${DIST_DIR}/.`);
     return 0;
   }
-  return spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' }).status ?? 1;
+  return spawnSync(process.execPath, ['--test', ...concurrencyFlags(kind), ...files], { stdio: 'inherit' }).status ?? 1;
 }
 
 process.exit(main(process.argv[2]));

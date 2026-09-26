@@ -12,6 +12,7 @@ import { after, before, describe, test } from 'node:test';
 import { readFixture } from '../testSupport/fixture.js';
 import { countProcesses, waitForProcessCount } from '../testSupport/processCount.js';
 import { requireTool } from '../testSupport/requireTool.js';
+import { PORTLESS_TESTBENCH_VHDL } from '../testSupport/vhdlSources.js';
 import { startTestBackend, type TestBackend } from '../testSupport/testBackend.js';
 import { startRun, withSession as withSessionOn } from '../testSupport/withSession.js';
 import type { WsTestClient } from '../testSupport/WsTestClient.js';
@@ -21,22 +22,6 @@ const ghdl = requireTool('ghdl');
 const BOARD_DESIGN = 'DE1_SoC.vhdl';
 const LEDS_FOLLOW_SWITCHES = { sw: '1010101010', key: '1111', ledr: '1010101010' };
 const TEARDOWN_TIMEOUT_MS = 5_000;
-
-/** No ports at all: the backend runs it directly, as a self-contained testbench. */
-const PORTLESS_TESTBENCH_VHDL = `entity tb_hello is
-end entity;
-
-architecture sim of tb_hello is
-begin
-  process
-  begin
-    report "hello one";
-    wait for 10 ns;
-    report "hello two";
-    wait;
-  end process;
-end architecture;
-`;
 
 describe('GHDL path — controls and teardown (characterization)', { skip: ghdl.skip }, () => {
   let backend: TestBackend;
