@@ -16,6 +16,7 @@ const NEW_CODE = [
   'src/verilog/**/*.ts',
   'src/engines/**/*.ts',
   'src/runtime.ts',
+  'src/session.ts',
   'src/outputLimiter.ts',
   'src/testSupport/**/*.ts',
 ];

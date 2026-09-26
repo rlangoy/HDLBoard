@@ -68,7 +68,11 @@ const PACING_MAX_OUTSTANDING = 1000;
  * array and never actually observes a change here — the timeout is the
  * only exit, which is precisely the "sleep without yielding" wanted.
  */
-const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
+const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+const MS_PER_SECOND = 1000;
+/** How often a contended rename is retried before giving up (`renameOverOpenFile`). */
+const MAX_RENAME_RETRIES = 50;
+const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
 /**
  * Bound on a batch (portless-entity) run. Generous relative to the 30 s
  * build timeout (`DEFAULT_COMMAND_TIMEOUT_MS`): an actual simulation, not just analysis, and unlike
@@ -77,6 +81,17 @@ const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
+
+/** True once `from` has replaced `to`; false when the destination is held open by another process. */
+function renamed(from: string, to: string): boolean {
+  try {
+    renameSync(from, to);
+    return true;
+  } catch (e) {
+    if (CONTENDED_RENAME_CODES.includes((e as NodeJS.ErrnoException).code ?? '')) return false;
+    throw e;
+  }
+}
 
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 
@@ -293,24 +308,33 @@ export class Session {
     }
   }
 
-  private pollOutput(): void {
+  /** The first line of `output.txt` as `<board bits> <last applied seq>`, or nothing before the run has written one. */
+  private readBoardLine(): { bits: string; ack: number } | undefined {
     let text: string;
     try {
       text = readFileSync(this.outputPath(), 'utf8');
     } catch {
-      return; // Nothing written yet.
+      return undefined; // Nothing written yet.
     }
     const [rawBits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
     const bits = normaliseBoardBits(rawBits);
-    if (bits.length !== STATE_LENGTH) return;
-    const ack = parseInt(ackText, 10);
-    if (!Number.isNaN(ack) && this.stimQueue.length > 0 && this.stimQueue[0].seq <= ack) {
-      this.stimQueue = this.stimQueue.filter((s) => s.seq > ack);
-      this.writeStimQueue();
-    }
-    if (bits === this.lastSentState) return;
-    this.lastSentState = bits;
-    this.send({ verb: 'STATE', bits });
+    return bits.length === STATE_LENGTH ? { bits, ack: parseInt(ackText, 10) } : undefined;
+  }
+
+  /** Drops the queued transitions the testbench says it has applied. */
+  private acknowledge(ack: number): void {
+    if (Number.isNaN(ack) || this.stimQueue[0]?.seq === undefined || this.stimQueue[0].seq > ack) return;
+    this.stimQueue = this.stimQueue.filter((s) => s.seq > ack);
+    this.writeStimQueue();
+  }
+
+  private pollOutput(): void {
+    const line = this.readBoardLine();
+    if (line === undefined) return;
+    this.acknowledge(line.ack);
+    if (line.bits === this.lastSentState) return;
+    this.lastSentState = line.bits;
+    this.send({ verb: 'STATE', bits: line.bits });
   }
 
   /**
@@ -418,7 +442,7 @@ export class Session {
         this.send({
           verb: 'ERROR',
           stage: 'runtime',
-          text: `Simulation exceeded ${BATCH_TIMEOUT_MS / 1000}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
+          text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
         });
       } else if (code !== 0) {
         this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
@@ -473,23 +497,13 @@ export class Session {
    * session.
    */
   private renameOverOpenFile(from: string, to: string): void {
-    const MAX_ATTEMPTS = 50;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        renameSync(from, to);
-        return;
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        const contended = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
-        if (!contended || attempt >= MAX_ATTEMPTS) {
-          if (!contended) throw e;
-          return; // Gave up; the next write will carry the same queue.
-        }
-        // A synchronous sleep, because the whole point is to not yield to
-        // an event loop that could start another write in between.
-        Atomics.wait(SLEEP_SIGNAL, 0, 0, 1);
-      }
+    for (let attempt = 0; attempt <= MAX_RENAME_RETRIES; attempt++) {
+      if (renamed(from, to)) return;
+      // A synchronous sleep, because the whole point is to not yield to
+      // an event loop that could start another write in between.
+      Atomics.wait(SLEEP_SIGNAL, 0, 0, 1);
     }
+    // Gave up; the next write will carry the same queue.
   }
 
   handleReset(): void {
