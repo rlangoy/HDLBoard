@@ -186,7 +186,7 @@ app.whenReady().then(async () => {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1e1e1e',
-    title: 'HDLBoard — Write VHDL and watch it run',
+    title: 'HDLBoard — Write VHDL or Verilog and watch it run',
     show: false,
     webPreferences: {
       // The renderer is a plain web app talking over a WebSocket; it has

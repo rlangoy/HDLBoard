@@ -405,7 +405,7 @@ live in `Dialog.css`, along with the shared callout and link-button styles;
 each dialog adds its own small stylesheet.
 
 `project.ts` holds the constants the dialogs and the desktop menu need to
-agree on: `APP_NAME` (`HDLBoard`), `APP_TAGLINE` (`Write VHDL and watch it run`),
+agree on: `APP_NAME` (`HDLBoard`), `APP_TAGLINE` (`Write VHDL or Verilog and watch it run`),
 `REPO_URL` (`https://github.com/rlangoy/HDLBoard`), `ISSUES_URL`, `GHDL_URL`,
 and `ABOUT_EVENT` (`'hdl-board:show-about'` — keep it in
 step with `winInstaller/electron/main.js`). Change the repository address in
