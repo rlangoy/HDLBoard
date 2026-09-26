@@ -11,6 +11,10 @@
  */
 
 import { spawn } from 'node:child_process';
+import { lineSplitter, runCommand, type BatchHandle, type BatchResult, type CmdResult, type RunHandle } from './runtime.js';
+
+// The shared definitions moved to runtime.ts; re-exported so existing imports keep working.
+export type { BatchHandle, BatchResult, CmdResult, RunHandle } from './runtime.js';
 
 /**
  * Which GHDL to run. `'ghdl'` means "whatever is on PATH", which is what
@@ -32,13 +36,6 @@ export function getGhdlExe(): string {
   return ghdlExe;
 }
 
-export interface CmdResult {
-  code: number;
-  out: string;
-  err: string;
-  timedOut: boolean;
-}
-
 /** A bounded command: used for `-a`/`-e`, which are expected to finish in seconds. */
 export function runCmd(
   cmd: string,
@@ -46,59 +43,7 @@ export function runCmd(
   cwd: string,
   timeoutMs = 30_000,
 ): Promise<CmdResult> {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd });
-    let out = '';
-    let err = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
-    child.on('error', (e) => {
-      clearTimeout(timer);
-      resolve({ code: -1, out, err: err + String(e), timedOut });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, out, err, timedOut });
-    });
-  });
-}
-
-export interface RunHandle {
-  kill(): void;
-  onExit(cb: (code: number | null, stderr: string) => void): void;
-  /**
-   * One call per complete line of the simulation's own stdout — the
-   * VHDL's `report`/`assert` output. This backend's own generated
-   * testbench (`tbTemplate.ts`) never writes to stdout (its result line
-   * goes to `output_file`, a real file, specifically so it can never be
-   * confused with this), so every line here is the student's own design.
-   */
-  onOutput(cb: (line: string) => void): void;
-  /**
-   * Writes `lines` newline-terminated lines into the process's stdin — the
-   * pacing grants when the testbench was generated with
-   * `pacingFromStdin` (Windows; see session.ts's `PACING`). A no-op once
-   * the process has gone.
-   */
-  grantPacing(lines: number): void;
-}
-
-/** Buffers arbitrary chunks and emits one callback per complete line. */
-function lineSplitter(cb: (line: string) => void): (chunk: Buffer | string) => void {
-  let buf = '';
-  return (chunk) => {
-    buf += chunk;
-    const lines = buf.split('\n');
-    buf = lines.pop() ?? '';
-    for (const line of lines) cb(line);
-  };
+  return runCommand({ cmd, args, cwd, timeoutMs });
 }
 
 /**
@@ -174,19 +119,6 @@ export function startPersistentRun(
       if (lines > 0 && child.stdin.writable) child.stdin.write('\n'.repeat(lines));
     },
   };
-}
-
-export interface BatchResult {
-  /** `null` only if the process was killed (Stop, or the timeout below). */
-  code: number | null;
-  timedOut: boolean;
-  stderr: string;
-}
-
-export interface BatchHandle {
-  kill(): void;
-  /** Resolves once, when the process exits — on its own, or via `kill()`. */
-  done: Promise<BatchResult>;
 }
 
 /**
