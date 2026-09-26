@@ -70,8 +70,8 @@ const PACING_MAX_OUTSTANDING = 1000;
  */
 const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
 /**
- * Bound on a batch (portless-entity) run. Generous relative to
- * `BUILD_TIMEOUT_MS`: an actual simulation, not just analysis, and unlike
+ * Bound on a batch (portless-entity) run. Generous relative to the 30 s
+ * build timeout (`DEFAULT_COMMAND_TIMEOUT_MS`): an actual simulation, not just analysis, and unlike
  * the persistent board mode there is no polling loop to keep a runaway
  * design alive on purpose — this is what stops a design bug (a loop with
  * no `wait`) from hanging the server instead.

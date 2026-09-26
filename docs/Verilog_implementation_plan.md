@@ -1618,14 +1618,14 @@ From a clean checkout: unit, integration (both simulators), parity, e2e; then
 
 | Gate | Result | Date |
 |---|---|---|
-| Unit + integration + parity | | |
-| Coverage report reviewed | | |
-| Lint (zero violations) | | |
-| Break-it checks (three modules) | | |
-| `/simplify` and `/code-review` findings closed | | |
-| E2E (E-1…E-8) | | |
-| Installer Tier 1, 2, 3 | | |
-| Linux gate (12.0 and 13.0) | | |
+| Unit + integration + parity | **Pass.** 207 server unit, 92 integration (both simulators, incl. I-V\*, I-X\*, I-P1–P3, I-V21), 32 frontend (vitest) | 2026-09-26 |
+| Coverage report reviewed | **Not done.** Node 20's built-in reporter throws, and `c8` needs a newer Node; rerun on Node 22 | open |
+| Lint (zero violations) | **Pass.** Scoped ESLint on the new files, no disables | 2026-09-26 |
+| Break-it checks (three modules) | **Pass.** Nine faults (three each in `ports.ts`, `outputLimiter.ts`, `testbench.ts`): every one failed at least one test | 2026-09-26 |
+| `/simplify` and `/code-review` findings closed | **Closed.** Fixed: shared run handles, dead code, one timing policy/timeout/timescale constant, banner read once, board ports moved to `engines/`, `topAfterDelete`, About credit, a missing-`vvp` crash. Skipped with reasons: frontend LOG coalescing, stderr cap, `start.sh` helper refactor, flat failure shapes, lazy tool paths, a cross-package extension-drift test, `apt-get update` in `start.sh` | 2026-09-26 |
+| E2E (E-1…E-8) | **Pass**, E-8 with the `tb_` note in `tests/e2e/verilog-browser.md`; GIFs not recorded | 2026-09-26 |
+| Installer Tier 1, 2, 3 | Tier 1 **pass** (`build.ps1` smoke test); Tier 2 **pass** (7/7 against the packaged app); Tier 3 (installer on a clean VM, V-1…V-10) **open** | 2026-09-26 |
+| Linux gate (12.0 and 13.0) | **Open** (needs the Linux machines) | open |
 
 ---
 

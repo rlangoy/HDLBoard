@@ -3,7 +3,8 @@
 
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
-import { lineSplitter, runCommand } from './runtime.js';
+import { spawn } from 'node:child_process';
+import { createBatchHandle, createRunHandle, lineSplitter, runCommand } from './runtime.js';
 import { makeTempDir } from './testSupport/sessionDir.js';
 
 const SHORT_TIMEOUT_MS = 300;
@@ -102,5 +103,24 @@ describe('runCommand', () => {
     const script = 'console.log(process.argv.slice(1).join("|"))';
     const result = await runCommand({ cmd: node, args: ['-e', script, 'a b', '$HOME', '&& echo injected'], cwd: cwdDir.path });
     assert.equal(result.out.trim(), 'a b|$HOME|&& echo injected');
+  });
+});
+
+describe('run handles', () => {
+  const cannotStart = () => spawn('no-such-program-hdlboard', []);
+
+  test('a batch program that cannot be started ends with its reason instead of crashing the process', async () => {
+    const result = await createBatchHandle(cannotStart(), () => {}, SHORT_TIMEOUT_MS).done;
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /ENOENT|no-such-program/);
+  });
+
+  test('a persistent program that cannot be started reports its exit with the reason', async () => {
+    const handle = createRunHandle(cannotStart());
+    const exit = await new Promise<{ code: number | null; stderr: string }>((resolve) =>
+      handle.onExit((code, stderr) => resolve({ code, stderr })),
+    );
+    assert.notEqual(exit.code, 0);
+    assert.match(exit.stderr, /ENOENT|no-such-program/);
   });
 });

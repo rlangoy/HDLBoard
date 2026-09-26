@@ -131,6 +131,9 @@ export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandl
   // that is an uncaught exception in the backend, so it is swallowed: the exit
   // itself is reported through `close`.
   child.stdin.on('error', () => {});
+  // A program that cannot be started (a missing `vvp`) reports through `error`, which unhandled
+  // would take the whole backend down; its reason becomes the run's stderr instead.
+  child.on('error', (error) => (stderr += error.message));
 
   const outputCallbacks: Array<(line: string) => void> = [];
   child.stdout.on('data', lineSplitter((line) => {
@@ -168,6 +171,7 @@ export function createBatchHandle(
   let stderr = '';
   let timedOut = false;
   child.stdin.on('error', () => {});
+  child.on('error', (error) => (stderr += error.message));
   child.stdin.end();
   child.stderr.on('data', (chunk) => (stderr += chunk));
   child.stdout.on('data', lineSplitter(onOutput));
