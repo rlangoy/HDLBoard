@@ -113,6 +113,16 @@ describe('Verilog path — end to end', { skip: icarus.skip }, () => {
       }
     }));
 
+  test('I-V24: blinkTest still blinks when TOGGLE_COUNT does not fit in 7 bits', () =>
+    withSession(async (client) => {
+      const content = readFixture('verilog', 'blinkTest.v').replace('TOGGLE_COUNT = 125', 'TOGGLE_COUNT = 205');
+      await startRun(client, [{ name: 'blinkTest.v', content }], 'blinkTest.v');
+      await playBoardScenario(client, [
+        { name: 'LEDs turn on after about 410 ms', expect: { ledr: '1111111111' }, withinMs: [300, 700] },
+        { name: 'and off again about 410 ms later', expect: { ledr: '0000000000' }, withinMs: [300, 700] },
+      ]);
+    }));
+
   test('I-V22: a testbench with ports but no board port runs standalone, hint first', () =>
     withSession(async (client) => {
       await startRun(client, [{ name: 'tb_done.v', content: STANDALONE_WITH_PORT }], 'tb_done.v');
