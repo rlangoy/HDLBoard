@@ -2,142 +2,143 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: researched and spiked, not implemented — 2026-09-26.** Nothing in
-`src/`, `server/` or `winInstaller/` has been changed by this document. Every
-"measured" claim below was run on the development machine (Windows 11 Pro
-10.0.26200, x64) against real Icarus Verilog binaries, not read out of
-documentation; § 4 is the record. Where something could only be read, or was
-not tested, the text says so.
+**Status: researched, spiked, reviewed (revision 2) — not implemented, 2026-09-26.**
+Nothing in `src/`, `server/` or `winInstaller/` has been changed by this
+document. Every "measured" claim was run on the development machine (Windows 11
+Pro 10.0.26200, x64) against real Icarus Verilog binaries; § 4 is the record.
+Where something could only be read, or was not tested, the text says so.
 
-The end state this plan describes: a student drops or uploads a `.v` file,
-it lands in a new **`verilog/`** folder, and when a file in that folder is the
-selected top-level file, **Start** compiles and simulates it with a real
-Verilog simulator instead of GHDL — driving the same board (switches, keys,
-LEDs, 7-segment displays) and writing the simulator's own messages to the
-same console. The frontend change is deliberately tiny; the work is in the
-backend and the installer.
+**The end state:** a student drops or uploads a `.v` file, it lands in a new
+**`verilog/`** folder, and when a file in that folder is the selected top-level
+file, **Start** compiles and simulates it with a real Verilog simulator
+instead of GHDL — driving the same board and writing the simulator's own
+messages to the same console. The frontend change is deliberately tiny.
 
-Same conventions as [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md):
-that document is the as-built reference for everything this one reuses (the
-wire protocol § 6, the persistent-process design § 5, real-time pacing
-§ 5.9/5.13, the Windows stdin pacing § 5.15). This one only describes what is
-*different* for Verilog.
+**How to use this document.** §§ 0–5 say *what* and *why* (read once). § 6 is
+the code standard every step must meet. § 7 is the test strategy. **§ 8 is the
+work order: 46 small steps, each one commit.** Do them in order; every step has
+a "Done when" you can check.
+
+Same conventions as [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md),
+which remains the as-built reference for everything reused here (wire protocol
+§ 6, persistent process § 5, pacing § 5.9/5.13/5.15).
 
 ## Contents
 
+- [Revision history](#revision-history)
 - [0. Summary and recommendation](#0-summary-and-recommendation)
 - [1. Requirements and non-goals](#1-requirements-and-non-goals)
 - [2. Simulator evaluation](#2-simulator-evaluation)
 - [3. Licensing and redistribution](#3-licensing-and-redistribution)
-- [4. Spike results — what was measured](#4-spike-results--what-was-measured)
+- [4. Measurements — what was run](#4-measurements--what-was-run)
 - [5. Design](#5-design)
-- [6. Frontend changes](#6-frontend-changes)
-- [7. Backend changes](#7-backend-changes)
-- [8. Windows packaging](#8-windows-packaging)
-- [9. Linux / server mode](#9-linux--server-mode)
-- [10. Testing and verification](#10-testing-and-verification)
-- [11. Security](#11-security)
-- [12. Open decisions](#12-open-decisions)
-- [13. Phased roadmap with acceptance criteria](#13-phased-roadmap-with-acceptance-criteria)
-- [Appendix A: the verified testbench shape](#appendix-a-the-verified-testbench-shape)
+- [6. Code standard (Clean Code)](#6-code-standard-clean-code)
+- [7. Testing](#7-testing)
+- [8. Implementation steps](#8-implementation-steps)
+- [9. Open decisions](#9-open-decisions)
+- [Appendix A: the verified testbench](#appendix-a-the-verified-testbench)
 - [Appendix B: real simulator output](#appendix-b-real-simulator-output)
-- [Appendix C: sources](#appendix-c-sources)
+- [Appendix C: converted starter designs (test fixtures)](#appendix-c-converted-starter-designs-test-fixtures)
+- [Appendix D: sources](#appendix-d-sources)
+
+---
+
+## Revision history
+
+**Revision 2 (2026-09-26)** — review of revision 1. What the review found and
+changed:
+
+| # | Finding | Change |
+|---|---|---|
+| 1 | Revision 1 was a design description with phases, not a work order. | New § 8: 46 small steps, each with files, action, test-first cases and a "Done when". |
+| 2 | The `session.ts` seam was "move `handleRun` verbatim and add two function parameters" — smaller diff, but it leaves a 640-line class branching on language. | Replaced by a `SimEngine` interface (§ 5.7), introduced **under characterization tests** written first (steps A5–A6, D1–D3), so the refactor is safe *and* clean. |
+| 3 | Frontend logic (extension → folder, which folder to send) was inline in a React component. | Extracted to a pure `fileKinds.ts` module with unit tests (§ 8, E1). |
+| 4 | Appendix A was a spike sketch: no 52-bit output, no dwell rule, no tie-offs. | Replaced by the **full generated wrapper, verified** on all three converted starters (M20). |
+| 5 | Open question: `-Wall` noise. | **Measured:** `-Wall` warns "timescale inherited" for *every* ordinary design. Use `-Wall -Wno-timescale` (M19). |
+| 6 | A student file named like a generated one (`hdl_board_tb.v`) or with a path would clash or escape the session directory. | New file-name validation module and tests (B6). |
+| 7 | Nothing said how to test, or how to verify an *installation*. | New § 7 and § 8 phases A, F, H. |
+| 8 | No code-quality standard. | New § 6, with a per-step Definition of Done and a post-implementation quality phase (H). |
+| 9 | VHDL starter designs were not available as Verilog. | Converted and **run** (Appendix C); they become the shared test fixtures. |
+| 10 | Spike ids `S1…S18` collided with step ids. | Measurements renamed `M1…M20`. |
+| 11 | Parity between languages needs care: `blinkTest.vhdl` leaves `HEX*` undriven (GHDL reports `X`, the frontend coerces it to "off"). | Parity rule stated in § 7.6; the Verilog twin blanks them explicitly. |
 
 ---
 
 ## 0. Summary and recommendation
 
-**Use Icarus Verilog 13.0** (`iverilog` to compile, `vvp` to run), bundled
-into the Windows installer the same way GHDL is.
+**Use Icarus Verilog 13.0** (`iverilog` to compile, `vvp` to run), bundled into
+the Windows installer the same way GHDL is.
 
-Why, in one paragraph each:
+- **Mature.** Long-standing open-source Verilog simulator (IEEE 1364 in full, a
+  growing subset of SystemVerilog). 13.0 was released as *stable* on
+  2026-03-02; the repository was still receiving commits on the day of
+  writing. Debian stable ships 12.0; Debian testing and Alpine edge ship 13.0.
+- **As easy to integrate as GHDL.** Two small command-line programs of the
+  same shape as GHDL's: compile, then run, diagnostics on stderr, `$display`
+  on stdout. No C++ compiler, Perl or MSYS2 at run time; compiles took
+  60–105 ms. It supports the file polling and blocking stdin reads the
+  existing pacing design needs (§ 4).
+- **Compatible licence.** GPL-2.0-or-later, the same family as GHDL and
+  HDLBoard (GPL-2.0-only), launched as separate programs with `spawn` (§ 3).
+- **Small.** ≈ 12 MB on disk, ≈ 2.2 MB compressed: the installer grows from
+  88.7 MB to roughly 91 MB.
 
-- **Mature.** Icarus is the long-standing open-source Verilog simulator
-  (IEEE 1364 in full, a growing subset of SystemVerilog). 13.0 was released
-  as *stable* on 2026-03-02 and the repository was still receiving commits on
-  the day of writing. Debian stable ships 12.0, Debian testing and Alpine
-  edge ship 13.0.
-- **As easy to integrate as GHDL — in practice easier.** It is two small
-  command-line programs with the same shape as GHDL's: compile, then run,
-  diagnostics on stderr, `$display` on stdout. It needs no C++ compiler, no
-  Perl, no MSYS2 at run time, and the compile step took 60–105 ms in the
-  spike. It reads the testbench's file polling and blocking stdin reads
-  exactly as the existing pacing design needs (§ 4).
-- **Compatible licence.** GPL-2.0-or-later, the same family as GHDL and as
-  HDLBoard itself (GPL-2.0-only). Separate programs launched with `spawn`, as
-  GHDL already is. § 3 lists every file that would ship and its licence.
-- **Small.** About 12 MB on disk, ~2.2 MB compressed: the installer would
-  grow from 88.7 MB to roughly 91 MB.
-
-The other candidates were evaluated in § 2 and rejected for concrete reasons:
-**Verilator** needs a C++ toolchain and GNU Make on the student's machine and
-has no official Windows binaries; **Yosys** is a synthesis tool that ships no
-Windows binary outside a 600 MB suite; **CVC / GPL Cver** are old or
-under a non-GPL licence; the commercial simulators cannot be redistributed.
+Rejected, with reasons in § 2: **Verilator** (needs a C++ toolchain and Make on
+the student's machine; no Windows binary mentioned), **Yosys** (synthesis tool,
+Windows builds only inside a ≈ 600 MB suite), **CVC / GPL Cver** (old, or a
+different licence), **commercial simulators** (not redistributable).
 
 ### The traps found by actually running it
 
-Each of these silently produces a *working-looking* build that fails on a
-student's machine, so each gets a check in the plan (§ 10):
+Each silently produces a working-looking build that fails on a student's
+machine, so each gets a check in the plan:
 
 1. **stdout is block-buffered through a pipe.** Without `vvp -i`, a design's
-   `$display` output never reaches the console while it runs — not even the
-   time-0 message. `-i` (unbuffered) fixes it. (§ 4, S4)
-2. **The runtime DLLs must sit next to `ivl.exe` too.** `iverilog.exe` launches
-   `lib/ivl/ivl.exe`; copying the DLLs only into `bin/` gives
-   `STATUS_DLL_NOT_FOUND` (exit `-1073741515`) unless `bin/` happens to be on
-   `PATH`. (§ 4, S2)
-3. **Absolute file names fail silently in a non-ASCII directory.** With
-   `+input_file=C:\Users\Rune Langøy\…` the simulation runs but reads and
-   writes nothing. Relative names with `cwd` set to the session directory
-   work. Windows user names like *Langøy* are real. (§ 4, S11)
-4. **Do not trim the `.vpi` files.** `iverilog.exe` has a fixed list of
-   modules it loads on every compile (`system`, `vhdl_sys`, `vhdl_textio`,
-   `va_math`, `v2005_math`, `v2009` — the names are compiled into the
-   executable). Removing four of them from `lib/ivl/` made every compile print
-   `error: Failed to open '…system.vpi'` while still exiting 0. (§ 4, S2)
+   `$display` never reaches the console while it runs. (M4)
+2. **The runtime DLLs must sit next to `ivl.exe` too**, not only in `bin/`, or
+   `iverilog.exe` fails with `STATUS_DLL_NOT_FOUND` (`-1073741515`) unless
+   `bin/` happens to be on `PATH`. (M2)
+3. **Absolute file names fail silently in a non-ASCII directory** (a user
+   named *Langøy*): the simulation runs but reads and writes nothing.
+   Relative names with `cwd` = the session directory work. (M11)
+4. **Do not trim the `.vpi` files.** `iverilog.exe` loads a fixed module list
+   compiled into it; missing ones print `error: Failed to open '…system.vpi'`
+   on every compile while still exiting 0. (M2)
 5. **`$stop` ends the run with exit 0** under `-n`. The persistent-run exit
-   handler currently only reports non-zero exits, so the UI would stay on
-   "running" forever. (§ 4, S9, § 7.5)
-6. **A file without `` `timescale `` runs at 1 s/1 s**, not nanoseconds, and
-   inherits from the *previous* file in compile order. (§ 5.4)
+   handler only reports non-zero exits, so the UI would stay on "running".
+   (M9, step D5)
+6. **A file without `` `timescale `` runs at 1 s** and inherits from the
+   *previous* file in compile order. (M17, § 5.4)
+7. **`-Wall` alone is noisy**: "timescale inherited" on every ordinary
+   design. Use `-Wall -Wno-timescale`. (M19)
 
 ### Assumptions to confirm (change these and the plan barely changes)
 
 | # | Assumption | Where |
 |---|---|---|
-| A1 | "When files in the Verilog folder are *activated*" means: the file marked as top with the existing blue dot (click to set) — the engine is chosen by that file's folder. No new UI. | § 6.2 |
-| A2 | The folder is displayed as `verilog/`, matching the existing `vhdl/` and `work/` (lower case with a trailing slash). | § 6.1 |
-| A3 | Every Verilog file goes to `verilog/`, including `tb_*.v`. (Today `tb_*` VHDL goes to `work/`, whose files are never sent to a simulator.) | § 12 #3 |
-| A4 | Scope is Verilog (`.v`, plus `.vh` include files). SystemVerilog (`.sv`) is not accepted in the first cut. | § 12 #1 |
+| A1 | "When files in the Verilog folder are *activated*" means: the file marked as top with the existing blue dot. The engine follows that file's folder. No new UI. | step E2 |
+| A2 | The folder shows as `verilog/`, matching `vhdl/` and `work/`. | step E2 |
+| A3 | Every Verilog file goes to `verilog/`, including `tb_*.v`. (Today `tb_*` VHDL goes to `work/`, whose files are never simulated.) | § 9 #3 |
+| A4 | Scope is Verilog (`.v`, plus `.vh` include files). SystemVerilog is not in the first cut. | § 9 #1 |
 
 ---
 
 ## 1. Requirements and non-goals
 
-Taken from the request:
-
 | Requirement | Addressed by |
 |---|---|
-| Research which simulator to embed; maturity, ease of integration (like GHDL), licence for distribution, Windows binary in the installer | § 2, § 3, § 8 |
-| Frontend: Verilog files go in a new **Verilog** folder (the VHDL folder already exists), when uploaded or dropped | § 6.1, § 6.3 |
-| Frontend: when a Verilog-folder file is activated, use the Verilog simulator, not GHDL | § 5.1, § 6.2 |
-| Minimum UI changes | § 6 — no new component, no new control, no protocol change |
-| The terminal shows the simulator's own output messages, as it does for GHDL (not the same text — the simulator's) | § 5.5 |
-| A new file `Verilog_implementation_plan.md` in `docs/` | this file |
+| Research which simulator to embed: maturity, ease of integration (like GHDL), licence, Windows binary in the installer | §§ 2, 3, phase F |
+| Frontend: Verilog files go in a new **Verilog** folder when uploaded or dropped | steps E1–E3 |
+| Frontend: activating a Verilog-folder file uses the Verilog simulator, not GHDL | § 5.1, steps E4, D3 |
+| Minimum UI changes | phase E — no new component, control or wire field |
+| The terminal shows the simulator's own messages, as it does for GHDL | § 5.5, step D4 |
+| Convert the static VHDL examples and use them later to test and verify the installation | Appendix C, § 7.3, § 7.8, phase F |
+| Clean Code; test the modules after implementation for quality and readability | § 6, § 7.9, phase H |
 
-**Non-goals** (each is a separate decision if wanted later):
-
-- SystemVerilog (`.sv`) — § 12 #1.
-- Verilog syntax highlighting in the editor — § 12 #6. Until then a `.v` file
-  is highlighted by the VHDL tokenizer (`vhdlHighlight.ts`), which will
-  colour it oddly (e.g. `--` is a comment there, `//` is not).
-- Waveform capture (also out of scope for GHDL, `ghdl_implementation_plan.md`
-  § 12 #5).
-- Mixed-language projects (a VHDL top instantiating a Verilog module or the
-  reverse). One run = one language. § 12 #4.
-- A synthesis check (Yosys). § 2.3 notes why it is not the simulator, and
-  § 12 #8 leaves the door open.
+**Non-goals** (each a separate decision): SystemVerilog `.sv` (§ 9 #1);
+Verilog syntax highlighting (§ 9 #6 — until then `.v` is coloured by the VHDL
+tokenizer); waveform capture; mixed-language projects (§ 9 #4); a Yosys
+synthesis check (§ 9 #8).
 
 ---
 
@@ -145,98 +146,80 @@ Taken from the request:
 
 ### 2.1 Criteria
 
-The three the request names, plus the two that decide whether the
-*existing architecture* survives:
-
-1. **Maturity** — years in use, release cadence, language coverage.
-2. **Ease of integration, "like GHDL"** — one process to spawn, diagnostics on
-   stderr, no toolchain the student must own.
-3. **Licence** — may it be redistributed inside a GPL-2.0-only installer.
-4. **Distributable as a Windows binary** — obtainable reproducibly, pinned,
-   small, and relocatable (runs from wherever the installer put it).
-5. **Fits the interactive model.** `ghdl_implementation_plan.md` § 5 settled on
-   *one persistent free-running process* that polls an input file, publishes
-   outputs to a file, and is held to real time by blocking reads. A candidate
-   must be able to do all three, and be stoppable by killing it.
+The three in the request, plus two that decide whether the existing
+architecture survives: (1) **maturity**; (2) **ease of integration "like
+GHDL"** — one process, diagnostics on stderr, nothing for the student to
+install; (3) **licence** — redistributable inside a GPL-2.0-only installer;
+(4) **a Windows binary** that is reproducible, pinned, small and relocatable;
+(5) **fit to the interactive model** of `ghdl_implementation_plan.md` § 5 —
+one persistent process that polls an input file, publishes an output file,
+and is held to real time by blocking reads, stoppable by killing it.
 
 ### 2.2 Comparison
 
 | | Icarus Verilog | Verilator | Yosys (`sim`) | CVC / GPL Cver | ModelSim / Questa / Vivado xsim |
 |---|---|---|---|---|---|
-| Kind | Event-driven interpreter (compile to bytecode, `vvp` runs it) | Compiles Verilog to C++, then builds it | Synthesis suite; a `sim` pass simulates the netlist | Older interpreters | Commercial |
-| Licence | GPL-2.0-or-later (verified in source headers and package metadata) | LGPL-3.0 **or** Artistic-2.0 | ISC | CVC: "modified Artistic"; Cver: GPL | Proprietary |
-| Maturity | Decades; 13.0 stable 2026-03-02; active | Very mature, very fast, very active (5.052 docs) | Very active (v0.69, 2026-09-09) | Little evidence of recent maintenance | Very mature |
-| Windows binary | Yes — MSYS2 package (13.0), bleyer.org installer (12.0 / a v14 snapshot); **no v13 Windows installer on bleyer.org** | None mentioned in the install guide, which describes building from source; needs Make + a C++ compiler | Releases carry a source tarball only; ready-made Windows builds come via the OSS CAD Suite (≈ 600 MB) | Not investigated further | Vendor installers |
-| Toolchain needed on the student's PC | None | C++ compiler + GNU Make, on every run | None once packaged | — | Licence server / vendor install |
-| Run-time model | 4-state, event-driven, real `#` delays, `$fopen`/`$fscanf`/`$fgets` | 2-state by default (4-state is "experimental, for developer use only"); C++ build per design | Netlist simulation, not a testbench-process model | — | — |
-| Fit to § 2.1 #5 | **Verified (§ 4)** | Would need a C++ build on every Start | Not a live testbench model | — | Not redistributable |
-| Verdict | **Recommended** | Rejected | Rejected as simulator; possible later lint/synth aid | Rejected | Rejected |
+| Kind | Event-driven interpreter (`iverilog` → bytecode → `vvp`) | Compiles Verilog to C++, then builds it | Synthesis suite with a `sim` pass | Older interpreters | Commercial |
+| Licence | GPL-2.0-or-later (source headers, MSYS2 metadata) | LGPL-3.0 **or** Artistic-2.0 | ISC | CVC "modified Artistic"; Cver GPL | Proprietary |
+| Maturity | Decades; 13.0 stable 2026-03-02; active | Very mature, very active | Very active (v0.69, 2026-09-09) | No sign of recent maintenance (not tested) | Very mature |
+| Windows binary | Yes — MSYS2 package (13.0); bleyer.org (12.0 / a v14 snapshot); **no v13 installer on bleyer.org** | None mentioned in the install guide; build from source; Make + C++ compiler | Releases carry a source tarball; Windows builds via the OSS CAD Suite (≈ 600 MB) | Not investigated | Vendor installers |
+| Needed on the student's PC | Nothing extra | C++ compiler + GNU Make, every run | Nothing once packaged | — | Vendor install + licence |
+| Run-time model | 4-state, event-driven, real `#` delays, `$fopen`/`$fscanf`/`$fgets` | 2-state by default (4-state "experimental, for developer use only"); C++ build per design | Netlist simulation, not a testbench-process model | — | — |
+| Fit to § 2.1 #5 | **Verified (§ 4)** | Would need a C++ build on every Start | Not a live testbench model (not spiked) | — | Not redistributable |
+| Verdict | **Recommended** | Rejected | Rejected as simulator | Rejected | Rejected |
 
-### 2.3 Notes per candidate
+### 2.3 Notes
 
-**Icarus Verilog.** README: "compile ALL of the Verilog HDL, as described in
-the IEEE 1364 standard", plus "a (slowly growing) subset of the SystemVerilog
-language". Default language generation is IEEE 1364-2005 (per the `iverilog`
-man page); `-g2012` turns on the SystemVerilog subset. A `.sv` extension
-does **not** switch it on by itself (tested: `always_comb`/`logic` in a `.sv`
-file is a syntax error without `-g2012`). Verified working on 13.0 and 12.0.
+**Icarus.** README: "compile ALL of the Verilog HDL, as described in the IEEE
+1364 standard" plus "a (slowly growing) subset of the SystemVerilog language".
+Default generation is IEEE 1364-2005; `-g2012` enables the SystemVerilog
+subset, and a `.sv` extension does **not** switch it on (tested, M13).
 
-**Verilator.** A different product: it turns Verilog into C++ and needs
-`make` and a C++ compiler at build time; `--binary` is documented as an alias
-for `--main --exe --build --timing`, and `--build` "requires GNU Make". Its
-install guide lists Windows as tested with MSVC and built under
-Cygwin/MinGW/WSL2, and mentions no prebuilt Windows binary. Two-state by
-default. Excellent for large,
-synthesizable designs — the wrong shape for "type code, press Start, see the
-LED", where a per-run C++ build would turn a 100 ms compile into many
-seconds and would put a C++ toolchain on every student's machine. It does
-have a `--lint-only` mode that would make a good *optional* checker later; it
-is not the simulator.
+**Verilator.** Turns Verilog into C++; `--binary` is an alias for `--main
+--exe --build --timing`, and `--build` "requires GNU Make". Its install guide
+lists Windows as tested with MSVC and built under Cygwin/MinGW/WSL2. Excellent
+for large synthesizable designs; the wrong shape for "press Start, see the
+LED", where a per-run C++ build would turn a 100 ms compile into many seconds
+and put a C++ toolchain on every student's PC. Its `--lint-only` mode would be
+a good *optional* checker later.
 
-**Yosys.** ISC-licensed, excellent, and the natural home for a "synthesis
-check" (the request mentions "synth"). But its releases carry only a source
-tarball, and Windows binaries come from the OSS CAD Suite
-(`oss-cad-suite-windows-x64-20260926.tgz`, ≈ 600 MB, of which Icarus would be
-a few MB). Its `sim` command is documented as simulating the circuit with
-waveform (VCD/FST) output; I did not spike it and do not expect it to host a
-live, file-polling, stdin-paced testbench. Not a candidate for the
-*simulator*; § 12 #8 keeps it as a possible later addition.
+**Yosys.** ISC-licensed and the natural home of a "synthesis check", but
+releases carry only a source tarball and Windows builds come from the OSS CAD
+Suite (`oss-cad-suite-windows-x64-20260926.tgz`, ≈ 600 MB). Its `sim` command
+is documented as simulating the circuit with VCD/FST output; not spiked, and
+not expected to host a live file-polling, stdin-paced testbench.
 
-**CVC / GPL Cver.** OSS CVC is under a "modified Artistic" licence; GPL Cver
-is a Verilog-1995 plus partial-2001 interpreter. I found no evidence of
-recent maintenance for either and did not spike them.
+**CVC / GPL Cver.** OSS CVC is under a "modified Artistic" licence; GPL Cver is
+a Verilog-1995 plus partial-2001 interpreter. No evidence of recent
+maintenance found; not spiked.
 
-**Commercial (ModelSim/Questa Intel FPGA, Vivado xsim).** Free-to-download is
-not free-to-redistribute; these would each need a per-student install and a
-licence check, which is the opposite of "the installer contains everything".
+**Commercial (ModelSim/Questa Intel FPGA, Vivado xsim).** Free to download is
+not free to redistribute; each would need a per-student install.
 
 ### 2.4 Version: 13.0
 
-13.0 is the current stable. 12.0 (what Debian stable ships) was also tested
-end-to-end with the same testbench, `-i` flag and diagnostics format and
-behaves identically for everything in § 4, so the generated code has no
-13-only dependence and a Linux server on 12.0 works. `bleyer.org` lists
-`v14-20260804` (a development snapshot of master) — not recommended for a
-course tool. The Windows binaries come from MSYS2's `ucrt64` package, the
-same toolchain family as the vendored GHDL (`ghdl-mcode-5.0.1-ucrt64.zip`),
-so both target the Windows 10+ system C runtime and nothing extra is needed
-on a student's machine.
+13.0 is the current stable. 12.0 (Debian stable) was tested end to end with the
+same testbench, `-i` flag and diagnostics and behaves identically for
+everything in § 4 (M12), so a Linux server on 12.0 works. `bleyer.org` lists
+`v14-20260804` (a master snapshot) — not for a course tool. The Windows
+binaries come from MSYS2's `ucrt64` packages, the same toolchain family as the
+vendored GHDL (`ghdl-mcode-5.0.1-ucrt64.zip`); both target the Windows 10+
+system C runtime.
 
 ---
 
 ## 3. Licensing and redistribution
 
-Not legal advice — the reasoning below is the same reasoning that already
-covers GHDL in `winInstaller/electron/build/license.txt`.
+Not legal advice — the same reasoning that already covers GHDL in
+`winInstaller/electron/build/license.txt`.
 
 ### 3.1 What would ship
 
-Licences below are the `license` field of the exact pinned MSYS2 packages
-(§ 8.2), except where noted.
+Licences are the `license` field of the exact pinned MSYS2 packages (§ 5.8).
 
 | Component | Files | Licence |
 |---|---|---|
-| Icarus Verilog 13.0 | `iverilog.exe`, `vvp.exe`, `ivl.exe`, `ivlpp.exe`, `*.vpi`, `*.tgt`, `*.conf` | GPL-2.0-or-later. Source-file headers read "either version 2 of the License, or (at your option) any later version" (checked in `vvp/main.cc`, `vpi_user.h`, `ivl_target.h` at tag `v13_0`). |
+| Icarus Verilog 13.0 | `iverilog.exe`, `vvp.exe`, `ivl.exe`, `ivlpp.exe`, `*.vpi`, `*.tgt`, `*.conf` | GPL-2.0-or-later (headers read "either version 2 of the License, or (at your option) any later version", checked in `vvp/main.cc`, `vpi_user.h`, `ivl_target.h` at tag `v13_0`) |
 | GNU Readline 8.3 | `libreadline8.dll`, `libhistory8.dll` | **GPL-3.0-or-later** (linked by `vvp.exe` for its interactive prompt) |
 | termcap 1.3.1 | `libtermcap-0.dll` | GPL / LGPL |
 | GCC runtime | `libgcc_s_seh-1.dll`, `libstdc++-6.dll` | GPL-3.0-or-later **with GCC Runtime Library Exception 3.1** |
@@ -247,80 +230,73 @@ Licences below are the `license` field of the exact pinned MSYS2 packages
 ### 3.2 Why this is compatible with HDLBoard
 
 - HDLBoard starts `iverilog.exe` and `vvp.exe` as **separate programs**
-  through `spawn`, never linking them — the identical relationship it has
-  with `ghdl.exe`, already accepted in `license.txt` ("They are separate
-  works, distributed here only for convenience"). That is aggregation, not a
-  combined work, so HDLBoard's GPL-2.0-only and the components' own licences
-  do not have to be the same.
-- The only GPL-3.0 piece, Readline, is linked *inside* `vvp.exe`. `vvp.exe`
-  is GPL-2.0-or-later, and the "or later" clause is what lets that
-  combination be distributed under GPL-3.0 — the ordinary situation for any
-  GPL-2.0-or-later program that links Readline. How that is packaged is
-  MSYS2's and Icarus's matter; it does not reach HDLBoard's own code,
-  because of the process boundary. (I checked the licence fields, not how
-  MSYS2 words the combined result — a reason for the not-legal-advice caveat
-  at the top of this section.)
+  through `spawn`, never linking them — the relationship it already has with
+  `ghdl.exe` and states in `license.txt` ("separate works, distributed here
+  only for convenience"). That is aggregation, so the components' licences
+  need not match HDLBoard's.
+- The one GPL-3.0 piece, Readline, is linked *inside* `vvp.exe`, which is
+  GPL-2.0-or-later; the "or later" clause is what lets that combination be
+  distributed under GPL-3.0 — the ordinary situation for any such program.
+  It does not reach HDLBoard's own code because of the process boundary. (I
+  checked the licence fields, not how MSYS2 words the combined result — hence
+  the caveat above.)
 - HDLBoard's Node backend and frontend never load any of these libraries.
 
-### 3.3 Obligations to meet when shipping
+### 3.3 Obligations (each is a step — F6)
 
-1. Add an **Icarus Verilog** section (and a line for the bundled runtime
-   libraries) to `winInstaller/electron/build/license.txt`, in the same form
-   as the GHDL section: version, copyright, licence, upstream URLs, "started
-   as a separate program, not linked".
-2. Install the licence texts: Icarus's `COPYING` (in the MSYS2 package at
-   `share/licenses/iverilog/COPYING`) and the per-package licence folders,
-   under `resources\iverilog\` — as `resources\ghdl\COPYING` is today.
-3. `VERSION.txt` recording exact package versions and SHA-256s, like
-   `vendor/ghdl/VERSION.txt`.
-4. **Source availability.** MSYS2 publishes a matching source package for
-   each binary — verified present:
+1. An **Icarus Verilog** section (and a line for the runtime libraries) in
+   `license.txt`, in the GHDL section's form.
+2. The licence texts installed under `resources\iverilog\` (Icarus's `COPYING`
+   is in the package at `share/licenses/iverilog/COPYING`).
+3. A `VERSION.txt` with exact package versions and SHA-256s.
+4. **Source availability.** MSYS2 publishes a source package for each binary —
+   verified present:
    `https://repo.msys2.org/mingw/sources/mingw-w64-iverilog-1~13.0-2.src.tar.zst`
-   (and `…readline-8.3.003-1…`, `…gcc-16.2.0-4…`), the recipe is
-   `https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-iverilog`,
-   and upstream is `https://github.com/steveicarus/iverilog` at tag `v13_0`.
-   `license.txt` should name these, as it names GHDL's tag.
-5. The unsigned-installer caveat already documented for HDLBoard covers
-   these binaries too. (The Icarus release notes themselves say Windows
-   binaries "will be unsigned so Windows may have issues".)
+   (and `…readline-8.3.003-1…`, `…gcc-16.2.0-4…`); recipe
+   `https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-iverilog`;
+   upstream `https://github.com/steveicarus/iverilog` at tag `v13_0`.
+   `license.txt` names these, as it names GHDL's tag.
+5. The existing unsigned-installer note covers these binaries (the Icarus
+   release notes themselves say Windows binaries "will be unsigned").
 
 ---
 
-## 4. Spike results — what was measured
+## 4. Measurements — what was run
 
-All on the development machine, using the extracted MSYS2 `ucrt64` packages
-(§ 8.2) with `PATH` reduced to `C:\Windows\System32` unless stated, from
-`…\T Rune Langøy\iverilog\` — a path with a space and a non-ASCII letter on
-purpose. The spike testbench is Appendix A; the harness was a Node script
-that drives `vvp` exactly the way `session.ts` drives GHDL (spawn, stdin
-grants, file polling).
+On the development machine, with the extracted MSYS2 `ucrt64` packages, `PATH`
+reduced to `C:\Windows\System32` unless stated, from
+`…\T Rune Langøy\iverilog\` (a space and a non-ASCII letter, on purpose). The
+harness was a Node script that drives `vvp` the way `session.ts` drives GHDL
+(spawn, stdin grants, file polling).
 
 | # | Question | Result |
 |---|---|---|
-| S1 | Does it run relocatably, with no install, no registry, no Cygwin? | **Yes**, once the DLLs are placed correctly (S2). `iverilog -V` → `Icarus Verilog version 13.0 (stable) (v13_0)`. |
-| S2 | What DLLs, where? | `iverilog.exe` spawns `lib/ivl/ivl.exe`, and `ivl.exe` loads `system.vpi`; Windows resolves their imports from the *loading executable's own directory*. With DLLs only in `bin/`: `STATUS_DLL_NOT_FOUND` (`-1073741515`), and with `zlib1.dll`/`libbz2-1.dll` missing from `lib/ivl/`: `Failed to open '…system.vpi'` yet exit 0. **Fix: the full set beside both `vvp.exe` and `ivl.exe`** (≈ 3 MB duplicated, ≈ 1 MB compressed), or prepend `bin/` to the child's `PATH`. Also: the default `.vpi` module names (`system`, `vhdl_sys`, `vhdl_textio`, `va_math`, `v2005_math`, `v2009`) are baked into `iverilog.exe` (found by scanning its strings; `vvp.conf` is only four lines and does not list them) — keep every `.vpi`. |
-| S3 | Speed | Compile (`iverilog -Wall -s … tb.v design.v`): **65–105 ms** warm, ≈ 280 ms cold. `vvp` start-up ≈ 100 ms. No comparison to GHDL's `-a`+`-e` was made. |
-| S4 | Does `$display` reach the console live? | **No, not by default.** Through a pipe `vvp` block-buffers: with `-n` alone, `design says hi at 0` never arrived in 3.5 s. With **`vvp -n -i`** it arrived at 0.02 s and every later line within a few ms of when it was printed. `-i` is documented as "makes all stdout output unbuffered". (`$fflush` in the testbench also works, but `-i` needs no cooperation from student code.) |
-| S5 | Does the stdin pacing design work? | **Yes.** The testbench blocks in `$fgets(line, 32'h8000_0000)` (Verilog's stdin descriptor) once per 20 ms of simulated time; the harness writes one line per 20 ms of real time. A clockless design with a 250 ms blink: **3520 ms simulated in 3517 ms real**, one blink every ≈ 250 ms real. Same design with 100 000 grants pre-loaded (no pacing): **≈ 74 s simulated in 4 s real (~18×)** — so the blocking read is what holds it to real time. |
-| S6 | Throughput with a 50 MHz clock | ≈ **60 ms simulated in 4 s real (0.015×)**. Slow motion, as with GHDL (`ghdl_implementation_plan.md` § 5.5 reports ≈ 0.0015× for GHDL mcode on a different design/machine — **not a like-for-like comparison**). Same constraint, same `CLOCK_500Hz` remedy. |
-| S7 | Input queue round trip | Queue file written at 1.08 s: applied and acknowledged (`<bits> 1`) in the very next output — within one 20–30 ms poll. Reading `input.txt` with `$fopen`/`$fscanf("%d %b")` per poll works. |
-| S8 | Diagnostics format | On **stderr**, `file:line: error: …` / `warning: …`; exit 2 on error. Real examples in Appendix B. `-Wall` adds useful port-width warnings ("Port 2 (b) of module w expects 4 bit(s), given 10."). |
-| S9 | `$stop`, `$finish`, `$fatal` | `vvp -n`: `$stop` prints `file:line: $stop called at 5 (1s)` and **exits 0**; `$finish` prints `file:line: $finish called at 200000 (1ps)` (stdout) and exits 0; `$fatal` prints `FATAL: file:line: boom` / `Time: 5  Scope: rt` and **exits 1**. (`-N` would make `$stop` exit 1.) |
-| S10 | Can Icarus report a module's ports itself? | Yes: `iverilog -tstub -s Top …` lists each root-module port with direction, width and exact case for ANSI and old-style headers. It is a debug dump, not a stable interface, so § 7.2 uses a source scanner and keeps this only as a cross-check. |
-| S11 | Non-ASCII directory | **Absolute** `+input_file=<path with ø>` etc.: the simulation ran but no output/heartbeat file was ever produced — **silent failure**. **Relative** names with `cwd` = that directory: fine (`0000000101 1` acked, 3520 ms simulated). |
-| S12 | 12.0 vs 13.0 | Same testbench, same `-n -i`, same error format, same result on 12.0 (stable in Debian). |
-| S13 | Default language | IEEE 1364-2005. `.sv` is not auto-detected. |
-| S14 | Can the build machine unpack `.pkg.tar.zst` without extra tools? | Yes: Windows' built-in `System32\tar.exe` (bsdtar 3.8.8, libzstd 1.5.7) extracts them. 7-Zip 25.01 also does (two-step). |
-| S15 | Can a design run shell commands? | No: `$system(...)` → `Error: System task/function $system() is not defined by any module` and the program is not runnable. |
-| S16 | Size | The trimmed tree used in the spike (30 files, without the `*-s.conf` target variants the § 8.2 deny-list would keep — a few KB): ≈ 12 MB on disk, **2.2 MB** with LZMA2 (7-Zip `-mx=9`). Current installer 88.7 MB. |
-| S17 | Timescale inheritance (§ 5.4) | Tested with `$printtimescale`: a file with no directive reports `1s / 1s` when compiled first, and `1ns / 1ps` when compiled after a file that has one. |
-| S18 | Where does `$finish`'s message go? | **stdout** (`fin.v:1: $finish called at 5 (1s)` appeared with stderr discarded and not with stdout discarded), so it flows into `LOG` with the student's own output. |
+| M1 | Runs relocatably — no install, registry or Cygwin? | **Yes**, once the DLLs are placed correctly (M2). `iverilog -V` → `Icarus Verilog version 13.0 (stable) (v13_0)`. |
+| M2 | What DLLs, where? | `iverilog.exe` spawns `lib/ivl/ivl.exe`, which loads `system.vpi`; Windows resolves their imports from the *loading executable's own directory*. DLLs only in `bin/` → `STATUS_DLL_NOT_FOUND` (`-1073741515`); `zlib1.dll`/`libbz2-1.dll` missing from `lib/ivl/` → `Failed to open '…system.vpi'` yet exit 0. **Fix: the full set beside both `vvp.exe` and `ivl.exe`** (≈ 3 MB duplicated, ≈ 1 MB compressed), or prepend `bin/` to the child's `PATH`. The default `.vpi` names (`system`, `vhdl_sys`, `vhdl_textio`, `va_math`, `v2005_math`, `v2009`) are compiled into `iverilog.exe` (`vvp.conf` is four lines and does not list them) — keep every `.vpi`. |
+| M3 | Speed | Compile (`iverilog -Wall -s … tb.v design.v`): **65–105 ms** warm, ≈ 280 ms cold. `vvp` start-up ≈ 100 ms. Not compared with GHDL's `-a`+`-e`. |
+| M4 | Does `$display` reach the console live? | **Not by default.** Through a pipe `vvp` block-buffers: with `-n` alone `design says hi at 0` never arrived in 3.5 s. With **`vvp -n -i`** it arrived at 0.02 s and later lines within milliseconds. `-i` is documented as "makes all stdout output unbuffered". |
+| M5 | Does stdin pacing work? | **Yes.** The testbench blocks in `$fgets(line, 32'h8000_0000)` (Verilog's stdin) once per 20 ms of simulated time; the harness writes one line per 20 ms of real time. Clockless design, 250 ms blink: **3520 ms simulated in 3517 ms real**. With 100 000 grants pre-loaded: **≈ 74 s simulated in 4 s real (~18×)** — so the blocking read is what holds it to real time. |
+| M6 | Throughput with a 50 MHz clock | ≈ **60 ms simulated in 4 s real (0.015×)**. Slow motion, as with GHDL (`ghdl_implementation_plan.md` § 5.5 reports ≈ 0.0015× for GHDL on a different design/machine — **not like-for-like**). Same `CLOCK_500Hz` remedy. |
+| M7 | Input queue round trip | Written at 1.08 s, applied and acknowledged in the very next output (one 20–30 ms poll). |
+| M8 | Diagnostics | On **stderr**, `file:line: error: …` / `warning: …`; exit 2 on error (Appendix B). |
+| M9 | `$stop`, `$finish`, `$fatal` | `vvp -n`: `$stop` prints `file:line: $stop called at 5 (1s)` and **exits 0**; `$finish` prints `… $finish called at … (1ps)` and exits 0; `$fatal` prints `FATAL: file:line: boom` and **exits 1**. |
+| M10 | Can Icarus report ports itself? | Yes: `iverilog -tstub -s Top …` lists each root-module port with direction, width and exact case. A debug dump, not a stable interface, so the plan uses a source scanner (B1–B3) and keeps this only as a test cross-check. |
+| M11 | Non-ASCII directory | **Absolute** `+input_file=<path with ø>`: runs, but no output/heartbeat file is ever produced — **silent failure**. **Relative** names with `cwd` = that directory: fine. |
+| M12 | 12.0 vs 13.0 | Same testbench, `-n -i`, error format and result on 12.0. |
+| M13 | Default language | IEEE 1364-2005; `.sv` not auto-detected. |
+| M14 | Unpack `.pkg.tar.zst` with no extra tools? | Yes: Windows' `System32\tar.exe` (bsdtar 3.8.8, libzstd 1.5.7). 7-Zip 25.01 also (two steps). |
+| M15 | Can a design run shell commands? | No: `$system(...)` → `Error: System task/function $system() is not defined by any module`. |
+| M16 | Size | The spike tree (30 files, without the `*-s.conf` variants the deny-list keeps — a few KB): ≈ 12 MB on disk, **2.2 MB** LZMA2 (7-Zip `-mx=9`). Installer today 88.7 MB. |
+| M17 | Timescale inheritance | Tested with `$printtimescale`: a file with no directive reports `1s / 1s` when compiled first, `1ns / 1ps` after a file that has one. |
+| M18 | Where does `$finish`'s message go? | **stdout** — so it flows into `LOG` with the student's output. |
+| M19 | `-Wall` noise | `-Wall` warns `timescale for X inherited from another file` for **every** design that lacks a directive — i.e. every normal synthesizable file, on every run. **`-Wall -Wno-timescale`** is clean on all fixtures and still reports real problems (port-width padding, Appendix B). |
+| M20 | Do the converted starters work end to end? | **Yes.** All three (Appendix C) compiled clean under `-Wall -Wno-timescale` and were driven through the full board protocol (52-bit state, input queue with acknowledgements, dwell rule, pacing) by a throwaway driver: `DE1_SoC.v` 4/4, `counter8` 5/5, `blinkTest.v` 3/3 (blink on at **241 ms**, off **247 ms** later, target 250). The self-checking `tb_counter8.v` ran in batch mode and printed `PASS`. |
 
-**Not measured:** Linux (POSIX) behaviour of the stdin pacing — Windows
-stdin is a pipe like the one used here, and POSIX pipes block the same way,
-but § 10 makes it a gate. The interactive latency of a real *browser* click
-through the full stack (the spike stopped at the file protocol). A student
-machine with real-time antivirus. The behaviour of very large designs.
+**Not measured:** POSIX behaviour of the stdin pacing (Windows and POSIX pipes
+block the same way, but step G2 makes it a gate); a browser click through the
+whole stack; real-time antivirus on a student machine; very large designs;
+GHDL behaviour on the Verilog-equivalent scenarios (parity, § 7.6, is
+specified but was not run).
 
 ---
 
@@ -328,698 +304,1074 @@ machine with real-time antivirus. The behaviour of very large designs.
 
 ### 5.1 Engine selection — no protocol change
 
-The existing `RUN` frame already carries the top file's name
-(`RUN <topFile>` + `@@FILE …@@` sections). **The backend picks the engine from
-the top file's extension**: `.v` → Verilog, `.vhd`/`.vhdl` → GHDL. Nothing in
-`server/src/protocol.ts` or `ghdlClient.ts`'s framing changes and
-`PROTOCOL_VERSION` stays `'1'`.
-
-The frontend's only job is to send the *right files*: those in the top file's
-folder (§ 6.4). That is also what makes "`verilog/` file selected → Verilog
-simulator" hold without any explicit "language" field. If the top file is
-missing (nothing marked), the backend keeps today's behaviour: VHDL.
-
-If the files sent are not all the top file's language (only possible through a
-rename that changed an extension without moving the file — § 6.5 closes it),
-the backend reports it as a clear `ERROR analyze` rather than guess.
+`RUN <topFile>` already carries the top file's name. **The backend picks the
+engine from that file's extension**: `.v` → Verilog; `.vhd`/`.vhdl` → GHDL.
+`protocol.ts`, the framing and `PROTOCOL_VERSION` (`'1'`) do not change. The
+frontend's only job is to send the *right files*: those in the top file's
+folder. No top file marked → today's behaviour (VHDL). Files that do not all
+belong to the top file's language get a clear `ERROR analyze`, not a guess.
 
 ### 5.2 The board contract for Verilog
 
-Same board, same names — `ghdl_implementation_plan.md` § 3.2 — so a design
-can be moved between languages by translating, not re-wiring:
+Same board, same names as `ghdl_implementation_plan.md` § 3.2, so a design
+moves between languages by translating, not re-wiring.
 
-| Port | Direction | Width | Notes |
+| Port | Dir | Width | Notes |
 |---|---|---|---|
-| `CLOCK_50` | in | 1 | 20 ns period, generated only if the module declares it |
-| `CLOCK_500Hz` | in | 1 | simulator-only convenience, 2 ms period, always generated |
+| `CLOCK_50` | in | 1 | 20 ns period, generated only if declared |
+| `CLOCK_500Hz` | in | 1 | simulator-only, 2 ms period, always generated |
 | `SW` | in | 10 | |
 | `KEY_N` | in | 4 | active low |
 | `LEDR` | out | 10 | |
 | `HEX0_N` … `HEX5_N` | out | 7 each | active low |
 
-- **Matching is case-insensitive; connection uses the declared spelling.**
-  Verilog identifiers are case-sensitive and VHDL's are not; a module that
-  declares `Clock_50` or `key_n` should not fail to elaborate over
-  capitalisation when the VHDL equivalent would not. The port scanner records
-  the name as written and the generated instance connects by that exact
-  spelling (`.Clock_50(clk_sig)`).
-- Only ports the module declares are connected; each undeclared output is
-  tied to its electrically "off" value (`LEDR` `0`, `HEX*` `7'h7F`) so it
-  reads blank, exactly as the VHDL testbench's defaults do.
-- **`rst` is not supported** (open decision § 12 #5). In VHDL it exists only
-  as legacy tolerance for older files; there is no legacy Verilog.
-- A width mismatch is Icarus's usual *warning* (padded/truncated), shown in
-  the console — not an error — see Appendix B.
-- **Terasic's own names** (`KEY`, `HEX0`, …) are not the course's names
-  (`KEY_N`, `HEX0_N`); same as VHDL, a course convention, not new here.
+- **Matching is case-insensitive; connection uses the declared spelling** —
+  `Clock_50` must not fail over capitalisation where VHDL would not.
+- Only declared ports are connected; each undeclared output is tied to its
+  "off" value (`LEDR` `0`, `HEX*` `7'h7F`).
+- **No `rst`** (§ 9 #5): in VHDL it is legacy tolerance; Verilog has no legacy.
+- A width mismatch is Icarus's usual *warning* (padded/truncated), shown in the
+  console.
 
-### 5.3 Run modes — same two as VHDL
+### 5.3 Run modes — the same two as VHDL
 
 | | Trigger | What runs |
 |---|---|---|
-| **board** | The top module has at least one port | Generated `hdl_board_tb` wraps it; one persistent `vvp` for the life of the session, polling `input.txt`, publishing `output.txt`, paced from stdin. Identical protocol to today: `READY`, `STATE`, `STIM`, `RESET`, `STOP`. |
-| **batch** | The top module has **no** ports (a self-contained testbench) | No wrapper. `iverilog -s <top>`, `vvp -n -i`, bounded by `BATCH_TIMEOUT_MS` (60 s). Ends with `DONE completed`. |
+| **board** | The top module declares at least one port | Generated `hdl_board_tb` wraps it; one persistent `vvp` polls `input.txt`, publishes `output.txt`, paced from stdin. Same `READY`/`STATE`/`STIM`/`RESET`/`STOP`. |
+| **batch** | The top module has **no** ports (a self-contained testbench) | No wrapper; `iverilog -s <top>`, `vvp -n -i`, bounded by the 60 s batch timeout. Ends with `DONE completed`. |
 
 ### 5.4 The compile pipeline
 
-One invocation, in the session's temp directory (`cwd`), with **relative
-names throughout** (S11):
+One invocation in the session's temp directory (`cwd`), **relative names only**
+(M11):
 
 ```
-iverilog -Wall -I. -s <top> -o sim.vvp  _hdlboard_ts.v  [hdl_board_tb.v]  <student .v files, submitted order>
+iverilog -Wall -Wno-timescale -I. -s <top> -o sim.vvp  _hdlboard_ts.v  [hdl_board_tb.v]  <student .v files, submitted order>
 vvp -n -i sim.vvp +input_file=input.txt +output_file=output.txt
                   +heartbeat_file=heartbeat-N.txt +poll_interval_ns=… +min_dwell_ns=…
 ```
 
-- `-s hdl_board_tb` in board mode (the student's module is reached by
-  instantiation); `-s <top>` in batch mode.
-- **Timescale.** A file without `` `timescale `` runs at the default 1 s unit
-  and inherits from whatever file was compiled *before* it. So the backend
-  writes `_hdlboard_ts.v` containing only `` `timescale 1ns/1ps `` and passes
-  it **first**; the generated wrapper carries its own directive as well. Files
-  that specify a timescale keep it (and, being Verilog, pass it on to later
-  files — a known language quirk; documented, not fought). Both halves of
-  this were tested (S17).
-- The first line of every `sim.vvp` is `#! /ucrt64/bin/vvp` — the path baked
-  in at MSYS2 build time (`vvp.conf`'s `VVP_EXECUTABLE`). It is harmless
-  because HDLBoard always runs `vvp.exe` explicitly and never executes the
-  `.vvp` file directly.
-- **`-Wall`** on: the request is that the console shows the simulator's own
-  messages. Its noise level on typical student designs should be checked in
-  Phase 2 (§ 13); dropping to `-Wall -Wno-…` is a one-line change.
-- `.vh` include files are written to the directory (so `` `include "x.vh" ``
-  resolves through `-I.`) but not listed as compile units.
-- The compile step is bounded by `BUILD_TIMEOUT_MS` (30 s), as `ghdl -a` is.
-- **No fixed-point ordering loop** (§ 7.2 of the GHDL plan needed one because
-  `ghdl -a` is order-sensitive per file). Verilog resolves module references
-  across all files in one `iverilog` run, so one invocation is enough.
+- `-s hdl_board_tb` in board mode; `-s <top>` in batch mode.
+- **Timescale.** A file without `` `timescale `` runs at 1 s and inherits from
+  the file compiled before it (M17). The backend writes `_hdlboard_ts.v` —
+  only `` `timescale 1ns/1ps `` — and passes it **first**; the wrapper carries
+  its own directive too. Files that set a timescale keep it and pass it on to
+  later files (a language quirk; documented, not fought).
+- **`-Wall -Wno-timescale`** (M19): the simulator's own warnings are shown,
+  minus the one that fires on every ordinary design.
+- **Reserved names.** `_hdlboard_ts.v`, `hdl_board_tb.v`, `sim.vvp` are
+  generated; a student file with one of those names, a path separator, `..`, a
+  leading `-`, or an absolute path is rejected before anything is written
+  (step B6). `.vh` files are written (so `` `include "x.vh" `` resolves through
+  `-I.`) but not listed as compile units.
+- Compile is bounded by the 30 s build timeout. **No fixed-point ordering
+  loop** (the GHDL flow needs one): `iverilog` resolves module references
+  across all files in one run.
+- `sim.vvp`'s first line is `#! /ucrt64/bin/vvp` (baked in by MSYS2). Harmless:
+  HDLBoard always runs `vvp.exe` explicitly.
 
 ### 5.5 What the console shows
 
-The request: show the simulator's own messages, as GHDL's are. Mapping, every
-row of which is real output (Appendix B):
+Every row is real output (Appendix B).
 
 | Source | Goes to | Notes |
 |---|---|---|
-| `iverilog -V`, first line | `LOG` at run start | e.g. `Icarus Verilog version 13.0 (stable) (v13_0)` — read from the binary, not hard-coded. (The GHDL path hard-codes `'GHDL 5.0.1 (mcode)'` at `session.ts:289`; Verilog should not repeat that.) |
-| `iverilog` stderr on **success** (warnings) | `LOG`, line by line, verbatim | The GHDL path discards `ghdl -a` warnings on success. Verilog keeps them: they are the simulator's messages and the request is to show them. |
-| `iverilog` stderr on **failure** | `ERROR analyze` (or `elaborate`, see below), verbatim | `file:line: error: …`, exit 2. |
-| `vvp` stdout, each line | `LOG`, verbatim, blank lines dropped | Includes the student's `$display`/`$write`/`$monitor` and the simulator's own `…: $finish called at 200000 (1ps)` / `…: $stop called at …` lines. |
-| `vvp` stderr + non-zero exit | `ERROR runtime` | `$fatal` → exit 1 with `FATAL: …` |
-| `vvp` exit 0 in batch mode | `DONE completed` | |
-| `vvp` exit 0 in board mode | `DONE completed` | New: today the handler is silent (§ 7.5). A `$finish` in the design ends the run. |
+| `iverilog -V`, first line | `LOG` at run start | Read from the binary, not hard-coded (the GHDL path hard-codes `'GHDL 5.0.1 (mcode)'` at `session.ts:289`). |
+| `iverilog` stderr on **success** (warnings) | `LOG`, per line, verbatim | The GHDL path discards `ghdl -a` warnings on success; Verilog keeps them — they are the simulator's messages. |
+| `iverilog` stderr on **failure** | `ERROR analyze` / `elaborate`, verbatim | `file:line: error: …`, exit 2. |
+| `vvp` stdout, per line | `LOG`, verbatim, blank lines dropped | The student's `$display`/`$write`/`$monitor` and the simulator's own `…: $finish called at …` / `$stop called at …`. |
+| `vvp` stderr + non-zero exit | `ERROR runtime` | `$fatal` → exit 1, `FATAL: …` |
+| `vvp` exit 0, batch mode | `DONE completed` | |
+| `vvp` exit 0, board mode | `DONE completed` | New: today's handler is silent (D5). |
 
-`stage` for compile failures: `elaborate` when the text contains
-`error(s) during elaboration` or `Unable to find the root module`,
-otherwise `analyze`. Icarus does both in one step, so the split is a
-cosmetic mapping onto the two stages the frontend already prints
-(`"<stage> error:\n<text>"`).
+Stage for a compile failure: `elaborate` if the text contains `error(s) during
+elaboration` or `Unable to find the root module`, else `analyze` (Icarus does
+both in one step; this is a cosmetic mapping onto the two stages the frontend
+prints as `"<stage> error:\n<text>"`).
 
 ### 5.6 Board mode: what differs from VHDL
 
-Everything engine-independent — the stimulus queue and its acknowledgements
-(`writeStimQueue`, `pollOutput`), the 20 ms `PACING_STEP_MS`, the poll
-intervals (10 µs with `CLOCK_50`, 1 ms without), the heartbeat, `RESET`,
-`STOP`, teardown — is reused unchanged, because the *files and the pacing
-grant* are the interface. The Verilog testbench (Appendix A) writes the same
-`input.txt` grammar, the same `output.txt` (`<52 bits> <seq>`), and the same
-heartbeat number.
+The stimulus queue and acknowledgements, `PACING_STEP_MS`, poll intervals
+(10 µs with `CLOCK_50`, 1 ms without), heartbeat, `RESET`, `STOP` and teardown
+are engine-independent and reused unchanged: the *files and the pacing grant*
+are the interface. Differences:
 
-Differences:
+- **Generics → plusargs** (`+input_file=…` read with `$value$plusargs`); no
+  recompile per run.
+- **Pacing is stdin on every platform** (no `mkfifo`). Verified on Windows
+  (M5); Linux is gate G2.
+- **`X`/`Z`**: Verilog prints `x`/`z`; `STATE` allows `0`/`1`/`X`, so
+  `pollOutput` normalises `[xXzZ]` → `X` (D5; a no-op for VHDL output).
+- **Truncated reads**: as with GHDL's testbench, the output file is opened,
+  written and closed on each change; `pollOutput` already ignores anything not
+  exactly 52 bits.
 
-- **Generics → plusargs.** GHDL takes `-ginput_file=…`; Verilog takes
-  `+input_file=…` read with `$value$plusargs`. No recompile per run — as with
-  GHDL generics.
-- **Pacing is stdin on every platform.** `session.ts` chooses
-  `PACING = win32 ? 'stdin' : 'fifo'`. The Verilog engine always uses the
-  stdin mechanism (`startStdinPacing`, `grantPacing`) — no `mkfifo`, no named
-  pipe, one less platform split. Verified on Windows (S5); Linux is a gate.
-- **`X`/`Z`.** Verilog prints unknown/high-impedance bits as `x`/`z`. The
-  wire protocol's `STATE` allows `0`/`1`/`X`, so `pollOutput` normalises
-  `[xXzZ]` → `X` before its length check (a one-line change that is a no-op
-  for VHDL output).
-- **Truncated reads.** As with GHDL's testbench, the output file is opened,
-  written and closed on each change; a reader can catch it empty. `pollOutput`
-  already ignores anything that is not exactly 52 bits (seen in the spike as
-  blank reads; harmless).
+### 5.7 The engine seam
 
----
-
-## 6. Frontend changes
-
-Deliberately minimal: no new component, prop, dialog or wire field. Line
-numbers are at commit `2a630bf`.
-
-### 6.1 The folder
-
-`src/components/workbench/files.ts:14`
+`session.ts` (641 lines) does two jobs: *orchestrate a session* (stimulus queue,
+pacing, polling, teardown — engine-independent) and *drive GHDL* (analysis
+loop, top detection, testbench, elaboration). Adding Verilog by branching would
+bury the first under the second. Instead the second becomes an interface:
 
 ```ts
-folder: 'vhdl' | 'verilog' | 'work';
-```
+export type Language = 'vhdl' | 'verilog';
 
-`src/components/workbench/FileExplorer.tsx:25`
+export interface PrepareRequest {
+  readonly dir: string;                       // the session's temp directory
+  readonly files: readonly SourceFile[];
+  readonly topFile?: string;
+}
 
-```ts
-const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
-```
+export interface RunPlan {
+  readonly mode: 'board' | 'batch';
+  readonly runTarget: string;                 // what the simulator is told to run
+  readonly hasClock50: boolean;               // selects poll interval and dwell
+  readonly pacing: 'fifo' | 'stdin';
+  readonly messages: readonly string[];       // banner and compile warnings → LOG
+}
 
-The folder label is already `{folder}/` (`:154`), so it renders `verilog/`
-with no other change. A folder with no files is not drawn (`:142`), so the
-starter project looks exactly as it does today — no empty `verilog/`.
+export type PrepareResult =
+  | { readonly ok: true; readonly plan: RunPlan }
+  | { readonly ok: false; readonly stage: ErrorStage; readonly text: string };
 
-### 6.2 "Activating" a Verilog file (assumption A1)
-
-The existing control is the blue **top-file dot**, currently shown only for
-`vhdl/` rows (`FileExplorer.tsx:163`, and the two `--has-top-dot` classes at
-`:184`/`:205` that reserve its space). Show it for `verilog/` rows too:
-
-```tsx
-const hasTopDot = folder === 'vhdl' || folder === 'verilog';
-```
-
-and use `hasTopDot` in those three places (and update the comment at `:20`,
-`:28`). One project-wide `topFileId` stays — so exactly one file is top, and
-choosing a Verilog file makes the VHDL dot grey and vice versa. The engine
-follows the top file's folder (§ 5.1, § 6.4). `SimulationCard` already prints
-the top file's name.
-
-If "activated" was meant as "the file in the *active editor tab*" rather than
-the top dot, say so — it is a different (also small) change to
-`handleStart`, and the top-dot approach would then be redundant. The
-trade-off: the tab-based rule makes Start's behaviour depend on which tab
-happens to be open, while the top file is already the concept the UI teaches.
-
-### 6.3 Upload and drop routing
-
-`src/components/workbench/Workbench.tsx:439-452` (`readAndAddFiles`, shared
-by the picker and drag-and-drop):
-
-```ts
-const VHDL_EXT    = /\.(vhdl?|vhd)$/i;
-const VERILOG_EXT = /\.(vh?)$/i;                    // .v and .vh
-
-for (const file of incoming) {
-  const isVhdl = VHDL_EXT.test(file.name);
-  const isVerilog = VERILOG_EXT.test(file.name);
-  if (!isVhdl && !isVerilog) {
-    appendLog(`Skipped ${file.name}: not a .vhd/.vhdl/.v file.`, 'error');
-    continue;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const folder: VhdlFile['folder'] = isVerilog
-      ? 'verilog'
-      : /^tb_/i.test(file.name) ? 'work' : 'vhdl';
-    addFile(file.name, String(reader.result ?? ''), folder);
-  };
-  reader.readAsText(file);
+export interface SimEngine {
+  readonly language: Language;
+  prepare(request: PrepareRequest): Promise<PrepareResult>;
+  startBoardRun(plan: RunPlan, files: BoardFiles, timing: BoardTiming): RunHandle;
+  startBatchRun(plan: RunPlan, onOutput: (line: string) => void, timeoutMs: number): BatchHandle;
 }
 ```
 
-- `:540` `accept=".vhd,.vhdl"` → `accept=".vhd,.vhdl,.v,.vh"`.
-- The two strings that name the file types — the drop hint
-  (`FileExplorer.tsx:120`, `Drop .vhd / .vhdl files`) and the button label
-  (`:130`, `Upload VHDL File`) — become `Drop .vhd / .vhdl / .v files` and
-  `Upload File`. Cosmetic, two strings, recommended because the old ones
-  would be wrong.
+`Session` asks `selectEngine(topFile)` once, calls `prepare`, forwards
+`plan.messages` as `LOG`, then starts a board or batch run. `GhdlEngine` is the
+current GHDL code *moved*, not rewritten; `VerilogEngine` is new. `RunHandle`
+and `BatchHandle` already exist in `ghdl.ts` (moved to `runtime.ts`, C1). The
+refactor is done **after** characterization tests pin today's GHDL behaviour
+(A5–A6), so "byte-identical" is checked, not hoped for.
 
-Note (A3): `tb_*` **VHDL** still goes to `work/`. Every `.v` goes to
-`verilog/`, testbenches included — a `tb_*.v` in `work/` would be dead
-weight, since only the top file's folder is ever sent to a simulator (§ 6.4).
-
-### 6.4 What Start sends
-
-`src/components/workbench/ghdlClient.ts:146-154`, `run()` currently filters
-`folder === 'vhdl'`. Change to *the top file's folder*, defaulting to `vhdl`:
-
-```ts
-run(files: VhdlFile[], topFileName?: string): void {
-  const ws = this.ensureSocket();
-  const top = files.find((f) => f.name === topFileName);
-  const folder = top?.folder === 'verilog' ? 'verilog' : 'vhdl';
-  const sources = files.filter((f) => f.folder === folder);
-  …                                   // unchanged: body, head, send
-}
-```
-
-`Workbench.tsx:488` (`getClient().run(files, topFile?.name)`) is unchanged.
-The wire format, `RUN <topFile>`, is unchanged (§ 5.1). `work/` files are
-still never sent, exactly as today.
-
-### 6.5 Two small consistency fixes
-
-- **Delete the top file** — `Workbench.tsx:413-415` hands the role to "the
-  first `vhdl/` file". Make it the first file *in the deleted file's folder*
-  (`f.folder === deleted.folder`), so deleting the last Verilog top does not
-  silently switch the engine.
-- **Rename across languages** — `handleRenameFile` (`Workbench.tsx:400`)
-  keeps the folder, so renaming `x.v` to `x.vhd` would leave a VHDL name in
-  `verilog/`. Recommended: on rename, if the new extension implies the other
-  language, move the file to that language's folder. Six lines. Without it
-  the backend's mismatch error (§ 5.1) is the safety net.
-
-`New File` (`handleNewFile`, `untitledN.vhd`) is unchanged: a new file is
-VHDL until renamed to `.v` (which, with the fix above, moves it).
-
-### 6.6 What deliberately does not change
-
-`CodeEditor` (highlighting — § 12 #6), `SimulationCard`, the board, the
-console, the protocol, dialogs (`About` could gain an Icarus credit next to
-GHDL's — optional; the installer's licence page already carries the notice).
-
----
-
-## 7. Backend changes
-
-### 7.1 Modules
-
-New, alongside the GHDL ones:
-
-| File | Role | Mirrors |
-|---|---|---|
-| `server/src/verilog.ts` | Spawn helpers: `runCmd`-based compile, `startPersistentRun`, `runBatch`, exe resolution (`setIverilogExe`, `getVvpExe`), banner | `ghdl.ts` |
-| `server/src/vlogTb.ts` | `generateVerilogTestbench(top, ports)` | `tbTemplate.ts` |
-| `server/src/vlogPorts.ts` | `findTopModule(files, preferred)` | `portDetect.ts` |
-
-`ghdl.ts` already exports the two interfaces the run machinery is written
-against — `RunHandle` (`kill`, `onExit`, `onOutput`, `grantPacing`) and
-`BatchHandle` (`kill`, `done`). The Verilog spawn helpers return the same
-shapes, which is what lets `session.ts` stay engine-agnostic. Move those two
-interfaces (and `CmdResult`/`runCmd`) to a shared `runtime.ts` and re-export
-from `ghdl.ts` so nothing that imports them changes.
-
-### 7.2 `vlogPorts.ts` — finding the top module
-
-Text analysis on a comment-stripped copy, same discipline as
-`portDetect.ts` (the source handed to the compiler is never modified):
-
-1. Strip `// …`, `/* … */`, string literals and `(* attributes *)`.
-2. Find every `module <name>` (skip `endmodule`, `macromodule` treated as
-   `module`).
-3. For each, read its header: skip an optional balanced `#( … )` parameter
-   list, then the balanced `( … )` port list.
-4. Split the list at **top-level** commas; in each piece drop `= default`,
-   drop any `[range]`, and take the **last identifier** — this handles ANSI
-   lists (`output reg [9:0] LEDR = 0, …`), lists where a direction applies to
-   several names (`output wire [6:0] HEX0_N, HEX1_N`), and old-style headers
-   (`module M(CLOCK_50, SW, LEDR);`) with one rule.
-5. Record `{ name, declaredSpelling }` and match against the board list
-   case-insensitively.
-
-Selection: an explicit top file (`RUN <topFile>`) → the module in that file
-scoring highest on board ports, else the first declared (a file may define a
-helper before its top; VHDL's "first entity" rule does not carry over
-cleanly). No explicit top → best board-port score across all modules, and an
-error naming the ports it looked for if none scores (same message shape as
-`portDetect.ts`). A top with **zero** ports → batch mode.
-
-S10's `-tstub` output is a possible cross-check in tests; it is not used at
-run time because it is a debug dump whose format is not a promise.
-
-### 7.3 `vlogTb.ts` — the generated wrapper
-
-Appendix A is the verified shape. The generator's conditional parts, all
-decided at generation time from the port set:
-
-- `always #10 clk_sig = ~clk_sig;` only if `CLOCK_50` is declared.
-- The `CLOCK_500Hz` generator always (`#1000000` = 1 ms half-period at
-  `1ns/1ps`).
-- One `.PortName(signal)` per declared board port, using the declared
-  spelling; each *undeclared* output gets an `assign … = <off value>;`.
-- No `rst` handling (§ 5.2).
-
-Written as Verilog-2005 only (`reg [1023:0]` for file names rather than
-`string`), so it compiles with the default generation and no `-g` flag.
-
-### 7.4 `session.ts` — the seam
-
-`handleRun` (`session.ts:204-298`) is GHDL-specific from "write files" to
-"elaborated"; `startRun`/`startBatchRun` (`:300`, `:508`) are generic except
-for *which spawn function they call*. The change:
-
-```ts
-async handleRun(files, topFile) {
-  const engine = engineFor(topFile);            // 'vhdl' | 'verilog', by extension
-  return engine === 'verilog' ? this.handleRunVerilog(files, topFile)
-                              : this.handleRunVhdl(files, topFile);   // today's body, untouched
-}
-```
-
-- `handleRunVhdl` is the current `handleRun` moved verbatim, so GHDL
-  behaviour is byte-identical (this codebase needed a dozen field-found fixes
-  to get here; do not refactor it under the feature).
-- `handleRunVerilog` does § 5.4: write files, compile, pick top, generate the
-  wrapper (board mode), then call the existing `startRun`/`startBatchRun`
-  with the Verilog spawn functions.
-- `startRun` gains one parameter, a `spawnPersistent` function, and
-  `startBatchRun` one, `spawnBatch`; the GHDL ones are the defaults. Inside
-  `startRun`, `PACING` becomes a per-engine value (Verilog: always `stdin`).
-
-### 7.5 One shared behaviour fix
-
-`startRun`'s `onExit` (`session.ts:349-359`) only reports `code !== 0`. A
-persistent `vvp` that ends with exit 0 — the design called `$finish`, or
-`$stop` under `-n` — leaves the UI on "running" with a frozen board. Send
-`DONE completed` when a run that was `running` exits 0. For GHDL this only
-changes a corner case that today is silent (`std.env.finish`).
-
-### 7.6 `server.ts`
-
-`BackendOptions` (`:37-49`) gains `iverilogExe?` and `vvpExe?`; env vars
-`IVERILOG_EXE` (default `iverilog`) and `VVP_EXE` (default: `vvp` beside
-`IVERILOG_EXE` if that is an absolute path, else `vvp` from `PATH`), set next
-to `setGhdlExe` (`:130`). The startup log line gains the Icarus path.
-
----
-
-## 8. Windows packaging
+### 5.8 Windows packaging (reference for phase F)
 
 Same recipe as GHDL (`fetch-ghdl.ps1` → `vendor/ghdl` → `resources/ghdl` →
-`extraResources`), with one difference: Icarus has no self-contained release
-zip, so the tree is *assembled* from pinned MSYS2 packages. That assembly is
-the whole of the packaging risk, which is why it is spiked (§ 4) and
-smoke-tested at build time (§ 8.4).
-
-### 8.1 Layout
+`extraResources`), except Icarus has no self-contained zip, so the tree is
+*assembled* from pinned MSYS2 packages — the whole of the packaging risk,
+hence spiked (§ 4) and smoke-tested at build time (F3).
 
 ```
 resources/iverilog/
   bin/      iverilog.exe  vvp.exe  + runtime DLLs (8)
   lib/ivl/  ivl.exe  ivlpp.exe  *.vpi  vvp.conf vvp.tgt (+ -s variants)  null/stub tgt+conf
-            + the same runtime DLLs again (S2)
+            + the same runtime DLLs again (M2)
   COPYING   licenses/<package>/…   VERSION.txt
 ```
 
-Runtime DLLs (all found by scanning the binaries' imports and confirmed by
-running with a clean `PATH`): `libgcc_s_seh-1.dll`, `libstdc++-6.dll`,
-`libwinpthread-1.dll`, `zlib1.dll`, `libbz2-1.dll`, and for `vvp.exe`
-`libreadline8.dll`, `libhistory8.dll`, `libtermcap-0.dll`.
+Runtime DLLs: `libgcc_s_seh-1`, `libstdc++-6`, `libwinpthread-1`, `zlib1`,
+`libbz2-1`, and for `vvp.exe` `libreadline8`, `libhistory8`, `libtermcap-0`.
 
-### 8.2 `winInstaller/fetch-iverilog.ps1` (new)
+Pins (all from `https://repo.msys2.org/mingw/ucrt64/`; recompute if any pin is
+bumped — do not paste from here without re-verifying):
 
-Behaves like `fetch-ghdl.ps1`: idempotent by a stamp in `VERSION.txt`,
-`-Force` to refetch, downloads with `Invoke-WebRequest`, **verifies SHA-256
-before unpacking**, refuses on mismatch. Pinned at research time (all from
-`https://repo.msys2.org/mingw/ucrt64/`; sizes in bytes):
+| Package file | Bytes | SHA-256 |
+|---|---|---|
+| `mingw-w64-ucrt-x86_64-iverilog-1~13.0-2-any.pkg.tar.zst` | 1 988 347 | `FD4D7D7CB60CDA1EB437F5476673503D92964CF47CE6C11B460EB3BD05C43582` |
+| `mingw-w64-ucrt-x86_64-readline-8.3.003-1-any.pkg.tar.zst` | 513 820 | `DE2423C2E10FCD88272A0AB2F833F6A082CFE613D4C17C2F548CC50A5D2190C4` |
+| `mingw-w64-ucrt-x86_64-termcap-1.3.1-7-any.pkg.tar.zst` | 27 912 | `17B78EB63E89458A6AE4D56AA1DC357E1DECB2F845B29FDED79BCCDD628D9D41` |
+| `mingw-w64-ucrt-x86_64-zlib-1.3.2-2-any.pkg.tar.zst` | 111 475 | `841401182976D2F9E17E5C0EBAAC51F2A8014140EA53D67625E91C8FB3C85EA0` |
+| `mingw-w64-ucrt-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst` | 94 396 | `F03A2174034DDD2D96CECD34F617C5F8E2EF86C812B8D2BB3B8875257F2C8BFA` |
+| `mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst` | 30 667 | `F8DE8153BBC0E47BA244A423C12C426FA1D9F56395117ECAA34C6AD6EBED6CA3` |
+| `mingw-w64-ucrt-x86_64-libgcc-16.2.0-4-any.pkg.tar.zst` | 77 220 | `DE65B4ADAE899D9278427402E29D03860BACBA481794460F3A1D078610CBB783` |
+| `mingw-w64-ucrt-x86_64-libstdc%2B%2B-16.2.0-4-any.pkg.tar.zst` (`+` percent-encoded) | 795 771 | `2211DBBF1220287E49F5D66BB6CB09EE5A157901A485197553C9A940CC902D5B` |
 
-| Package file | SHA-256 |
-|---|---|
-| `mingw-w64-ucrt-x86_64-iverilog-1~13.0-2-any.pkg.tar.zst` (1 988 347) | `FD4D7D7CB60CDA1EB437F5476673503D92964CF47CE6C11B460EB3BD05C43582` |
-| `mingw-w64-ucrt-x86_64-readline-8.3.003-1-any.pkg.tar.zst` (513 820) | `DE2423C2E10FCD88272A0AB2F833F6A082CFE613D4C17C2F548CC50A5D2190C4` |
-| `mingw-w64-ucrt-x86_64-termcap-1.3.1-7-any.pkg.tar.zst` (27 912) | `17B78EB63E89458A6AE4D56AA1DC357E1DECB2F845B29FDED79BCCDD628D9D41` |
-| `mingw-w64-ucrt-x86_64-zlib-1.3.2-2-any.pkg.tar.zst` (111 475) | `841401182976D2F9E17E5C0EBAAC51F2A8014140EA53D67625E91C8FB3C85EA0` |
-| `mingw-w64-ucrt-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst` (94 396) | `F03A2174034DDD2D96CECD34F617C5F8E2EF86C812B8D2BB3B8875257F2C8BFA` |
-| `mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst` (30 667) | `F8DE8153BBC0E47BA244A423C12C426FA1D9F56395117ECAA34C6AD6EBED6CA3` |
-| `mingw-w64-ucrt-x86_64-libgcc-16.2.0-4-any.pkg.tar.zst` (77 220) | `DE65B4ADAE899D9278427402E29D03860BACBA481794460F3A1D078610CBB783` |
-| `mingw-w64-ucrt-x86_64-libstdc%2B%2B-16.2.0-4-any.pkg.tar.zst` (795 771) | `2211DBBF1220287E49F5D66BB6CB09EE5A157901A485197553C9A940CC902D5B` |
+**Availability risk.** `repo.msys2.org` currently retains old versions (several
+`readline` and `libwinpthread` builds were listed) but promises nothing.
+Mitigations: cache `vendor/iverilog` (gitignored, like `vendor/ghdl`); or
+re-host the *assembled* tree as a GitHub release asset (GHDL's zip already is
+one). § 9 #7.
 
-(The last URL needs the `+` percent-encoded. Recompute these if any pin is
-bumped; do not paste from here without re-verifying.)
+### 5.9 Linux / server mode
 
-Steps: download → verify → unpack each with `$env:SystemRoot\System32\tar.exe -xf`
-(S14; a build-machine-only requirement, Windows 10 1803+/11) → copy
-`ucrt64\bin\{iverilog,vvp}.exe` and the DLLs into `bin/`, `ucrt64\lib\ivl\*`
-into `lib/ivl/`, the DLLs again into `lib/ivl/` (S2) → **deny-list, not
-allow-list**: drop `vhdlpp.exe`, `include/`, `libvpi.a`, `iverilog-vpi.exe`,
-and the `blif`/`pcb`/`sizer`/`vlog95`/`vhdl` targets, keeping everything else
-(an allow-list is how the missing `.vpi` files of S2 happened) → copy licence
-texts from each package's `share\licenses\` → write `VERSION.txt` with the
-package list, URLs, SHA-256s and the source-package URLs of § 3.3.
+`scripts/start.sh` (lines 71–95) installs GHDL through whichever of `apt-get`,
+`dnf`, `pacman`, `zypper`, `apk`, `brew` exists; `alpineInstall.sh` builds it.
+Icarus is simply a package in all of those: Alpine `edge/community` carries
+`iverilog` 13.0-r0; Debian stable 12.0-2, testing/unstable 13.0-2 (package
+presence verified, not installation; Homebrew's formula is `icarus-verilog`,
+to confirm when implementing). The backend needs only `iverilog` and `vvp` on
+`PATH`, or `IVERILOG_EXE` / `VVP_EXE`.
 
-**Availability risk.** `repo.msys2.org` currently retains old versions
-(several `readline` and `libwinpthread` builds were listed), but nothing
-promises it will. Mitigations, in order of effort: the build caches
-`vendor/iverilog` (gitignored, like `vendor/ghdl`); re-host the *assembled*
-tree as a GitHub release asset of the HDLBoard repository and fetch that
-instead (GHDL's own zip is a release asset, which is why it is stable). This
-is § 12 #7.
+### 5.10 Security
 
-### 8.3 Wiring
+Same posture as `ghdl_implementation_plan.md` § 11: the desktop app binds
+loopback and runs the student's own code on the student's own machine; server
+mode is a LAN service whose trust boundary is "people you would hand a shell
+to". Carried over: `spawn` with an argument array only, never a shell string;
+no source content or file name on a command line; one session directory per
+connection, deleted on teardown; the session cap. Verilog-specific:
 
-| File | Change |
-|---|---|
-| `winInstaller/build.ps1` step 0 | fetch `vendor/iverilog` if missing, as for GHDL; step 5 copy to `resources/iverilog`; fail if `COPYING`/`VERSION.txt` is missing |
-| `winInstaller/electron/electron-builder.yml` `extraResources` | `- from: resources/iverilog` / `to: iverilog` |
-| `winInstaller/electron/main.js` `resolvePaths()` (`:37-57`) | packaged: `iverilogExe: <res>/iverilog/bin/iverilog.exe`, `vvpExe: <res>/iverilog/bin/vvp.exe`; dev: `IVERILOG_EXE`/`VVP_EXE` or `PATH` (as for `GHDL_EXE`); pass to `startBackend` |
-| `winInstaller/electron/build/license.txt` | the § 3.3 section |
-| `winInstaller/README.md`, `.gitignore` | document the step; ignore `vendor/iverilog/` and the download cache |
-
-Teardown needs no change: Electron calls the backend's `stop()` on
-`before-quit`, which destroys every session and kills its children
-(`server.ts`, `stop`), and `vvp.exe` is just another child of a `Session`.
-§ 10 #3 still checks for orphans.
-
-### 8.4 Build-time smoke test (do not skip)
-
-After assembling `resources/iverilog`, `build.ps1` compiles and runs a
-three-line design **with `PATH` reduced to `System32`, from a directory whose
-name contains a space and `ø`**, and fails the build if it does not print the
-expected line. That single step catches S2, the `.vpi` trap and the DLL trap
-before anything is packaged — each of which otherwise looks fine on the
-build machine (where `PATH` usually contains an MSYS2 or GHDL directory that
-masks it; the spike's first "success" was exactly that).
-
----
-
-## 9. Linux / server mode
-
-`scripts/alpineInstall.sh` builds GHDL from source; `scripts/start.sh` installs
-it (`start.sh:71-95`) through whichever of `apt-get`/`dnf`/`pacman`/`zypper`/
-`apk`/`brew` the machine has, and stops with a pointer to `docs/BUILDING.md`
-otherwise. Icarus is simply a package in all of those: Alpine `edge/community`
-carries `iverilog` 13.0-r0 (GPL-2.0-or-later); Debian stable carries 12.0-2,
-testing/unstable 13.0-2 (package presence verified, not installation). So both
-scripts gain an `iverilog` step of the same shape (`apk add iverilog` in
-`alpineInstall.sh`; one more `command -v iverilog` block in `start.sh` using
-the same package-manager ladder — Homebrew's formula is named
-`icarus-verilog`, to be confirmed when implementing), and `docs/BUILDING.md`
-/ `HOSTING.md` list the commands. The backend needs only `iverilog` and `vvp`
-on `PATH` (or `IVERILOG_EXE`/`VVP_EXE`).
-
-12.0 and 13.0 behave identically for everything the backend relies on (S12).
-Pacing is stdin on Linux as well (§ 5.6); **verify it there** (§ 10 #6) — it
-is the one behaviour measured only on Windows.
-
----
-
-## 10. Testing and verification
-
-There is still no test runner in the repo (the GHDL plan hit the same and used
-scripts). Same approach; every item below is a script or a manual gate, and
-"run it" is the standard, per the GHDL plan's § 10.
-
-1. **`vlogPorts.ts` unit script.** ANSI and old-style headers, `#(…)`
-   parameter lists, `output reg [9:0] LEDR = 0`, shared-direction lists,
-   comments containing `module`/`input`, two modules in one file, mixed-case
-   port names, a portless testbench module.
-2. **Generator round trip.** For each port subset (`SW`+`LEDR` only; full
-   board; `CLOCK_500Hz` only; `CLOCK_50` present): generate → `iverilog` →
-   `vvp` for a fixed time → assert `output.txt` content. (Appendix A is the
-   baseline.)
-3. **Raw protocol client** (a Node script over `ws`, as in the GHDL plan),
-   cases: clean `RUN`→`READY`→`STIM`→`STATE`; syntax error (`ERROR analyze`
-   with the real `file:line: error:` text); unknown module
-   (`ERROR elaborate`); warnings on a successful compile arrive as `LOG`
-   *before* `READY`; multi-file project with a cross-file instantiation in
-   either order; a partial interface; `RESET`; `STOP`; a design that calls
-   `$finish` in board mode (→ `DONE completed`); `$fatal` (→ `ERROR
-   runtime`); a portless testbench (batch → `LOG` lines → `DONE completed`);
-   an infinite loop with no delay (→ the 60 s `ERROR runtime`, or `STOP`
-   returning promptly); disconnect mid-run (no orphan `vvp`/`iverilog`
-   process: `Get-Process vvp`); VHDL → Verilog → VHDL on one connection.
-4. **VHDL regression.** Re-run every existing GHDL case unchanged; § 7.4
-   promises byte-identical behaviour and this is the proof.
-5. **Headless browser end-to-end** (Playwright, already a dev dependency):
-   drop a `.v` file → it appears under `verilog/`; drop `.vhd` → under
-   `vhdl/`; set the `.v` file as top; Start; flip a switch; assert the real
-   `Leds` DOM. **The decisive test is `assign LEDR = ~SW;`** — it passes only
-   if the Verilog simulator is genuinely driving the board (the same
-   reasoning as `LEDR <= not SW` in the GHDL plan). Then set a VHDL file as
-   top and confirm GHDL is used again. Assert the console shows the
-   `Icarus Verilog version …` line and a design `$display`.
-6. **Linux gate.** The raw-client suite under a real Linux (Alpine or
-   Debian) with the distribution's `iverilog`, specifically the pacing
-   measurement of S5 (a clockless 250 ms blink tracks real time and the
-   unpaced run does not).
-7. **Windows gates** (run on a clean machine/VM; the existing open installer
-   gates in the project notes are the same ones): install → a Verilog design
-   with `$display` shows live output; the S11 case (user name with a
-   non-ASCII letter) end to end; uninstall leaves nothing; the installer's
-   licence page shows the new section.
-8. **The build-time smoke test** of § 8.4 runs on every `build.ps1`.
-
----
-
-## 11. Security
-
-Same posture as the GHDL plan's § 11: the desktop app binds loopback and
-runs the student's own code on the student's own machine; server mode is a
-LAN service whose trust boundary is "people you would hand a shell prompt to
-a simulator". Carried over: `spawn` with an argument array only, never a
-shell string (§ 7.1's `ghdl.ts` header comment applies verbatim to
-`verilog.ts`); no source content or file name on a command line; session
-directory per connection, deleted on teardown; session cap.
-
-Verilog-specific:
-
-- **`$system` is not available** (S15) — a design cannot run shell commands
-  with the shipped modules.
+- **`$system` is unavailable** (M15).
 - Verilog can still **open arbitrary paths** (`$fopen`, `$readmemh`) and
-  `` `include `` arbitrary files, as VHDL's `textio` can — an existing
-  property of running student code, not a new class. Do not describe the
-  server mode as a sandbox.
-- File names given to the simulator are **fixed, generated, relative** names
-  (`input.txt`, `output.txt`, `heartbeat-N.txt`); student-supplied file names
-  are written into the session directory but only ever passed as compile
-  arguments after being validated as plain file names (no path separators, no
-  leading `-`). GHDL's path has the same requirement; the backend should
-  reject `..`/absolute `@@FILE` names for both engines.
-- No `-m`/`-M`/`-p` options are ever taken from the client, so a design cannot
-  load an arbitrary VPI module.
+  `` `include `` arbitrary files, as VHDL's `textio` can. Server mode is not a
+  sandbox.
+- Simulator-facing file names are **fixed, generated and relative**;
+  student-supplied names are validated (B6) before being written or passed.
+- No `-m`/`-M`/`-p` option ever comes from the client, so a design cannot load
+  an arbitrary VPI module.
 
 ---
 
-## 12. Open decisions
+## 6. Code standard (Clean Code)
+
+Code quality is a requirement, not a preference. The standard is *Clean Code*
+(Robert C. Martin), adapted to TypeScript/Node/React and to conventions this
+repository already follows. **Every step in § 8 must meet it; § 6.4 is the
+checklist; phase H verifies it after the fact.**
+
+### 6.1 The rules
+
+Each rule is written so it can be checked, and names where this plan applies it.
+
+| # | Rule | How it is checked | Applied here |
+|---|---|---|---|
+| 1 | **Names reveal intent.** Types and modules are nouns, functions are verbs, booleans read as predicates (`hasClock50`, `isReservedName`). No cryptic abbreviations beyond the board's own vocabulary (`sw`, `key`, `ledr`, `hex`, `tb`). | Cold read (§ 7.9) — any name that needs a comment is renamed | `findTopModule`, `buildBoardTestbench`, `classifyCompileFailure`, `folderForUpload` |
+| 2 | **Small functions, one thing each.** Aim ≤ 20 lines; hard cap 40 (the Verilog template literal in `testbench.ts` is data, not logic, and is exempt). One level of abstraction per function. If describing it needs "and", split it. | Lint rule `max-lines-per-function` (§ 6.3) + cold read | `ports.ts` = `stripComments`, `findModules`, `readPortHeader`, `splitAtTopLevelCommas`, `lastIdentifier`, `portNames`, `findTopModule` |
+| 3 | **At most three parameters.** More → a named options type. **No boolean flag parameters** — two functions instead. | Lint `max-params` | `PrepareRequest`, `BoardFiles`, `BoardTiming` |
+| 4 | **Single responsibility per module; pure logic apart from I/O.** Parsing, generation, classification and validation are pure functions (no `fs`, no `spawn`, no `Date`), so they are unit-testable without a simulator. Processes and files live in a thin layer around them. | Import scan: pure modules import nothing from `node:*` | `ports`, `testbench`, `diagnostics`, `fileNames`, `fileKinds` are pure; `process.ts` is the thin process layer |
+| 5 | **Polymorphism over conditionals.** One dispatch point (`selectEngine`) — no `if (language === 'verilog')` scattered through `Session`. | Grep for the language literal outside `selectEngine` and the engines | § 5.7 |
+| 6 | **No duplication (DRY).** Shared code is extracted (`runtime.ts`), not copied; the two engines share by composition. | Cold read; `/simplify` pass (H3) | C1 |
+| 7 | **Dependencies point one way.** `Session` → `SimEngine`; engines never import `Session`; pure modules import no process code. | Import graph read in H1 | § 5.7 |
+| 8 | **Comments explain *why*, never *what*.** Match the repository's existing style (its comments carry the reason a decision was made, with the measurement behind it). No commented-out code; no `TODO` without a written follow-up; every exported symbol gets a doc comment saying what a caller may rely on. | Cold read | every step |
+| 9 | **No magic numbers or strings.** Named constants with the reason, as `PACING_STEP_MS` already does. | Lint `no-magic-numbers` (warn) on new files | `BUILD_TIMEOUT_MS`, `RESERVED_FILE_NAMES`, `VVP_STDIN_FD` |
+| 10 | **Expected failures are values; only bugs throw.** A compile error is a `PrepareResult` with `ok: false`, not an exception. Nothing is swallowed silently except where a comment says why (the existing `EPIPE` guard). | Review; tests assert the failure *values* | § 5.7 |
+| 11 | **Types carry meaning.** No `any`, no non-null `!` without a comment, `readonly` on data that is not mutated, discriminated unions instead of flag fields. | `tsc` strict + lint `no-explicit-any` | `PrepareResult`, `Language` |
+| 12 | **Tests are first-class code** — Fast, Independent, Repeatable, Self-validating, Timely (F.I.R.S.T.); one behaviour per test; a test name reads as a sentence; no logic (loops, conditionals) inside a test body; arrange-act-assert. | Read the spec-reporter output (§ 7.9) | § 7 |
+| 13 | **Leave it cleaner, but do not refactor what you are not changing.** GHDL logic moves only under characterization tests (A5–A6), and only its structure changes, never its behaviour. | A5–A6 stay green through D2 | D2 |
+| 14 | **Consistency with the surrounding code.** SPDX header and copyright on every new file (as every existing file has); 2-space indent, single quotes, semicolons; `.js` suffix on server imports (NodeNext); `spawn(cmd, argsArray)` only, never a shell string. | Diff review; `tsc` | every step |
+
+### 6.2 Structure of the new code
+
+```
+server/src/
+  runtime.ts              shared: CmdResult, runCmd, RunHandle, BatchHandle, lineSplitter   (moved from ghdl.ts)
+  engines/
+    types.ts              SimEngine, PrepareRequest, RunPlan, PrepareResult, …      (interfaces only)
+    selectEngine.ts       language from top file name; the single dispatch point
+    ghdlEngine.ts         the current GHDL logic, moved
+    verilogEngine.ts      compile → plan → runs, composed from the modules below
+  verilog/
+    ports.ts              pure — modules and board-port detection
+    testbench.ts          pure — generate hdl_board_tb
+    diagnostics.ts        pure — compile-failure stage, banner parsing
+    fileNames.ts          pure — reserved / unsafe name validation
+    process.ts            thin — iverilog and vvp spawning (RunHandle/BatchHandle)
+src/components/workbench/
+  fileKinds.ts            pure — extension → folder, top → source folder, rename → folder
+tests/fixtures/           the shared fixture set (§ 7.3)
+```
+
+(File names in § 8 follow this layout. Move `ghdl.ts`/`tbTemplate.ts`/
+`portDetect.ts` under `engines/ghdl/` only if it can be done as pure renames in
+its own commit; it is not required.)
+
+### 6.3 Enforcement
+
+1. **`tsc` strict** — already on in both packages (`strict`, `noUnusedLocals`,
+   `noUnusedParameters`, `noImplicitReturns`); a step is not done with a
+   single error.
+2. **Scoped lint rules** (step A3, recommended): ESLint with
+   `typescript-eslint`, applied **only to the new files** so existing code is
+   not churned —
+   `max-lines-per-function: 40`, `max-params: 3`, `complexity: 8`,
+   `max-depth: 3`, `@typescript-eslint/no-explicit-any`,
+   `@typescript-eslint/no-non-null-assertion`, `no-magic-numbers` (warn).
+   A `// eslint-disable` needs a comment saying why; the goal is zero.
+   (§ 9 #12 if you would rather not add the dependency: the checklist and the
+   cold read then carry the load.)
+3. **Per-step self-review** against § 6.4.
+4. **After implementation, phase H**: metrics, cold read, break-it checks,
+   `/simplify`, `/code-review`.
+
+### 6.4 The checklist (apply to every step's diff)
+
+- [ ] Every function does one thing and fits on a screen; none takes a boolean flag or more than three parameters.
+- [ ] Every name says what it is without a comment.
+- [ ] No duplication with existing code (I looked in `ghdl.ts` / `session.ts` first).
+- [ ] Pure logic is in a pure module; the process layer has no parsing in it.
+- [ ] No `if (language …)` outside `selectEngine`.
+- [ ] Expected failures return values; nothing is swallowed without a comment.
+- [ ] No `any`, no unexplained `!`, no magic numbers.
+- [ ] Comments say *why*; no dead code; SPDX header present.
+- [ ] Tests were written first, seen failing, and read like a specification.
+- [ ] `typecheck` clean, all tests green, GHDL characterization tests unchanged.
+
+### 6.5 Definition of Done — applies to **every** step in § 8
+
+1. The step's tests were written first and seen to fail for the right reason.
+2. All tests pass: `npm test` in `server/` (and at the root for frontend steps),
+   plus the characterization suite (A5–A6) once it exists.
+3. `npm run typecheck` is clean in the affected package.
+4. The § 6.4 checklist was applied to the diff.
+5. **One commit** per step: `Verilog <step id>: <title>`, ending with the
+   attribution line this repository uses.
+
+---
+
+## 7. Testing
+
+### 7.1 Principles
+
+- **Test the behaviour a student sees**, at the lowest level that can show it.
+  Pure logic → unit tests; process behaviour → integration tests against the
+  *real* simulators; the browser path → a few end-to-end tests; an installed
+  build → a verification run (§ 7.8).
+- **Real simulators, not mocks.** Every claim in § 4 came from running
+  `iverilog`/`vvp`; the integration tests re-run those scenarios so a wrong
+  assumption fails a test instead of a student's session.
+- **One source of truth for expected behaviour**: the fixture set and its
+  scenario file (§ 7.3) feed the integration, parity, end-to-end and
+  installation tests alike.
+- **Write the test first**; a test never seen to fail proves nothing (§ 6.5).
+- **The GHDL path is protected before it is touched** (A5–A6).
+
+### 7.2 Tooling and layout
+
+The repository has no test runner, linter or formatter today (checked). The
+plan adds the least that does the job:
+
+| Layer | Runner | New dependency | Where | Command |
+|---|---|---|---|---|
+| Server unit | Node's built-in `node:test` | none | `server/src/**/*.test.ts`, compiled to `dist/` | `npm test` (in `server/`) |
+| Server integration (real GHDL/Icarus) | `node:test`; each test **skips itself** if its simulator is not on `PATH` | none | `server/src/integration/*.test.ts` | `npm run test:integration` |
+| Frontend unit (pure modules) | `vitest` | `vitest` (dev) — § 9 #11 | `src/**/*.test.ts` | `npm test` (root) |
+| End to end (browser) | plain Node script over Playwright (already a dev dependency, as `tools/screenshot.mjs`) | none | `tools/e2e-verilog.mjs` | `npm run e2e` |
+| Installation | `tools/verify-backend.mjs` (WebSocket client) + a clean-VM checklist | none | `tools/`, § 7.8 | § 7.8 |
+
+`server/package.json` gains `"test": "tsc -b && node --test dist/"` and
+`"test:integration": "tsc -b && node --test dist/integration/"`. Tests compile
+into `dist/` but are never bundled: the installer's `build-backend.mjs` bundles
+from the `server.ts` entry only.
+
+Shared test helpers (each small, each tested by use): `WsTestClient` (connect,
+`HELLO`, `run(files, top)`, `until(verb)`, `stim(bits)`), `requireTool(name)`
+(skip-if-missing), `fixture(language, name)` (load from `tests/fixtures`),
+`sessionDir()` (temp dir with cleanup).
+
+### 7.3 The fixture set — the converted starter designs
+
+`STARTER_FILES` in `files.ts` holds three VHDL designs. They are converted to
+Verilog (Appendix C — **already converted and run**, M20) and both sets are
+kept as fixtures, so the same scenario runs against GHDL and Icarus.
+
+```
+tests/fixtures/
+  vhdl/     DE1_SoC.vhdl   blinkTest.vhdl   keyCouter2Led.vhdl        ← copies of the starters
+  verilog/  DE1_SoC.v      blinkTest.v      keyCouter2Led.v   tb_counter8.v
+  scenarios.json                                                     ← expected behaviour, both languages
+```
+
+| Fixture | Top | Ports used | Purpose | Verified (M20) |
+|---|---|---|---|---|
+| `DE1_SoC` | `DE1_SoC` | `CLOCK_50 SW KEY_N LEDR HEX0_N…HEX5_N` | Full board interface; combinational `LEDR = SW`; blank `HEX` | 4/4 checks |
+| `blinkTest` | `blinkTest` | `CLOCK_500Hz SW KEY_N LEDR HEX*` | Sequential logic and **real-time pacing** (250 ms toggle) | 3/3, 241 / 247 ms |
+| `keyCouter2Led` | `counter8` | `CLOCK_50 KEY_N LEDR` | Edge-triggered counting on the keys; partial interface; `CLOCK_50` present (slow-clock regime) | 5/5 |
+| `tb_counter8` | `tb_counter8` | none | **Batch mode**: self-checking testbench, prints `PASS` | `PASS`, exit 0 |
+
+`scenarios.json` holds, per fixture, an ordered list of steps
+`{ "stim": "<SW10><KEY4>", "expect": { "ledr": "<10 bits>", "hex": "blank" } }`
+and, for timed fixtures, `{ "within_ms": [150, 400] }`. It is the only place
+expected values live. **A guard test asserts the `vhdl/` fixtures equal
+`STARTER_FILES`** so the two cannot drift.
+
+### 7.4 Unit test catalog
+
+Written first (§ 6.5). "Case" ids are referenced by the steps.
+
+**Port scanner — `verilog/ports.ts` (steps B1–B3)**
+
+| Id | Input | Expected |
+|---|---|---|
+| P-1 | Comments containing `module`, `input`, `endmodule` (`//`, `/* */`) | Not treated as code |
+| P-2 | String literal containing `module X(` | Not treated as code |
+| P-3 | `module A(input a, output b); … endmodule` | Module `A`, ports `a`, `b` |
+| P-4 | ANSI list with ranges and defaults: `output reg [9:0] LEDR = 0` | Port `LEDR` |
+| P-5 | Shared direction: `output wire [6:0] HEX0_N, HEX1_N` | Ports `HEX0_N`, `HEX1_N` |
+| P-6 | Old-style header `module M(CLOCK_50, SW, LEDR);` | Ports `CLOCK_50`, `SW`, `LEDR` |
+| P-7 | Parameter list `module M #(parameter W = 4)(input clk);` | Parameters skipped; port `clk` |
+| P-8 | `(* keep *)` attributes in the header | Ignored |
+| P-9 | Two modules in one file | Both found, each with its own ports |
+| P-10 | Mixed-case names: `Clock_50`, `key_n` | Matched case-insensitively; **declared spelling preserved** |
+| P-11 | Module with no ports | Empty set → batch mode |
+| P-12 | Preferred top file with helper module first, top second | The board-scoring module is chosen, not "first declared" |
+| P-13 | No preferred file; best board-port score across modules | Highest score wins |
+| P-14 | No module scores against the board | Failure value naming the ports it looked for |
+| P-15 | Preferred file declares no module | Failure value naming the file |
+
+**Testbench generator — `verilog/testbench.ts` (steps B4–B5)**
+
+| Id | Input | Expected |
+|---|---|---|
+| T-1 | Full-board port set | Golden file equals Appendix A byte for byte |
+| T-2 | `SW` + `LEDR` only | Only those two connections; all `HEX` tied to `7'h7F`; no clock process |
+| T-3 | `CLOCK_50` declared | `always #10` clock process present |
+| T-4 | `CLOCK_50` not declared | No `always #10` process |
+| T-5 | `CLOCK_500Hz` declared or not | 500 Hz process present in both cases |
+| T-6 | `ledr` not declared | `assign ledr_sig = 10'b0;` |
+| T-7 | Declared spelling `Clock_50` | Connection is `.Clock_50(clk_sig)` |
+| T-8 | Top module name | Used verbatim in the instance line |
+| T-9 | The 52-bit concatenation order | `{ledr, hex0 … hex5}` (matches the protocol) |
+| T-10 | Generated text | Contains no `rst` handling (§ 5.2) |
+
+**Diagnostics — `verilog/diagnostics.ts` (step B6)**
+
+| Id | Input | Expected |
+|---|---|---|
+| D-1 | `… 2 error(s) during elaboration.` | stage `elaborate` |
+| D-2 | `error: Unable to find the root module "Top"` | stage `elaborate` |
+| D-3 | `x.v:2: syntax error` | stage `analyze` |
+| D-4 | Empty stderr with non-zero exit | stage `analyze`, generic message |
+| D-5 | First line of `iverilog -V` output | Banner extracted verbatim |
+
+**File names — `verilog/fileNames.ts` (step B6)**
+
+| Id | Input | Expected |
+|---|---|---|
+| N-1 | `hdl_board_tb.v`, `_hdlboard_ts.v`, `sim.vvp` | Rejected (reserved) |
+| N-2 | `../x.v`, `a/b.v`, `a\b.v`, `C:\x.v`, `/x.v` | Rejected (path) |
+| N-3 | `-x.v` | Rejected (leading `-`) |
+| N-4 | `led.v`, `Top_1.v`, `defs.vh` | Accepted |
+| N-5 | Reserved-name check is case-insensitive | `HDL_BOARD_TB.V` rejected |
+
+**Frontend — `fileKinds.ts` (step E1)**
+
+| Id | Input | Expected |
+|---|---|---|
+| K-1 | `a.v`, `A.V`, `defs.vh` | folder `verilog` |
+| K-2 | `a.vhd`, `a.vhdl` | folder `vhdl` |
+| K-3 | `tb_a.vhd` | folder `work` |
+| K-4 | `tb_a.v` | folder `verilog` (A3) |
+| K-5 | `a.txt`, `a` | not accepted |
+| K-6 | Top file in `verilog` → sent folder | `verilog` |
+| K-7 | Top file in `vhdl`, in `work`, or none → sent folder | `vhdl` |
+| K-8 | Rename `x.vhd` → `x.v` (currently in `vhdl`) | moves to `verilog` |
+| K-9 | Rename within the same language; rename to an unknown extension | stays put |
+| K-10 | Guard: `tests/fixtures/vhdl` equals `STARTER_FILES` | equal |
+
+### 7.5 Integration test catalog
+
+Raw WebSocket client against the real backend and the real simulators. Each
+skips itself if its simulator is absent. Ids `I-G*` run on GHDL (they are the
+characterization suite, written **before** the refactor); `I-V*` run on Icarus.
+
+| Id | Case | Expected |
+|---|---|---|
+| I-G1 | Clean VHDL board run (`DE1_SoC.vhdl`) | `READY`; `STIM` → `STATE` matches `scenarios.json` |
+| I-G2 | VHDL syntax error | `ERROR analyze` with GHDL's text |
+| I-G3 | Misspelled board port | `ERROR elaborate` |
+| I-G4 | Multi-file project, cross-file entity reference, either order | `READY` |
+| I-G5 | VHDL portless testbench | `LOG` lines, `DONE completed` |
+| I-G6 | `RESET`, `STOP` | fresh run; `DONE stopped` |
+| I-G7 | Disconnect mid-run | no orphan `ghdl` process |
+| I-V1 | Clean Verilog board run (`DE1_SoC.v`) | `READY`; banner `LOG` first; `STATE` per scenario |
+| I-V2 | Verilog syntax error | `ERROR analyze` with `file:line: error:` text |
+| I-V3 | Unknown module | `ERROR elaborate` |
+| I-V4 | Warning on a successful compile (port-width mismatch) | warning arrives as `LOG` **before** `READY` |
+| I-V5 | Multi-file, module defined after the file that instantiates it | `READY` |
+| I-V6 | Partial interface (`SW` + `LEDR` only) | `READY`; `STATE` correct; `HEX` blank |
+| I-V7 | `$display` in a running design | `LOG` line arrives **within 200 ms** (guards `-i`, M4) |
+| I-V8 | `$finish` in board mode | `DONE completed` (guards D5) |
+| I-V9 | `$stop` in board mode | `DONE completed` |
+| I-V10 | `$fatal` | `ERROR runtime` with `FATAL:` text |
+| I-V11 | Portless testbench (`tb_counter8.v`) | `LOG` lines including `PASS`, then `DONE completed` |
+| I-V12 | Runaway loop with no delay in batch mode | `ERROR runtime` after the timeout, or prompt `DONE stopped` on `STOP` |
+| I-V13 | `RESET`, `STOP` | as GHDL |
+| I-V14 | Disconnect mid-run | no orphan `vvp` / `iverilog` process |
+| I-V15 | Student file named `hdl_board_tb.v` or `../x.v` | `ERROR analyze`, nothing written outside the session directory |
+| I-V16 | Session directory containing a non-ASCII letter | `STATE` still flows (guards M11) |
+| I-X1 | VHDL → Verilog → VHDL on one connection | each run uses the right engine |
+| I-X2 | Mixed extensions in one `RUN` | `ERROR analyze` naming the mismatch |
+
+### 7.6 Parity tests
+
+The same scenario run against the `vhdl/` and `verilog/` twin of each fixture
+must give the same board. Rule: **`LEDR` compared bit for bit; `HEX` compared
+after the frontend's own coercion** (`X` → "off", `ghdlClient.ts`'s
+`parseState`). This matters: `blinkTest.vhdl` leaves `HEX0_N`…`HEX5_N`
+undriven, so GHDL reports `X`, while the Verilog twin blanks them explicitly;
+both render blank. Ids `I-P1…P3` (one per twin). A parity failure means either
+the conversion or an engine differs — both are worth knowing.
+
+### 7.7 End-to-end tests (browser)
+
+`tools/e2e-verilog.mjs`, Playwright, against a running frontend + backend:
+
+| Id | Case | Expected |
+|---|---|---|
+| E-1 | Drop `DE1_SoC.v` on the Files panel | Appears under `verilog/`, not `vhdl/` |
+| E-2 | Drop `.vhd`, `tb_x.vhd`, `.v`, `.txt` | `vhdl/`, `work/`, `verilog/`, rejected with a console line |
+| E-3 | Mark the `.v` as top; Start; flip a real switch | The real `Leds` DOM follows |
+| E-4 | **Decisive:** a design with `assign LEDR = ~SW;` | LEDs are the *inverse* of the switches — possible only if the simulator drives the board |
+| E-5 | Console after Start | Contains the `Icarus Verilog version …` line and the design's `$display` |
+| E-6 | Mark a VHDL file top; Start | GHDL banner; LEDs follow; switching back to Verilog works |
+| E-7 | Delete the Verilog top | Top falls to another `verilog/` file; the VHDL dot is not lit |
+| E-8 | Rename `x.v` to `x.vhd` | File moves to `vhdl/` |
+
+### 7.8 Verifying an installation
+
+The converted fixtures are also the acceptance test for an *installed* build.
+Three tiers, cheapest first:
+
+**Tier 1 — build-time smoke test (F3), every build.** `build.ps1` compiles and
+runs `DE1_SoC.v` and `tb_counter8.v` from the freshly assembled
+`resources/iverilog` with `PATH` reduced to `System32`, from a directory whose
+name contains a space and `ø`, and fails the build otherwise. It checks the
+*result* (`PASS`, expected state), not message text (the OS text is localised —
+Appendix B). This catches M2, the `.vpi` trap and the DLL trap before
+anything is packaged; on the build machine `PATH` usually contains an MSYS2 or
+GHDL directory that masks all three (the spike's first "success" was exactly
+that).
+
+**Tier 2 — `tools/verify-backend.mjs <ws-url>`, any backend.** Runs the whole
+scenario file (both languages) over the WebSocket and prints a pass/fail table
+with exit code. It works against a dev backend, a Linux server, and **the
+installed app** (`ws://127.0.0.1:9010/ghdlsim` while HDLBoard is running). It
+needs Node, so it is for developers and CI, not a student VM.
+
+**Tier 3 — clean-VM acceptance, by hand** (the project's existing open
+installer gates are the same machines; combine them). Install, then:
+
+| Id | Action | Expected |
+|---|---|---|
+| V-1 | Launch HDLBoard | Starter project shows `vhdl/` only |
+| V-2 | Drag `DE1_SoC.v` onto the Files panel | Appears under a new `verilog/` folder |
+| V-3 | Click its dot to make it top; Start | Console: `Icarus Verilog version 13.0 …`, then `Simulation running ...` |
+| V-4 | Flip switches | LEDs follow the switches; displays stay blank |
+| V-5 | Drop `keyCouter2Led.v`, make it top, Start; press KEY0 three times | `LEDR[7:0]` = 3; press KEY1 → 0 |
+| V-6 | Drop `blinkTest.v`, make it top, Start | All ten LEDs toggle about every 250 ms |
+| V-7 | Drop `tb_counter8.v`, make it top, Start | Console shows the count lines and `PASS`, then `Simulation complete.` |
+| V-8 | Make `DE1_SoC.vhdl` top again; Start | GHDL banner; LEDs follow |
+| V-9 | Repeat V-3 on a Windows account whose name contains a non-ASCII letter | Identical (M11) |
+| V-10 | Uninstall | `resources\iverilog` and the session directories are gone; the licence page showed the Icarus section |
+
+**Optional stretch (F8):** an in-app `HDLBoard.exe --self-test` that runs the
+scenario file headlessly against the *installed* binaries and exits 0/1 — the
+only tier that verifies a student's machine without Node or a human. Costs a
+small exported function and a flag in `main.js`; § 9 #10.
+
+### 7.9 Quality verification after implementation
+
+The request: test the modules once implemented for quality and readability.
+This is phase H, and it is a different activity from functional tests:
+
+1. **Coverage of the pure modules.** `node --test --experimental-test-coverage`
+   on `ports`, `testbench`, `diagnostics`, `fileNames` (and `fileKinds` under
+   vitest's coverage): target **100 % of lines**; any uncovered line is either
+   tested or deleted.
+2. **Break-it checks (poor-man's mutation testing).** For each pure module,
+   introduce five deliberate faults — flip a comparison, drop a `.toLowerCase()`,
+   swap two array elements, change a constant, delete a branch — and confirm
+   **at least one test fails each time**. A fault no test notices is a missing
+   test. Revert every fault.
+3. **Cold read.** Read each new file top to bottom without running it. For every
+   function write one sentence of what it does; if the sentence has "and", or
+   a name needs explaining, or the reader has to scroll to keep context,
+   refactor. Record the result in the H1 commit message.
+4. **Tests as specification.** Run with `--test-reporter=spec` and read the
+   output aloud as sentences; a test whose name does not say what behaviour it
+   guarantees is renamed.
+5. **Metrics / lint.** The scoped ESLint rules (§ 6.3) report zero violations on
+   the new files, with no unexplained disables.
+6. **Import graph.** Confirm rule 7: pure modules import no `node:*`; engines
+   do not import `Session`; nothing outside `selectEngine` names a language.
+7. **Two review passes** on the branch diff: `/simplify` (reuse, simplification,
+   efficiency) and `/code-review high` (correctness). Every finding is fixed
+   or answered in writing.
+8. **Regression.** The whole suite — unit, integration (both simulators),
+   parity, e2e — run once from a clean checkout, then Tier 1–3 of § 7.8.
+
+---
+
+## 8. Implementation steps
+
+Forty-six steps, one commit each, in order. **Every step also obeys § 6.5.**
+Size: **S** ≈ under an hour, **M** ≈ a few hours. "Files" are relative to the
+repository root.
+
+| Phase | Steps | What |
+|---|---|---|
+| **A** | A1–A7 | Foundations: fixtures, test runners, characterization tests. *No behaviour change.* |
+| **B** | B1–B6 | Pure backend modules, test-first. |
+| **C** | C1–C5 | Backend process layer and options. |
+| **D** | D1–D6 | The engine seam and Verilog engine. |
+| **E** | E1–E7 | Frontend. |
+| **F** | F1–F8 | Windows packaging and installation verification. |
+| **G** | G1–G3 | Linux and documentation. |
+| **H** | H1–H4 | Quality verification. |
+
+### Phase A — Foundations (no behaviour change)
+
+**A1 — Convert the starters; create the fixtures.** *S*
+Files: `tests/fixtures/verilog/{DE1_SoC,blinkTest,keyCouter2Led,tb_counter8}.v`
+(from Appendix C), `tests/fixtures/vhdl/{DE1_SoC,blinkTest,keyCouter2Led}.vhdl`
+(the three template strings of `files.ts`, verbatim).
+Done when: each `.v` compiles with `iverilog -Wall -Wno-timescale` with zero
+output, and `tb_counter8` prints `PASS`.
+
+**A2 — Scenario file.** *S*
+Files: `tests/fixtures/scenarios.json` (schema and entries from § 7.3 and
+Appendix C).
+Done when: it validates against a 15-line schema check (a test in A4's helper
+set) and every referenced fixture file exists.
+
+**A3 — Quality tooling (recommended).** *S*
+Files: `server/eslint.config.js` (new files only — the config lists the
+`verilog/`, `engines/` and `runtime.ts` globs), `server/package.json`
+(`"lint"`).
+Done when: `npm run lint` passes on an empty set of new files and *fails* on a
+scratch file with a 50-line function (then delete it).
+
+**A4 — Server test runner and helpers.** *M*
+Files: `server/package.json` (`test`, `test:integration`),
+`server/src/testSupport/{WsTestClient,requireTool,fixture,sessionDir}.ts`.
+Test first: a trivial `WsTestClient` test against the real backend
+(`HELLO` → `WELCOME`).
+Done when: `npm test` and `npm run test:integration` run, and skip cleanly when
+`ghdl`/`iverilog` are absent.
+
+**A5 — Characterization tests for the VHDL path: protocol cases.** *M*
+Files: `server/src/integration/ghdl.characterization.test.ts`.
+Cases: I-G1, I-G2, I-G3, I-G4. **Run against the unchanged backend** — they
+must pass today; they *are* the specification of today's behaviour.
+Done when: green on the current `main`, and each was seen failing when the
+backend is deliberately broken (e.g. wrong stage string).
+
+**A6 — Characterization tests: batch, control, teardown.** *M*
+Files: same file (or `…control.test.ts`). Cases: I-G5, I-G6, I-G7.
+Done when: green on the current `main`.
+
+**A7 — Frontend test runner.** *S*
+Files: `package.json` (`vitest` dev dependency, `"test": "vitest run"`),
+`src/components/workbench/files.fixtures.test.ts` (case K-10, the
+fixtures-equal-starters guard).
+Done when: `npm test` passes; changing one character of a fixture fails it.
+
+### Phase B — Pure backend modules (test-first, no processes)
+
+Each step: write the catalog cases, watch them fail, implement, watch them
+pass. These modules import nothing from `node:*` (rule 4).
+
+**B1 — Comment and string stripping; module discovery.** *S*
+Files: `server/src/verilog/ports.ts`, `ports.test.ts`.
+Cases: P-1, P-2, P-3, P-9.
+Functions: `stripComments`, `findModules`.
+
+**B2 — Port header parsing.** *M*
+Files: same.
+Cases: P-4, P-5, P-6, P-7, P-8, P-10, P-11.
+Functions: `readPortHeader`, `splitAtTopLevelCommas`, `lastIdentifier`,
+`portNames` (each ≤ 20 lines; the scanner is one small function per idea, not
+one long loop).
+
+**B3 — Top-module selection.** *S*
+Files: same.
+Cases: P-12, P-13, P-14, P-15.
+Function: `findTopModule(files, preferredFile)` → `TopModule | Failure`
+(no throwing, rule 10). `BOARD_PORTS` shared with the VHDL scanner or
+duplicated only if importing it would pull in VHDL code — decide by rule 6.
+
+**B4 — Testbench: connections and tie-offs.** *S*
+Files: `server/src/verilog/testbench.ts`, `testbench.test.ts`.
+Cases: T-2, T-6, T-7, T-8.
+Functions: `portConnections`, `tieOffAssignments` (small, string-returning).
+
+**B5 — Testbench: the whole wrapper.** *M*
+Files: same, plus `testbench.golden.v` (Appendix A's output).
+Cases: T-1, T-3, T-4, T-5, T-9, T-10. The big Verilog template is one
+constant per *section* (declarations, clocks, parameters, pacing, board I/O)
+so no function exceeds the cap; the template text is data.
+Done when: the golden file test passes, and the wrapper compiles in
+`iverilog` for every port subset used by the fixtures.
+
+**B6 — Diagnostics and file-name validation.** *S*
+Files: `server/src/verilog/{diagnostics,fileNames}.ts` and tests.
+Cases: D-1…D-5, N-1…N-5.
+Functions: `classifyCompileFailure`, `extractBanner`, `validateSourceName`,
+`RESERVED_FILE_NAMES`.
+
+### Phase C — Backend process layer
+
+**C1 — Extract the shared runtime.** *M*
+Files: `server/src/runtime.ts` (new), `server/src/ghdl.ts` (re-exports),
+`server/src/session.ts` (imports unchanged if re-exported).
+Move `CmdResult`, `runCmd`, `RunHandle`, `BatchHandle`, `lineSplitter`
+verbatim; add no behaviour.
+Done when: A5–A6 still pass and the diff is a pure move.
+
+**C2 — Compile.** *M*
+Files: `server/src/verilog/process.ts`, `process.test.ts` (integration; skips
+without `iverilog`).
+Function: `compileVerilog(dir, top, sourceNames): Promise<CompileOutcome>`
+using `runCmd`, the § 5.4 command line and `-Wall -Wno-timescale`; also
+`readBanner()` (`iverilog -V`).
+Cases: I-V2, I-V3, I-V4 at the process level; a warning on success is returned
+as `messages`, not lost.
+
+**C3 — Persistent run.** *M*
+Files: same.
+Function: `startVerilogBoardRun(...)` → `RunHandle`: `vvp -n -i`, relative
+plusargs, stdin grants, `EPIPE` guard, listeners removed on `kill` (mirror
+`startPersistentRun`, sharing helpers from `runtime.ts` — no copy).
+Test: run `DE1_SoC.v` through a small harness; assert a `STATE` file appears
+and `$display` arrives within 200 ms (I-V7).
+
+**C4 — Batch run.** *S*
+Files: same.
+Function: `runVerilogBatch(...)` → `BatchHandle`, with the batch timeout.
+Test: `tb_counter8.v` → lines including `PASS`, exit 0; a no-delay loop is
+killed at the timeout (short timeout injected).
+
+**C5 — Backend options.** *S*
+Files: `server/src/server.ts` (`BackendOptions.iverilogExe`, `vvpExe`; env
+`IVERILOG_EXE`, `VVP_EXE`; default `vvp` beside an absolute `iverilog`),
+`server/src/verilog/process.ts` (`setIverilogExe`, `getVvpExe`).
+Done when: a unit test of the resolution rule passes; startup log prints the
+resolved paths.
+
+### Phase D — The engine seam and the Verilog engine
+
+**D1 — Engine types.** *S*
+Files: `server/src/engines/types.ts` (§ 5.7 exactly), `selectEngine.ts` +
+test (top `.v` → verilog; `.vhd`/`.vhdl` → vhdl; none → vhdl; mixed-extension
+detection helper).
+Done when: pure, tested, imported by nothing yet.
+
+**D2 — `GhdlEngine`: move, do not rewrite.** *M*
+Files: `server/src/engines/ghdlEngine.ts` (new), `session.ts` (loses the
+moved code).
+Move the analysis loop, top detection, testbench generation, elaboration and
+run spawning behind `SimEngine`, keeping every line's logic. Messages
+(`'GHDL 5.0.1 (mcode)'`) go to `plan.messages`.
+Done when: **A5–A6 pass unchanged**; the diff reads as a move plus thin
+adaptation. If a characterization test needs editing, stop — the refactor
+changed behaviour.
+
+**D3 — `Session` uses the seam.** *M*
+Files: `server/src/session.ts`.
+`handleRun` becomes: select engine → `prepare` → forward `messages` →
+start board or batch → same handlers as today. `startRun`/`startBatchRun`
+take the engine's run functions; pacing comes from `plan.pacing`.
+Done when: A5–A6 green; `session.ts` no longer mentions GHDL by name; rule 5's
+grep is clean.
+
+**D4 — `VerilogEngine`.** *M*
+Files: `server/src/engines/verilogEngine.ts`.
+`prepare`: validate names (B6) → write files and `_hdlboard_ts.v` → find top
+(B3) → if portless, plan batch; else generate wrapper (B5) → compile (C2) →
+map failure via `classifyCompileFailure` → return the plan with banner and
+warnings in `messages`. Board/batch run functions delegate to C3/C4.
+Each stage above is its own small function.
+Done when: I-V1, I-V2, I-V3, I-V4, I-V5, I-V6, I-V11, I-V15 pass.
+
+**D5 — Two shared behaviour fixes.** *S*
+Files: `session.ts`.
+(a) A run that was `running` and exits 0 sends `DONE completed` (§ 5.5).
+(b) `pollOutput` normalises `[xXzZ]` → `X` before its 52-bit check.
+Test first: I-V8, I-V9 (fail before, pass after); I-G1 unchanged.
+Done when: the GHDL corner case `std.env.finish` also reports `DONE completed`
+(note it in the commit message).
+
+**D6 — Remaining Verilog integration cases.** *M*
+Files: `server/src/integration/verilog.test.ts`.
+Cases: I-V7, I-V10, I-V12, I-V13, I-V14, I-V16, I-X1, I-X2, and parity
+I-P1–P3 (§ 7.6).
+Done when: `npm run test:integration` is green on this machine with both
+simulators present, and each I-V case was seen failing under a deliberate
+fault (e.g. drop `-i`).
+
+### Phase E — Frontend
+
+**E1 — `fileKinds.ts`.** *S*
+Files: `src/components/workbench/fileKinds.ts`, `fileKinds.test.ts`.
+Cases K-1…K-9. Functions: `folderForUpload`, `sourceFolderFor`,
+`folderAfterRename`. Pure; no React.
+
+**E2 — Folder type and the file tree.** *S*
+Files: `files.ts:14` (`'vhdl' | 'verilog' | 'work'`), `FileExplorer.tsx:25`
+(`FOLDER_ORDER`) and the three `folder === 'vhdl'` conditions (`:163`, `:184`,
+`:205`) via one `hasTopDot(folder)` helper; update the comments at `:20`, `:28`.
+Done when: `typecheck` clean; the starter project looks exactly as before (no
+empty `verilog/`); a manual check with a `verilog` file shows the folder and
+the top dot.
+
+**E3 — Upload and drop routing.** *S*
+Files: `Workbench.tsx:439-452` (use `folderForUpload`), `:540`
+(`accept=".vhd,.vhdl,.v,.vh"`), `FileExplorer.tsx:120`, `:130` (strings →
+`Drop .vhd / .vhdl / .v files`, `Upload File`).
+Done when: dropping `.v`, `.vhd`, `tb_x.vhd`, `.txt` lands in `verilog/`,
+`vhdl/`, `work/`, and a rejection line (E-2).
+
+**E4 — What Start sends.** *S*
+Files: `ghdlClient.ts:146-154` (use `sourceFolderFor(top)`), no change to
+`Workbench.tsx:488`.
+Done when: with a `.v` top only `verilog/` files are in the `RUN` frame
+(assert on a fake socket); with none or a VHDL top, unchanged.
+
+**E5 — Delete and rename consistency.** *S*
+Files: `Workbench.tsx:413-415` (top falls back within the deleted file's
+folder), `:400` (`handleRenameFile` uses `folderAfterRename`).
+Done when: E-7 and E-8 behave; K-8/K-9 pass.
+
+**E6 — End-to-end script.** *M*
+Files: `tools/e2e-verilog.mjs`, `package.json` (`"e2e"`).
+Cases E-1…E-8 using the fixtures; assert on the real DOM.
+Done when: passes against a running dev frontend + backend; **E-4 (`~SW`) was
+seen to pass only with Icarus running** (stop the backend → it fails).
+
+**E7 — Frontend quality pass.** *S*
+Files: none new; § 6.4 applied to phase E's diff; run `npm run typecheck`,
+`npm test`.
+Done when: nothing in `Workbench.tsx` beyond the call to `fileKinds` knows the
+extension rules; the component grew by fewer lines than it shed.
+
+### Phase F — Windows packaging and installation verification
+
+**F1 — `fetch-iverilog.ps1`: download and verify.** *M*
+Files: `winInstaller/fetch-iverilog.ps1`.
+Model on `fetch-ghdl.ps1`: idempotent by a stamp, `-Force`, per-package
+SHA-256 (§ 5.8), refuse on mismatch, download cache.
+Done when: a corrupted byte in one download is refused with the expected/actual
+hash, and a second run is a no-op.
+
+**F2 — Assemble the tree.** *M*
+Files: same.
+Unpack with `$env:SystemRoot\System32\tar.exe -xf` (M14); build the § 5.8
+layout with the DLLs in **both** `bin/` and `lib/ivl/`; **deny-list** (drop
+`vhdlpp.exe`, `include/`, `libvpi.a`, `iverilog-vpi.exe`, and the
+`blif`/`pcb`/`sizer`/`vlog95`/`vhdl` targets), never an allow-list; copy the
+per-package licence folders and `COPYING`; write `VERSION.txt` with versions,
+URLs, hashes and the source-package URLs of § 3.3.
+Done when: `vendor/iverilog` is ≈ 12 MB and matches the layout; `-V` runs.
+
+**F3 — Smoke test script.** *M*
+Files: `winInstaller/verify-iverilog.ps1` (a script, so build and humans both
+run it).
+Compile and run `DE1_SoC.v` (board wrapper from a checked-in generated copy)
+and `tb_counter8.v` with `PATH = System32`, from a directory whose name
+contains `ø` and a space; assert on results, not text.
+Done when: it passes on the assembled tree, **fails** when one DLL is removed
+from `lib/ivl/`, fails when one `.vpi` is removed, and passes again.
+
+**F4 — Build wiring.** *S*
+Files: `winInstaller/build.ps1` (fetch if missing; copy to
+`resources/iverilog`; run `verify-iverilog.ps1` and fail the build on error),
+`winInstaller/electron/electron-builder.yml` (`extraResources`).
+Done when: `build.ps1` produces an installer and aborts if the smoke test
+fails.
+
+**F5 — Runtime paths.** *S*
+Files: `winInstaller/electron/main.js` (`resolvePaths`: packaged →
+`resources/iverilog/bin/{iverilog,vvp}.exe`; dev → `IVERILOG_EXE`/`VVP_EXE` or
+`PATH`; pass to `startBackend`).
+Done when: the packaged app's startup log prints both paths.
+
+**F6 — Licence, README, ignore rules.** *S*
+Files: `winInstaller/electron/build/license.txt` (§ 3.3), `winInstaller/README.md`,
+`.gitignore` (`vendor/iverilog/`, the download cache).
+Done when: the installer's licence page shows the Icarus section with the
+source URLs.
+
+**F7 — Build and verify the installer.** *M*
+Run `build.ps1`; install; on this machine run `tools/verify-backend.mjs
+ws://127.0.0.1:9010/ghdlsim` against the installed app (Tier 2); then the
+Tier 3 checklist V-1…V-8, V-10.
+Done when: Tier 2 is all green and V-1…V-8, V-10 are ticked. (V-9, the
+non-ASCII account, and the clean-VM run are the project's existing open
+installer gates — do them together.)
+
+**F8 — Installed self-test (optional stretch).** *M*
+Files: `server/src/selfTest.ts` (runs `scenarios.json` through `Session` with a
+fake `send`, prints a table), `winInstaller/electron/main.js`
+(`--self-test` → run headless, exit 0/1), fixtures packaged under
+`resources/selftest/`.
+Done when: `HDLBoard.exe --self-test` exits 0 on a clean VM with no Node
+installed. Skip if § 9 #10 is answered "no".
+
+### Phase G — Linux and documentation
+
+**G1 — Linux install scripts.** *S*
+Files: `scripts/start.sh` (an `iverilog` block using the same package-manager
+ladder as GHDL's, lines 71–95), `scripts/alpineInstall.sh` (`apk add
+iverilog`), `docs/BUILDING.md`, `docs/HOSTING.md`.
+Done when: `HDLBOARD_SKIP_INSTALL=1 ./scripts/start.sh` reports a missing
+`iverilog` with a pointer, like GHDL.
+
+**G2 — Linux gate.** *S*
+Run the integration suite (including I-V7, I-V12 and the pacing scenario) on a
+real Linux with the distribution's `iverilog` — Debian stable (12.0) **and**
+one 13.0 system (Alpine edge or Debian testing).
+Done when: green on both; `blinkTest.v` toggles at ≈ 250 ms (M5's check).
+
+**G3 — Docs and changelog.** *S*
+Files: `docs/changelog.txt` (one dated line), `README.md` (features),
+`docs/ghdl_implementation_plan.md` (a one-line cross-reference), this plan's
+status line (**built and verified**), and § 4 gains the measured results of the
+implementation.
+Done when: no document says "VHDL only".
+
+### Phase H — Quality verification (§ 7.9)
+
+**H1 — Read, measure, cover.** *M*
+Run coverage on the pure modules (target 100 %), the scoped lint (zero
+violations, no unexplained disables), the import-graph check (rule 7 and rule
+5's grep), then the cold read of every new file. Fix what they find; note the
+result in the commit message.
+
+**H2 — Break-it checks.** *S*
+Five deliberate faults per pure module (§ 7.9 #2); every fault must fail a
+test; add the missing tests; revert the faults.
+
+**H3 — Review passes.** *S*
+Run `/simplify`, then `/code-review high`, on the whole branch diff. Fix or
+answer each finding in writing.
+
+**H4 — Full regression and sign-off.** *S*
+From a clean checkout: unit, integration (both simulators), parity, e2e; then
+§ 7.8 Tier 1–3. Fill the sign-off table in this document:
+
+| Gate | Result | Date |
+|---|---|---|
+| Unit + integration + parity | | |
+| Coverage of pure modules (100 %) | | |
+| Lint (zero violations) | | |
+| Break-it checks | | |
+| `/simplify` and `/code-review` findings closed | | |
+| E2E (E-1…E-8) | | |
+| Installer Tier 1, 2, 3 | | |
+| Linux gate (12.0 and 13.0) | | |
+
+---
+
+## 9. Open decisions
 
 | # | Decision | Recommendation |
 |---|---|---|
-| 1 | **SystemVerilog (`.sv`)** | Not in the first cut (the request says Verilog). To add it later: accept `.sv/.svh`, pass `-g2012` *to the whole compile* when any `.sv` is present (`-g` is per invocation; `.sv` is not auto-detected — § 2.3). Cost: SV keywords (`logic`, `bit`, `do`, `final`, …) become reserved for the `.v` files in that run. |
-| 2 | **Terasic port names** (`KEY`, `HEX0`, …) as aliases | No — course convention `KEY_N`/`HEX0_N` (`ghdl_implementation_plan.md` § 12 #6). Revisit only if students paste Terasic templates a lot. |
-| 3 | **`tb_*.v` placement** | Everything `.v` → `verilog/` (§ 6.3). Alternative: mirror VHDL and send `tb_*.v` to `work/` — but `work/` is never simulated, which is arguably a wart of the VHDL flow, not something to copy. |
-| 4 | **Mixed VHDL + Verilog in one run** | Out of scope. Icarus's `vhdlpp` (bundled in the MSYS2 package, dropped by § 8.2) translates a small VHDL subset, not something to rely on. |
+| 1 | **SystemVerilog (`.sv`)** | Not in the first cut. To add: accept `.sv`/`.svh`; pass `-g2012` to the *whole* compile when any `.sv` is present (`-g` is per invocation; M13). Cost: SV keywords (`logic`, `bit`, `do`, `final`, …) become reserved for the `.v` files in that run. |
+| 2 | **Terasic port names** (`KEY`, `HEX0`, …) as aliases | No — course convention `KEY_N`/`HEX0_N`. |
+| 3 | **`tb_*.v` placement** | Everything `.v` → `verilog/` (A3): `work/` is never simulated. |
+| 4 | **Mixed VHDL + Verilog in one run** | Out of scope. |
 | 5 | **`rst` for Verilog** | Not supported; add only if a course template needs it (one `assign`). |
-| 6 | **Verilog syntax highlighting** | Out of scope by request; the VHDL tokenizer mis-colours `.v` (`--` vs `//`). A ~40-line `verilogHighlight.ts` selected by file extension is the follow-up. |
-| 7 | **Where the Windows binaries come from long-term** | Start with pinned MSYS2 URLs + the `vendor/` cache; re-host the assembled tree as a release asset if `repo.msys2.org` ever drops a pin (§ 8.2). |
-| 8 | **Synthesis / lint check** (Yosys `synth`, Verilator `--lint-only`) | Later, separately, and not on the Start path. Both are open-source with permissive-enough licences (§ 2.3) but no small Windows binary is published for either. |
-| 9 | **A starter Verilog example** | None by default (the `verilog/` folder stays hidden until used, § 6.1). If wanted, add a `DE1_SoC.v` to `STARTER_FILES` — but that makes the folder visible on first launch. |
-| 10 | **`-Wall` noise** | Start with `-Wall`; measure on the starter-style designs in Phase 2 and relax if it is chatty. |
-| 11 | **Adjacent, existing:** the GHDL path passes *absolute* file names to `-ginput_file=` etc. (`session.ts`) | S11 shows Icarus fails silently on them under a non-ASCII directory; GHDL was not tested for the same. Worth a check on a profile such as `C:\Users\Rune Langøy\…` — it may be a latent bug in the shipped GHDL path. |
+| 6 | **Verilog syntax highlighting** | Out of scope by request; a ~40-line `verilogHighlight.ts` chosen by extension is the follow-up. |
+| 7 | **Long-term source of the Windows binaries** | Start with pinned MSYS2 URLs plus the `vendor/` cache; re-host the assembled tree as a release asset if a pin disappears (§ 5.8). |
+| 8 | **Synthesis / lint check** (Yosys `synth`, Verilator `--lint-only`) | Later, separately, off the Start path; no small Windows binary is published for either. |
+| 9 | **Ship the converted starters in the app** | Not by default (the `verilog/` folder stays hidden until used). They are ready in Appendix C if wanted; adding them to `STARTER_FILES` makes the folder appear on first launch. |
+| 10 | **Installed self-test (F8)** | Recommended: the only tier that verifies a student's machine without Node. Skip if you would rather keep `main.js` unchanged. |
+| 11 | **`vitest` as a dev dependency** | Recommended — Vite-native, zero config, needed only for the few pure frontend modules. Alternative: test those via the Playwright script only (fewer tests, no dependency). |
+| 12 | **ESLint as a dev dependency (A3)** | Recommended, scoped to the new files so nothing existing is reformatted. Alternative: rely on `tsc` strict, the § 6.4 checklist and phase H. |
+| 13 | **Adjacent, existing:** the GHDL path passes *absolute* file names (`-ginput_file=…`, `session.ts`) | M11 shows Icarus fails silently on them under a non-ASCII directory; GHDL was not tested for the same. Worth a check on a profile such as `C:\Users\Rune Langøy\…` — a possible latent bug in the shipped GHDL path. Not fixed here. |
 
 ---
 
-## 13. Phased roadmap with acceptance criteria
+## Appendix A: the verified testbench
 
-**Phase 0 — spike — done (this document, § 4).**
-
-**Phase 1 — packaging.** `fetch-iverilog.ps1`, `vendor/iverilog`, the
-build-time smoke test of § 8.4 as a standalone script first.
-*Gate:* from a clean `PATH`, in a directory with a space and `ø`, compile and
-run a small design; `iverilog -V` prints 13.0; `VERSION.txt` lists every pin
-and its SHA-256; tree ≈ 12 MB.
-
-**Phase 2 — backend.** `runtime.ts` extraction, `vlogPorts.ts`, `vlogTb.ts`,
-`verilog.ts`, the `session.ts` seam (§ 7.4), the `onExit` fix (§ 7.5),
-`server.ts` options.
-*Gate:* § 10 items 1–4 pass against `iverilog`/`vvp` on `PATH`; the GHDL
-regression is identical; the `-Wall` noise question (§ 12 #10) is answered.
-
-**Phase 3 — frontend.** § 6.1–6.5.
-*Gate:* `npm run typecheck` clean; § 10 item 5 (`assign LEDR = ~SW;` in a
-real browser, then switching top to VHDL and back); starter project looks
-exactly as before.
-
-**Phase 4 — installer.** § 8.3.
-*Gate:* an installed build on a clean Windows VM: a Verilog design runs with
-live `$display` output in the console; § 10 item 7. (The project's existing
-open installer gates — Linux paced timing, clean VM — are the same
-machines; combine the runs.)
-
-**Phase 5 — Linux and docs.** `alpineInstall.sh`/`start.sh`/`HOSTING.md`,
-`winInstaller/README.md`, `changelog.txt`, the licence page.
-*Gate:* § 10 item 6 on a real Linux.
-
-Estimated order of effort, smallest to largest: Phase 3 (a handful of edits),
-Phase 1, Phase 5, Phase 4, Phase 2 (the port scanner, the generator, and
-keeping the GHDL path untouched while adding the seam).
-
----
-
-## Appendix A: the verified testbench shape
-
-This is the file the spike compiled and drove (`tb3.v`), reproduced here as
-the generator's target. `NOCLK50` stands for the generator's decision not to
-emit the `CLOCK_50` process; the design under test in the spike declared
-`CLOCK_50`, `CLOCK_500Hz`, `SW`, `KEY_N`, `LEDR`. Two edits for production:
-undeclared board outputs get `assign … = <off value>;`, and the instance
-lists whichever ports the module declares.
+The exact output of the throwaway generator prototype for the full board
+(`DE1_SoC`), compiled with `iverilog -Wall -Wno-timescale -I. -s hdl_board_tb`
+and run through the board protocol (M20). This is the golden file for step B5
+(T-1). Written in Verilog-2005 only, so it needs no `-g` flag. For a smaller
+port set the generator (a) connects only the declared ports, using each one's
+declared spelling, (b) emits `assign ledr_sig = 10'b0;` / `assign hexN_sig =
+7'h7F;` for each undeclared output, and (c) omits the `always #10` line when
+`CLOCK_50` is not declared. The blank line where ties go is kept as generated.
 
 ```verilog
 `timescale 1ns/1ps
+
 module hdl_board_tb;
-  reg clk = 0, clk500 = 0;
-  reg [9:0] sw = 0; reg [3:0] key = 4'hF;
-  wire [9:0] ledr;
-  reg [1023:0] input_file, output_file, hb_file;
-  integer poll_ns = 1000;
-  integer fin, fout, fhb, r, seq, applied = 0, last_seq = -1;
-  reg [13:0] rec;
-  reg [255:0] line;
-  reg [9:0] last_led = 10'bx;
+  reg         clk_sig    = 1'b0;
+  reg         clk500_sig = 1'b0;
+  reg  [9:0]  sw_sig     = 10'b0;
+  reg  [3:0]  key_sig    = 4'hF;
+  wire [9:0]  ledr_sig;
+  wire [6:0]  hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig;
+  
 
-  DE1_SoC uut(.CLOCK_50(clk), .CLOCK_500Hz(clk500), .SW(sw), .KEY_N(key), .LEDR(ledr));
+  DE1_SoC uut (.CLOCK_50(clk_sig), .SW(sw_sig), .KEY_N(key_sig), .LEDR(ledr_sig), .HEX0_N(hex0_sig), .HEX1_N(hex1_sig), .HEX2_N(hex2_sig), .HEX3_N(hex3_sig), .HEX4_N(hex4_sig), .HEX5_N(hex5_sig));
 
-`ifndef NOCLK50
-  always #10 clk = ~clk;                  // only if CLOCK_50 is declared
-`endif
-  always #1000000 clk500 = ~clk500;       // 1 ms half period = 500 Hz
+  always #10 clk_sig = ~clk_sig;
+  always #1000000 clk500_sig = ~clk500_sig;
 
-  initial begin                           // run-time parameters (+name=value)
-    if (!$value$plusargs("poll_interval_ns=%d", poll_ns)) poll_ns = 1000;
-    if (!$value$plusargs("input_file=%s", input_file)) input_file = "";
-    if (!$value$plusargs("output_file=%s", output_file)) output_file = "";
-    if (!$value$plusargs("heartbeat_file=%s", hb_file)) hb_file = "";
+  reg [1023:0] input_file, output_file, heartbeat_file;
+  integer poll_interval_ns, min_dwell_ns;
+  initial begin
+    if (!$value$plusargs("input_file=%s", input_file)) input_file = 0;
+    if (!$value$plusargs("output_file=%s", output_file)) output_file = 0;
+    if (!$value$plusargs("heartbeat_file=%s", heartbeat_file)) heartbeat_file = 0;
+    if (!$value$plusargs("poll_interval_ns=%d", poll_interval_ns)) poll_interval_ns = 1000;
+    if (!$value$plusargs("min_dwell_ns=%d", min_dwell_ns)) min_dwell_ns = 0;
   end
 
-  // Pacing: after every 20 ms of simulated time, report progress and BLOCK on
-  // one line from stdin (32'h8000_0000). The Node side writes one line per
-  // 20 ms of real time — a late Node side can only slow the run down.
+  // Real-time pacing: after every 20 ms of simulated time, report progress and
+  // block on one stdin line (32'h8000_0000).
+  integer fhb, pace_status;
+  reg [255:0] pace_line;
   initial begin
     #1;
     forever begin
       #20000000;
-      fhb = $fopen(hb_file, "w"); $fdisplay(fhb, "%0d", $time / 1000000); $fclose(fhb);
-      r = $fgets(line, 32'h8000_0000);
+      if (heartbeat_file != 0) begin
+        fhb = $fopen(heartbeat_file, "w");
+        $fdisplay(fhb, "%0d", $time / 1000000);
+        $fclose(fhb);
+      end
+      pace_status = $fgets(pace_line, 32'h8000_0000);
     end
   end
 
-  // I/O: apply at most one queued "<seq> <SW9..SW0 KEY3..KEY0>" line per poll,
-  // publish "<LEDR> <last applied seq>" whenever either changes.
+  // Board I/O: apply at most one queued input line per poll, publish the
+  // 52-bit board state whenever it (or the applied sequence number) changes.
+  wire [51:0] board_bits = {ledr_sig, hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig};
+  integer fin, fout, scan_count, seq, applied_seq = 0, last_seq = -1;
+  reg [13:0] rec;
+  reg [51:0] last_bits = 52'bx;
+  time applied_at = 0;
+  reg applied_one;
   initial begin
     #1;
     forever begin
-      #(poll_ns * 1);
-      fin = $fopen(input_file, "r");
-      if (fin != 0) begin
-        r = 1;
-        while (r == 1 && !$feof(fin)) begin
-          r = $fscanf(fin, "%d %b\n", seq, rec);
-          if (r == 2) begin
-            if (seq > applied) begin sw = rec[13:4]; key = rec[3:0]; applied = seq; r = 0; end
-            else r = 1;
-          end else r = 0;
+      #(poll_interval_ns * 1);
+      if (input_file != 0 && ($time - applied_at) >= min_dwell_ns) begin
+        fin = $fopen(input_file, "r");
+        if (fin != 0) begin
+          applied_one = 0;
+          while (!applied_one && !$feof(fin)) begin
+            scan_count = $fscanf(fin, "%d %b", seq, rec);
+            if (scan_count == 2 && seq > applied_seq) begin
+              sw_sig = rec[13:4];
+              key_sig = rec[3:0];
+              applied_seq = seq;
+              applied_at = $time;
+              applied_one = 1;
+            end
+          end
+          $fclose(fin);
         end
-        $fclose(fin);
       end
-      if (ledr !== last_led || applied != last_seq) begin
-        fout = $fopen(output_file, "w"); $fdisplay(fout, "%b %0d", ledr, applied); $fclose(fout);
-        last_led = ledr; last_seq = applied;
+      if (output_file != 0 && (board_bits !== last_bits || applied_seq != last_seq)) begin
+        fout = $fopen(output_file, "w");
+        $fdisplay(fout, "%b %0d", board_bits, applied_seq);
+        $fclose(fout);
+        last_bits = board_bits;
+        last_seq = applied_seq;
       end
     end
   end
 endmodule
 ```
 
-The production version also writes the full 52-bit `LEDR`+`HEX0..5` string
-(`%b` of a concatenation) and applies the `min_dwell_ns` rule of
-`tbTemplate.ts`; both are direct translations of the VHDL `io` process and
-are not repeated here because the spike did not exercise them.
-
-Driving it (what `verilog.ts` will do, as run in the spike):
+How it maps to the GHDL testbench: the queue grammar (`<seq> <SW10><KEY4>`),
+the output (`<52 bits> <seq>`), the dwell rule and the heartbeat number are
+identical to `tbTemplate.ts`; `input_file`/`output_file`/… are plusargs instead
+of generics, and pacing reads `stdin` (`32'h8000_0000`) on every platform.
+Driving it, as `process.ts` will:
 
 ```
-iverilog -Wall -DNOCLK50 -s hdl_board_tb -o sim.vvp tb3.v design.v
-vvp -n -i sim.vvp +input_file=input.txt +output_file=output.txt +heartbeat_file=hb.txt +poll_interval_ns=1000000
+iverilog -Wall -Wno-timescale -I. -s hdl_board_tb -o sim.vvp _hdlboard_ts.v hdl_board_tb.v DE1_SoC.v
+vvp -n -i sim.vvp +input_file=input.txt +output_file=output.txt +heartbeat_file=heartbeat-1.txt +poll_interval_ns=10000 +min_dwell_ns=10000
 ```
 
 ## Appendix B: real simulator output
@@ -1028,7 +1380,7 @@ Captured from the spike, Icarus 13.0 on Windows.
 
 **Banner** (`iverilog -V`, first line): `Icarus Verilog version 13.0 (stable) (v13_0)`
 
-**Live output of a running design** (arrival time in real seconds, `vvp -n -i`,
+**Live output of a running design** (arrival in real seconds, `vvp -n -i`,
 paced, clockless design, 250 ms blink):
 
 ```
@@ -1056,7 +1408,7 @@ unk.v:2: error: Unknown module type: missing_mod
 ***
 ```
 
-**Warnings on a successful `-Wall` compile** (stderr, exit 0):
+**Warnings on a successful `-Wall -Wno-timescale` compile** (stderr, exit 0):
 
 ```
 warn.v:5: warning: Port 1 (a) of module w expects 8 bit(s), given 4.
@@ -1078,38 +1430,229 @@ FATAL: fatal.v:1: boom
 
 **`$finish`** (stdout, exit 0): `tb.v:6: $finish called at 200000 (1ps)`
 
-**Missing `.vpi` (the packaging trap, S2)** — exit 0, printed on every compile:
+**The batch fixture** (`tb_counter8.v` with `_hdlboard_ts.v` first):
+
+```
+count after 3 presses = 3
+count after reset     = 0
+PASS
+tb_counter8.v:30: $finish called at 900000 (1ps)
+```
+
+**Missing `.vpi` (the packaging trap, M2)** — exit 0, printed on every compile:
 
 ```
 error: Failed to open '…\lib\ivl\system.vpi' because:
      : The specified module could not be found.
 ```
 
-(The message text comes from the OS and is localised: on this Norwegian
-Windows it read *"Den angitte modulen ble ikke funnet."* — a reason for the
-smoke test to check the *result*, not match text.)
+(The message text comes from the OS and is localised — on this Norwegian
+Windows it read *"Den angitte modulen ble ikke funnet."* — which is why the
+smoke test checks the *result*, not the text.)
 
-## Appendix C: sources
+## Appendix C: converted starter designs (test fixtures)
 
-Primary sources consulted (2026-09-26). Facts about releases, licences and
-package versions were read from the GitHub API, the MSYS2 repository
-metadata, and upstream source headers, not from summaries.
+The three static VHDL examples of `STARTER_FILES` converted to Verilog-2001,
+plus one new self-checking testbench. All four were compiled with `iverilog
+-Wall -Wno-timescale` (no output) and run (M20). They become the files of step
+A1.
+
+Conversion notes: comments carried over; `std_logic_vector` → `wire [n:0]`;
+the `integer range` counter → a 7-bit `reg`; `falling_edge(KEY_N(x))` → a
+previous-value register (the Verilog idiom for "edge of an active-low key
+without a clock"). **One deliberate difference:** `blinkTest.vhdl` leaves the
+`HEX*` outputs undriven; here they are blanked (`7'b1111111`) because Verilog
+would read them as high-impedance (`z`) — both render blank (§ 7.6).
+
+### `DE1_SoC.v`
+
+```verilog
+// The real DE1-SoC top-level interface: these are the board's own pin
+// names, not a stand-in for them, so this file can go straight into
+// Quartus with only a pin assignment added. Every port here is optional
+// for the simulator - a design that only declares SW and LEDR is a
+// perfectly normal first lab.
+module DE1_SoC (
+    input  wire        CLOCK_50,
+    input  wire [9:0]  SW,
+    input  wire [3:0]  KEY_N,
+    output wire [9:0]  LEDR,
+    output wire [6:0]  HEX0_N,
+    output wire [6:0]  HEX1_N,
+    output wire [6:0]  HEX2_N,
+    output wire [6:0]  HEX3_N,
+    output wire [6:0]  HEX4_N,
+    output wire [6:0]  HEX5_N
+);
+    // LEDR = SW; the first thing every student wires up.
+    assign LEDR = SW;
+
+    // Blank until you add your own 7-segment logic - active low, so
+    // all-ones is "off".
+    assign HEX0_N = 7'b1111111;
+    assign HEX1_N = 7'b1111111;
+    assign HEX2_N = 7'b1111111;
+    assign HEX3_N = 7'b1111111;
+    assign HEX4_N = 7'b1111111;
+    assign HEX5_N = 7'b1111111;
+endmodule
+```
+
+### `blinkTest.v`
+
+```verilog
+// The real DE1-SoC top-level interface: these are the board's own pin
+// names, not a stand-in for them, so this file can go straight into
+// Quartus with only a pin assignment added. Every port here is optional
+// for the simulator - a design that only declares SW and LEDR is a
+// perfectly normal first lab.
+module blinkTest (
+    input  wire        CLOCK_500Hz,
+    input  wire [9:0]  SW,
+    input  wire [3:0]  KEY_N,
+    output wire [9:0]  LEDR,
+    output wire [6:0]  HEX0_N,
+    output wire [6:0]  HEX1_N,
+    output wire [6:0]  HEX2_N,
+    output wire [6:0]  HEX3_N,
+    output wire [6:0]  HEX4_N,
+    output wire [6:0]  HEX5_N
+);
+    // 500 Hz clock -> 500 cycles per second
+    // For 2 Hz blink (LED toggles every 250 ms):
+    // Toggle period = 1 / (2 * 2 Hz) = 250 ms
+    // Cycles per toggle = 0.25 s * 500 = 125
+    localparam TOGGLE_COUNT = 125;
+
+    reg [6:0] counter   = 7'd0;      // counts 0 .. TOGGLE_COUNT-1
+    reg       led_state = 1'b0;
+
+    always @(posedge CLOCK_500Hz) begin
+        if (counter == TOGGLE_COUNT - 1) begin
+            counter   <= 7'd0;
+            led_state <= ~led_state;
+        end else begin
+            counter <= counter + 7'd1;
+        end
+    end
+
+    // Drive all 10 LEDs with the same blinking signal
+    assign LEDR = {10{led_state}};
+
+    // The VHDL original leaves these outputs undriven; Verilog would read
+    // them as high-impedance, so they are blanked explicitly (active low).
+    assign HEX0_N = 7'b1111111;
+    assign HEX1_N = 7'b1111111;
+    assign HEX2_N = 7'b1111111;
+    assign HEX3_N = 7'b1111111;
+    assign HEX4_N = 7'b1111111;
+    assign HEX5_N = 7'b1111111;
+endmodule
+```
+
+### `keyCouter2Led.v` (module `counter8`, as in the VHDL original)
+
+```verilog
+module counter8 (
+    input  wire        CLOCK_50,
+    input  wire [3:0]  KEY_N,
+    output wire [9:0]  LEDR
+);
+    reg [7:0] count    = 8'd0;
+    reg [1:0] key_prev = 2'b11;
+
+    // KEY_N[1]: reset, KEY_N[0]: count up. Both act on a button *press*,
+    // i.e. the falling edge of the active-low key.
+    always @(KEY_N[1:0]) begin
+        if (key_prev[1] && !KEY_N[1])
+            count <= 8'd0;
+        else if (key_prev[0] && !KEY_N[0])
+            count <= count + 8'd1;
+        key_prev <= KEY_N[1:0];
+    end
+
+    assign LEDR[7:0] = count;
+    assign LEDR[9:8] = 2'b00;          // unused LEDs off
+endmodule
+```
+
+### `tb_counter8.v` (new — no VHDL original; batch-mode fixture)
+
+```verilog
+// Self-checking testbench: no ports, so it runs on its own (batch mode).
+module tb_counter8;
+    reg        CLOCK_50 = 1'b0;
+    reg  [3:0] KEY_N    = 4'b1111;
+    wire [9:0] LEDR;
+
+    counter8 dut (.CLOCK_50(CLOCK_50), .KEY_N(KEY_N), .LEDR(LEDR));
+
+    always #10 CLOCK_50 = ~CLOCK_50;
+
+    task press(input integer key);
+        begin
+            KEY_N[key] = 1'b0;
+            #100;
+            KEY_N[key] = 1'b1;
+            #100;
+        end
+    endtask
+
+    initial begin
+        #100;
+        press(0);
+        press(0);
+        press(0);
+        $display("count after 3 presses = %0d", LEDR[7:0]);
+        press(1);
+        $display("count after reset     = %0d", LEDR[7:0]);
+        if (LEDR[7:0] === 8'd0) $display("PASS");
+        else                    $display("FAIL");
+        $finish;
+    end
+endmodule
+```
+
+### Scenarios (input to `scenarios.json`, step A2)
+
+Checked against the real simulator in M20. `stim` is `<SW9..SW0><KEY3..KEY0>`;
+`ledr` is `LEDR9..LEDR0`; `hex: blank` means all six displays `1111111`.
+Poll settings are the production ones: 10 µs poll and dwell when `CLOCK_50` is
+declared, 1 ms poll and 4 ms dwell when it is not.
+
+| Fixture | Step | `stim` | Expected |
+|---|---|---|---|
+| `DE1_SoC` | initial | — | `ledr 0000000000`, `hex blank` |
+| | 1 | `1010101010 1111` | `ledr 1010101010`, `hex blank` |
+| | 2 | `0000000000 1111` | `ledr 0000000000` |
+| `keyCouter2Led` | initial | — | `ledr 0000000000` |
+| | 1 | `0000000000 1110` (press KEY0) | `ledr 0000000001` |
+| | 2 | `0000000000 1111` (release) | `ledr 0000000001` |
+| | 3 | `0000000000 1110` (press) | `ledr 0000000010` |
+| | 4 | `0000000000 1111`, then `0000000000 1101` (press KEY1) | `ledr 0000000000` |
+| `blinkTest` | no stimulus | — | `ledr 1111111111` within 150–400 ms; then `0000000000` 150–400 ms later; `hex blank` |
+| `tb_counter8` (batch) | — | — | stdout contains `PASS`; `DONE completed` |
+
+For the parity tests (§ 7.6) the same table is run against the `vhdl/` twin of
+each fixture, comparing `LEDR` exactly and `HEX` after `X` → "off".
+
+## Appendix D: sources
+
+Primary sources consulted (2026-09-26). Release, licence and package facts were
+read from the GitHub API, the MSYS2 repository metadata and upstream source
+headers, not from summaries.
 
 - Icarus Verilog repository and README — <https://github.com/steveicarus/iverilog>
 - Icarus Verilog releases (v13_0 published 2026-03-02) — <https://github.com/steveicarus/iverilog/releases>
-- Icarus Verilog documentation, `vvp` flags (`-i`, `-n`, `-N`) — <https://steveicarus.github.io/iverilog/usage/vvp_flags.html>
+- `vvp` flags (`-i`, `-n`, `-N`) — <https://steveicarus.github.io/iverilog/usage/vvp_flags.html>
 - Icarus Verilog for Windows (installer list; v12-20220611, v14-20260804) — <https://bleyer.org/icarus/>
 - MSYS2 package `mingw-w64-ucrt-x86_64-iverilog` — <https://packages.msys2.org/packages/mingw-w64-ucrt-x86_64-iverilog>
-- MSYS2 binary repository (packages, hashes computed locally) — <https://repo.msys2.org/mingw/ucrt64/>
-- MSYS2 source packages — <https://repo.msys2.org/mingw/sources/>
-- MSYS2 build recipe — <https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-iverilog>
-- Alpine `iverilog` package (edge/community, 13.0-r0) — <https://pkgs.alpinelinux.org/packages?name=iverilog&branch=edge>
-- Debian `iverilog` package versions — <https://packages.debian.org/search?keywords=iverilog&searchon=names&suite=all&section=all>
-- Verilator installation guide (no prebuilt Windows binaries; Windows support statement) — <https://verilator.org/guide/latest/install.html>
-- Verilator command reference (`--binary`, `--build`, four-state is experimental) — <https://verilator.org/guide/latest/exe_verilator.html>
-- Verilator overview (LGPL-3.0 or Artistic-2.0) — <https://verilator.org/guide/latest/overview.html>
-- Yosys repository (ISC; releases carry source only) — <https://github.com/YosysHQ/yosys>
-- Yosys `sim` command — <https://yosyshq.readthedocs.io/projects/yosys/en/0.47/cmd/sim.html>
-- OSS CAD Suite builds (windows-x64 ≈ 600 MB) — <https://github.com/YosysHQ/oss-cad-suite-build>
+- MSYS2 binary repository — <https://repo.msys2.org/mingw/ucrt64/> · source packages — <https://repo.msys2.org/mingw/sources/> · recipe — <https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-iverilog>
+- Alpine `iverilog` (edge/community, 13.0-r0) — <https://pkgs.alpinelinux.org/packages?name=iverilog&branch=edge>
+- Debian `iverilog` versions — <https://packages.debian.org/search?keywords=iverilog&searchon=names&suite=all&section=all>
+- Verilator install guide — <https://verilator.org/guide/latest/install.html> · command reference — <https://verilator.org/guide/latest/exe_verilator.html> · overview (LGPL-3.0 or Artistic-2.0) — <https://verilator.org/guide/latest/overview.html>
+- Yosys (ISC; releases carry source only) — <https://github.com/YosysHQ/yosys> · `sim` — <https://yosyshq.readthedocs.io/projects/yosys/en/0.47/cmd/sim.html>
+- OSS CAD Suite (windows-x64 ≈ 600 MB) — <https://github.com/YosysHQ/oss-cad-suite-build>
 - OSS CVC — <https://github.com/cambridgehackers/open-src-cvc> · GPL Cver — <https://github.com/omasanori/gplcver>
+- *Clean Code: A Handbook of Agile Software Craftsmanship*, Robert C. Martin (the standard § 6 adapts)
 - The GHDL plan this builds on — [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md)
