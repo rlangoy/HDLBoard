@@ -42,6 +42,8 @@ simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so stud
 `LEDR <= SW;` and similar constructs actually behave the way the real
 board would, without needing hardware in hand.
 
+The course is taught in VHDL, so VHDL is the main language. Verilog support was added just for fun.
+
 ## Credits
 
 HDLBoard stands on the work of others. Thank you to all of these projects and their contributors:
