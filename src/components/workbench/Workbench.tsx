@@ -27,6 +27,8 @@ import { FileExplorer } from './FileExplorer';
 import { CodeEditor } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
+import { appendCapped } from './consoleLines';
+import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, hasTopDot } from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import './Workbench.css';
@@ -304,7 +306,7 @@ export function Workbench() {
 
   const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
     logSeq.current += 1;
-    setLogLines((prev) => [...prev, { id: logSeq.current, time: timestamp(), text, tone }]);
+    setLogLines((prev) => appendCapped(prev, { id: logSeq.current, time: timestamp(), text, tone }));
   }, []);
 
   const stopElapsedTimer = () => {
@@ -398,7 +400,7 @@ export function Workbench() {
   };
 
   const handleRenameFile = (id: string, name: string) => {
-    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name, folder: folderAfterRename(f.folder, name) } : f)));
   };
 
   const handleDeleteFile = (id: string) => {
@@ -407,11 +409,14 @@ export function Workbench() {
     // logic as a plain close, since a deleted file can't stay open.
     handleCloseTab(id);
     // A deleted top file can't stay top either — hand the role to
-    // whatever vhdl/ file is first afterward, or to nothing if that was
-    // the last one (handleStart already tolerates topFileId being null,
-    // same as it did before any file was ever marked top).
+    // whatever file is first afterward in the same folder (so a Verilog
+    // run stays a Verilog run), or to nothing if that was the last one
+    // (handleStart already tolerates topFileId being null, same as it did
+    // before any file was ever marked top).
     if (id === topFileId) {
-      setTopFileId(files.find((f) => f.id !== id && f.folder === 'vhdl')?.id ?? null);
+      const deleted = files.find((f) => f.id === id);
+      const heir = files.find((f) => f.id !== id && f.folder === deleted?.folder && hasTopDot(f.folder));
+      setTopFileId(heir?.id ?? null);
     }
   };
 
@@ -432,21 +437,19 @@ export function Workbench() {
   const handleUploadClick = () => uploadInputRef.current?.click();
 
   // Shared by the hidden <input type="file"> (a real picker, filtered to
-  // .vhd/.vhdl by its own `accept`) and drag-and-drop onto the Files
-  // panel (below) — a browser drop is not filtered by `accept` at all, so
-  // this is the one place non-VHDL files actually get rejected, with a
-  // console line explaining why rather than silently reading garbage in.
+  // the source extensions by its own `accept`) and drag-and-drop onto the
+  // Files panel (below) — a browser drop is not filtered by `accept` at
+  // all, so this is the one place other files actually get rejected, with
+  // a console line explaining why rather than silently reading garbage in.
   const readAndAddFiles = (incoming: Iterable<File>) => {
     for (const file of incoming) {
-      if (!/\.(vhdl?|vhd)$/i.test(file.name)) {
-        appendLog(`Skipped ${file.name}: not a .vhd/.vhdl file.`, 'error');
+      const folder = folderForUpload(file.name);
+      if (folder === undefined) {
+        appendLog(`Skipped ${file.name}: not a ${ACCEPTED_FILES_TEXT} file.`, 'error');
         continue;
       }
       const reader = new FileReader();
-      reader.onload = () => {
-        const folder: VhdlFile['folder'] = /^tb_/i.test(file.name) ? 'work' : 'vhdl';
-        addFile(file.name, String(reader.result ?? ''), folder);
-      };
+      reader.onload = () => addFile(file.name, String(reader.result ?? ''), folder);
       reader.readAsText(file);
     }
   };
@@ -537,7 +540,7 @@ export function Workbench() {
           <input
             ref={uploadInputRef}
             type="file"
-            accept=".vhd,.vhdl"
+            accept={UPLOAD_ACCEPT}
             multiple
             className="wb-files__hidden-input"
             onChange={handleFilesChosen}

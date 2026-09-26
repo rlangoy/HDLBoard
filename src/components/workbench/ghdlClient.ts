@@ -14,6 +14,7 @@
 
 import { bitsToString, type BitVector } from '../board';
 import { blankSegments, patternToSegments, type SegmentVector } from '../SevenSegment';
+import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
 
 const PROTOCOL_VERSION = '1';
@@ -87,7 +88,7 @@ export class GhdlClient {
     };
     ws.onclose = () => {
       if (!this.everReady) {
-        this.handlers.onError('internal', `Could not reach the GHDL backend at ${this.url}.`);
+        this.handlers.onError('internal', `Could not reach the simulation backend at ${this.url}.`);
       }
       this.handlers.onClosed();
     };
@@ -137,16 +138,20 @@ export class GhdlClient {
   }
 
   /**
-   * Filters to `folder === 'vhdl'` and builds the `@@FILE ...@@`-framed
-   * body (§ 6.3). `topFileName`, when given (the file currently marked
-   * as top in the Files panel), is sent as `RUN`'s inline arg so the
-   * backend elaborates that file's entity rather than guessing from
-   * board-port matches — see `portDetect.ts`'s `findTopEntity`.
+   * Sends the files of one design folder — the folder of the top file
+   * (`sourceFolderFor`: `verilog/` for a Verilog top, `vhdl/` otherwise) —
+   * as the `@@FILE ...@@`-framed body (§ 6.3). The backend picks its
+   * simulator from the top file's extension. `topFileName`, when given
+   * (the file currently marked as top in the Files panel), is sent as
+   * `RUN`'s inline arg so the backend elaborates that file's design
+   * rather than guessing from board-port matches — see `portDetect.ts`'s
+   * `findTopEntity`.
    */
   run(files: VhdlFile[], topFileName?: string): void {
     const ws = this.ensureSocket();
-    const vhdlFiles = files.filter((f) => f.folder === 'vhdl');
-    const body = vhdlFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
+    const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
+    const sourceFiles = files.filter((f) => f.folder === folder);
+    const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = topFileName ? `RUN ${topFileName}` : 'RUN';
     const send = () => ws.send(`${head}\n${body}`);
     if (ws.readyState === WebSocket.OPEN) send();

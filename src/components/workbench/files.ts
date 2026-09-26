@@ -11,7 +11,7 @@ export interface VhdlFile {
   id: string;
   name: string;
   /** Folder the file tree groups it under. */
-  folder: 'vhdl' | 'work';
+  folder: 'vhdl' | 'verilog' | 'work';
   content: string;
 }
 
