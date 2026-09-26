@@ -46,6 +46,8 @@ function resolvePaths() {
       frontend: path.join(res, 'frontend'),
       backend: path.join(res, 'backend.mjs'),
       ghdlExe: path.join(res, 'ghdl', 'bin', 'ghdl.exe'),
+      // The flat Icarus tree; the backend runs it with -B/-M.
+      iverilogDir: path.join(res, 'iverilog'),
     };
   }
   const repo = path.join(__dirname, '..', '..');
@@ -53,6 +55,8 @@ function resolvePaths() {
     frontend: path.join(repo, 'dist'),
     backend: path.join(repo, 'server', 'dist', 'server.js'),
     ghdlExe: process.env.GHDL_EXE ?? 'ghdl',
+    // Dev: IVERILOG_DIR / IVERILOG_EXE / VVP_EXE or PATH, resolved by the backend itself.
+    iverilogDir: undefined,
   };
 }
 
@@ -136,6 +140,7 @@ async function startBackendOrDie(paths) {
     port: PORT,
     serveDir: paths.frontend,
     ghdlExe: paths.ghdlExe,
+    iverilogDir: paths.iverilogDir,
     // One window, one user, one machine: the multi-student bound that
     // matters on a shared LAN server is irrelevant here.
     maxSessions: 4,
@@ -148,6 +153,7 @@ app.whenReady().then(async () => {
   console.log(`frontend: ${paths.frontend}`);
   console.log(`backend:  ${paths.backend}`);
   console.log(`ghdl:     ${paths.ghdlExe}`);
+  console.log(`iverilog: ${paths.iverilogDir ?? '(dev: IVERILOG_DIR / PATH)'}`);
 
   buildMenu(logPath);
 

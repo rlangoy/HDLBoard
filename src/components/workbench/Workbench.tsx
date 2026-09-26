@@ -87,7 +87,7 @@ export function Workbench() {
   const [openTabs, setOpenTabs] = useState<string[]>(DEFAULT_OPEN_TABS);
   const [activeTabId, setActiveTabId] = useState<string | null>(DEFAULT_OPEN_TABS[0] ?? null);
 
-  // The vhdl/ file GHDL elaborates as top-level (FileExplorer's blue dot),
+  // The design file (vhdl/ or verilog/) a run starts from as top-level (FileExplorer's blue dot),
   // independent of which tab is open/active — starts on whichever starter
   // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
   // showed as a static label before this was selectable.
