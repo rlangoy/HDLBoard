@@ -11,17 +11,16 @@
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getGhdlExe, runBatch, runCmd, startPersistentRun } from '../ghdl.js';
+import { getGhdlExe, runBatch, startPersistentRun } from '../ghdl.js';
 import { findTopEntity, type TopEntity } from '../portDetect.js';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
+import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
-import { TIMING_WITHOUT_CLOCK_50, TIMING_WITH_CLOCK_50 } from './boardTiming.js';
+import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
 const GHDL_STANDARD = '--std=08';
-/** Bound on `ghdl -a` / `-e`: they are expected to finish in seconds (§ 7.4). */
-const BUILD_TIMEOUT_MS = 30_000;
 const GHDL_BANNER = 'GHDL 5.0.1 (mcode)';
 
 /**
@@ -31,11 +30,14 @@ const GHDL_BANNER = 'GHDL 5.0.1 (mcode)';
  */
 const PACING: RunPlan['pacing'] = process.platform === 'win32' ? 'stdin' : 'fifo';
 
+/** `ghdl -a` / `-e` are expected to finish in seconds, so they run under the shared build timeout (§ 7.4). */
+const ghdl = (args: string[], dir: string): Promise<CmdResult> => runCommand({ cmd: getGhdlExe(), args, cwd: dir });
+
 const failure = (stage: ErrorStage, text: string): PrepareResult => ({ ok: false, stage, text });
 
 /** The error text if `ghdl -a` rejects the file, `undefined` if it is analysed. */
 async function analyzeFile(dir: string, name: string): Promise<string | undefined> {
-  const result = await runCmd(getGhdlExe(), ['-a', GHDL_STANDARD, name], dir, BUILD_TIMEOUT_MS);
+  const result = await ghdl(['-a', GHDL_STANDARD, name], dir);
   if (result.code === 0) return undefined;
   if (result.timedOut) return `Analysis of ${name} timed out.\n${result.err}`;
   return result.err || `ghdl -a failed on ${name} with no output.`;
@@ -80,7 +82,7 @@ function boardPlan(dir: string, timing: BoardTiming): RunPlan {
 
 /** A genuinely portless entity: no wrapper, run directly (see `runBatch`'s own doc comment). */
 async function prepareBatch(dir: string, entityName: string): Promise<PrepareResult> {
-  const elaborated = await runCmd(getGhdlExe(), ['-e', GHDL_STANDARD, entityName], dir, BUILD_TIMEOUT_MS);
+  const elaborated = await ghdl(['-e', GHDL_STANDARD, entityName], dir);
   if (elaborated.code !== 0) return failure('elaborate', elaborated.err);
   return { ok: true, plan: batchPlan(dir, entityName) };
 }
@@ -89,10 +91,10 @@ async function prepareBatch(dir: string, entityName: string): Promise<PrepareRes
 async function prepareBoard(dir: string, top: TopEntity): Promise<PrepareResult> {
   writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), generateTestbench(top.name, top.ports, { pacingFromStdin: PACING === 'stdin' }));
 
-  const analyzed = await runCmd(getGhdlExe(), ['-a', GHDL_STANDARD, `${TB_ENTITY}.vhdl`], dir, BUILD_TIMEOUT_MS);
+  const analyzed = await ghdl(['-a', GHDL_STANDARD, `${TB_ENTITY}.vhdl`], dir);
   if (analyzed.code !== 0) return failure('internal', `Internal testbench build error:\n${analyzed.err}`);
 
-  const elaborated = await runCmd(getGhdlExe(), ['-e', GHDL_STANDARD, TB_ENTITY], dir, BUILD_TIMEOUT_MS);
+  const elaborated = await ghdl(['-e', GHDL_STANDARD, TB_ENTITY], dir);
   if (elaborated.code !== 0) {
     return failure(
       'elaborate',
@@ -103,7 +105,7 @@ async function prepareBoard(dir: string, top: TopEntity): Promise<PrepareResult>
 
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
-  const timing = top.ports.has('clock_50') ? TIMING_WITH_CLOCK_50 : TIMING_WITHOUT_CLOCK_50;
+  const timing = boardTimingFor(top.ports.has('clock_50'));
   return { ok: true, plan: boardPlan(dir, timing) };
 }
 

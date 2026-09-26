@@ -10,6 +10,8 @@
 
 import type { Language } from './types.js';
 
+// Keep in step with src/components/workbench/fileKinds.ts, which applies the same
+// extension rules in the browser (the two packages share no code).
 const VERILOG_EXTENSION = /\.vh?$/i;
 const VHDL_EXTENSION = /\.vhdl?$/i;
 

@@ -22,6 +22,8 @@ export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh';
 /** What the drop hint and the rejection line call the accepted files. */
 export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh';
 
+// Keep in step with server/src/engines/language.ts, which applies the same extension rules
+// on the backend (the two packages share no code).
 const VERILOG_NAME = /\.vh?$/i;
 const VHDL_NAME = /\.(vhdl?|vhd)$/i;
 const VHDL_TESTBENCH_NAME = /^tb_/i;
@@ -67,6 +69,16 @@ export function folderAfterRename(current: Folder, newName: string): Folder {
   const language = languageOfName(newName);
   if (language === undefined || language === languageOfFolder(current)) return current;
   return folderForUpload(newName) ?? current;
+}
+
+/**
+ * The file that takes over as top when `deletedId` is deleted: the first other file in
+ * the deleted file's own folder (so a Verilog run stays a Verilog run), or `null`.
+ */
+export function topAfterDelete(files: readonly Pick<VhdlFile, 'id' | 'folder'>[], deletedId: string): string | null {
+  const deleted = files.find((file) => file.id === deletedId);
+  if (deleted === undefined || !hasTopDot(deleted.folder)) return null;
+  return files.find((file) => file.id !== deletedId && file.folder === deleted.folder)?.id ?? null;
 }
 
 /** Whether the folder's files can be marked as the top of a run (the blue dot). */

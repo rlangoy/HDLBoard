@@ -14,14 +14,14 @@
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { runCommand, type CmdResult } from '../runtime.js';
+import { DEFAULT_COMMAND_TIMEOUT_MS, runCommand, type CmdResult } from '../runtime.js';
 import { classifyCompileFailure, extractBanner, type CompileFailure } from './diagnostics.js';
 import { SIMULATION_FILE_NAME, STUB_FILE_NAME, TIMESCALE_FILE_NAME } from './fileNames.js';
 import { parseStubPorts, type Port } from './ports.js';
 import { compilerFlags, type ToolPaths } from './toolPaths.js';
 
 /** A compile is expected to finish in a fraction of a second; this only bounds a hang. */
-export const BUILD_TIMEOUT_MS = 30_000;
+const BUILD_TIMEOUT_MS = DEFAULT_COMMAND_TIMEOUT_MS;
 const MS_PER_SECOND = 1000;
 
 export interface CompileRequest {

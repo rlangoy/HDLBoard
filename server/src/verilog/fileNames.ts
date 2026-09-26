@@ -14,6 +14,8 @@
 
 /** The files the backend writes into a session directory, named once so nothing can drift. */
 export const TIMESCALE_FILE_NAME = '_hdlboard_ts.v';
+/** Passed first to every compile, so `#delay`s mean nanoseconds however the student's files begin. */
+export const TIMESCALE_SOURCE = '`timescale 1ns/1ps\n';
 export const TESTBENCH_FILE_NAME = 'hdl_board_tb.v';
 export const STUB_FILE_NAME = 'ports.stub';
 export const SIMULATION_FILE_NAME = 'sim.vvp';

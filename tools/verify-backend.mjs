@@ -10,6 +10,9 @@
  *
  *     node tools/verify-backend.mjs ws://127.0.0.1:9010/ghdlsim
  *
+ * Standalone on purpose (no build step), so its board-matching rule mirrors
+ * server/src/testSupport/boardState.ts and must be kept in step with it.
+ *
  * Exit code 0 when every scenario passes, 1 otherwise. Needs Node and, for the
  * WebSocket client, `npm install` to have been run in server/.
  */
@@ -27,11 +30,10 @@ const PROTOCOL_VERSION = '1';
 const STEP_TIMEOUT_MS = 8000;
 const BATCH_TIMEOUT_MS = 20000;
 const BLANK_HEX = '1'.repeat(42);
-const EXTENSION_FOLDER = { vhdl: 'vhdl', verilog: 'verilog' };
 
 const scenarios = JSON.parse(readFileSync(join(root, 'tests', 'fixtures', 'scenarios.json'), 'utf8'));
 const readFixture = (language, name) =>
-  readFileSync(join(root, 'tests', 'fixtures', EXTENSION_FOLDER[language], name), 'utf8').replace(/\r\n/g, '\n');
+  readFileSync(join(root, 'tests', 'fixtures', language, name), 'utf8').replace(/\r\n/g, '\n');
 
 /** One connection: frames in, a cursor over them, and waiting helpers. */
 class Client {

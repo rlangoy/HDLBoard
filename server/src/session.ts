@@ -231,12 +231,12 @@ export class Session {
       this.stopPacing();
       this.endOutput();
       if (!wasRunning) return;
-      // A board design that ends the simulation itself (Verilog's `$finish`) is a
-      // completed run, not a crash: the student asked for it.
+      // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
+      // is a completed run, not a crash: the student asked for it.
       if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
       else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
     });
-    // The design's own report/assert output — GHDL writes this to
+    // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
     // (the generated testbench itself never writes to stdout, so
     // everything that arrives here is the student's own `report`/
@@ -260,7 +260,7 @@ export class Session {
   }
 
   private forwardOutputLine(line: string): void {
-    if (line.trim().length > 0) this.sendLogLines(this.limiter?.accept(line) ?? []);
+    if (/\S/.test(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */

@@ -13,19 +13,19 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { standaloneHint, versionWarning } from '../verilog/diagnostics.js';
-import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, validateSourceName } from '../verilog/fileNames.js';
+import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE, validateSourceName } from '../verilog/fileNames.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, type Port } from '../verilog/ports.js';
 import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '../verilog/process.js';
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
 import { getToolPaths } from '../verilog/tools.js';
 import type { ToolPaths } from '../verilog/toolPaths.js';
-import { TIMING_WITH_CLOCK_50, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
+import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import type { PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
-/** Passed first to every compile, so `#delay`s mean nanoseconds however the student's files begin. */
-const TIMESCALE_SOURCE = '`timescale 1ns/1ps\n';
 const CLOCK_BOARD_NAME = 'clock_50';
+/** Every platform paces through stdin: Verilog can block in `$fgets` on it, and there is no `mkfifo` on Windows. */
+const PACING: RunPlan['pacing'] = 'stdin';
 
 const failure = (stage: ErrorStage, text: string): PrepareResult => ({ ok: false, stage, text });
 
@@ -44,30 +44,26 @@ type Checked =
   | { readonly ok: true; readonly top: string; readonly sources: readonly string[] }
   | { readonly ok: false; readonly stage: ErrorStage; readonly text: string };
 
-function firstInvalidName(files: readonly VhdlFileInput[]): string | undefined {
+/** Each name checked once: the first reason a name is unusable, or else the names of the `.v` sources. */
+function checkNames(files: readonly VhdlFileInput[]): { readonly problem?: string; readonly sources: string[] } {
+  const sources: string[] = [];
   for (const { name } of files) {
     const check = validateSourceName(name);
-    if (!check.ok) return check.reason;
+    if (!check.ok) return { problem: check.reason, sources };
+    if (check.kind === 'source') sources.push(name);
   }
-  return undefined;
-}
-
-function sourceNames(files: readonly VhdlFileInput[]): string[] {
-  return files.filter(({ name }) => {
-    const check = validateSourceName(name);
-    return check.ok && check.kind === 'source';
-  }).map(({ name }) => name);
+  return { sources };
 }
 
 /** The file names, the top file's presence and its module: everything decidable before Icarus runs. */
 function checkProject(files: readonly VhdlFileInput[], topFile: string | undefined): Checked {
-  const invalid = firstInvalidName(files);
-  if (invalid !== undefined) return { ok: false, stage: 'analyze', text: invalid };
+  const { problem, sources } = checkNames(files);
+  if (problem !== undefined) return { ok: false, stage: 'analyze', text: problem };
   const top = files.find((file) => file.name === topFile);
   if (top === undefined) return { ok: false, stage: 'analyze', text: `Top file ${topFile ?? '(none)'} was not among the files sent.` };
   const choice = chooseTopModule(top.name, moduleNames(top.content));
   if (!choice.ok) return { ok: false, stage: 'elaborate', text: choice.reason };
-  return { ok: true, top: choice.name, sources: sourceNames(files) };
+  return { ok: true, top: choice.name, sources };
 }
 
 function writeProject(dir: string, files: readonly VhdlFileInput[]): void {
@@ -82,13 +78,12 @@ const compileRequest = (build: Build, target: string, extraFiles: readonly strin
 });
 
 function batchPlan(build: Build, messages: readonly string[]): RunPlan {
-  return { mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: 'stdin', messages };
+  return { mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
 }
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
-  const hasClock = boardPortSpellings(ports).has(CLOCK_BOARD_NAME);
-  const timing = hasClock ? TIMING_WITH_CLOCK_50 : TIMING_WITHOUT_CLOCK_50;
-  return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: 'stdin', messages };
+  const timing = boardTimingFor(boardPortSpellings(ports).has(CLOCK_BOARD_NAME));
+  return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
 }
 
 /** A standalone testbench supplies its own stimuli: compile the student's top directly and run it. */
@@ -113,9 +108,16 @@ async function prepareBoard(build: Build, ports: readonly Port[]): Promise<Prepa
   return stage === 'analyze' ? failure('internal', `Internal testbench build error:\n${text}`) : failure(stage, text);
 }
 
+/** The banner never changes for a given `iverilog`, so it is read once, not spawned on every run. */
+const notesByCompiler = new Map<string, string[]>();
+
 async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
+  const known = notesByCompiler.get(tools.iverilog);
+  if (known !== undefined) return known;
   const banner = await readBanner(tools, dir);
-  return [banner, versionWarning(banner)].filter((line): line is string => line !== undefined && line !== '');
+  const notes = [banner, versionWarning(banner)].filter((line): line is string => line !== undefined && line !== '');
+  if (banner !== '') notesByCompiler.set(tools.iverilog, notes); // a failed read is tried again next run
+  return notes;
 }
 
 async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {

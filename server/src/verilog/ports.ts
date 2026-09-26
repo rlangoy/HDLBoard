@@ -14,7 +14,7 @@
  * Pure: no filesystem, no processes.
  */
 
-import { BOARD_PORTS } from '../portDetect.js';
+import { BOARD_PORTS } from '../engines/boardPorts.js';
 
 /**
  * Comments and string literals, matched leftmost-first so a `//` inside a string is
@@ -107,7 +107,7 @@ export function parseStubPorts(stubText: string, top: string): PortsResult {
  * VHDL-only legacy tolerance (§ 5.2), and there is no legacy Verilog to accommodate.
  */
 const LEGACY_VHDL_PORT = 'rst';
-export const BOARD_PORT_NAMES: ReadonlySet<string> = new Set(BOARD_PORTS.filter((name) => name !== LEGACY_VHDL_PORT));
+const BOARD_PORT_NAMES: ReadonlySet<string> = new Set(BOARD_PORTS.filter((name) => name !== LEGACY_VHDL_PORT));
 
 /**
  * The design's board ports, as `lower-case board name -> the spelling the design

@@ -37,3 +37,8 @@ import type { BoardTiming } from './types.js';
 export const TIMING_WITH_CLOCK_50: BoardTiming = { pollIntervalNs: 10_000, minDwellNs: 10_000 };
 
 export const TIMING_WITHOUT_CLOCK_50: BoardTiming = { pollIntervalNs: 1_000_000, minDwellNs: 4_000_000 };
+
+/** The one policy for every engine: what a design's clock decides is how finely to poll. */
+export function boardTimingFor(hasClock50: boolean): BoardTiming {
+  return hasClock50 ? TIMING_WITH_CLOCK_50 : TIMING_WITHOUT_CLOCK_50;
+}

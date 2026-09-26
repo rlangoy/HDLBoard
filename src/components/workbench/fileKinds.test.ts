@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { folderAfterRename, folderForUpload, hasTopDot, sourceFolderFor } from './fileKinds';
+import { folderAfterRename, folderForUpload, hasTopDot, sourceFolderFor, topAfterDelete } from './fileKinds';
 
 describe('folderForUpload', () => {
   test.each(['a.v', 'A.V', 'defs.vh'])('K-1: %s goes to verilog/', (name) => {
@@ -57,5 +57,26 @@ describe('hasTopDot', () => {
     expect(hasTopDot('vhdl')).toBe(true);
     expect(hasTopDot('verilog')).toBe(true);
     expect(hasTopDot('work')).toBe(false);
+  });
+});
+
+describe('topAfterDelete', () => {
+  const files = [
+    { id: 'a', folder: 'vhdl' as const },
+    { id: 'b', folder: 'verilog' as const },
+    { id: 'c', folder: 'verilog' as const },
+    { id: 'd', folder: 'work' as const },
+  ];
+
+  test('E-7: the top falls to another file in the same folder', () => {
+    expect(topAfterDelete(files, 'b')).toBe('c');
+  });
+
+  test('is nothing when the deleted file was the last of its folder', () => {
+    expect(topAfterDelete(files, 'a')).toBeNull();
+  });
+
+  test('is nothing for a folder that cannot hold a top file', () => {
+    expect(topAfterDelete(files, 'd')).toBeNull();
   });
 });

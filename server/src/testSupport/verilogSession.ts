@@ -11,14 +11,13 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TestContext } from 'node:test';
-import { TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME } from '../verilog/fileNames.js';
+import { TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE } from '../verilog/fileNames.js';
 import { boardPortSpellings } from '../verilog/ports.js';
 import { compileVerilog, readTopPorts } from '../verilog/process.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
 import type { ToolPaths } from '../verilog/toolPaths.js';
 import { makeTempDir, type TempDir } from './sessionDir.js';
 
-const TIMESCALE_SOURCE = '`timescale 1ns/1ps\n';
 /** A space and a non-ASCII letter: the directory names that broke Icarus's file access (M11). */
 export const AWKWARD_DIRECTORY_PREFIX = 'hdlboard smoke ø ';
 

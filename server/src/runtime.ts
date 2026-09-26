@@ -29,7 +29,7 @@ export interface CommandOptions {
 }
 
 /** A bounded command is expected to finish in seconds: a compile, not a simulation. */
-const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+export const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 
 /**
  * Runs a command to completion and returns what it printed. Never rejects: a program
@@ -104,7 +104,7 @@ export function lineSplitter(cb: (line: string) => void): (chunk: Buffer | strin
     buf += chunk;
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
-    for (const line of lines) cb(line.replace(/\r$/, ''));
+    for (const line of lines) cb(line.endsWith('\r') ? line.slice(0, -1) : line);
   };
 }
 
@@ -133,7 +133,9 @@ export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandl
   child.stdin.on('error', () => {});
 
   const outputCallbacks: Array<(line: string) => void> = [];
-  child.stdout.on('data', lineSplitter((line) => outputCallbacks.forEach((callback) => callback(line))));
+  child.stdout.on('data', lineSplitter((line) => {
+    for (const callback of outputCallbacks) callback(line);
+  }));
 
   const exitCallbacks: Array<(code: number | null, stderr: string) => void> = [];
   child.on('close', (code) => exitCallbacks.forEach((callback) => callback(code, stderr)));

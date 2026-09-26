@@ -13,8 +13,9 @@ export const REPO_URL = 'https://github.com/rlangoy/HDLBoard';
 /** Where suggestions and bug reports go. */
 export const ISSUES_URL = `${REPO_URL}/issues`;
 
-/** GHDL, the simulation engine — credited in the About dialog. */
+/** GHDL and Icarus Verilog, the simulation engines — credited in the About dialog. */
 export const GHDL_URL = 'https://github.com/ghdl/ghdl';
+export const ICARUS_URL = 'https://github.com/steveicarus/iverilog';
 
 /**
  * Dispatched on `window` to open the About dialog from outside React. The

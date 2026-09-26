@@ -28,7 +28,7 @@ import { CodeEditor } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, hasTopDot } from './fileKinds';
+import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import './Workbench.css';
@@ -73,10 +73,10 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 /**
  * The workbench's main page: a file tree and tabbed editor on the left
- * driving a live DE1-SoC board mock and GHDL console on the right, laid
+ * driving a live DE1-SoC board mock and simulator console on the right, laid
  * out to match `DesignResources/WorkBench.png`.
  *
- * `LEDR`/`HEX` are driven by a real GHDL simulation over WebSocket
+ * `LEDR`/`HEX` are driven by a real GHDL or Icarus Verilog simulation over WebSocket
  * (`ghdlClient.ts`, ghdl_implementation_plan.md) — never by `SW`/`KEY`
  * directly (Design_Description.md § 5 convention 11). Every board panel
  * is the real, working component from `components/board`, `Switches`,
@@ -414,9 +414,7 @@ export function Workbench() {
     // (handleStart already tolerates topFileId being null, same as it did
     // before any file was ever marked top).
     if (id === topFileId) {
-      const deleted = files.find((f) => f.id === id);
-      const heir = files.find((f) => f.id !== id && f.folder === deleted?.folder && hasTopDot(f.folder));
-      setTopFileId(heir?.id ?? null);
+      setTopFileId(topAfterDelete(files, id));
     }
   };
 
