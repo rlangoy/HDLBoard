@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { classifyCompileFailure, extractBanner, parseVersion, versionWarning } from './diagnostics.js';
+import { classifyCompileFailure, extractBanner, parseVersion, standaloneHint, versionWarning } from './diagnostics.js';
 
 const BANNER_13 = 'Icarus Verilog version 13.0 (stable) (v13_0)';
 const BANNER_12 = 'Icarus Verilog version 12.0 (stable) ()';
@@ -84,5 +84,13 @@ describe('versionWarning', () => {
 
   test('warns, without throwing, when the version cannot be read', () => {
     assert.match(versionWarning('garbage') ?? '', /Could not read the Icarus Verilog version/);
+  });
+});
+
+describe('standaloneHint', () => {
+  test('names the module and the ports a board design must declare', () => {
+    const hint = standaloneHint('leds');
+    assert.match(hint, /'leds'/);
+    assert.match(hint, /CLOCK_50.*SW.*KEY_N.*LEDR.*HEX0_N/);
   });
 });

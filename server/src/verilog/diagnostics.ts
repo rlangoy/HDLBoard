@@ -74,3 +74,16 @@ export function versionWarning(banner: string): string | undefined {
   if (TESTED_MAJOR_VERSIONS.includes(version.major)) return undefined;
   return `Icarus Verilog ${version.major}.${version.minor} has not been tested with HDLBoard (${testedRange()}); ${advice}`;
 }
+
+/**
+ * Said before a run when the top has ports of its own but none of the board's. Such a
+ * module runs as a standalone testbench, which is right for a testbench with an
+ * `output reg done` and puzzling for a board design that misspelled `LEDR` — this line
+ * is what tells the two apart (§ 5.3).
+ */
+export function standaloneHint(top: string): string {
+  return (
+    `Top module '${top}' declares none of the board's ports (CLOCK_50, CLOCK_500Hz, SW, KEY_N, LEDR, HEX0_N…HEX5_N), ` +
+    'so it runs as a standalone testbench. If it is a board design, check the port names.'
+  );
+}

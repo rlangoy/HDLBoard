@@ -8,12 +8,12 @@
 
 import { ghdlEngine } from './ghdlEngine.js';
 import { languageOfTopFile } from './language.js';
+import { verilogEngine } from './verilogEngine.js';
 import type { Language, SimEngine } from './types.js';
 
-/** Engines for the other languages arrive with step E4; until then everything runs on GHDL. */
-const ENGINES: Partial<Record<Language, SimEngine>> = { vhdl: ghdlEngine };
+const ENGINES: Readonly<Record<Language, SimEngine>> = { vhdl: ghdlEngine, verilog: verilogEngine };
 
 /** The engine for a run whose top file is `topFile` (none marked: VHDL, as it has always been). */
 export function selectEngine(topFile: string | undefined): SimEngine {
-  return ENGINES[languageOfTopFile(topFile)] ?? ghdlEngine;
+  return ENGINES[languageOfTopFile(topFile)];
 }
