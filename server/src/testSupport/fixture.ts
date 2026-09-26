@@ -28,6 +28,11 @@ export function readFixture(directory: FixtureDirectory, fileName: string): stri
   return readFileSync(fixturePath(directory, fileName), 'utf8').replace(/\r\n/g, '\n');
 }
 
+/** The repository root: two levels above the fixtures. */
+export function repoRoot(): string {
+  return join(FIXTURE_ROOT, '..', '..');
+}
+
 export function scenarioFilePath(): string {
   return join(FIXTURE_ROOT, 'scenarios.json');
 }

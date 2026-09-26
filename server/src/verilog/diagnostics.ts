@@ -10,7 +10,8 @@
 import type { ErrorStage } from '../protocol.js';
 
 export interface CompileFailure {
-  readonly stage: Extract<ErrorStage, 'analyze' | 'elaborate'>;
+  /** `internal` is for failures that are HDLBoard's own assumption breaking, not the student's code. */
+  readonly stage: Extract<ErrorStage, 'analyze' | 'elaborate' | 'internal'>;
   /** The compiler's own words, trimmed — shown to the student verbatim. */
   readonly text: string;
 }

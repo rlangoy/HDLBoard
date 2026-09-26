@@ -70,7 +70,10 @@ export function tieOffs(spellings: Spellings): string[] {
  */
 const TIMESCALE = '`timescale 1ns/1ps';
 
-const DECLARATIONS = `module hdl_board_tb;
+/** The wrapper's module name: what `iverilog -s` elaborates in a board run. */
+export const TESTBENCH_MODULE_NAME = 'hdl_board_tb';
+
+const DECLARATIONS = `module ${TESTBENCH_MODULE_NAME};
   reg         clk_sig    = 1'b0;
   reg         clk500_sig = 1'b0;
   reg  [9:0]  sw_sig     = 10'b0;

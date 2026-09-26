@@ -42,6 +42,19 @@ describe('lineSplitter', () => {
     assert.deepEqual(lines, ['a', '', 'b']);
   });
 
+  test('treats a Windows line ending as one line ending, not a line that ends in a carriage return', () => {
+    const { lines, feed } = collect();
+    feed('design says hi\r\nsecond\r\n');
+    assert.deepEqual(lines, ['design says hi', 'second']);
+  });
+
+  test('handles a Windows line ending split across two chunks', () => {
+    const { lines, feed } = collect();
+    feed('one\r');
+    feed('\ntwo\r\n');
+    assert.deepEqual(lines, ['one', 'two']);
+  });
+
   test('accepts a Buffer as well as a string', () => {
     const { lines, feed } = collect();
     feed(Buffer.from('x\n'));

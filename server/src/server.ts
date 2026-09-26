@@ -29,6 +29,8 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
+import { setToolPaths } from './verilog/tools.js';
+import { resolveToolPaths } from './verilog/toolPaths.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
 
 const WSPATH = '/ghdlsim';
@@ -39,6 +41,15 @@ export interface BackendOptions {
   port?: number;
   /** Absolute path to the GHDL executable. Defaults to `GHDL_EXE`, then `'ghdl'`. */
   ghdlExe?: string;
+  /**
+   * The flat Icarus Verilog tree the packaged app ships (`resources/iverilog`). Set, it
+   * wins over the executables below and over the environment. Defaults to `IVERILOG_DIR`.
+   */
+  iverilogDir?: string;
+  /** Absolute path to `iverilog`. Defaults to `IVERILOG_EXE`, then `'iverilog'` on PATH. */
+  iverilogExe?: string;
+  /** Absolute path to `vvp`. Defaults to `VVP_EXE`, then the one beside `iverilogExe`. */
+  vvpExe?: string;
   /**
    * Directory of the built frontend to serve over HTTP. Unset (the
    * default) keeps today's WebSocket-only, LAN-bound behaviour.
@@ -128,6 +139,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
   setGhdlExe(opts.ghdlExe ?? process.env.GHDL_EXE ?? 'ghdl');
+  const iverilogTools = resolveToolPaths(process.env, opts);
+  setToolPaths(iverilogTools);
 
   // Desktop mode is a single-user app on one machine; exposing a GHDL
   // spawner to the LAN there would be a gratuitous attack surface.
@@ -245,6 +258,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
 
   httpServer.listen(port, host, () => {
     console.log(`hdl-board GHDL backend listening on ws://${host}:${port}${WSPATH}`);
+    console.log(`hdl-board Icarus Verilog: ${iverilogTools.iverilog}${iverilogTools.bundledDir ? ' (bundled tree)' : ''}`);
     if (serveDir) console.log(`hdl-board serving frontend from ${serveDir} on http://${host}:${port}/`);
   });
 

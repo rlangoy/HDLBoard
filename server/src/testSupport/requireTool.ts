@@ -7,12 +7,13 @@
  * simply does not have it (docs/Verilog_implementation_plan.md § 7.2).
  *
  * Lookup order matches how the backend itself will find the tool: an explicit
- * environment setting first (`IVERILOG_DIR` is the bundled tree from step B2),
- * then `PATH`.
+ * environment setting first (`IVERILOG_DIR` is the bundled tree from step B2), then
+ * the vendored tree in this repository if it has been fetched, then `PATH`.
  */
 
 import { statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
+import { repoRoot } from './fixture.js';
 
 export type ToolName = 'ghdl' | 'iverilog';
 
@@ -51,6 +52,9 @@ export function findOnPath(name: string, env: NodeJS.ProcessEnv = process.env): 
   return null;
 }
 
+/** Where `fetch-iverilog.ps1` puts the bundled tree, relative to the repository root. */
+const VENDORED_ICARUS_DIR = join('winInstaller', 'vendor', 'iverilog');
+
 function firstExistingFile(candidates: ReadonlyArray<string | undefined>): string | null {
   return candidates.find((path): path is string => path !== undefined && isFile(path)) ?? null;
 }
@@ -61,13 +65,19 @@ function fromEnvironment(name: ToolName, env: NodeJS.ProcessEnv): string | null 
   return firstExistingFile([bundled, env.IVERILOG_EXE]);
 }
 
+/** Only Icarus is vendored; a machine that ran the fetch script needs no environment setting. */
+function fromVendoredTree(name: ToolName, root: string): string | null {
+  if (name !== 'iverilog') return null;
+  return firstExistingFile([join(root, VENDORED_ICARUS_DIR, WINDOWS ? 'iverilog.exe' : 'iverilog')]);
+}
+
 const ENVIRONMENT_HINT: Record<ToolName, string> = {
   ghdl: 'GHDL_EXE',
   iverilog: 'IVERILOG_DIR or IVERILOG_EXE',
 };
 
-export function requireTool(name: ToolName, env: NodeJS.ProcessEnv = process.env): ToolLookup {
-  const exe = fromEnvironment(name, env) ?? findOnPath(name, env);
+export function requireTool(name: ToolName, env: NodeJS.ProcessEnv = process.env, vendoredRoot: string = repoRoot()): ToolLookup {
+  const exe = fromEnvironment(name, env) ?? fromVendoredTree(name, vendoredRoot) ?? findOnPath(name, env);
   if (exe) return { exe, skip: false };
   return { exe: null, skip: `${name} not found: put it on PATH or set ${ENVIRONMENT_HINT[name]}` };
 }

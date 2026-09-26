@@ -12,8 +12,19 @@
  * Pure: it checks text and touches nothing.
  */
 
-/** Files the backend writes itself; a student file with one of these names would overwrite it. */
-export const RESERVED_FILE_NAMES: readonly string[] = ['_hdlboard_ts.v', 'hdl_board_tb.v', 'ports.stub', 'sim.vvp'];
+/** The files the backend writes into a session directory, named once so nothing can drift. */
+export const TIMESCALE_FILE_NAME = '_hdlboard_ts.v';
+export const TESTBENCH_FILE_NAME = 'hdl_board_tb.v';
+export const STUB_FILE_NAME = 'ports.stub';
+export const SIMULATION_FILE_NAME = 'sim.vvp';
+
+/** A student file with one of these names would overwrite a generated one. */
+export const RESERVED_FILE_NAMES: readonly string[] = [
+  TIMESCALE_FILE_NAME,
+  TESTBENCH_FILE_NAME,
+  STUB_FILE_NAME,
+  SIMULATION_FILE_NAME,
+];
 
 export type SourceKind = 'source' | 'header';
 

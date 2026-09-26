@@ -11,7 +11,7 @@
  * line. Do not "simplify" this to `exec`.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export interface CmdResult {
   code: number;
@@ -92,13 +92,102 @@ export interface BatchHandle {
   done: Promise<BatchResult>;
 }
 
-/** Buffers arbitrary chunks and emits one callback per complete line. */
+/**
+ * Buffers arbitrary chunks and emits one callback per complete line. A Windows line
+ * ending (`\r\n`) is one line ending: `vvp` writes it there, and a line that ends in a
+ * stray carriage return would reach the console and any exact comparison. A `\r` at
+ * the end of a chunk simply waits for the `\n` that follows.
+ */
 export function lineSplitter(cb: (line: string) => void): (chunk: Buffer | string) => void {
   let buf = '';
   return (chunk) => {
     buf += chunk;
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
-    for (const line of lines) cb(line);
+    for (const line of lines) cb(line.replace(/\r$/, ''));
+  };
+}
+
+/**
+ * Stops a killed child's output reaching anyone. Only the `data` listeners go: removing
+ * *every* listener also strips the stream's own, and the child's `close` event — which
+ * waits for its streams to end — would then never fire.
+ */
+function stopDelivering(child: ChildProcessWithoutNullStreams): void {
+  child.stdout.removeAllListeners('data');
+  child.stderr.removeAllListeners('data');
+}
+
+/**
+ * Wraps a running child as a `RunHandle` — the persistent, free-running simulation
+ * that lives until `kill()` (Stop, Reset, session teardown).
+ */
+export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandle {
+  let stderr = '';
+  child.stderr.on('data', (chunk) => (stderr += chunk));
+  // stdin is only ever written for pacing, but the stream exists either way, and a
+  // write to a process that has just exited (Stop/Reset racing a pacing tick)
+  // surfaces as an `error` event — EPIPE on POSIX, EOF/EPERM on Windows. Unhandled,
+  // that is an uncaught exception in the backend, so it is swallowed: the exit
+  // itself is reported through `close`.
+  child.stdin.on('error', () => {});
+
+  const outputCallbacks: Array<(line: string) => void> = [];
+  child.stdout.on('data', lineSplitter((line) => outputCallbacks.forEach((callback) => callback(line))));
+
+  const exitCallbacks: Array<(code: number | null, stderr: string) => void> = [];
+  child.on('close', (code) => exitCallbacks.forEach((callback) => callback(code, stderr)));
+
+  return {
+    kill: () => {
+      stopDelivering(child);
+      child.kill('SIGTERM');
+    },
+    onExit: (callback) => exitCallbacks.push(callback),
+    onOutput: (callback) => outputCallbacks.push(callback),
+    grantPacing: (lines) => {
+      if (lines > 0 && child.stdin.writable) child.stdin.write('\n'.repeat(lines));
+    },
+  };
+}
+
+/**
+ * Wraps a child expected to reach the end of its own accord as a `BatchHandle`. It is
+ * bounded by `timeoutMs`: with no polling loop of ours keeping a runaway design alive
+ * on purpose, this is what stops a design bug (a loop with no delay) from hanging the
+ * server. Standard input is closed at once, so a design that reads it sees end-of-file
+ * instead of waiting for a grant that a batch run never sends.
+ */
+export function createBatchHandle(
+  child: ChildProcessWithoutNullStreams,
+  onOutput: (line: string) => void,
+  timeoutMs: number,
+): BatchHandle {
+  let stderr = '';
+  let timedOut = false;
+  child.stdin.on('error', () => {});
+  child.stdin.end();
+  child.stderr.on('data', (chunk) => (stderr += chunk));
+  child.stdout.on('data', lineSplitter(onOutput));
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGKILL');
+  }, timeoutMs);
+
+  const done = new Promise<BatchResult>((resolve) => {
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, timedOut, stderr });
+    });
+  });
+
+  return {
+    kill: () => {
+      clearTimeout(timer);
+      stopDelivering(child);
+      child.kill('SIGTERM');
+    },
+    done,
   };
 }
