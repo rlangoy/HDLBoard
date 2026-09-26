@@ -10,7 +10,9 @@
     "start": "node dist/server.js",
     "dev": "tsc -b && node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --no-error-on-unmatched-pattern src/verilog src/engines src/runtime.ts src/outputLimiter.ts src/testSupport"
+    "lint": "eslint --no-error-on-unmatched-pattern src/verilog src/engines src/runtime.ts src/outputLimiter.ts src/testSupport",
+    "test": "tsc -b && node scripts/run-tests.mjs unit",
+    "test:integration": "tsc -b && node scripts/run-tests.mjs integration"
   },
   "dependencies": {
     "ws": "^8.18.0"
