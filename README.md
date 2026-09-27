@@ -41,8 +41,7 @@ Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
 simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so students can see
 `LEDR <= SW;` and similar constructs actually behave the way the real
 board would, without needing hardware in hand.
-
-The course is taught in VHDL, so VHDL is the main language. Verilog support was added just for fun.
+The Verilog support was added just for others since the frontend of the simulator was already inplace.
 
 ## Credits
 
