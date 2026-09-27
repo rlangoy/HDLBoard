@@ -27,6 +27,13 @@ extraResources:
     to: frontend
   - from: resources/backend.mjs
     to: backend.mjs
+  # window.hdlboard (project storage); resolvePaths() loads it from here.
+  - from: resources/preload.js
+    to: preload.js
+  # { "persistProjects": true } — the packaged build's default. A dev run
+  # has no resources/ and so stays off; see resolvePersistProjects().
+  - from: resources/settings.default.json
+    to: settings.default.json
   - from: resources/ghdl
     to: ghdl
   # Icarus Verilog: one flat directory, run with -B/-M (plan 5.8).

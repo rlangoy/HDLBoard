@@ -12,6 +12,36 @@
   color: var(--wb-text);
 }
 
+/* The desktop variant is a div, not a .wb-dialog__lead paragraph, so it needs its own gap. */
+div.wb-settings__empty {
+  margin-bottom: 18px;
+}
+
+/* The desktop app's project-storage checkbox (window.hdlboard). */
+.wb-settings__option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  color: var(--wb-text);
+}
+
+.wb-settings__option input {
+  margin: 3px 0 0;
+  accent-color: var(--wb-accent);
+}
+
+.wb-settings__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+.wb-settings__note--error {
+  color: var(--wb-danger-dark);
+}
+
 .wb-settings__heading {
   margin: 0 0 8px;
   font-size: 15px;

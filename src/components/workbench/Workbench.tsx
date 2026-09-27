@@ -32,6 +32,7 @@ import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload,
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import { downloadProjectZip, downloadSourceFile } from './download';
+import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
 import './Workbench.css';
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
@@ -49,6 +50,9 @@ function timestamp(): string {
 }
 
 let nextFileSeq = 1;
+
+// How long typing has to pause before the desktop app stores the workspace.
+const AUTOSAVE_DELAY_MS = 600;
 
 // The space each pane needs to stay usable, and the width each starts at —
 // see the "Resizing" note in this folder's README before changing these.
@@ -95,6 +99,62 @@ export function Workbench() {
   const [topFileId, setTopFileId] = useState<string | null>(
     () => STARTER_FILES.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
   );
+
+  // Desktop project storage (desktop.ts): only when the Electron preload
+  // exposes it. Load once on mount, and hold auto-save back until that has
+  // answered, so the starter files can never overwrite a stored workspace.
+  const [hydrated, setHydrated] = useState(() => !desktopBridge()?.saveWorkspace);
+  useEffect(() => {
+    const bridge = desktopBridge();
+    if (!bridge?.loadWorkspace) return;
+    let cancelled = false;
+    bridge
+      .loadWorkspace()
+      .then((json) => {
+        if (cancelled) return;
+        const ws = parseWorkspace(json);
+        if (!ws) return;
+        // Stored ids like `file-7` must not be handed out again by addFile.
+        for (const f of ws.files) {
+          const seq = /^file-(\d+)$/.exec(f.id);
+          if (seq) nextFileSeq = Math.max(nextFileSeq, Number(seq[1]) + 1);
+        }
+        setFiles(ws.files);
+        setOpenTabs(ws.openTabs);
+        setActiveTabId(ws.activeTabId);
+        setTopFileId(ws.topFileId);
+      })
+      .catch((err: unknown) => console.error('Could not load the saved workspace:', err))
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const save = desktopBridge()?.saveWorkspace;
+    if (!hydrated || !save) return;
+    const json = serializeWorkspace({ files, openTabs, activeTabId, topFileId });
+    const flush = () => {
+      save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
+    };
+    const timer = window.setTimeout(() => {
+      window.removeEventListener('pagehide', onHide);
+      flush();
+    }, AUTOSAVE_DELAY_MS);
+    // A reload or close inside the debounce window still gets stored.
+    const onHide = () => {
+      window.clearTimeout(timer);
+      flush();
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [hydrated, files, openTabs, activeTabId, topFileId]);
 
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires

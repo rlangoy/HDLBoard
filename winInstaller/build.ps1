@@ -130,6 +130,10 @@ try {
   Pop-Location
 }
 
+Write-Host "  preload.js, settings.default.json (project storage on by default)"
+Copy-Item (Join-Path $ElectronDir "preload.js") $ResDir
+Copy-Item (Join-Path $ElectronDir "settings.default.json") $ResDir
+
 Write-Host "  frontend/"
 Copy-Item -Recurse (Join-Path $RepoRoot "dist") (Join-Path $ResDir "frontend")
 

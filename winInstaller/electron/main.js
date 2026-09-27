@@ -15,7 +15,7 @@
  * `ws://…:9010/ghdlsim` URL comes out malformed.
  */
 
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -45,6 +45,7 @@ function resolvePaths() {
     return {
       frontend: path.join(res, 'frontend'),
       backend: path.join(res, 'backend.mjs'),
+      preload: path.join(res, 'preload.js'),
       ghdlExe: path.join(res, 'ghdl', 'bin', 'ghdl.exe'),
       // The flat Icarus tree; the backend runs it with -B/-M.
       iverilogDir: path.join(res, 'iverilog'),
@@ -54,6 +55,7 @@ function resolvePaths() {
   return {
     frontend: path.join(repo, 'dist'),
     backend: path.join(repo, 'server', 'dist', 'server.js'),
+    preload: path.join(__dirname, 'preload.js'),
     ghdlExe: process.env.GHDL_EXE ?? 'ghdl',
     // Dev: IVERILOG_DIR / IVERILOG_EXE / VVP_EXE or PATH, resolved by the backend itself.
     iverilogDir: undefined,
@@ -86,6 +88,111 @@ function initLogging() {
   }
   console.log(`--- HDLBoard ${app.getVersion()} starting (packaged=${app.isPackaged}) ---`);
   return logPath;
+}
+
+/**
+ * Project storage ("persistProjects") is opt-in and desktop-only. The
+ * flag is resolved once, at startup, each layer overriding the last:
+ *
+ *   1. off — the source default, so a dev run (`npm start`) stores nothing;
+ *   2. resources/settings.default.json — shipped only in the packaged app,
+ *      which is how the installer build turns the feature on without
+ *      writing anything into a user's profile at install time;
+ *   3. <userData>/settings.json — the user's own choice from Settings.
+ *
+ * Changing it applies on the next launch: the preload's API and the IPC
+ * handlers below are fixed for the life of the window.
+ */
+function readJson(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value && typeof value === 'object' ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function userSettingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function resolvePersistProjects() {
+  let enabled = false;
+  if (app.isPackaged) {
+    const shipped = readJson(path.join(process.resourcesPath, 'settings.default.json'));
+    if (typeof shipped.persistProjects === 'boolean') enabled = shipped.persistProjects;
+  }
+  const user = readJson(userSettingsPath());
+  if (typeof user.persistProjects === 'boolean') enabled = user.persistProjects;
+  return enabled;
+}
+
+/** Saved projects never go near $INSTDIR: an update or uninstall would take them with it. */
+function projectsDir() {
+  return path.join(app.getPath('userData'), 'projects');
+}
+
+/**
+ * The one place a stored file's path is built. Names are fixed today
+ * (`workspace.json`), but the check stays so a future named-project
+ * feature cannot walk out of the projects folder by accident.
+ */
+function projectFile(name) {
+  const base = projectsDir();
+  const file = path.resolve(base, path.basename(name));
+  if (path.dirname(file) !== path.resolve(base)) throw new Error(`invalid project file name: ${name}`);
+  return file;
+}
+
+const WORKSPACE_FILE = 'workspace.json';
+// Generous for source text; a cap only so a runaway renderer cannot fill the disk.
+const MAX_WORKSPACE_BYTES = 16 * 1024 * 1024;
+
+/** Only the app's own page may use these — never a frame from anywhere else. */
+function fromApp(event) {
+  const url = event.senderFrame ? event.senderFrame.url : '';
+  if (!url.startsWith(`http://127.0.0.1:${PORT}/`)) throw new Error(`IPC refused from ${url}`);
+}
+
+function registerIpc(persistProjects) {
+  ipcMain.handle('hdlboard:set-enabled', (event, value) => {
+    fromApp(event);
+    const file = userSettingsPath();
+    const settings = readJson(file);
+    settings.persistProjects = value === true;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    console.log(`persistProjects set to ${settings.persistProjects} (applies after restart)`);
+    return settings.persistProjects;
+  });
+
+  // Off means no handlers at all, matching the preload exposing no methods.
+  if (!persistProjects) return;
+
+  ipcMain.handle('hdlboard:save-workspace', (event, json) => {
+    fromApp(event);
+    if (typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > MAX_WORKSPACE_BYTES) {
+      throw new Error('workspace rejected: not a string, or too large');
+    }
+    JSON.parse(json); // refuse to store anything that would not load back
+    const file = projectFile(WORKSPACE_FILE);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Write-then-rename, so a crash mid-save leaves the previous copy intact.
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, json, 'utf8');
+    fs.renameSync(tmp, file);
+    return true;
+  });
+
+  ipcMain.handle('hdlboard:load-workspace', (event) => {
+    fromApp(event);
+    try {
+      return fs.readFileSync(projectFile(WORKSPACE_FILE), 'utf8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return null;
+      throw err;
+    }
+  });
 }
 
 function showPortInUseDialog() {
@@ -155,6 +262,10 @@ app.whenReady().then(async () => {
   console.log(`ghdl:     ${paths.ghdlExe}`);
   console.log(`iverilog: ${paths.iverilogDir ?? '(dev: IVERILOG_DIR / PATH)'}`);
 
+  const persistProjects = resolvePersistProjects();
+  console.log(`persistProjects: ${persistProjects}`);
+  registerIpc(persistProjects);
+
   buildMenu(logPath);
 
   try {
@@ -193,6 +304,10 @@ app.whenReady().then(async () => {
       // no need for Node, and giving it none keeps that true.
       nodeIntegration: false,
       contextIsolation: true,
+      // window.hdlboard — see preload.js. The switch is how the preload
+      // learns whether project storage is on this launch.
+      preload: paths.preload,
+      additionalArguments: persistProjects ? ['--hdlboard-persist'] : [],
     },
   });
 

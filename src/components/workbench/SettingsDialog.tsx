@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { useState } from 'react';
 import { Dialog } from './Dialog';
+import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
 import { APP_NAME, ISSUES_URL } from './project';
 import './SettingsDialog.css';
@@ -14,12 +16,29 @@ export interface SettingsDialogProps {
 const NEW_ISSUE = `${ISSUES_URL}/new`;
 
 /**
- * There is nothing to configure yet, so instead of an empty form this says
- * so and points at the one thing a user can do to change the program:
- * open an issue. The two buttons open GitHub's new-issue page with a title
+ * In a browser there is nothing to configure, so instead of an empty form
+ * this says so. The desktop app has one setting — project storage — which
+ * its preload exposes on `window.hdlboard` (desktop.ts); it applies on the
+ * next launch. Either way the dialog points at the one thing a user can do
+ * to change the program: open an issue. The two buttons open GitHub's new-issue page with a title
  * prefix, so a report arrives already sorted into bug or suggestion.
  */
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
+  const bridge = desktopBridge();
+  // What is stored for the next launch, not what this launch is running with.
+  const [persist, setPersist] = useState(() => bridge?.enabled ?? false);
+  const [saveError, setSaveError] = useState(false);
+
+  const handlePersistChange = (next: boolean) => {
+    if (!bridge) return;
+    setPersist(next);
+    setSaveError(false);
+    bridge.setEnabled(next).catch(() => {
+      setPersist(!next);
+      setSaveError(true);
+    });
+  };
+
   return (
     <Dialog
       open={open}
@@ -28,10 +47,34 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
-      <p className="wb-dialog__lead wb-settings__empty">
-        <strong>No settings are available for now.</strong> {APP_NAME} works out
-        of the box &mdash; nothing needs configuring yet :)
-      </p>
+      {bridge ? (
+        <div className="wb-settings__empty">
+          <label className="wb-settings__option">
+            <input
+              type="checkbox"
+              checked={persist}
+              onChange={(e) => handlePersistChange(e.target.checked)}
+            />
+            <span>
+              <strong>Keep my project between sessions</strong>
+              <span className="wb-settings__note">
+                Saves your files and open tabs on this computer and restores them
+                when {APP_NAME} starts. Applies after restart.
+              </span>
+              {saveError && (
+                <span className="wb-settings__note wb-settings__note--error" role="alert">
+                  The setting could not be saved.
+                </span>
+              )}
+            </span>
+          </label>
+        </div>
+      ) : (
+        <p className="wb-dialog__lead wb-settings__empty">
+          <strong>No settings are available for now.</strong> {APP_NAME} works out
+          of the box &mdash; nothing needs configuring yet :)
+        </p>
+      )}
 
       <section className="wb-settings__help" aria-labelledby="wb-settings-help">
         <h3 id="wb-settings-help" className="wb-settings__heading">
