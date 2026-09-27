@@ -7,3 +7,8 @@
 *.png binary
 *.jpg binary
 *.ico binary
+
+# Test fixtures and golden files are compared byte for byte (and the VHDL
+# copies against the starter designs in files.ts), so they stay LF on every
+# platform instead of following the working tree's native line endings.
+tests/fixtures/** text eol=lf

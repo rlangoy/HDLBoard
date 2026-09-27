@@ -3,7 +3,7 @@
 
 import { Dialog } from './Dialog';
 import { LOGO_DATA_URI } from './logo';
-import { APP_NAME, GHDL_URL, REPO_URL } from './project';
+import { APP_NAME, ELECTRON_URL, GHDL_URL, ICARUS_URL, REACT_URL, REPO_URL, TYPESCRIPT_URL, VITE_URL, WS_URL } from './project';
 import './AboutDialog.css';
 
 export interface AboutDialogProps {
@@ -27,8 +27,8 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       describedBy="wb-about-notice"
     >
       <p className="wb-dialog__lead">
-        Write VHDL and watch it run on a virtual board. Your designs run on
-        real GHDL, with the board&rsquo;s switches, buttons, LEDs and 7-segment
+        Write VHDL or Verilog and watch it run on a virtual board. Your designs run on
+        real GHDL or Icarus Verilog, with the board&rsquo;s switches, buttons, LEDs and 7-segment
         displays on screen.
       </p>
 
@@ -60,12 +60,49 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
           </dd>
         </div>
         <div className="wb-about__fact">
-          <dt>Simulation engine</dt>
+          <dt>Simulation engines</dt>
           <dd>
             <a href={GHDL_URL} target="_blank" rel="noopener noreferrer">
               GHDL
             </a>{' '}
-            (GPL-2.0)
+            (GPL-2.0),{' '}
+            <a href={ICARUS_URL} target="_blank" rel="noopener noreferrer">
+              Icarus Verilog
+            </a>{' '}
+            (GPL-2.0 or later)
+          </dd>
+        </div>
+        <div className="wb-about__fact">
+          <dt>Built with</dt>
+          <dd>
+            <a href={REACT_URL} target="_blank" rel="noopener noreferrer">
+              React
+            </a>{' '}
+            (MIT),{' '}
+            <a href={WS_URL} target="_blank" rel="noopener noreferrer">
+              ws
+            </a>{' '}
+            (MIT),{' '}
+            <a href={ELECTRON_URL} target="_blank" rel="noopener noreferrer">
+              Electron
+            </a>{' '}
+            (MIT; includes Chromium and Node.js), and the build tools{' '}
+            <a href={VITE_URL} target="_blank" rel="noopener noreferrer">
+              Vite
+            </a>{' '}
+            and{' '}
+            <a href={TYPESCRIPT_URL} target="_blank" rel="noopener noreferrer">
+              TypeScript
+            </a>
+            . Thanks to all of their authors and contributors.
+          </dd>
+        </div>
+        <div className="wb-about__fact">
+          <dt>Trademarks</dt>
+          <dd>
+            DE1-SoC is a product of Terasic Technologies. HDLBoard is an
+            independent teaching tool, not affiliated with or endorsed by
+            Terasic.
           </dd>
         </div>
       </dl>

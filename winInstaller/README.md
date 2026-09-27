@@ -84,6 +84,8 @@ winInstaller/
 ├─ README.md                 this file
 ├─ build.ps1                 the whole build flow
 ├─ fetch-ghdl.ps1            pinned, checksum-verified GHDL download
+├─ fetch-iverilog.ps1        pinned, checksum-verified Icarus Verilog tree (MSYS2 packages)
+├─ verify-iverilog.ps1       smoke test of that tree; build.ps1 fails if it fails
 ├─ make-assets.cjs           renders icon.ico + installerSidebar.bmp (run by Electron)
 ├─ electron/
 │  ├─ package.json           electron + electron-builder + esbuild
@@ -166,3 +168,16 @@ electron-builder picks them up with no config change.
   through the FIFO, and the VHDL generated for POSIX is byte-identical to
   before the stdin change. A full `./scripts/start.sh` + browser run on a Linux
   machine has not been repeated — do that before trusting a release.
+
+## Icarus Verilog (Verilog designs)
+
+The build also bundles **Icarus Verilog 13.0** (GPL-2.0-or-later), assembled by
+`fetch-iverilog.ps1` from eight SHA-256-pinned MSYS2 ucrt64 packages into one flat
+directory (~8 MB) at `resources\iverilog`. The backend runs it as
+`iverilog -B<dir>` and `vvp -M<dir>` (backslash Windows paths), because the
+DLLs must sit beside `ivl.exe`. `build.ps1` runs `verify-iverilog.ps1` first: a clean
+`PATH`, a directory containing a space and an `�`, every fixture compiled, a batch
+run and a board run through the file protocol. A failing tree aborts the build.
+The licence page carries the Icarus section with the source URLs; the licence texts and
+`VERSION.txt` (exact packages and checksums) are installed under `resources\iverilog`.
+In development the backend finds Icarus through `IVERILOG_DIR`, `IVERILOG_EXE`/`VVP_EXE` or `PATH`.

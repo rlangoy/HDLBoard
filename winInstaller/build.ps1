@@ -28,6 +28,7 @@ $RepoRoot    = Split-Path $WinDir -Parent
 $ElectronDir = Join-Path $WinDir "electron"
 $ResDir      = Join-Path $ElectronDir "resources"
 $VendorGhdl  = Join-Path $WinDir "vendor\ghdl"
+$VendorIverilog = Join-Path $WinDir "vendor\iverilog"
 
 function Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 
@@ -54,6 +55,16 @@ if (-not (Test-Path (Join-Path $VendorGhdl "bin\ghdl.exe"))) {
   $v = & (Join-Path $VendorGhdl "bin\ghdl.exe") --version | Select-Object -First 1
   Write-Host "  $v"
 }
+
+# --- 0b. Icarus Verilog: vendored, then smoke-tested before anything is packaged
+Step "Checking vendored Icarus Verilog"
+if (-not (Test-Path (Join-Path $VendorIverilog "iverilog.exe"))) {
+  Write-Host "vendor/iverilog missing - running fetch-iverilog.ps1"
+  & (Join-Path $WinDir "fetch-iverilog.ps1")
+  if ($LASTEXITCODE -ne 0) { throw "fetch-iverilog.ps1 failed" }
+}
+& (Join-Path $WinDir "verify-iverilog.ps1") -TreeDir $VendorIverilog
+if ($LASTEXITCODE -ne 0) { throw "verify-iverilog.ps1 failed - the Icarus tree is not fit to ship" }
 
 # --- 1. Frontend ---------------------------------------------------------
 if (-not $SkipAppBuild) {
@@ -127,6 +138,13 @@ Copy-Item -Recurse $VendorGhdl (Join-Path $ResDir "ghdl")
 
 if (-not (Test-Path (Join-Path $ResDir "ghdl\COPYING"))) {
   throw "resources\ghdl\COPYING is missing - the license page references it, so the installer must not ship without it."
+}
+
+Write-Host "  iverilog/ (flat tree, run with -B/-M)"
+Copy-Item -Recurse $VendorIverilog (Join-Path $ResDir "iverilog")
+
+if (-not (Test-Path (Join-Path $ResDir "iverilog\COPYING"))) {
+  throw "resources\iverilog\COPYING is missing - the license page references it, so the installer must not ship without it."
 }
 
 # --- 6. Package ----------------------------------------------------------

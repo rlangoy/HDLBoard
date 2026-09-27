@@ -3,6 +3,7 @@
 
 import { useRef, useState, type DragEvent, type UIEvent } from 'react';
 import { cx } from '../board';
+import { ACCEPTED_FILES_TEXT } from './fileKinds';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
@@ -130,7 +131,7 @@ export function CodeEditor({
       {dragDepth > 0 && (
         <div className="wb-editor__drop-hint" aria-hidden="true">
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-          Drop .vhd / .vhdl files
+          Drop {ACCEPTED_FILES_TEXT} files
         </div>
       )}
       <div className="wb-editor__tabs" role="tablist">

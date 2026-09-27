@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Renders the installer's branding from src/Images/hdlboard_logo.svg:
+ * Renders the installer's branding from the two-tone HDLBoard logo (the same
+ * chip/pins + "H" split as src/Images/hdlboard_logo.svg, see LOGO_*_PATH):
  *
  *   electron/build/icon.ico            app + installer icon, 7 sizes
  *   electron/build/installerSidebar.bmp  NSIS welcome/finish panel, 164x314
@@ -25,14 +26,12 @@
  */
 
 const { app, BrowserWindow } = require('electron');
-const { readFileSync, writeFileSync, mkdirSync, rmSync, mkdtempSync } = require('node:fs');
-const { join, resolve } = require('node:path');
+const { writeFileSync, mkdirSync, rmSync, mkdtempSync } = require('node:fs');
+const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { pathToFileURL } = require('node:url');
 
 const here = __dirname;
-const repoRoot = resolve(here, '..');
-const svgPath = join(repoRoot, 'src', 'Images', 'hdlboard_logo.svg');
 const buildDir = join(here, 'electron', 'build');
 const icoPath = join(buildDir, 'icon.ico');
 const bmpPath = join(buildDir, 'installerSidebar.bmp');
@@ -52,6 +51,12 @@ const SIDEBAR_SCALE = 3;
 
 const BRAND_DARK = '#07506A'; // the logo's own circle colour
 const BRAND_LIGHT = '#0A6B8C';
+
+// App-icon tile: corner radius and the margin around the logo, as fractions
+// of the icon's edge. Enough margin that the pins clear the tile's rounded
+// corners; not so much that the chip shrinks to mush at 16 px.
+const ICON_RADIUS = 0.22;
+const ICON_INSET = 0.1;
 
 // The same two-tone split the header renders (src/components/workbench/
 // logo.tsx's HeaderLogo): the chip/pins silhouette solid, the "H" cut out
@@ -162,7 +167,6 @@ app.disableHardwareAcceleration();
 app.on('window-all-closed', () => {});
 
 app.whenReady().then(async () => {
-  const svg = readFileSync(svgPath, 'utf8').replace(/<\?xml[^?]*\?>/, '');
   mkdirSync(buildDir, { recursive: true });
 
   // --- icon.ico --------------------------------------------------------
@@ -176,11 +180,21 @@ app.whenReady().then(async () => {
     webPreferences: { offscreen: true },
   });
 
+  // The bare logo is black-on-transparent, which vanishes on a dark taskbar,
+  // and the white two-tone variant vanishes on a light one. Seating it on a
+  // brand-coloured tile makes the icon independent of whatever surface
+  // Windows draws it on.
+  const inset = Math.round(MASTER * ICON_INSET);
   const master = await render(
     iconWin,
     `<!doctype html><html><body style="margin:0;background:transparent">
-       <div style="width:${MASTER}px;height:${MASTER}px">${svg}</div>
-       <style>svg{width:${MASTER}px;height:${MASTER}px;display:block}</style>
+       <div style="
+         width:${MASTER}px;height:${MASTER}px;box-sizing:border-box;
+         padding:${inset}px;border-radius:${Math.round(MASTER * ICON_RADIUS)}px;
+         background:linear-gradient(160deg, ${BRAND_LIGHT} 0%, ${BRAND_DARK} 100%);">
+         ${TWO_TONE_LOGO_SVG}
+       </div>
+       <style>svg{width:100%;height:100%;display:block}</style>
      </body></html>`,
   );
 

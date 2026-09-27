@@ -11,6 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createBatchHandle, createRunHandle, type BatchHandle, type RunHandle } from './runtime.js';
 
 /**
  * Which GHDL to run. `'ghdl'` means "whatever is on PATH", which is what
@@ -27,78 +28,9 @@ export function setGhdlExe(path: string): void {
   ghdlExe = path;
 }
 
-/** The resolved executable — `session.ts` passes this to `runCmd`. */
+/** The resolved executable. */
 export function getGhdlExe(): string {
   return ghdlExe;
-}
-
-export interface CmdResult {
-  code: number;
-  out: string;
-  err: string;
-  timedOut: boolean;
-}
-
-/** A bounded command: used for `-a`/`-e`, which are expected to finish in seconds. */
-export function runCmd(
-  cmd: string,
-  args: string[],
-  cwd: string,
-  timeoutMs = 30_000,
-): Promise<CmdResult> {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd });
-    let out = '';
-    let err = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
-    child.on('error', (e) => {
-      clearTimeout(timer);
-      resolve({ code: -1, out, err: err + String(e), timedOut });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, out, err, timedOut });
-    });
-  });
-}
-
-export interface RunHandle {
-  kill(): void;
-  onExit(cb: (code: number | null, stderr: string) => void): void;
-  /**
-   * One call per complete line of the simulation's own stdout — the
-   * VHDL's `report`/`assert` output. This backend's own generated
-   * testbench (`tbTemplate.ts`) never writes to stdout (its result line
-   * goes to `output_file`, a real file, specifically so it can never be
-   * confused with this), so every line here is the student's own design.
-   */
-  onOutput(cb: (line: string) => void): void;
-  /**
-   * Writes `lines` newline-terminated lines into the process's stdin — the
-   * pacing grants when the testbench was generated with
-   * `pacingFromStdin` (Windows; see session.ts's `PACING`). A no-op once
-   * the process has gone.
-   */
-  grantPacing(lines: number): void;
-}
-
-/** Buffers arbitrary chunks and emits one callback per complete line. */
-function lineSplitter(cb: (line: string) => void): (chunk: Buffer | string) => void {
-  let buf = '';
-  return (chunk) => {
-    buf += chunk;
-    const lines = buf.split('\n');
-    buf = lines.pop() ?? '';
-    for (const line of lines) cb(line);
-  };
 }
 
 /**
@@ -139,54 +71,7 @@ export function startPersistentRun(
     { cwd },
   );
 
-  let stderr = '';
-  child.stderr.on('data', (d) => (stderr += d));
-  // stdin is only ever written for stdin pacing, but the stream exists
-  // either way, and a write to a process that has just exited (Stop/Reset
-  // race a pacing tick) surfaces as an `error` event — EPIPE on POSIX,
-  // EOF/EPERM on Windows. Unhandled, that is an uncaught exception in the
-  // backend, so it is swallowed: the exit itself is reported via `close`.
-  child.stdin.on('error', () => {});
-
-  const outputCbs: Array<(line: string) => void> = [];
-  const emitOutput = lineSplitter((line) => {
-    for (const cb of outputCbs) cb(line);
-  });
-  child.stdout.on('data', emitOutput);
-
-  const exitCbs: Array<(code: number | null, stderr: string) => void> = [];
-  child.on('close', (code) => {
-    for (const cb of exitCbs) cb(code, stderr);
-  });
-
-  return {
-    kill: () => {
-      child.stdout.removeAllListeners();
-      child.stderr.removeAllListeners();
-      // A process held by pacing (§ 5.13) is blocked in a FIFO read, which
-      // SIGTERM interrupts like any other syscall — no SIGCONT dance needed
-      // now that pacing no longer stops the process outright.
-      child.kill('SIGTERM');
-    },
-    onExit: (cb) => exitCbs.push(cb),
-    onOutput: (cb) => outputCbs.push(cb),
-    grantPacing: (lines) => {
-      if (lines > 0 && child.stdin.writable) child.stdin.write('\n'.repeat(lines));
-    },
-  };
-}
-
-export interface BatchResult {
-  /** `null` only if the process was killed (Stop, or the timeout below). */
-  code: number | null;
-  timedOut: boolean;
-  stderr: string;
-}
-
-export interface BatchHandle {
-  kill(): void;
-  /** Resolves once, when the process exits — on its own, or via `kill()`. */
-  done: Promise<BatchResult>;
+  return createRunHandle(child);
 }
 
 /**
@@ -206,31 +91,5 @@ export interface BatchHandle {
  */
 export function runBatch(cwd: string, entityName: string, onOutput: (line: string) => void, timeoutMs: number): BatchHandle {
   const child = spawn(ghdlExe, ['-r', '--std=08', entityName], { cwd });
-
-  let stderr = '';
-  let timedOut = false;
-  child.stderr.on('data', (d) => (stderr += d));
-  child.stdout.on('data', lineSplitter(onOutput));
-
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill('SIGKILL');
-  }, timeoutMs);
-
-  const done = new Promise<BatchResult>((resolve) => {
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code, timedOut, stderr });
-    });
-  });
-
-  return {
-    kill: () => {
-      clearTimeout(timer);
-      child.stdout.removeAllListeners();
-      child.stderr.removeAllListeners();
-      child.kill('SIGTERM');
-    },
-    done,
-  };
+  return createBatchHandle(child, onOutput, timeoutMs);
 }

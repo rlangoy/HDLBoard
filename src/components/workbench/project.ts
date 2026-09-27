@@ -5,7 +5,7 @@
 export const APP_NAME = 'HDLBoard';
 
 /** The one-liner that follows the name — title bar, README, installer. */
-export const APP_TAGLINE = 'Write VHDL and watch it run';
+export const APP_TAGLINE = 'Write VHDL or Verilog and watch it run';
 
 /** Where the project lives — shown in the dialogs, opened in the user's browser. */
 export const REPO_URL = 'https://github.com/rlangoy/HDLBoard';
@@ -13,8 +13,16 @@ export const REPO_URL = 'https://github.com/rlangoy/HDLBoard';
 /** Where suggestions and bug reports go. */
 export const ISSUES_URL = `${REPO_URL}/issues`;
 
-/** GHDL, the simulation engine — credited in the About dialog. */
+/** GHDL and Icarus Verilog, the simulation engines — credited in the About dialog. */
 export const GHDL_URL = 'https://github.com/ghdl/ghdl';
+export const ICARUS_URL = 'https://github.com/steveicarus/iverilog';
+
+/** Other components HDLBoard is built with — credited in the About dialog and the README. */
+export const REACT_URL = 'https://react.dev/';
+export const WS_URL = 'https://github.com/websockets/ws';
+export const ELECTRON_URL = 'https://www.electronjs.org/';
+export const VITE_URL = 'https://vite.dev/';
+export const TYPESCRIPT_URL = 'https://www.typescriptlang.org/';
 
 /**
  * Dispatched on `window` to open the About dialog from outside React. The

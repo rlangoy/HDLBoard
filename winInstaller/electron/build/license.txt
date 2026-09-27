@@ -54,6 +54,48 @@ GHDL
   installed at resources\ghdl\lib\ghdl\src\ieee2008\LICENSE.
 
 
+Icarus Verilog
+--------------
+
+  Version:    13.0 (MSYS2 ucrt64 build for Windows x86-64)
+  Copyright:  (C) 2000-2026 Stephen Williams and the Icarus Verilog contributors
+  License:    GNU General Public License, version 2 or (at your option) any
+              later version
+  Source:     https://github.com/steveicarus/iverilog (tag v13_0)
+
+  Icarus Verilog is the Verilog compiler and simulator that runs designs
+  written in Verilog. HDLBoard starts it (iverilog and vvp) as separate
+  programs; it is not linked into HDLBoard's own code.
+
+  The complete corresponding source for these binaries is published by
+  the MSYS2 project, which built them:
+
+      https://repo.msys2.org/mingw/sources/mingw-w64-iverilog-1~13.0-2.src.tar.zst
+      https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-iverilog
+
+  The runtime libraries that come with it keep their own licenses: GNU
+  Readline (GPL-3.0-or-later, linked into vvp), zlib, bzip2, termcap, the
+  winpthreads library, and the GCC runtime libraries (GPL-3.0-or-later with
+  the GCC Runtime Library Exception). Their sources are in the same MSYS2
+  source repository, and their license texts are installed in:
+
+      <installation directory>esources\iverilog\COPYING
+      <installation directory>esources\iverilog\licenses
+  The exact packages, with their SHA-256 checksums, are recorded in:
+
+      <installation directory>esources\iverilog\VERSION.txt
+
+
+React and ws
+------------
+
+  The user interface is built with React and ReactDOM (MIT License,
+  Copyright (c) Meta Platforms, Inc. and affiliates), https://react.dev/.
+  The WebSocket link between the interface and the simulators uses ws
+  (MIT License, Copyright (c) Einar Otto Stangvik and contributors),
+  https://github.com/websockets/ws. Both are bundled into the application.
+
+
 Electron
 --------
 

@@ -117,6 +117,43 @@ if ! command -v ghdl >/dev/null 2>&1; then
   }
 fi
 
+# Icarus Verilog, for Verilog designs. Unlike GHDL it is optional: without it
+# VHDL runs exactly as before and a Verilog run reports that the simulator is
+# missing, so a missing or declined install warns instead of stopping.
+if ! command -v iverilog >/dev/null 2>&1 || ! command -v vvp >/dev/null 2>&1; then
+  if [ "${HDLBOARD_SKIP_INSTALL:-0}" = "1" ]; then
+    echo "iverilog not found on PATH — Verilog designs won't run (see docs/BUILDING.md)." >&2
+  else
+    if command -v apt-get >/dev/null 2>&1;   then iverilog_install=(apt-get install -y iverilog)
+    elif command -v dnf >/dev/null 2>&1;     then iverilog_install=(dnf install -y iverilog)
+    elif command -v pacman >/dev/null 2>&1;  then iverilog_install=(pacman -S --noconfirm iverilog)
+    elif command -v zypper >/dev/null 2>&1;  then iverilog_install=(zypper install -y iverilog)
+    elif command -v apk >/dev/null 2>&1;     then iverilog_install=(apk add iverilog)
+    elif command -v brew >/dev/null 2>&1;    then iverilog_install=(brew install icarus-verilog)
+    else iverilog_install=()
+    fi
+
+    if [ "${#iverilog_install[@]}" -eq 0 ]; then
+      echo "iverilog not found and no known package manager — Verilog designs won't run (docs/BUILDING.md)." >&2
+    else
+      if [ "${iverilog_install[0]}" != "brew" ] && [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then iverilog_install=(sudo "${iverilog_install[@]}"); else iverilog_install=(); fi
+      fi
+      if [ "${#iverilog_install[@]}" -eq 0 ]; then
+        echo "iverilog not found, and neither root nor sudo is available — Verilog designs won't run." >&2
+      else
+        echo "iverilog not found on PATH. It can be installed with:"
+        echo "    ${iverilog_install[*]}"
+        if confirm "Install Icarus Verilog now?"; then
+          "${iverilog_install[@]}" || echo "Installing iverilog failed — Verilog designs won't run (docs/BUILDING.md)." >&2
+        else
+          echo "Skipped — Verilog designs won't run until iverilog is installed." >&2
+        fi
+      fi
+    fi
+  fi
+fi
+
 # npm dependencies for both projects. node_modules' mtime moves on every
 # install, so a manifest newer than it means the lockfile changed (a `git
 # pull`, typically) and the tree needs refreshing.

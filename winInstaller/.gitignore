@@ -1,4 +1,4 @@
-# Populated by fetch-ghdl.ps1 — a 55 MB third-party binary tree, never committed.
+# Populated by fetch-ghdl.ps1 and fetch-iverilog.ps1 (third-party binary trees, ~55 MB and ~8 MB) and the download cache — never committed.
 vendor/
 
 # Populated by build.ps1 from the two projects' build output — never hand-edited.

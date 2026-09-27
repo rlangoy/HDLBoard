@@ -198,7 +198,7 @@ UI/
          ├─ FileExplorer.tsx / .css   the Files panel + tree
          ├─ CodeEditor.tsx / .css    tabs + a highlighted textarea overlay
          ├─ SimulationCard.tsx / .css  Start/Stop + status, in the sidebar
-         ├─ ConsoleOutput.tsx / .css the GHDL Output/Status log
+         ├─ ConsoleOutput.tsx / .css the simulator Output/Status log
          ├─ vhdlHighlight.ts    line-based VHDL tokenizer for the editor
          ├─ files.ts            the three-file starter project shown in the tree
          ├─ icons.tsx           edit/delete — real SVG, the one exception

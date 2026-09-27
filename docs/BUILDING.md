@@ -9,6 +9,7 @@ needs none of this.
 | Tool | Purpose | Minimum |
 |---|---|---|
 | [GHDL](https://ghdl.github.io/ghdl/) | Compiles and simulates the VHDL | Anything supporting `--std=08` and `-g<name>=<value>` (verified against 5.0.1, mcode) |
+| [Icarus Verilog](https://steveicarus.github.io/iverilog/) | Compiles and simulates Verilog designs (optional: VHDL works without it) | 12.0 or newer (verified against 12.0 and 13.0; `iverilog` and `vvp` on `PATH`) |
 | [Node.js](https://nodejs.org/) + npm | Frontend build and the backend | Node 18+ (20+ recommended) |
 
 Nothing else, and no external services: the backend runs on your machine or
@@ -25,6 +26,7 @@ your platform and check it with `ghdl --version`:
 | Ubuntu / Debian | `sudo apt install ghdl` |
 | Fedora | `sudo dnf install ghdl` |
 | macOS | `brew install ghdl` |
+| Icarus Verilog (optional) | `sudo apt install iverilog` · `sudo dnf install iverilog` · `brew install icarus-verilog` · `apk add iverilog` |
 | Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu (recommended — `scripts/start.sh`/`scripts/stop.sh` assume POSIX), or a native build from the [GHDL releases](https://github.com/ghdl/ghdl/releases) |
 
 ## Install and run
@@ -39,6 +41,8 @@ Before starting anything, `start.sh` makes sure the prerequisites are there:
 - **GHDL** — if it isn't on `PATH`, the script prints the install command for
   your package manager (`apt-get`, `dnf`, `pacman`, `zypper`, `apk` or `brew`,
   with `sudo` where needed) and asks before running it.
+- **Icarus Verilog** — for Verilog designs; the same package-manager ladder, but a
+  missing or declined install only warns, since VHDL runs without it.
 - **npm dependencies** — runs `npm install` in the repository root and in
   `server/` when `node_modules` is missing, or when a `package.json` /
   `package-lock.json` is newer than it, which is what a `git pull` leaves

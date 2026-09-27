@@ -13,7 +13,7 @@ directories:
   buildResources: build
 
 # Only the shell itself goes into app.asar. The backend, the frontend and
-# GHDL are extraResources instead — see below.
+# GHDL and Icarus are extraResources instead — see below.
 files:
   - main.js
   - package.json
@@ -29,6 +29,9 @@ extraResources:
     to: backend.mjs
   - from: resources/ghdl
     to: ghdl
+  # Icarus Verilog: one flat directory, run with -B/-M (plan 5.8).
+  - from: resources/iverilog
+    to: iverilog
 
 # HDLBoard's own GPL-2.0 text, installed so license.txt's reference
 # to it is true.

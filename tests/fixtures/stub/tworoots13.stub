@@ -1,0 +1,29 @@
+root module = alpha
+scope: alpha (0 parameters, 2 signals, 1 logic) module alpha time units = 1e0
+ time precision = 1e0
+  tri unsigned input logic a[word=0, adr=0]  <width=1> <discipline=NONE> nexus=000001db302ceb98
+      SIG alpha.a word=0 (HiZ0, HiZ1)
+      LOG alpha._ivl_1[1] (HiZ0, HiZ1)
+  tri unsigned output logic y[word=0, adr=0]  <width=1> <discipline=NONE> nexus=000001db302cebc8
+      SIG alpha.y word=0 (HiZ0, HiZ1)
+      LOG alpha._ivl_1[0] (strong0, strong1)
+  not _ivl_1 <width=1>
+    <Delays...>
+    0: 000001db302cebc8 <drive0/1 = 6/6>
+    1: 000001db302ceb98
+end scope alpha
+root module = beta
+scope: beta (0 parameters, 2 signals, 1 logic) module beta time units = 1e0
+ time precision = 1e0
+  tri unsigned input logic[3:0] b[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000001db302cec58
+      SIG beta.b word=0 (HiZ0, HiZ1)
+      LOG beta._ivl_0[1] (HiZ0, HiZ1)
+  tri unsigned output logic[3:0] z[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000001db302cec88
+      SIG beta.z word=0 (HiZ0, HiZ1)
+      LOG beta._ivl_0[0] (strong0, strong1)
+  bufz _ivl_0 <width=4>
+    <Delays...>
+    0: 000001db302cec88 <drive0/1 = 6/6>
+    1: 000001db302cec58
+end scope beta
+# There are 0 constants detected

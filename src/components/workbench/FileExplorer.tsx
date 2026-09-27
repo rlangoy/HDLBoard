@@ -3,6 +3,7 @@
 
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
+import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import type { VhdlFile } from './files';
 import { DeleteIcon, EditIcon, FilesIcon } from './icons';
 import './FileExplorer.css';
@@ -17,18 +18,18 @@ export interface FileExplorerProps {
   onDelete: (id: string) => void;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList) => void;
-  /** The `vhdl/` file GHDL elaborates as top-level — a blue dot, vs. every other `vhdl/` file's gray circle. */
+  /** The design file a run starts from — a blue dot, vs. every other design file's gray circle. Its folder picks the simulator. */
   topFileId: string | null;
   onSetTopFile: (id: string) => void;
 }
 
-const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'work'];
+const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
 
 /**
  * The "Files" panel: upload / new-file actions above the folder tree —
- * `vhdl/` for the design and `work/` for an uploaded `tb_*` testbench.
- * A folder with no files is not drawn, so the starter project shows only
- * `vhdl/`.
+ * `vhdl/` and `verilog/` for designs and `work/` for an uploaded VHDL `tb_*`
+ * testbench. A folder with no files is not drawn, so the starter project
+ * shows only `vhdl/`.
  */
 export function FileExplorer({
   files,
@@ -117,7 +118,7 @@ export function FileExplorer({
       {dragDepth > 0 && (
         <div className="wb-files__drop-hint" aria-hidden="true">
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-          Drop .vhd / .vhdl files
+          Drop {ACCEPTED_FILES_TEXT} files
         </div>
       )}
       <div className="wb-files__header">
@@ -128,7 +129,7 @@ export function FileExplorer({
       <div className="wb-files__actions">
         <button type="button" className="wb-files__upload" onClick={onUpload}>
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-          <span className="wb-files__label-text">Upload VHDL File</span>
+          <span className="wb-files__label-text">Upload File</span>
         </button>
         <button type="button" className="wb-files__new" onClick={onNewFile}>
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
@@ -160,7 +161,7 @@ export function FileExplorer({
                       <div
                         className={cx('wb-files__row', f.id === activeFileId && 'is-active')}
                       >
-                        {folder === 'vhdl' && (
+                        {hasTopDot(folder) && (
                           <button
                             type="button"
                             className={cx('wb-files__top-dot', f.id === topFileId && 'is-top')}
@@ -181,7 +182,7 @@ export function FileExplorer({
                           <span
                             className={cx(
                               'wb-files__file wb-files__file--editing',
-                              folder === 'vhdl' && 'wb-files__file--has-top-dot',
+                              hasTopDot(folder) && 'wb-files__file--has-top-dot',
                             )}
                           >
                             <span className="wb-icon wb-icon--file" aria-hidden="true" />
@@ -202,7 +203,7 @@ export function FileExplorer({
                             type="button"
                             role="treeitem"
                             aria-selected={f.id === activeFileId}
-                            className={cx('wb-files__file', folder === 'vhdl' && 'wb-files__file--has-top-dot')}
+                            className={cx('wb-files__file', hasTopDot(folder) && 'wb-files__file--has-top-dot')}
                             onClick={() => onSelect(f.id)}
                             onDoubleClick={() => startRename(f)}
                           >

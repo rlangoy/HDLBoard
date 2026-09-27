@@ -2,7 +2,7 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: built and verified, 2026-09-17.** This started as a work order —
+**Status: built and verified, 2026-09-17.** (Verilog designs run on a second engine behind the same session and protocol: see [Verilog_implementation_plan.md](Verilog_implementation_plan.md).) This started as a work order —
 written to be executed by someone (or some agent) who had not been part of
 the discussion that produced it, so every phase states the files to touch,
 the exact edit, and the acceptance test that proves the phase is done — and

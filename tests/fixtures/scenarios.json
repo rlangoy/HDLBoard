@@ -1,0 +1,56 @@
+{
+  "$comment": [
+    "Expected behaviour of the shared fixtures, in both languages. The single source of truth for the",
+    "integration, parity, browser and installation tests (docs/Verilog_implementation_plan.md, 7.3).",
+    "sw is SW9..SW0 and key is KEY3..KEY0, as the STIM protocol frame orders them; ledr is LEDR9..LEDR0.",
+    "hex \"blank\" means all six 7-segment displays are 1111111 (off, active low).",
+    "withinMs is the window, in real milliseconds after the previous step, in which the state must appear."
+  ],
+  "version": 1,
+  "fixtures": [
+    {
+      "id": "de1_soc",
+      "mode": "board",
+      "top": "DE1_SoC",
+      "files": { "vhdl": "DE1_SoC.vhdl", "verilog": "DE1_SoC.v" },
+      "steps": [
+        { "name": "starts with all LEDs off and blank displays", "expect": { "ledr": "0000000000", "hex": "blank" } },
+        { "name": "LEDR follows SW", "sw": "1010101010", "key": "1111", "expect": { "ledr": "1010101010", "hex": "blank" } },
+        { "name": "all switches off turns all LEDs off", "sw": "0000000000", "key": "1111", "expect": { "ledr": "0000000000" } }
+      ]
+    },
+    {
+      "id": "key_counter",
+      "mode": "board",
+      "top": "counter8",
+      "files": { "vhdl": "keyCouter2Led.vhdl", "verilog": "keyCouter2Led.v" },
+      "steps": [
+        { "name": "starts at zero", "expect": { "ledr": "0000000000" } },
+        { "name": "pressing KEY0 counts up", "sw": "0000000000", "key": "1110", "expect": { "ledr": "0000000001" } },
+        { "name": "releasing KEY0 keeps the count", "sw": "0000000000", "key": "1111", "expect": { "ledr": "0000000001" } },
+        { "name": "pressing KEY0 again counts up", "sw": "0000000000", "key": "1110", "expect": { "ledr": "0000000010" } },
+        { "name": "releasing KEY0 keeps the count", "sw": "0000000000", "key": "1111", "expect": { "ledr": "0000000010" } },
+        { "name": "pressing KEY1 resets", "sw": "0000000000", "key": "1101", "expect": { "ledr": "0000000000" } }
+      ]
+    },
+    {
+      "id": "blink",
+      "mode": "board",
+      "top": "blinkTest",
+      "files": { "vhdl": "blinkTest.vhdl", "verilog": "blinkTest.v" },
+      "steps": [
+        { "name": "LEDs turn on after about 250 ms", "expect": { "ledr": "1111111111" }, "withinMs": [150, 400] },
+        { "name": "LEDs turn off about 250 ms later", "expect": { "ledr": "0000000000" }, "withinMs": [150, 400] },
+        { "name": "displays stay blank", "expect": { "hex": "blank" } }
+      ]
+    },
+    {
+      "id": "tb_counter8",
+      "mode": "batch",
+      "top": "tb_counter8",
+      "files": { "verilog": "tb_counter8.v" },
+      "companions": { "verilog": ["keyCouter2Led.v"] },
+      "expectOutput": ["count after 3 presses = 3", "count after reset     = 0", "PASS"]
+    }
+  ]
+}

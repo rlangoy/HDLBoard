@@ -1,0 +1,184 @@
+root module = top_ifdef
+scope: top_ifdef (2 parameters, 5 signals, 0 logic) module top_ifdef time units = 1e0
+ time precision = 1e0
+   parameter K;
+       <number=8'b11111111, signed sized bool, parameter=K>
+   parameter N;
+       <number=32'b00000000000000000000000000001010, signed sized bool, parameter=N>
+  tri unsigned input logic CLOCK_50[word=0, adr=0]  <width=1> <discipline=NONE> nexus=000002378c7e2208
+      SIG top_ifdef.CLOCK_50 word=0 (HiZ0, HiZ1)
+  tri unsigned input logic[3:0] KEY_N[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000002378c7e2148
+      SIG top_ifdef.h.a word=0 (HiZ0, HiZ1)
+      SIG top_ifdef.KEY_N word=0 (HiZ0, HiZ1)
+      LOG top_ifdef.h._ivl_1[1] (HiZ0, HiZ1)
+  tri unsigned output logic[9:0] LEDR[word=0, adr=0]  <width=10> <discipline=NONE> nexus=000002378c7e2238
+      SIG top_ifdef.LEDR word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_29 (strong0, strong1)
+    keep = 1
+  tri unsigned input logic[9:0] SW[word=0, adr=0]  <width=10> <discipline=NONE> nexus=000002378c7e2268
+      SIG top_ifdef.SW word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_2 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_5 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_8 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_11 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_14 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_17 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_20 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_23 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_26 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_30 (HiZ0, HiZ1)
+  tri unsigned logic[3:0] unused[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000002378c7e2178
+      SIG top_ifdef.h.b word=0 (HiZ0, HiZ1)
+      SIG top_ifdef.unused word=0 (HiZ0, HiZ1)
+      LOG top_ifdef.h._ivl_1[0] (strong0, strong1)
+  LPM_PART_VP _ivl_2: <width=1, base=0, signed=0>
+    O: 000002378c7e1f68
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_5: <width=1, base=1, signed=0>
+    O: 000002378c7e1f98
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_8: <width=1, base=2, signed=0>
+    O: 000002378c7e1fc8
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_11: <width=1, base=3, signed=0>
+    O: 000002378c7e1ff8
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_14: <width=1, base=4, signed=0>
+    O: 000002378c7e2028
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_17: <width=1, base=5, signed=0>
+    O: 000002378c7e2058
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_20: <width=1, base=6, signed=0>
+    O: 000002378c7e2088
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_23: <width=1, base=7, signed=0>
+    O: 000002378c7e20b8
+    I: 000002378c7e2268
+  LPM_PART_VP _ivl_26: <width=1, base=8, signed=0>
+    O: 000002378c7e20e8
+    I: 000002378c7e2268
+  LPM_CONCATZ _ivl_29: <width=10, inputs=10>
+    O: 000002378c7e2238
+    I0: 000002378c7e1f68 (width=1)
+    I1: 000002378c7e1f98 (width=1)
+    I2: 000002378c7e1fc8 (width=1)
+    I3: 000002378c7e1ff8 (width=1)
+    I4: 000002378c7e2028 (width=1)
+    I5: 000002378c7e2058 (width=1)
+    I6: 000002378c7e2088 (width=1)
+    I7: 000002378c7e20b8 (width=1)
+    I8: 000002378c7e20e8 (width=1)
+    I9: 000002378c7e2118 (width=1)
+  LPM_PART_VP _ivl_30: <width=1, base=9, signed=0>
+    O: 000002378c7e2118
+    I: 000002378c7e2268
+end scope top_ifdef
+scope: top_ifdef.g[0] (1 parameters, 1 signals, 0 logic) type(5) g[0] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=2'b00, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e1f68
+      SIG top_ifdef.g[0]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_2 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[0]
+scope: top_ifdef.g[1] (1 parameters, 1 signals, 0 logic) type(5) g[1] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=2'b01, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e1f98
+      SIG top_ifdef.g[1]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_5 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[1]
+scope: top_ifdef.g[2] (1 parameters, 1 signals, 0 logic) type(5) g[2] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=3'b010, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e1fc8
+      SIG top_ifdef.g[2]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_8 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[2]
+scope: top_ifdef.g[3] (1 parameters, 1 signals, 0 logic) type(5) g[3] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=3'b011, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e1ff8
+      SIG top_ifdef.g[3]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_11 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[3]
+scope: top_ifdef.g[4] (1 parameters, 1 signals, 0 logic) type(5) g[4] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=4'b0100, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e2028
+      SIG top_ifdef.g[4]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_14 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[4]
+scope: top_ifdef.g[5] (1 parameters, 1 signals, 0 logic) type(5) g[5] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=4'b0101, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e2058
+      SIG top_ifdef.g[5]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_17 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[5]
+scope: top_ifdef.g[6] (1 parameters, 1 signals, 0 logic) type(5) g[6] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=4'b0110, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e2088
+      SIG top_ifdef.g[6]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_20 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[6]
+scope: top_ifdef.g[7] (1 parameters, 1 signals, 0 logic) type(5) g[7] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=4'b0111, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e20b8
+      SIG top_ifdef.g[7]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_23 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[7]
+scope: top_ifdef.g[8] (1 parameters, 1 signals, 0 logic) type(5) g[8] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=5'b01000, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e20e8
+      SIG top_ifdef.g[8]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_26 (strong0, strong1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+end scope top_ifdef.g[8]
+scope: top_ifdef.g[9] (1 parameters, 1 signals, 0 logic) type(5) g[9] time units = 1e0
+ time precision = 1e0
+   parameter i;
+       <number=5'b01001, signed unsized bool, parameter=i>
+  tri unsigned logic[0:0] _ivl_0[word=0, adr=0]  <width=1, local> <discipline=NONE> nexus=000002378c7e2118
+      SIG top_ifdef.g[9]._ivl_0 word=0 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_29 (HiZ0, HiZ1)
+      LPM top_ifdef._ivl_30 (strong0, strong1)
+end scope top_ifdef.g[9]
+scope: top_ifdef.h (1 parameters, 2 signals, 1 logic) module helper time units = 1e0
+ time precision = 1e0
+   parameter W;
+       <number=32'b00000000000000000000000000000100, signed sized bool, parameter=W>
+  tri unsigned input logic[3:0] a[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000002378c7e2148
+      SIG top_ifdef.h.a word=0 (HiZ0, HiZ1)
+      SIG top_ifdef.KEY_N word=0 (HiZ0, HiZ1)
+      LOG top_ifdef.h._ivl_1[1] (HiZ0, HiZ1)
+  tri unsigned output logic[3:0] b[word=0, adr=0]  <width=4> <discipline=NONE> nexus=000002378c7e2178
+      SIG top_ifdef.h.b word=0 (HiZ0, HiZ1)
+      SIG top_ifdef.unused word=0 (HiZ0, HiZ1)
+      LOG top_ifdef.h._ivl_1[0] (strong0, strong1)
+  not _ivl_1 <width=4>
+    <Delays...>
+    0: 000002378c7e2178 <drive0/1 = 6/6>
+    1: 000002378c7e2148
+end scope top_ifdef.h
+# There are 0 constants detected

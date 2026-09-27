@@ -1,0 +1,205 @@
+root module = tb_counter8
+scope: tb_counter8 (0 parameters, 3 signals, 0 logic) module tb_counter8 time units = 1e0
+ time precision = 1e0
+  reg unsigned logic CLOCK_50[word=0, adr=0]  <width=1> <discipline=NONE> nexus=00000164a4d63f48
+      SIG tb_counter8.dut.CLOCK_50 word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.CLOCK_50 word=0 (strong0, strong1)
+  reg unsigned logic[3:0] KEY_N[word=0, adr=0]  <width=4> <discipline=NONE> nexus=00000164a4d63f78
+      SIG tb_counter8.dut.KEY_N word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.KEY_N word=0 (strong0, strong1)
+      LPM tb_counter8.dut._ivl_10 (HiZ0, HiZ1)
+  tri unsigned logic[9:0] LEDR[word=0, adr=0]  <width=10> <discipline=NONE> nexus=00000164a4d63fa8
+      SIG tb_counter8.dut.LEDR word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.LEDR word=0 (HiZ0, HiZ1)
+      LPM tb_counter8.dut._ivl_6 (strong0, strong1)
+end scope tb_counter8
+scope: tb_counter8.dut (0 parameters, 8 signals, 1 logic) module counter8 time units = 1e0
+ time precision = 1e0
+  tri unsigned input logic CLOCK_50[word=0, adr=0]  <width=1> <discipline=NONE> nexus=00000164a4d63f48
+      SIG tb_counter8.dut.CLOCK_50 word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.CLOCK_50 word=0 (strong0, strong1)
+  tri unsigned input logic[3:0] KEY_N[word=0, adr=0]  <width=4> <discipline=NONE> nexus=00000164a4d63f78
+      SIG tb_counter8.dut.KEY_N word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.KEY_N word=0 (strong0, strong1)
+      LPM tb_counter8.dut._ivl_10 (HiZ0, HiZ1)
+  tri unsigned output logic[9:0] LEDR[word=0, adr=0]  <width=10> <discipline=NONE> nexus=00000164a4d63fa8
+      SIG tb_counter8.dut.LEDR word=0 (HiZ0, HiZ1)
+      SIG tb_counter8.LEDR word=0 (HiZ0, HiZ1)
+      LPM tb_counter8.dut._ivl_6 (strong0, strong1)
+  tri unsigned logic[1:0] _ivl_11[word=0, adr=0]  <width=2, local> <discipline=NONE> nexus=00000164a4d63fd8
+      SIG tb_counter8.dut._ivl_11 word=0 (HiZ0, HiZ1)
+      LPM tb_counter8.dut._ivl_10 (strong0, strong1)
+  tri unsigned logic[7:0] _ivl_3[word=0, adr=0]  <width=8, local> <discipline=NONE> nexus=00000164a4d64008
+      SIG tb_counter8.dut._ivl_3 word=0 (HiZ0, HiZ1)
+      LOG tb_counter8.dut._ivl_2[0] (strong0, strong1)
+      LPM tb_counter8.dut._ivl_6 (HiZ0, HiZ1)
+  tri unsigned bool[1:0] _ivl_7[word=0, adr=0]  <width=2, local> <discipline=NONE> nexus=00000164a4d64038
+      SIG tb_counter8.dut._ivl_7 word=0 (HiZ0, HiZ1)
+      LPM tb_counter8.dut._ivl_6 (HiZ0, HiZ1)
+      const-00 (strong0, strong1, width=2)
+  reg unsigned logic[7:0] count[word=0, adr=0]  <width=8> <discipline=NONE> nexus=00000164a4d64068
+      SIG tb_counter8.dut.count word=0 (strong0, strong1)
+      LOG tb_counter8.dut._ivl_2[1] (HiZ0, HiZ1)
+  reg unsigned logic[1:0] key_prev[word=0, adr=0]  <width=2> <discipline=NONE> nexus=00000164a4d64098
+      SIG tb_counter8.dut.key_prev word=0 (strong0, strong1)
+  event _ivl_9 (0 pos, 0 neg, 1 any);
+      ANYEDGE: 00000164a4d63fd8
+  bufz _ivl_2 <width=8>
+    <Delays...>
+    0: 00000164a4d64008 <drive0/1 = 6/6>
+    1: 00000164a4d64068
+  LPM_CONCATZ _ivl_6: <width=10, inputs=2>
+    O: 00000164a4d63fa8
+    I0: 00000164a4d64008 (width=8)
+    I1: 00000164a4d64038 (width=2)
+  LPM_PART_VP _ivl_10: <width=2, base=0, signed=0>
+    O: 00000164a4d63fd8
+    I: 00000164a4d63f78
+end scope tb_counter8.dut
+scope: tb_counter8.press (0 parameters, 1 signals, 0 logic) task press time units = 1e0
+ time precision = 1e0
+  integer signed input logic[31:0] key[word=0, adr=0]  <width=32> <discipline=NONE> nexus=00000164a4d64158
+      SIG tb_counter8.press.key word=0 (strong0, strong1)
+  scope function/task definition
+      begin
+          ASSIGN <lwidth=1> opcode= 
+              {name=tb_counter8.KEY_N signal width=4 l-value width=1}
+                  Part select base:
+                      <signal=key, words=1, width=32, signed type=logic (logic)>
+              <number=1'b0, unsigned sized bool>
+            Total l-value width is 1
+          #100
+            /* noop */;
+          ASSIGN <lwidth=1> opcode= 
+              {name=tb_counter8.KEY_N signal width=4 l-value width=1}
+                  Part select base:
+                      <signal=key, words=1, width=32, signed type=logic (logic)>
+              <number=1'b1, unsigned sized bool>
+            Total l-value width is 1
+          #100
+            /* noop */;
+      end
+end scope tb_counter8.press
+# There are 1 constants detected
+constant 00 at ..\verilog\keyCouter2Led.v:20
+initial
+    begin
+        ASSIGN <lwidth=8> opcode= 
+            {name=tb_counter8.dut.count signal width=8 l-value width=8}
+            <number=8'b00000000, unsigned sized bool>
+          Total l-value width is 8
+        ASSIGN <lwidth=2> opcode= 
+            {name=tb_counter8.dut.key_prev signal width=2 l-value width=2}
+            <number=2'b11, unsigned sized bool>
+          Total l-value width is 2
+    end
+always
+    (* _ivl_schedule_push = 1 *)
+    @(tb_counter8.dut._ivl_9)
+        begin
+            if (...)
+                <"a" width=1, unsigned, type=logic>
+                   <select: width=1, unsigned, type=logic>
+                      <signal=key_prev, words=1, width=2, unsigned type=logic (logic)>
+                      <number=2'b01, signed unsized bool>
+                   <unary "!" width=1, unsigned, type=logic>
+                       <select: width=1, unsigned, type=logic>
+                          <signal=KEY_N, words=1, width=4, unsigned type=logic (logic)>
+                          <number=2'b01, signed unsized bool>
+                ASSIGN_NB <lwidth=8>
+                    {name=tb_counter8.dut.count signal width=8 l-value width=8}
+                    <number=8'b00000000, unsigned sized bool>
+            else
+                if (...)
+                    <"a" width=1, unsigned, type=logic>
+                       <select: width=1, unsigned, type=logic>
+                          <signal=key_prev, words=1, width=2, unsigned type=logic (logic)>
+                          <number=2'b00, signed unsized bool>
+                       <unary "!" width=1, unsigned, type=logic>
+                           <select: width=1, unsigned, type=logic>
+                              <signal=KEY_N, words=1, width=4, unsigned type=logic (logic)>
+                              <number=2'b00, signed unsized bool>
+                    ASSIGN_NB <lwidth=8>
+                        {name=tb_counter8.dut.count signal width=8 l-value width=8}
+                        <"+" width=8, unsigned, type=logic>
+                           <signal=count, words=1, width=8, unsigned type=logic (logic)>
+                           <number=8'b00000001, unsigned sized bool>
+            ASSIGN_NB <lwidth=2>
+                {name=tb_counter8.dut.key_prev signal width=2 l-value width=2}
+                <select: width=2, unsigned, type=logic>
+                   <signal=KEY_N, words=1, width=4, unsigned type=logic (logic)>
+                   <number=2'b00, signed unsized bool>
+        end
+initial
+    begin
+        ASSIGN <lwidth=1> opcode= 
+            {name=tb_counter8.CLOCK_50 signal width=1 l-value width=1}
+            <number=1'b0, unsigned sized bool>
+          Total l-value width is 1
+        ASSIGN <lwidth=4> opcode= 
+            {name=tb_counter8.KEY_N signal width=4 l-value width=4}
+            <number=4'b1111, unsigned sized bool>
+          Total l-value width is 4
+    end
+always
+    #10
+      ASSIGN <lwidth=1> opcode= 
+          {name=tb_counter8.CLOCK_50 signal width=1 l-value width=1}
+          <unary "~" width=1, unsigned, type=logic>
+              <signal=CLOCK_50, words=1, width=1, unsigned type=logic (logic)>
+        Total l-value width is 1
+initial
+    begin
+        #100
+          /* noop */;
+        begin
+            ASSIGN <lwidth=32> opcode= 
+                {name=tb_counter8.press.key signal width=32 l-value width=32}
+                <number=32'b00000000000000000000000000000000, signed sized bool>
+              Total l-value width is 32
+            call task ...
+        end
+        begin
+            ASSIGN <lwidth=32> opcode= 
+                {name=tb_counter8.press.key signal width=32 l-value width=32}
+                <number=32'b00000000000000000000000000000000, signed sized bool>
+              Total l-value width is 32
+            call task ...
+        end
+        begin
+            ASSIGN <lwidth=32> opcode= 
+                {name=tb_counter8.press.key signal width=32 l-value width=32}
+                <number=32'b00000000000000000000000000000000, signed sized bool>
+              Total l-value width is 32
+            call task ...
+        end
+        Call $display(2 parameters); /* ..\verilog\tb_counter8.v:25 */
+            <string="count after 3 presses = %0d", width=216, type=bool>
+            <select: width=8, unsigned, type=logic>
+               <signal=LEDR, words=1, width=10, unsigned type=logic (logic)>
+               <number=2'b00, signed unsized bool>
+        begin
+            ASSIGN <lwidth=32> opcode= 
+                {name=tb_counter8.press.key signal width=32 l-value width=32}
+                <number=32'b00000000000000000000000000000001, signed sized bool>
+              Total l-value width is 32
+            call task ...
+        end
+        Call $display(2 parameters); /* ..\verilog\tb_counter8.v:27 */
+            <string="count after reset     = %0d", width=216, type=bool>
+            <select: width=8, unsigned, type=logic>
+               <signal=LEDR, words=1, width=10, unsigned type=logic (logic)>
+               <number=2'b00, signed unsized bool>
+        if (...)
+            <"E" width=1, unsigned, type=bool>
+               <select: width=8, unsigned, type=logic>
+                  <signal=LEDR, words=1, width=10, unsigned type=logic (logic)>
+                  <number=2'b00, signed unsized bool>
+               <number=8'b00000000, unsigned sized bool>
+            Call $display(1 parameters); /* ..\verilog\tb_counter8.v:28 */
+                <string="PASS", width=32, type=bool>
+        else
+            Call $display(1 parameters); /* ..\verilog\tb_counter8.v:29 */
+                <string="FAIL", width=32, type=bool>
+        Call $finish(0 parameters); /* ..\verilog\tb_counter8.v:30 */
+    end

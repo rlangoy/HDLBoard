@@ -18,7 +18,7 @@ export interface ConsoleOutputProps {
   onClear: () => void;
 }
 
-/** The bottom "GHDL Output / Status" panel — a scrolling, clearable log. */
+/** The bottom "Simulator Output / Status" panel — a scrolling, clearable log. */
 export function ConsoleOutput({ lines, onClear }: ConsoleOutputProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -27,9 +27,9 @@ export function ConsoleOutput({ lines, onClear }: ConsoleOutputProps) {
   }, [lines.length]);
 
   return (
-    <section className="wb-console" aria-label="GHDL output">
+    <section className="wb-console" aria-label="Simulator output">
       <div className="wb-console__header">
-        <h2 className="wb-console__title">GHDL Output / Status</h2>
+        <h2 className="wb-console__title">Simulator Output / Status</h2>
         <button type="button" className="wb-console__clear" onClick={onClear}>
           <DeleteIcon className="wb-console__clear-icon" aria-hidden="true" />
           Clear

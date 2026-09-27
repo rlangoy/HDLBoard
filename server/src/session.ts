@@ -14,46 +14,18 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getGhdlExe, runCmd, runBatch, startPersistentRun, type BatchHandle, type RunHandle } from './ghdl.js';
-import { findTopEntity } from './portDetect.js';
-import { generateTestbench } from './tbTemplate.js';
-import { STATE_LENGTH, type ServerFrame, type VhdlFileInput } from './protocol.js';
+import type { BatchHandle, RunHandle } from './runtime.js';
+import { createOutputLimiter, type OutputLimiter } from './outputLimiter.js';
+import { normaliseBoardBits } from './engines/boardBits.js';
+import { mismatchedFiles, mismatchMessage } from './engines/language.js';
+import { selectEngine } from './engines/selectEngine.js';
+import type { BoardFiles, RunPlan, SimEngine } from './engines/types.js';
+import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput } from './protocol.js';
 
-const TB_ENTITY = 'hdl_board_tb';
-/**
- * How often (simulated time) the generated testbench's `io` process
- * re-reads the input file and re-checks for output changes (§ 5.8). The
- * interval is in *simulated* time but what a student feels is *real*
- * time, and the exchange rate between the two differs by three orders of
- * magnitude depending on one thing: whether `clkgen` exists (§ 5.12).
- *
- * With `CLOCK_50` declared, a 20 ns-period clock dominates everything and
- * simulated time crawls — measured at ~0.0015x real — so a 1 ms interval
- * samples input only about every 685 ms of real time, which is both the
- * "reacts slowly" latency and, worse, slow enough to miss a button press
- * entirely. A finer interval is close to free there, because the clock,
- * not this process, is what costs: 1 ms/100 us/10 us/1 us all measured the
- * same simulated-time throughput.
- *
- * Without `CLOCK_50` the exchange rate inverts — simulated time runs at or
- * above real time (§ 5.9 paces it back down) — and the same 1 us interval
- * measured 0.15x real time, i.e. this process becomes the bottleneck all
- * over again (§ 5.8). Hence two values, chosen so that *real*-time
- * responsiveness lands in the same few-milliseconds range either way.
- */
-const POLL_INTERVAL_NS_WITH_CLOCK50 = 10_000;
-const POLL_INTERVAL_NS_DEFAULT = 1_000_000;
-/**
- * Minimum simulated time each queued input transition is held before the
- * next is applied (§ 5.13). Only matters when transitions arrive faster
- * than one per poll — i.e. a press and release that reached this process
- * together — since a real human press lasts far longer than either value.
- * With CLOCK_50 one poll (10 us) is already 500 clock edges. Without it,
- * 4 ms spans two rising edges of CLOCK_500Hz, so a design that samples
- * KEY_N on that clock still sees every queued press.
- */
-const MIN_DWELL_NS_WITH_CLOCK50 = POLL_INTERVAL_NS_WITH_CLOCK50;
-const MIN_DWELL_NS_DEFAULT = 4_000_000;
+/** The files a board testbench exchanges data through, in the session directory. */
+const INPUT_FILE_NAME = 'input.txt';
+const OUTPUT_FILE_NAME = 'output.txt';
+
 /**
  * Bound on not-yet-acknowledged transitions (§ 5.13). Far above anything a
  * person can click within one acknowledgement round trip; exists only so
@@ -67,6 +39,8 @@ const MAX_STIM_QUEUE = 256;
  * file, so paying it more often is the cheapest latency left to buy.
  */
 const OUTPUT_POLL_MS = 20;
+/** How often a finished flood window is checked for its summary line (`outputLimiter.ts`). */
+const LIMITER_FLUSH_MS = 250;
 /**
  * Real-time pacing (§ 5.9, reworked in § 5.13). GHDL runs a session's own
  * simulated time as fast as it can — without this, a design not declaring
@@ -89,67 +63,44 @@ const PACING_CHECK_MS = 10;
  */
 const PACING_MAX_OUTSTANDING = 1000;
 /**
- * Where the testbench's pacing grants (above) come from on this platform.
- *
- * `'fifo'` (POSIX) is § 5.13's original mechanism, untouched: a FIFO made
- * with `mkfifo`, named to the testbench by its `pacing_file` generic.
- *
- * Windows cannot do that. `mkfifo` is not a command there (an immediate
- * `ENOENT` — the first thing that fails), and Node's `fs` does not support
- * `O_NONBLOCK`. A regular file cannot stand in either, because the
- * testbench's backpressure is `readline` *blocking* at end-of-file, and a
- * regular file's `readline` returns instead of blocking — pacing would
- * silently stop pacing rather than fail loudly. (v1 shipped exactly that
- * way — unpaced — and a `CLOCK_500Hz` design blinked faster than the real
- * board.)
- *
- * `'stdin'` (Windows) keeps the property that matters — a read that blocks
- * until the Node side has written one line — but takes it from the one
- * pipe every child process already has: the testbench is generated to
- * `readline(std.textio.input, ...)`, and this side writes the grants into
- * the child's stdin. No named pipe, no `O_NONBLOCK`, no file the two sides
- * must agree on; and nothing else in the design ever reads stdin. The
- * generic `pacing_file` stays empty in this mode.
- *
- * Everything POSIX-side is guarded on `PACING === 'fifo'`, so it cannot be
- * reached on Windows — and the `'stdin'` path is never reached on POSIX,
- * where the generated VHDL is also unchanged (`TestbenchOptions`).
- */
-const PACING: 'fifo' | 'stdin' = process.platform === 'win32' ? 'stdin' : 'fifo';
-/**
  * Backing store for the one-millisecond synchronous sleep in
  * `renameOverOpenFile`. `Atomics.wait` needs a `SharedArrayBuffer`-backed
  * array and never actually observes a change here — the timeout is the
  * only exit, which is precisely the "sleep without yielding" wanted.
  */
-const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
-/** Bound on ghdl -a / -e — these are expected to finish in seconds (§ 7.4). */
-const BUILD_TIMEOUT_MS = 30_000;
+const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+const MS_PER_SECOND = 1000;
+/** How often a contended rename is retried before giving up (`renameOverOpenFile`). */
+const MAX_RENAME_RETRIES = 50;
+const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
 /**
- * Bound on a batch (portless-entity) run. Generous relative to
- * `BUILD_TIMEOUT_MS`: an actual simulation, not just analysis, and unlike
+ * Bound on a batch (portless-entity) run. Generous relative to the 30 s
+ * build timeout (`DEFAULT_COMMAND_TIMEOUT_MS`): an actual simulation, not just analysis, and unlike
  * the persistent board mode there is no polling loop to keep a runaway
  * design alive on purpose — this is what stops a design bug (a loop with
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
 
+/** True once `from` has replaced `to`; false when the destination is held open by another process. */
+function renamed(from: string, to: string): boolean {
+  try {
+    renameSync(from, to);
+    return true;
+  } catch (e) {
+    if (CONTENDED_RENAME_CODES.includes((e as NodeJS.ErrnoException).code ?? '')) return false;
+    throw e;
+  }
+}
+
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
-/**
- * 'board': the usual persistent, polled simulation (§ 5) — a real design
- * with at least one board port, kept alive by the generated wrapper.
- * 'batch': a portless entity (zero ports at all) run directly with no
- * wrapper — it supplies its own stimuli, so wrapping it would be
- * redundant, and it is expected to reach quiescence and exit on its own.
- */
-type SessionMode = 'board' | 'batch' | null;
 
 export class Session {
   private readonly send: (frame: ServerFrame) => void;
   private readonly dir: string;
   private state: SessionState = 'new';
-  private entityName: string | null = null;
-  private mode: SessionMode = null;
+  private engine: SimEngine | null = null;
+  private plan: RunPlan | null = null;
   private run: RunHandle | null = null;
   private batchRun: BatchHandle | null = null;
   private outputPollTimer: NodeJS.Timeout | null = null;
@@ -166,9 +117,6 @@ export class Session {
    * unlikely.
    */
   private runSeq = 0;
-  /** Set per `RUN` from the detected port set — see § 5.12. */
-  private pollIntervalNs = POLL_INTERVAL_NS_DEFAULT;
-  private minDwellNs = MIN_DWELL_NS_DEFAULT;
   /**
    * `STIM`s the running testbench has not yet acknowledged, oldest first
    * (§ 5.13). `stimSeq` is per session, never per run, so an ack from a
@@ -178,6 +126,8 @@ export class Session {
   private stimSeq = 0;
   private lastStimBits: string | null = null;
   private lastSentState: string | null = null;
+  private limiter: OutputLimiter | null = null;
+  private limiterTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
 
   constructor(send: (frame: ServerFrame) => void) {
@@ -186,118 +136,70 @@ export class Session {
   }
 
   private inputPath(): string {
-    return join(this.dir, 'input.txt');
+    return join(this.dir, INPUT_FILE_NAME);
   }
 
   private outputPath(): string {
-    return join(this.dir, 'output.txt');
+    return join(this.dir, OUTPUT_FILE_NAME);
+  }
+
+  private heartbeatName(): string {
+    return `heartbeat-${this.runSeq}.txt`;
   }
 
   private heartbeatPath(): string {
-    return join(this.dir, `heartbeat-${this.runSeq}.txt`);
+    return join(this.dir, this.heartbeatName());
+  }
+
+  private pacingName(): string {
+    return `pacing-${this.runSeq}.fifo`;
   }
 
   private pacingPath(): string {
-    return join(this.dir, `pacing-${this.runSeq}.fifo`);
+    return join(this.dir, this.pacingName());
+  }
+
+  /** The names the testbench exchanges data through, relative to the session directory. */
+  private boardFiles(plan: RunPlan): BoardFiles {
+    return {
+      input: INPUT_FILE_NAME,
+      output: OUTPUT_FILE_NAME,
+      heartbeat: this.heartbeatName(),
+      // No FIFO with stdin pacing: the testbench reads its grants from stdin instead.
+      pacing: plan.pacing === 'fifo' ? this.pacingName() : undefined,
+    };
   }
 
   async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
     this.stopActive('stopped');
     this.state = 'compiling';
 
-    for (const file of files) {
-      writeFileSync(join(this.dir, file.name), file.content);
-    }
-
-    // Analyze every file before doing our own port scan, so a genuine
-    // syntax error gets GHDL's real diagnosis under `analyze` rather than
-    // being intercepted early by findTopEntity()'s own regex heuristic —
-    // that heuristic runs on source we don't yet know is even valid VHDL.
-    //
-    // Files are analyzed to a fixed point rather than strictly in the
-    // order submitted: RUN's files are not guaranteed top-entity-last
-    // (§ 6.3), so a project whose top entity instantiates a component
-    // declared in a file that happens to arrive first would otherwise
-    // fail with a spurious "unit not found in library work". Each pass
-    // analyzes whatever is still pending; a pass that analyzes nothing
-    // new means the remaining failures are real, not just waiting on an
-    // unanalyzed dependency.
-    const pending = new Map(files.map((f) => [f.name, f]));
-    const lastErrors = new Map<string, string>();
-    while (pending.size > 0) {
-      let progressed = false;
-      for (const name of [...pending.keys()]) {
-        const r = await runCmd(getGhdlExe(), ['-a', '--std=08', name], this.dir, BUILD_TIMEOUT_MS);
-        if (r.code === 0) {
-          pending.delete(name);
-          progressed = true;
-        } else {
-          lastErrors.set(
-            name,
-            r.timedOut ? `Analysis of ${name} timed out.\n${r.err}` : r.err || `ghdl -a failed on ${name} with no output.`,
-          );
-        }
-      }
-      if (!progressed) {
-        const text = [...pending.keys()].map((name) => lastErrors.get(name)).join('\n');
-        this.send({ verb: 'ERROR', stage: 'analyze', text });
-        this.state = 'stopped';
-        return;
-      }
-    }
-
-    const top = findTopEntity(files, topFile);
-    if ('message' in top) {
-      this.send({ verb: 'ERROR', stage: 'elaborate', text: top.message });
-      this.state = 'stopped';
-      return;
-    }
-    this.entityName = top.name;
-
-    // A genuinely portless entity — a self-contained testbench, not a
-    // board design missing a port by accident — skips the wrapper and
-    // the persistent board mode entirely; see runBatch()'s own doc
-    // comment for why wrapping one would be wrong, not just unnecessary.
-    if (top.ports.size === 0) {
-      await this.runElaborateAndBatch(top.name);
+    const engine = selectEngine(topFile);
+    const strangers = mismatchedFiles(files, engine.language);
+    if (strangers.length > 0) {
+      this.failRun('analyze', mismatchMessage(engine.language, topFile ?? '(none)', strangers));
       return;
     }
 
-    const tbSource = generateTestbench(top.name, top.ports, { pacingFromStdin: PACING === 'stdin' });
-    writeFileSync(join(this.dir, `${TB_ENTITY}.vhdl`), tbSource);
-
-    let r = await runCmd(getGhdlExe(), ['-a', '--std=08', `${TB_ENTITY}.vhdl`], this.dir, BUILD_TIMEOUT_MS);
-    if (r.code !== 0) {
-      this.send({ verb: 'ERROR', stage: 'internal', text: `Internal testbench build error:\n${r.err}` });
-      this.state = 'stopped';
+    const prepared = await engine.prepare({ dir: this.dir, files, topFile });
+    if (!prepared.ok) {
+      this.failRun(prepared.stage, prepared.text);
       return;
     }
 
-    r = await runCmd(getGhdlExe(), ['-e', '--std=08', TB_ENTITY], this.dir, BUILD_TIMEOUT_MS);
-    if (r.code !== 0) {
-      this.send({
-        verb: 'ERROR',
-        stage: 'elaborate',
-        text:
-          `GHDL elaboration error (check that your entity's port names match the board's — ` +
-          `CLOCK_50, SW, KEY, LEDR, HEX0..HEX5):\n${r.err}`,
-      });
-      this.state = 'stopped';
-      return;
-    }
-
-    this.send({ verb: 'LOG', text: 'GHDL 5.0.1 (mcode)' });
-    this.mode = 'board';
-    // Same condition `tbTemplate.ts` uses to decide whether `clkgen` exists
-    // at all (§ 5.8) — which is what decides how fast simulated time runs,
-    // and so which interval keeps real-time responsiveness sane (§ 5.12).
-    const hasClock50 = top.ports.has('clock_50');
-    this.pollIntervalNs = hasClock50 ? POLL_INTERVAL_NS_WITH_CLOCK50 : POLL_INTERVAL_NS_DEFAULT;
-    this.minDwellNs = hasClock50 ? MIN_DWELL_NS_WITH_CLOCK50 : MIN_DWELL_NS_DEFAULT;
-    this.startRun();
+    this.engine = engine;
+    this.plan = prepared.plan;
+    for (const message of prepared.plan.messages) this.send({ verb: 'LOG', text: message });
+    if (prepared.plan.mode === 'batch') this.startBatchRun(engine, prepared.plan);
+    else this.startRun(engine, prepared.plan);
   }
 
-  private startRun(): void {
+  private failRun(stage: ErrorStage, text: string): void {
+    this.send({ verb: 'ERROR', stage, text });
+    this.state = 'stopped';
+  }
+
+  private startRun(engine: SimEngine, plan: RunPlan): void {
     this.lastSentState = null;
     // These outlive a single run — they live in the session's temp
     // directory, and a re-`RUN`/`RESET` reuses it. Inheriting them is not
@@ -316,28 +218,17 @@ export class Session {
     // free (§ 5.11), now that it holds transitions instead of a snapshot.
     this.stimQueue = this.lastStimBits ? [{ seq: ++this.stimSeq, bits: this.lastStimBits }] : [];
     this.writeStimQueue();
-    // Opened read-write and non-blocking before GHDL starts: read-write so
-    // this open doesn't wait for a reader and GHDL's own read-mode open
+    // Opened read-write and non-blocking before the simulator starts: read-write so
+    // this open doesn't wait for a reader and the simulator's own read-mode open
     // doesn't wait for a writer; non-blocking so a full FIFO could never
     // stall this event loop (PACING_MAX_OUTSTANDING keeps it from filling).
-    if (PACING === 'fifo') {
+    if (plan.pacing === 'fifo') {
       execFileSync('mkfifo', [this.pacingPath()]);
       this.pacingFd = openSync(this.pacingPath(), fsConstants.O_RDWR | fsConstants.O_NONBLOCK);
     }
-    const handle = startPersistentRun(
-      this.dir,
-      TB_ENTITY,
-      this.inputPath(),
-      this.outputPath(),
-      this.pollIntervalNs,
-      this.minDwellNs,
-      this.heartbeatPath(),
-      // Empty: no FIFO. With stdin pacing the testbench reads its grants
-      // from stdin instead (see PACING) and never opens `pacing_file`.
-      PACING === 'fifo' ? this.pacingPath() : '',
-    );
+    const handle = engine.startBoardRun(plan, this.boardFiles(plan));
     this.run = handle;
-    if (PACING === 'fifo') this.startPacing(handle);
+    if (plan.pacing === 'fifo') this.startPacing(handle);
     else this.startStdinPacing(handle);
     // Identity-checked against `handle`, not just `this.destroyed`/
     // `this.state`: `kill()` (Stop/Reset/a new RUN) sets `this.run = null`
@@ -353,21 +244,56 @@ export class Session {
       this.state = 'stopped';
       this.stopOutputPolling();
       this.stopPacing();
-      if (wasRunning && code !== 0) {
-        this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
-      }
+      this.endOutput();
+      if (!wasRunning) return;
+      // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
+      // is a completed run, not a crash: the student asked for it.
+      if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
+      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
     });
-    // The design's own report/assert output — GHDL writes this to
+    // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
     // (the generated testbench itself never writes to stdout, so
     // everything that arrives here is the student's own `report`/
     // `assert`, never internal plumbing).
-    handle.onOutput((line) => {
-      if (line.trim().length > 0) this.send({ verb: 'LOG', text: line });
-    });
+    this.beginOutput();
+    handle.onOutput((line) => this.forwardOutputLine(line));
     this.state = 'running';
     this.send({ verb: 'READY' });
     this.startOutputPolling();
+  }
+
+  /**
+   * The simulator's own output — a design's `$display`/`report` text — goes through a
+   * per-run line budget so a design that prints on every clock edge cannot flood the
+   * socket and the console (`outputLimiter.ts`). Both run kinds share these three.
+   */
+  private beginOutput(): void {
+    this.endOutput();
+    this.limiter = createOutputLimiter(Date.now);
+    this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
+  }
+
+  private forwardOutputLine(line: string): void {
+    if (/\S/.test(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+  }
+
+  /** Reports what the budget dropped in the last window, then stops budgeting. */
+  private endOutput(): void {
+    this.stopLimiterTimer();
+    if (this.limiter) this.sendLogLines(this.limiter.finish());
+    this.limiter = null;
+  }
+
+  private stopLimiterTimer(): void {
+    if (this.limiterTimer) {
+      clearInterval(this.limiterTimer);
+      this.limiterTimer = null;
+    }
+  }
+
+  private sendLogLines(lines: readonly string[]): void {
+    for (const text of lines) this.send({ verb: 'LOG', text });
   }
 
   private startOutputPolling(): void {
@@ -382,23 +308,33 @@ export class Session {
     }
   }
 
-  private pollOutput(): void {
+  /** The first line of `output.txt` as `<board bits> <last applied seq>`, or nothing before the run has written one. */
+  private readBoardLine(): { bits: string; ack: number } | undefined {
     let text: string;
     try {
       text = readFileSync(this.outputPath(), 'utf8');
     } catch {
-      return; // Nothing written yet.
+      return undefined; // Nothing written yet.
     }
-    const [bits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
-    if (bits.length !== STATE_LENGTH) return;
-    const ack = parseInt(ackText, 10);
-    if (!Number.isNaN(ack) && this.stimQueue.length > 0 && this.stimQueue[0].seq <= ack) {
-      this.stimQueue = this.stimQueue.filter((s) => s.seq > ack);
-      this.writeStimQueue();
-    }
-    if (bits === this.lastSentState) return;
-    this.lastSentState = bits;
-    this.send({ verb: 'STATE', bits });
+    const [rawBits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
+    const bits = normaliseBoardBits(rawBits);
+    return bits.length === STATE_LENGTH ? { bits, ack: parseInt(ackText, 10) } : undefined;
+  }
+
+  /** Drops the queued transitions the testbench says it has applied. */
+  private acknowledge(ack: number): void {
+    if (Number.isNaN(ack) || this.stimQueue[0]?.seq === undefined || this.stimQueue[0].seq > ack) return;
+    this.stimQueue = this.stimQueue.filter((s) => s.seq > ack);
+    this.writeStimQueue();
+  }
+
+  private pollOutput(): void {
+    const line = this.readBoardLine();
+    if (line === undefined) return;
+    this.acknowledge(line.ack);
+    if (line.bits === this.lastSentState) return;
+    this.lastSentState = line.bits;
+    this.send({ verb: 'STATE', bits: line.bits });
   }
 
   /**
@@ -439,7 +375,7 @@ export class Session {
   }
 
   /**
-   * `startPacing`, for `PACING === 'stdin'` (Windows): the same schedule —
+   * `startPacing`, for `plan.pacing === 'stdin'` (Windows): the same schedule —
    * one grant per `PACING_STEP_MS` of real time since the run started,
    * never more than `PACING_MAX_OUTSTANDING` ahead of what the testbench
    * has consumed — delivered through the child's stdin instead of a FIFO.
@@ -488,27 +424,9 @@ export class Session {
     }
   }
 
-  /**
-   * Elaborates a portless entity directly (no wrapper — see `runBatch()`'s
-   * doc comment in `ghdl.ts`) and starts it. Split from `handleRun` only
-   * because `handleRun`'s board-mode path already has its own `-e` step
-   * in between the same two points; the analysis loop above is shared.
-   */
-  private async runElaborateAndBatch(entityName: string): Promise<void> {
-    const r = await runCmd(getGhdlExe(), ['-e', '--std=08', entityName], this.dir, BUILD_TIMEOUT_MS);
-    if (r.code !== 0) {
-      this.send({ verb: 'ERROR', stage: 'elaborate', text: r.err });
-      this.state = 'stopped';
-      return;
-    }
-    this.mode = 'batch';
-    this.startBatchRun(entityName);
-  }
-
-  private startBatchRun(entityName: string): void {
-    const handle = runBatch(this.dir, entityName, (line) => {
-      if (line.trim().length > 0) this.send({ verb: 'LOG', text: line });
-    }, BATCH_TIMEOUT_MS);
+  private startBatchRun(engine: SimEngine, plan: RunPlan): void {
+    this.beginOutput();
+    const handle = engine.startBatchRun(plan, (line) => this.forwardOutputLine(line), BATCH_TIMEOUT_MS);
     this.batchRun = handle;
     this.state = 'running';
     this.send({ verb: 'READY' });
@@ -518,12 +436,13 @@ export class Session {
       this.batchRun = null;
       const wasRunning = this.state === 'running';
       this.state = 'stopped';
+      this.endOutput();
       if (!wasRunning) return; // already reported via handleStop's own DONE
       if (timedOut) {
         this.send({
           verb: 'ERROR',
           stage: 'runtime',
-          text: `Simulation exceeded ${BATCH_TIMEOUT_MS / 1000}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
+          text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
         });
       } else if (code !== 0) {
         this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
@@ -534,7 +453,7 @@ export class Session {
   }
 
   handleStim(bits: string): void {
-    if (this.state !== 'running' || this.mode !== 'board') return;
+    if (this.state !== 'running' || this.plan?.mode !== 'board') return;
     if (bits === this.lastStimBits) return;
     this.lastStimBits = bits;
     // Queued, not overwritten (§ 5.13): a press and its release can reach
@@ -578,34 +497,20 @@ export class Session {
    * session.
    */
   private renameOverOpenFile(from: string, to: string): void {
-    const MAX_ATTEMPTS = 50;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        renameSync(from, to);
-        return;
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        const contended = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
-        if (!contended || attempt >= MAX_ATTEMPTS) {
-          if (!contended) throw e;
-          return; // Gave up; the next write will carry the same queue.
-        }
-        // A synchronous sleep, because the whole point is to not yield to
-        // an event loop that could start another write in between.
-        Atomics.wait(SLEEP_SIGNAL, 0, 0, 1);
-      }
+    for (let attempt = 0; attempt <= MAX_RENAME_RETRIES; attempt++) {
+      if (renamed(from, to)) return;
+      // A synchronous sleep, because the whole point is to not yield to
+      // an event loop that could start another write in between.
+      Atomics.wait(SLEEP_SIGNAL, 0, 0, 1);
     }
+    // Gave up; the next write will carry the same queue.
   }
 
   handleReset(): void {
-    if (this.state !== 'running' || !this.entityName) return;
-    if (this.mode === 'board') {
-      this.stopActive(null);
-      this.startRun();
-    } else if (this.mode === 'batch') {
-      this.stopActive(null);
-      this.startBatchRun(this.entityName);
-    }
+    if (this.state !== 'running' || !this.engine || !this.plan) return;
+    this.stopActive(null);
+    if (this.plan.mode === 'board') this.startRun(this.engine, this.plan);
+    else this.startBatchRun(this.engine, this.plan);
   }
 
   handleStop(): void {
@@ -616,6 +521,7 @@ export class Session {
   private stopActive(reason: 'stopped' | null): void {
     this.stopOutputPolling();
     this.stopPacing();
+    this.endOutput();
     if (this.run) {
       this.run.kill();
       this.run = null;
@@ -634,6 +540,7 @@ export class Session {
     this.destroyed = true;
     this.stopOutputPolling();
     this.stopPacing();
+    this.stopLimiterTimer();
     if (this.run) this.run.kill();
     if (this.batchRun) this.batchRun.kill();
     void fs.rm(this.dir, { recursive: true, force: true }).catch(() => {});
