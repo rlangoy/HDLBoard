@@ -1,5 +1,5 @@
-HDLBoard — Write VHDL and watch it run
-======================================
+HDLBoard - Write VHDL or Verilog and watch it run
+=================================================
 
 Copyright (C) 2026 Rune Langoy
 

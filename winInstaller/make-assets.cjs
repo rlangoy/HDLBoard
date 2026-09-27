@@ -237,11 +237,11 @@ app.whenReady().then(async () => {
       <div style="
         margin-top:${18 * SIDEBAR_SCALE}px;
         font-size:${13 * SIDEBAR_SCALE}px;font-weight:700;letter-spacing:.2px;
-        text-align:center;line-height:1.3;">HDLBoard<br>Write VHDL and watch it run</div>
+        text-align:center;line-height:1.3;">HDLBoard<br>Write VHDL or Verilog and watch it run</div>
       <div style="
         margin-top:${7 * SIDEBAR_SCALE}px;
         font-size:${8 * SIDEBAR_SCALE}px;opacity:.75;text-align:center;">
-        Powered by GHDL</div>
+        Powered by GHDL and Icarus Verilog</div>
       <div style="
         position:absolute;bottom:${12 * SIDEBAR_SCALE}px;
         font-size:${7 * SIDEBAR_SCALE}px;opacity:.6;">USN &middot; PB1180</div>
