@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HDLBoard — Write VHDL. Watch it light up.</title>
-<meta name="description" content="A free, open-source virtual FPGA board for learning VHDL. Flip switches, press buttons and see your design come alive — no hardware needed." />
+<title>HDLBoard — Write VHDL or Verilog. Watch it light up.</title>
+<meta name="description" content="A free, open-source virtual FPGA board for learning VHDL and Verilog. Flip switches, press buttons and see your design come alive — no hardware needed." />
 <link rel="icon" href="assets/favicon.svg?v=3" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
 
-<meta property="og:title" content="HDLBoard — Write VHDL. Watch it light up." />
-<meta property="og:description" content="A free, open-source virtual FPGA board for learning VHDL. No hardware needed." />
+<meta property="og:title" content="HDLBoard — Write VHDL or Verilog. Watch it light up." />
+<meta property="og:description" content="A free, open-source virtual FPGA board for learning VHDL and Verilog. No hardware needed." />
 <meta property="og:image" content="assets/workbench.png" />
 <meta property="og:type" content="website" />
 </head>
@@ -39,10 +39,10 @@
   <div class="wrap">
 
     <div class="hero-text">
-      <h1><span>Write VHDL.</span> <span>Watch it light up.</span></h1>
+      <h1><span>Write VHDL or Verilog.</span> <span>Watch it light up.</span></h1>
       <p class="lede">A virtual FPGA board on your screen. Flip switches, press buttons and see your design come alive. No hardware needed.</p>
       <div class="actions">
-        <a class="btn btn-primary btn-lg btn-glow" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.0.1/HDLBoard-Setup-1.0.1.exe">
+        <a class="btn btn-primary btn-lg btn-glow" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.1.0/HDLBoard-Setup-1.1.0.exe">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
           Download for Windows
         </a>
@@ -69,8 +69,8 @@
       </div>
       <div class="band-item">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 6 2 12 8 18"/><polyline points="16 6 22 12 16 18"/></svg>
-        <h3>Real VHDL</h3>
-        <p>The same code you would put on a real FPGA, simulated by GHDL.</p>
+        <h3>Real VHDL and Verilog</h3>
+        <p>The same code you would put on a real FPGA, simulated by GHDL (VHDL) or Icarus Verilog.</p>
       </div>
       <div class="band-item">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>
@@ -88,7 +88,7 @@
       </div>
       <div class="split-text">
         <h2>Flip a switch. Your design reacts.</h2>
-        <p>Switches, pushbuttons, LEDs and 7-segment displays respond to your VHDL while it runs. It feels like the real board, without one on your desk.</p>
+        <p>Switches, pushbuttons, LEDs and 7-segment displays respond to your design while it runs. It feels like the real board, without one on your desk.</p>
       </div>
     </div>
   </section>
@@ -98,13 +98,13 @@
       <h2>Made for the classroom</h2>
       <p>Built at USN for students taking their first steps in FPGA design. Install it on your own PC, or host one copy and let the whole class use it in the browser.</p>
       <div class="actions">
-        <a class="btn btn-primary btn-lg" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.0.1/HDLBoard_1_0_1.ova">
+        <a class="btn btn-primary btn-lg" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.1.0/HDLBoard.ova">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
           Download VirtualBox image
         </a>
         <a class="btn btn-ghost-dark btn-lg" href="https://github.com/rlangoy/HDLBoard/blob/main/docs/HOSTING.md">Read the hosting guide</a>
       </div>
-      <p class="dl-note">VirtualBox .ova · 330 MB</p>
+      <p class="dl-note">VirtualBox .ova · 340 MB</p>
     </div>
   </section>
 
@@ -112,8 +112,8 @@
     <div class="wrap center">
       <h2 id="how-heading">How it works</h2>
       <ol class="steps">
-        <li><span class="step-num">1</span><h3>Write</h3><p>Edit VHDL source files in the browser.</p></li>
-        <li><span class="step-num">2</span><h3>Simulate</h3><p>GHDL compiles and runs your design.</p></li>
+        <li><span class="step-num">1</span><h3>Write</h3><p>Edit VHDL or Verilog source files in the browser.</p></li>
+        <li><span class="step-num">2</span><h3>Simulate</h3><p>GHDL (VHDL) or Icarus Verilog compiles and runs your design.</p></li>
         <li><span class="step-num">3</span><h3>Watch it respond</h3><p>Results are drawn live onto the virtual board.</p></li>
         <li><span class="step-num">4</span><h3>Interact</h3><p>Flip switches and press buttons, and see the design react.</p></li>
       </ol>
