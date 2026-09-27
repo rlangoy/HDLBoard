@@ -145,7 +145,7 @@ UI/
 ├─ tools/
 │  ├─ screenshot.mjs            visual check helper (playwright)
 │  └─ bundle.mjs                inline a build into one .html for Examples/
-├─ server/                      GHDL backend, Node + TS — planned, not built
+├─ server/                      simulation backend (GHDL and Icarus Verilog), Node + TS
 └─ src/
    ├─ main.tsx
    ├─ index.css                 gallery page only — not part of any component
@@ -927,8 +927,8 @@ prints. `SEGMENT_PATTERNS` is the table itself.
 What HDLBoard does, at the level the README used to spell out. The
 component work in §§ 1–7 is one half of it; this is the other.
 
-- **File explorer** — a `vhdl/` / `work/` project tree with upload (a
-  picker, or drag-and-drop `.vhd`/`.vhdl` files onto the panel), new-file,
+- **File explorer** — a `vhdl/` / `verilog/` / `work/` project tree with upload (a
+  picker, or drag-and-drop `.vhd`/`.vhdl`/`.v`/`.vh` files onto the panel), new-file,
   rename and delete (the last two on hover, or double-click a name to
   rename).
 - **Resizable panes** — drag the handles either side of the editor to
@@ -936,23 +936,28 @@ component work in §§ 1–7 is one half of it; this is the other.
   shrinking together (or giving way to whichever one is being dragged)
   rather than overflowing it.
 - **Tabbed code editor** — closable tabs, line numbers and VHDL syntax
-  highlighting (keywords, types, comments, strings, numbers), built on a
+  highlighting (keywords, types, comments, strings, numbers; Verilog files
+  are shown with the same highlighter, which is not Verilog-aware), built on a
   real, editable `<textarea>`, not a static preview.
 - **Simulation controls** — Start/Stop drives a real `ghdl -a` / `-e` /
-  `-r` compile → elaborate → run sequence, with GHDL's own output (or error
-  text, file:line included) in the console panel.
+  `-r` compile → elaborate → run sequence for a VHDL top file, or
+  `iverilog` / `vvp` for a Verilog one (the engine follows the top file's
+  extension), with the simulator's own output (or error text, file:line
+  included) in the console panel.
 - **Live DE1-SoC board** — `SW[9:0]` and `KEY_N[3:0]` are genuinely
-  clickable inputs; `LEDR[9:0]` and `HEX0_N`…`HEX5_N` are driven by GHDL
-  actually simulating the VHDL, not mirrored from the switches (wire
+  clickable inputs; `LEDR[9:0]` and `HEX0_N`…`HEX5_N` are driven by GHDL or
+  Icarus Verilog actually simulating the design, not mirrored from the switches (wire
   protocol: `ghdl_implementation_plan.md` § 6).
-- **`report` / `assert` output** — printed to the console live, in either a
+- **`report` / `assert` / `$display` output** — printed to the console live, in either a
   board design or a plain, portless testbench (select it as the top file —
-  the dot in the Files panel — and it runs directly at GHDL's normal speed,
-  finishing on its own).
+  the dot in the Files panel — and it runs directly at the simulator's normal speed,
+  finishing on its own). A design that prints on every clock edge is limited
+  to 200 console lines a second, with a summary line for the rest, and the
+  console keeps the newest 2000 lines.
 - **Component gallery** — every board part in every state, beside the
   reference renders, at the `#gallery` route.
 - **Windows desktop build** — a one-file installer that bundles the
-  frontend, the backend and GHDL (`winInstaller/README.md`). The desktop app
+  frontend, the backend, GHDL and Icarus Verilog (`winInstaller/README.md`). The desktop app
   serves the same frontend to itself on `127.0.0.1:9010`; nothing is
   reimplemented and nothing is exposed to the network.
 - **LAN access** — in the browser build both servers bind to `0.0.0.0`, and
@@ -973,6 +978,12 @@ board — `blinkTest.vhdl` blinks at 2 Hz in both.
 - **No file system on disk.** Uploaded files and edits are held in memory on
   both ends; nothing is written beyond a per-session temp directory on the
   backend, deleted when the tab closes.
+- **Verilog is the second language.** The course is taught in VHDL, and the
+  editor's highlighting, the Help dialog's learning links and most of the
+  design notes are VHDL-oriented. Verilog support is described in
+  `Verilog_implementation_plan.md`; a Verilog top with ports but none of the
+  board's runs as a standalone testbench (with a hint), where VHDL reports an
+  error.
 - **No persistence.** Reloading resets everything to the starter project; a
   closed tab ends the simulation session.
 - **A clock-rate limit for board designs, not a bug.** A design that divides
@@ -1003,18 +1014,24 @@ HDLBoard/
 │  ├─ BUILDING.md               compiling and running from source
 │  ├─ Design_Description.md     ← this file: how the components are BUILT
 │  ├─ ghdl_implementation_plan.md  the GHDL backend: protocol, design, build log
+│  ├─ Verilog_implementation_plan.md  the Icarus Verilog engine: research, design, tests
+│  ├─ HOSTING.md               running it as a web server
 │  ├─ implementation_plan_win_installer.md, windows_installer_…  installer plan
 │  └─ images/                   README screenshot
-├─ scripts/                     start.sh / stop.sh: run both servers as a pair
+├─ scripts/                     start.sh / stop.sh: run both servers as a pair; alpineInstall.sh
+├─ tests/                       fixtures (VHDL + Verilog twins, scenarios.json) and the browser runbook
 ├─ index.html, package.json, tsconfig*.json, vite.config.ts
 ├─ tools/
+│  ├─ verify-backend.mjs        runs the scenario fixtures against any running backend
 │  ├─ screenshot.mjs            visual-check helper (Playwright)
 │  └─ bundle.mjs                inline a build into one self-contained .html
-├─ server/                      the GHDL backend — its own Node.js project
-│  └─ src/                      protocol, session, GHDL process management
+├─ server/                      the simulation backend — its own Node.js project
+│  └─ src/                      protocol, session, engines/ (GHDL, Icarus), verilog/
 ├─ winInstaller/                the Windows desktop build (additive)
 │  ├─ build.ps1                 builds the installer end to end
 │  ├─ fetch-ghdl.ps1            downloads + checksums the vendored GHDL
+│  ├─ fetch-iverilog.ps1        assembles + checksums the vendored Icarus Verilog tree
+│  ├─ verify-iverilog.ps1       smoke test of that tree (build.ps1 runs it)
 │  └─ electron/                 Electron shell, its own standalone project
 └─ src/
    ├─ main.tsx, index.css

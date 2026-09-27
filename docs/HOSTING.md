@@ -148,10 +148,13 @@ less alpineInstall.sh            # it runs as root — read it first
 sudo sh alpineInstall.sh
 ```
 
-Safe to re-run: a second run updates the checkout, rebuilds and restarts. The
+It ends with a check that the service account can really analyse, elaborate
+and run a VHDL design *and* compile and run a Verilog one. Safe to re-run: a
+second run updates the checkout, rebuilds and restarts. The
 rest of this section, and [§ 5](#5-get-it-running), are what it does by hand.
 
-Node and Icarus Verilog are packaged; **GHDL is not** (checked against 3.24 main
+Node and Icarus Verilog are packaged (`iverilog` is in the *community*
+repository, which the first command below enables); **GHDL is not** (checked against 3.24 main
 and community), so build it — Alpine has the Ada compiler GHDL needs:
 
 ```bash
@@ -386,8 +389,8 @@ that isn't there.
 
 ```sh
 #!/sbin/openrc-run
-name="HDLBoard backend"
-description="WebSocket backend that compiles and runs VHDL (GHDL) and Verilog (Icarus)"
+name="HDLBoard GHDL backend"
+description="WebSocket backend that compiles and runs VHDL with GHDL and Verilog with Icarus"
 
 command="/usr/bin/node"
 command_args="/srv/HDLBoard/server/dist/server.js"
@@ -404,7 +407,8 @@ error_log="/var/log/hdlboard.log"
 # /usr/local/sbin, so the source build from § 4 (in /usr/local) is found as
 # it is, and `apk add iverilog` lands in /usr/bin. GHDL installed anywhere
 # else (/opt, or under a user's ~/.local) needs GHDL_EXE with an absolute
-# path; an Icarus outside the service's PATH needs IVERILOG_EXE (and VVP_EXE).
+# path; an Icarus outside the service's PATH needs IVERILOG_EXE and VVP_EXE
+# (alpineInstall.sh pins all three, so the service uses the ones it verified).
 supervise_daemon_args="--env GHDL_WS_PORT=9010 --env GHDL_MAX_SESSIONS=32"
 #supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl --env IVERILOG_EXE=/opt/iverilog/bin/iverilog"
 

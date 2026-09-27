@@ -40,10 +40,11 @@ with `-Force` to refetch).
 
 ```
 Electron main process (main.js)
- ├─ startBackend({ port: 9010, serveDir, ghdlExe })   ← in-process, no child node
+ ├─ startBackend({ port: 9010, serveDir, ghdlExe, iverilogDir })   ← in-process, no child node
  │    ├─ http.createServer()  → serves resources/frontend/
  │    └─ WebSocketServer({ noServer: true }) on upgrade "/ghdlsim"
- │         └─ spawns resources/ghdl/bin/ghdl.exe
+ │         ├─ spawns resources/ghdl/bin/ghdl.exe            (VHDL)
+ │         └─ spawns resources/iverilog/{iverilog,vvp}.exe  (Verilog)
  └─ BrowserWindow → loadURL("http://127.0.0.1:9010/")
       └─ renderer = the existing src/ React app, UNMODIFIED
 ```
@@ -99,6 +100,7 @@ winInstaller/
 │  │  └─ license.txt         HDLBoard + GHDL notices, shown by the installer
 │  └─ resources/             gitignored — assembled by build.ps1, never hand-edited
 ├─ vendor/ghdl/              gitignored — populated by fetch-ghdl.ps1
+├─ vendor/iverilog/          gitignored — populated by fetch-iverilog.ps1
 └─ output/                   gitignored — Setup.exe lands here
 ```
 
@@ -113,8 +115,8 @@ Only the ones under `winInstaller/` are Electron's:
 | `node_modules/`, `dist/` | **the frontend** | React, Vite, TypeScript, Playwright; and the Vite build |
 | `server/node_modules/`, `server/dist/` | **the backend** | `ws`; and the compiled TypeScript |
 | `winInstaller/electron/node_modules/` | **Electron** | electron, electron-builder, esbuild |
-| `winInstaller/electron/resources/` | **Electron** | the assembled frontend + backend bundle + GHDL |
-| `winInstaller/vendor/`, `winInstaller/output/` | **Electron** | the downloaded GHDL; the built `Setup.exe` |
+| `winInstaller/electron/resources/` | **Electron** | the assembled frontend + backend bundle + GHDL + Icarus Verilog |
+| `winInstaller/vendor/`, `winInstaller/output/` | **Electron** | the downloaded GHDL and Icarus Verilog; the built `Setup.exe` |
 
 Two names in the *root* `node_modules` look like Electron but are not:
 `esbuild` is Vite's own internal bundler, and `electron-to-chromium` is a

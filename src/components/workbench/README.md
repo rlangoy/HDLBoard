@@ -67,7 +67,7 @@ Workbench                              (CSS grid: header / body / console)
 └─ .wb-body                            (grid row 2, flex row)
    ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
    │  ├─ SimulationCard                (card: Start/Stop + status)
-   │  └─ FileExplorer                  (card: Upload/New File + the vhdl/work tree)
+   │  └─ FileExplorer                  (card: Upload/New File + the vhdl/verilog/work tree)
    ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
    ├─ CodeEditor                       (flex: 1 — takes the remaining width)
    ├─ .wb-resizer                      (drag handle — resizes .wb-right)
@@ -178,9 +178,9 @@ interface FileExplorerProps {
 }
 ```
 
-Renders the `vhdl/` and `work/` folders from `files`, grouped by each file's
+Renders the `vhdl/`, `verilog/` and `work/` folders from `files`, grouped by each file's
 `folder`; a folder with no files is not drawn, so `work/` only appears once a
-`tb_*` file has been uploaded (the starter project has none). Folders are collapsible (own local `collapsed` state — purely a UI
+VHDL `tb_*` file has been uploaded (the starter project has none; it has `vhdl/` and `verilog/`). Folders are collapsible (own local `collapsed` state — purely a UI
 concern, not lifted to `Workbench`). Clicking a file calls `onSelect`;
 `Workbench` opens it as a tab if it isn't already and makes it active.
 `onUpload` is wired to a hidden `<input type="file">` in `Workbench`, not
@@ -206,14 +206,14 @@ another element over the panel is inert.
 `onFilesDropped` hands the raw `FileList` straight to `Workbench`, which
 already owns file-reading (`readAndAddFiles`, shared with the `<input
 type="file">` picker) — `FileExplorer` does no reading itself. This
-matters beyond not repeating code: a native file picker's `accept=".vhd,
-.vhdl"` only filters what the *dialog* shows, never what a drop can
-deliver, so `readAndAddFiles` is where non-VHDL files actually get
-rejected (a red console line, `Skipped <name>: not a .vhd/.vhdl file.`),
-regardless of which path they arrived by.
+matters beyond not repeating code: a native file picker's `accept=".vhd,.vhdl,.v,.vh"` only filters what the *dialog* shows, never what a drop can
+deliver, so `readAndAddFiles` is where other files actually get
+rejected (a red console line, `Skipped <name>: not a .vhd / .vhdl / .v / .vh file.`),
+regardless of which path they arrived by. Which folder a file lands in is
+`folderForUpload` in `fileKinds.ts` (see below), not this component.
 
-**The top file.** Every `vhdl/` row (never `work/` — a testbench isn't a
-candidate; see below) gets a small dot before its name: a blue
+**The top file.** Every `vhdl/` and `verilog/` row (never `work/` — a testbench isn't a
+candidate; see below; `hasTopDot(folder)` decides) gets a small dot before its name: a blue
 `.wb-files__top-dot.is-top` for whichever file's `id` equals `topFileId`,
 a gray `.wb-files__top-dot` for every other. It's a sibling of the
 file-select `<button>`, not nested inside it — an interactive element
@@ -307,7 +307,7 @@ type SimStatus = 'stopped' | 'compiling' | 'running';
 interface SimulationCardProps {
   status: SimStatus;
   elapsedSeconds: number;
-  topFile: string;          // whichever vhdl/ file has the blue dot right now
+  topFile: string;          // whichever design file has the blue dot right now
   onStart: () => void;
   onStop: () => void;
 }
@@ -317,7 +317,7 @@ The card at the top of the sidebar: a circular play glyph and "Simulation"
 heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
 line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` tracks
-whichever `vhdl/` file currently has the blue dot in `<FileExplorer>`
+whichever `vhdl/` or `verilog/` file currently has the blue dot in `<FileExplorer>`
 (above) — not a fixed label.
 
 Purely presentational: the button is disabled while `compiling`, shows
@@ -369,9 +369,11 @@ extend the highlighter.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the three-file starter project shown in the
-tree (`DE1_SoC.vhdl`, `blinkTest.vhdl`, `keyCouter2Led.vhdl`, all under
-`vhdl/`). `blinkTest.vhdl` and `keyCouter2Led.vhdl`
+`STARTER_FILES: VhdlFile[]` — the starter project shown in the
+tree: `DE1_SoC.vhdl`, `blinkTest.vhdl`, `keyCouter2Led.vhdl` under
+`vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v` under
+`verilog/`. The twins are copies of `tests/fixtures/{vhdl,verilog}/`, and
+`files.fixtures.test.ts` fails if either side drifts. `blinkTest.vhdl` and `keyCouter2Led.vhdl`
 are both standalone examples (their own `blinkTest`/`counter8` entities,
 not wired into `DE1_SoC.vhd`) — mark either top via its Files-panel dot to
 run it on its own. `blinkTest.vhdl` demonstrates `CLOCK_500Hz`
@@ -381,7 +383,7 @@ up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets) displayed on `LEDR`.
 `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhdl"`) is only the
 *initial* top file — `Workbench`'s `topFileId` starts pointed at whichever
 starter file has this name, then moves independently once a user clicks
-another `vhdl/` file's dot (`<FileExplorer>`, above). `DE1_SoC.vhdl`
+another design file's dot (`<FileExplorer>`, above). `DE1_SoC.vhdl`
 declares the real
 DE1-SoC top-level ports (`CLOCK_50`, `SW`, `KEY_N`, `LEDR`,
 `HEX0_N..HEX5_N` — `ghdl_implementation_plan.md` § 3.2), not stand-ins for
@@ -390,7 +392,27 @@ rather than the board's literal pin names (`KEY`/`HEX0..HEX5`), the one
 exception to that otherwise-literal contract; see § 3.2's note. Verified
 against the real GHDL toolchain, not just plausible-looking:
 `ghdl -a`/`-e`/`-r --std=08` were run by hand against every `vhdl/` file
-and the `work/` testbench before this was called done.
+and the `work/` testbench, and `iverilog`/`vvp` against every `verilog/` file, before this was called done.
+
+### `fileKinds.ts` and `consoleLines.ts`
+
+Pure modules, so `Workbench` and `FileExplorer` never look at a file name
+themselves, and covered by vitest (`npm test`):
+
+- `folderForUpload(name)` — `.v`/`.vh` go to `verilog/`, `.vhd`/`.vhdl` to
+  `vhdl/`, a VHDL `tb_*` to `work/`, anything else is refused. A Verilog
+  testbench stays in `verilog/` because it is compiled with its design.
+- `sourceFolderFor(top)` — which folder a run sends.
+- `folderAfterRename(current, newName)` — a rename that changes the language
+  moves the file to the new language's folder.
+- `topAfterDelete(files, id)` — the deleted top's successor comes from the
+  same folder, so a Verilog run stays a Verilog run.
+- `hasTopDot(folder)`, `UPLOAD_ACCEPT`, `ACCEPTED_FILES_TEXT`.
+- `appendCapped(lines, line)` (`consoleLines.ts`) — the console keeps the
+  newest 2000 lines.
+
+The extension rules mirror `server/src/engines/language.ts`; the two packages
+share no code, so a change to one must be made in the other.
 
 ### `Dialog.tsx` and `project.ts`
 
@@ -480,10 +502,12 @@ nobody asked for. Full wire protocol and backend design:
 1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, blanks the
    board (`blankBoard()` — LEDs off, HEX blank; see
    `Design_Description.md` § 5 convention 11), and calls
-   `client.run(files)`, which filters to `folder === 'vhdl'` and sends
-   them as one `RUN` frame.
-2. The backend's `LOG`/`ERROR` frames drive `appendLog` directly — GHDL's
-   own output (or, on failure, GHDL's own error text with file:line)
+   `client.run(files, topFileName)`, which sends the files of the top file's
+   folder (`sourceFolderFor` in `fileKinds.ts`: `verilog/` for a Verilog top,
+   `vhdl/` otherwise) as one `RUN` frame; the backend picks GHDL or Icarus
+   from the top file's extension.
+2. The backend's `LOG`/`ERROR` frames drive `appendLog` directly — the
+   simulator's own output (or, on failure, its own error text with file:line)
    reaches the console verbatim, not a scripted approximation of it.
 3. On `READY`, `status` becomes `'running'`, the elapsed-time interval
    starts, and the client immediately sends one `STIM` of the *current*
@@ -522,9 +546,9 @@ rather than sharing "Simulation stopped." with a user-initiated end —
 the two mean different things and reads as such.
 
 Every `report`/`assert` the design's own process calls arrives as an
-ordinary `LOG` line too, in both modes — real GHDL output, not
-summarized or filtered, the same console line format a local terminal
-`ghdl -r` would show.
+ordinary `LOG` line too, in both modes — real simulator output (GHDL's or
+Icarus's), not summarized or filtered except by the server's flood limit
+(200 lines a second, with a summary line for the rest).
 
 ## How the editor overlay works
 

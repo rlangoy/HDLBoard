@@ -147,11 +147,12 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           The board&rsquo;s signal names
         </h3>
         <p className="wb-dialog__lead">
-          Your top-level entity, <code>DE1_SoC</code>, talks to the board through
-          the ports below. They are the DE1-SoC&rsquo;s own names, with a
+          Your top-level entity (VHDL) or module (Verilog), for example{' '}
+          <code>DE1_SoC</code>, talks to the board through the ports below. They are the DE1-SoC&rsquo;s own names, with a
           couple of course conventions. Declare only the ones you use &mdash;
           every port is optional &mdash; and remember that VHDL ignores case,
-          so <code>ledr</code> and <code>LEDR</code> are the same port.
+          so <code>ledr</code> and <code>LEDR</code> are the same port (HDLBoard
+          matches the names without regard to case for Verilog too).
         </p>
 
         <div className="wb-help__tablewrap">

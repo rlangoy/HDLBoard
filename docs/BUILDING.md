@@ -60,7 +60,7 @@ Two environment variables adjust that behaviour:
 | Variable | Effect |
 |---|---|
 | `HDLBOARD_SKIP_INSTALL=1` | Check only — report anything missing and exit instead of installing |
-| `HDLBOARD_ASSUME_YES=1` | Don't prompt before installing GHDL (needed for non-interactive runs, which otherwise refuse) |
+| `HDLBOARD_ASSUME_YES=1` | Don't prompt before installing GHDL or Icarus Verilog (needed for non-interactive runs, which otherwise refuse) |
 
 Doing it by hand instead is still just the two npm projects:
 
@@ -103,6 +103,7 @@ Root project:
 | `npm run build` | Type-check (`tsc -b`) and build into `dist/` |
 | `npm run preview` | Serve the last `dist/` build |
 | `npm run typecheck` | Type-check only |
+| `npm test` | Frontend unit tests (vitest): file routing rules, console cap, the RUN frame, the starter-file guard |
 | `npm run shot` | Screenshot a selector from `vite preview` on port 4173 (needs `npx playwright install chromium`) |
 | `npm run demo` | Build, then inline into one self-contained `Examples/board_demo.html` (the folder is created on demand and gitignored) |
 
@@ -114,6 +115,13 @@ Root project:
 | `npm start` | Run the built backend (`node dist/server.js`) |
 | `npm run dev` | Build, then run |
 | `npm run typecheck` | Type-check only |
+| `npm test` | Unit tests (`node:test`); need neither GHDL nor Icarus |
+| `npm run test:integration` | Integration tests against the real simulators (GHDL and Icarus; each skips itself if its simulator is missing) |
+| `npm run lint` | The scoped clean-code rules (function length, parameters, complexity, nesting) on the newer modules |
+
+To check a running backend end to end, in both languages:
+`node tools/verify-backend.mjs ws://localhost:9010/ghdlsim` (needs `npm install` in `server/`).
+The browser check is the runbook `tests/e2e/verilog-browser.md`.
 
 ## Building the Windows installer
 
@@ -127,8 +135,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File winInstaller\build.ps1
 where scripts are allowed, plain `winInstaller\build.ps1` does the same. Close
 a running HDLBoard first — it locks files the build overwrites.
 
-The script fetches and checksum-verifies GHDL, builds the frontend and the
-backend, bundles them with Electron, and writes
+The script fetches and checksum-verifies GHDL and Icarus Verilog, smoke-tests
+the Icarus tree (`verify-iverilog.ps1`, which fails the build if it cannot
+compile and run the fixtures), builds the frontend and the backend, bundles
+them with Electron, and writes
 `winInstaller\output\HDLBoard-Setup-<version>.exe`. Details:
 [`winInstaller/README.md`](../winInstaller/README.md).
 
@@ -140,5 +150,7 @@ backend, bundles them with Electron, and writes
   are built and why; § 11 has the current repository layout.
 - [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the GHDL
   backend: wire protocol, simulation strategy, generated testbench.
+- [`Verilog_implementation_plan.md`](Verilog_implementation_plan.md) — the
+  Icarus Verilog engine: research, design, test strategy and what was built.
 - [`src/components/workbench/README.md`](../src/components/workbench/README.md)
   — how the workbench page itself is put together.
