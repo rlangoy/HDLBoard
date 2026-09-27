@@ -22,6 +22,8 @@ import { Header } from './Header';
 import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { HelpDialog } from './HelpDialog';
+import { NewFileDialog } from './NewFileDialog';
+import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { CodeEditor } from './CodeEditor';
@@ -159,7 +161,7 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | null>(null);
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
   useEffect(() => {
     const openAbout = () => setDialog('about');
     window.addEventListener(ABOUT_EVENT, openAbout);
@@ -516,9 +518,16 @@ export function Workbench() {
     setActiveTabId(id);
   };
 
-  const handleNewFile = () => {
-    const n = files.filter((f) => f.name.startsWith('untitled')).length + 1;
-    addFile(`untitled${n}.vhd`, '');
+  // New File asks for a name and a language first (NewFileDialog); the file is
+  // added once the dialog's Create is pressed.
+  const handleNewFile = () => setDialog('newFile');
+
+  const suggestedNewFileName = `untitled${files.filter((f) => f.name.startsWith('untitled')).length + 1}`;
+
+  const handleCreateFile = (name: string, language: NewFileLanguage) => {
+    setDialog(null);
+    // folderForUpload keeps the upload rules: .v to verilog/, a VHDL tb_* to work/.
+    addFile(name, newFileContent(name, language), folderForUpload(name) ?? 'vhdl');
   };
 
   const handleUploadClick = () => uploadInputRef.current?.click();
@@ -602,6 +611,14 @@ export function Workbench() {
       <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
+      {dialog === 'newFile' && (
+        <NewFileDialog
+          suggestedName={suggestedNewFileName}
+          existingNames={files.map((f) => f.name)}
+          onCreate={handleCreateFile}
+          onClose={() => setDialog(null)}
+        />
+      )}
 
       <div className="wb-body" ref={bodyRef}>
         <div className="wb-sidebar" style={{ width: sidebarWidth }}>

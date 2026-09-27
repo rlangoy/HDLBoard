@@ -1,0 +1,127 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The New File dialog's own pieces; the shell is in Dialog.css. */
+
+.wb-newfile {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+}
+
+.wb-newfile__label {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-newfile__name {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--wb-text);
+  background: #ffffff;
+}
+
+.wb-newfile__name:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+  border-color: var(--wb-accent);
+}
+
+.wb-newfile__name[aria-invalid='true'] {
+  border-color: var(--wb-danger);
+}
+
+.wb-newfile__hint {
+  min-height: 1.5em;
+  margin: 6px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+.wb-newfile__hint strong {
+  color: var(--wb-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 600;
+}
+
+.wb-newfile__error {
+  color: var(--wb-danger-dark);
+}
+
+.wb-newfile__languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.wb-newfile__languages > legend {
+  float: left;
+  width: 100%;
+}
+
+.wb-newfile__radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--wb-text);
+  cursor: pointer;
+}
+
+.wb-newfile__radio input {
+  margin: 0;
+  accent-color: var(--wb-accent);
+}
+
+.wb-newfile__ext {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: var(--wb-text-muted);
+}
+
+.wb-newfile__buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.wb-newfile__cancel {
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  padding: 9px 18px;
+  background: #ffffff;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-newfile__cancel:hover {
+  background: var(--wb-hover);
+}
+
+.wb-newfile__cancel:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-newfile__buttons .wb-dialog__close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wb-newfile__buttons .wb-dialog__close:disabled:hover {
+  background: var(--wb-accent);
+}

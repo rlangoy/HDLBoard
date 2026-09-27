@@ -22,21 +22,24 @@ export interface DialogProps {
   describedBy?: string;
   /** `wide` (760 px) for content with a table; the default is 560 px. */
   size?: 'default' | 'wide';
+  /** Replaces the Close button, for a dialog that asks for something (New File). */
+  footer?: ReactNode;
   children: ReactNode;
 }
 
-const FOCUSABLE = 'a[href], button:not([disabled])';
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled])';
 
 /**
  * The shared modal shell for the About, Settings and Help dialogs: a blue header
  * band (badge, title, subtitle), a scrolling body and a Close button.
  *
  * Escape or a click on the backdrop closes it. Focus starts on the Close
- * button, is kept inside the dialog while it is open (Tab wraps), and goes
+ * button (or on an `autoFocus` field when `footer` replaces it), is kept
+ * inside the dialog while it is open (Tab wraps), and goes
  * back to whatever had it before — so a keyboard user lands back on the
  * header button they opened it from.
  */
-export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size = 'default', children }: DialogProps) {
+export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size = 'default', footer, children }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = `${useId()}-title`;
@@ -98,9 +101,11 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
         <div className="wb-dialog__body">{children}</div>
 
         <footer className="wb-dialog__footer">
-          <button ref={closeRef} type="button" className="wb-dialog__close" onClick={onClose}>
-            Close
-          </button>
+          {footer ?? (
+            <button ref={closeRef} type="button" className="wb-dialog__close" onClick={onClose}>
+              Close
+            </button>
+          )}
         </footer>
       </div>
     </div>
