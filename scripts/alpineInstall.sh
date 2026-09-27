@@ -2,8 +2,9 @@
 # HDLBoard — one-shot installer for Alpine Linux.
 #
 # Installs everything needed to serve HDLBoard as a web application on this
-# machine, and to keep it running: the built page served by nginx, the GHDL
-# backend supervised by OpenRC, both starting at boot.
+# machine, and to keep it running: the built page served by nginx, the backend
+# (GHDL for VHDL, Icarus Verilog for Verilog) supervised by OpenRC, both
+# starting at boot.
 #
 #   wget -O alpineInstall.sh https://raw.githubusercontent.com/rlangoy/HDLBoard/main/scripts/alpineInstall.sh
 #   sudo sh alpineInstall.sh
@@ -95,14 +96,23 @@ else
 	command -v ghdl >/dev/null 2>&1 || die "GHDL installed but not on PATH"
 	info "built and installed: $(ghdl --version | head -1)"
 fi
-# Icarus Verilog is packaged for Alpine (community), so no source build.
+
+# --- 3b. Icarus Verilog -----------------------------------------------------
+# Packaged for Alpine (community, enabled above), so no source build. The
+# backend needs both halves: iverilog compiles, vvp runs the result.
 step "Installing Icarus Verilog"
-if command -v iverilog >/dev/null 2>&1; then
+if command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
 	info "already installed: $(iverilog -V 2>/dev/null | head -1)"
 else
-	apk add --no-progress iverilog >/dev/null || die "could not install iverilog with apk"
+	apk add --no-progress iverilog >/dev/null || die "could not install iverilog with apk — is the community repository reachable?"
+	command -v iverilog >/dev/null 2>&1 || die "iverilog still not on PATH after 'apk add iverilog'"
+	command -v vvp >/dev/null 2>&1 || die "vvp still not on PATH after 'apk add iverilog'"
 	info "installed: $(iverilog -V 2>/dev/null | head -1)"
 fi
+# Pinned for the same reason as GHDL below: the service uses the one verified here.
+IVERILOG_BIN="$(command -v iverilog)"
+VVP_BIN="$(command -v vvp)"
+
 # Pin the absolute path of the GHDL we just found. OpenRC does put
 # /usr/local/bin on a service's PATH (see _LOCAL_PREFIX in
 # /usr/libexec/rc/sh/functions.sh), so a source build needs no help — but a
@@ -168,7 +178,7 @@ cat > /etc/init.d/hdlboard <<INIT
 #!/sbin/openrc-run
 # Written by scripts/alpineInstall.sh. See docs/HOSTING.md § 5.3.
 name="HDLBoard GHDL backend"
-description="WebSocket backend that compiles and runs VHDL with GHDL"
+description="WebSocket backend that compiles and runs VHDL with GHDL and Verilog with Icarus"
 
 command="$(command -v node)"
 command_args="$DIR/server/dist/server.js"
@@ -183,7 +193,8 @@ error_log="$LOG"
 # plain export: OpenRC builds supervise-daemon's command line from a fixed set
 # of variables and passes nothing else through. GHDL_EXE is belt-and-braces
 # for a source build in /usr/local, and load-bearing for a GHDL anywhere else.
-supervise_daemon_args="--env GHDL_WS_PORT=$WS_PORT --env GHDL_MAX_SESSIONS=$MAX_SESSIONS --env GHDL_EXE=$GHDL_BIN"
+# IVERILOG_EXE and VVP_EXE do the same job for Icarus Verilog.
+supervise_daemon_args="--env GHDL_WS_PORT=$WS_PORT --env GHDL_MAX_SESSIONS=$MAX_SESSIONS --env GHDL_EXE=$GHDL_BIN --env IVERILOG_EXE=$IVERILOG_BIN --env VVP_EXE=$VVP_BIN"
 
 depend() {
 	need net
@@ -252,6 +263,17 @@ if su -s /bin/sh "$USR" -c "cd '$probe' && '$GHDL_BIN' -a --std=08 probe.vhdl &&
 	info "GHDL     : the $USR account can analyse, elaborate and run a design"
 else
 	info "GHDL     : the $USR account CANNOT run a simulation — the board will stay dark"; rc=1
+fi
+
+# The same for Verilog: compile with iverilog and run with vvp.
+cat > "$probe/probe.v" <<'VERILOG'
+module probe; initial $display("hdlboard-probe-ok"); endmodule
+VERILOG
+chown "$USR:$USR" "$probe/probe.v"
+if su -s /bin/sh "$USR" -c "cd '$probe' && '$IVERILOG_BIN' -o probe.vvp probe.v && '$VVP_BIN' -n probe.vvp" 2>&1 | grep -q hdlboard-probe-ok; then
+	info "Icarus   : the $USR account can compile and run a Verilog design"
+else
+	info "Icarus   : the $USR account CANNOT run a Verilog simulation"; rc=1
 fi
 rm -rf "$probe"
 
