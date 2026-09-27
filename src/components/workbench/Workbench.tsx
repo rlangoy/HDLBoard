@@ -31,6 +31,7 @@ import { appendCapped } from './consoleLines';
 import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
+import { downloadProjectZip, downloadSourceFile } from './download';
 import './Workbench.css';
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
@@ -420,6 +421,34 @@ export function Workbench() {
 
   const handleSetTopFile = (id: string) => setTopFileId(id);
 
+  const handleDownloadFile = (id: string) => {
+    const file = files.find((f) => f.id === id);
+    if (file) downloadSourceFile(file);
+  };
+
+  const handleDownloadAll = () => {
+    if (files.length > 0) downloadProjectZip(files);
+  };
+
+  // Ctrl+S / Cmd+S saves the active tab to disk instead of the browser's
+  // "Save page as…" (which would save the app's HTML, not the design).
+  // Refs rather than deps so the listener is attached once, not on every
+  // keystroke's re-render.
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const activeTabRef = useRef(activeTabId);
+  activeTabRef.current = activeTabId;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      const file = filesRef.current.find((f) => f.id === activeTabRef.current);
+      if (file) downloadSourceFile(file);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl') => {
     const id = `file-${nextFileSeq++}`;
     setFiles((prev) => [...prev, { id, name, folder, content }]);
@@ -531,6 +560,8 @@ export function Workbench() {
             onNewFile={handleNewFile}
             onRename={handleRenameFile}
             onDelete={handleDeleteFile}
+            onDownload={handleDownloadFile}
+            onDownloadAll={handleDownloadAll}
             onFilesDropped={handleFilesDropped}
             topFileId={topFileId}
             onSetTopFile={handleSetTopFile}

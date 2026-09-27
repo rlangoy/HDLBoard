@@ -62,7 +62,8 @@
 }
 
 .wb-files__upload,
-.wb-files__new {
+.wb-files__new,
+.wb-files__download-all {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -95,6 +96,28 @@
 
 .wb-files__new:hover {
   background: var(--wb-hover);
+}
+
+/* Same secondary look as New File (a muted label read as disabled). */
+.wb-files__download-all {
+  border: 1px solid var(--wb-border);
+  background: #ffffff;
+  color: var(--wb-text);
+}
+
+.wb-files__download-all:hover:not(:disabled) {
+  background: var(--wb-hover);
+}
+
+.wb-files__download-all:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wb-files__action-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
 }
 
 .wb-files__tree {
@@ -395,7 +418,7 @@
   background: #f8fafc;
 }
 
-/* Rename/delete: real Material Symbols Outlined glyphs (icons.tsx), not
+/* Download/rename/delete: real Material Symbols Outlined glyphs (icons.tsx), not
    built from CSS shapes like the rest of this file's icons — see the
    comment there for why. `fill: currentColor` on the <svg> is what makes
    them track the button's colour, .wb-files__row-action / --danger below. */

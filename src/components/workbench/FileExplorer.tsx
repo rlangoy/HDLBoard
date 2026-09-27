@@ -5,7 +5,7 @@ import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import type { VhdlFile } from './files';
-import { DeleteIcon, EditIcon, FilesIcon } from './icons';
+import { DeleteIcon, DownloadIcon, EditIcon, FilesIcon } from './icons';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -16,6 +16,10 @@ export interface FileExplorerProps {
   onNewFile: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  /** Save one file to the user's disk, as it currently reads in the editor. */
+  onDownload: (id: string) => void;
+  /** Save the whole project (every folder) as one .zip. */
+  onDownloadAll: () => void;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList) => void;
   /** The design file a run starts from — a blue dot, vs. every other design file's gray circle. Its folder picks the simulator. */
@@ -26,7 +30,7 @@ export interface FileExplorerProps {
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
 
 /**
- * The "Files" panel: upload / new-file actions above the folder tree —
+ * The "Files" panel: upload / new-file / download-all actions above the folder tree —
  * `vhdl/` and `verilog/` for designs and `work/` for an uploaded VHDL `tb_*`
  * testbench. A folder with no files is not drawn, so the starter project
  * shows only `vhdl/`.
@@ -39,6 +43,8 @@ export function FileExplorer({
   onNewFile,
   onRename,
   onDelete,
+  onDownload,
+  onDownloadAll,
   onFilesDropped,
   topFileId,
   onSetTopFile,
@@ -135,6 +141,16 @@ export function FileExplorer({
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
           <span className="wb-files__label-text">New File</span>
         </button>
+        <button
+          type="button"
+          className="wb-files__download-all"
+          onClick={onDownloadAll}
+          disabled={files.length === 0}
+          title="Save every file as one .zip, keeping the folders"
+        >
+          <DownloadIcon className="wb-files__action-icon" aria-hidden="true" />
+          <span className="wb-files__label-text">Download All</span>
+        </button>
       </div>
 
       <div className="wb-files__tree" role="tree">
@@ -216,7 +232,17 @@ export function FileExplorer({
                             <button
                               type="button"
                               className="wb-files__row-action"
+                              aria-label={`Download ${f.name}`}
+                              title="Download"
+                              onClick={() => onDownload(f.id)}
+                            >
+                              <DownloadIcon className="wb-files__row-icon" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="wb-files__row-action"
                               aria-label={`Rename ${f.name}`}
+                              title="Rename"
                               onClick={() => startRename(f)}
                             >
                               <EditIcon className="wb-files__row-icon" aria-hidden="true" />
@@ -225,6 +251,7 @@ export function FileExplorer({
                               type="button"
                               className="wb-files__row-action wb-files__row-action--danger"
                               aria-label={`Delete ${f.name}`}
+                              title="Delete"
                               onClick={() => handleDelete(f)}
                             >
                               <DeleteIcon className="wb-files__row-icon" aria-hidden="true" />

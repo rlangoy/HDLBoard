@@ -67,7 +67,7 @@ Workbench                              (CSS grid: header / body / console)
 └─ .wb-body                            (grid row 2, flex row)
    ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
    │  ├─ SimulationCard                (card: Start/Stop + status)
-   │  └─ FileExplorer                  (card: Upload/New File + the vhdl/verilog/work tree)
+   │  └─ FileExplorer                  (card: Upload/New File/Download All + the vhdl/verilog/work tree)
    ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
    ├─ CodeEditor                       (flex: 1 — takes the remaining width)
    ├─ .wb-resizer                      (drag handle — resizes .wb-right)
@@ -172,6 +172,8 @@ interface FileExplorerProps {
   onNewFile: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onDownload: (id: string) => void;
+  onDownloadAll: () => void;
   onFilesDropped: (files: FileList) => void;
   topFileId: string | null;
   onSetTopFile: (id: string) => void;
@@ -258,6 +260,17 @@ Both are local to `FileExplorer` only in their *editing* state (`renamingId`
 `handleDeleteFile` reuses `handleCloseTab`'s "hand off to the next tab"
 logic — a deleted file cannot stay open — so deleting the active file
 behaves exactly like closing its tab, plus removing it from `files`.
+
+**Download.** Each row also has a download button (before rename), and the
+actions column has **Download All**, which saves the whole project as one
+`.zip` laid out like the tree (`vhdl/…`, `verilog/…`, `work/…`), named
+`HDLBoard-project-YYYY-MM-DD.zip`. Ctrl+S / Cmd+S downloads the active tab
+instead of the browser's "Save page as…". It is all client-side
+(`download.ts`: a Blob plus an `<a download>` click; in the desktop app
+Electron shows its native Save As dialog for the same click). The ZIP comes
+from `zip.ts`, a ~140-line stored-only writer (CRC-32, UTF-8 names), not
+jszip, to keep "no runtime deps beyond React". Duplicate names in one folder
+get ` (2)`, ` (3)` … so no file is lost on extraction. Tests: `zip.test.ts`.
 
 Folder and file names are wrapped in `.wb-files__label-text`
 (`overflow: hidden; text-overflow: ellipsis`), and every row/button it sits
@@ -446,7 +459,7 @@ other schemes.
 
 ### `icons.tsx`
 
-`EditIcon`, `DeleteIcon` — `FileExplorer`'s rename/delete row actions. The
+`EditIcon`, `DeleteIcon`, `DownloadIcon` — `FileExplorer`'s row actions (and Download All). The
 one deliberate exception to this folder's otherwise all-CSS icons (the
 upload arrow, `+`, chevron, folder and file glyphs are all drawn from
 `FileExplorer.css` pseudo-elements, same technique as the board parts):

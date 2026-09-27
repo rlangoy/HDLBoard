@@ -4,7 +4,7 @@
 import type { SVGProps } from 'react';
 
 /*
- * Material Symbols Outlined — "edit" and "delete", wght 400 / GRAD 0 /
+ * Material Symbols Outlined — "edit", "delete" and "download", wght 400 / GRAD 0 /
  * opsz 24 / FILL 0 (Google's default web variant), inlined as plain SVG
  * rather than pulled in as an icon font: this project runs fully local,
  * with no runtime dependency beyond React (see README "Prerequisites").
@@ -24,6 +24,14 @@ export function DeleteIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
       <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
+      <path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z" />
     </svg>
   );
 }
