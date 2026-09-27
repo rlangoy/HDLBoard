@@ -13,7 +13,9 @@ and **Windows (via WSL2)**.
 
 ## 1. How it fits together
 
-HDLBoard is two processes, and a browser that talks to both:
+HDLBoard is two processes, and a browser that talks to both. The backend starts
+GHDL for a VHDL design and Icarus Verilog (`iverilog` + `vvp`) for a Verilog one,
+chosen by the file the student marked as top:
 
 ```
    browser                         host machine
@@ -22,7 +24,7 @@ HDLBoard is two processes, and a browser that talks to both:
   │  page   │                     │  dist/  —  any web server    │
   │         │   WebSocket :9010   ├──────────────────────────────┤
   │  board  │ ◀──────────────────▶│  node server/dist/server.js  │
-  └─────────┘   /ghdlsim          │       └─ spawns ghdl         │
+  └─────────┘   /ghdlsim          │       └─ spawns ghdl / vvp   │
                                   └──────────────────────────────┘
 ```
 
@@ -47,9 +49,9 @@ build time (default `9010`). So:
 | **OS** | Linux, macOS, or Windows with WSL2 | `scripts/start.sh` / `stop.sh` are POSIX shell; Windows hosts run them inside WSL |
 | **[Node.js](https://nodejs.org/)** | 18+ (20+ recommended) | Runs the backend and builds the page |
 | **[GHDL](https://ghdl.github.io/ghdl/)** | any build supporting `--std=08` and `-g<name>=<value>` | Verified against 5.0.1 and 6.0.0, mcode |
-| **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Every Verilog session forks its own `vvp` |
+| **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Install it if students will use Verilog |
 | **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend) |
-| **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` process |
+| **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` or `vvp` process |
 | **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the browser tab closes |
 
 Nothing else, and no external services or accounts: everything stays on your
@@ -65,9 +67,11 @@ running in bursts. Raise or lower the cap to match the hardware.
 
 ## 3. Read this before you expose it
 
-The backend compiles and runs VHDL that anyone who can reach the port sends
-it. GHDL is a real compiler and VHDL-2008 has real file I/O, so **anyone who
-can reach the backend can run code as the user the backend runs as.** Each
+The backend compiles and runs VHDL and Verilog that anyone who can reach the
+port sends it. GHDL and Icarus Verilog are real compilers, and both languages
+have real file I/O (VHDL-2008's `textio`, Verilog's `$fopen`/`$fwrite`), so
+**anyone who can reach the backend can run code as the user the backend runs
+as.** Each
 session gets its own temp directory and simulations are killed after a
 timeout, but that is scheduling hygiene, not a sandbox. There is no
 authentication and no TLS.
@@ -92,6 +96,7 @@ Pick your platform. Each ends with the same two checks:
 ```bash
 node -v      # v18 or newer
 ghdl --version
+iverilog -V  # optional: only needed for Verilog designs
 ```
 
 ### Debian
@@ -134,8 +139,8 @@ moving on.
 
 ### Alpine Linux
 
-Everything on this page, in one command — packages, GHDL, the build, nginx,
-the OpenRC service, and checks that each part works:
+Everything on this page, in one command — packages, GHDL, Icarus Verilog, the
+build, nginx, the OpenRC service, and checks that each part works:
 
 ```bash
 wget -O alpineInstall.sh https://raw.githubusercontent.com/rlangoy/HDLBoard/main/scripts/alpineInstall.sh
@@ -146,20 +151,20 @@ sudo sh alpineInstall.sh
 Safe to re-run: a second run updates the checkout, rebuilds and restarts. The
 rest of this section, and [§ 5](#5-get-it-running), are what it does by hand.
 
-Node is packaged; **GHDL is not** (checked against 3.24 main and community),
-so build it — Alpine has the Ada compiler GHDL needs:
+Node and Icarus Verilog are packaged; **GHDL is not** (checked against 3.24 main
+and community), so build it — Alpine has the Ada compiler GHDL needs:
 
 ```bash
 sudo setup-apkrepos -o          # enable community: npm lives there, and a fresh install leaves it off
 sudo apk update
-sudo apk add nodejs npm git build-base gcc-gnat zlib-dev
+sudo apk add nodejs npm git iverilog build-base gcc-gnat zlib-dev
 
 git clone https://github.com/ghdl/ghdl ~/ghdl-src
 cd ~/ghdl-src
 ./configure --prefix=/usr/local          # mcode backend, the default
 make -j$(nproc)
 sudo make install
-cd - && ghdl --version
+cd - && ghdl --version && iverilog -V | head -1
 ```
 
 Skip the first line and `apk add` fails with `npm (no such package)`: `npm`
@@ -243,8 +248,9 @@ Good for a lab session you start in the morning and stop in the afternoon:
 ./scripts/start.sh
 ```
 
-That installs any missing npm dependencies (and offers to install GHDL if you
-skipped § 4), builds the backend, and starts both processes bound to
+That installs any missing npm dependencies (and offers to install GHDL, and
+Icarus Verilog, if you skipped § 4 — a missing Icarus only warns, since VHDL runs
+without it), builds the backend, and starts both processes bound to
 `0.0.0.0`. Students open `http://<your-ip>:5173/`. Logs are in `.run/*.log`;
 `./scripts/stop.sh` stops both.
 
@@ -291,7 +297,7 @@ it there is no site to open: see [§ 5.4](#54-serve-the-page).
 
 ```ini
 [Unit]
-Description=HDLBoard GHDL backend
+Description=HDLBoard simulation backend (GHDL and Icarus Verilog)
 After=network.target
 
 [Service]
@@ -380,8 +386,8 @@ that isn't there.
 
 ```sh
 #!/sbin/openrc-run
-name="HDLBoard GHDL backend"
-description="WebSocket backend that compiles and runs VHDL with GHDL"
+name="HDLBoard backend"
+description="WebSocket backend that compiles and runs VHDL (GHDL) and Verilog (Icarus)"
 
 command="/usr/bin/node"
 command_args="/srv/HDLBoard/server/dist/server.js"
@@ -396,10 +402,11 @@ error_log="/var/log/hdlboard.log"
 # how you set it — pass it to the supervisor, which is what actually spawns
 # node. A service's PATH is /bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:
 # /usr/local/sbin, so the source build from § 4 (in /usr/local) is found as
-# it is. GHDL installed anywhere else (/opt, or under a user's ~/.local)
-# needs GHDL_EXE with an absolute path.
+# it is, and `apk add iverilog` lands in /usr/bin. GHDL installed anywhere
+# else (/opt, or under a user's ~/.local) needs GHDL_EXE with an absolute
+# path; an Icarus outside the service's PATH needs IVERILOG_EXE (and VVP_EXE).
 supervise_daemon_args="--env GHDL_WS_PORT=9010 --env GHDL_MAX_SESSIONS=32"
-#supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl"
+#supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl --env IVERILOG_EXE=/opt/iverilog/bin/iverilog"
 
 depend() {
 	need net
@@ -442,6 +449,7 @@ ways it goes wrong:
 | a `--user` or `chown` failure, service never starts | Step 1 skipped: the `hdlboard` user doesn't exist |
 | `chdir: No such file or directory` | `/srv/HDLBoard` doesn't exist, or `directory=` points somewhere else |
 | Service runs, but every simulation reports GHDL missing | GHDL isn't reachable by the service user — see below |
+| Service runs and VHDL works, but a Verilog run says `Icarus Verilog (iverilog) was not found` | Icarus isn't installed, or isn't on the service user's `PATH` — install it, or set `IVERILOG_EXE` (and `VVP_EXE`) to absolute paths |
 | `stopped` after a reboot, and no `/var/log/hdlboard.log` at all | It never started node. Step 1 didn't complete — check `id hdlboard` and `ls /srv/HDLBoard/server/dist/server.js` |
 | `addgroup: group 'hdlboard' in use`, and nothing after it ran | A partly-completed earlier attempt. Re-run step 1's block as written — the guards make it idempotent |
 | `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 5.2, then copy again |
@@ -601,6 +609,9 @@ Backend, read at startup:
 | `GHDL_WS_PORT` | `9010` | Port the backend listens on |
 | `GHDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
+| `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |
+| `VVP_EXE` | `vvp` beside `IVERILOG_EXE`, else on `PATH` | Path to Icarus's `vvp` runtime, if it is not beside the compiler |
+| `IVERILOG_DIR` | unset | A self-contained Icarus tree (the Windows app ships one); the backend runs it with `-B`/`-M`. Takes precedence over the two above |
 
 `scripts/start.sh`:
 
@@ -609,7 +620,7 @@ Backend, read at startup:
 | `STATIC_PORT` | `5173` | Port for the page |
 | `GHDL_WS_PORT` | `9010` | Passed through to the backend |
 | `HDLBOARD_SKIP_INSTALL` | unset | `1` = check for prerequisites, never install |
-| `HDLBOARD_ASSUME_YES` | unset | `1` = install GHDL without prompting |
+| `HDLBOARD_ASSUME_YES` | unset | `1` = install GHDL and Icarus Verilog without prompting |
 
 Frontend, read at **build** time only:
 
@@ -666,6 +677,18 @@ design that proves the round trip — `LEDR <= SW;` — press **Start**, and fli
 a switch. If the LEDs follow the switches, the page, the backend and GHDL are
 all working together. Nothing else tests all three at once.
 
+Repeat it for Verilog: open `DE1_SoC.v` in the `verilog/` folder of the
+starter project, click its dot to make it the top file,
+and press **Start**. The console should print `Icarus Verilog version …`
+before `Simulation running ...`, and the LEDs should follow the switches.
+
+From the host you can also run the whole scenario set, in both languages,
+against the backend (needs Node and `npm install` in `server/`):
+
+```bash
+node tools/verify-backend.mjs ws://localhost:9010/ghdlsim     # prints PASS/FAIL per scenario, exit 0 if all pass
+```
+
 ---
 
 ## 10. Troubleshooting
@@ -676,10 +699,15 @@ all working together. Nothing else tests all three at once.
 | Works on the host, not from other machines | Firewall ([§ 8](#8-open-the-firewall)), or WSL networking ([§ 4](#windows-wsl2)) |
 | Board dark only over HTTPS | Mixed content — [§ 6](#6-one-port-with-a-reverse-proxy) |
 | `ghdl not found on PATH` | GHDL isn't installed, or isn't on the service user's `PATH` — set `GHDL_EXE` to its absolute path |
+| `Icarus Verilog (iverilog) was not found, so Verilog designs cannot run` | Icarus isn't installed, or isn't on the service user's `PATH` — install it (`apt install iverilog`, `apk add iverilog`, `brew install icarus-verilog`) or set `IVERILOG_EXE`; VHDL is unaffected |
+| Verilog console starts with a warning about an untested Icarus version | The installed Icarus is neither 12.x nor 13.x. It usually still works; install 13.0 if compiling or running misbehaves |
 | `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
 | `Too many concurrent sessions` | The `GHDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
-| Simulation stops after 60 s | A batch run hit its timeout — usually a process with no `wait`, not a hosting problem |
+| Simulation stops after 60 s | A batch run (a testbench with no ports) hit its timeout — usually a process with no `wait` (VHDL) or no `$finish`/delay (Verilog), not a hosting problem |
 | Page is stale after `git pull` | Rebuild: `npm run build`, and restart the backend. `start.sh` rebuilds the backend for you, not a production `dist/` |
+
+A design that prints on every clock edge is throttled to 200 console lines a
+second, with a summary line for what was dropped — that is by design, not loss.
 
 Logs: `.run/backend.log` and `.run/frontend.log` under `scripts/start.sh`,
 `journalctl -u hdlboard` under systemd, `rc-service hdlboard status` under
@@ -692,5 +720,7 @@ OpenRC.
 - [`BUILDING.md`](BUILDING.md) — building from source and the dev workflow
 - [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the backend's
   wire protocol, session model and limits
+- [`Verilog_implementation_plan.md`](Verilog_implementation_plan.md) — how the
+  Icarus Verilog engine is chosen, compiled and run
 - [`Design_Description.md`](Design_Description.md) — the board components and
   known limitations
