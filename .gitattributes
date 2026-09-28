@@ -12,3 +12,9 @@
 # copies against the starter designs in files.ts), so they stay LF on every
 # platform instead of following the working tree's native line endings.
 tests/fixtures/** text eol=lf
+
+# Docker inputs run inside Linux containers. The Dockerfile's RUN heredocs are
+# passed to /bin/sh verbatim, so a CRLF checkout breaks the build ("set -eu\r").
+docker/**          text eol=lf
+docker-compose.yml text eol=lf
+.dockerignore      text eol=lf

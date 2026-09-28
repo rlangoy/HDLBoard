@@ -10,3 +10,4 @@ Examples/
 
 # scripts/start.sh and stop.sh PID + log tracking (ghdl_implementation_plan.md § 7)
 .run/
+/Claude outputs

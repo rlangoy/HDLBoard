@@ -1,0 +1,10 @@
+# Keep the build context small; docker/Dockerfile copies what it needs by name.
+**/node_modules
+**/dist
+.git
+.run
+.env
+Examples
+winInstaller
+docs
+*.png

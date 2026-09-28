@@ -176,7 +176,7 @@ step "Installing the OpenRC service"
 [ -f /etc/init.d/hdlboard ] && [ ! -f /etc/init.d/hdlboard.bak ] && cp /etc/init.d/hdlboard /etc/init.d/hdlboard.bak
 cat > /etc/init.d/hdlboard <<INIT
 #!/sbin/openrc-run
-# Written by scripts/alpineInstall.sh. See docs/HOSTING.md § 5.3.
+# Written by scripts/alpineInstall.sh. See docs/HOSTING.md § 7.3.
 name="HDLBoard GHDL backend"
 description="WebSocket backend that compiles and runs VHDL with GHDL and Verilog with Icarus"
 

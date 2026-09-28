@@ -1,0 +1,66 @@
+# HDLBoard in Docker — see docker/README.md.
+#
+#   docker compose up -d --build        then open http://<host>/
+#
+# One public port: nginx serves the page and proxies /ghdlsim to the backend,
+# which is reachable only on the compose network (HOSTING.md § 8).
+# Settings go in a .env file next to this one.
+
+name: hdlboard
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: backend
+      args:
+        ALPINE_VERSION: ${ALPINE_VERSION:-3.24}
+        GHDL_REF: ${GHDL_REF:-master}
+    image: hdlboard-backend:latest
+    restart: unless-stopped        # replaces the OpenRC service + default runlevel
+    init: true                     # reaps ghdl/vvp children of a dead session
+    environment:
+      GHDL_MAX_SESSIONS: ${GHDL_MAX_SESSIONS:-32}
+    expose:
+      - "9010"                     # compose network only — not published
+    # Sessions write only under os.tmpdir() (work libraries, FIFOs, output),
+    # so everything else can be read-only.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 1024
+    # Budget ~1 core and ~150 MB per active simulation (HOSTING.md § 2):
+    # cpus: "4"
+    # mem_limit: 5g
+    healthcheck:
+      # A plain GET answers 426 — that port speaks WebSocket only.
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+process.env.GHDL_WS_PORT+'/ghdlsim',r=>process.exit(r.statusCode===426?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: web
+      args:
+        ALPINE_VERSION: ${ALPINE_VERSION:-3.24}
+        # The page connects to ws://<host>:<this port>/ghdlsim, i.e. back to nginx.
+        VITE_GHDL_WS_PORT: ${HDLBOARD_PAGE_PORT:-80}
+    image: hdlboard-web:latest
+    restart: unless-stopped
+    ports:
+      - "${HDLBOARD_PAGE_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

@@ -18,7 +18,7 @@ Write VHDL or Verilog and watch it run on a virtual board — flip switches, lig
 [Releases page](https://github.com/rlangoy/HDLBoard/releases) and run it.<br>
 The installer is not code-signed, so Windows SmartScreen will show a warning: choose **More info → Run anyway**.
 
-**Web Hosting** — host HDLBoard yourself (Linux or WSL) and open it in a browser.<br>
+**Web Hosting** — host HDLBoard yourself and open it in a browser.<br>
 Requirements and step-by-step installation: [**HOSTING.md**](docs/HOSTING.md).
 
 ## Compiling
@@ -29,7 +29,7 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 ## Documentation
 
 - [`BUILDING.md`](docs/BUILDING.md) — compile, run and package
-- [`HOSTING.md`](docs/HOSTING.md) — host it yourself on Linux, macOS or WSL
+- [`HOSTING.md`](docs/HOSTING.md) — host it yourself using Docker,Linux, macOS or Windows (WSL)
 - [`Design_Description.md`](docs/Design_Description.md) — how the board components are built, plus features and known limitations
 - [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
 - [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built

@@ -6,8 +6,11 @@ network. If you only want it on your *own* desktop, the
 [Windows installer](../README.md#installing) is simpler, and
 [`BUILDING.md`](BUILDING.md) covers a plain developer checkout.
 
-Instructions below for **Debian**, **Ubuntu**, **Alpine Linux**, **macOS**
-and **Windows (via WSL2)**.
+The quickest routes are **Docker** ([§ 4](#4-host-with-docker)) on any host
+that runs it, and a **one-command installer for Alpine Linux**
+([§ 5](#5-alpine-linux-one-command-install)). Setting it up by hand is covered
+for **Debian**, **Ubuntu**, **Alpine Linux**, **macOS** and **Windows (via
+WSL2)**.
 
 ---
 
@@ -30,7 +33,7 @@ chosen by the file the student marked as top:
 
 **The one rule that decides your whole setup:** the page builds its backend
 URL as `ws://<the host you typed in the address bar>:<port>/ghdlsim`
-(`src/components/workbench/ghdlClient.ts:33`), where the port is baked in at
+(`src/components/workbench/ghdlClient.ts:34`), where the port is baked in at
 build time (default `9010`). So:
 
 - the backend port must be reachable **from each student's browser**, not just
@@ -38,7 +41,7 @@ build time (default `9010`). So:
 - the hostname takes care of itself: whatever address the page was loaded
   from is the address the socket uses, so nothing needs configuring per client;
 - one port for everything is possible, with a reverse proxy — see
-  [§ 6](#6-one-port-with-a-reverse-proxy).
+  [§ 8](#8-one-port-with-a-reverse-proxy).
 
 ---
 
@@ -50,7 +53,7 @@ build time (default `9010`). So:
 | **[Node.js](https://nodejs.org/)** | 18+ (20+ recommended) | Runs the backend and builds the page |
 | **[GHDL](https://ghdl.github.io/ghdl/)** | any build supporting `--std=08` and `-g<name>=<value>` | Verified against 5.0.1 and 6.0.0, mcode |
 | **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Install it if students will use Verilog |
-| **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend) |
+| **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend). The Alpine installer uses `80` and `9010`. Docker, or any setup with the reverse proxy of [§ 8](#8-one-port-with-a-reverse-proxy), needs only `80` |
 | **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` or `vvp` process |
 | **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the browser tab closes |
 
@@ -84,12 +87,199 @@ Host it accordingly:
   forwarded from your home router.
 
 If it must sit somewhere less trusted, run it as a dedicated unprivileged user
-(§ 5.3 does this) inside a container or VM you can throw away, and put a VPN
+(§ 7.3 does this) inside a container or VM you can throw away, and put a VPN
 or an authenticating proxy in front.
 
 ---
 
-## 4. Install the prerequisites
+## Pick a route
+
+| Route | Best for | Ports open to clients | Section |
+|---|---|---|---|
+| **Docker** | Any Linux host with Docker, or Windows/macOS with Docker Desktop. Nothing installed on the host but Docker | **1** (`80`) | [§ 4](#4-host-with-docker) |
+| **Alpine installer** | A dedicated Alpine Linux machine or VM. One script sets up everything as native services | 2 (`80` and `9010`) | [§ 5](#5-alpine-linux-one-command-install) |
+| **By hand** | Debian, Ubuntu, macOS, WSL2, or when you want to see every piece | 2 (`5173` and `9010`) | [§ 6](#6-install-the-prerequisites) and [§ 7](#7-get-it-running) |
+
+All three end in the same place: a page students open in a browser and a
+backend that runs their VHDL and Verilog. [§ 11](#11-check-it-works) checks
+any of them.
+
+---
+
+## 4. Host with Docker
+
+The quickest route on any machine that has Docker. T
+```
+   browser                  host
+  ┌─────────┐  HTTP + WS  ┌───────────────────────────────────────────────┐
+  │  page   │ ──:80─────> │ web (nginx)  ── /ghdlsim ──────> backend:9010 │
+  │  board  │             │  dist/                        node + hdl      │
+  └─────────┘             └───────────────────────────────────────────────┘
+```
+
+
+**Requirements:** Docker Engine with the Compose plugin (`docker compose`), or
+Docker Desktop on Windows/macOS. The GHDL build needs about 1 GB of disk and a
+few minutes the first time. The image is verified on x86_64.
+
+### 4.1 Start it
+
+From the root of a checkout:
+
+```bash
+git clone https://github.com/rlangoy/HDLBoard.git
+cd HDLBoard
+docker compose up -d --build     # first build: a few minutes (GHDL compiles)
+docker compose ps                # wait for both services to be "healthy"
+```
+
+Then open `http://localhost/`.
+
+Stop and start it again (from the same folder):
+
+```bash
+docker compose stop      # stop both containers
+docker compose start     # start them again, no rebuild
+```
+
+**The build checks itself.** Before the backend image is tagged, the build
+runs the `hdlboard` account's GHDL and Icarus against a small design. If
+either one can't analyse, elaborate and run it, the build fails and the old
+image stays in place. For the full scenario set against the running backend,
+in both languages:
+
+```bash
+docker compose exec backend node tools/verify-backend.mjs    # 7/7 passed
+```
+
+### 4.2 Settings
+
+Put these in a `.env` file next to `docker-compose.yml`. All are optional.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. It is compiled into the page, so rebuild after changing it (`up -d --build`) |
+| `GHDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
+| `GHDL_REF` | `master` | GHDL branch or tag to build. Set a release tag such as `v6.0.0` for a reproducible build |
+| `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
+
+A classroom server wants a fixed GHDL, not whatever `master` holds on the day
+you rebuild:
+
+```bash
+echo GHDL_REF=v6.0.0 >> .env
+docker compose up -d --build
+docker compose exec backend ghdl --version     # GHDL 6.0.0 …
+```
+
+### 4.3 Day to day
+
+| Task | Command |
+|---|---|
+| Backend output | `docker compose logs -f backend` |
+| Restart | `docker compose restart backend` |
+| Update to the latest checkout | `git pull && docker compose up -d --build` |
+| Stop and remove | `docker compose down` |
+| Rebuild GHDL too | `docker compose build --no-cache backend` |
+
+`restart: unless-stopped` brings both containers back after a reboot, as long
+as the Docker daemon starts at boot: `systemctl enable docker` on systemd
+hosts, `rc-update add docker boot` on Alpine. Docker Desktop has to be set to
+start at sign-in.
+
+### 4.4 What the containers do for you
+
+- **Security.** The backend container runs as the unprivileged `hdlboard`
+  user, with a read-only root filesystem, no capabilities, no privilege
+  escalation and a PID limit. Sessions write only to a `tmpfs` at `/tmp`.
+  It is still arbitrary code execution on your hardware, so § 3 applies in
+  full. To cap CPU and memory on a shared server, uncomment `cpus` and
+  `mem_limit` in `docker-compose.yml`, using the sizing in § 2.
+- **No port mismatch.** The page is built with `VITE_GHDL_WS_PORT` set to the
+  page port, and nginx forwards the WebSocket, so the two-places rule of
+  [§ 9](#9-configuration-reference) is handled for you.
+- **HTTPS** still does not work as shipped, for the reason in
+  [§ 8](#8-one-port-with-a-reverse-proxy).
+
+[`docker/README.md`](../docker/README.md) has the same reference in short
+form, next to the Dockerfile.
+
+---
+
+## 5. Alpine Linux: one-command install
+
+For a dedicated Alpine machine or VM, where you want HDLBoard running as
+native services rather than in containers.
+[`scripts/alpineInstall.sh`](../scripts/alpineInstall.sh) does everything
+in [§ 6](#alpine-linux) and [§ 7](#7-get-it-running) for you:
+
+```bash
+wget -O alpineInstall.sh https://raw.githubusercontent.com/rlangoy/HDLBoard/main/scripts/alpineInstall.sh
+less alpineInstall.sh            # it runs as root, so read it first
+sudo sh alpineInstall.sh         # or: doas sh alpineInstall.sh
+```
+
+A minimal Alpine has `doas` rather than `sudo`. Use it, or `apk add sudo` first.
+
+### 5.1 What it does
+
+| Step | |
+|---|---|
+| 1. Preflight | Must be root, on Alpine, with OpenRC |
+| 2. Node | Enables the *community* repository if `setup-alpine` left it off (that's where `npm` lives), then installs `nodejs`, `npm` and `git`. Refuses Node older than 18 |
+| 3. GHDL | Skipped if `ghdl` is already on `PATH`. Otherwise it builds the mcode backend from GHDL's source into `/usr/local`, which takes a few minutes. GHDL isn't packaged for Alpine, and the upstream binaries are glibc builds that misbehave on musl |
+| 3b. Icarus Verilog | `apk add iverilog` (brings `vvp`) |
+| 4. Account and checkout | Creates the `hdlboard` system user and clones HDLBoard into `/srv/HDLBoard`. On a re-run it updates the checkout instead |
+| 5. Build | `npm install` and builds the page (with the backend port compiled in) and the backend, as `hdlboard` |
+| 6. Backend service | Writes `/etc/init.d/hdlboard` (the [§ 7.3](#73-keep-the-backend-running) service, with the GHDL and Icarus paths it just verified pinned), adds it to the `default` runlevel and starts it |
+| 7. Page | Installs nginx and serves `/srv/HDLBoard/dist` on port 80, replacing Alpine's default site |
+| 8. Checks | The backend answers `426`, the page answers, the `hdlboard` account can run a VHDL *and* a Verilog design, and both services start at boot |
+
+It finishes by printing the URL to open, or by marking each failed check with
+`NOT` / `CANNOT`, exiting non-zero and asking you to fix them and re-run.
+
+### 5.2 Settings
+
+Pass them as environment variables. All are optional:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HDLBOARD_DIR` | `/srv/HDLBoard` | Where to install |
+| `HDLBOARD_USER` | `hdlboard` | The service account |
+| `HDLBOARD_PAGE_PORT` | `80` | Port nginx serves the page on |
+| `GHDL_WS_PORT` | `9010` | Port the backend listens on, compiled into the page as well |
+| `GHDL_MAX_SESSIONS` | `32` | Concurrent simulations |
+| `HDLBOARD_REPO` | the GitHub repository | Git URL to install from, for a fork or a local mirror |
+| `HDLBOARD_BRANCH` | `main` | Branch or tag to install |
+
+```bash
+sudo env HDLBOARD_PAGE_PORT=8080 GHDL_MAX_SESSIONS=48 sh alpineInstall.sh
+```
+
+### 5.3 After installing
+
+Unlike Docker, this setup has **two** ports that must be reachable from each
+student's browser: the page port (`80`) and the backend port (`9010`), per
+[§ 1](#1-how-it-fits-together). A stock Alpine has no firewall, so there is
+usually nothing to open. If you run one, see [§ 10](#10-open-the-firewall).
+
+| Task | Command |
+|---|---|
+| Backend status | `rc-service hdlboard status` |
+| Backend output | `tail -f /var/log/hdlboard.log` |
+| Restart | `rc-service hdlboard restart` |
+| Update to the latest version | Re-run `sudo sh alpineInstall.sh`. It stops the service, updates the checkout, rebuilds and restarts |
+
+**Re-running is safe.** Every step checks before it acts. An existing GHDL is
+kept, the log isn't truncated, and a hand-written `/etc/init.d/hdlboard` is
+saved once as `hdlboard.bak` before it is replaced.
+
+If a check fails, the troubleshooting table in [§ 7.3](#73-keep-the-backend-running)
+covers the OpenRC failure modes one by one.
+
+---
+
+## 6. Install the prerequisites
 
 Pick your platform. Each ends with the same two checks:
 
@@ -139,19 +329,9 @@ moving on.
 
 ### Alpine Linux
 
-Everything on this page, in one command — packages, GHDL, Icarus Verilog, the
-build, nginx, the OpenRC service, and checks that each part works:
-
-```bash
-wget -O alpineInstall.sh https://raw.githubusercontent.com/rlangoy/HDLBoard/main/scripts/alpineInstall.sh
-less alpineInstall.sh            # it runs as root — read it first
-sudo sh alpineInstall.sh
-```
-
-It ends with a check that the service account can really analyse, elaborate
-and run a VHDL design *and* compile and run a Verilog one. Safe to re-run: a
-second run updates the checkout, rebuilds and restarts. The
-rest of this section, and [§ 5](#5-get-it-running), are what it does by hand.
+The [one-command installer](#5-alpine-linux-one-command-install) does all of
+this for you. The rest of this section, and [§ 7](#7-get-it-running), are
+what it does, by hand.
 
 Node and Icarus Verilog are packaged (`iverilog` is in the *community*
 repository, which the first command below enables); **GHDL is not** (checked against 3.24 main
@@ -181,8 +361,8 @@ development branch; tested with `7.0.0-dev`, and simulations run correctly
 on it). Don't reach for the binaries on GHDL's
 releases page: they're linked against glibc and Alpine is musl, so they need
 a glibc shim to run at all and misbehave in ways that look like compiler bugs.
-If you'd rather not build, run HDLBoard in a Debian container on the Alpine
-host instead.
+If you'd rather not build on the host, use [Docker](#4-host-with-docker),
+which builds GHDL inside the image instead.
 
 ### macOS
 
@@ -236,14 +416,14 @@ worth preferring on a machine that gets rebooted.
 
 ---
 
-## 5. Get it running
+## 7. Get it running
 
 ```bash
 git clone https://github.com/rlangoy/HDLBoard.git
 cd HDLBoard
 ```
 
-### 5.1 Quick — the dev server
+### 7.1 Quick — the dev server
 
 Good for a lab session you start in the morning and stop in the afternoon:
 
@@ -252,7 +432,7 @@ Good for a lab session you start in the morning and stop in the afternoon:
 ```
 
 That installs any missing npm dependencies (and offers to install GHDL, and
-Icarus Verilog, if you skipped § 4 — a missing Icarus only warns, since VHDL runs
+Icarus Verilog, if you skipped § 6 — a missing Icarus only warns, since VHDL runs
 without it), builds the backend, and starts both processes bound to
 `0.0.0.0`. Students open `http://<your-ip>:5173/`. Logs are in `.run/*.log`;
 `./scripts/stop.sh` stops both.
@@ -261,7 +441,7 @@ It's the Vite dev server, so it rebuilds on file changes and does more work
 per request than it needs to — fine for a class, not what you want running
 for months.
 
-### 5.2 Production — build once, serve static
+### 7.2 Production — build once, serve static
 
 Build the page, then serve `dist/` with any web server:
 
@@ -287,14 +467,14 @@ server {
 ```
 
 Clients then use port 5173 for the page and 9010 for the board (the same
-ports as `scripts/start.sh`). To put both on port 80, see [§ 6](#6-one-port-with-a-reverse-proxy).
+ports as `scripts/start.sh`). To put both on port 80, see [§ 8](#8-one-port-with-a-reverse-proxy).
 
-### 5.3 Keep the backend running
+### 7.3 Keep the backend running
 
 Everything in this section starts the **backend only**. The backend speaks
 WebSocket and nothing else — a browser pointed at it gets `426 Upgrade
 Required`, not a page. Serving the page is a separate job, and until you do
-it there is no site to open: see [§ 5.4](#54-serve-the-page).
+it there is no site to open: see [§ 7.4](#74-serve-the-page).
 
 **systemd** (Debian, Ubuntu) — `/etc/systemd/system/hdlboard.service`:
 
@@ -338,7 +518,7 @@ terminal that's about to prompt for a sudo password routinely executes the
 first line and silently discards the rest:
 
 ```bash
-cd /path/to/HDLBoard      # your checkout, spelled out — it must be built, § 5.2
+cd /path/to/HDLBoard      # your checkout, spelled out — it must be built, § 7.2
 SRC=$PWD                  # an absolute path, resolved before sudo sees it
 
 sudo sh -eu <<SETUP
@@ -368,7 +548,7 @@ Three things make that safe to run, and to re-run:
   with it — or, for the log, emptying it (`install` on an existing file
   truncates it).
 - **Re-running is also how you redeploy.** After a `git pull` and a rebuild
-  (§ 5.2), run the block again and `sudo rc-service hdlboard restart`.
+  (§ 7.2), run the block again and `sudo rc-service hdlboard restart`.
 
 Check all of it landed before going on — **every one of these must print, and
 if any of them doesn't, fix that before writing the service file**, because
@@ -404,7 +584,7 @@ error_log="/var/log/hdlboard.log"
 # The daemon's environment. A plain `export` at the top of this file is not
 # how you set it — pass it to the supervisor, which is what actually spawns
 # node. A service's PATH is /bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:
-# /usr/local/sbin, so the source build from § 4 (in /usr/local) is found as
+# /usr/local/sbin, so the source build from § 6 (in /usr/local) is found as
 # it is, and `apk add iverilog` lands in /usr/bin. GHDL installed anywhere
 # else (/opt, or under a user's ~/.local) needs GHDL_EXE with an absolute
 # path; an Icarus outside the service's PATH needs IVERILOG_EXE and VVP_EXE
@@ -456,7 +636,7 @@ ways it goes wrong:
 | Service runs and VHDL works, but a Verilog run says `Icarus Verilog (iverilog) was not found` | Icarus isn't installed, or isn't on the service user's `PATH` — install it, or set `IVERILOG_EXE` (and `VVP_EXE`) to absolute paths |
 | `stopped` after a reboot, and no `/var/log/hdlboard.log` at all | It never started node. Step 1 didn't complete — check `id hdlboard` and `ls /srv/HDLBoard/server/dist/server.js` |
 | `addgroup: group 'hdlboard' in use`, and nothing after it ran | A partly-completed earlier attempt. Re-run step 1's block as written — the guards make it idempotent |
-| `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 5.2, then copy again |
+| `Cannot find module '/srv/HDLBoard/server/dist/server.js'` in the log | The tree was copied before it was built — § 7.2, then copy again |
 
 **A GHDL under someone's home directory won't do.** A service's PATH doesn't
 include home directories, so it needs `GHDL_EXE` with an absolute path — and
@@ -471,7 +651,7 @@ $ env HOME=/srv/HDLBoard ~/.local/bin/ghdl --version
 The service user has its own `$HOME`, so the launcher looks in the wrong
 place and every simulation fails while the backend itself looks healthy.
 Install GHDL somewhere system-wide — `/usr/local` from the source build in
-[§ 4](#alpine-linux), or move the unpacked tree to `/opt/ghdl` and rewrite its
+[§ 6](#alpine-linux), or move the unpacked tree to `/opt/ghdl` and rewrite its
 launcher with absolute paths — or, on a single-user machine, skip the
 dedicated account and run the service as the user that owns the GHDL install.
 
@@ -540,14 +720,14 @@ even though nothing is wrong.
 `server/dist/server.js`, `RunAtLoad` true, then
 `launchctl load ~/Library/LaunchAgents/lan.hdlboard.plist`.
 
-### 5.4 Serve the page
+### 7.4 Serve the page
 
 The backend has no web page in it, so one of these has to be running too:
 
 | | |
 |---|---|
-| **nginx** (or any static server) | Serves the `dist/` from [§ 5.2](#52-production--build-once-serve-static). The production answer; the OpenRC walkthrough's step 5 above has a complete Alpine recipe, and the same `server {}` block works under Debian, Ubuntu and macOS |
-| **`scripts/start.sh`** | Serves the page *and* the backend, via the Vite dev server ([§ 5.1](#51-quick--the-dev-server)). Fine for a lab session, not for a machine that runs unattended — and don't run it alongside the service, they'd both want port 9010 |
+| **nginx** (or any static server) | Serves the `dist/` from [§ 7.2](#72-production--build-once-serve-static). The production answer; the OpenRC walkthrough's step 5 above has a complete Alpine recipe, and the same `server {}` block works under Debian, Ubuntu and macOS |
+| **`scripts/start.sh`** | Serves the page *and* the backend, via the Vite dev server ([§ 7.1](#71-quick--the-dev-server)). Fine for a lab session, not for a machine that runs unattended — and don't run it alongside the service, they'd both want port 9010 |
 
 A backend with no page in front of it is the most common way this setup looks
 finished and isn't: `rc-status`/`systemctl` says started, the port answers
@@ -555,7 +735,7 @@ finished and isn't: `rc-status`/`systemctl` says started, the port answers
 
 ---
 
-## 6. One port, with a reverse proxy
+## 8. One port, with a reverse proxy
 
 Two open ports is the default because the page and the backend are separate
 servers. You can collapse them into one by telling the build that the backend
@@ -592,7 +772,7 @@ that's merely waiting for the student to flip a switch.
 **HTTPS does not work as shipped.** The page always builds a `ws://` URL, and
 browsers block a plain WebSocket from an `https://` page, so a TLS front end
 gets you a dark board. It's a one-line change if you need it —
-`src/components/workbench/ghdlClient.ts:33`:
+`src/components/workbench/ghdlClient.ts:34`:
 
 ```ts
 const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -604,7 +784,7 @@ That change isn't in the repository; you're maintaining a local patch.
 
 ---
 
-## 7. Configuration reference
+## 9. Configuration reference
 
 Backend, read at startup:
 
@@ -639,9 +819,11 @@ up only as a board that never lights.
 
 ---
 
-## 8. Open the firewall
+## 10. Open the firewall
 
-Substitute your own ports if you changed them.
+Substitute your own ports if you changed them. The Alpine installer uses `80`
+and `9010`, and Docker needs only the page port (`80`). Docker publishes it
+itself, but a host firewall such as `ufw` still has to allow it.
 
 ```bash
 # Debian / Ubuntu (ufw)
@@ -656,21 +838,23 @@ sudo rc-update add iptables
 ```
 
 If you enable a default-drop policy, allow `22` first or you'll lock yourself
-out. (Using the one-port setup of § 6? Open `80` instead of both.)
+out. (Using the one-port setup of § 8? Open `80` instead of both.)
 
 macOS prompts on first launch — allow `node` to accept incoming connections;
 the setting lives in **System Settings → Network → Firewall → Options**.
-Windows is the `New-NetFirewallRule` line in [§ 4](#windows-wsl2).
+Windows is the `New-NetFirewallRule` line in [§ 6](#windows-wsl2).
 
 ---
 
-## 9. Check it works
+## 11. Check it works
 
-From the host:
+From the host (use your own page port: `80` for Docker and the Alpine
+installer, `5173` for `start.sh`):
 
 ```bash
 curl -I http://localhost:5173/                 # 200
 curl -i  http://localhost:9010/ghdlsim         # 426 Upgrade Required — correct
+curl -i  http://localhost/ghdlsim              # Docker: the same 426, through nginx
 ```
 
 `426` is the backend saying "this port speaks WebSocket": it means the backend
@@ -693,35 +877,47 @@ against the backend (needs Node and `npm install` in `server/`):
 node tools/verify-backend.mjs ws://localhost:9010/ghdlsim     # prints PASS/FAIL per scenario, exit 0 if all pass
 ```
 
+Under Docker the script is already in the backend image:
+`docker compose exec backend node tools/verify-backend.mjs`. From a checkout
+on the host, `node tools/verify-backend.mjs ws://localhost/ghdlsim` runs the
+same set through nginx, so it tests the WebSocket proxy too.
+
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 | Symptom | Cause |
 |---|---|
 | Page loads, board stays dark, console says the backend is unreachable | The backend port isn't open to the client. The page port being open is not enough — see [§ 1](#1-how-it-fits-together) |
-| Works on the host, not from other machines | Firewall ([§ 8](#8-open-the-firewall)), or WSL networking ([§ 4](#windows-wsl2)) |
-| Board dark only over HTTPS | Mixed content — [§ 6](#6-one-port-with-a-reverse-proxy) |
+| Works on the host, not from other machines | Firewall ([§ 10](#10-open-the-firewall)), or WSL networking ([§ 6](#windows-wsl2)) |
+| Board dark only over HTTPS | Mixed content — [§ 8](#8-one-port-with-a-reverse-proxy) |
 | `ghdl not found on PATH` | GHDL isn't installed, or isn't on the service user's `PATH` — set `GHDL_EXE` to its absolute path |
 | `Icarus Verilog (iverilog) was not found, so Verilog designs cannot run` | Icarus isn't installed, or isn't on the service user's `PATH` — install it (`apt install iverilog`, `apk add iverilog`, `brew install icarus-verilog`) or set `IVERILOG_EXE`; VHDL is unaffected |
 | Verilog console starts with a warning about an untested Icarus version | The installed Icarus is neither 12.x nor 13.x. It usually still works; install 13.0 if compiling or running misbehaves |
 | `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
 | `Too many concurrent sessions` | The `GHDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
 | Simulation stops after 60 s | A batch run (a testbench with no ports) hit its timeout — usually a process with no `wait` (VHDL) or no `$finish`/delay (Verilog), not a hosting problem |
+| Docker: `failed to connect to the docker API` | The Docker daemon isn't running. Start Docker Desktop, or `systemctl start docker` / `rc-service docker start` |
+| Docker: `web` never starts, `backend` is `unhealthy` | `docker compose logs backend`. The healthcheck expects `426` from the backend, and `web` waits for it by design |
+| Docker: the build fails at the `RUN <<'PROBE'` step with exit code 2, and the command in the error is full of `\r\n` | The Dockerfile was checked out with CRLF line endings. `.gitattributes` forces LF for `docker/`; re-checkout with `git rm --cached -r docker && git checkout -- docker` |
+| Docker: port 80 is already in use | Set `HDLBOARD_PAGE_PORT` in `.env` ([§ 4.2](#42-settings)), then `docker compose up -d --build` |
 | Page is stale after `git pull` | Rebuild: `npm run build`, and restart the backend. `start.sh` rebuilds the backend for you, not a production `dist/` |
 
 A design that prints on every clock edge is throttled to 200 console lines a
 second, with a summary line for what was dropped — that is by design, not loss.
 
 Logs: `.run/backend.log` and `.run/frontend.log` under `scripts/start.sh`,
-`journalctl -u hdlboard` under systemd, `rc-service hdlboard status` under
-OpenRC.
+`journalctl -u hdlboard` under systemd, `/var/log/hdlboard.log` under OpenRC
+(and the Alpine installer), `docker compose logs backend` under Docker.
 
 ---
 
 ## See also
 
 - [`BUILDING.md`](BUILDING.md) — building from source and the dev workflow
+- [`docker/README.md`](../docker/README.md) — the Docker setup in short form
+- [`scripts/alpineInstall.sh`](../scripts/alpineInstall.sh) — the Alpine
+  installer, commented step by step
 - [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) — the backend's
   wire protocol, session model and limits
 - [`Verilog_implementation_plan.md`](Verilog_implementation_plan.md) — how the
