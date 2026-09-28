@@ -50,8 +50,8 @@ services:
       target: web
       args:
         ALPINE_VERSION: ${ALPINE_VERSION:-3.24}
-        # The page connects to ws://<host>:<this port>/ghdlsim, i.e. back to nginx.
-        VITE_GHDL_WS_PORT: ${HDLBOARD_PAGE_PORT:-80}
+        # VITE_GHDL_WS_PORT stays empty: the page connects back to its own
+        # origin (nginx), whatever port or scheme it was loaded from.
     image: hdlboard-web:latest
     restart: unless-stopped
     ports:

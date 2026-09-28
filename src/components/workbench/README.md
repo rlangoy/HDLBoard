@@ -524,7 +524,7 @@ export class GhdlClient {
   close(): void;
 }
 
-export function ghdlBackendUrl(port: number): string;  // ws://<page host>:<port>/ghdlsim
+export function ghdlBackendUrl(port?: number): string; // ws[s]://<page host>[:<port>]/ghdlsim, no port = page origin
 ```
 
 The only file in this component that speaks WebSocket to the backend — full

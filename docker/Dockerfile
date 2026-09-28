@@ -10,6 +10,8 @@
 #   page-build  the page -> dist/, with the public port baked in
 #   backend     node + GHDL + Icarus Verilog, runs as 'hdlboard'   (target)
 #   web         nginx: serves dist/ and proxies /ghdlsim to backend (target)
+#   render      backend + nginx in one container, for single-container hosts
+#               such as Render.com (the default target: it is the last stage)
 
 ARG ALPINE_VERSION=3.24
 
@@ -48,10 +50,11 @@ RUN npm uninstall playwright --package-lock-only --no-fund --no-audit \
  && npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
-# The port the browser opens ws://<host>:<port>/ghdlsim on. With nginx proxying
-# /ghdlsim, that is the public page port — compose passes HDLBOARD_PAGE_PORT.
-# Declared after npm ci so changing it only redoes the build step.
-ARG VITE_GHDL_WS_PORT=80
+# The port the browser opens /ghdlsim on. Empty = the page's own origin (and
+# scheme: wss:// on https://), which is where nginx proxies /ghdlsim — so the
+# page works on any public port, behind TLS too. Declared after npm ci so
+# changing it only redoes the build step.
+ARG VITE_GHDL_WS_PORT=
 RUN VITE_GHDL_WS_PORT=${VITE_GHDL_WS_PORT} npm run build \
  && test -f dist/index.html
 
@@ -114,3 +117,28 @@ FROM nginx:alpine AS web
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=page-build /src/dist/ /usr/share/nginx/html/
 EXPOSE 80
+
+# --- render -----------------------------------------------------------------
+# Render (and hosts like it) builds the last stage and runs one container; it
+# ignores docker-compose.yml. So nginx and the backend share this one, nginx on
+# Render's default PORT (10000) proxying /ghdlsim to 127.0.0.1:9010. Compose
+# names its targets, so this stage never affects it.
+FROM backend AS render
+USER root
+# tini replaces compose's `init: true`: it reaps ghdl/vvp children of a dead
+# session. /run/nginx holds the pid file; logs go to Render's log stream.
+RUN apk add --no-cache nginx tini \
+ && mkdir -p /run/nginx \
+ && ln -sf /dev/stdout /var/log/nginx/access.log \
+ && ln -sf /dev/stderr /var/log/nginx/error.log
+COPY docker/nginx.single.conf /etc/nginx/http.d/default.conf
+COPY --from=page-build /src/dist/ /usr/share/nginx/html/
+# A free/starter instance has 512 MB and a fraction of a core; at ~150 MB per
+# simulation (HOSTING.md § 2) a few sessions is the ceiling. Override in the
+# Render dashboard for a bigger instance.
+ENV GHDL_MAX_SESSIONS=3
+EXPOSE 10000
+ENTRYPOINT ["/sbin/tini", "--"]
+# The backend runs as hdlboard and is restarted if it exits; nginx is the
+# container's main process.
+CMD ["/bin/sh", "-c", "(while :; do su -s /bin/sh hdlboard -c 'node server/dist/server.js'; echo 'backend exited, restarting' >&2; sleep 1; done) & exec nginx -g 'daemon off;'"]

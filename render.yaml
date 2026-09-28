@@ -1,0 +1,14 @@
+# Render.com Blueprint — see docker/README.md § Render. Builds the Dockerfile's
+# last stage (`render`): nginx + backend in one container on port 10000.
+services:
+  - type: web
+    name: hdlboard
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /
+    envVars:
+      # ~150 MB per active simulation; raise it on a bigger instance.
+      - key: GHDL_MAX_SESSIONS
+        value: "3"

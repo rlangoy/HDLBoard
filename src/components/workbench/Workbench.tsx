@@ -43,7 +43,9 @@ import './Workbench.css';
 // ghdlBackendUrl() resolves it from whatever host the page was loaded
 // from, so the LAN access this repo's own README documents for the Vite
 // dev server works for the backend too, with no extra configuration.
-const GHDL_WS_PORT = Number(import.meta.env.VITE_GHDL_WS_PORT ?? 9010);
+// Built with it set but empty (Docker, Render), Number('') is 0 and the page
+// connects to its own origin, where a reverse proxy forwards /ghdlsim.
+const GHDL_WS_PORT = Number(import.meta.env.VITE_GHDL_WS_PORT ?? 9010) || undefined;
 
 function timestamp(): string {
   const d = new Date();
