@@ -143,7 +143,6 @@ UI/
 ├─ tsconfig*.json
 ├─ vite.config.ts
 ├─ tools/
-│  ├─ screenshot.mjs            visual check helper (playwright)
 │  └─ bundle.mjs                inline a build into one .html for Examples/
 ├─ server/                      simulation backend (GHDL and Icarus Verilog), Node + TS
 └─ src/
@@ -826,15 +825,19 @@ prints. `SEGMENT_PATTERNS` is the table itself.
    § 4.
 3. Build the part; wrap it in `<Panel>` + `<BitRow>` + `<Readout>` from
    `components/board`. Add its tokens to `board/tokens.css`.
-4. Verify before calling it done:
+4. Verify before calling it done, with Claude driving a real Chrome window
+   through the **Claude-in-Chrome extension** (no script, no dependency —
+   the same approach as the browser end-to-end runbook,
+   `tests/e2e/verilog-browser.md`):
 
    ```
    npm run build
    npx vite preview --port 4173
-   npm run shot -- .pb-leds out.png
    ```
 
-   Then put `out.png` next to the reference PNG at the same width and compare.
+   Open `http://localhost:4173/` in Chrome and have Claude screenshot the
+   part (e.g. `.pb-leds`), then put that next to the reference PNG at the
+   same width and compare.
    Check every state — for LEDs that means lit and unlit, for HEX every
    segment pattern.
 5. Update § 2 and § 4 in this file, and the component's section plus the
@@ -1023,7 +1026,6 @@ HDLBoard/
 ├─ index.html, package.json, tsconfig*.json, vite.config.ts
 ├─ tools/
 │  ├─ verify-backend.mjs        runs the scenario fixtures against any running backend
-│  ├─ screenshot.mjs            visual-check helper (Playwright)
 │  └─ bundle.mjs                inline a build into one self-contained .html
 ├─ server/                      the simulation backend — its own Node.js project
 │  └─ src/                      protocol, session, engines/ (GHDL, Icarus), verilog/

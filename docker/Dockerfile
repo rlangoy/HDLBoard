@@ -41,11 +41,7 @@ FROM alpine:${ALPINE_VERSION} AS page-build
 RUN apk add --no-cache nodejs npm
 WORKDIR /src
 COPY package.json package-lock.json ./
-# playwright is a dev-only tool the page build never uses; take it out of this
-# stage's copy of package.json + lockfile (the repository is untouched), then
-# install exactly what the lockfile pins for everything else.
-RUN npm uninstall playwright --package-lock-only --no-fund --no-audit \
- && npm ci --no-fund --no-audit
+RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
 # The port the browser opens ws://<host>:<port>/ghdlsim on. With nginx proxying

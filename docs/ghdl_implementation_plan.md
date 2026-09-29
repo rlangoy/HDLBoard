@@ -1612,9 +1612,10 @@ obvious in a browser.
    error (misspelled `LEDR`); multi-file with cross-file entity reference;
    partial interface (`SW`/`LEDR` only); `RESET`; `STOP`; disconnect
    mid-run (assert no orphan GHDL process — `pgrep ghdl`).
-4. **Headless browser end-to-end.** Playwright is already a dev dependency
-   (`tools/screenshot.mjs`). Load the Workbench, type VHDL into the real
-   editor, Start, click a real switch, assert on the real `Leds` DOM. The
+4. **Browser end-to-end.** Claude drives a real Chrome window through the
+   Claude-in-Chrome extension, following a checked-in runbook (the approach
+   of `Verilog_implementation_plan.md` § 7.7). Load the Workbench, type
+   VHDL into the real editor, Start, click a real switch, assert on the real `Leds` DOM. The
    decisive test is **`LEDR <= not SW`** — it passes only if the backend is
    genuinely driving the board, because the Phase 0 mock could never produce
    it. Make this the regression test.
@@ -1696,11 +1697,13 @@ obvious in a browser.
     one 20 ms step. Run on the slowest machine in reach, and confirm
     `server/dist` matches `server/src` before measuring anything.
 
-> A note for whoever runs the Playwright tests here: in this project's
-> headless setup, `ResizeObserver` callbacks are not delivered unless frames
-> are being produced — take a screenshot between steps to pump the
-> compositor, or layout-dependent assertions silently read stale values.
-> This cost real debugging time during the board-scaling work.
+> A note for whoever runs the browser tests here: `ResizeObserver`
+> callbacks are not delivered unless frames are being produced (found under
+> the headless Playwright setup this project used before, and just as true
+> of a background Chrome tab) — keep the tab in front, or take a screenshot
+> between steps to pump the compositor, or layout-dependent assertions
+> silently read stale values. This cost real debugging time during the
+> board-scaling work.
 
 ---
 
@@ -1831,9 +1834,10 @@ was confirmed visually — six independently-addressable segment readouts
 in the real `SevenSegmentDisplays` DOM, correct positions.
 
 **Phase 6 — wire into `Workbench`** (§ 8.3) — **done. The end-to-end gate
-passed**, run in a real headless browser (Playwright) against the real
-backend, exactly as prescribed: three switches flipped, the code edited
-live in the real `<textarea>` from `LEDR <= SW;` to `LEDR <= not SW;`,
+passed**, run in a real headless browser (Playwright, at the time — browser
+tests have since moved to the Claude-in-Chrome extension,
+`Verilog_implementation_plan.md` § 7.7) against the real backend, exactly
+as prescribed: three switches flipped, the code edited live in the real `<textarea>` from `LEDR <= SW;` to `LEDR <= not SW;`,
 Start clicked — **7 of 10 LEDs lit** (10 − 3, inverted), a result the
 Phase 0 mock cannot produce under any input, which is what makes it
 proof rather than a plausible-looking coincidence. A further switch flip

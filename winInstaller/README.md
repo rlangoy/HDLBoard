@@ -112,7 +112,7 @@ Only the ones under `winInstaller/` are Electron's:
 
 | Path | Belongs to | Holds |
 |---|---|---|
-| `node_modules/`, `dist/` | **the frontend** | React, Vite, TypeScript, Playwright; and the Vite build |
+| `node_modules/`, `dist/` | **the frontend** | React, Vite, TypeScript; and the Vite build |
 | `server/node_modules/`, `server/dist/` | **the backend** | `ws`; and the compiled TypeScript |
 | `winInstaller/electron/node_modules/` | **Electron** | electron, electron-builder, esbuild |
 | `winInstaller/electron/resources/` | **Electron** | the assembled frontend + backend bundle + GHDL + Icarus Verilog |
