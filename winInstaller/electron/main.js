@@ -233,7 +233,7 @@ function registerIpc(persistProjects) {
 
 function showPortInUseDialog() {
   dialog.showErrorBox(
-    'Port 9010 is already in use',
+    `Port ${PORT} is already in use`,
     `HDLBoard needs port ${PORT}, but something else is already listening on it.\n\n` +
       'The usual causes are:\n' +
       `  • another copy of this app is already running — look for it in the taskbar;\n` +
@@ -279,7 +279,7 @@ async function startBackendOrDie(paths) {
   // because a bare Windows path like `C:\…` is not a valid module
   // specifier.
   const mod = await import(pathToFileURL(paths.backend).href);
-  return mod.startBackend({
+  const handle = mod.startBackend({
     port: PORT,
     serveDir: paths.frontend,
     ghdlExe: paths.ghdlExe,
@@ -288,6 +288,11 @@ async function startBackendOrDie(paths) {
     // matters on a shared LAN server is irrelevant here.
     maxSessions: 4,
   });
+  // `listen()` reports a busy port (EADDRINUSE) asynchronously, after
+  // `startBackend` has returned; `ready` is where it surfaces, so the caller's
+  // try/catch sees it like any other startup failure.
+  await handle.ready;
+  return handle;
 }
 
 app.whenReady().then(async () => {
@@ -313,19 +318,6 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-
-  // `listen()` reports EADDRINUSE asynchronously, so it surfaces here
-  // rather than in the try/catch above — by which time `startBackend` has
-  // already returned a handle quite happily.
-  process.on('uncaughtException', (err) => {
-    if (err && err.code === 'EADDRINUSE') {
-      console.error(`port ${PORT} already in use`);
-      showPortInUseDialog();
-      app.quit();
-      return;
-    }
-    console.error(`uncaught: ${err && err.stack ? err.stack : String(err)}`);
-  });
 
   const windowState = loadWindowState();
   mainWindow = new BrowserWindow({
