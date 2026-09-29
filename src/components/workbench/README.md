@@ -200,6 +200,7 @@ interface FileExplorerProps {
   onFilesDropped: (files: FileList) => void;
   topFileId: string | null;
   onSetTopFile: (id: string) => void;
+  topLocked?: boolean;   // a simulation is compiling/running: no new top
 }
 ```
 
@@ -255,7 +256,9 @@ directly — no need to first open/select that file. Each dot also carries a
 native `title` tooltip — "Top-File" on the current one, "Set Top-File" on
 every other — which a browser shows on hover regardless of `disabled`;
 `aria-label` carries the fuller, file-named version of the same thing for
-screen readers.
+screen readers. While `topLocked`, every other file's dot is disabled and
+faded (`.is-locked`, tooltip "Stop the simulation to change the Top-File"):
+the top file of a running simulation can't change until it stops.
 
 `Workbench` sends the top file's `name` as `RUN`'s optional inline arg
 (`ghdl_implementation_plan.md` § 6.3) so the backend elaborates *that*
@@ -311,11 +314,12 @@ interface CodeEditorProps {
   onAddTab: () => void;            // the tab strip's "+"
   onChange: (id: string, content: string) => void;
   onFilesDropped: (files: FileList) => void;
-  activeTabRun?: TabRunControl | null;  // the active tab's play/stop icon
+  tabRun?: TabRunControl | null;   // the one tab with a play/stop icon
 }
 
 interface TabRunControl {
-  running: boolean;   // the running simulation has this tab's file as top
+  tabId: string;
+  running: boolean;   // a simulation is running this tab's file: Stop
   disabled: boolean;  // while a run is compiling
   onStart: () => void;
   onStop: () => void;
@@ -324,12 +328,13 @@ interface TabRunControl {
 
 The tab strip plus one editing surface for the active tab.
 
-**Play/stop on the active tab.** Only the active tab shows a
-[`<SimToggle>`](#simtoggle) icon, ahead of its name, and only when
-`activeTabRun` is given — `Workbench` passes `null` for a file that can't be
-top (a `work/` testbench). It shows Stop only while the simulation is
-running *that* file; any other active tab shows Play, and Play makes the
-file top and starts (or restarts) the run from it. See
+**Play/stop on one tab.** At most one tab — `tabRun.tabId` — shows a
+[`<SimToggle>`](#simtoggle) icon, ahead of its name. `Workbench` picks it:
+while nothing runs, the active tab gets Play (unless its file can't be top,
+a `work/` testbench), and Play makes that file top and starts the run from
+it; while a simulation compiles or runs, only the running file's tab gets
+Stop — whichever tab is active, and greyed out until compiling finishes —
+and no tab offers Play. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
 textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
 open" placeholder rather than an empty editor — which is itself a valid
@@ -611,12 +616,6 @@ top, then does the same. Both go through `startRun`, which:
    change, passing the *next* value, never the `sw`/`key` state variable
    (React state isn't updated synchronously, so the stale value would
    leave the board permanently one flip behind).
-
-A play icon pressed on another tab while a run is going sends a fresh `RUN`
-straight away: the backend ends the old run with a `DONE` before compiling
-the new one. `onDone` leaves `status` at `'compiling'` when it is already
-there — it reads `statusRef`, not the stale `status` — so the card doesn't
-flash Stopped between the two runs.
 
 `handleStop` sends `STOP` and nothing else — `status`/log/board-blanking
 all happen when the backend's own `DONE` frame arrives (`onDone`), not

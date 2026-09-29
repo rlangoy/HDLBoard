@@ -16,9 +16,10 @@ export interface EditorTab {
   content: string;
 }
 
-/** What the active tab's play/stop icon shows and does (SimToggle). */
+/** Which tab carries the play/stop icon, and what it shows and does (SimToggle). */
 export interface TabRunControl {
-  /** The running simulation has this tab's file as top: Stop rather than Play. */
+  tabId: string;
+  /** A simulation is running this tab's file: Stop rather than Play. */
   running: boolean;
   disabled: boolean;
   onStart: () => void;
@@ -35,10 +36,10 @@ export interface CodeEditorProps {
   /** Files dropped anywhere on the editor pane — imported the same way a drop on the Files panel is. */
   onFilesDropped: (files: FileList) => void;
   /**
-   * The play/stop icon on the active tab; omitted or null when that file
-   * can't be run (a `work/` testbench). Inactive tabs never show one.
+   * The one tab with a play/stop icon — Play on the active tab while nothing
+   * runs, Stop on the running file's tab while a simulation runs — or null.
    */
-  activeTabRun?: TabRunControl | null;
+  tabRun?: TabRunControl | null;
 }
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
@@ -86,7 +87,7 @@ export function CodeEditor({
   onAddTab,
   onChange,
   onFilesDropped,
-  activeTabRun,
+  tabRun,
 }: CodeEditorProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -170,8 +171,15 @@ export function CodeEditor({
               if (e.key === 'Enter' || e.key === ' ') onSelectTab(tab.id);
             }}
           >
-            {tab.id === activeTabId && activeTabRun && (
-              <SimToggle className="wb-editor__tab-run" fileName={tab.name} {...activeTabRun} />
+            {tabRun?.tabId === tab.id && (
+              <SimToggle
+                className="wb-editor__tab-run"
+                fileName={tab.name}
+                running={tabRun.running}
+                disabled={tabRun.disabled}
+                onStart={tabRun.onStart}
+                onStop={tabRun.onStop}
+              />
             )}
             <span className="wb-editor__tab-name">{tab.name}</span>
             <button
