@@ -2,7 +2,13 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: plan, not built (2026-09-29).** Every simulator message quoted in this
+**Status: phases 1–4 built on branch `imp_syntax_error` (2026-09-29); phase 0.1 and phase 5 not done.**
+Phase 0.1 (re-capturing Appendix A on GHDL 5.0.1/6.0.0 and Icarus 13.0) could not be run in the
+build environment, which has neither simulator, so the fixtures are still the GHDL 4.1.0 / Icarus 12.0
+captures. The runbook of § 6.4 is in `tests/e2e/editor-diagnostics.md`; the UI was checked in Chromium
+against a faked backend only (E-D1–E-D4, E-D13, E-D14, E-D17), not against real simulators.
+
+**Original status: plan, not built.** Every simulator message quoted in this
 document was produced by running the real tools with the exact flags the backend
 uses (GHDL 4.1.0 mcode and Icarus Verilog 12.0 on Ubuntu 24.04), and checked
 against the Icarus 13.0 output already recorded in

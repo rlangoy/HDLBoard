@@ -38,6 +38,15 @@
   --wb-danger: #ef4444;
   --wb-danger-dark: #dc2626;
 
+  /* Editor error markers (CodeEditor). Every text colour is >= 4.5:1 on the
+     surface it is drawn on; the code text stays at 12.5:1 on the red tint. */
+  --wb-diag-error: #dc2626; /* gutter number, glyph, edge: 4.6:1 on the gutter */
+  --wb-diag-error-bg: rgba(239, 68, 68, 0.12); /* line tint (--wb-danger at 12 %) */
+  --wb-diag-error-text: #b91c1c; /* inline message: 5.5:1 on the tint */
+  --wb-diag-warning: #b45309; /* 4.8:1 on the gutter (#d97706 would be only 3.0:1) */
+  --wb-diag-warning-bg: rgba(245, 158, 11, 0.14);
+  --wb-diag-warning-text: #92400e; /* inline message: 6.4:1 on the tint */
+
   --wb-console-bg: #0f172a;
 
   /* The pane dividers (.wb-resizer): a light gray bar with darker edges,
@@ -229,4 +238,14 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+/* Text for assistive technology only. */
+.wb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

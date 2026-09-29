@@ -33,7 +33,11 @@ import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
 import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { HdlClient, hdlBackendUrl } from './hdlClient';
+import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
+import { useDiagnostics } from './useDiagnostics';
+import type { RevealRequest } from './useRevealLine';
+import type { LocatedDiagnostic } from './diagnosticLocation';
+import { firstRevealTarget } from './diagnosticLocation';
 import { runIconFor } from './runIcon';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
@@ -63,6 +67,13 @@ function timestamp(): string {
 let nextFileSeq = 1;
 
 // How long typing has to pause before the desktop app stores the workspace.
+/**
+ * An `ERROR` frame of these stages is a failed compile: open the first error.
+ * Runtime messages mark lines but never move the view (a failing assertion can
+ * arrive every clock cycle).
+ */
+const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
+
 const AUTOSAVE_DELAY_MS = 600;
 
 // The space each pane needs to stay usable, and the width each starts at —
@@ -483,6 +494,29 @@ export function Workbench() {
   // student hasn't asked for yet. `onState` is the only path that ever
   // writes ledState/hexState to anything other than blank — see the
   // file-top comment and Design_Description.md § 5 convention 11.
+  // Read by the HdlClient handlers (created once) and by Ctrl+S below.
+  const filesRef = useRef(files);
+  filesRef.current = files;
+
+  // Error markers: the compiler's messages, located in the files that were sent.
+  const diagnostics = useDiagnostics();
+  const { record: recordDiagnostics, startRun: startDiagnosticsRun, dismissFile: dismissDiagnostics } = diagnostics;
+  const [reveal, setReveal] = useState<RevealRequest | null>(null);
+  const revealSeq = useRef(0);
+  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
+    setOpenTabs((prev) => (prev.includes(target.fileId) ? prev : [...prev, target.fileId]));
+    setActiveTabId(target.fileId);
+    revealSeq.current += 1;
+    setReveal({ fileId: target.fileId, line: target.line, id: revealSeq.current });
+  }, []);
+  const revealFirstError = useCallback(
+    (located: readonly LocatedDiagnostic[]) => {
+      const target = firstRevealTarget(located);
+      if (target) revealLocation(target);
+    },
+    [revealLocation],
+  );
+
   const clientRef = useRef<HdlClient | null>(null);
   const getClient = useCallback((): HdlClient => {
     if (!clientRef.current) {
@@ -502,9 +536,14 @@ export function Workbench() {
           setLedState(ledr);
           setHexState(hex);
         },
-        onLog: (text) => appendLog(text),
+        onLog: (text) => {
+          appendLog(text);
+          recordDiagnostics(text, filesRef.current);
+        },
         onError: (stage, text) => {
           appendLog(`${stage} error:\n${text}`, 'error');
+          const located = recordDiagnostics(text, filesRef.current);
+          if (REVEALING_STAGES.includes(stage)) revealFirstError(located);
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
@@ -529,7 +568,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard]);
+  }, [appendLog, blankBoard, recordDiagnostics, revealFirstError]);
 
   useEffect(
     () => () => {
@@ -559,6 +598,7 @@ export function Workbench() {
 
   const handleDeleteFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
+    dismissDiagnostics(id);
     // Also closes the tab, if it had one open — same "next tab takes over"
     // logic as a plain close, since a deleted file can't stay open.
     handleCloseTab(id);
@@ -592,8 +632,6 @@ export function Workbench() {
   // "Save page as…" (which would save the app's HTML, not the design).
   // Refs rather than deps so the listener is attached once, not on every
   // keystroke's re-render.
-  const filesRef = useRef(files);
-  filesRef.current = files;
   const activeTabRef = useRef(activeTabId);
   activeTabRef.current = activeTabId;
   useEffect(() => {
@@ -655,6 +693,7 @@ export function Workbench() {
 
   const handleContentChange = (id: string, content: string) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));
+    dismissDiagnostics(id);
   };
 
   // The next value is sent, never the `sw`/`key` state variable — React
@@ -681,6 +720,8 @@ export function Workbench() {
     setRunFileId(fileId);
     blankBoard();
     const topFile = files.find((f) => f.id === fileId);
+    // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
+    startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
     getClient().run(files, topFile?.name);
   };
 
@@ -797,6 +838,9 @@ export function Workbench() {
           onChange={handleContentChange}
           onFilesDropped={handleFilesDropped}
           tabRun={tabRun}
+          diagnostics={diagnostics.byFile}
+          onDismissDiagnostics={dismissDiagnostics}
+          reveal={reveal}
         />
 
         <div
@@ -833,7 +877,12 @@ export function Workbench() {
         onPointerDown={handleConsoleResizerPointerDown}
       />
 
-      <ConsoleOutput lines={logLines} onClear={handleClearConsole} />
+      <ConsoleOutput
+        lines={logLines}
+        onClear={handleClearConsole}
+        locate={(line) => diagnostics.locateText(line, filesRef.current)}
+        onOpenLocation={revealLocation}
+      />
     </div>
   );
 }

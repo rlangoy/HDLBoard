@@ -667,6 +667,40 @@ identical font, padding and line-height.
 No third-party editor dependency, consistent with the "no runtime
 dependencies beyond React" rule.
 
+## Error markers
+
+When a run fails to compile, the code pane shows where: the line is tinted
+red (warnings amber), its line number carries a ✕ (or `!`) and a tooltip with
+the compiler's message, the message is written at the end of the line, and
+the tab gets a dot. The file with the first error is opened and scrolled to
+it. Console lines that name a marked place are links to it. There is no backend
+or protocol change: everything is parsed in the browser from the `ERROR` and
+`LOG` text the console already shows. Design:
+[`editor_diagnostics_implementation_plan.md`](../../../docs/editor_diagnostics_implementation_plan.md).
+
+| Module | Role |
+|---|---|
+| `diagnostics.ts` | Pure. A table of recognizers (`RECOGNIZERS`), one per message shape of GHDL and Icarus Verilog; `parseDiagnostics` turns text into `Diagnostic`s (notes and `(found: …)` continuations become `details`). |
+| `diagnosticLocation.ts` | Pure. Matches a printed file name to the file that was sent at Start (`RunSnapshot`, from `filesForRun`), drops anything ambiguous, unknown, out of range or edited since; `firstRevealTarget`. |
+| `diagnosticStore.ts` | Pure. `DiagnosticsByFile` with the dedup and caps (5 messages per line, 200 lines per file); returns the same object when nothing was added. |
+| `diagnosticText.ts` | Pure. All student-facing wording: tooltip, inline text, screen-reader summary. |
+| `useDiagnostics.ts`, `useRevealLine.ts` | The only stateful pieces: the store plus the run snapshot, and scroll-and-caret for a `RevealRequest`. |
+
+When markers change:
+
+| Event | Effect |
+|---|---|
+| Start pressed | all markers cleared; a new snapshot is taken |
+| `ERROR` frame | parse, locate, add; a failed compile (`analyze`, `elaborate`) reveals the first error |
+| `LOG` frame | parse, locate, add; never moves the view |
+| click in the code pane (text or gutter) | the active file's markers are removed |
+| any edit of a file, or deleting it | that file's markers are removed |
+| console Clear, tab switch or close, Stop, rename | no effect |
+
+A new message shape is one new entry in `RECOGNIZERS` plus a test row in
+`diagnostics.test.ts`; the real compiler output the tests use is in
+`diagnostics.fixtures.ts`.
+
 ## Styling
 
 Plain CSS per component, imported by each component's own `.tsx` — no

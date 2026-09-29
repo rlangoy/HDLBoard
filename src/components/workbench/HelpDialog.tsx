@@ -256,6 +256,17 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
         </div>
       </section>
 
+      {/* ------------------------------------------------ error markers */}
+      <section aria-labelledby="wb-help-markers">
+        <h3 id="wb-help-markers" className="wb-help__heading">
+          Error markers
+        </h3>
+        <p className="wb-dialog__lead">
+          Red and amber lines show where the compiler found a problem. Click or type in the file to clear them; the
+          full text stays in the console.
+        </p>
+      </section>
+
       {/* ------------------------------------------- learning resources */}
       <section aria-labelledby="wb-help-learn" className="wb-help__learn">
         <h3 id="wb-help-learn" className="wb-help__heading">

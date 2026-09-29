@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useRef, useState, type DragEvent, type UIEvent } from 'react';
+import { useId, useMemo, useRef, useState, type DragEvent, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
+import { describeLine, inlineText, summarize } from './diagnosticText';
+import {
+  countSeverities,
+  NO_DIAGNOSTICS,
+  type DiagnosticsByFile,
+  type LineDiagnostic,
+} from './diagnosticStore';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
 import { SimToggle } from './SimToggle';
+import { useRevealLine, type RevealRequest } from './useRevealLine';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
@@ -40,7 +48,15 @@ export interface CodeEditorProps {
    * runs, Stop on the running file's tab while a simulation runs — or null.
    */
   tabRun?: TabRunControl | null;
+  /** Compiler problems to mark, per file id (see diagnosticStore.ts). */
+  diagnostics?: DiagnosticsByFile;
+  /** The student clicked in, or edited, this file's code pane: its markers should go. */
+  onDismissDiagnostics?: (fileId: string) => void;
+  /** Show this line of its file (opened and active), caret at its start. */
+  reveal?: RevealRequest | null;
 }
+
+const NO_LINES: readonly LineDiagnostic[] = [];
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   keyword: 'wb-tok-keyword',
@@ -51,10 +67,10 @@ const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   punctuation: 'wb-tok-punct',
 };
 
-function HighlightedLine({ line }: { line: string }) {
+function HighlightedLine({ line, diagnostic }: { line: string; diagnostic?: LineDiagnostic }) {
   const tokens = tokenizeVhdlLine(line);
   return (
-    <div className="wb-editor__line">
+    <div className={cx('wb-editor__line', diagnostic && `is-${diagnostic.severity}`)}>
       {line.length === 0 ? (
         ' '
       ) : (
@@ -69,8 +85,49 @@ function HighlightedLine({ line }: { line: string }) {
           );
         })
       )}
+      {diagnostic && (
+        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inlineText(diagnostic)}</span>
+      )}
     </div>
   );
+}
+
+/** Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue). */
+function EditorGutter({
+  lines,
+  linesByNumber,
+  gutterRef,
+}: {
+  lines: string[];
+  linesByNumber: ReadonlyMap<number, LineDiagnostic>;
+  gutterRef: RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div className="wb-editor__gutter" ref={gutterRef} aria-hidden="true">
+      {lines.map((_, i) => {
+        const diagnostic = linesByNumber.get(i + 1);
+        return (
+          <div
+            className={cx('wb-editor__gutter-line', diagnostic && `is-${diagnostic.severity}`)}
+            key={i}
+            title={diagnostic && describeLine(diagnostic)}
+          >
+            {i + 1}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Hidden text after a tab's name, so the dot is not the only cue: ", 2 errors". */
+function tabProblemsText(lines: readonly LineDiagnostic[]): string {
+  const { errors, warnings } = countSeverities(lines);
+  const parts = [
+    errors > 0 && `${errors} error${errors === 1 ? '' : 's'}`,
+    warnings > 0 && `${warnings} warning${warnings === 1 ? '' : 's'}`,
+  ].filter(Boolean);
+  return parts.length > 0 ? `, ${parts.join(', ')}` : '';
 }
 
 /**
@@ -88,6 +145,9 @@ export function CodeEditor({
   onChange,
   onFilesDropped,
   tabRun,
+  diagnostics = NO_DIAGNOSTICS,
+  onDismissDiagnostics,
+  reveal,
 }: CodeEditorProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -98,6 +158,13 @@ export function CodeEditor({
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
   const lines = active ? active.content.split('\n') : [];
+  const activeLines = (active && diagnostics[active.id]) || NO_LINES;
+  const linesByNumber = useMemo(() => new Map(activeLines.map((d) => [d.line, d])), [activeLines]);
+  // Computed only from the stored lines, so a repeating assertion that adds
+  // nothing leaves the text unchanged and the live region silent.
+  const status = useMemo(() => (active ? summarize(active.name, activeLines) : ''), [active?.name, activeLines]);
+  const statusId = useId();
+  useRevealLine(textareaRef, active, reveal);
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     const { scrollTop, scrollLeft } = e.currentTarget;
@@ -159,13 +226,21 @@ export function CodeEditor({
         </div>
       )}
       <div className="wb-editor__tabs" role="tablist">
-        {tabs.map((tab) => (
+        {tabs.map((tab) => {
+          const tabLines = diagnostics[tab.id] ?? NO_LINES;
+          const { errors, warnings } = countSeverities(tabLines);
+          return (
           <div
             key={tab.id}
             role="tab"
             tabIndex={0}
             aria-selected={tab.id === activeTabId}
-            className={cx('wb-editor__tab', tab.id === activeTabId && 'is-active')}
+            className={cx(
+              'wb-editor__tab',
+              tab.id === activeTabId && 'is-active',
+              errors > 0 && 'has-errors',
+              errors === 0 && warnings > 0 && 'has-warnings',
+            )}
             onClick={() => onSelectTab(tab.id)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') onSelectTab(tab.id);
@@ -180,7 +255,10 @@ export function CodeEditor({
                 onClick={tabRun.onClick}
               />
             )}
-            <span className="wb-editor__tab-name">{tab.name}</span>
+            <span className="wb-editor__tab-name">
+              {tab.name}
+              <span className="wb-sr-only">{tabProblemsText(tabLines)}</span>
+            </span>
             <button
               type="button"
               className="wb-editor__tab-close"
@@ -193,25 +271,30 @@ export function CodeEditor({
               ×
             </button>
           </div>
-        ))}
+          );
+        })}
         <button type="button" className="wb-editor__tab-add" aria-label="New file" onClick={onAddTab}>
           +
         </button>
       </div>
 
       {active ? (
-        <div className="wb-editor__body">
-          <div className="wb-editor__gutter" ref={gutterRef} aria-hidden="true">
-            {lines.map((_, i) => (
-              <div className="wb-editor__gutter-line" key={i}>
-                {i + 1}
-              </div>
-            ))}
-          </div>
+        <div
+          className="wb-editor__body"
+          // A click in the text or on a line number clears this file's markers
+          // (hovering does not). The reveal's own focus and scroll are not clicks.
+          onPointerDown={() => {
+            if (activeLines.length > 0) onDismissDiagnostics?.(active.id);
+          }}
+        >
+          <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
+            {status}
+          </p>
+          <EditorGutter lines={lines} linesByNumber={linesByNumber} gutterRef={gutterRef} />
           <div className="wb-editor__surface">
             <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
               {lines.map((line, i) => (
-                <HighlightedLine line={line} key={i} />
+                <HighlightedLine line={line} key={i} diagnostic={linesByNumber.get(i + 1)} />
               ))}
             </pre>
             <textarea
@@ -223,6 +306,7 @@ export function CodeEditor({
               onScroll={handleScroll}
               onChange={(e) => onChange(active.id, e.target.value)}
               aria-label={`${active.name} source`}
+              aria-describedby={statusId}
             />
             <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
             <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
