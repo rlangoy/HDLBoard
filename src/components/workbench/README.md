@@ -87,7 +87,7 @@ Workbench                              (CSS grid: header / body / divider / cons
 ├─ Header                              (grid row 1, full width)
 └─ .wb-body                            (grid row 2, flex row)
    ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
-   │  ├─ SimulationCard                (card: play/stop icon, Start/Stop + status)
+   │  ├─ SimulationCard                (card: Start/Stop + status)
    │  └─ FileExplorer                  (card: Upload/New File/Download All + the vhdl/verilog/work tree)
    ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
    ├─ CodeEditor                       (flex: 1 — takes the remaining width)
@@ -361,15 +361,14 @@ interface SimulationCardProps {
 }
 ```
 
-The card at the top of the sidebar: a [`<SimToggle>`](#simtoggle) play/stop
-icon and "Simulation" heading, a status pill (dot + label) on the right, one full-width button
+The card at the top of the sidebar: a circular play glyph (decoration
+only) and "Simulation" heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
 line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` is the
 `topFile` prop.
 
 Purely presentational: the button is disabled while `compiling`, shows
-Start when `stopped` or `compiling`, and Stop once `running` — and the icon
-by the heading does the same, as Play or Stop; the status
+Start when `stopped` or `compiling`, and Stop once `running`; the status
 dot's colour and pulse follow `status` the same way. The caller decides
 what `status` means and owns the elapsed-time interval — this component
 only formats and renders the number it's given.
@@ -388,12 +387,11 @@ interface SimToggleProps {
   fileName: string;     // for the tooltip / aria-label
   onStart: () => void;
   onStop: () => void;
-  className?: string;   // callers set the size (24px in the card, 18px on a tab)
+  className?: string;   // the caller sets the size (18px on a tab)
 }
 ```
 
-The green play disc / red stop square shared by `<SimulationCard>`'s heading
-and `<CodeEditor>`'s active tab, so the two always look and read the same.
+The green play disc / red stop square on `<CodeEditor>`'s active tab.
 Its click stops propagating, so pressing it inside a tab isn't also a click
 on the tab.
 

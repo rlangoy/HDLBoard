@@ -17,10 +17,7 @@ export interface SimToggleProps {
   className?: string;
 }
 
-/**
- * The one-click play/stop icon shared by the Simulation card's heading and the
- * editor's active tab, so the two always look and read the same.
- */
+/** The one-click play/stop icon on the editor's active tab. */
 export function SimToggle({ running, disabled = false, fileName, onStart, onStop, className }: SimToggleProps) {
   const label = running ? `Stop simulation of ${fileName}` : `Start simulation with ${fileName} as top`;
   return (
