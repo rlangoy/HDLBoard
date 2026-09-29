@@ -69,6 +69,12 @@ export interface BackendHandle {
   stop(onClosed?: () => void): void;
   /** The port actually listening — useful to log. */
   port: number;
+  /**
+   * Resolves once the port is listening. Rejects with the listen error — `EADDRINUSE`
+   * when something else holds the port — which `listen()` can only report
+   * asynchronously, after `startBackend` has already returned.
+   */
+  ready: Promise<void>;
 }
 
 const MIME: Record<string, string> = {
@@ -91,6 +97,19 @@ const MIME: Record<string, string> = {
 };
 
 /**
+ * The request's path, percent-decoded, or `undefined` for a malformed escape such as
+ * `/%E0%A4%A` — `decodeURIComponent` throws on those, and from inside a request handler
+ * that is an unhandled rejection, which ends the process.
+ */
+function decodedPath(req: IncomingMessage): string | undefined {
+  try {
+    return decodeURIComponent((req.url ?? '/').split('?')[0]);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Serves one file out of `rootDir`. The `normalize`-then-prefix-check is
  * the path traversal guard: a request for `/../../etc/passwd` normalizes
  * to something outside `rootDir`, and anything that does is refused
@@ -100,7 +119,12 @@ const MIME: Record<string, string> = {
  * talk to it.
  */
 async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const urlPath = decodeURIComponent((req.url ?? '/').split('?')[0]);
+  const urlPath = decodedPath(req);
+  if (urlPath === undefined) {
+    res.writeHead(400, { 'content-type': 'text/plain' });
+    res.end('Bad request');
+    return;
+  }
   const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
   const target = resolve(rootDir, normalize(rel));
 
@@ -121,7 +145,11 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
       // a stale shell after an upgrade.
       'cache-control': 'no-cache',
     });
-    createReadStream(target).pipe(res);
+    // A file removed between the stat and the read fails here, after the headers
+    // went out; unhandled, that stream error would take the backend down.
+    createReadStream(target)
+      .on('error', () => res.destroy())
+      .pipe(res);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('Not found');
@@ -256,6 +284,16 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     ws.on('error', teardown);
   });
 
+  // Only a listen error belongs to `ready`; once listening, the listener is removed so
+  // a later error is not silently absorbed by an already-settled promise.
+  const ready = new Promise<void>((resolve, reject) => {
+    httpServer.once('error', reject);
+    httpServer.once('listening', () => {
+      httpServer.off('error', reject);
+      resolve();
+    });
+  });
+
   httpServer.listen(port, host, () => {
     console.log(`hdl-board GHDL backend listening on ws://${host}:${port}${WSPATH}`);
     console.log(`hdl-board Icarus Verilog: ${iverilogTools.iverilog}${iverilogTools.bundledDir ? ' (bundled tree)' : ''}`);
@@ -265,6 +303,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   let stopped = false;
   return {
     port,
+    ready,
     stop: (onClosed?: () => void) => {
       if (stopped) {
         onClosed?.();
@@ -294,6 +333,10 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   const backend = startBackend();
+  backend.ready.catch((err: unknown) => {
+    console.error(`hdl-board backend could not listen on port ${backend.port}: ${String(err)}`);
+    process.exit(1);
+  });
 
   /**
    * A signalled backend must not outlive its GHDL children (§ 5.10). Node's

@@ -4,9 +4,10 @@
 /* ------------------------------------------------------------------ *
  * A small VHDL tokenizer for the code editor's syntax colouring.
  *
- * Line-based on purpose: VHDL has no block comments and no multi-line
- * strings, so a whole file can be highlighted one line at a time with
- * no state carried across lines.
+ * Line-based on purpose: VHDL has no multi-line strings, and before
+ * VHDL-2008 no block comments, so a whole file can be highlighted one
+ * line at a time with no state carried across lines. VHDL-2008's
+ * `/* … *\/` comments are therefore not coloured as comments.
  * ------------------------------------------------------------------ */
 
 export type TokenType =

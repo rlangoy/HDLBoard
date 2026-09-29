@@ -10,8 +10,11 @@ class FakeSocket {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
   static last: FakeSocket | undefined;
-  readyState = FakeSocket.OPEN;
+  /** What a new socket starts as; a test sets CONNECTING to see what waits for `open`. */
+  static initialState = FakeSocket.OPEN;
+  readyState = FakeSocket.initialState;
   readonly sent: string[] = [];
+  private readonly openListeners: Array<() => void> = [];
   onopen: (() => void) | null = null;
   onmessage: (() => void) | null = null;
   onclose: (() => void) | null = null;
@@ -25,8 +28,18 @@ class FakeSocket {
     this.sent.push(text);
   }
 
-  addEventListener(): void {}
+  addEventListener(type: string, listener: () => void): void {
+    if (type === 'open') this.openListeners.push(listener);
+  }
+
   close(): void {}
+
+  /** Completes the connection the way a browser does: the `onopen` handler, then the listeners. */
+  open(): void {
+    this.readyState = FakeSocket.OPEN;
+    this.onopen?.();
+    for (const listener of this.openListeners) listener();
+  }
 }
 
 const file = (name: string, folder: VhdlFile['folder']): VhdlFile => ({ id: name, name, folder, content: `// ${name}` });
@@ -65,6 +78,7 @@ function runWith(topFileName?: string): string {
 describe('GhdlClient.run', () => {
   beforeEach(() => {
     FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
     vi.stubGlobal('WebSocket', FakeSocket);
   });
 
@@ -87,5 +101,13 @@ describe('GhdlClient.run', () => {
     const frame = runWith(undefined);
     expect(frame.split('\n')[0]).toBe('RUN');
     expect(sentNames()).toEqual(['top.vhd']);
+  });
+
+  test('a run started while connecting sends HELLO once, then RUN', () => {
+    FakeSocket.initialState = FakeSocket.CONNECTING;
+    runWith('top.vhd');
+    FakeSocket.last?.open();
+    const verbs = (FakeSocket.last?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
+    expect(verbs).toEqual(['HELLO', 'RUN']);
   });
 });

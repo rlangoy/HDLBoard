@@ -4,6 +4,8 @@
 import { useRef, useState, type DragEvent, type UIEvent } from 'react';
 import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
+import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
+import { isOverflowing } from './scrollThumb';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
@@ -72,6 +74,11 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scroll = useScrollMetrics(textareaRef);
+  // Where both bars show, each stops short of the corner the other one runs into.
+  const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
+  const cornerInset = bothBars ? SCROLLBAR_PX : 0;
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
   const lines = active ? active.content.split('\n') : [];
 
@@ -182,7 +189,8 @@ export function CodeEditor({
               ))}
             </pre>
             <textarea
-              className="wb-editor__textarea"
+              ref={textareaRef}
+              className="wb-editor__textarea wb-scrollbar-host"
               value={active.content}
               spellCheck={false}
               wrap="off"
@@ -190,6 +198,8 @@ export function CodeEditor({
               onChange={(e) => onChange(active.id, e.target.value)}
               aria-label={`${active.name} source`}
             />
+            <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
+            <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
           </div>
         </div>
       ) : (

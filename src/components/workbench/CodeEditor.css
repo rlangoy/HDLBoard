@@ -216,6 +216,13 @@
   caret-color: #0f172a;
 }
 
+/* The editor is the obvious focus target already; the browser's focus ring
+   around the whole text area is noise. */
+.wb-editor__textarea:focus,
+.wb-editor__textarea:focus-visible {
+  outline: none;
+}
+
 .wb-editor__textarea::selection {
   background: rgba(37, 99, 235, 0.25);
 }

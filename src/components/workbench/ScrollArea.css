@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* ScrollArea.tsx: a vertical scrolling viewport; the bar itself is OverlayScrollbar.css. */
+
+.wb-scroll {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wb-scroll__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Keeps content (the file rows' action buttons) out from under the bar. */
+.wb-scroll.has-rail .wb-scroll__viewport {
+  padding-right: 14px; /* OverlayScrollbar's SCROLLBAR_PX */
+}
