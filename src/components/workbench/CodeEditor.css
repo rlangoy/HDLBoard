@@ -103,6 +103,14 @@
   box-shadow: inset 0 -2px 0 var(--wb-accent);
 }
 
+/* The play/stop icon, ahead of the file name (CodeEditor's tabRun). Two classes, so
+   it outranks SimToggle.css's own size whatever the load order. */
+.wb-simtoggle.wb-editor__tab-run {
+  width: 16px;
+  height: 16px;
+  margin-left: -4px;
+}
+
 .wb-editor__tab-close {
   border: none;
   background: transparent;

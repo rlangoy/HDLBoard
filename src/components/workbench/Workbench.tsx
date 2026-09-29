@@ -27,11 +27,18 @@ import { NewFileDialog } from './NewFileDialog';
 import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
+import {
+  ACCEPTED_FILES_TEXT,
+  UPLOAD_ACCEPT,
+  folderAfterRename,
+  folderForUpload,
+  hasTopDot,
+  topAfterDelete,
+} from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import { downloadProjectZip, downloadSourceFile } from './download';
@@ -183,6 +190,9 @@ export function Workbench() {
   }, []);
 
   const [status, setStatus] = useState<SimStatus>('stopped');
+  // The file the current (or last) run was started with as top — the tab
+  // that carries the Stop icon while it runs.
+  const [runFileId, setRunFileId] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
 
@@ -564,7 +574,12 @@ export function Workbench() {
     }
   };
 
-  const handleSetTopFile = (id: string) => setTopFileId(id);
+  // A compiling or running simulation: its top file stays put until it stops.
+  const simActive = status !== 'stopped';
+
+  const handleSetTopFile = (id: string) => {
+    if (!simActive) setTopFileId(id);
+  };
 
   const handleDownloadFile = (id: string) => {
     const file = files.find((f) => f.id === id);
@@ -661,13 +676,30 @@ export function Workbench() {
     getClient().stim(sw, next);
   };
 
-  const handleStart = () => {
+  const startRun = (fileId: string | null) => {
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');
+    setRunFileId(fileId);
     blankBoard();
-    const topFile = files.find((f) => f.id === topFileId);
+    const topFile = files.find((f) => f.id === fileId);
     getClient().run(files, topFile?.name);
+  };
+
+  // The Start button runs the file named as "Top:" — open it and make it the
+  // active file (Files panel highlight and editor tab), so what runs is what shows.
+  const handleStart = () => {
+    if (topFileId !== null) handleOpenFile(topFileId);
+    startRun(topFileId);
+  };
+
+  // The active tab's play icon (only offered while nothing runs): that file
+  // becomes top — the blue dot, and the Simulation card's "Top:" — and the
+  // run starts from it.
+  const handleRunFile = (id: string) => {
+    if (simActive) return;
+    setTopFileId(id);
+    startRun(id);
   };
 
   const handleStop = () => {
@@ -683,6 +715,32 @@ export function Workbench() {
     .map((id) => files.find((f) => f.id === id))
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
+
+  // While a simulation compiles or runs, only its file's tab has an icon —
+  // Stop, whichever tab is active (greyed out until compiling finishes, as
+  // the card's button is). Otherwise the active tab offers Play, when its
+  // file could carry the blue dot.
+  const activeFile = files.find((f) => f.id === activeTabId);
+  let tabRun: TabRunControl | null = null;
+  if (simActive) {
+    if (runFileId !== null) {
+      tabRun = {
+        tabId: runFileId,
+        running: true,
+        disabled: status === 'compiling',
+        onStart: () => {},
+        onStop: handleStop,
+      };
+    }
+  } else if (activeFile && hasTopDot(activeFile.folder)) {
+    tabRun = {
+      tabId: activeFile.id,
+      running: false,
+      disabled: false,
+      onStart: () => handleRunFile(activeFile.id),
+      onStop: handleStop,
+    };
+  }
 
   return (
     <div
@@ -729,6 +787,7 @@ export function Workbench() {
             onFilesDropped={handleFilesDropped}
             topFileId={topFileId}
             onSetTopFile={handleSetTopFile}
+            topLocked={simActive}
           />
           <input
             ref={uploadInputRef}
@@ -756,6 +815,7 @@ export function Workbench() {
           onAddTab={handleNewFile}
           onChange={handleContentChange}
           onFilesDropped={handleFilesDropped}
+          tabRun={tabRun}
         />
 
         <div

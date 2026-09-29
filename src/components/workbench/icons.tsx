@@ -74,3 +74,21 @@ export function GearIcon() {
     </svg>
   );
 }
+
+/** An outlined teal triangle — starts a simulation (SimToggle). */
+export function PlayIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
+      <path d="M5.5 3.5L12.5 8L5.5 12.5V3.5Z" stroke="#0D9488" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+/** An outlined red rounded square — stops the running simulation (SimToggle). */
+export function StopIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
+      <rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.25" stroke="#EF4444" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}

@@ -244,6 +244,12 @@
   cursor: default;
 }
 
+/* Another file while a simulation runs: it can't become top until Stop. */
+.wb-files__top-dot.is-locked {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .wb-files__top-dot:not(:disabled):hover {
   background: rgba(15, 23, 42, 0.08);
 }

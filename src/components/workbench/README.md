@@ -44,9 +44,9 @@ export default function Page() {
 
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 `SettingsDialog`, `HelpDialog`, `FileExplorer`, `CodeEditor`,
-`SimulationCard`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
+`SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
 `ISSUES_URL`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
-`VhdlFile`, `EditorTab`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
+`VhdlFile`, `EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
 ---
@@ -62,6 +62,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<FileExplorer>`](#fileexplorer)
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
+  - [`<SimToggle>`](#simtoggle)
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
@@ -199,6 +200,7 @@ interface FileExplorerProps {
   onFilesDropped: (files: FileList) => void;
   topFileId: string | null;
   onSetTopFile: (id: string) => void;
+  topLocked?: boolean;   // a simulation is compiling/running: no new top
 }
 ```
 
@@ -254,7 +256,9 @@ directly — no need to first open/select that file. Each dot also carries a
 native `title` tooltip — "Top-File" on the current one, "Set Top-File" on
 every other — which a browser shows on hover regardless of `disabled`;
 `aria-label` carries the fuller, file-named version of the same thing for
-screen readers.
+screen readers. While `topLocked`, every other file's dot is disabled and
+faded (`.is-locked`, tooltip "Stop the simulation to change the Top-File"):
+the top file of a running simulation can't change until it stops.
 
 `Workbench` sends the top file's `name` as `RUN`'s optional inline arg
 (`ghdl_implementation_plan.md` § 6.3) so the backend elaborates *that*
@@ -310,10 +314,27 @@ interface CodeEditorProps {
   onAddTab: () => void;            // the tab strip's "+"
   onChange: (id: string, content: string) => void;
   onFilesDropped: (files: FileList) => void;
+  tabRun?: TabRunControl | null;   // the one tab with a play/stop icon
+}
+
+interface TabRunControl {
+  tabId: string;
+  running: boolean;   // a simulation is running this tab's file: Stop
+  disabled: boolean;  // while a run is compiling
+  onStart: () => void;
+  onStop: () => void;
 }
 ```
 
-The tab strip plus one editing surface for the active tab. See
+The tab strip plus one editing surface for the active tab.
+
+**Play/stop on one tab.** At most one tab — `tabRun.tabId` — shows a
+[`<SimToggle>`](#simtoggle) icon, ahead of its name. `Workbench` picks it:
+while nothing runs, the active tab gets Play (unless its file can't be top,
+a `work/` testbench), and Play makes that file top and starts the run from
+it; while a simulation compiles or runs, only the running file's tab gets
+Stop — whichever tab is active, and greyed out until compiling finishes —
+and no tab offers Play. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
 textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
 open" placeholder rather than an empty editor — which is itself a valid
@@ -345,8 +366,8 @@ interface SimulationCardProps {
 }
 ```
 
-The card at the top of the sidebar: a circular play glyph and "Simulation"
-heading, a status pill (dot + label) on the right, one full-width button
+The card at the top of the sidebar: a circular play glyph (decoration
+only) and "Simulation" heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
 line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` is the
 `topFile` prop.
@@ -361,6 +382,23 @@ The title, status label and footer line all use the same
 `.wb-simcard__label-text` truncation treatment as `FileExplorer`'s file
 names, for the same reason — the "Top: <file>" line in particular can run
 long enough to otherwise resist the sidebar shrinking.
+
+### `<SimToggle>`
+
+```tsx
+interface SimToggleProps {
+  running: boolean;     // Stop while true, Play otherwise
+  disabled?: boolean;
+  fileName: string;     // for the tooltip / aria-label
+  onStart: () => void;
+  onStop: () => void;
+  className?: string;   // the caller sets the size (16px on a tab)
+}
+```
+
+The outlined teal play triangle / red stop square on `<CodeEditor>`'s active tab.
+Its click stops propagating, so pressing it inside a tab isn't also a click
+on the tab.
 
 ### `<ConsoleOutput>`
 
@@ -491,6 +529,10 @@ each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn icon
 in this folder already does.
 
+`PlayIcon` and `StopIcon` (`<SimToggle>`'s teal triangle and red square) are
+the exception to that: they carry their own fixed colours, since the
+colour *is* the signal.
+
 ### `desktop.ts`
 
 ```ts
@@ -546,9 +588,12 @@ first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
-`handleStart`:
+`handleStart` (the card's Start button) opens the file with the blue dot
+and makes it the active file (Files panel and editor tab), then runs it; `handleRunFile` (the active tab's play icon) first makes that tab's file
+top, then does the same. Both go through `startRun`, which:
 
-1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, blanks the
+1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file
+   as `runFileId` (the one tab that shows Stop while it runs), blanks the
    board (`blankBoard()` — LEDs off, HEX blank; see
    `Design_Description.md` § 5 convention 11), and calls
    `client.run(files, topFileName)`, which sends the files of the top file's
