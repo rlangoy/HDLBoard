@@ -6,6 +6,12 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Its natural height while that fits the sidebar; shorter than that, the
+     file tree (.wb-files__scroll) scrolls instead of being cut off. The
+     minimum keeps the header, the buttons and a few rows in view — below it
+     the sidebar itself scrolls. */
+  flex: 0 1 auto;
+  min-height: 220px;
   overflow: hidden;
   background: #ffffff;
   border: 1px solid var(--wb-border);
@@ -118,6 +124,11 @@
   width: 15px;
   height: 15px;
   flex: none;
+}
+
+.wb-files__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .wb-files__tree {

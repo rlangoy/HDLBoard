@@ -1,0 +1,75 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * ScrollArea.tsx: a scrolling viewport with an overlay scrollbar in the style of
+ * Visual Studio's Solution Explorer. Idle, the thumb is a thin gray line on the
+ * right edge; over the rail (or while dragging) it widens into a track + thumb.
+ * The rail's hit area is always the wide one, so the thin line is easy to find.
+ */
+
+.wb-scroll {
+  --wb-scroll-rail-w: 12px;
+  --wb-scroll-line-w: 3px;
+  --wb-scroll-bar-w: 8px;
+  --wb-scroll-edge: 2px;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wb-scroll__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The overlay rail below replaces the native bar. */
+  scrollbar-width: none;
+}
+
+/* Keeps content (the file rows' action buttons) out from under the rail. */
+.wb-scroll.has-rail .wb-scroll__viewport {
+  padding-right: var(--wb-scroll-rail-w);
+}
+
+.wb-scroll__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.wb-scroll__rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--wb-scroll-rail-w);
+  z-index: 1;
+  border-radius: 6px;
+  transition: background 140ms ease;
+}
+
+.wb-scroll__thumb {
+  position: absolute;
+  right: var(--wb-scroll-edge);
+  width: var(--wb-scroll-line-w);
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: width 140ms ease, background 140ms ease;
+}
+
+.wb-scroll__rail:hover,
+.wb-scroll__rail.is-dragging {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.wb-scroll__rail:hover .wb-scroll__thumb,
+.wb-scroll__rail.is-dragging .wb-scroll__thumb {
+  width: var(--wb-scroll-bar-w);
+  background: #94a3b8;
+}
+
+.wb-scroll__rail .wb-scroll__thumb:hover,
+.wb-scroll__rail.is-dragging .wb-scroll__thumb {
+  background: #64748b;
+}
