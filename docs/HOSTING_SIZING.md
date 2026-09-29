@@ -4,6 +4,12 @@ Recommended `GHDL_MAX_SESSIONS` and per-simulation memory cap
 (`HDLBOARD_SIM_MEMORY_MB`) for the machines HDLBoard has been sized for, how
 those numbers were measured, and how to size a machine that is not listed.
 
+> **Branches.** The Render.com deployment files — `render.yaml`, the
+> `render` stage of `docker/Dockerfile` and the memory-cap script
+> `docker/simlimit.sh` — live on the
+> [`onrender`](https://github.com/rlangoy/HDLBoard/tree/onrender) branch.
+> The sizing advice applies to any host.
+
 - [Quick reference](#quick-reference)
 - [Render.com Free](#rendercom-free)
 - [Render.com Starter](#rendercom-starter)
@@ -44,7 +50,8 @@ than the worst case in the table.
 ## Render.com Free
 
 **Plan:** 0.1 CPU, 512 MB RAM, spins down after 15 minutes idle.
-**Deploy:** the `render` stage of `docker/Dockerfile`, via `render.yaml`.
+**Deploy:** the `render` stage of `docker/Dockerfile`, via `render.yaml`
+(both on the `onrender` branch).
 
 ```yaml
 envVars:
@@ -54,7 +61,8 @@ envVars:
     value: "96"
 ```
 
-These are the defaults in both `render.yaml` and the Dockerfile's render stage.
+These are the defaults in both `render.yaml` and the Dockerfile's render stage
+on the `onrender` branch.
 
 | Sessions running | LED lag (median / p90) | Time to start |
 |---|---|---|
@@ -164,11 +172,12 @@ a ~2.8 GHz Xeon, or ask for a quick benchmark run.
 
 ## Turning on the memory cap outside the render image
 
-The cap (`docker/simlimit.sh`) is built into the Dockerfile's `render` stage
-only. A native install (and the compose `backend` service) runs without one.
+The cap (`docker/simlimit.sh`, on the `onrender` branch) is built into the
+Dockerfile's `render` stage only. A native install (and the compose `backend` service) runs without one.
 To add it on a Linux host:
 
 ```bash
+# from a checkout of the onrender branch
 sudo mkdir -p /usr/local/lib/hdlboard
 sudo cp docker/simlimit.sh /usr/local/lib/hdlboard/
 sudo chmod 755 /usr/local/lib/hdlboard/simlimit.sh
@@ -189,8 +198,9 @@ The links' directory must **not** be on `PATH`: the script finds the real
 `ghdl`, `iverilog` and `vvp` by name on `PATH`.
 
 When a design exceeds the cap, GHDL stops without a message of its own; the
-backend then tells the student the simulation may have run out of memory and
-what the per-simulation limit is.
+`onrender` backend then tells the student the simulation may have run out of
+memory and what the per-simulation limit is (on `main` the message is only
+"Simulation exited unexpectedly.").
 
 ---
 
