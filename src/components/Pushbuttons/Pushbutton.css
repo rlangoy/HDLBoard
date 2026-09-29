@@ -32,8 +32,12 @@
   line-height: 0;
 
   box-sizing: border-box;
-  display: grid;
-  place-items: center;
+  /* The cap is centred by absolute positioning, not grid/flex: Chrome
+     before 83 ignores `display: grid` on a <button> and the cap would sit
+     8 px left of centre (seen on an Android TV's Chrome 80). */
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
   width: var(--pb-key-w);
   height: var(--pb-key-w);
   border-radius: var(--pb-key-r);
@@ -71,6 +75,12 @@
 
 .pb-key__cap {
   display: block;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: auto;
   width: var(--pb-key-cap);
   height: var(--pb-key-cap);
   border-radius: 50%;

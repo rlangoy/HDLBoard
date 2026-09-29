@@ -5,7 +5,7 @@ import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import type { VhdlFile } from './files';
-import { DeleteIcon, DownloadIcon, EditIcon, FilesIcon } from './icons';
+import { DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './FileExplorer.css';
 
@@ -204,7 +204,7 @@ export function FileExplorer({
                                 hasTopDot(folder) && 'wb-files__file--has-top-dot',
                               )}
                             >
-                              <span className="wb-icon wb-icon--file" aria-hidden="true" />
+                              <FileIcon className="wb-icon--file" aria-hidden="true" />
                               <input
                                 type="text"
                                 className="wb-files__rename-input"
@@ -226,7 +226,7 @@ export function FileExplorer({
                               onClick={() => onSelect(f.id)}
                               onDoubleClick={() => startRename(f)}
                             >
-                              <span className="wb-icon wb-icon--file" aria-hidden="true" />
+                              <FileIcon className="wb-icon--file" aria-hidden="true" />
                               <span className="wb-files__label-text">{f.name}</span>
                             </button>
                           )}

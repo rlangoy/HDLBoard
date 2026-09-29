@@ -44,6 +44,27 @@ export function FilesIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** A page with a folded corner — each source file's row in the Files panel. */
+export function FileIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#6B7280"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
 /** A gear, shared by the header's Settings button and the Settings dialog's badge. */
 export function GearIcon() {
   return (
