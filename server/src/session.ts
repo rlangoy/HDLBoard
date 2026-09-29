@@ -19,6 +19,7 @@ import { createOutputLimiter, type OutputLimiter } from './outputLimiter.js';
 import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
+import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, RunPlan, SimEngine } from './engines/types.js';
 import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput } from './protocol.js';
 
@@ -93,6 +94,19 @@ function renamed(from: string, to: string): boolean {
   }
 }
 
+/**
+ * Why a run cannot even be compiled, or `undefined` when it can. Names come first:
+ * every engine writes them into the session directory, so no engine may see one that
+ * would land outside it.
+ */
+function refusalBeforeCompile(files: readonly VhdlFileInput[], topFile: string | undefined, engine: SimEngine): string | undefined {
+  const unsafeName = firstUnsafeName(files);
+  if (unsafeName !== undefined) return unsafeName;
+  const strangers = mismatchedFiles(files, engine.language);
+  if (strangers.length > 0) return mismatchMessage(engine.language, topFile ?? '(none)', strangers);
+  return undefined;
+}
+
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 
 export class Session {
@@ -129,9 +143,18 @@ export class Session {
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
+  /**
+   * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
+   * closing — can arrive before it finishes; comparing against this after the
+   * await is how the older one knows it no longer owns the session.
+   */
+  private runRequest = 0;
+  private readonly chooseEngine: (topFile: string | undefined) => SimEngine;
 
-  constructor(send: (frame: ServerFrame) => void) {
+  /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
+  constructor(send: (frame: ServerFrame) => void, chooseEngine: (topFile: string | undefined) => SimEngine = selectEngine) {
     this.send = send;
+    this.chooseEngine = chooseEngine;
     this.dir = mkdtempSync(join(tmpdir(), 'hdl-board-'));
   }
 
@@ -173,15 +196,19 @@ export class Session {
   async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
     this.stopActive('stopped');
     this.state = 'compiling';
+    const request = ++this.runRequest;
 
-    const engine = selectEngine(topFile);
-    const strangers = mismatchedFiles(files, engine.language);
-    if (strangers.length > 0) {
-      this.failRun('analyze', mismatchMessage(engine.language, topFile ?? '(none)', strangers));
+    const engine = this.chooseEngine(topFile);
+    const refusal = refusalBeforeCompile(files, topFile, engine);
+    if (refusal !== undefined) {
+      this.failRun('analyze', refusal);
       return;
     }
 
     const prepared = await engine.prepare({ dir: this.dir, files, topFile });
+    // Closed, or superseded by a newer RUN while compiling: starting now would leave a
+    // simulator running that nothing tracks, and even a failure is no longer news.
+    if (this.destroyed || request !== this.runRequest) return;
     if (!prepared.ok) {
       this.failRun(prepared.stage, prepared.text);
       return;

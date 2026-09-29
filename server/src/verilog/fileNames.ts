@@ -12,6 +12,8 @@
  * Pure: it checks text and touches nothing.
  */
 
+import { firstProblem, PLAIN_NAME_RULES, type NameRule } from '../engines/sourceNames.js';
+
 /** The files the backend writes into a session directory, named once so nothing can drift. */
 export const TIMESCALE_FILE_NAME = '_hdlboard_ts.v';
 /** Passed first to every compile, so `#delay`s mean nanoseconds however the student's files begin. */
@@ -34,57 +36,25 @@ export type NameCheck =
   | { readonly ok: true; readonly kind: SourceKind }
   | { readonly ok: false; readonly reason: string };
 
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
-/** Separators, and the colon that makes `C:x.v` a drive-relative path on Windows. */
-const PATH_CHARACTER = /[\\/:]/;
 const SOURCE_EXTENSION = /\.v$/i;
 const HEADER_EXTENSION = /\.vh$/i;
 
-type Rule = (name: string) => string | undefined;
-
-const rejectEmpty: Rule = (name) => (name === '' ? 'A file name cannot be empty.' : undefined);
-
-const rejectControlCharacters: Rule = (name) =>
-  CONTROL_CHARACTER.test(name) ? 'A file name cannot contain control characters.' : undefined;
-
-const rejectPaths: Rule = (name) =>
-  name.includes('..') || PATH_CHARACTER.test(name) ? `${name} must be a plain file name, not a folder or a path.` : undefined;
-
-const rejectLeadingDash: Rule = (name) =>
-  name.startsWith('-') ? `${name}: file names cannot start with "-", which the compiler would read as an option.` : undefined;
-
-const rejectReservedNames: Rule = (name) =>
+const rejectReservedNames: NameRule = (name) =>
   RESERVED_FILE_NAMES.includes(name.toLowerCase()) ? `${name} is reserved: HDLBoard generates a file with that name.` : undefined;
 
-const rejectBareExtension: Rule = (name) =>
+const rejectBareExtension: NameRule = (name) =>
   /^\.[^.]*$/.test(name) ? `${name} has no name before its extension.` : undefined;
 
-const rejectNonVerilog: Rule = (name) =>
+const rejectNonVerilog: NameRule = (name) =>
   SOURCE_EXTENSION.test(name) || HEADER_EXTENSION.test(name)
     ? undefined
     : `${name} is not a Verilog file: a Verilog run accepts .v sources and .vh headers.`;
 
 /** In the order the reasons are most useful: structural problems first, then meaning. */
-const RULES: readonly Rule[] = [
-  rejectEmpty,
-  rejectControlCharacters,
-  rejectPaths,
-  rejectLeadingDash,
-  rejectReservedNames,
-  rejectBareExtension,
-  rejectNonVerilog,
-];
-
-function firstProblem(name: string): string | undefined {
-  for (const rule of RULES) {
-    const problem = rule(name);
-    if (problem !== undefined) return problem;
-  }
-  return undefined;
-}
+const RULES: readonly NameRule[] = [...PLAIN_NAME_RULES, rejectReservedNames, rejectBareExtension, rejectNonVerilog];
 
 export function validateSourceName(name: string): NameCheck {
-  const problem = firstProblem(name);
+  const problem = firstProblem(name, RULES);
   if (problem !== undefined) return { ok: false, reason: problem };
   return { ok: true, kind: HEADER_EXTENSION.test(name) ? 'header' : 'source' };
 }
