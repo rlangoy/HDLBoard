@@ -680,6 +680,16 @@ possibly-clamped state — so dragging the sidebar wide, which shrinks the
 board out of the way, doesn't forget the board's preferred width: drag the
 sidebar back and the board grows back to it.
 
+Those three requested sizes — both desired widths and the console height —
+are also written to `localStorage` at the end of every drag
+([`paneLayout.ts`](./paneLayout.ts)) and read back as the starting values on
+mount, so the app reopens with its dividers where they were left. The
+desktop app always serves the page from the same origin, so this survives a
+restart there; it also restores its window's size, position and maximized
+state (`window-state.json` in `userData`, `winInstaller/electron/main.js`),
+without which the restored pixel widths would be re-clamped to a different
+window.
+
 This is what keeps either panel from ever being pushed outside the viewport
 by the other — they shrink instead, in JS, rather than relying on flexbox
 to shrink a `flex: none` panel (which it won't).

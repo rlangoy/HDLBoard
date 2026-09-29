@@ -15,7 +15,7 @@
  * `ws://…:9010/ghdlsim` URL comes out malformed.
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -125,6 +125,42 @@ function resolvePersistProjects() {
   const user = readJson(userSettingsPath());
   if (typeof user.persistProjects === 'boolean') enabled = user.persistProjects;
   return enabled;
+}
+
+/*
+ * The window reopens where and how large it was left. The renderer
+ * remembers its divider positions in pixels, so the window's own size has
+ * to come back too, or those widths get re-clamped to a different window.
+ */
+const DEFAULT_WINDOW = { width: 1500, height: 950 };
+
+function windowStatePath() {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
+
+/** The stored bounds, or the defaults when they are missing or no longer on any screen. */
+function loadWindowState() {
+  const s = readJson(windowStatePath());
+  const num = (v) => typeof v === 'number' && Number.isFinite(v);
+  if (!num(s.x) || !num(s.y) || !num(s.width) || !num(s.height)) return { ...DEFAULT_WINDOW, maximized: false };
+  const bounds = { x: s.x, y: s.y, width: s.width, height: s.height };
+  // A monitor that has since been unplugged would put the window off-screen.
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const visible =
+    bounds.x < area.x + area.width - 50 && bounds.x + bounds.width > area.x + 50 &&
+    bounds.y >= area.y - 10 && bounds.y < area.y + area.height - 50;
+  if (!visible) return { ...DEFAULT_WINDOW, maximized: s.maximized === true };
+  return { ...bounds, maximized: s.maximized === true };
+}
+
+function saveWindowState(win) {
+  try {
+    // getNormalBounds: the un-maximized size, so un-maximizing later restores it.
+    const state = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    fs.writeFileSync(windowStatePath(), JSON.stringify(state));
+  } catch (err) {
+    console.error(`could not save window state: ${err}`);
+  }
 }
 
 /** Saved projects never go near $INSTDIR: an update or uninstall would take them with it. */
@@ -291,9 +327,12 @@ app.whenReady().then(async () => {
     console.error(`uncaught: ${err && err.stack ? err.stack : String(err)}`);
   });
 
+  const windowState = loadWindowState();
   mainWindow = new BrowserWindow({
-    width: 1500,
-    height: 950,
+    x: windowState.x,
+    y: windowState.y,
+    width: windowState.width,
+    height: windowState.height,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1e1e1e',
@@ -311,7 +350,11 @@ app.whenReady().then(async () => {
     },
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    if (windowState.maximized) mainWindow.maximize();
+    mainWindow.show();
+  });
+  mainWindow.on('close', () => saveWindowState(mainWindow));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

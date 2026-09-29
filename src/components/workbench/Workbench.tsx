@@ -36,6 +36,7 @@ import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } fro
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
+import { loadPaneLayout, savePaneLayout } from './paneLayout';
 import './Workbench.css';
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
@@ -215,18 +216,35 @@ export function Workbench() {
   // reconciliation below; that's what lets a panel grow back to what the
   // user asked for once the other one is dragged back or the window
   // regains room, instead of staying stuck at a once-clamped size.
+  //
+  // The desired sizes start from wherever the dividers were last left
+  // (paneLayout.ts), and are stored again at the end of every drag.
+  const [initialLayout] = useState(() =>
+    loadPaneLayout({
+      sidebarWidth: SIDEBAR_DEFAULT_W,
+      boardWidth: BOARD_DEFAULT_W,
+      consoleHeight: CONSOLE_DEFAULT_H,
+    }),
+  );
   const bodyRef = useRef<HTMLDivElement>(null);
-  const desiredSidebarWidth = useRef(SIDEBAR_DEFAULT_W);
-  const desiredBoardWidth = useRef(BOARD_DEFAULT_W);
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_W);
-  const [boardWidth, setBoardWidth] = useState(BOARD_DEFAULT_W);
+  const desiredSidebarWidth = useRef(initialLayout.sidebarWidth);
+  const desiredBoardWidth = useRef(initialLayout.boardWidth);
+  const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
+  const [boardWidth, setBoardWidth] = useState(initialLayout.boardWidth);
 
   // The console's height, reconciled the same way against the page's height:
   // `desiredConsoleHeight` is what the last drag left it at, `consoleHeight`
   // what currently fits.
   const wbRef = useRef<HTMLDivElement>(null);
-  const desiredConsoleHeight = useRef(CONSOLE_DEFAULT_H);
-  const [consoleHeight, setConsoleHeight] = useState(CONSOLE_DEFAULT_H);
+  const desiredConsoleHeight = useRef(initialLayout.consoleHeight);
+  const [consoleHeight, setConsoleHeight] = useState(initialLayout.consoleHeight);
+
+  const storePaneLayout = () =>
+    savePaneLayout({
+      sidebarWidth: desiredSidebarWidth.current,
+      boardWidth: desiredBoardWidth.current,
+      consoleHeight: desiredConsoleHeight.current,
+    });
 
   // The board keeps one fixed 2x2 arrangement at one fixed internal size and
   // is scaled to whatever the pane currently gives it, so the parts never
@@ -384,6 +402,7 @@ export function Workbench() {
       onDelta((axis === 'x' ? ev.clientX : ev.clientY) - start);
     };
     const onUp = () => {
+      storePaneLayout();
       document.body.classList.remove(bodyClass);
       handle.classList.remove('is-dragging');
       handle.releasePointerCapture(e.pointerId);
