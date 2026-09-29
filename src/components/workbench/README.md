@@ -583,8 +583,8 @@ first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
-`handleStart` (the card's Start button or icon) runs the file with the blue
-dot; `handleRunFile` (the active tab's play icon) first makes that tab's file
+`handleStart` (the card's Start button) opens the file with the blue dot
+and makes it the active file (Files panel and editor tab), then runs it; `handleRunFile` (the active tab's play icon) first makes that tab's file
 top, then does the same. Both go through `startRun`, which:
 
 1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file

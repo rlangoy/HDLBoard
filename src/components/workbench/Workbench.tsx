@@ -691,7 +691,12 @@ export function Workbench() {
     getClient().run(files, topFile?.name);
   };
 
-  const handleStart = () => startRun(topFileId);
+  // The Start button runs the file named as "Top:" — open it and make it the
+  // active file (Files panel highlight and editor tab), so what runs is what shows.
+  const handleStart = () => {
+    if (topFileId !== null) handleOpenFile(topFileId);
+    startRun(topFileId);
+  };
 
   // The active tab's play icon: that file becomes top (the blue dot, and
   // the Simulation card's "Top:") and the run starts from it — replacing
