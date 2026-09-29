@@ -387,11 +387,11 @@ interface SimToggleProps {
   fileName: string;     // for the tooltip / aria-label
   onStart: () => void;
   onStop: () => void;
-  className?: string;   // the caller sets the size (18px on a tab)
+  className?: string;   // the caller sets the size (16px on a tab)
 }
 ```
 
-The green play disc / red stop square on `<CodeEditor>`'s active tab.
+The outlined teal play triangle / red stop square on `<CodeEditor>`'s active tab.
 Its click stops propagating, so pressing it inside a tab isn't also a click
 on the tab.
 
@@ -524,7 +524,7 @@ each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn icon
 in this folder already does.
 
-`PlayIcon` and `StopIcon` (`<SimToggle>`'s green disc and red square) are
+`PlayIcon` and `StopIcon` (`<SimToggle>`'s teal triangle and red square) are
 the exception to that: they carry their own fixed colours, since the
 colour *is* the signal.
 

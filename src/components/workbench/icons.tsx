@@ -75,22 +75,20 @@ export function GearIcon() {
   );
 }
 
-/** A green disc with a white triangle — starts a simulation (SimToggle). */
+/** An outlined teal triangle — starts a simulation (SimToggle). */
 export function PlayIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" {...props}>
-      <circle cx="12" cy="12" r="11" fill="#22C55E" />
-      <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="white" />
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
+      <path d="M5.5 3.5L12.5 8L5.5 12.5V3.5Z" stroke="#0D9488" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
     </svg>
   );
 }
 
-/** A red rounded square with a white square — stops the running simulation (SimToggle). */
+/** An outlined red rounded square — stops the running simulation (SimToggle). */
 export function StopIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" {...props}>
-      <rect x="2" y="2" width="20" height="20" rx="3" fill="#EF4444" />
-      <rect x="7" y="7" width="10" height="10" rx="1" fill="white" />
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
+      <rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.25" stroke="#EF4444" strokeWidth="1.5" fill="none" />
     </svg>
   );
 }

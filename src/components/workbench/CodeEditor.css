@@ -106,8 +106,8 @@
 /* The active tab's play/stop icon, ahead of the file name. Two classes, so
    it outranks SimToggle.css's own size whatever the load order. */
 .wb-simtoggle.wb-editor__tab-run {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-left: -4px;
 }
 

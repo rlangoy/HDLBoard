@@ -1,25 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (C) 2026 Rune Langøy */
 
-/* The icon carries its own colour (green play / red stop), so the button
+/* The icon carries its own colour (teal play / red stop), so the button
    itself is just a borderless hit area; each caller sets the size. */
 .wb-simtoggle {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
-  transition: transform 120ms ease, filter 120ms ease, opacity 140ms ease;
-}
-
-.wb-simtoggle.is-stop {
-  border-radius: 4px;
+  transition: background 120ms ease, transform 120ms ease, opacity 140ms ease;
 }
 
 .wb-simtoggle svg {
@@ -29,8 +25,7 @@
 }
 
 .wb-simtoggle:hover:not(:disabled) {
-  filter: brightness(0.92);
-  transform: scale(1.08);
+  background: rgba(15, 23, 42, 0.08); /* same tint as the tab's close button */
 }
 
 .wb-simtoggle:active:not(:disabled) {
@@ -51,7 +46,6 @@
   .wb-simtoggle {
     transition: none;
   }
-  .wb-simtoggle:hover:not(:disabled),
   .wb-simtoggle:active:not(:disabled) {
     transform: none;
   }
