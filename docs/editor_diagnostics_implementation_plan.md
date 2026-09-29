@@ -10,6 +10,15 @@ against the Icarus 13.0 output already recorded in
 Every regular expression in § 4.2 was run against all of that output (§ 2.5).
 Where something could only be read, not run, the text says so.
 
+**Revised after review (2026-09-29).** Two design reviews were worked through.
+§ 9 lists each point, what changed and what was declined, with the reason. The
+main changes: the run snapshot now holds exactly the files that were sent, and
+an ambiguous file name is dropped instead of guessed (§ 4.4). There is one
+file-name rule (§ 4.4.1), one line-count helper (`countLines`), one cap and dedup
+policy (§ 4.5.1) and a stated fallback for when nothing parses (§ 4.11). The
+message text formatters are in their own module (`diagnosticText.ts`), there is a
+golden-fixture test set (§ 6.0), and phase 0.1 now blocks phase 1.
+
 **The end state:** a student presses **Start**, the design fails to compile, and
 the code pane shows *where*: the offending line is tinted red, its line number
 carries a ✕, and the compiler's message is written at the end of the line. The
@@ -38,6 +47,7 @@ and [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md).
 - [6. Testing](#6-testing)
 - [7. Implementation steps](#7-implementation-steps)
 - [8. Open decisions](#8-open-decisions)
+- [9. Review log](#9-review-log)
 - [Appendix A: real simulator output (test fixtures)](#appendix-a-real-simulator-output-test-fixtures)
 - [Appendix B: sources](#appendix-b-sources)
 
@@ -51,7 +61,7 @@ and [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md).
 | D2 | **One pure parser module, driven by a table of recognizers** (one per message shape), not by a `switch` on the simulator. | Clean Code "prefer polymorphism to if/else". The repository already uses this pattern (`server/src/verilog/fileNames.ts`, its `RULES` list). The message shapes of the two tools never overlap (§ 2.5), so the parser does not need to know which tool ran. |
 | D3 | **Mark whole lines.** The tint, the gutter glyph and the inline message all apply to the whole line. Underlining GHDL's exact column is an optional later step (§ 7, phase 5). | Icarus reports no column at all (§ 2.2). Whole-line marking is consistent across both languages. |
 | D4 | **Clear a file's markers when the user clicks in or edits that file's code pane.** Starting a new run clears every marker. Nothing else clears them. | This is the requirement (R4). It also avoids the hardest problem in IDE diagnostics, stale positions after edits (§ 3, B6): once the text changes, the markers are gone, so they never point at the wrong line. |
-| D5 | **Resolve file names against a snapshot of the files taken at Start**, and drop anything that does not resolve. | The compiler names files exactly as the browser sent them (§ 2.4). The generated wrapper (`hdl_board_tb.vhdl`, `hdl_board_tb.v`) and the timescale file (`_hdlboard_ts.v`) are not project files, so they must never be marked (§ 2.4). |
+| D5 | **Resolve file names against a snapshot of exactly the files sent at Start**, and drop anything that does not resolve to **one** file. | The compiler names files exactly as the browser sent them (§ 2.4). `GhdlClient.run` sends only the files in the run's folder, so a file in any other folder cannot be the one the compiler meant. The generated wrapper (`hdl_board_tb.vhdl`, `hdl_board_tb.v`) and the timescale file (`_hdlboard_ts.v`) are not project files, so they must never be marked (§ 2.4). A name that matches two sent files is dropped: a marker on the wrong file is worse than no marker, and the console still has the message. |
 | D6 | **After a failed compile, open and scroll to the first error.** Runtime messages mark lines but never move the view. | Beginners need to be led to the problem (§ 3, B7). Runtime assertions can arrive every clock cycle; jumping on each one would make the editor unusable. |
 | D7 | **Keep `Workbench.tsx` from growing.** New state lives in a `useDiagnostics` hook and pure modules; `Workbench` only wires it (about 25 new lines). | The clean-code review found `Workbench()` is already 494 lines (see § 5). |
 
@@ -194,6 +204,27 @@ earlier in this repository: Icarus 13.0, same formats. **Not run: GHDL 5.0.1 and
 `file:line:col:severity:` format is documented and long-standing, but step 0.1
 re-captures Appendix A on GHDL 5.0.1 or 6.0.0 before the tests are frozen.
 
+### 2.6 Which invocation produces which shape
+
+A summary of §§ 2.1–2.3. The table is written from the parser's side. The
+"Recognizers" column refers to the numbers in § 4.2, and "Frame" is what the
+browser receives.
+
+| Tool | Invocation (backend) | Frame | Shapes that can appear | Recognizers | Reveals? |
+|---|---|---|---|---|---|
+| GHDL | `ghdl -a --std=08 <file>` (analysis, per file) | `ERROR` stage `analyze` | `file:line:col:error\|warning:` + caret echo + `(…)` continuation | 1 | yes |
+| GHDL | `ghdl -e --std=08 <unit>` (elaboration) | `ERROR` stage `elaborate` | `file:line:col:warning:` + continuation; `<ghdl path>:error: …` without a place | 1 (the unplaced line matches none) | yes |
+| GHDL | `ghdl -r --std=08 <unit>` (run) | `LOG`, one line each | `file:line:col:@time:(assertion\|report level):`; `ghdl:error: … at file:line`; `ghdl:error: simulation failed` | 2, 3 | no |
+| GHDL | wrapper build (`hdl_board_tb.vhdl`) | `ERROR` stage `internal` | shape 1, but the file is not a project file | 1, then dropped by § 4.4 | no |
+| Icarus | `iverilog -tstub …` and the full `iverilog -Wall …` compile, failing | `ERROR` stage `analyze` / `elaborate` | `file:line: error\|warning\|sorry:`, `file:line: syntax error`, `file:line: Include file … not found`, `file:line:      : note` | 5, 6, 7, 8 | yes |
+| Icarus | full compile, succeeding with warnings | `LOG` lines before the run | `file:line: warning:` | 6 | no |
+| Icarus | `vvp -n -i sim.vvp` (run) | `LOG`, one line each | `ERROR\|WARNING\|FATAL: file:line: …`; `file:line: $finish called …` (not marked) | 4 | no |
+
+Rows marked "yes" reveal only when the stage is `analyze` or `elaborate`
+(`REVEALING_STAGES`, § 7 step 3.3). The parser never looks at the stage or the
+tool. A line is recognized by its shape alone (D2), and the stage only decides
+whether to reveal.
+
 ---
 
 ## 3. How IDEs show compiler errors — research
@@ -240,8 +271,8 @@ lost, because the console still has it.
                           │
                           ▼
    CodeEditor  ← diagnostics={byFile}, reveal={RevealRequest}, onDismissDiagnostics(fileId)
-     • line tint + inline message (HighlightedLine)
-     • gutter glyph + tooltip (EditorGutter)
+     • line tint + inline message (HighlightedLine; text from diagnosticText.ts)
+     • gutter glyph + tooltip (EditorGutter; text from diagnosticText.ts)
      • tab dot, status text for screen readers
      • pointerdown in body / onChange → dismiss the active file
 ```
@@ -266,14 +297,30 @@ export interface Diagnostic {
 }
 ```
 
+**Fields left out on purpose.** A review suggested `endLine`, `endCol`, `code`
+and `raw`, plus a third severity `note`. None of them has a consumer:
+
+- `endLine` / `endCol`: neither tool reports a range. GHDL gives one column and
+  Icarus none (§ 2.2).
+- `code`: GHDL appends `[-Wbinding]` to some warnings and Icarus has no codes.
+  It stays in `message`, where the student sees it.
+- `raw`: the console already shows the raw line (R7), and console links (§ 4.9)
+  re-parse the line they are given.
+- `note`: notes are never marked (§ 1.2), and Icarus notes become `details`.
+
+Add any of these when a feature needs it. The types are internal, so that is a
+local change.
+
 In `src/components/workbench/diagnosticLocation.ts` (pure):
 
 ```ts
-/** The project as it was sent at Start — what the line numbers refer to. */
+/**
+ * The files exactly as they were sent at Start — what the line numbers refer to.
+ * Built from the same `filesForRun` that `GhdlClient.run` sends (§ 4.4), so it
+ * can never contain a file the compiler did not see.
+ */
 export interface RunSnapshot {
-  readonly files: readonly Pick<VhdlFile, 'id' | 'name' | 'folder' | 'content'>[];
-  /** The folder the run compiled from (`sourceFolderFor(topFile)`), preferred when two files share a name. */
-  readonly preferredFolder: VhdlFile['folder'];
+  readonly files: readonly Pick<VhdlFile, 'id' | 'name' | 'content'>[];
 }
 
 /** A diagnostic matched to a project file. */
@@ -339,8 +386,11 @@ Rules that go with the table:
 
 - **Order matters.** Recognizer 1 needs a column (`:\d+:\d+:`), so it can never match Icarus's `file:line: error:`. Recognizer 2 needs `@`. Recognizer 5 must run before 6–8.
 - **"Declined" is not "no match".** A declined line (a GHDL `note`, a `report note`) stops the search and produces nothing. Otherwise a later, looser pattern might pick it up.
-- The file group: remove one leading `./` (Icarus `-I.` include paths). Do not change case or anything else.
+- The file group is normalized by `normalizeFileName` (§ 4.4.1), the only place that changes a file name.
+- The message group is trimmed at the end (`trimEnd()`). A repeated runtime message therefore has exactly the same text every time, which the dedup in § 4.5.1 relies on. The start is not trimmed, because a leading `(` decides whether a message is a continuation.
 - `line` and `column` are parsed with `Number(...)`. A line of `0` or less (after the include offset) is discarded.
+- **The include offset is the only line-number adjustment.** Do not move other lines, for example by subtracting 1 from every `syntax error` or searching backwards for a missing `;`. Icarus sometimes reports the right line, and nothing in the text says when. The plan shows what the compiler says, adds the hint, and reveals the lowest error line (§ 4.4), which lands on the statement-level message in the A.7 case.
+- **Continuation is one named predicate:** `isGhdlContinuation(message) = message.startsWith('(')`, used only by recognizer 1. Why this and not a list of known continuations (`(found: …)`, `(in default configuration …)`): GHDL has more continuation forms than were captured, and the two possible mistakes are not equally bad. A continuation missed by a list would become an extra red line. A real error that happens to start with `(` becomes a detail of the previous message, which the tooltip still shows. § 4.3 rule 2 also requires the same file. If a false match is ever seen, tighten the predicate and add a test row.
 - `ICARUS_SYNTAX_HINT = 'Icarus reports the line where it noticed the problem. If this line looks right, check the end of the previous line of code (a missing \';\' is the usual cause).'` Its *why* comment should quote the `DE1_SoC.v` 19/23 measurement (A.7).
 - **No recognizer for the lines that must be ignored.** Caret echo lines, summaries (`I give up.`, `N error(s) during elaboration.`), `$display` text, `$finish called at …` and located-less `error: …` lines are ignored because nothing matches them. Do **not** add a catch-all `file:line:` pattern: `tb2.v:4: $finish called at 0 (1ps)` would then be marked.
 
@@ -379,7 +429,7 @@ A level missing from the map (for example `note`) is declined.
 1. `kind: 'note'` (Icarus recognizer 5) → append its `message` to `previous.details`. With no `previous`, drop it.
 2. `kind: 'continuation'` — recognizer 1 returns this instead of `diagnostic` when the message **starts with `(`** (`(found: 'end')`, `(in default configuration of comp(rtl))`). Append the message to `previous.details` if there is a `previous` in the **same file**; otherwise treat it as a `diagnostic` (T-12). Only recognizer 1 does this: a runtime `report "(debug) …"` (recognizer 2) is the student's own text and is never a continuation.
 3. Any other diagnostic → finish `previous` and start a new one.
-4. `declined` / `none` → nothing. **`previous` is kept**: caret lines sit between an error and its `(found …)` continuation (Appendix A.1). Resetting `previous` would break rule 2.
+4. `declined` / `none` → nothing. **`previous` is kept**: caret lines sit between an error and its `(found …)` continuation (Appendix A.1). Resetting `previous` would break rule 2. The code comment for this rule must quote the four A.1 lines (`syntax.vhdl:13:15:error: ';' expected …`, the source echo, the `^` line, `syntax.vhdl:13:15:error: (found: 'end')`), so that nobody later "simplifies" it by resetting `previous` on unmatched lines.
 
 `parseDiagnostics` is given one `LOG` line or one `ERROR` body at a time. A note
 never spans two calls: Icarus notes arrive in the same `ERROR` body as their
@@ -390,14 +440,49 @@ error, and `vvp`'s `Time: … Scope: …` lines are not needed.
 `locateDiagnostics(diagnostics, snapshot, currentFiles): LocatedDiagnostic[]` —
 pure. For each diagnostic, in order:
 
-1. **Resolve the name** (`resolveFileId(fileName, snapshot)`):
-   a. files in the snapshot whose `name === fileName`;
-   b. if none, files whose `name.toLowerCase() === fileName.toLowerCase()` (Windows file systems ignore case, so `` `include "DEFS.vh" `` finds `defs.vh`);
-   c. none → **drop** (this is what removes `hdl_board_tb.*` and `_hdlboard_ts.v`, R6);
-   d. several → take the one in `snapshot.preferredFolder`, else the first.
-2. **Check the line exists**: `1 <= line <= content.split('\n').length` of the snapshot file, else drop.
+1. **Resolve the name** (`resolveFileId(fileName, snapshot)`, § 4.4.1). If it does not resolve, **drop** the diagnostic.
+2. **Check the line exists**: `isLineInFile(line, content)` is `1 <= line <= countLines(content)` for the snapshot file. Otherwise drop.
 3. **Check the file was not changed or deleted since Start**: the file with that id in `currentFiles` must exist and have the **same `content`** as the snapshot. Otherwise drop, because the student edited it while it compiled and the line numbers are stale.
 4. Keep `line`, `column`, `severity`, `message`, `details`; replace `fileName` with `fileId`.
+
+**Where the snapshot comes from.** Move the file selection out of
+`GhdlClient.run` (`ghdlClient.ts`, the `sourceFolderFor` and `filter` lines)
+into a pure, exported `filesForRun(files, topFileName)`. `run` sends what it
+returns, and `handleStart` builds the snapshot from the same call. The snapshot
+then holds exactly the strings that were sent, and it cannot drift from the
+upload. This is a boy-scout extraction (§ 5) and does not change behaviour.
+`ghdlClient.test.ts` gets one row that pins the selection (step 1.4).
+
+**Why compare the content itself and not a hash.** A review suggested storing a
+fingerprint. It was declined because a hash would have to be computed from
+`currentFiles` on every frame, which reads the whole string anyway, so nothing
+is saved. Comparing the strings directly is cheap in the common cases. An
+unedited file is the same string object React keeps in state, so the check
+ends at the reference. An edited file almost always differs in length, which
+the engine checks first. Student files are a few kilobytes. Line endings cannot
+cause a false mismatch either: the snapshot is the sent string, and
+`currentFiles` holds the same object until an edit replaces it, and an edit
+clears the markers anyway (§ 4.5).
+
+**`countLines(text)`** lives in `diagnosticLocation.ts` and is the only line
+counter: `text.split('\n').length`, so `''` is 1 line and a trailing newline adds
+an empty last line, the same as the editor's gutter (`CodeEditor.tsx` renders one
+gutter number per `split('\n')` entry). `isLineInFile`, `offsetOfLine`, the reveal
+hook and the tests all use it. A `\r` before a `\n` stays part of its line, so
+Windows line endings do not change the count.
+
+#### 4.4.1 File-name normalization: the one rule
+
+Everything that turns a printed file name into a project file id is in this
+list. No other code touches file names.
+
+1. **Strip one trailing `\r`** from the whole text line before any regex runs (§ 4.2; `vvp` on Windows).
+2. **`normalizeFileName(printed)`**: remove **one** leading `./` (Icarus prints included headers as `./defs.vh` because of `-I.`). Nothing else changes: not case, spaces, other `../` or `/` prefixes, or backslashes. The backend runs every tool with bare names in the session directory (§ 2), so any other form is not a project file and should not resolve.
+3. **`resolveFileId(name, snapshot)`**:
+   a. snapshot files whose `name === name`, and exactly one → that file;
+   b. if there are none, snapshot files whose `name.toLowerCase() === name.toLowerCase()`, and exactly one → that file (Windows file systems ignore case, so `` `include "DEFS.vh" `` finds `defs.vh`);
+   c. none → `undefined` (this is what removes `hdl_board_tb.*` and `_hdlboard_ts.v`, R6);
+   d. **two or more at the same step → `undefined`** (D5). The snapshot is one folder, and file dialogs refuse duplicate names, so this only happens when two uploads share a name. In that case the compiler saw only one of them, and the browser cannot tell which.
 
 `firstRevealTarget(located): LocatedDiagnostic | undefined`: take the file of
 the first `error` in the list, and return that file's error with the **lowest
@@ -407,20 +492,48 @@ warnings, so warnings never move the view (B9).
 
 ### 4.5 Storing and the marker lifecycle
 
-`diagnosticStore.ts` (pure, every function returns a new object and never mutates):
+`diagnosticStore.ts` (pure data, no text formatting; every function returns a new object and never mutates):
 
-- `addToFiles(byFile, located): DiagnosticsByFile`
-  - group by `fileId`; within a file, one `LineDiagnostic` per `line`, kept in ascending line order;
-  - a message equal to one already on that line (same `severity` and `message`) is not added again. Runtime assertions repeat every cycle, and repeats would otherwise flood the line;
-  - a line's `severity` is `error` if any of its messages is an error, else `warning`;
-  - caps, as named constants with the reason: `MAX_MESSAGES_PER_LINE = 5` (extra messages are dropped) and `MAX_MARKED_LINES_PER_FILE = 200` (lines beyond it are dropped). **Encapsulate these boundary conditions in one function each** (Clean Code): `withinMessageLimit`, `withinLineLimit`.
+- `addToFiles(byFile, located): DiagnosticsByFile`: group by `fileId`, one `LineDiagnostic` per `line` in ascending line order, applying the policy of § 4.5.1. A line's `severity` is `error` if any of its messages is an error, else `warning`.
 - `withoutFile(byFile, fileId): DiagnosticsByFile`. Returns **the same object** when the file has no entry, so React does not re-render for nothing.
 - `countSeverities(lines): { errors: number; warnings: number }` counts messages.
-- `describeLine(lineDiagnostic): string` builds the tooltip text: one message per line, `error: …` / `warning: …`, each detail on its own line indented by two spaces.
-- `inlineText(lineDiagnostic): string` builds the text at the end of the line: the first message of the line's severity, truncated to `INLINE_MESSAGE_MAX_CHARS = 120` with `…`, plus ` (+N more)` when there are more messages.
-- `summarize(fileName, lines): string` builds the screen-reader summary: `''` when empty, else e.g. `syntax.vhdl: 2 errors, 1 warning. First on line 13: ';' expected at end of signal assignment`. Use singular and plural correctly.
 
-**Lifecycle — the complete list of what changes markers:**
+`diagnosticText.ts` (pure; the only module that builds text shown to the
+student, kept apart so parsing and storage never format anything and the
+wording can change without touching them):
+
+- `describeLine(lineDiagnostic): string` builds the tooltip text. It lists **every kept message** on the line (up to the cap), errors first and then warnings, each group in arrival order. Each message is `error: …` / `warning: …`, with each detail on its own line indented by two spaces.
+- `inlineText(lineDiagnostic): string` builds the text at the end of the line: the **first message in the same order** (the first error that arrived, or the first warning if the line has no error), truncated to `INLINE_MESSAGE_MAX_CHARS = 120` with `…`, plus ` (+N more)` when there are more messages.
+- `summarize(fileName, lines): string` builds the screen-reader and status summary: `''` when empty, else e.g. `syntax.vhdl: 2 errors, 1 warning. First on line 13: ';' expected at end of signal assignment. Click or type in the file to clear the markers.` Use singular and plural correctly.
+
+Position helpers (`countLines`, `isLineInFile`, `offsetOfLine`,
+`lineHeightOrFallback`) are in `diagnosticLocation.ts`, so every definition of
+"a line" is in one module.
+
+The order is **"errors first, then arrival order"**, and it is one exported
+comparator, `byDisplayOrder`, used by both `describeLine` and `inlineText`. Tests
+therefore never depend on how the recognizers happened to order things.
+
+#### 4.5.1 Caps and dedup policy
+
+All in `addToFiles`, all named constants at the top of `diagnosticStore.ts`,
+each boundary in its own function (Clean Code "encapsulate boundary
+conditions"):
+
+| Rule | Constant / function | Why |
+|---|---|---|
+| A message equal to one already on the line (**same `severity` and same `message`**, after the `trimEnd` of § 4.2) is not added again. | `isDuplicate` | Runtime assertions fire every clock cycle with the same text. |
+| At most 5 messages per line; later ones are dropped. | `MAX_MESSAGES_PER_LINE = 5`, `withinMessageLimit` | A `$error("count=%0d", i)` produces a *different* text every cycle, so dedup alone does not bound it. |
+| At most 200 marked lines per file; lines beyond it are dropped. | `MAX_MARKED_LINES_PER_FILE = 200`, `withinLineLimit` | Bounds the DOM work (B10). |
+| **If nothing was added, return the input object unchanged.** | — | The main flood guard. Up to 200 `LOG` lines per second arrive (`outputLimiter.ts`). Once a repeating assertion has been stored or its line is full, each further frame adds nothing, so `setByFile` gets back the same object and React skips the render. |
+
+A dedup key of `file + line + severity` alone was considered and declined: two
+different errors on one line (Appendix A.5, `undeclared.v:6`, three messages)
+must all reach the tooltip, and the per-line cap already bounds a flood.
+
+#### 4.5.2 Marker lifecycle
+
+**The complete list of what changes markers:**
 
 | Event | Effect | Where |
 |---|---|---|
@@ -435,6 +548,24 @@ warnings, so warnings never move the view (B9).
 
 Keyboard navigation with the arrow keys is not "writing" (R4), so it does not
 clear markers. Only a change of content does.
+
+**The reveal cannot clear what it shows.** The reveal (§ 4.7) scrolls with
+`scrollTop` and focuses with `focus({ preventScroll: true })`. Neither fires
+`pointerdown`, so the student arrives with the markers still there. Step 2.6 is
+done only when this has been checked in the browser (E-D1: the markers are
+visible after the reveal). Hovering the gutter does not clear either, so the
+tooltip can be read without losing it.
+
+**Clear-on-click is said in the UI.** A review warned that a student may click to
+put the caret near the error and see the markers vanish before reading them. R4
+is kept as specified, and two things make it expected rather than a surprise:
+the status text ends with `Click or type in the file to clear the markers.`, and
+the Help dialog gets one line under the editor section saying the same.
+Changing to clear-on-edit only is open decision § 8 #7.
+
+**A reveal can interrupt typing.** If the student is typing in another file when
+a compile fails, the reveal switches tab and moves the caret. That is intended
+(D6); the compile they started has failed, and the error is what they need next.
 
 ### 4.6 Rendering in the code pane
 
@@ -550,9 +681,9 @@ GhdlClient handlers, which are created once (see the stale-closure note on
 `CodeEditor` handles it in a small hook `useRevealLine(textareaRef, activeTab, reveal)` (own file):
 
 - runs when `reveal?.id` changes **and** `reveal.fileId === activeTab?.id` (the tab may become active one render later; the effect then runs again);
-- line height from the element, not a duplicated constant: `parseFloat(getComputedStyle(textarea).lineHeight)`;
+- line height from the element, not a duplicated constant: `parseFloat(getComputedStyle(textarea).lineHeight)`. `CodeEditor.css` sets it to a pixel length (`--wb-code-line-h`), so the computed value is in `px`. If the value is not a finite positive number (a future theme that sets `normal`), fall back to `textarea.scrollHeight / countLines(content)`, which measures the lines as rendered. Keep this in one small pure helper, `lineHeightOrFallback(computed, scrollHeight, lineCount)`, with its own two test rows (S-18, S-19);
 - `textarea.scrollTop = Math.max(0, (line - 1) * lineHeight - textarea.clientHeight / 2)`. This fires the textarea's `scroll` event, and the existing `handleScroll` moves the `<pre>` and gutter with it;
-- caret at the start of the line: `const at = offsetOfLine(content, line); textarea.focus({ preventScroll: true }); textarea.setSelectionRange(at, at);`. `offsetOfLine` is pure (in `diagnosticStore.ts` or its own module): the sum of the lengths of the previous lines plus one per newline;
+- caret at the start of the line: `const at = offsetOfLine(content, line); textarea.focus({ preventScroll: true }); textarea.setSelectionRange(at, at);`. `offsetOfLine` is pure (in `diagnosticLocation.ts`, next to `countLines`): the sum of the lengths of the previous lines plus one per newline;
 - remembers the last handled `id` in a ref, so a re-render does not reveal again.
 
 Programmatic focus is **not** a click, so it does not clear the markers. The
@@ -564,6 +695,7 @@ error and starts fixing it.
 - Colour is never alone: glyph, inline text and tooltip (WCAG 1.4.1).
 - Add a generic visually hidden class to `Workbench.css` (the same rules as the existing `.wb-help__sr`), named `.wb-sr-only`.
 - In `CodeEditor`, when a file is open: `<p id={statusId} className="wb-sr-only" role="status" aria-live="polite">{summarize(active.name, activeLines)}</p>`, with `statusId` from `useId()`. Give the textarea `aria-describedby={statusId}`, so a screen reader announces the problems when they appear and when the textarea gets focus (WCAG 3.3.1).
+- **The live region must not chatter.** A screen reader announces a polite live region when its text changes, not when React re-renders it with the same text. `summarize` depends only on the active file's stored lines, and § 4.5.1 guarantees those do not change while a repeating assertion is being dropped. So the region speaks when a *new* problem is stored and then stays silent. Compute the text with `useMemo(() => summarize(active.name, activeLines), [active?.name, activeLines])` so the rule holds by construction. Runbook row E-D15 checks it.
 - The tab's hidden `, N errors` text (§ 4.6).
 - The gutter stays `aria-hidden` (line numbers are noise to a screen reader); the status text carries the information.
 
@@ -575,7 +707,8 @@ A console line that names a marked place becomes a link to it (B7):
 - `ConsoleOutput` gets two optional props: `locate?: (line: string) => { fileId: string; line: number } | undefined` and `onOpenLocation?: (target) => void`;
 - when rendering `line.text`, split it on `\n`. For each part that `locate` resolves, render `<button type="button" className="wb-console__link" onClick={() => onOpenLocation(target)}>{part}</button>`; render other parts as text, keeping the newlines (the body is `white-space: pre-wrap` today);
 - `onOpenLocation` is `revealLocation` in `Workbench`: steps 2–3 of § 4.7 for that location;
-- CSS: `.wb-console__link { all: unset; cursor: pointer; text-decoration: underline dotted; } .wb-console__link:hover { text-decoration-style: solid; } .wb-console__link:focus-visible { outline: 2px solid #93c5fd; }`.
+- CSS: `.wb-console__link { all: unset; cursor: pointer; text-decoration: underline dotted; user-select: text; } .wb-console__link:hover { text-decoration-style: solid; } .wb-console__link:focus-visible { outline: 2px solid #93c5fd; }`. `user-select: text` is there because students copy error text into chats and reports, and a button's text is not selectable by default in every browser;
+- a click that ends a text selection is not a navigation: in the handler, `if (window.getSelection()?.toString()) return;`, so selecting across a link to copy it does not jump away.
 
 Because `locateText` checks that the file is unchanged, a line for an edited
 file stops being a link, which is correct, since its line number is stale.
@@ -586,12 +719,17 @@ file stops being a link, which is correct, since its line number is stale.
 src/components/workbench/
   diagnostics.ts            pure — Diagnostic types, RECOGNIZERS, recognizeLine, parseDiagnostics
   diagnostics.test.ts
-  diagnosticLocation.ts     pure — RunSnapshot, LocatedDiagnostic, resolveFileId, locateDiagnostics, firstRevealTarget
+  diagnosticLocation.ts     pure — RunSnapshot, LocatedDiagnostic, normalizeFileName, resolveFileId, locateDiagnostics,
+                                   firstRevealTarget, countLines, isLineInFile, offsetOfLine, lineHeightOrFallback
   diagnosticLocation.test.ts
   diagnosticStore.ts        pure — LineDiagnostic, DiagnosticsByFile, addToFiles, withoutFile, countSeverities,
-                                   describeLine, inlineText, summarize, offsetOfLine
+                                   byDisplayOrder, the § 4.5.1 caps
   diagnosticStore.test.ts
+  diagnosticText.ts         pure — describeLine, inlineText, summarize (all student-facing wording)
+  diagnosticText.test.ts
   diagnostics.fixtures.ts   test data — the Appendix A captures as exported string constants
+  diagnostics.golden.test.ts  the § 6.0 golden run: every fixture through parse → locate → store
+  ghdlClient.ts             + exported pure filesForRun (moved out of run, § 4.4)
   useDiagnostics.ts         React hook — state + snapshot ref; the only stateful piece
   useRevealLine.ts          React hook — scroll + caret for a RevealRequest
   CodeEditor.tsx            + EditorGutter, marker classes, inline message, status text, dismiss handler
@@ -624,7 +762,24 @@ export interface DiagnosticsApi {
 created once. They read the snapshot from a `useRef` and change state with the
 functional form `setByFile(prev => …)`. `record` computes `located` **outside**
 the state updater (from its arguments and the snapshot ref), then calls
-`setByFile(prev => addToFiles(prev, located))` and returns `located`.
+`setByFile(prev => addToFiles(prev, located))` and returns `located`. When
+`located` is empty, it returns without calling `setByFile`.
+
+### 4.11 When parsing finds nothing (fallback)
+
+Markers are an addition to the console, never a replacement for it (R7), so the
+fallback for every failure is **the console as it is today**:
+
+| Situation | What the student sees |
+|---|---|
+| A line matches no recognizer (a new message shape, a new simulator version, a tool that crashed) | Nothing in the editor for that line; the console shows it. |
+| A compile fails, but none of its messages locate (only unplaced lines such as `cannot find entity …`, only wrapper errors (A.4), or every file was edited during the compile) | No marker, no reveal, the view does not move; the console shows the error as today. `firstRevealTarget([])` is `undefined`, so this needs no special case. |
+| A diagnostic names a file that is ambiguous, missing, or edited (§ 4.4) | That diagnostic is dropped; others in the same frame are still marked. |
+| A line number is out of range (a stale or odd report) | Dropped (`isLineInFile`). |
+| The parser itself throws (it should not: it is regular expressions over a string) | `record` catches, logs once with `console.error('Diagnostics:', err)` to the browser console, and returns `[]`. The simulator console and the run are never affected, so a parser bug can only lose markers, never output. |
+
+The try/catch sits only in `record`, at the boundary between the pure code and
+the client handlers. Pure modules do not catch.
 
 ---
 
@@ -717,6 +872,55 @@ export const GHDL_SYNTAX_ERROR = [
 ].join('\n');
 ```
 
+### 6.0 Golden fixtures (`diagnostics.golden.test.ts`)
+
+The golden test runs each **whole capture** through `parseDiagnostics` and
+compares the result with the § 2.5 list. It is the check that the recognizers
+still agree with real compiler output. When phase 0.1 or a later tool upgrade
+changes a capture, this test says which fixture changed.
+
+Each diagnostic is written as one line by a helper in the test file,
+`golden`, which writes `severity fileName:line[:column] message` and then
+` | detail` for each detail. The test compares **the array of those lines, sorted**,
+so the test depends on what was found and not on the order it was found in.
+Order is tested separately where it matters (T-13, L-11). `test.each` over
+the rows below, one `expect(...).toEqual(...)` each:
+
+| Id | Fixture constant (Appendix) | Golden result (sorted; `HINT` = `ICARUS_SYNTAX_HINT`) |
+|---|---|---|
+| G-1 | `GHDL_SYNTAX_ERROR` (A.1) | `error syntax.vhdl:13:15 ';' expected at end of signal assignment \| (found: 'end')` |
+| G-2 | `GHDL_UNDECLARED` (A.1) | `error undeclared.vhdl:13:13 no declaration for "swx"`, `error undeclared.vhdl:14:16 can't match character literal '2' with type STD_ULOGIC` |
+| G-3 | `GHDL_TYPEERR` (A.1) | `error typeerr.vhdl:14:13 can't match "count" …`, `warning typeerr.vhdl:15:25 value constraints don't match target ones [-Wruntime-error]` |
+| G-4 | `GHDL_SPACE_NAME` (A.1) | `error space name.vhdl:1:28 missing ";" at end of entity` |
+| G-5 | `GHDL_ELABORATION` (A.2) | `warning comp.vhdl:9:5 instance "u0" … [-Wbinding] \| (in default configuration of comp(rtl))` |
+| G-6 | `GHDL_RUNTIME_REPORTS` (A.3) | `error tb.vhdl:8:9 values differ`, `error tb.vhdl:9:9 fatal stop`, `warning tb.vhdl:7:9 warning level` |
+| G-7 | `GHDL_RUNTIME_BOUND` (A.3) | `error bound.vhdl:9 index (5) out of bounds (0 to 3)` |
+| G-8 | `GHDL_WRAPPER_MISMATCH` (A.4) | `error hdl_board_tb.vhdl:55:15 actual constraints don't match formal ones` (parsed; dropped later by L-4) |
+| G-9 | `ICARUS_SYNTAX` (A.5) | `error syntax.v:6 syntax error \| HINT` |
+| G-10 | `ICARUS_UNDECLARED` (A.5) | the five `undeclared.v` errors (lines 5, 5, 6, 6, 6) |
+| G-11 | `ICARUS_REGASSIGN` (A.5) | `error regassign.v:5 LEDR is not a valid l-value in regassign. \| LEDR is declared here as wire.` |
+| G-12 | `ICARUS_INCLUDE_SYNTAX` (A.5) | `error defs.vh:2 syntax error \| HINT`, `warning inc.v:3 macro WIDTHX undefined (and assumed null) at this point.` |
+| G-13 | `ICARUS_SPACE_NAME` (A.5) | `error sp ace.v:1 Syntax error in continuous assignment`, `error sp ace.v:1 syntax error \| HINT` |
+| G-14 | `ICARUS_SORRY` (A.5) | `error sorry.v:5 'disable fork' requires SystemVerilog.` |
+| G-15 | `ICARUS_UNKNOWN_MODULE` (A.5) | `error unk.v:2 Unknown module type: missing_mod` |
+| G-16 | `ICARUS_MISSING_INCLUDE` (A.5) | `error miss.v:1 Include file nope.vh not found` |
+| G-17 | `ICARUS_WARNING` (A.5) | `warning warn.v:6 implicit definition of wire 'nothere'.` |
+| G-18 | `VVP_RUNTIME` (A.6) | `error tb.v:6 values differ`, `error tb.v:9 fatal stop`, `error tb2.v:8 $readmemh: Unable to open nofile.hex for reading.`, `warning tb.v:5 careful: 3` |
+| G-19 | `ICARUS_DE1_MISSING_SEMICOLON` (A.7) | `error DE1_SoC.v:19 Syntax error in left side of continuous assignment.`, `error DE1_SoC.v:23 syntax error \| HINT` |
+| G-20 | `GHDL_DE1_MISSING_SEMICOLON` (A.7) | `error DE1_SoC.vhdl:27:15 ';' expected at end of signal assignment \| (found: an identifier)` |
+| G-21 | `ICARUS_INCLUDE_LATER_LINE` (A.7) | `error inc3.v:3 Include file nope.vh not found`, `error inc3.v:3 syntax error \| HINT` |
+
+(In the table `\|` is a markdown escape for the ` | ` separator. `…` shortens
+messages that are quoted in full in § 2.5; the test file writes them out.)
+
+One more golden row runs the full chain on the two starter designs, because that
+is what a student hits first:
+
+| Id | Input | Expected |
+|---|---|---|
+| G-22 | `ICARUS_DE1_MISSING_SEMICOLON`, snapshot = the Verilog `DE1_SoC.v` from `STARTER_FILES` (kept equal to `tests/fixtures/verilog/` by K-10) with the `;` of line 19 removed, `parse → locate → addToFiles` | one file entry with lines `[19, 23]`, both `error` |
+| G-23 | `GHDL_DE1_MISSING_SEMICOLON`, snapshot = the VHDL `DE1_SoC.vhdl` from `STARTER_FILES` with the `;` of line 27 removed | one file entry with line `[27]`, `error` |
+
 ### 6.1 `diagnostics.test.ts` — recognizing lines
 
 `test.each` over rows `[id, input line, expected LineResult]`, one `expect(recognizeLine(input)).toEqual(expected)` per row:
@@ -759,6 +963,7 @@ export const GHDL_SYNTAX_ERROR = [
 | P-34 | `DE1_SoC.v:19: error: Syntax error in left side of continuous assignment.` | error, 19 |
 | P-35 | `syntax.vhdl:13:15:error: (found: 'end')` | continuation |
 | P-36 | `tb.vhdl:6:9:@0ms:(assertion error): (debug) x` | diagnostic, message `(debug) x` (not a continuation) |
+| P-37 | `ERROR: tb.v:6: values differ   ` (trailing spaces) | message `values differ` (trimmed, § 4.2) |
 
 (P-15: the `sorry:` level was not reproduced with Icarus 12.0 here, where `disable fork` came
 back as `error:`; the row only tests that the level is recognized.)
@@ -783,8 +988,10 @@ One `expect` each; use the fixture constants:
 | T-12 | `"a.vhdl:1:1:error: (x)"` alone | one diagnostic with message `(x)` (a leading `(` without a previous diagnostic is kept) |
 | T-13 | the `DE1_SoC.v` capture (A.7) | two diagnostics, lines 23 and 19, in that order |
 | T-14 | the `DE1_SoC.vhdl` capture (A.7) | one diagnostic, line 27, details `['(found: an identifier)']` |
+| T-15 | `"a.vhdl:2:1:note: n"` then `"a.vhdl:3:1:error: e"` in one text | one diagnostic, the error (a declined note first in a batch is dropped and does not become `previous`) |
+| T-16 | `"a.vhdl:2:1:note: n"` then `"a.vhdl:2:1:error: (x)"` | one diagnostic with message `(x)`: with no `previous`, a continuation is kept on its own (T-12 rule after a declined line) |
 
-### 6.3 `diagnosticLocation.test.ts` and `diagnosticStore.test.ts`
+### 6.3 `diagnosticLocation.test.ts`, `diagnosticStore.test.ts` and `diagnosticText.test.ts`
 
 Build small snapshots inline (two or three files with short `content`).
 
@@ -792,7 +999,7 @@ Build small snapshots inline (two or three files with short `content`).
 |---|---|---|
 | L-1 | name matches exactly | located with that file's id |
 | L-2 | only a case-insensitive match (`DEFS.vh` vs `defs.vh`) | located |
-| L-3 | two files named `top.vhdl` in `vhdl` and `work`, `preferredFolder: 'vhdl'` | the `vhdl` one |
+| L-3 | two snapshot files both named `top.vhdl` | dropped (ambiguous, § 4.4.1 d) |
 | L-4 | `hdl_board_tb.vhdl` | dropped |
 | L-5 | `_hdlboard_ts.v` | dropped |
 | L-6 | line greater than the file's line count | dropped |
@@ -801,6 +1008,11 @@ Build small snapshots inline (two or three files with short `content`).
 | L-9 | `firstRevealTarget` of [warning, error, error] | the first error |
 | L-10 | `firstRevealTarget` of warnings only | `undefined` |
 | L-11 | `firstRevealTarget` of the `DE1_SoC.v` capture (A.7: line 23 then line 19) | line 19 |
+| L-12 | no exact match, and two case-insensitive matches (`Defs.vh`, `DEFS.vh` for `defs.vh`) | dropped (ambiguous) |
+| L-13 | one exact match (`defs.vh`) plus a case-insensitive one (`DEFS.vh`) | the exact match (step a wins before b is tried) |
+| L-14 | `filesForRun(files, 'DE1_SoC.v')` with files in `vhdl/`, `verilog/` and `work/` | only the `verilog/` files (pins the selection moved out of `GhdlClient.run`) |
+| L-15 | `countLines('')`, `countLines('a')`, `countLines('a\n')`, `countLines('a\r\nb')` | `1`, `1`, `2`, `2` (one row each) |
+| L-16 | `normalizeFileName('./defs.vh')`, `('././x.v')`, `('../x.v')`, `('sub/x.v')` | `defs.vh`, `./x.v`, `../x.v`, `sub/x.v` (only one `./` removed, nothing else) |
 | S-1 | two messages on the same line | one `LineDiagnostic` with two messages |
 | S-2 | the same message twice | stored once |
 | S-3 | warning then error on one line | line severity `error` |
@@ -818,6 +1030,17 @@ Build small snapshots inline (two or three files with short `content`).
 | S-15 | `summarize` with 1 error | singular `1 error` |
 | S-16 | `offsetOfLine('a\nbb\nccc', 3)` | `5` |
 | S-17 | `offsetOfLine(text, 1)` | `0` |
+| S-18 | `lineHeightOrFallback('20px', 400, 10)` | `20` |
+| S-19 | `lineHeightOrFallback('normal', 400, 10)` | `40` (measured fallback) |
+| S-20 | `addToFiles` with only a duplicate of a stored message | returns the **same** object (`toBe`), the flood guard of § 4.5.1 |
+| S-21 | `addToFiles` onto a line already at `MAX_MESSAGES_PER_LINE` | returns the **same** object |
+| S-22 | `inlineText` of a line where a warning arrived before an error | the error's message (errors first, `byDisplayOrder`) |
+| S-23 | `describeLine` of warning, error, error (arrival order) | error, error, warning, and the two errors in arrival order |
+| S-24 | `summarize` with 1 error | ends with `Click or type in the file to clear the markers.` |
+
+Where the rows live: S-1…S-10, S-20, S-21 in `diagnosticStore.test.ts`;
+S-11…S-15, S-22…S-24 in `diagnosticText.test.ts`; S-16…S-19 in
+`diagnosticLocation.test.ts`, next to L-15.
 
 ### 6.4 Browser runbook (acceptance)
 
@@ -843,6 +1066,9 @@ with GHDL and Icarus). DOM hooks: `.wb-editor__line.is-error`,
 | E-D12 | start a compile, type in the file before it finishes | no markers appear in that file |
 | E-D13 | console **Clear** after E-D1 | markers stay |
 | E-D14 | (phase 4) click the error line in the console | file opens at the line; markers unchanged |
+| E-D15 | VHDL testbench with `assert false report "x" severity error;` inside a clocked process (fires every cycle), screen reader or the browser's accessibility tree open | the status text changes once, when the marker first appears, and not again while the assertion keeps firing; the page stays responsive |
+| E-D16 | after E-D1, select part of the error text in the console by dragging across it, and copy | the text is copied; the view does not jump to the file (phase 4) |
+| E-D17 | after E-D1 (the reveal has put the caret on the line), wait without touching anything | markers are still there: the reveal's own focus and scroll do not clear them |
 
 ---
 
@@ -854,20 +1080,23 @@ ending with the repository's attribution line. Never commit with a red test.
 
 ### Phase 0 — Confirm the input
 
+**Phase 0.1 blocks phase 1.** Do not write `RECOGNIZERS` or freeze the fixtures
+against the GHDL 4.1.0 / Icarus 12.0 captures alone.
+
 | Step | Do | Done when |
 |---|---|---|
-| 0.1 | On a machine with **GHDL 5.0.1 or 6.0.0** (the shipped versions) and Icarus 13.0, re-run the captures of Appendix A with the commands shown there. | Every line differs from Appendix A only in the program path. If a format differs, update the recognizers **before** phase 1 and note it in this document. |
+| 0.1 | On a machine with **the exact GHDL and Icarus versions the Windows installer and the Docker image ship** (GHDL 5.0.1 or 6.0.0, Icarus 13.0; read them from `winInstaller/fetch-*.ps1` and `docker/Dockerfile`), re-run the captures of Appendix A with the commands shown there. | Every line differs from Appendix A only in the program path, and this document's status line says so with the versions and date. If a severity word, the colon layout or a runtime-error shape differs, update § 2, § 4.2 and Appendix A **before** phase 1. Where versions disagree, keep both captures as separate fixtures. |
 | 0.2 | Read `src/components/workbench/CodeEditor.tsx`, `Workbench.tsx` (`getClient`, `handleStart`, `handleContentChange`, `handleOpenFile`, `handleDeleteFile`), `ConsoleOutput.tsx`. | You can point at where each row of the § 4.5 lifecycle table will be wired. |
 
 ### Phase 1 — Pure parsing (no UI)
 
 | Step | Do | Done when |
 |---|---|---|
-| 1.1 | Create `diagnostics.fixtures.ts` from Appendix A (SPDX header; one exported `const` per case, with a comment naming the tool, version and command). Split the combined blocks A.1 and A.5 at each file's first line, so each case is its own constant (e.g. `ICARUS_REGASSIGN` holds the three `regassign` lines). | Compiles; every line of Appendix A is in exactly one constant. |
-| 1.2 | Create `diagnostics.ts` with the § 4.1 `Diagnostic` types and the § 4.2 `LineResult`, `Recognizer`, `RECOGNIZERS`, `recognizeLine`. | P-1…P-36 pass. |
-| 1.3 | Add `parseDiagnostics` with § 4.3. | T-1…T-14 pass. |
-| 1.4 | Create `diagnosticLocation.ts`: `RunSnapshot`, `LocatedDiagnostic`, `resolveFileId`, `isLineInFile`, `locateDiagnostics`, `firstRevealTarget` (§ 4.4). | L-1…L-11 pass. |
-| 1.5 | Create `diagnosticStore.ts`: § 4.5 functions and constants, plus `offsetOfLine`. | S-1…S-17 pass; `npm run typecheck` clean; § 5 lint command reports nothing. |
+| 1.1 | Create `diagnostics.fixtures.ts` from Appendix A (SPDX header; one exported `const` per case, with a comment naming the tool, version and command). Split the combined blocks A.1 and A.5 at each file's first line, so each case is its own constant, named as in the § 6.0 table (e.g. `ICARUS_REGASSIGN` holds the three `regassign` lines). | Compiles; every line of Appendix A is in exactly one constant. |
+| 1.2 | Create `diagnostics.ts` with the § 4.1 `Diagnostic` types and the § 4.2 `LineResult`, `Recognizer`, `RECOGNIZERS`, `isGhdlContinuation`, `recognizeLine`. | P-1…P-37 pass. |
+| 1.3 | Add `parseDiagnostics` with § 4.3. Add `diagnostics.golden.test.ts` with G-1…G-21 (§ 6.0). | T-1…T-16 and G-1…G-21 pass. |
+| 1.4 | Create `diagnosticLocation.ts`: `RunSnapshot`, `LocatedDiagnostic`, `countLines`, `normalizeFileName`, `resolveFileId`, `isLineInFile`, `locateDiagnostics`, `firstRevealTarget`, `offsetOfLine`, `lineHeightOrFallback` (§ 4.4, § 4.4.1). Move the file selection of `GhdlClient.run` into an exported `filesForRun` and make `run` use it. | L-1…L-16 and S-16…S-19 pass; `ghdlClient.test.ts` still green. |
+| 1.5 | Create `diagnosticStore.ts` (§ 4.5, § 4.5.1) and `diagnosticText.ts` (§ 4.5). Add G-22 and G-23. | S-1…S-15, S-20…S-24, G-22, G-23 pass; `npm run typecheck` clean; § 5 lint command reports nothing. |
 
 ### Phase 2 — State and rendering
 
@@ -877,8 +1106,8 @@ ending with the repository's attribution line. Never commit with a red test.
 | 2.2 | Add the colour tokens and `.wb-sr-only` to `Workbench.css` (§ 4.6, § 4.8). | — |
 | 2.3 | `CodeEditor`: new props `diagnostics: DiagnosticsByFile` and `onDismissDiagnostics(fileId: string)`. Build `const linesByNumber = useMemo(() => new Map(activeLines.map(d => [d.line, d])), [activeLines])`. Pass `diagnostic={linesByNumber.get(i + 1)}` to `HighlightedLine`, which renders the classes and the inline span (§ 4.6). | Markers render when a hard-coded test value is passed (remove it afterwards). |
 | 2.4 | Extract `EditorGutter` (props: `lines: string[]`, `linesByNumber`, `gutterRef`); add the marker classes and `title` (§ 4.6). | Same rendering as before when there are no diagnostics. |
-| 2.5 | Tab classes and hidden count text (§ 4.6); status paragraph and `aria-describedby` (§ 4.8). | — |
-| 2.6 | On `.wb-editor__body` add `onPointerDown={() => { if (active && activeLines.length > 0) onDismissDiagnostics(active.id); }}`. | Clicking text or a line number clears the active file only. |
+| 2.5 | Tab classes and hidden count text (§ 4.6); status paragraph (memoized, § 4.8) and `aria-describedby`. One line in `HelpDialog` under the editor: "Red and amber lines show where the compiler found a problem. Click or type in the file to clear them; the full text stays in the console." | — |
+| 2.6 | On `.wb-editor__body` add `onPointerDown={() => { if (active && activeLines.length > 0) onDismissDiagnostics(active.id); }}`. | Clicking text or a line number clears the active file only; hovering the gutter does not. |
 | 2.7 | CSS of § 4.6 in `CodeEditor.css`, including `--wb-code-pad-x`. | Screenshot: a tinted line lines up exactly with the textarea text (type on that line; the caret stays on the characters). |
 
 ### Phase 3 — Wiring in `Workbench`
@@ -886,17 +1115,17 @@ ending with the repository's attribution line. Never commit with a red test.
 | Step | Do | Done when |
 |---|---|---|
 | 3.1 | `const diagnostics = useDiagnostics();` Pass `diagnostics={diagnostics.byFile}` and `onDismissDiagnostics={diagnostics.dismissFile}` to `CodeEditor`. | Typecheck clean. |
-| 3.2 | `handleStart`: after the existing `const topFile = files.find((f) => f.id === topFileId);` and before `getClient().run(...)`, call `diagnostics.startRun({ files, preferredFolder: sourceFolderFor(topFile) })` (`sourceFolderFor` is in `fileKinds.ts`; it is the same folder `GhdlClient.run` sends). | E-D11. |
+| 3.2 | `handleStart`: after the existing `const topFile = files.find((f) => f.id === topFileId);` and before `getClient().run(...)`, call `diagnostics.startRun({ files: filesForRun(files, topFile?.name) })`. This is the same call `GhdlClient.run` makes, so the snapshot is exactly what is sent (§ 4.4). | E-D11. |
 | 3.3 | Move `filesRef` (with its `filesRef.current = files` line) above `getClient`, then in `getClient` add: `onLog: (text) => { appendLog(text); diagnostics.record(text, filesRef.current); }` and, in `onError`, after `appendLog`: `const located = diagnostics.record(text, filesRef.current); if (REVEALING_STAGES.includes(stage)) revealFirstError(located);` with `const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];` at module level. Add `diagnostics.record` and `revealFirstError` to `getClient`'s dependency list. | E-D1, E-D6, E-D8, E-D9, E-D10. |
 | 3.4 | `handleContentChange`: add `diagnostics.dismissFile(id)`. `handleDeleteFile`: same. | E-D2, E-D12. |
-| 3.5 | `revealFirstError` and `reveal` state (§ 4.7); `useRevealLine`; pass `reveal` to `CodeEditor`. | E-D1 caret, E-D5. |
-| 3.6 | Run the full runbook § 6.4 (E-D1…E-D13). | All pass; record the results and date in `tests/e2e/editor-diagnostics.md`. |
+| 3.5 | `revealFirstError` and `reveal` state (§ 4.7); `useRevealLine`; pass `reveal` to `CodeEditor`. | E-D1 caret, E-D5, E-D17. |
+| 3.6 | Run the runbook § 6.4 (E-D1…E-D13, E-D15, E-D17). | All pass; record the results and date in `tests/e2e/editor-diagnostics.md`. |
 
 ### Phase 4 — Console links (recommended)
 
 | Step | Do | Done when |
 |---|---|---|
-| 4.1 | `locateText` in `useDiagnostics`; `locate` / `onOpenLocation` props on `ConsoleOutput`; `revealLocation` in `Workbench` (§ 4.9). | E-D14. |
+| 4.1 | `locateText` in `useDiagnostics`; `locate` / `onOpenLocation` props on `ConsoleOutput`; `revealLocation` in `Workbench` (§ 4.9). | E-D14, E-D16. |
 | 4.2 | Update `src/components/workbench/README.md`: a short "Error markers" section (what is parsed, the lifecycle table of § 4.5, where the code is). | Section exists. |
 
 ### Phase 5 — Optional refinements (only if asked)
@@ -918,6 +1147,56 @@ ending with the repository's attribution line. Never commit with a red test.
 | 4 | Should clicking the *tab strip* also clear markers? | No. The tab strip is navigation, not "the code pane"; switching tabs to read another file's errors must not erase them. |
 | 5 | Should markers survive a page reload in the desktop app? | No. Diagnostics describe one run; the workspace store (`desktop.ts`) should not hold them. |
 | 6 | The branch `feature/resizable-dividers` also changes `Workbench.tsx` and `Workbench.css`. | If it is merged first, nothing in this plan changes: the functions named here are the same on both branches. |
+| 7 | Clear markers on **edit only**, and not on a click (a review's suggestion)? A click to place the caret would then leave the markers until the text changes, and they would still never be stale, because an edit clears them. | Keep R4 as specified for the first version, with the UI text of § 4.5.2 so the behaviour is expected. If students in the first course use it and markers are reported as "disappearing", change step 2.6: remove the `pointerdown` handler and keep the clear in `handleContentChange`. It is a one-line change, and nothing else depends on it. |
+
+---
+
+## 9. Review log
+
+Two reviews of this plan (2026-09-29) and a list of suggested additions were
+worked through. Each point is listed with what was done. "Applied" means the
+plan now says it; "declined" gives the reason, so the point does not come back
+without new information.
+
+### 9.1 Applied
+
+| Point | Where it is now |
+|---|---|
+| Phase 0.1 is a real gate; capture on the exact shipped versions first | § 7 phase 0 (blocking note, sources of the version numbers) |
+| Do not generalize the Icarus line heuristic beyond the include offset | § 4.2 rules |
+| Deterministic message order; the tooltip lists every kept message | § 4.5 `byDisplayOrder`, S-22, S-23 |
+| Normalize messages before the dedup comparison | § 4.2 (`\r` strip, `trimEnd`), P-37 |
+| The snapshot must be exactly what was sent (line endings, representation) | § 4.4 `filesForRun`, L-14 |
+| Ambiguous file names: drop instead of guessing; test it | D5, § 4.4.1 d, L-3, L-12, L-13 |
+| One line-count helper used everywhere | § 4.4 `countLines`, L-15 |
+| Explicit, named continuation detection | § 4.2 `isGhdlContinuation` (kept `startsWith('(')`, see the reason there) |
+| Flood protection for repeating runtime messages | § 4.5.1 (unchanged object → no render), S-20, S-21 |
+| Reveal must not trigger the click dismissal; reveal can interrupt typing | § 4.5.2, E-D17 |
+| Test a declined note first in a batch; quote A.1 in the "keep `previous`" comment | T-15, T-16, § 4.3 rule 4 |
+| `aria-live` noise during repeated assertions | § 4.8, E-D15 |
+| Defensive line-height read | § 4.7 `lineHeightOrFallback`, S-18, S-19 |
+| Console links must not break copying | § 4.9, E-D16 |
+| Tell the student that a click clears markers | § 4.5.2, step 2.5 (status text, Help line), § 8 #7 |
+| Keep text formatting apart from parsing and storage | `diagnosticText.ts` (§ 4.5, § 4.10) |
+| Stable, order-independent expectations in tests | § 6.0 (sorted golden arrays) |
+| Addition 1: a written `Diagnostic` type | § 4.1 (and the fields left out, with reasons) |
+| Addition 2: which invocation produces which shape | § 2.6 |
+| Addition 3: the path-normalization rule, once | § 4.4.1 |
+| Addition 4: the cap and dedup policy | § 4.5.1 |
+| Addition 5: fallback when parsing fails | § 4.11 |
+| Addition 6: a golden-fixture test list | § 6.0 |
+| Addition 7: the marker lifecycle | § 4.5.2 (was already there; now its own heading, with the reveal and UI notes) |
+
+### 9.2 Declined
+
+| Point | Why |
+|---|---|
+| Compare a content hash instead of the content | A hash of the current files has to be computed on every frame, which reads the whole string, so it saves nothing. A direct compare of an unedited file ends at the reference check (§ 4.4). |
+| Dedup key `file + line + severity` for runtime messages | It would hide different errors on the same line (A.5 `undeclared.v:6` has three). The per-line cap and the unchanged-object rule already bound a flood (§ 4.5.1). |
+| A list of known GHDL continuations instead of `startsWith('(')` | A missed continuation becomes a wrong extra marker, which is worse than the rare opposite mistake (§ 4.2). |
+| `endLine`, `endCol`, `code`, `raw`, severity `note` on `Diagnostic` | Nothing would use them; see § 4.1 "Fields left out on purpose". |
+| Drop diagnostics for files with zero lines | Cannot happen: `countLines('') = 1`, the same as the gutter, and line 1 of an empty file is a real place to point at. |
+| Clear on edit only (remove clear-on-click) | R4 is the stated requirement. Kept as open decision § 8 #7 with a one-line change path. |
 
 ---
 
