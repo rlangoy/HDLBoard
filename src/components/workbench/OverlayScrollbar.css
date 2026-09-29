@@ -1,0 +1,112 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * OverlayScrollbar.tsx, styled after Visual Studio: idle, only a thin rounded
+ * thumb; with the pointer over the bar (or while dragging) the thumb widens and
+ * darkens, and a light track and the arrow buttons appear. The hit area is the
+ * full bar thickness either way. --wb-scrollbar-size must match SCROLLBAR_PX.
+ */
+
+.wb-scrollbar {
+  --wb-scrollbar-size: 14px;
+  --wb-scrollbar-thumb-idle: 6px;
+  --wb-scrollbar-thumb-hover: 8px;
+
+  position: absolute;
+  z-index: 2;
+  border-radius: 7px;
+  transition: background 140ms ease;
+}
+
+.wb-scrollbar--y {
+  top: 0;
+  right: 0;
+  width: var(--wb-scrollbar-size);
+}
+
+.wb-scrollbar--x {
+  left: 0;
+  bottom: 0;
+  height: var(--wb-scrollbar-size);
+}
+
+.wb-scrollbar__thumb {
+  position: absolute;
+  border-radius: 999px;
+  background: #a3a3a3;
+  transition: width 140ms ease, height 140ms ease, background 140ms ease;
+}
+
+/* Centred across the bar, so it widens symmetrically on hover. */
+.wb-scrollbar--y .wb-scrollbar__thumb {
+  left: 50%;
+  width: var(--wb-scrollbar-thumb-idle);
+  transform: translateX(-50%);
+}
+
+.wb-scrollbar--x .wb-scrollbar__thumb {
+  top: 50%;
+  height: var(--wb-scrollbar-thumb-idle);
+  transform: translateY(-50%);
+}
+
+.wb-scrollbar__arrow {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--wb-scrollbar-size);
+  height: var(--wb-scrollbar-size);
+  fill: #6b7280;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.wb-scrollbar--y .wb-scrollbar__arrow--start { top: 0; left: 0; }
+.wb-scrollbar--y .wb-scrollbar__arrow--end { bottom: 0; left: 0; }
+.wb-scrollbar--x .wb-scrollbar__arrow--start { left: 0; top: 0; }
+.wb-scrollbar--x .wb-scrollbar__arrow--end { right: 0; top: 0; }
+
+.wb-scrollbar:hover,
+.wb-scrollbar.is-dragging {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.wb-scrollbar:hover .wb-scrollbar__arrow,
+.wb-scrollbar.is-dragging .wb-scrollbar__arrow {
+  opacity: 1;
+}
+
+.wb-scrollbar__arrow:hover {
+  fill: #1f2937;
+}
+
+.wb-scrollbar--y:hover .wb-scrollbar__thumb,
+.wb-scrollbar--y.is-dragging .wb-scrollbar__thumb {
+  width: var(--wb-scrollbar-thumb-hover);
+}
+
+.wb-scrollbar--x:hover .wb-scrollbar__thumb,
+.wb-scrollbar--x.is-dragging .wb-scrollbar__thumb {
+  height: var(--wb-scrollbar-thumb-hover);
+}
+
+.wb-scrollbar:hover .wb-scrollbar__thumb,
+.wb-scrollbar.is-dragging .wb-scrollbar__thumb {
+  background: #8a8a8a;
+}
+
+.wb-scrollbar .wb-scrollbar__thumb:hover,
+.wb-scrollbar.is-dragging .wb-scrollbar__thumb {
+  background: #6b6b6b;
+}
+
+/* For the element whose native bars these replace. */
+.wb-scrollbar-host {
+  scrollbar-width: none;
+}
+
+.wb-scrollbar-host::-webkit-scrollbar {
+  display: none;
+}
