@@ -9,6 +9,14 @@ services:
     plan: free
     healthCheckPath: /
     envVars:
-      # ~150 MB per active simulation; raise it on a bigger instance.
+      # Sized for Free (512 MB, 0.1 CPU), where CPU is the limit: with 4
+      # simulations running, LEDs follow a switch in about 0.5 s. On Starter
+      # (0.5 CPU) 8 sessions stay around 0.2 s; set 8 and 48 there. Keep
+      # GHDL_MAX_SESSIONS x HDLBOARD_SIM_MEMORY_MB under about 400, so no mix
+      # of designs can push the container into the OOM killer. The render
+      # stage in docker/Dockerfile has the measurements.
       - key: GHDL_MAX_SESSIONS
-        value: "3"
+        value: "4"
+      # Memory cap per simulation run, in MB (docker/simlimit.sh).
+      - key: HDLBOARD_SIM_MEMORY_MB
+        value: "96"

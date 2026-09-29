@@ -119,6 +119,32 @@ describe('Session runs that outlive their request', () => {
     assert.deepEqual(verbs(frames), ['READY']);
   });
 
+  test('a run that dies silently says why it may have, where runs are memory-capped', async () => {
+    const saved = process.env.HDLBOARD_SIM_MEMORY_MB;
+    const errorFor = async (capMb: string | undefined) => {
+      if (capMb === undefined) delete process.env.HDLBOARD_SIM_MEMORY_MB;
+      else process.env.HDLBOARD_SIM_MEMORY_MB = capMb;
+      const frames: ServerFrame[] = [];
+      const { engine, compiles } = controlledEngine();
+      engine.startBatchRun = () => ({ kill: () => {}, done: Promise.resolve({ code: null, timedOut: false, stderr: '' }) });
+      const session = new Session((frame) => frames.push(frame), () => engine);
+      const run = session.handleRun(FILES, 'top.vhdl');
+      compiles[0].resolve({ ok: true, plan: batchPlan(tmpdir()) });
+      await run;
+      await settle();
+      session.destroy();
+      return frames.find((frame) => frame.verb === 'ERROR');
+    };
+    try {
+      assert.deepEqual(await errorFor(undefined), { verb: 'ERROR', stage: 'runtime', text: 'Simulation exited unexpectedly.' });
+      const capped = await errorFor('96');
+      assert.ok(capped?.verb === 'ERROR' && capped.text.includes('possibly out of memory') && capped.text.includes('96 MB'));
+    } finally {
+      if (saved === undefined) delete process.env.HDLBOARD_SIM_MEMORY_MB;
+      else process.env.HDLBOARD_SIM_MEMORY_MB = saved;
+    }
+  });
+
   test('a superseded compile that fails reports nothing', async () => {
     const frames: ServerFrame[] = [];
     const { engine, compiles } = controlledEngine();
