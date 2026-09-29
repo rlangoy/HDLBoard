@@ -9,8 +9,18 @@
  * real WebSocket.
  */
 
-import { promises as fs, closeSync, constants as fsConstants, mkdtempSync, openSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import {
+  promises as fs,
+  closeSync,
+  constants as fsConstants,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,6 +92,8 @@ const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
+/** A simulator that died without a word on stderr still owes the student a reason. */
+const UNEXPLAINED_EXIT_TEXT = 'Simulation exited unexpectedly.';
 
 /** True once `from` has replaced `to`; false when the destination is held open by another process. */
 function renamed(from: string, to: string): boolean {
@@ -276,7 +288,7 @@ export class Session {
       // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
       // is a completed run, not a crash: the student asked for it.
       if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
-      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
+      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
     });
     // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
@@ -472,7 +484,7 @@ export class Session {
           text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
         });
       } else if (code !== 0) {
-        this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || 'Simulation exited unexpectedly.' });
+        this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
       } else {
         this.send({ verb: 'DONE', reason: 'completed' });
       }

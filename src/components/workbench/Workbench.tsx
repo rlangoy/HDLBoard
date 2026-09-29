@@ -198,9 +198,8 @@ export function Workbench() {
   const keyRef = useRef(key);
 
   // Board outputs are driven by the simulation backend, never by the
-  // inputs. Until GHDL is wired up they stay at their blank values — see
-  // ghdl_implementation_plan.md § 0 for why that is the correct state
-  // (Design_Description.md § 5 convention 11).
+  // inputs. Whenever no simulation is running they stay at their blank
+  // values (Design_Description.md § 5 convention 11).
   const [ledState, setLedState] = useState<BitVector>(() => zeroBits(10));
   const [hexState, setHexState] = useState<SegmentVector[]>(() =>
     Array.from({ length: 6 }, () => blankSegments()),

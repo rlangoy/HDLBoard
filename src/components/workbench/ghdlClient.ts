@@ -13,7 +13,7 @@
  */
 
 import { bitsToString, type BitVector } from '../board';
-import { blankSegments, patternToSegments, type SegmentVector } from '../SevenSegment';
+import { patternToSegments, type SegmentVector } from '../SevenSegment';
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
 
@@ -154,8 +154,9 @@ export class GhdlClient {
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = topFileName ? `RUN ${topFileName}` : 'RUN';
     const send = () => ws.send(`${head}\n${body}`);
+    // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.
     if (ws.readyState === WebSocket.OPEN) send();
-    else ws.addEventListener('open', () => { ws.send(`HELLO ${PROTOCOL_VERSION}`); send(); }, { once: true });
+    else ws.addEventListener('open', send, { once: true });
   }
 
   stim(sw: BitVector, key: BitVector): void {
@@ -178,12 +179,4 @@ export class GhdlClient {
       this.ws = null;
     }
   }
-}
-
-/** Blank board outputs — what `Workbench` resets to on every `run()` (§ 8.3). */
-export function blankBoardOutputs(): { ledr: BitVector; hex: SegmentVector[] } {
-  return {
-    ledr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    hex: Array.from({ length: 6 }, () => blankSegments()),
-  };
 }
