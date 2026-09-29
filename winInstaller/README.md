@@ -42,7 +42,7 @@ with `-Force` to refetch).
 Electron main process (main.js)
  ├─ startBackend({ port: 9010, serveDir, ghdlExe, iverilogDir })   ← in-process, no child node
  │    ├─ http.createServer()  → serves resources/frontend/
- │    └─ WebSocketServer({ noServer: true }) on upgrade "/ghdlsim"
+ │    └─ WebSocketServer({ noServer: true }) on upgrade "/hdlsim"
  │         ├─ spawns resources/ghdl/bin/ghdl.exe            (VHDL)
  │         └─ spawns resources/iverilog/{iverilog,vvp}.exe  (Verilog)
  └─ BrowserWindow → loadURL("http://127.0.0.1:9010/")
@@ -54,7 +54,7 @@ Three decisions explain most of the code here.
 **The frontend is served over HTTP, not loaded with `loadFile()`.** The
 renderer builds its WebSocket URL from `window.location.hostname`, which
 is the empty string under `file://` — producing a malformed
-`ws://:9010/ghdlsim`. Serving the page from the backend means page and
+`ws://:9010/hdlsim`. Serving the page from the backend means page and
 socket share an origin and a port, so `src/**` needs no changes at all.
 That is also why the port is **fixed**: the renderer's port is a Vite
 build-time constant, so it cannot be discovered at runtime. A collision

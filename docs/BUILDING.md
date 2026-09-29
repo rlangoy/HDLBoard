@@ -69,8 +69,8 @@ npm install                                              # frontend
 cd server && npm install && npm run build && cd ..       # backend
 ```
 
-`scripts/start.sh` honours `STATIC_PORT` and `GHDL_WS_PORT`
-(`STATIC_PORT=8080 GHDL_WS_PORT=9090 ./scripts/start.sh`). Logs land in `.run/*.log`
+`scripts/start.sh` honours `STATIC_PORT` and `HDL_WS_PORT`
+(`STATIC_PORT=8080 HDL_WS_PORT=9090 ./scripts/start.sh`). Logs land in `.run/*.log`
 and PIDs in `.run/*.pid`, so it won't double-start.
 
 Frontend only, with hot reload (the board stays dark — Start needs the
@@ -119,7 +119,7 @@ Root project:
 | `npm run lint` | The scoped clean-code rules (function length, parameters, complexity, nesting) on the newer modules |
 
 To check a running backend end to end, in both languages:
-`node tools/verify-backend.mjs ws://localhost:9010/ghdlsim` (needs `npm install` in `server/`).
+`node tools/verify-backend.mjs ws://localhost:9010/hdlsim` (needs `npm install` in `server/`).
 The browser check is the runbook `tests/e2e/verilog-browser.md`.
 
 ## Building the Windows installer

@@ -2,7 +2,7 @@
 /* Copyright (C) 2026 Rune Langøy */
 
 /* The icon carries its own colour (teal play / red stop), so the button
-   itself is just a borderless hit area; each caller sets the size. */
+   itself is just a borderless hit area the size of the 16 px icon. */
 .wb-simtoggle {
   flex: none;
   display: inline-flex;

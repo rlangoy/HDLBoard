@@ -12,7 +12,7 @@
  * socket share an origin and a port. See the plan's finding F2 for why
  * `loadFile()` cannot work here: under `file://`,
  * `window.location.hostname` is empty and the renderer's derived
- * `ws://…:9010/ghdlsim` URL comes out malformed.
+ * `ws://…:9010/hdlsim` URL comes out malformed.
  */
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell } = require('electron');
@@ -22,7 +22,7 @@ const { pathToFileURL } = require('node:url');
 
 /**
  * Fixed, not ephemeral. The renderer reads its WebSocket port from a Vite
- * build-time constant (`VITE_GHDL_WS_PORT`, defaulting to 9010), so the
+ * build-time constant (`VITE_HDL_WS_PORT`, defaulting to 9010), so the
  * port is baked into the bundle and cannot be discovered at runtime.
  * A collision is therefore reported, not worked around — see
  * `showPortInUseDialog`.

@@ -1065,7 +1065,7 @@ that).
 **Tier 2 — `tools/verify-backend.mjs <ws-url>`, any backend.** Runs the whole
 scenario file (both languages) over the WebSocket and prints a pass/fail table
 with exit code. It works against a dev backend, a Linux server, and **the
-installed app** (`ws://127.0.0.1:9010/ghdlsim` while HDLBoard is running). It
+installed app** (`ws://127.0.0.1:9010/hdlsim` while HDLBoard is running). It
 needs Node, so it is for developers and CI, not a student VM.
 
 **Tier 3 — clean-VM acceptance, by hand** (the project's existing open
@@ -1554,7 +1554,7 @@ source URLs.
 
 **G4 — Build and verify the installer.** *M*
 Run `build.ps1`; install; on this machine run `tools/verify-backend.mjs
-ws://127.0.0.1:9010/ghdlsim` against the installed app (Tier 2); then the
+ws://127.0.0.1:9010/hdlsim` against the installed app (Tier 2); then the
 Tier 3 checklist V-1…V-8, V-10.
 Done when: Tier 2 is all green and V-1…V-8, V-10 are ticked. (V-9, the
 non-ASCII account, and the clean-VM run are the project's existing open

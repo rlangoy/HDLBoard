@@ -9,7 +9,7 @@
 #   server-build  server/ -> server/dist, production node_modules only
 #   page-build  the page -> dist/, with the public port baked in
 #   backend     node + GHDL + Icarus Verilog, runs as 'hdlboard'   (target)
-#   web         nginx: serves dist/ and proxies /ghdlsim to backend (target)
+#   web         nginx: serves dist/ and proxies /hdlsim to backend (target)
 
 ARG ALPINE_VERSION=3.24
 
@@ -44,11 +44,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
-# The port the browser opens ws://<host>:<port>/ghdlsim on. With nginx proxying
-# /ghdlsim, that is the public page port — compose passes HDLBOARD_PAGE_PORT.
+# The port the browser opens ws://<host>:<port>/hdlsim on. With nginx proxying
+# /hdlsim, that is the public page port — compose passes HDLBOARD_PAGE_PORT.
 # Declared after npm ci so changing it only redoes the build step.
-ARG VITE_GHDL_WS_PORT=80
-RUN VITE_GHDL_WS_PORT=${VITE_GHDL_WS_PORT} npm run build \
+ARG VITE_HDL_WS_PORT=80
+RUN VITE_HDL_WS_PORT=${VITE_HDL_WS_PORT} npm run build \
  && test -f dist/index.html
 
 # --- backend ----------------------------------------------------------------
@@ -69,8 +69,8 @@ COPY tests/fixtures/          /srv/HDLBoard/tests/fixtures/
 ENV GHDL_EXE=/usr/local/bin/ghdl \
     IVERILOG_EXE=/usr/bin/iverilog \
     VVP_EXE=/usr/bin/vvp \
-    GHDL_WS_PORT=9010 \
-    GHDL_MAX_SESSIONS=32
+    HDL_WS_PORT=9010 \
+    HDL_MAX_SESSIONS=32
 
 USER hdlboard
 WORKDIR /srv/HDLBoard

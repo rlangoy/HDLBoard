@@ -202,7 +202,7 @@ UI/
          ├─ files.ts            the three-file starter project shown in the tree
          ├─ icons.tsx           edit/delete — real SVG, the one exception
          │                       to this folder's CSS-only icons
-         └─ ghdlClient.ts       the simulator's WebSocket client — planned,
+         └─ hdlClient.ts       the simulator's WebSocket client — planned,
                                  the only file that speaks to the backend
 ```
 

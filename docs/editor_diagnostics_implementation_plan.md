@@ -57,11 +57,11 @@ and [`ghdl_implementation_plan.md`](ghdl_implementation_plan.md).
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | **Parse in the frontend**, from the text the browser already receives: `ERROR` frames and `LOG` lines. No backend or protocol change. | The backend forwards compiler output verbatim by design (Verilog plan § 5.5). Every message that carries a location already reaches the browser (§ 2.4). A protocol change would mean editing two independent grammar implementations (`server/src/protocol.ts` and `ghdlClient.ts`) and bumping the version, for no gain. |
+| D1 | **Parse in the frontend**, from the text the browser already receives: `ERROR` frames and `LOG` lines. No backend or protocol change. | The backend forwards compiler output verbatim by design (Verilog plan § 5.5). Every message that carries a location already reaches the browser (§ 2.4). A protocol change would mean editing two independent grammar implementations (`server/src/protocol.ts` and `hdlClient.ts`) and bumping the version, for no gain. |
 | D2 | **One pure parser module, driven by a table of recognizers** (one per message shape), not by a `switch` on the simulator. | Clean Code "prefer polymorphism to if/else". The repository already uses this pattern (`server/src/verilog/fileNames.ts`, its `RULES` list). The message shapes of the two tools never overlap (§ 2.5), so the parser does not need to know which tool ran. |
 | D3 | **Mark whole lines.** The tint, the gutter glyph and the inline message all apply to the whole line. Underlining GHDL's exact column is an optional later step (§ 7, phase 5). | Icarus reports no column at all (§ 2.2). Whole-line marking is consistent across both languages. |
 | D4 | **Clear a file's markers when the user clicks in or edits that file's code pane.** Starting a new run clears every marker. Nothing else clears them. | This is the requirement (R4). It also avoids the hardest problem in IDE diagnostics, stale positions after edits (§ 3, B6): once the text changes, the markers are gone, so they never point at the wrong line. |
-| D5 | **Resolve file names against a snapshot of exactly the files sent at Start**, and drop anything that does not resolve to **one** file. | The compiler names files exactly as the browser sent them (§ 2.4). `GhdlClient.run` sends only the files in the run's folder, so a file in any other folder cannot be the one the compiler meant. The generated wrapper (`hdl_board_tb.vhdl`, `hdl_board_tb.v`) and the timescale file (`_hdlboard_ts.v`) are not project files, so they must never be marked (§ 2.4). A name that matches two sent files is dropped: a marker on the wrong file is worse than no marker, and the console still has the message. |
+| D5 | **Resolve file names against a snapshot of exactly the files sent at Start**, and drop anything that does not resolve to **one** file. | The compiler names files exactly as the browser sent them (§ 2.4). `HdlClient.run` sends only the files in the run's folder, so a file in any other folder cannot be the one the compiler meant. The generated wrapper (`hdl_board_tb.vhdl`, `hdl_board_tb.v`) and the timescale file (`_hdlboard_ts.v`) are not project files, so they must never be marked (§ 2.4). A name that matches two sent files is dropped: a marker on the wrong file is worse than no marker, and the console still has the message. |
 | D6 | **After a failed compile, open and scroll to the first error.** Runtime messages mark lines but never move the view. | Beginners need to be led to the problem (§ 3, B7). Runtime assertions can arrive every clock cycle; jumping on each one would make the editor unusable. |
 | D7 | **Keep `Workbench.tsx` from growing.** New state lives in a `useDiagnostics` hook and pure modules; `Workbench` only wires it (about 25 new lines). | The clean-code review found `Workbench()` is already 494 lines (see § 5). |
 
@@ -258,7 +258,7 @@ lost, because the console still has it.
 ### 4.1 Data flow and types
 
 ```
- GhdlClient handlers (Workbench.getClient)
+ HdlClient handlers (Workbench.getClient)
    onError(stage, text) ──┐
    onLog(text) ───────────┤
                           ▼
@@ -316,7 +316,7 @@ In `src/components/workbench/diagnosticLocation.ts` (pure):
 ```ts
 /**
  * The files exactly as they were sent at Start — what the line numbers refer to.
- * Built from the same `filesForRun` that `GhdlClient.run` sends (§ 4.4), so it
+ * Built from the same `filesForRun` that `HdlClient.run` sends (§ 4.4), so it
  * can never contain a file the compiler did not see.
  */
 export interface RunSnapshot {
@@ -446,12 +446,12 @@ pure. For each diagnostic, in order:
 4. Keep `line`, `column`, `severity`, `message`, `details`; replace `fileName` with `fileId`.
 
 **Where the snapshot comes from.** Move the file selection out of
-`GhdlClient.run` (`ghdlClient.ts`, the `sourceFolderFor` and `filter` lines)
+`HdlClient.run` (`hdlClient.ts`, the `sourceFolderFor` and `filter` lines)
 into a pure, exported `filesForRun(files, topFileName)`. `run` sends what it
 returns, and `handleStart` builds the snapshot from the same call. The snapshot
 then holds exactly the strings that were sent, and it cannot drift from the
 upload. This is a boy-scout extraction (§ 5) and does not change behaviour.
-`ghdlClient.test.ts` gets one row that pins the selection (step 1.4).
+`hdlClient.test.ts` gets one row that pins the selection (step 1.4).
 
 **Why compare the content itself and not a hash.** A review suggested storing a
 fingerprint. It was declined because a hash would have to be computed from
@@ -671,7 +671,7 @@ and inside the tab a visually hidden text `, 2 errors` (B8).
 
 `Workbench` holds `reveal: RevealRequest | null`. `revealFirstError(located)` —
 a `useCallback` with no changing dependencies, because it runs inside the
-GhdlClient handlers, which are created once (see the stale-closure note on
+HdlClient handlers, which are created once (see the stale-closure note on
 `swRef`):
 
 1. `target = firstRevealTarget(located)`; stop if `undefined`;
@@ -729,7 +729,7 @@ src/components/workbench/
   diagnosticText.test.ts
   diagnostics.fixtures.ts   test data — the Appendix A captures as exported string constants
   diagnostics.golden.test.ts  the § 6.0 golden run: every fixture through parse → locate → store
-  ghdlClient.ts             + exported pure filesForRun (moved out of run, § 4.4)
+  hdlClient.ts             + exported pure filesForRun (moved out of run, § 4.4)
   useDiagnostics.ts         React hook — state + snapshot ref; the only stateful piece
   useRevealLine.ts          React hook — scroll + caret for a RevealRequest
   CodeEditor.tsx            + EditorGutter, marker classes, inline message, status text, dismiss handler
@@ -758,7 +758,7 @@ export interface DiagnosticsApi {
 ```
 
 `startRun`, `record`, `dismissFile` and `locateText` must be **stable**
-(`useCallback` with `[]`): they are called from the GhdlClient handlers, which are
+(`useCallback` with `[]`): they are called from the HdlClient handlers, which are
 created once. They read the snapshot from a `useRef` and change state with the
 functional form `setByFile(prev => …)`. `record` computes `located` **outside**
 the state updater (from its arguments and the snapshot ref), then calls
@@ -1010,7 +1010,7 @@ Build small snapshots inline (two or three files with short `content`).
 | L-11 | `firstRevealTarget` of the `DE1_SoC.v` capture (A.7: line 23 then line 19) | line 19 |
 | L-12 | no exact match, and two case-insensitive matches (`Defs.vh`, `DEFS.vh` for `defs.vh`) | dropped (ambiguous) |
 | L-13 | one exact match (`defs.vh`) plus a case-insensitive one (`DEFS.vh`) | the exact match (step a wins before b is tried) |
-| L-14 | `filesForRun(files, 'DE1_SoC.v')` with files in `vhdl/`, `verilog/` and `work/` | only the `verilog/` files (pins the selection moved out of `GhdlClient.run`) |
+| L-14 | `filesForRun(files, 'DE1_SoC.v')` with files in `vhdl/`, `verilog/` and `work/` | only the `verilog/` files (pins the selection moved out of `HdlClient.run`) |
 | L-15 | `countLines('')`, `countLines('a')`, `countLines('a\n')`, `countLines('a\r\nb')` | `1`, `1`, `2`, `2` (one row each) |
 | L-16 | `normalizeFileName('./defs.vh')`, `('././x.v')`, `('../x.v')`, `('sub/x.v')` | `defs.vh`, `./x.v`, `../x.v`, `sub/x.v` (only one `./` removed, nothing else) |
 | S-1 | two messages on the same line | one `LineDiagnostic` with two messages |
@@ -1095,7 +1095,7 @@ against the GHDL 4.1.0 / Icarus 12.0 captures alone.
 | 1.1 | Create `diagnostics.fixtures.ts` from Appendix A (SPDX header; one exported `const` per case, with a comment naming the tool, version and command). Split the combined blocks A.1 and A.5 at each file's first line, so each case is its own constant, named as in the § 6.0 table (e.g. `ICARUS_REGASSIGN` holds the three `regassign` lines). | Compiles; every line of Appendix A is in exactly one constant. |
 | 1.2 | Create `diagnostics.ts` with the § 4.1 `Diagnostic` types and the § 4.2 `LineResult`, `Recognizer`, `RECOGNIZERS`, `isGhdlContinuation`, `recognizeLine`. | P-1…P-37 pass. |
 | 1.3 | Add `parseDiagnostics` with § 4.3. Add `diagnostics.golden.test.ts` with G-1…G-21 (§ 6.0). | T-1…T-16 and G-1…G-21 pass. |
-| 1.4 | Create `diagnosticLocation.ts`: `RunSnapshot`, `LocatedDiagnostic`, `countLines`, `normalizeFileName`, `resolveFileId`, `isLineInFile`, `locateDiagnostics`, `firstRevealTarget`, `offsetOfLine`, `lineHeightOrFallback` (§ 4.4, § 4.4.1). Move the file selection of `GhdlClient.run` into an exported `filesForRun` and make `run` use it. | L-1…L-16 and S-16…S-19 pass; `ghdlClient.test.ts` still green. |
+| 1.4 | Create `diagnosticLocation.ts`: `RunSnapshot`, `LocatedDiagnostic`, `countLines`, `normalizeFileName`, `resolveFileId`, `isLineInFile`, `locateDiagnostics`, `firstRevealTarget`, `offsetOfLine`, `lineHeightOrFallback` (§ 4.4, § 4.4.1). Move the file selection of `HdlClient.run` into an exported `filesForRun` and make `run` use it. | L-1…L-16 and S-16…S-19 pass; `hdlClient.test.ts` still green. |
 | 1.5 | Create `diagnosticStore.ts` (§ 4.5, § 4.5.1) and `diagnosticText.ts` (§ 4.5). Add G-22 and G-23. | S-1…S-15, S-20…S-24, G-22, G-23 pass; `npm run typecheck` clean; § 5 lint command reports nothing. |
 
 ### Phase 2 — State and rendering
@@ -1115,7 +1115,7 @@ against the GHDL 4.1.0 / Icarus 12.0 captures alone.
 | Step | Do | Done when |
 |---|---|---|
 | 3.1 | `const diagnostics = useDiagnostics();` Pass `diagnostics={diagnostics.byFile}` and `onDismissDiagnostics={diagnostics.dismissFile}` to `CodeEditor`. | Typecheck clean. |
-| 3.2 | `handleStart`: after the existing `const topFile = files.find((f) => f.id === topFileId);` and before `getClient().run(...)`, call `diagnostics.startRun({ files: filesForRun(files, topFile?.name) })`. This is the same call `GhdlClient.run` makes, so the snapshot is exactly what is sent (§ 4.4). | E-D11. |
+| 3.2 | `handleStart`: after the existing `const topFile = files.find((f) => f.id === topFileId);` and before `getClient().run(...)`, call `diagnostics.startRun({ files: filesForRun(files, topFile?.name) })`. This is the same call `HdlClient.run` makes, so the snapshot is exactly what is sent (§ 4.4). | E-D11. |
 | 3.3 | Move `filesRef` (with its `filesRef.current = files` line) above `getClient`, then in `getClient` add: `onLog: (text) => { appendLog(text); diagnostics.record(text, filesRef.current); }` and, in `onError`, after `appendLog`: `const located = diagnostics.record(text, filesRef.current); if (REVEALING_STAGES.includes(stage)) revealFirstError(located);` with `const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];` at module level. Add `diagnostics.record` and `revealFirstError` to `getClient`'s dependency list. | E-D1, E-D6, E-D8, E-D9, E-D10. |
 | 3.4 | `handleContentChange`: add `diagnostics.dismissFile(id)`. `handleDeleteFile`: same. | E-D2, E-D12. |
 | 3.5 | `revealFirstError` and `reveal` state (§ 4.7); `useRevealLine`; pass `reveal` to `CodeEditor`. | E-D1 caret, E-D5, E-D17. |

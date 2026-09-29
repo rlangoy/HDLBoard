@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { GhdlClient } from './ghdlClient';
+import { HdlClient } from './hdlClient';
 import type { VhdlFile } from './files';
 
 /** Just enough of a WebSocket to see what `run` puts on the wire. */
@@ -63,7 +63,7 @@ const sentNames = (): string[] =>
     .map((line) => line.slice('@@FILE '.length, -'@@'.length));
 
 function runWith(topFileName?: string): string {
-  const client = new GhdlClient('ws://test', {
+  const client = new HdlClient('ws://test', {
     onReady: vi.fn(),
     onState: vi.fn(),
     onLog: vi.fn(),
@@ -75,7 +75,7 @@ function runWith(topFileName?: string): string {
   return lastFrame();
 }
 
-describe('GhdlClient.run', () => {
+describe('HdlClient.run', () => {
   beforeEach(() => {
     FakeSocket.last = undefined;
     FakeSocket.initialState = FakeSocket.OPEN;

@@ -8,7 +8,7 @@
  * Works against a dev backend, a Linux server, or the installed app while HDLBoard is
  * running:
  *
- *     node tools/verify-backend.mjs ws://127.0.0.1:9010/ghdlsim
+ *     node tools/verify-backend.mjs ws://127.0.0.1:9010/hdlsim
  *
  * Standalone on purpose (no build step), so its board-matching rule mirrors
  * server/src/testSupport/boardState.ts and must be kept in step with it.
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WebSocket = createRequire(join(root, 'server', 'package.json'))('ws');
 
-const url = process.argv[2] ?? 'ws://127.0.0.1:9010/ghdlsim';
+const url = process.argv[2] ?? 'ws://127.0.0.1:9010/hdlsim';
 const PROTOCOL_VERSION = '1';
 const STEP_TIMEOUT_MS = 8000;
 const BATCH_TIMEOUT_MS = 20000;

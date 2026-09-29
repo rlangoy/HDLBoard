@@ -5,7 +5,7 @@
  * Comparing a `STATE` frame's board bits with what a scenario expects.
  *
  * Undefined bits (`X`) are read exactly as the frontend reads them
- * (`ghdlClient.ts`'s `parseState`): an undefined LED is off (0) and an undefined
+ * (`hdlClient.ts`'s `parseState`): an undefined LED is off (0) and an undefined
  * segment is off (1, active low). That is what makes a VHDL design that leaves its
  * `HEX` outputs undriven compare equal to its Verilog twin, which blanks them
  * (docs/Verilog_implementation_plan.md § 7.6).

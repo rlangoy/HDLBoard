@@ -198,14 +198,14 @@ This is the work order that makes Electron possible without touching
   types; `vite.config.ts` already sets `base: './'` so relative paths
   resolve).
 - Construct `WebSocketServer({ noServer: true })` and handle the
-  server's `upgrade` event for path `/ghdlsim`, rejecting others.
+  server's `upgrade` event for path `/hdlsim`, rejecting others.
 - Listen on `127.0.0.1:<port>` when `serveDir` is set (desktop, loopback
   only); keep today's `0.0.0.0` bind and WS-only behaviour when it isn't
   (LAN mode must not regress).
 
 **Gate:** `startBackend({ serveDir: '<repo>/dist', port: 9010 })`, then a
 plain browser at `http://127.0.0.1:9010/` loads the Workbench and
-simulates a design over `ws://127.0.0.1:9010/ghdlsim` — **with no
+simulates a design over `ws://127.0.0.1:9010/hdlsim` — **with no
 Electron involved**. Separately, `./scripts/start.sh` still works in two-port
 LAN mode. Proving F2's fix in a browser here means WO-6 debugs one new
 thing instead of two.

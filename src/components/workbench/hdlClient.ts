@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The Workbench's WebSocket client for the GHDL backend —
+ * The Workbench's WebSocket client for the simulation backend, which runs
+ * GHDL or Icarus Verilog behind one endpoint —
  * ../../../docs/ghdl_implementation_plan.md § 6, § 8.2. The only file in this
  * app that speaks the wire protocol; `Workbench.tsx` calls this, never
  * `WebSocket` directly.
@@ -20,7 +21,7 @@ import type { VhdlFile } from './files';
 const PROTOCOL_VERSION = '1';
 const STATE_LENGTH = 10 + 6 * 7;
 
-export interface GhdlClientHandlers {
+export interface HdlClientHandlers {
   onReady(): void;
   onState(ledr: BitVector, hex: SegmentVector[]): void;
   onLog(text: string): void;
@@ -29,9 +30,9 @@ export interface GhdlClientHandlers {
   onClosed(): void;
 }
 
-/** `ws://<page host>:<port>/ghdlsim` — never a hardcoded `localhost` (§ 6.4). */
-export function ghdlBackendUrl(port: number): string {
-  return `ws://${window.location.hostname}:${port}/ghdlsim`;
+/** `ws://<page host>:<port>/hdlsim` — never a hardcoded `localhost` (§ 6.4). */
+export function hdlBackendUrl(port: number): string {
+  return `ws://${window.location.hostname}:${port}/hdlsim`;
 }
 
 /**
@@ -55,10 +56,10 @@ function parseState(bits: string): { ledr: BitVector; hex: SegmentVector[] } {
   return { ledr, hex };
 }
 
-export class GhdlClient {
+export class HdlClient {
   private ws: WebSocket | null = null;
   private readonly url: string;
-  private readonly handlers: GhdlClientHandlers;
+  private readonly handlers: HdlClientHandlers;
   // Whether the current socket has ever received READY. A close before
   // that happens means the backend was never actually reached — a plain
   // `onClosed()` there is indistinguishable from a normal Stop, and the
@@ -68,7 +69,7 @@ export class GhdlClient {
   // near-instant on localhost, and silent without this).
   private everReady = false;
 
-  constructor(url: string, handlers: GhdlClientHandlers) {
+  constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
     this.handlers = handlers;
   }

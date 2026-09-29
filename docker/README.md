@@ -8,7 +8,7 @@ with Docker, and on Windows or macOS with Docker Desktop.
 ```
    browser                  host
   ┌─────────┐  HTTP + WS  ┌───────────────────────────────────────────────┐
-  │  page   │ ──:80─────> │ web (nginx)  ── /ghdlsim ──────> backend:9010 │
+  │  page   │ ──:80─────> │ web (nginx)  ── /hdlsim ──────> backend:9010 │
   │  board  │             │  dist/                        node + hdl      │
   └─────────┘             └───────────────────────────────────────────────┘
 ```
@@ -66,7 +66,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 | Variable | Default | Effect |
 |---|---|---|
 | `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. It is baked into the page, so rebuild after changing it (`up -d --build`) |
-| `GHDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
+| `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused (the older name `GHDL_MAX_SESSIONS` is still read) |
 | `GHDL_REF` | `master` | GHDL branch or tag to build, for example `v6.0.0` for a pinned release |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 

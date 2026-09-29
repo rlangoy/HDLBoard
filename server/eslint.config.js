@@ -20,6 +20,8 @@ const NEW_CODE = [
   'src/session.test.ts',
   'src/server.test.ts',
   'src/outputLimiter.ts',
+  'src/settings.ts',
+  'src/settings.test.ts',
   'src/testSupport/**/*.ts',
 ];
 

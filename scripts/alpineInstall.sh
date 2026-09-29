@@ -16,8 +16,9 @@
 #   HDLBOARD_DIR         where to install          (default /srv/HDLBoard)
 #   HDLBOARD_USER        service account           (default hdlboard)
 #   HDLBOARD_PAGE_PORT   port nginx serves on      (default 80)
-#   GHDL_WS_PORT         port the backend listens on (default 9010)
-#   GHDL_MAX_SESSIONS    concurrent simulations    (default 32)
+#   HDL_WS_PORT          port the backend listens on (default 9010)
+#   HDL_MAX_SESSIONS     concurrent simulations    (default 32)
+#   (GHDL_WS_PORT / GHDL_MAX_SESSIONS, their older names, are still read.)
 #   HDLBOARD_REPO        git URL to install from
 #   HDLBOARD_BRANCH      branch or tag             (default main)
 #
@@ -27,8 +28,8 @@ set -eu
 DIR="${HDLBOARD_DIR:-/srv/HDLBoard}"
 USR="${HDLBOARD_USER:-hdlboard}"
 PAGE_PORT="${HDLBOARD_PAGE_PORT:-80}"
-WS_PORT="${GHDL_WS_PORT:-9010}"
-MAX_SESSIONS="${GHDL_MAX_SESSIONS:-32}"
+WS_PORT="${HDL_WS_PORT:-${GHDL_WS_PORT:-9010}}"
+MAX_SESSIONS="${HDL_MAX_SESSIONS:-${GHDL_MAX_SESSIONS:-32}}"
 REPO="${HDLBOARD_REPO:-https://github.com/rlangoy/HDLBoard.git}"
 BRANCH="${HDLBOARD_BRANCH:-main}"
 LOG=/var/log/hdlboard.log
@@ -152,13 +153,13 @@ chown -R "$USR:$USR" "$DIR"
 info "$(su -s /bin/sh "$USR" -c "cd '$DIR' && git log --oneline -1")"
 
 # --- 5. build ---------------------------------------------------------------
-# VITE_GHDL_WS_PORT is compiled into the page: it is how the browser knows
+# VITE_HDL_WS_PORT is compiled into the page: it is how the browser knows
 # which port to open the WebSocket on, and it has to match the backend's
-# GHDL_WS_PORT or the board never lights.
+# HDL_WS_PORT or the board never lights.
 step "Building the page and the backend"
 su -s /bin/sh "$USR" -c "cd '$DIR' && npm install --no-fund --no-audit" >/dev/null \
 	|| die "npm install failed in $DIR"
-su -s /bin/sh "$USR" -c "cd '$DIR' && VITE_GHDL_WS_PORT=$WS_PORT npm run build" >/dev/null \
+su -s /bin/sh "$USR" -c "cd '$DIR' && VITE_HDL_WS_PORT=$WS_PORT npm run build" >/dev/null \
 	|| die "the frontend build failed"
 su -s /bin/sh "$USR" -c "cd '$DIR/server' && npm install --no-fund --no-audit && npm run build" >/dev/null \
 	|| die "the backend build failed"
@@ -177,7 +178,7 @@ step "Installing the OpenRC service"
 cat > /etc/init.d/hdlboard <<INIT
 #!/sbin/openrc-run
 # Written by scripts/alpineInstall.sh. See docs/HOSTING.md § 7.3.
-name="HDLBoard GHDL backend"
+name="HDLBoard simulation backend"
 description="WebSocket backend that compiles and runs VHDL with GHDL and Verilog with Icarus"
 
 command="$(command -v node)"
@@ -194,7 +195,7 @@ error_log="$LOG"
 # of variables and passes nothing else through. GHDL_EXE is belt-and-braces
 # for a source build in /usr/local, and load-bearing for a GHDL anywhere else.
 # IVERILOG_EXE and VVP_EXE do the same job for Icarus Verilog.
-supervise_daemon_args="--env GHDL_WS_PORT=$WS_PORT --env GHDL_MAX_SESSIONS=$MAX_SESSIONS --env GHDL_EXE=$GHDL_BIN --env IVERILOG_EXE=$IVERILOG_BIN --env VVP_EXE=$VVP_BIN"
+supervise_daemon_args="--env HDL_WS_PORT=$WS_PORT --env HDL_MAX_SESSIONS=$MAX_SESSIONS --env GHDL_EXE=$GHDL_BIN --env IVERILOG_EXE=$IVERILOG_BIN --env VVP_EXE=$VVP_BIN"
 
 depend() {
 	need net
@@ -236,7 +237,7 @@ sleep 2
 # 127.0.0.1, not localhost: busybox wget tries ::1 first and the backend
 # binds IPv4, so the name resolves to a refused connection. And -S without
 # -q, because -q suppresses the response line -S exists to print.
-if wget -S -O /dev/null "http://127.0.0.1:$WS_PORT/ghdlsim" 2>&1 | grep -q "426"; then
+if wget -S -O /dev/null "http://127.0.0.1:$WS_PORT/hdlsim" 2>&1 | grep -q "426"; then
 	info "backend  : 426 Upgrade Required on $WS_PORT (correct — that port speaks WebSocket)"
 else
 	info "backend  : NOT ANSWERING on $WS_PORT — see $LOG"; rc=1

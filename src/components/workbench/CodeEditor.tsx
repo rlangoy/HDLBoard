@@ -22,8 +22,8 @@ export interface TabRunControl {
   /** A simulation is running this tab's file: Stop rather than Play. */
   running: boolean;
   disabled: boolean;
-  onStart: () => void;
-  onStop: () => void;
+  /** Start the run (Play) or stop it (Stop). */
+  onClick: () => void;
 }
 
 export interface CodeEditorProps {
@@ -177,8 +177,7 @@ export function CodeEditor({
                 fileName={tab.name}
                 running={tabRun.running}
                 disabled={tabRun.disabled}
-                onStart={tabRun.onStart}
-                onStop={tabRun.onStop}
+                onClick={tabRun.onClick}
               />
             )}
             <span className="wb-editor__tab-name">{tab.name}</span>

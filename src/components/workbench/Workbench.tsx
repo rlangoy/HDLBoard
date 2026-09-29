@@ -31,16 +31,10 @@ import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import {
-  ACCEPTED_FILES_TEXT,
-  UPLOAD_ACCEPT,
-  folderAfterRename,
-  folderForUpload,
-  hasTopDot,
-  topAfterDelete,
-} from './fileKinds';
+import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
+import { HdlClient, hdlBackendUrl } from './hdlClient';
+import { runIconFor } from './runIcon';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
 import { loadPaneLayout, savePaneLayout } from './paneLayout';
@@ -49,10 +43,16 @@ import './Workbench.css';
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
 // overridable at build time so a deployment can point at a different
 // backend without editing source. The host is never hardcoded (§ 6.4):
-// ghdlBackendUrl() resolves it from whatever host the page was loaded
+// hdlBackendUrl() resolves it from whatever host the page was loaded
 // from, so the LAN access this repo's own README documents for the Vite
 // dev server works for the backend too, with no extra configuration.
-const GHDL_WS_PORT = Number(import.meta.env.VITE_GHDL_WS_PORT ?? 9010);
+// VITE_GHDL_WS_PORT is the setting's name from when GHDL was the only
+// simulator, still honoured so an older build script keeps working.
+// The default must match the backend's own (server/src/settings.ts).
+const DEFAULT_WS_PORT = 9010;
+const HDL_WS_PORT = Number(
+  import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT,
+);
 
 function timestamp(): string {
   const d = new Date();
@@ -103,7 +103,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
  * out to match `DesignResources/WorkBench.png`.
  *
  * `LEDR`/`HEX` are driven by a real GHDL or Icarus Verilog simulation over WebSocket
- * (`ghdlClient.ts`, ghdl_implementation_plan.md) — never by `SW`/`KEY`
+ * (`hdlClient.ts`, ghdl_implementation_plan.md) — never by `SW`/`KEY`
  * directly (Design_Description.md § 5 convention 11). Every board panel
  * is the real, working component from `components/board`, `Switches`,
  * `Leds`, `Pushbuttons` and `SevenSegment`.
@@ -199,7 +199,7 @@ export function Workbench() {
 
   const [sw, setSw] = useState<BitVector>(() => zeroBits(10));
   const [key, setKey] = useState<BitVector>(() => [1, 1, 1, 1]);
-  // Mirrors of sw/key for the GhdlClient's handlers to read (below): those
+  // Mirrors of sw/key for the HdlClient's handlers to read (below): those
   // handlers are captured once, when the client is lazily constructed, so
   // reading `sw`/`key` directly there would see whatever they were at that
   // moment forever after — a stale closure. Refs are updated synchronously
@@ -478,15 +478,15 @@ export function Workbench() {
     setHexState(Array.from({ length: 6 }, () => blankSegments()));
   }, []);
 
-  // One GhdlClient per Workbench instance, created lazily on first Start
+  // One HdlClient per Workbench instance, created lazily on first Start
   // rather than on mount, so opening the page never opens a socket the
   // student hasn't asked for yet. `onState` is the only path that ever
   // writes ledState/hexState to anything other than blank — see the
   // file-top comment and Design_Description.md § 5 convention 11.
-  const clientRef = useRef<GhdlClient | null>(null);
-  const getClient = useCallback((): GhdlClient => {
+  const clientRef = useRef<HdlClient | null>(null);
+  const getClient = useCallback((): HdlClient => {
     if (!clientRef.current) {
-      clientRef.current = new GhdlClient(ghdlBackendUrl(GHDL_WS_PORT), {
+      clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
         onReady: () => {
           setStatus('running');
           appendLog('Simulation running ...', 'success');
@@ -573,10 +573,10 @@ export function Workbench() {
   };
 
   // A compiling or running simulation: its top file stays put until it stops.
-  const simActive = status !== 'stopped';
+  const isSimulating = status !== 'stopped';
 
   const handleSetTopFile = (id: string) => {
-    if (!simActive) setTopFileId(id);
+    if (!isSimulating) setTopFileId(id);
   };
 
   const handleDownloadFile = (id: string) => {
@@ -695,7 +695,7 @@ export function Workbench() {
   // becomes top — the blue dot, and the Simulation card's "Top:" — and the
   // run starts from it.
   const handleRunFile = (id: string) => {
-    if (simActive) return;
+    if (isSimulating) return;
     setTopFileId(id);
     startRun(id);
   };
@@ -714,31 +714,14 @@ export function Workbench() {
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
 
-  // While a simulation compiles or runs, only its file's tab has an icon —
-  // Stop, whichever tab is active (greyed out until compiling finishes, as
-  // the card's button is). Otherwise the active tab offers Play, when its
-  // file could carry the blue dot.
-  const activeFile = files.find((f) => f.id === activeTabId);
-  let tabRun: TabRunControl | null = null;
-  if (simActive) {
-    if (runFileId !== null) {
-      tabRun = {
-        tabId: runFileId,
-        running: true,
-        disabled: status === 'compiling',
-        onStart: () => {},
-        onStop: handleStop,
-      };
-    }
-  } else if (activeFile && hasTopDot(activeFile.folder)) {
-    tabRun = {
-      tabId: activeFile.id,
-      running: false,
-      disabled: false,
-      onStart: () => handleRunFile(activeFile.id),
-      onStop: handleStop,
-    };
-  }
+  // Stop is greyed out until compiling finishes, as the card's button is.
+  const runIcon = runIconFor(status, runFileId, files.find((f) => f.id === activeTabId));
+  const tabRun: TabRunControl | null = runIcon && {
+    tabId: runIcon.tabId,
+    running: runIcon.kind === 'stop',
+    disabled: status === 'compiling',
+    onClick: runIcon.kind === 'stop' ? handleStop : () => handleRunFile(runIcon.tabId),
+  };
 
   return (
     <div
@@ -785,7 +768,7 @@ export function Workbench() {
             onFilesDropped={handleFilesDropped}
             topFileId={topFileId}
             onSetTopFile={handleSetTopFile}
-            topLocked={simActive}
+            topLocked={isSimulating}
           />
           <input
             ref={uploadInputRef}

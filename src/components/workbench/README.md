@@ -4,7 +4,7 @@
 syntax-highlighted editor, Start/Stop simulation controls, a simulator
 console, and the DE1-SoC board from [`components/board`](../board), driven
 by a real GHDL or Icarus Verilog simulation over WebSocket
-([`ghdlClient.ts`](#ghdlclientts); the backend and wire protocol are in
+([`hdlClient.ts`](#hdlclientts); the backend and wire protocol are in
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md)).
 Its building blocks (`<FileExplorer>`, `<CodeEditor>`, `<SimulationCard>`,
 `<ConsoleOutput>`, `<Header>` and the dialogs) are exported too and can be
@@ -25,11 +25,11 @@ export default function Page() {
 
 - **A backend.** Start does nothing useful without the simulation server
   (`server/`) running. The client connects to
-  `ws://<page host>:<port>/ghdlsim` — the host is always the one the page was
+  `ws://<page host>:<port>/hdlsim` — the host is always the one the page was
   loaded from, never a hardcoded `localhost`, and the port defaults to `9010`,
-  overridable at build time with `VITE_GHDL_WS_PORT`. Without a backend,
+  overridable at build time with `VITE_HDL_WS_PORT`. Without a backend,
   Start fails fast with a red console line
-  (`ERROR internal, "Could not reach the GHDL backend at …"`), not a hang.
+  (`ERROR internal, "Could not reach the simulation backend at …"`), not a hang.
 - **The whole viewport.** The root `.wb` is `height: 100vh` with its own
   header / body / console grid, so mount it as the page, not inside a
   scrolling container.
@@ -67,12 +67,12 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
   - [`files.ts`](#filests)
-  - [`fileKinds.ts` and `consoleLines.ts`](#filekindsts-and-consolelinests)
+  - [`fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`](#filekindsts-consolelinests-and-runiconts)
   - [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)
   - [`helpResources.ts`](#helpresourcests)
   - [`icons.tsx`](#iconstsx)
   - [`desktop.ts`](#desktopts)
-  - [`ghdlClient.ts`](#ghdlclientts)
+  - [`hdlClient.ts`](#hdlclientts)
 - [How the simulation runs](#how-the-simulation-runs)
 - [How the editor overlay works](#how-the-editor-overlay-works)
 - [Styling](#styling)
@@ -321,8 +321,7 @@ interface TabRunControl {
   tabId: string;
   running: boolean;   // a simulation is running this tab's file: Stop
   disabled: boolean;  // while a run is compiling
-  onStart: () => void;
-  onStop: () => void;
+  onClick: () => void; // start (Play) or stop (Stop)
 }
 ```
 
@@ -334,7 +333,8 @@ while nothing runs, the active tab gets Play (unless its file can't be top,
 a `work/` testbench), and Play makes that file top and starts the run from
 it; while a simulation compiles or runs, only the running file's tab gets
 Stop — whichever tab is active, and greyed out until compiling finishes —
-and no tab offers Play. See
+and no tab offers Play. The rule itself is the pure `runIconFor` in
+`runIcon.ts`, unit-tested in `runIcon.test.ts`. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
 textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
 open" placeholder rather than an empty editor — which is itself a valid
@@ -390,9 +390,8 @@ interface SimToggleProps {
   running: boolean;     // Stop while true, Play otherwise
   disabled?: boolean;
   fileName: string;     // for the tooltip / aria-label
-  onStart: () => void;
-  onStop: () => void;
-  className?: string;   // the caller sets the size (16px on a tab)
+  onClick: () => void;  // start when showing Play, stop when showing Stop
+  className?: string;
 }
 ```
 
@@ -463,7 +462,7 @@ than the board's literal pin names (`KEY`/`HEX0..HEX5`), the one exception
 to that otherwise-literal contract; see § 3.2's note. Every starter file
 compiles and runs under GHDL (`--std=08`) or Icarus Verilog.
 
-### `fileKinds.ts` and `consoleLines.ts`
+### `fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`
 
 Pure modules, so `Workbench` and `FileExplorer` never look at a file name
 themselves, and covered by vitest (`npm test`):
@@ -479,6 +478,8 @@ themselves, and covered by vitest (`npm test`):
 - `hasTopDot(folder)`, `UPLOAD_ACCEPT`, `ACCEPTED_FILES_TEXT`.
 - `appendCapped(lines, line)` (`consoleLines.ts`) — the console keeps the
   newest 2000 lines.
+- `runIconFor(status, runFileId, activeFile)` (`runIcon.ts`) — which editor
+  tab shows the play/stop icon, and which of the two (see `<CodeEditor>`).
 
 The extension rules mirror `server/src/engines/language.ts`; the two packages
 share no code, so a change to one must be made in the other.
@@ -555,11 +556,11 @@ and on `pagehide`. What is stored is `serializeWorkspace` output — `files`,
 host (the desktop build's implementation is in `winInstaller/electron/`).
 Tests: `desktop.test.ts`.
 
-### `ghdlClient.ts`
+### `hdlClient.ts`
 
 ```ts
-export class GhdlClient {
-  constructor(url: string, handlers: GhdlClientHandlers);
+export class HdlClient {
+  constructor(url: string, handlers: HdlClientHandlers);
   run(files: VhdlFile[], topFileName?: string): void;
   stim(sw: BitVector, key: BitVector): void;
   reset(): void;
@@ -567,7 +568,7 @@ export class GhdlClient {
   close(): void;
 }
 
-export function ghdlBackendUrl(port: number): string;  // ws://<page host>:<port>/ghdlsim
+export function hdlBackendUrl(port: number): string;  // ws://<page host>:<port>/hdlsim
 ```
 
 The only file in this component that speaks WebSocket to the backend — full
@@ -583,7 +584,7 @@ browser and cannot import a Node-side file.
 
 ## How the simulation runs
 
-`Workbench` holds one `GhdlClient` (`ghdlClient.ts`), created lazily on
+`Workbench` holds one `HdlClient` (`hdlClient.ts`), created lazily on
 first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
@@ -803,7 +804,7 @@ pane instead. Standalone `Board` users keep the stacking fallback.
   workspace. The backend's per-session temp directory is deleted when the
   socket closes (`ghdl_implementation_plan.md` § 7.2).
 - **No configuration from the host.** `<Workbench>` takes no props: the
-  starter project, the backend path (`/ghdlsim`) and the layout defaults are
+  starter project, the backend path (`/hdlsim`) and the layout defaults are
   constants in its source, the port is a build-time variable, and it
   assumes it fills the viewport.
 - **A clock-rate limit for board designs, not a bug.** A hardware-accurate

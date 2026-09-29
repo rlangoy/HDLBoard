@@ -7,6 +7,7 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
+import { WebSocket } from 'ws';
 import { startBackend, type BackendHandle } from './server.js';
 
 const LOOPBACK = '127.0.0.1';
@@ -73,4 +74,33 @@ describe('startBackend on a port that is already taken', () => {
       await new Promise((resolve) => blocker.close(resolve));
     }
   });
+});
+
+describe('the WebSocket endpoint path', () => {
+  let backend: BackendHandle;
+
+  before(async () => {
+    backend = startBackend({ port: await freePort() });
+    await backend.ready;
+  });
+
+  after(() => stopped(backend));
+
+  /**
+   * Whether a WebSocket upgrade on `path` opens (true) or is refused (false). The `ws`
+   * package rather than Node's global WebSocket, which Node 18 and 20 do not have.
+   */
+  const opens = (path: string) =>
+    new Promise<boolean>((resolve) => {
+      const ws = new WebSocket(`ws://${LOOPBACK}:${backend.port}${path}`);
+      ws.once('open', () => {
+        ws.close();
+        resolve(true);
+      });
+      ws.once('error', () => resolve(false));
+    });
+
+  test('accepts /hdlsim', async () => assert.equal(await opens('/hdlsim'), true));
+  test('still accepts the legacy /ghdlsim', async () => assert.equal(await opens('/ghdlsim'), true));
+  test('refuses any other path', async () => assert.equal(await opens('/other'), false));
 });
