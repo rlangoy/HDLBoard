@@ -22,6 +22,12 @@
   border-bottom: 1px solid var(--wb-border);
 }
 
+/* Two classes, so it outranks SimToggle.css's own size whatever the load order. */
+.wb-simtoggle.wb-simcard__toggle {
+  width: 24px;
+  height: 24px;
+}
+
 .wb-simcard__title {
   margin: 0;
   flex: 1;
@@ -150,27 +156,6 @@
 }
 
 /* ---- icons ---------------------------------------------------------- */
-
-.wb-icon--play-circle {
-  position: relative;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1.6px solid var(--wb-text);
-}
-.wb-icon--play-circle::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 54%;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 5px 0 5px 8px;
-  border-color: transparent transparent transparent currentColor;
-  transform: translate(-50%, -50%);
-}
 
 .wb-icon--play {
   width: 0;

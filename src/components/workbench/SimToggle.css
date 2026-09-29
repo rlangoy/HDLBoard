@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The icon carries its own colour (green play / red stop), so the button
+   itself is just a borderless hit area; each caller sets the size. */
+.wb-simtoggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, opacity 140ms ease;
+}
+
+.wb-simtoggle.is-stop {
+  border-radius: 4px;
+}
+
+.wb-simtoggle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.wb-simtoggle:hover:not(:disabled) {
+  filter: brightness(0.92);
+  transform: scale(1.08);
+}
+
+.wb-simtoggle:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.wb-simtoggle:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-simtoggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-simtoggle {
+    transition: none;
+  }
+  .wb-simtoggle:hover:not(:disabled),
+  .wb-simtoggle:active:not(:disabled) {
+    transform: none;
+  }
+}

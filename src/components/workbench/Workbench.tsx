@@ -27,11 +27,18 @@ import { NewFileDialog } from './NewFileDialog';
 import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
+import {
+  ACCEPTED_FILES_TEXT,
+  UPLOAD_ACCEPT,
+  folderAfterRename,
+  folderForUpload,
+  hasTopDot,
+  topAfterDelete,
+} from './fileKinds';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { GhdlClient, ghdlBackendUrl } from './ghdlClient';
 import { downloadProjectZip, downloadSourceFile } from './download';
@@ -180,7 +187,18 @@ export function Workbench() {
     return () => window.removeEventListener(ABOUT_EVENT, openAbout);
   }, []);
 
-  const [status, setStatus] = useState<SimStatus>('stopped');
+  const [status, setStatusState] = useState<SimStatus>('stopped');
+  // Mirror of `status` for the GhdlClient's handlers, which are captured
+  // once (same stale-closure reason as swRef/keyRef below); set together
+  // with the state so a frame arriving before the next render still sees it.
+  const statusRef = useRef<SimStatus>('stopped');
+  const setStatus = useCallback((next: SimStatus) => {
+    statusRef.current = next;
+    setStatusState(next);
+  }, []);
+  // The file the current (or last) run was started with as top — what the
+  // active tab's icon compares against, so only that file's tab shows Stop.
+  const [runFileId, setRunFileId] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
 
@@ -501,7 +519,11 @@ export function Workbench() {
         },
         onDone: (reason) => {
           stopElapsedTimer();
-          setStatus('stopped');
+          // Still 'compiling' here only when Start was pressed while a run
+          // was going (another tab's play icon): the backend ends the old
+          // run with this DONE before compiling the new one, whose READY or
+          // ERROR is still to come — so don't flash 'stopped' in between.
+          if (statusRef.current !== 'compiling') setStatus('stopped');
           // 'completed': a portless testbench (batch mode, no board
           // polling — server/src/session.ts) reached its own natural end
           // on its own, distinct from the user clicking Stop — the green
@@ -519,7 +541,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard]);
+  }, [appendLog, blankBoard, setStatus]);
 
   useEffect(
     () => () => {
@@ -659,13 +681,24 @@ export function Workbench() {
     getClient().stim(sw, next);
   };
 
-  const handleStart = () => {
+  const startRun = (fileId: string | null) => {
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');
+    setRunFileId(fileId);
     blankBoard();
-    const topFile = files.find((f) => f.id === topFileId);
+    const topFile = files.find((f) => f.id === fileId);
     getClient().run(files, topFile?.name);
+  };
+
+  const handleStart = () => startRun(topFileId);
+
+  // The active tab's play icon: that file becomes top (the blue dot, and
+  // the Simulation card's "Top:") and the run starts from it — replacing
+  // whatever was running before, as a fresh RUN always does on the backend.
+  const handleRunFile = (id: string) => {
+    setTopFileId(id);
+    startRun(id);
   };
 
   const handleStop = () => {
@@ -681,6 +714,18 @@ export function Workbench() {
     .map((id) => files.find((f) => f.id === id))
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
+
+  // Only a file that could carry the blue dot can be run from its tab.
+  const activeFile = files.find((f) => f.id === activeTabId);
+  const activeTabRun: TabRunControl | null =
+    activeFile && hasTopDot(activeFile.folder)
+      ? {
+          running: status === 'running' && runFileId === activeFile.id,
+          disabled: status === 'compiling',
+          onStart: () => handleRunFile(activeFile.id),
+          onStop: handleStop,
+        }
+      : null;
 
   return (
     <div
@@ -754,6 +799,7 @@ export function Workbench() {
           onAddTab={handleNewFile}
           onChange={handleContentChange}
           onFilesDropped={handleFilesDropped}
+          activeTabRun={activeTabRun}
         />
 
         <div

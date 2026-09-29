@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { cx } from '../board';
+import { SimToggle } from './SimToggle';
 import './SimulationCard.css';
 
 export type SimStatus = 'stopped' | 'compiling' | 'running';
@@ -34,7 +35,8 @@ function formatElapsed(totalSeconds: number): string {
 /**
  * The "Simulation" card at the top of the left pane — Start/Stop and the
  * run status, integrated into the sidebar rather than floating over the
- * board (matches the reference Simulate-and-Files-pane mockup).
+ * board (matches the reference Simulate-and-Files-pane mockup). The
+ * play/stop icon by the heading does what the button below it does.
  */
 export function SimulationCard({ status, elapsedSeconds, topFile, onStart, onStop }: SimulationCardProps) {
   const running = status === 'running';
@@ -43,7 +45,14 @@ export function SimulationCard({ status, elapsedSeconds, topFile, onStart, onSto
   return (
     <section className="wb-simcard">
       <div className="wb-simcard__header">
-        <span className="wb-icon wb-icon--play-circle" aria-hidden="true" />
+        <SimToggle
+          className="wb-simcard__toggle"
+          running={running}
+          disabled={compiling}
+          fileName={topFile}
+          onStart={onStart}
+          onStop={onStop}
+        />
         <h2 className="wb-simcard__title">Simulation</h2>
         <span className={cx('wb-simcard__status', `is-${status}`)}>
           <span className="wb-simcard__dot" aria-hidden="true" />

@@ -74,3 +74,23 @@ export function GearIcon() {
     </svg>
   );
 }
+
+/** A green disc with a white triangle — starts a simulation (SimToggle). */
+export function PlayIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" {...props}>
+      <circle cx="12" cy="12" r="11" fill="#22C55E" />
+      <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="white" />
+    </svg>
+  );
+}
+
+/** A red rounded square with a white square — stops the running simulation (SimToggle). */
+export function StopIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" {...props}>
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#EF4444" />
+      <rect x="7" y="7" width="10" height="10" rx="1" fill="white" />
+    </svg>
+  );
+}

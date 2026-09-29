@@ -6,6 +6,7 @@ import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
+import { SimToggle } from './SimToggle';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
@@ -13,6 +14,15 @@ export interface EditorTab {
   id: string;
   name: string;
   content: string;
+}
+
+/** What the active tab's play/stop icon shows and does (SimToggle). */
+export interface TabRunControl {
+  /** The running simulation has this tab's file as top: Stop rather than Play. */
+  running: boolean;
+  disabled: boolean;
+  onStart: () => void;
+  onStop: () => void;
 }
 
 export interface CodeEditorProps {
@@ -24,6 +34,11 @@ export interface CodeEditorProps {
   onChange: (id: string, content: string) => void;
   /** Files dropped anywhere on the editor pane — imported the same way a drop on the Files panel is. */
   onFilesDropped: (files: FileList) => void;
+  /**
+   * The play/stop icon on the active tab; omitted or null when that file
+   * can't be run (a `work/` testbench). Inactive tabs never show one.
+   */
+  activeTabRun?: TabRunControl | null;
 }
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
@@ -71,6 +86,7 @@ export function CodeEditor({
   onAddTab,
   onChange,
   onFilesDropped,
+  activeTabRun,
 }: CodeEditorProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -154,6 +170,9 @@ export function CodeEditor({
               if (e.key === 'Enter' || e.key === ' ') onSelectTab(tab.id);
             }}
           >
+            {tab.id === activeTabId && activeTabRun && (
+              <SimToggle className="wb-editor__tab-run" fileName={tab.name} {...activeTabRun} />
+            )}
             <span className="wb-editor__tab-name">{tab.name}</span>
             <button
               type="button"

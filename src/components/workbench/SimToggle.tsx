@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+import { cx } from '../board';
+import { PlayIcon, StopIcon } from './icons';
+import './SimToggle.css';
+
+export interface SimToggleProps {
+  /** Shows Stop while true, Play otherwise. */
+  running: boolean;
+  /** Greyed out and inert — while a run is still compiling, as the Start button is. */
+  disabled?: boolean;
+  /** The file Play runs as top (or Stop stops), for the tooltip and screen readers. */
+  fileName: string;
+  onStart: () => void;
+  onStop: () => void;
+  className?: string;
+}
+
+/**
+ * The one-click play/stop icon shared by the Simulation card's heading and the
+ * editor's active tab, so the two always look and read the same.
+ */
+export function SimToggle({ running, disabled = false, fileName, onStart, onStop, className }: SimToggleProps) {
+  const label = running ? `Stop simulation of ${fileName}` : `Start simulation with ${fileName} as top`;
+  return (
+    <button
+      type="button"
+      className={cx('wb-simtoggle', running ? 'is-stop' : 'is-play', className)}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(e) => {
+        // Inside an editor tab: pressing the icon must not also count as a click on the tab.
+        e.stopPropagation();
+        if (running) onStop();
+        else onStart();
+      }}
+    >
+      {running ? <StopIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
+    </button>
+  );
+}
+
+export default SimToggle;

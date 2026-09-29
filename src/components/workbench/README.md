@@ -44,9 +44,9 @@ export default function Page() {
 
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 `SettingsDialog`, `HelpDialog`, `FileExplorer`, `CodeEditor`,
-`SimulationCard`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
+`SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
 `ISSUES_URL`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
-`VhdlFile`, `EditorTab`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
+`VhdlFile`, `EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
 ---
@@ -62,6 +62,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<FileExplorer>`](#fileexplorer)
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
+  - [`<SimToggle>`](#simtoggle)
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
@@ -86,7 +87,7 @@ Workbench                              (CSS grid: header / body / divider / cons
 ├─ Header                              (grid row 1, full width)
 └─ .wb-body                            (grid row 2, flex row)
    ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
-   │  ├─ SimulationCard                (card: Start/Stop + status)
+   │  ├─ SimulationCard                (card: play/stop icon, Start/Stop + status)
    │  └─ FileExplorer                  (card: Upload/New File/Download All + the vhdl/verilog/work tree)
    ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
    ├─ CodeEditor                       (flex: 1 — takes the remaining width)
@@ -310,10 +311,25 @@ interface CodeEditorProps {
   onAddTab: () => void;            // the tab strip's "+"
   onChange: (id: string, content: string) => void;
   onFilesDropped: (files: FileList) => void;
+  activeTabRun?: TabRunControl | null;  // the active tab's play/stop icon
+}
+
+interface TabRunControl {
+  running: boolean;   // the running simulation has this tab's file as top
+  disabled: boolean;  // while a run is compiling
+  onStart: () => void;
+  onStop: () => void;
 }
 ```
 
-The tab strip plus one editing surface for the active tab. See
+The tab strip plus one editing surface for the active tab.
+
+**Play/stop on the active tab.** Only the active tab shows a
+[`<SimToggle>`](#simtoggle) icon, ahead of its name, and only when
+`activeTabRun` is given — `Workbench` passes `null` for a file that can't be
+top (a `work/` testbench). It shows Stop only while the simulation is
+running *that* file; any other active tab shows Play, and Play makes the
+file top and starts (or restarts) the run from it. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
 textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
 open" placeholder rather than an empty editor — which is itself a valid
@@ -345,14 +361,15 @@ interface SimulationCardProps {
 }
 ```
 
-The card at the top of the sidebar: a circular play glyph and "Simulation"
-heading, a status pill (dot + label) on the right, one full-width button
+The card at the top of the sidebar: a [`<SimToggle>`](#simtoggle) play/stop
+icon and "Simulation" heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
 line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` is the
 `topFile` prop.
 
 Purely presentational: the button is disabled while `compiling`, shows
-Start when `stopped` or `compiling`, and Stop once `running`; the status
+Start when `stopped` or `compiling`, and Stop once `running` — and the icon
+by the heading does the same, as Play or Stop; the status
 dot's colour and pulse follow `status` the same way. The caller decides
 what `status` means and owns the elapsed-time interval — this component
 only formats and renders the number it's given.
@@ -361,6 +378,24 @@ The title, status label and footer line all use the same
 `.wb-simcard__label-text` truncation treatment as `FileExplorer`'s file
 names, for the same reason — the "Top: <file>" line in particular can run
 long enough to otherwise resist the sidebar shrinking.
+
+### `<SimToggle>`
+
+```tsx
+interface SimToggleProps {
+  running: boolean;     // Stop while true, Play otherwise
+  disabled?: boolean;
+  fileName: string;     // for the tooltip / aria-label
+  onStart: () => void;
+  onStop: () => void;
+  className?: string;   // callers set the size (24px in the card, 18px on a tab)
+}
+```
+
+The green play disc / red stop square shared by `<SimulationCard>`'s heading
+and `<CodeEditor>`'s active tab, so the two always look and read the same.
+Its click stops propagating, so pressing it inside a tab isn't also a click
+on the tab.
 
 ### `<ConsoleOutput>`
 
@@ -491,6 +526,10 @@ each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn icon
 in this folder already does.
 
+`PlayIcon` and `StopIcon` (`<SimToggle>`'s green disc and red square) are
+the exception to that: they carry their own fixed colours, since the
+colour *is* the signal.
+
 ### `desktop.ts`
 
 ```ts
@@ -546,9 +585,12 @@ first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
-`handleStart`:
+`handleStart` (the card's Start button or icon) runs the file with the blue
+dot; `handleRunFile` (the active tab's play icon) first makes that tab's file
+top, then does the same. Both go through `startRun`, which:
 
-1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, blanks the
+1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file
+   as `runFileId` (the one tab that shows Stop while it runs), blanks the
    board (`blankBoard()` — LEDs off, HEX blank; see
    `Design_Description.md` § 5 convention 11), and calls
    `client.run(files, topFileName)`, which sends the files of the top file's
@@ -571,6 +613,12 @@ socket nobody asked for. Full wire protocol and backend design:
    change, passing the *next* value, never the `sw`/`key` state variable
    (React state isn't updated synchronously, so the stale value would
    leave the board permanently one flip behind).
+
+A play icon pressed on another tab while a run is going sends a fresh `RUN`
+straight away: the backend ends the old run with a `DONE` before compiling
+the new one. `onDone` leaves `status` at `'compiling'` when it is already
+there — it reads `statusRef`, not the stale `status` — so the card doesn't
+flash Stopped between the two runs.
 
 `handleStop` sends `STOP` and nothing else — `status`/log/board-blanking
 all happen when the backend's own `DONE` frame arrives (`onDone`), not
