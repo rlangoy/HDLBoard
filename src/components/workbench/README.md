@@ -82,7 +82,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 ## Layout
 
 ```
-Workbench                              (CSS grid: header / body / console)
+Workbench                              (CSS grid: header / body / divider / console)
 ├─ Header                              (grid row 1, full width)
 └─ .wb-body                            (grid row 2, flex row)
    ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
@@ -93,7 +93,8 @@ Workbench                              (CSS grid: header / body / console)
    ├─ .wb-resizer                      (drag handle — resizes .wb-right)
    └─ .wb-right                        (draggable width panel)
       └─ Board                        (LEDs + HEX on top, SW + KEY underneath)
-└─ ConsoleOutput                       (grid row 3, full width)
+├─ .wb-resizer--row                    (grid row 3, drag handle — resizes the console)
+└─ ConsoleOutput                       (grid row 4, full width, draggable height)
 ```
 
 `SimulationCard` and `FileExplorer` are two independent white, rounded,
@@ -633,6 +634,21 @@ and are kept separate on purpose.
 
 ### Resizing
 
+Every pane boundary is a divider: a 5px light gray `.wb-resizer` bar with
+darker edges. The grab area reaches 4px past each side of the bar (its
+`::before`), the cursor shows ↔ (`ew-resize`) on the vertical ones and ↕
+(`ns-resize`) on the horizontal one, and the bar turns accent blue on hover
+and for the whole of a drag (`.is-dragging`). During a drag, `.wb-is-resizing-x`
+/ `-y` on `<body>` holds that cursor and blocks text selection everywhere,
+and pointer capture keeps the drag on the handle, so the panes follow the
+pointer continuously wherever it goes.
+
+**The console** is resized from the horizontal divider on its top edge
+(`handleConsoleResizerPointerDown`). Its height goes into `--wb-console-h`
+inline on `.wb`, clamped by `applyConsoleHeight` between `CONSOLE_MIN_H` and
+whatever leaves the panes above `BODY_MIN_H`; a `ResizeObserver` on `.wb`
+re-applies the clamp when the window height changes.
+
 Both side panels are draggable, each via its own `.wb-resizer` handle:
 `.wb-sidebar` from the one between it and the editor
 (`handleSidebarResizerPointerDown`), `.wb-right` from the one on its own
@@ -691,8 +707,8 @@ hide the fault.
 **The side panels are `border-box`.** `applyLayout` budgets in rendered
 pixels, so the width it sets has to be the width on screen. With content-box
 their padding (14px and 16px a side) would sit outside that number and,
-with the two 10px handles, 80px of the row would go unbudgeted — enough to
-squeeze the editor to 120px against a declared `EDITOR_MIN_W` of 200. The
+with the two 5px handles, 70px of the row would go unbudgeted — enough to
+squeeze the editor to 130px against a declared `EDITOR_MIN_W` of 200. The
 `*_DEFAULT_W` constants include the padding for this reason; changing a
 panel's padding means changing them to match.
 

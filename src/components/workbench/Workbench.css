@@ -40,9 +40,19 @@
 
   --wb-console-bg: #0f172a;
 
+  /* The pane dividers (.wb-resizer): a light gray bar with darker edges,
+     5px thick — Workbench.tsx's CHROME_W / ROW_DIVIDER_H budget for it. */
+  --wb-divider-size: 5px;
+  --wb-divider-bg: #e5e9f0;
+  --wb-divider-edge: #cbd5e1;
+  /* How far the invisible grab area reaches past each side of the bar. */
+  --wb-divider-reach: 4px;
+
   height: 100vh;
   display: grid;
-  grid-template-rows: var(--wb-header-h) 1fr var(--wb-console-h);
+  /* --wb-console-h is overridden inline by Workbench.tsx as the console's
+     divider is dragged; the value above is only the initial/no-JS height. */
+  grid-template-rows: var(--wb-header-h) 1fr var(--wb-divider-size) var(--wb-console-h);
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
   background: #ffffff;
@@ -68,50 +78,79 @@
 }
 
 /*
- * Drag handles either side of the editor — one resizes .wb-sidebar, the
- * other .wb-right (Workbench.tsx's handleSidebarResizerPointerDown /
- * handleBoardResizerPointerDown). Both panels' widths are set inline from
- * that drag state, not from --wb-sidebar-w / --wb-right-w below — those
- * vars only supply the initial/no-JS width.
+ * Pane dividers. The two vertical ones sit either side of the editor — one
+ * resizes .wb-sidebar, the other .wb-right (Workbench.tsx's
+ * handleSidebarResizerPointerDown / handleBoardResizerPointerDown); both
+ * panels' widths are set inline from that drag state, not from
+ * --wb-sidebar-w / --wb-right-w below — those vars only supply the
+ * initial/no-JS width. The horizontal one (.wb-resizer--row) sits on the
+ * console's top edge and sets --wb-console-h
+ * (handleConsoleResizerPointerDown).
+ *
+ * The bar itself is only --wb-divider-size thick; the ::before strip
+ * widens the grab area by --wb-divider-reach on each side, over the
+ * neighbouring panes, without taking layout space from them. z-index 2
+ * puts it above the panes' own z-index 1 overlays (the drop hints).
  */
 .wb-resizer {
+  position: relative;
+  z-index: 2;
   flex: none;
-  width: 10px;
-  cursor: col-resize;
-  background: transparent;
+  box-sizing: border-box;
+  width: var(--wb-divider-size);
+  background: var(--wb-divider-bg);
+  border-left: 1px solid var(--wb-divider-edge);
+  border-right: 1px solid var(--wb-divider-edge);
+  cursor: ew-resize;
   touch-action: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
-/* A visible 2px grip line at rest, so the handle reads as draggable
-   without needing to hover blind over an invisible strip first. */
-.wb-resizer::after {
+.wb-resizer::before {
   content: '';
-  width: 2px;
-  height: 100%;
-  background: var(--wb-border);
+  position: absolute;
+  inset: 0 calc(-1 * var(--wb-divider-reach) - 1px);
 }
 
-.wb-resizer:hover::after,
-.wb-resizer:active::after {
-  background: var(--wb-accent);
+.wb-resizer--row {
+  grid-row: 3;
+  width: auto;
+  height: var(--wb-divider-size);
+  border: 0;
+  border-top: 1px solid var(--wb-divider-edge);
+  border-bottom: 1px solid var(--wb-divider-edge);
+  cursor: ns-resize;
 }
 
+.wb-resizer--row::before {
+  inset: calc(-1 * var(--wb-divider-reach) - 1px) 0;
+}
+
+/* Hover and drag: the bar picks up the accent so it's plain it will move.
+   .is-dragging is set by beginResize, so the highlight holds for the whole
+   drag even when the pointer runs ahead of the bar. */
 .wb-resizer:hover,
-.wb-resizer:active {
+.wb-resizer.is-dragging {
   background: var(--wb-accent-soft);
+  border-color: var(--wb-accent);
 }
 
 /* Set on <body> for the duration of a drag (Workbench.tsx's beginResize). */
-.wb-is-resizing {
-  cursor: col-resize;
+.wb-is-resizing-x,
+.wb-is-resizing-y {
   user-select: none;
 }
 
-.wb-is-resizing * {
-  cursor: col-resize !important;
+.wb-is-resizing-x,
+.wb-is-resizing-x * {
+  cursor: ew-resize !important;
+}
+
+.wb-is-resizing-y,
+.wb-is-resizing-y * {
+  cursor: ns-resize !important;
 }
 
 /*
@@ -119,8 +158,8 @@
  * then Files) rather than one flush panel — matches the reference
  * Simulate-and-Files-pane mockup. Width, background and the scrollbar
  * all live here now; FileExplorer.css's .wb-files is just the card
- * underneath it. The border against the editor is the .wb-resizer grip
- * line above, not a border here — a plain border would double up with it.
+ * underneath it. The border against the editor is the .wb-resizer bar
+ * above, not a border here — a plain border would double up with it.
  */
 .wb-sidebar {
   width: var(--wb-sidebar-w);
@@ -141,7 +180,7 @@
  * The board pane. It never scrolls and the board inside it never reflows:
  * the parts keep one fixed arrangement and are scaled to fit whatever
  * width the drag/window leaves (Workbench.tsx's board-fit effect). No
- * border-left here — the .wb-resizer grip line on this panel's left edge
+ * border-left here — the .wb-resizer bar on this panel's left edge
  * is that border.
  */
 .wb-right {

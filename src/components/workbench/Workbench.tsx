@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { Board, zeroBits, type BitVector } from '../board';
@@ -72,9 +73,19 @@ const SIDEBAR_DEFAULT_W = 278;
 const EDITOR_MIN_W = 200;
 const BOARD_MIN_W = 200;
 const BOARD_DEFAULT_W = 792;
-// The two .wb-resizer handles, which sit between the panes and take width
-// of their own (Workbench.css keeps them at 10px each).
-const CHROME_W = 20;
+// The two vertical .wb-resizer handles, which sit between the panes and take
+// width of their own (Workbench.css keeps them at 5px each).
+const CHROME_W = 10;
+
+// The same rules for the console below the panes: a minimum it can't be
+// dragged under, a starting height, and the height the panes above must keep.
+// ROW_DIVIDER_H is the horizontal .wb-resizer's own height (Workbench.css).
+const CONSOLE_MIN_H = 72;
+const CONSOLE_DEFAULT_H = 180;
+const BODY_MIN_H = 160;
+const ROW_DIVIDER_H = 5;
+
+type ResizeAxis = 'x' | 'y';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -210,6 +221,13 @@ export function Workbench() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_W);
   const [boardWidth, setBoardWidth] = useState(BOARD_DEFAULT_W);
 
+  // The console's height, reconciled the same way against the page's height:
+  // `desiredConsoleHeight` is what the last drag left it at, `consoleHeight`
+  // what currently fits.
+  const wbRef = useRef<HTMLDivElement>(null);
+  const desiredConsoleHeight = useRef(CONSOLE_DEFAULT_H);
+  const [consoleHeight, setConsoleHeight] = useState(CONSOLE_DEFAULT_H);
+
   // The board keeps one fixed 2x2 arrangement at one fixed internal size and
   // is scaled to whatever the pane currently gives it, so the parts never
   // reflow or get scrolled out of reach. `offsetWidth`/`offsetHeight` are
@@ -316,26 +334,58 @@ export function Workbench() {
     return () => observer.disconnect();
   }, [applyLayout]);
 
+  // Clamps a requested console height between its own minimum and whatever
+  // the panes above leave, and returns what it applied. The header's height
+  // is measured (the gap between .wb's top and .wb-body's), not duplicated
+  // from Workbench.css.
+  const applyConsoleHeight = useCallback((desired: number): number => {
+    const wb = wbRef.current;
+    const body = bodyRef.current;
+    if (!wb || !body) return desired;
+    const headerH = body.getBoundingClientRect().top - wb.getBoundingClientRect().top;
+    const room = wb.clientHeight - headerH - ROW_DIVIDER_H;
+    const next = clamp(desired, CONSOLE_MIN_H, Math.max(CONSOLE_MIN_H, room - BODY_MIN_H));
+    setConsoleHeight(next);
+    return next;
+  }, []);
+
+  // Only .wb's own height matters here; the console's height moves space
+  // between .wb-body and the console, never .wb itself, so this can't loop.
+  useEffect(() => {
+    const el = wbRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => applyConsoleHeight(desiredConsoleHeight.current));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [applyConsoleHeight]);
+
   // Pointer capture keeps the whole drag bound to the handle: without it the
   // cursor reverts to whatever the pointer happens to be over mid-drag (the
   // editor's text I-beam, most obviously), which reads as the drag having
-  // dropped. `.wb-is-resizing` holds the col-resize cursor and suppresses
-  // text selection across the page for the same reason.
+  // dropped. `.wb-is-resizing-x` / `-y` holds the resize cursor and
+  // suppresses text selection across the page for the same reason, and
+  // `.is-dragging` keeps the handle highlighted even when the pointer
+  // outruns it.
   const beginResize = (
     e: ReactPointerEvent<HTMLDivElement>,
-    onDelta: (deltaX: number, containerWidth: number) => void,
+    axis: ResizeAxis,
+    onDelta: (delta: number) => void,
   ) => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    const startX = e.clientX;
+    const start = axis === 'x' ? e.clientX : e.clientY;
     const handle = e.currentTarget;
+    const bodyClass = `wb-is-resizing-${axis}`;
     handle.setPointerCapture(e.pointerId);
-    document.body.classList.add('wb-is-resizing');
+    handle.classList.add('is-dragging');
+    document.body.classList.add(bodyClass);
 
     const onMove = (ev: PointerEvent) => {
-      onDelta(ev.clientX - startX, bodyRef.current?.getBoundingClientRect().width ?? 0);
+      onDelta((axis === 'x' ? ev.clientX : ev.clientY) - start);
     };
     const onUp = () => {
-      document.body.classList.remove('wb-is-resizing');
+      document.body.classList.remove(bodyClass);
+      handle.classList.remove('is-dragging');
       handle.releasePointerCapture(e.pointerId);
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', onUp);
@@ -346,12 +396,14 @@ export function Workbench() {
     handle.addEventListener('pointercancel', onUp);
   };
 
+  const bodyWidth = () => bodyRef.current?.getBoundingClientRect().width ?? 0;
+
   const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startWidth = sidebarWidth;
-    beginResize(e, (deltaX, containerWidth) => {
+    beginResize(e, 'x', (deltaX) => {
       const next = startWidth + deltaX;
       desiredSidebarWidth.current = next;
-      applyLayout(containerWidth, next, desiredBoardWidth.current, 'board');
+      applyLayout(bodyWidth(), next, desiredBoardWidth.current, 'board');
     });
   };
 
@@ -360,10 +412,21 @@ export function Workbench() {
   // from the sidebar handle, which grows its panel by dragging right.
   const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startWidth = boardWidth;
-    beginResize(e, (deltaX, containerWidth) => {
+    beginResize(e, 'x', (deltaX) => {
       const next = startWidth - deltaX;
       desiredBoardWidth.current = next;
-      applyLayout(containerWidth, desiredSidebarWidth.current, next, 'sidebar');
+      applyLayout(bodyWidth(), desiredSidebarWidth.current, next, 'sidebar');
+    });
+  };
+
+  // This handle sits on the console's top edge, so dragging it up (negative
+  // clientY delta) grows the console. The clamped height is what's
+  // remembered — unlike the side panes there is no other pane to give way,
+  // so an over-drag has nothing to grow back into later.
+  const handleConsoleResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const startHeight = consoleHeight;
+    beginResize(e, 'y', (deltaY) => {
+      desiredConsoleHeight.current = applyConsoleHeight(startHeight - deltaY);
     });
   };
 
@@ -602,7 +665,11 @@ export function Workbench() {
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
 
   return (
-    <div className="wb">
+    <div
+      className="wb"
+      ref={wbRef}
+      style={{ '--wb-console-h': `${consoleHeight}px` } as CSSProperties}
+    >
       <Header
         onSettings={() => setDialog('settings')}
         onHelp={() => setDialog('help')}
@@ -696,6 +763,14 @@ export function Workbench() {
           </div>
         </div>
       </div>
+
+      <div
+        className="wb-resizer wb-resizer--row"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize console"
+        onPointerDown={handleConsoleResizerPointerDown}
+      />
 
       <ConsoleOutput lines={logLines} onClear={handleClearConsole} />
     </div>
