@@ -56,6 +56,16 @@ function parseState(bits: string): { ledr: BitVector; hex: SegmentVector[] } {
   return { ledr, hex };
 }
 
+/**
+ * The files one run sends: those in the folder of the top file (`sourceFolderFor`:
+ * `verilog/` for a Verilog top, `vhdl/` otherwise). Shared by `HdlClient.run` and
+ * the diagnostics snapshot, so the snapshot is exactly what was uploaded.
+ */
+export function filesForRun(files: readonly VhdlFile[], topFileName?: string): VhdlFile[] {
+  const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
+  return files.filter((f) => f.folder === folder);
+}
+
 export class HdlClient {
   private ws: WebSocket | null = null;
   private readonly url: string;
@@ -150,8 +160,7 @@ export class HdlClient {
    */
   run(files: VhdlFile[], topFileName?: string): void {
     const ws = this.ensureSocket();
-    const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
-    const sourceFiles = files.filter((f) => f.folder === folder);
+    const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = topFileName ? `RUN ${topFileName}` : 'RUN';
     const send = () => ws.send(`${head}\n${body}`);
