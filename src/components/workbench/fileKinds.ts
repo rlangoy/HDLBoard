@@ -15,7 +15,7 @@
 import type { VhdlFile } from './files';
 
 export type Folder = VhdlFile['folder'];
-type Language = 'vhdl' | 'verilog';
+export type Language = 'vhdl' | 'verilog';
 
 /** The `accept` of the upload picker; a drop is not filtered by it, so `folderForUpload` decides too. */
 export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh';
@@ -28,7 +28,7 @@ const VERILOG_NAME = /\.vh?$/i;
 const VHDL_NAME = /\.(vhdl?|vhd)$/i;
 const VHDL_TESTBENCH_NAME = /^tb_/i;
 
-function languageOfName(name: string): Language | undefined {
+export function languageOfName(name: string): Language | undefined {
   if (VERILOG_NAME.test(name)) return 'verilog';
   if (VHDL_NAME.test(name)) return 'vhdl';
   return undefined;

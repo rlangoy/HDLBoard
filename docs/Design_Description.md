@@ -199,6 +199,8 @@ UI/
          ├─ SimulationCard.tsx / .css  Start/Stop + status, in the sidebar
          ├─ ConsoleOutput.tsx / .css the simulator Output/Status log
          ├─ vhdlHighlight.ts    line-based VHDL tokenizer for the editor
+         ├─ verilogHighlight.ts Verilog tokenizer (carries block-comment state)
+         ├─ highlight.ts        picks the tokenizer by file extension
          ├─ files.ts            the three-file starter project shown in the tree
          ├─ icons.tsx           edit/delete — real SVG, the one exception
          │                       to this folder's CSS-only icons
@@ -938,10 +940,10 @@ component work in §§ 1–7 is one half of it; this is the other.
   resize the file panel and the board panel; both stay within the window,
   shrinking together (or giving way to whichever one is being dragged)
   rather than overflowing it.
-- **Tabbed code editor** — closable tabs, line numbers and VHDL syntax
-  highlighting (keywords, types, comments, strings, numbers; Verilog files
-  are shown with the same highlighter, which is not Verilog-aware), built on a
-  real, editable `<textarea>`, not a static preview.
+- **Tabbed code editor** — closable tabs, line numbers and VHDL or Verilog
+  syntax highlighting, chosen by the file's extension (keywords, types,
+  comments, strings, numbers; Verilog also colours `$system` tasks and
+  `` `directives``), built on a real, editable `<textarea>`, not a static preview.
 - **Simulation controls** — Start/Stop drives a real `ghdl -a` / `-e` /
   `-r` compile → elaborate → run sequence for a VHDL top file, or
   `iverilog` / `vvp` for a Verilog one (the engine follows the top file's
