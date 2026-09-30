@@ -24,4 +24,6 @@ export type { ConsoleLine, ConsoleOutputProps } from './ConsoleOutput';
 export { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY } from './files';
 export type { VhdlFile } from './files';
 export { tokenizeVhdlLine } from './vhdlHighlight';
+export { tokenizeVerilog } from './verilogHighlight';
+export { tokenizeSource } from './highlight';
 export type { Token, TokenType } from './vhdlHighlight';

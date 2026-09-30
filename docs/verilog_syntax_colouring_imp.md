@@ -2,8 +2,8 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: researched and prototyped (2026-09-30); not built.** The prototype (§ 8) lives
-in a scratch directory, not in the repository; nothing under `src/` has changed.
+**Status: built (2026-09-30).** The step-by-step recipe that built it is
+[`verilog_syntax_highlight_imp_plan.md`](verilog_syntax_highlight_imp_plan.md); the sections below are the research and design it follows.
 
 This is the follow-up that [`Verilog_implementation_plan.md`](Verilog_implementation_plan.md)
 § 1 and § 9 #6 left open: *"Verilog syntax highlighting — a ~40-line
