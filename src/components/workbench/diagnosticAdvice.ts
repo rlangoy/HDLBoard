@@ -6,17 +6,21 @@
  * mislead but its column does not — docs/editor_diagnostics_improvement_plan.md
  * § 4. The compiler's text is never replaced: advice is added next to it. Pure.
  *
- * Only GHDL compile errors get advice: they are the only diagnostics with a
- * column, and `useDiagnostics` runs this on ERROR frames only, never on the
- * runtime LOG lines (§ 4.12).
+ * GHDL's rules need its column, so they only take GHDL compile errors. Verilog
+ * files get Icarus's line-level rules instead (icarusAdvice.ts,
+ * docs/editor_diagnostics_verilog_research.md). `useDiagnostics` runs this on
+ * ERROR frames; runtime LOG lines get no advice (§ 4.12), except Icarus's
+ * implicit-wire warning (`adviseLogDiagnostics`).
  */
 
 import { declaredNames } from './declaredNames';
 import { firstRevealTarget, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { isFollowOn } from './diagnosticStore';
 import { adviceText } from './diagnosticText';
-import { osaDistance } from './editDistance';
+import { languageOfName } from './fileKinds';
 import { ghdlColumnToIndex } from './ghdlColumn';
+import { adviseIcarusDiagnostics, adviseIcarusLog } from './icarusAdvice';
+import { nearestInGroups, uniqueNearest } from './nearestWord';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import {
   isLibraryName,
@@ -42,6 +46,8 @@ export interface Advice {
   readonly relatedLine?: number;
   /** Set on muted follow-on errors (Rule F): the line of the first error. */
   readonly followOnOf?: number;
+  /** Who printed the message, as the tooltip names it (`Icarus`); absent for GHDL, whose advice came first. */
+  readonly compiler?: string;
 }
 
 export interface AdvisedDiagnostic extends LocatedDiagnostic {
@@ -54,8 +60,6 @@ const KEYWORD_SEARCH_TOKENS = 3;
 const MIN_KEYWORD_TYPO_LENGTH = 4;
 /** Rule C also takes 3-letter words: `inn` → `in`. */
 const MIN_UNDECLARED_TYPO_LENGTH = 3;
-/** From this length on, two edits are allowed: `rttange` → `range`. */
-const TWO_EDIT_WORD_LENGTH = 6;
 /** Rules D and E reveal the line they name when it is this close to GHDL's line (§ 4.10). */
 const REVEAL_RELATED_WITHIN_LINES = 10;
 
@@ -222,41 +226,12 @@ function isWord(token: PositionedToken): boolean {
 
 // ------------------------------------------------------------ suggestions
 
-function maxEdits(word: string): number {
-  return word.length >= TWO_EDIT_WORD_LENGTH ? 2 : 1;
-}
-
-interface Nearest {
-  readonly distance: number;
-  /** Every candidate at that distance: a tie when there is more than one. */
-  readonly names: readonly string[];
-}
-
-/**
- * The candidates nearest to `word` within its edit allowance, starting with the
- * same letter (every measured keyword typo keeps its first letter, and the test
- * removes `clock` → `block` and `dout` → `out`, § 2.7). The word itself is never
- * its own suggestion.
- */
-function nearest(word: string, candidates: readonly string[]): Nearest | undefined {
-  const lower = word.toLowerCase();
-  const allowed = maxEdits(word);
-  const scored = candidates
-    .filter((name) => name.toLowerCase() !== lower && name[0]?.toLowerCase() === lower[0])
-    .map((name) => ({ name, distance: osaDistance(word, name, allowed) }))
-    .filter(({ distance }) => distance <= allowed);
-  if (scored.length === 0) return undefined;
-  const distance = Math.min(...scored.map((s) => s.distance));
-  return { distance, names: scored.filter((s) => s.distance === distance).map((s) => s.name) };
-}
-
 /** Rule B's candidate test (§ 4.4). */
 function suggestedKeyword(token: PositionedToken, project: Project): string | undefined {
   const { text } = token;
   const excluded = isReservedWord(text) || isLibraryName(text) || project.declared.has(text.toLowerCase());
   if (!isWord(token) || excluded || text.length < MIN_KEYWORD_TYPO_LENGTH) return undefined;
-  const found = nearest(text, SUGGESTED_KEYWORDS);
-  return found?.names.length === 1 ? found.names[0] : undefined;
+  return uniqueNearest(text, SUGGESTED_KEYWORDS);
 }
 
 /**
@@ -266,10 +241,7 @@ function suggestedKeyword(token: PositionedToken, project: Project): string | un
  */
 function suggestedName(word: string, file: SourceFile): string | undefined {
   if (word.length < MIN_UNDECLARED_TYPO_LENGTH) return undefined;
-  const groups = [file.declared, LIBRARY_NAMES, SUGGESTED_KEYWORDS].map((names) => nearest(word, names));
-  const distances = groups.flatMap((group) => (group ? [group.distance] : []));
-  const winner = groups.find((group) => group?.distance === Math.min(...distances));
-  return winner?.names.length === 1 ? winner.names[0] : undefined;
+  return nearestInGroups(word, [file.declared, LIBRARY_NAMES, SUGGESTED_KEYWORDS]);
 }
 
 // ------------------------------------------------------------ the rules
@@ -394,7 +366,7 @@ function adviceFor(place: Place, project: Project): Advice | undefined {
  * a headline when a rule is confident (B–E), and the muting of follow-on errors
  * (F). Keeps the input order; diagnostics without advice come back unchanged.
  */
-export function adviseDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
+function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
   const muted = followOns(located);
   const project = projectOf(located, snapshot, muted);
   return located.map((diagnostic) => {
@@ -408,6 +380,47 @@ export function adviseDiagnostics(located: readonly LocatedDiagnostic[], snapsho
     const advice = adviceFor(placeOf(diagnostic, file), project);
     return advice ? { ...diagnostic, advice } : diagnostic;
   });
+}
+
+type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) => AdvisedDiagnostic[];
+
+const noAdvice: Advisor = (located) => [...located];
+
+/**
+ * Each file's messages go to its language's advisor, picked by the file's name
+ * (docs/editor_diagnostics_verilog_research.md § 6): the parser still does not
+ * know which tool ran, but the snapshot knows each file's language. Each advisor
+ * sees only its own language's files. Keeps the input order.
+ */
+function byLanguage(
+  located: readonly LocatedDiagnostic[],
+  snapshot: RunSnapshot,
+  advisors: { readonly verilog: Advisor; readonly other: Advisor },
+): AdvisedDiagnostic[] {
+  const isVerilogFile = (file: RunSnapshot['files'][number]): boolean => languageOfName(file.name) === 'verilog';
+  const verilogIds = new Set(snapshot.files.filter(isVerilogFile).map((file) => file.id));
+  const isVerilog = (diagnostic: LocatedDiagnostic): boolean => verilogIds.has(diagnostic.fileId);
+  const verilogSnapshot = { files: snapshot.files.filter(isVerilogFile) };
+  const otherSnapshot = { files: snapshot.files.filter((file) => !isVerilogFile(file)) };
+  const verilog = advisors.verilog(located.filter(isVerilog), verilogSnapshot)[Symbol.iterator]();
+  const other = advisors.other(located.filter((diagnostic) => !isVerilog(diagnostic)), otherSnapshot)[Symbol.iterator]();
+  return located.map((diagnostic) => (isVerilog(diagnostic) ? verilog : other).next().value as AdvisedDiagnostic);
+}
+
+/**
+ * Advice for the body of an ERROR frame — compiler output: Icarus's rules for
+ * Verilog files, GHDL's for every other file, exactly as before Verilog had any.
+ */
+export function adviseDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
+  return byLanguage(located, snapshot, { verilog: adviseIcarusDiagnostics, other: adviseGhdlDiagnostics });
+}
+
+/**
+ * Advice for LOG lines: none, except Icarus's warning about an implicit wire,
+ * which a successful Verilog compile prints there (research § 3, Rule G).
+ */
+export function adviseLogDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
+  return byLanguage(located, snapshot, { verilog: adviseIcarusLog, other: noAdvice });
 }
 
 /**
