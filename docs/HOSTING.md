@@ -27,13 +27,13 @@ chosen by the file the student marked as top:
   │  page   │                     │  dist/  —  any web server    │
   │         │   WebSocket :9010   ├──────────────────────────────┤
   │  board  │ ◀──────────────────▶│  node server/dist/server.js  │
-  └─────────┘   /ghdlsim          │       └─ spawns ghdl / vvp   │
+  └─────────┘   /hdlsim          │       └─ spawns ghdl / vvp   │
                                   └──────────────────────────────┘
 ```
 
 **The one rule that decides your whole setup:** the page builds its backend
-URL as `ws://<the host you typed in the address bar>:<port>/ghdlsim`
-(`src/components/workbench/ghdlClient.ts:34`), where the port is baked in at
+URL as `ws://<the host you typed in the address bar>:<port>/hdlsim`
+(`src/components/workbench/hdlClient.ts:34`), where the port is baked in at
 build time (default `9010`). So:
 
 - the backend port must be reachable **from each student's browser**, not just
@@ -61,7 +61,7 @@ Nothing else, and no external services or accounts: everything stays on your
 machine and your network.
 
 **Sizing.** The backend accepts 32 concurrent sessions by default
-(`GHDL_MAX_SESSIONS`) and refuses the 33rd with a clear message rather than
+(`HDL_MAX_SESSIONS`) and refuses the 33rd with a clear message rather than
 melting. A session only costs CPU while its simulation is actually running,
 so a 4-core machine comfortably serves a class of 20–30 students editing and
 running in bursts. Raise or lower the cap to match the hardware.
@@ -112,7 +112,7 @@ The quickest route on any machine that has Docker. T
 ```
    browser                  host
   ┌─────────┐  HTTP + WS  ┌───────────────────────────────────────────────┐
-  │  page   │ ──:80─────> │ web (nginx)  ── /ghdlsim ──────> backend:9010 │
+  │  page   │ ──:80─────> │ web (nginx)  ── /hdlsim ──────> backend:9010 │
   │  board  │             │  dist/                        node + hdl      │
   └─────────┘             └───────────────────────────────────────────────┘
 ```
@@ -159,7 +159,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All are optional.
 | Variable | Default | Effect |
 |---|---|---|
 | `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. It is compiled into the page, so rebuild after changing it (`up -d --build`) |
-| `GHDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
+| `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
 | `GHDL_REF` | `master` | GHDL branch or tag to build. Set a release tag such as `v6.0.0` for a reproducible build |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 
@@ -195,7 +195,7 @@ start at sign-in.
   It is still arbitrary code execution on your hardware, so § 3 applies in
   full. To cap CPU and memory on a shared server, uncomment `cpus` and
   `mem_limit` in `docker-compose.yml`, using the sizing in § 2.
-- **No port mismatch.** The page is built with `VITE_GHDL_WS_PORT` empty, so
+- **No port mismatch.** The page is built with `VITE_HDL_WS_PORT` empty, so
   it connects back to its own origin, and nginx forwards the WebSocket. The
   two-places rule of [§ 9](#9-configuration-reference) is handled for you.
 - **HTTPS** works behind a TLS front end: the page opens `wss://` on an
@@ -249,13 +249,13 @@ Pass them as environment variables. All are optional:
 | `HDLBOARD_DIR` | `/srv/HDLBoard` | Where to install |
 | `HDLBOARD_USER` | `hdlboard` | The service account |
 | `HDLBOARD_PAGE_PORT` | `80` | Port nginx serves the page on |
-| `GHDL_WS_PORT` | `9010` | Port the backend listens on, compiled into the page as well |
-| `GHDL_MAX_SESSIONS` | `32` | Concurrent simulations |
+| `HDL_WS_PORT` | `9010` | Port the backend listens on, compiled into the page as well |
+| `HDL_MAX_SESSIONS` | `32` | Concurrent simulations |
 | `HDLBOARD_REPO` | the GitHub repository | Git URL to install from, for a fork or a local mirror |
 | `HDLBOARD_BRANCH` | `main` | Branch or tag to install |
 
 ```bash
-sudo env HDLBOARD_PAGE_PORT=8080 GHDL_MAX_SESSIONS=48 sh alpineInstall.sh
+sudo env HDLBOARD_PAGE_PORT=8080 HDL_MAX_SESSIONS=48 sh alpineInstall.sh
 ```
 
 ### 5.3 After installing
@@ -490,8 +490,8 @@ Type=simple
 User=hdlboard
 WorkingDirectory=/srv/HDLBoard
 ExecStart=/usr/bin/node /srv/HDLBoard/server/dist/server.js
-Environment=GHDL_WS_PORT=9010
-Environment=GHDL_MAX_SESSIONS=32
+Environment=HDL_WS_PORT=9010
+Environment=HDL_MAX_SESSIONS=32
 Restart=on-failure
 # Modest hardening: the backend needs only its own tree and a temp dir.
 PrivateTmp=yes
@@ -571,7 +571,7 @@ that isn't there.
 
 ```sh
 #!/sbin/openrc-run
-name="HDLBoard GHDL backend"
+name="HDLBoard simulation backend"
 description="WebSocket backend that compiles and runs VHDL with GHDL and Verilog with Icarus"
 
 command="/usr/bin/node"
@@ -591,7 +591,7 @@ error_log="/var/log/hdlboard.log"
 # else (/opt, or under a user's ~/.local) needs GHDL_EXE with an absolute
 # path; an Icarus outside the service's PATH needs IVERILOG_EXE and VVP_EXE
 # (alpineInstall.sh pins all three, so the service uses the ones it verified).
-supervise_daemon_args="--env GHDL_WS_PORT=9010 --env GHDL_MAX_SESSIONS=32"
+supervise_daemon_args="--env HDL_WS_PORT=9010 --env HDL_MAX_SESSIONS=32"
 #supervise_daemon_args="$supervise_daemon_args --env GHDL_EXE=/usr/local/bin/ghdl --env IVERILOG_EXE=/opt/iverilog/bin/iverilog"
 
 depend() {
@@ -605,8 +605,8 @@ depend() {
 sudo rc-update add hdlboard default
 sudo rc-service hdlboard start
 sudo rc-service hdlboard status
-curl -si http://localhost:9010/ghdlsim | head -1     # 426 Upgrade Required = working
-cat /var/log/hdlboard.log                            # "… listening on ws://0.0.0.0:9010/ghdlsim"
+curl -si http://localhost:9010/hdlsim | head -1     # 426 Upgrade Required = working
+cat /var/log/hdlboard.log                            # "… listening on ws://0.0.0.0:9010/hdlsim"
 ```
 
 `rc-service … status` and even `start` report success while node is
@@ -698,7 +698,7 @@ on command. `curl` prints `000` (exit status 7) when nothing is listening:
 ```bash
 probe() {
   echo "page  :5173 $(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/)"       # 200
-  echo "board :9010 $(curl -s -o /dev/null -w '%{http_code}' http://localhost:9010/ghdlsim)" # 426
+  echo "board :9010 $(curl -s -o /dev/null -w '%{http_code}' http://localhost:9010/hdlsim)" # 426
 }
 
 probe                                           # 200 and 426: both up
@@ -741,10 +741,10 @@ finished and isn't: `rc-status`/`systemctl` says started, the port answers
 
 Two open ports is the default because the page and the backend are separate
 servers. You can collapse them into one by telling the build that the backend
-lives on the web port, and having the web server proxy `/ghdlsim` to it:
+lives on the web port, and having the web server proxy `/hdlsim` to it:
 
 ```bash
-VITE_GHDL_WS_PORT= npm run build       # empty: connect to the page's own origin
+VITE_HDL_WS_PORT= npm run build       # empty: connect to the page's own origin
 ```
 
 ```nginx
@@ -756,7 +756,7 @@ server {
 
     location / { try_files $uri $uri/ /index.html; }
 
-    location /ghdlsim {
+    location /hdlsim {
         proxy_pass http://127.0.0.1:9010;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -772,8 +772,8 @@ firewall rule. `proxy_read_timeout` matters: the default 60 s closes a socket
 that's merely waiting for the student to flip a switch.
 
 **HTTPS** needs nothing extra: the page opens `wss://` when it was loaded over
-`https://`, and with an empty `VITE_GHDL_WS_PORT` it uses the page's own host
-and port. Terminate TLS at nginx and proxy `/ghdlsim` exactly as above.
+`https://`, and with an empty `VITE_HDL_WS_PORT` it uses the page's own host
+and port. Terminate TLS at nginx and proxy `/hdlsim` exactly as above.
 
 ---
 
@@ -783,19 +783,27 @@ Backend, read at startup:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `GHDL_WS_PORT` | `9010` | Port the backend listens on |
-| `GHDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
+| `HDL_WS_PORT` | `9010` | Port the backend listens on |
+| `HDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
+| `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |
 | `VVP_EXE` | `vvp` beside `IVERILOG_EXE`, else on `PATH` | Path to Icarus's `vvp` runtime, if it is not beside the compiler |
 | `IVERILOG_DIR` | unset | A self-contained Icarus tree (the Windows app ships one); the backend runs it with `-B`/`-M`. Takes precedence over the two above |
+
+The simulator locations can also be given on the command line, where they win over
+the variables — `node dist/server.js --iverilog-dir <dir> --ghdl-dir <dir>` (or
+`--ghdl-exe <path>`; `--flag=value` works too). An unknown flag stops the backend
+with a usage message. The Windows installer uses these flags: it writes the
+installation's own `resources\iverilog` and `resources\ghdl` into the shortcuts it
+creates.
 
 `scripts/start.sh`:
 
 | Variable | Default | Effect |
 |---|---|---|
 | `STATIC_PORT` | `5173` | Port for the page |
-| `GHDL_WS_PORT` | `9010` | Passed through to the backend |
+| `HDL_WS_PORT` | `9010` | Passed through to the backend, and to the page it serves |
 | `HDLBOARD_SKIP_INSTALL` | unset | `1` = check for prerequisites, never install |
 | `HDLBOARD_ASSUME_YES` | unset | `1` = install GHDL and Icarus Verilog without prompting |
 
@@ -803,12 +811,20 @@ Frontend, read at **build** time only:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VITE_GHDL_WS_PORT` | `9010` | Backend port the page will connect to. Set but empty = the page's own origin (behind a reverse proxy) |
+| `VITE_HDL_WS_PORT` | `9010` | Backend port the page will connect to. Set but empty = the page's own origin (behind a reverse proxy) |
 
 **Changing the backend port means changing it in two places:** rebuild the
-page with `VITE_GHDL_WS_PORT=<n> npm run build` *and* start the backend with
-`GHDL_WS_PORT=<n>`. They are compiled in independently, and a mismatch shows
-up only as a board that never lights.
+page with `VITE_HDL_WS_PORT=<n> npm run build` *and* start the backend with
+`HDL_WS_PORT=<n>`. They are compiled in independently, and a mismatch shows
+up only as a board that never lights. (`scripts/start.sh` passes its
+`HDL_WS_PORT` to the dev-server page too, so there it is one setting.)
+
+**Older names still work.** These settings were called `GHDL_WS_PORT`,
+`GHDL_MAX_SESSIONS` and `VITE_GHDL_WS_PORT` when GHDL was the only
+simulator, and the WebSocket path was `/ghdlsim`. The old names are still
+read when the new ones are unset, and the backend still answers on
+`/ghdlsim`, so an existing service file, `.env` or reverse-proxy rule keeps
+working; new setups should use the `HDL_*` names and `/hdlsim`.
 
 ---
 
@@ -846,8 +862,8 @@ installer, `5173` for `start.sh`):
 
 ```bash
 curl -I http://localhost:5173/                 # 200
-curl -i  http://localhost:9010/ghdlsim         # 426 Upgrade Required — correct
-curl -i  http://localhost/ghdlsim              # Docker: the same 426, through nginx
+curl -i  http://localhost:9010/hdlsim         # 426 Upgrade Required — correct
+curl -i  http://localhost/hdlsim              # Docker: the same 426, through nginx
 ```
 
 `426` is the backend saying "this port speaks WebSocket": it means the backend
@@ -867,12 +883,12 @@ From the host you can also run the whole scenario set, in both languages,
 against the backend (needs Node and `npm install` in `server/`):
 
 ```bash
-node tools/verify-backend.mjs ws://localhost:9010/ghdlsim     # prints PASS/FAIL per scenario, exit 0 if all pass
+node tools/verify-backend.mjs ws://localhost:9010/hdlsim     # prints PASS/FAIL per scenario, exit 0 if all pass
 ```
 
 Under Docker the script is already in the backend image:
 `docker compose exec backend node tools/verify-backend.mjs`. From a checkout
-on the host, `node tools/verify-backend.mjs ws://localhost/ghdlsim` runs the
+on the host, `node tools/verify-backend.mjs ws://localhost/hdlsim` runs the
 same set through nginx, so it tests the WebSocket proxy too.
 
 ---
@@ -888,7 +904,7 @@ same set through nginx, so it tests the WebSocket proxy too.
 | `Icarus Verilog (iverilog) was not found, so Verilog designs cannot run` | Icarus isn't installed, or isn't on the service user's `PATH` — install it (`apt install iverilog`, `apk add iverilog`, `brew install icarus-verilog`) or set `IVERILOG_EXE`; VHDL is unaffected |
 | Verilog console starts with a warning about an untested Icarus version | The installed Icarus is neither 12.x nor 13.x. It usually still works; install 13.0 if compiling or running misbehaves |
 | `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
-| `Too many concurrent sessions` | The `GHDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
+| `Too many concurrent sessions` | The `HDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
 | Simulation stops after 60 s | A batch run (a testbench with no ports) hit its timeout — usually a process with no `wait` (VHDL) or no `$finish`/delay (Verilog), not a hosting problem |
 | Docker: `failed to connect to the docker API` | The Docker daemon isn't running. Start Docker Desktop, or `systemctl start docker` / `rc-service docker start` |
 | Docker: `web` never starts, `backend` is `unhealthy` | `docker compose logs backend`. The healthcheck expects `426` from the backend, and `web` waits for it by design |

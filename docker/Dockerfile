@@ -9,7 +9,7 @@
 #   server-build  server/ -> server/dist, production node_modules only
 #   page-build  the page -> dist/, with the public port baked in
 #   backend     node + GHDL + Icarus Verilog, runs as 'hdlboard'   (target)
-#   web         nginx: serves dist/ and proxies /ghdlsim to backend (target)
+#   web         nginx: serves dist/ and proxies /hdlsim to backend (target)
 #   render      backend + nginx in one container, for single-container hosts
 #               such as Render.com (the default target: it is the last stage)
 
@@ -43,19 +43,15 @@ FROM alpine:${ALPINE_VERSION} AS page-build
 RUN apk add --no-cache nodejs npm
 WORKDIR /src
 COPY package.json package-lock.json ./
-# playwright is a dev-only tool the page build never uses; take it out of this
-# stage's copy of package.json + lockfile (the repository is untouched), then
-# install exactly what the lockfile pins for everything else.
-RUN npm uninstall playwright --package-lock-only --no-fund --no-audit \
- && npm ci --no-fund --no-audit
+RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
-# The port the browser opens /ghdlsim on. Empty = the page's own origin (and
-# scheme: wss:// on https://), which is where nginx proxies /ghdlsim — so the
+# The port the browser opens /hdlsim on. Empty = the page's own origin (and
+# scheme: wss:// on https://), which is where nginx proxies /hdlsim — so the
 # page works on any public port, behind TLS too. Declared after npm ci so
 # changing it only redoes the build step.
-ARG VITE_GHDL_WS_PORT=
-RUN VITE_GHDL_WS_PORT=${VITE_GHDL_WS_PORT} npm run build \
+ARG VITE_HDL_WS_PORT=
+RUN VITE_HDL_WS_PORT=${VITE_HDL_WS_PORT} npm run build \
  && test -f dist/index.html
 
 # --- backend ----------------------------------------------------------------
@@ -76,8 +72,8 @@ COPY tests/fixtures/          /srv/HDLBoard/tests/fixtures/
 ENV GHDL_EXE=/usr/local/bin/ghdl \
     IVERILOG_EXE=/usr/bin/iverilog \
     VVP_EXE=/usr/bin/vvp \
-    GHDL_WS_PORT=9010 \
-    GHDL_MAX_SESSIONS=32
+    HDL_WS_PORT=9010 \
+    HDL_MAX_SESSIONS=32
 
 USER hdlboard
 WORKDIR /srv/HDLBoard
@@ -121,7 +117,7 @@ EXPOSE 80
 # --- render -----------------------------------------------------------------
 # Render (and hosts like it) builds the last stage and runs one container; it
 # ignores docker-compose.yml. So nginx and the backend share this one, nginx on
-# Render's default PORT (10000) proxying /ghdlsim to 127.0.0.1:9010. Compose
+# Render's default PORT (10000) proxying /hdlsim to 127.0.0.1:9010. Compose
 # names its targets, so this stage never affects it.
 FROM backend AS render
 USER root
@@ -150,9 +146,11 @@ RUN for tool in ghdl iverilog vvp; do ln -s simlimit.sh "/usr/local/lib/hdlboard
 # - Memory: about 130 MB for nginx, node and their page cache, then about
 #   7 MB per typical session. The cap stops one design taking the rest: GHDL
 #   needs about 350 bytes per std_logic bit, so 96 MB still holds an 8K x 32
-#   RAM. Keep GHDL_MAX_SESSIONS x HDLBOARD_SIM_MEMORY_MB under about 400.
+#   RAM. Keep HDL_MAX_SESSIONS x HDLBOARD_SIM_MEMORY_MB under about 400.
 # render.yaml sets the first two again; override them in the Render dashboard.
-ENV GHDL_MAX_SESSIONS=4 \
+# HDL_MAX_SESSIONS, not the older GHDL_ name: the backend stage sets
+# HDL_MAX_SESSIONS=32, and the new name is read first.
+ENV HDL_MAX_SESSIONS=4 \
     HDLBOARD_SIM_MEMORY_MB=96 \
     GHDL_EXE=/usr/local/lib/hdlboard/ghdl \
     IVERILOG_EXE=/usr/local/lib/hdlboard/iverilog \

@@ -78,3 +78,18 @@
   height: 14px;
   flex: none;
 }
+
+/* A console line that names a marked place in a project file (ConsoleOutput's `locate`). */
+.wb-console__link {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  /* Students copy error text into chats and reports; a button's text is not always selectable. */
+  user-select: text;
+}
+.wb-console__link:hover {
+  text-decoration-style: solid;
+}
+.wb-console__link:focus-visible {
+  outline: 2px solid #93c5fd;
+}

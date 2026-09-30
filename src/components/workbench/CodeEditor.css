@@ -103,11 +103,9 @@
   box-shadow: inset 0 -2px 0 var(--wb-accent);
 }
 
-/* The play/stop icon, ahead of the file name (CodeEditor's tabRun). Two classes, so
-   it outranks SimToggle.css's own size whatever the load order. */
-.wb-simtoggle.wb-editor__tab-run {
-  width: 16px;
-  height: 16px;
+/* The play/stop icon, ahead of the file name (CodeEditor's tabRun): pulled
+   into the tab's left padding so the name doesn't sit far from the edge. */
+.wb-editor__tab-run {
   margin-left: -4px;
 }
 
@@ -157,6 +155,7 @@
   --wb-code-size: 13px;
   --wb-code-line-h: 20px;
   --wb-code-pad-top: 12px;
+  --wb-code-pad-x: 16px;
 }
 
 .wb-editor__body {
@@ -176,6 +175,7 @@
 }
 
 .wb-editor__gutter-line {
+  position: relative;
   height: var(--wb-code-line-h);
   line-height: var(--wb-code-line-h);
   font-family: var(--wb-code-font);
@@ -194,7 +194,7 @@
   position: absolute;
   inset: 0;
   margin: 0;
-  padding: var(--wb-code-pad-top) 16px 12px;
+  padding: var(--wb-code-pad-top) var(--wb-code-pad-x) 12px;
   border: 0;
   font-family: var(--wb-code-font);
   font-size: var(--wb-code-size);
@@ -214,6 +214,79 @@
 
 .wb-editor__line {
   height: var(--wb-code-line-h);
+}
+
+/* ---- error markers ---------------------------------------------------
+ * Drawn only in the highlight layer and the gutter; the textarea is
+ * untouched, and nothing here may change a line's height. */
+
+.wb-editor__line.is-error,
+.wb-editor__line.is-warning {
+  /* Tint the full visible width, padding included, without moving the text. */
+  margin-inline: calc(-1 * var(--wb-code-pad-x));
+  padding-inline: var(--wb-code-pad-x);
+  min-width: 100%;
+  width: max-content;
+}
+.wb-editor__line.is-error {
+  background: var(--wb-diag-error-bg);
+}
+.wb-editor__line.is-warning {
+  background: var(--wb-diag-warning-bg);
+}
+
+.wb-editor__diag-inline {
+  margin-left: 3ch;
+  font-style: italic;
+}
+.wb-editor__diag-inline.is-error {
+  color: var(--wb-diag-error-text);
+}
+.wb-editor__diag-inline.is-warning {
+  color: var(--wb-diag-warning-text);
+}
+
+.wb-editor__gutter-line.is-error,
+.wb-editor__gutter-line.is-warning {
+  font-weight: 700;
+  cursor: help;
+}
+.wb-editor__gutter-line.is-error {
+  color: var(--wb-diag-error);
+  box-shadow: inset -3px 0 0 var(--wb-diag-error);
+}
+.wb-editor__gutter-line.is-warning {
+  color: var(--wb-diag-warning);
+  box-shadow: inset -3px 0 0 var(--wb-diag-warning);
+}
+.wb-editor__gutter-line.is-error::before,
+.wb-editor__gutter-line.is-warning::before {
+  position: absolute;
+  left: 3px;
+  font-size: 10px;
+}
+.wb-editor__gutter-line.is-error::before {
+  content: '✕';
+}
+.wb-editor__gutter-line.is-warning::before {
+  content: '!';
+}
+
+.wb-editor__tab.has-errors .wb-editor__tab-name::after,
+.wb-editor__tab.has-warnings .wb-editor__tab-name::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.wb-editor__tab.has-errors .wb-editor__tab-name::after {
+  background: var(--wb-diag-error);
+}
+.wb-editor__tab.has-warnings .wb-editor__tab-name::after {
+  background: var(--wb-diag-warning);
 }
 
 .wb-editor__textarea {

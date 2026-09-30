@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Starts the frontend (Vite dev server) and the GHDL backend as a pair,
-# tracked by PID so this script won't double-start or fail to find a
-# running instance — ghdl_implementation_plan.md § 7 / § 9.
+# Starts the frontend (Vite dev server) and the simulation backend (GHDL and
+# Icarus Verilog) as a pair, tracked by PID so this script won't double-start
+# or fail to find a running instance — ghdl_implementation_plan.md § 7 / § 9.
 #
 # Usage:   ./scripts/start.sh   (from the repository root, or anywhere)
-# Config:  STATIC_PORT=8080 GHDL_WS_PORT=9090 ./scripts/start.sh
+# Config:  STATIC_PORT=8080 HDL_WS_PORT=9090 ./scripts/start.sh
+#          (GHDL_WS_PORT, the older name, is still read.)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."   # repository root
 
 STATIC_PORT="${STATIC_PORT:-5173}"
-export GHDL_WS_PORT="${GHDL_WS_PORT:-9010}"
+export HDL_WS_PORT="${HDL_WS_PORT:-${GHDL_WS_PORT:-9010}}"
+# The page is told the same port, or a non-default one leaves it knocking on 9010.
+export VITE_HDL_WS_PORT="$HDL_WS_PORT"
 
 mkdir -p .run
 
@@ -204,7 +207,7 @@ start_one "frontend" .run/frontend.pid .run/frontend.log \
 cat <<EOF
 
 Frontend: http://localhost:${STATIC_PORT}/
-Backend:  ws://localhost:${GHDL_WS_PORT}/ghdlsim
+Backend:  ws://localhost:${HDL_WS_PORT}/hdlsim
 
 Both also bind 0.0.0.0, so any device on the same network can reach them
 via this machine's IP instead of localhost — the frontend resolves the

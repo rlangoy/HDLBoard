@@ -3,10 +3,37 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { compilerFlags, resolveToolPaths, runtimeFlags } from './toolPaths.js';
+import { compilerFlags, resolveToolPaths, runtimeFlags, withUsableBundledDir } from './toolPaths.js';
 
 const WINDOWS = 'win32';
 const LINUX = 'linux';
+
+describe('withUsableBundledDir', () => {
+  const shorten = (dir: string) => dir.replace('Program Files', 'PROGRA~1');
+
+  test('swaps a Windows tree path containing a space for its short form', () => {
+    const paths = resolveToolPaths({ IVERILOG_DIR: 'C:\\Program Files\\HDLBoard\\resources\\iverilog' }, {}, WINDOWS);
+    assert.deepEqual(withUsableBundledDir(paths, shorten, WINDOWS), {
+      iverilog: 'C:\\PROGRA~1\\HDLBoard\\resources\\iverilog\\iverilog.exe',
+      vvp: 'C:\\PROGRA~1\\HDLBoard\\resources\\iverilog\\vvp.exe',
+      bundledDir: 'C:\\PROGRA~1\\HDLBoard\\resources\\iverilog',
+    });
+  });
+
+  test('leaves a path without a space, tools from PATH, and Linux alone', () => {
+    const plain = resolveToolPaths({ IVERILOG_DIR: 'C:\\HDLBoard\\iverilog' }, {}, WINDOWS);
+    assert.equal(withUsableBundledDir(plain, shorten, WINDOWS), plain);
+    const onPath = resolveToolPaths({}, {}, WINDOWS);
+    assert.equal(withUsableBundledDir(onPath, shorten, WINDOWS), onPath);
+    const linux = resolveToolPaths({ IVERILOG_DIR: '/opt/Program Files/iverilog' }, {}, LINUX);
+    assert.equal(withUsableBundledDir(linux, shorten, LINUX), linux);
+  });
+
+  test('keeps the original when no short form exists', () => {
+    const paths = resolveToolPaths({ IVERILOG_DIR: 'C:\\Program Files\\iverilog' }, {}, WINDOWS);
+    assert.equal(withUsableBundledDir(paths, (dir) => dir, WINDOWS), paths);
+  });
+});
 
 describe('resolveToolPaths', () => {
   test('uses iverilog and vvp from PATH when nothing is configured', () => {

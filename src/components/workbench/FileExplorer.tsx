@@ -32,6 +32,40 @@ export interface FileExplorerProps {
 
 const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
 
+interface TopDotButtonProps {
+  file: VhdlFile;
+  isTop: boolean;
+  /** A simulation is running: no other file can become top until it stops. */
+  locked: boolean;
+  onSetTop: (id: string) => void;
+}
+
+function topDotTitle(isTop: boolean, locked: boolean): string {
+  if (isTop) return 'Top-File';
+  return locked ? 'Stop the simulation to change the Top-File' : 'Set Top-File';
+}
+
+/**
+ * The dot ahead of a design file: blue on the top file, grey on the others —
+ * click a grey one to make that file top. Disabled on the top file (a second
+ * click there would do nothing) and, while `locked`, on every other one too.
+ */
+function TopDotButton({ file, isTop, locked, onSetTop }: TopDotButtonProps) {
+  return (
+    <button
+      type="button"
+      className={cx('wb-files__top-dot', isTop && 'is-top', locked && !isTop && 'is-locked')}
+      aria-pressed={isTop}
+      aria-label={isTop ? `${file.name} is the top-level file` : `Set ${file.name} as the top-level file`}
+      title={topDotTitle(isTop, locked)}
+      disabled={isTop || locked}
+      onClick={() => onSetTop(file.id)}
+    >
+      <span className="wb-files__top-dot-glyph" aria-hidden="true" />
+    </button>
+  );
+}
+
 /**
  * The "Files" panel: upload / new-file / download-all actions above the folder tree —
  * `vhdl/` and `verilog/` for designs and `work/` for an uploaded VHDL `tb_*`
@@ -184,31 +218,12 @@ export function FileExplorer({
                           className={cx('wb-files__row', f.id === activeFileId && 'is-active')}
                         >
                           {hasTopDot(folder) && (
-                            <button
-                              type="button"
-                              className={cx(
-                                'wb-files__top-dot',
-                                f.id === topFileId && 'is-top',
-                                topLocked && f.id !== topFileId && 'is-locked',
-                              )}
-                              aria-pressed={f.id === topFileId}
-                              aria-label={
-                                f.id === topFileId
-                                  ? `${f.name} is the top-level file`
-                                  : `Set ${f.name} as the top-level file`
-                              }
-                              title={
-                                f.id === topFileId
-                                  ? 'Top-File'
-                                  : topLocked
-                                    ? 'Stop the simulation to change the Top-File'
-                                    : 'Set Top-File'
-                              }
-                              disabled={f.id === topFileId || topLocked}
-                              onClick={() => onSetTopFile(f.id)}
-                            >
-                              <span className="wb-files__top-dot-glyph" aria-hidden="true" />
-                            </button>
+                            <TopDotButton
+                              file={f}
+                              isTop={f.id === topFileId}
+                              locked={topLocked}
+                              onSetTop={onSetTopFile}
+                            />
                           )}
                           {renamingId === f.id ? (
                             <span

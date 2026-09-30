@@ -21,7 +21,6 @@ import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, S
 
 const TB_ENTITY = 'hdl_board_tb';
 const GHDL_STANDARD = '--std=08';
-const GHDL_BANNER = 'GHDL 5.0.1 (mcode)';
 
 /**
  * Where the testbench's real-time pacing grants come from on this platform. Windows has
@@ -76,8 +75,28 @@ function batchPlan(dir: string, entityName: string): RunPlan {
   return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages: [] };
 }
 
-function boardPlan(dir: string, timing: BoardTiming): RunPlan {
-  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages: [GHDL_BANNER] };
+function boardPlan(dir: string, timing: BoardTiming, banner: string | undefined): RunPlan {
+  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages: banner === undefined ? [] : [banner] };
+}
+
+/**
+ * The first line of `ghdl --version` — "GHDL 6.0.0 (6.0.0.r0.ge589c69) [Dunoon edition]" —
+ * so the console names the GHDL actually running (the Windows app ships 5.0.1, the
+ * Docker image builds 6.0.0, a Linux host has whatever its distribution packages).
+ * It never changes for a given executable, so it is read once; a failed read is
+ * tried again on the next run rather than cached.
+ */
+const bannerByExe = new Map<string, string>();
+
+async function ghdlBanner(dir: string): Promise<string | undefined> {
+  const exe = getGhdlExe();
+  const known = bannerByExe.get(exe);
+  if (known !== undefined) return known;
+  const result = await ghdl(['--version'], dir);
+  const banner = result.code === 0 ? result.out.split(/\r?\n/)[0]?.trim() : undefined;
+  if (!banner) return undefined;
+  bannerByExe.set(exe, banner);
+  return banner;
 }
 
 /** A genuinely portless entity: no wrapper, run directly (see `runBatch`'s own doc comment). */
@@ -106,7 +125,7 @@ async function prepareBoard(dir: string, top: TopEntity): Promise<PrepareResult>
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(top.ports.has('clock_50'));
-  return { ok: true, plan: boardPlan(dir, timing) };
+  return { ok: true, plan: boardPlan(dir, timing, await ghdlBanner(dir)) };
 }
 
 async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {

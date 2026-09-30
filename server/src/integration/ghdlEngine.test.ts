@@ -10,6 +10,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { before, describe, test, type TestContext } from 'node:test';
@@ -31,7 +32,8 @@ import {
 
 const ghdl = requireTool('ghdl');
 
-const GHDL_BANNER = 'GHDL 5.0.1 (mcode)';
+/** The first line of `ghdl --version`, whichever GHDL this machine has: "GHDL 5.0.1 (…) [Dunoon edition]". */
+const GHDL_BANNER = /^GHDL \d+\.\d+\.\d+\b/;
 const EXPECTED_PACING = process.platform === 'win32' ? 'stdin' : 'fifo';
 
 function newDir(t: TestContext): string {
@@ -61,7 +63,11 @@ describe('GhdlEngine.prepare', { skip: ghdl.skip }, () => {
     assert.equal(result.plan.mode, 'board');
     assert.equal(result.plan.runTarget, 'hdl_board_tb');
     assert.equal(result.plan.pacing, EXPECTED_PACING);
-    assert.deepEqual(result.plan.messages, [GHDL_BANNER]);
+    assert.equal(result.plan.messages.length, 1);
+    assert.match(result.plan.messages[0] ?? '', GHDL_BANNER);
+    // The real version, not a fixed string: it is what `ghdl --version` says.
+    const version = spawnSync(ghdl.exe as string, ['--version'], { encoding: 'utf8' }).stdout.split(/\r?\n/)[0]?.trim();
+    assert.equal(result.plan.messages[0], version);
   });
 
   test('polls finely when the design declares CLOCK_50', async (t) => {

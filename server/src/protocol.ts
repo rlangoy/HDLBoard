@@ -6,7 +6,7 @@
  * ../../docs/ghdl_implementation_plan.md § 6. Pure functions only: no socket,
  * no filesystem, no GHDL. That is what makes this module unit-testable in
  * isolation and is the one place the grammar is implemented on the
- * backend side (the frontend's ghdlClient.ts implements the same grammar
+ * backend side (the frontend's hdlClient.ts implements the same grammar
  * independently — it is a separate npm package, in the browser, and
  * cannot import this file).
  *

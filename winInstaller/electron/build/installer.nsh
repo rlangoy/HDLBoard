@@ -3,6 +3,32 @@
 ;
 ; Custom NSIS hooks, pulled in via `nsis.include` in electron-builder.yml.
 
+; Where this installation keeps its simulators, handed to the app on its command
+; line (main.js applyToolArgs, which also exports them as IVERILOG_DIR and
+; GHDL_DIR for the backend). The app would find the same trees beside itself
+; anyway; writing them into the shortcut makes the installed location the
+; explicit setting — and the place to change it, in the shortcut's properties.
+!define HDL_TOOL_ARGS '--iverilog-dir "$INSTDIR\resources\iverilog" --ghdl-dir "$INSTDIR\resources\ghdl"'
+
+!macro hdlRewriteShortcut link
+  ; Only a shortcut electron-builder just made (or kept): one the user declined
+  ; stays declined.
+  ${if} ${FileExists} "${link}"
+    CreateShortCut "${link}" "$appExe" '${HDL_TOOL_ARGS}' "$appExe" 0 "" "" "${APP_DESCRIPTION}"
+    ClearErrors
+    WinShell::SetLnkAUMI "${link}" "${APP_ID}"
+  ${endIf}
+!macroend
+
+!macro customInstall
+  ; Runs after electron-builder has created its argument-less shortcuts.
+  ; $launchLink is the Start-menu shortcut, so "Run HDLBoard" on the finish
+  ; page starts the app with these arguments too.
+  !insertmacro hdlRewriteShortcut "$newStartMenuLink"
+  !insertmacro hdlRewriteShortcut "$newDesktopLink"
+  System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
+!macroend
+
 !macro customUnInstall
   ; electron-builder's uninstaller deletes every file it installed but
   ; leaves the installation directory itself behind. Observed effect: a

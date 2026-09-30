@@ -1,6 +1,6 @@
 # Hosting sizing — how many sessions a machine can serve
 
-Recommended `GHDL_MAX_SESSIONS` and per-simulation memory cap
+Recommended `HDL_MAX_SESSIONS` and per-simulation memory cap
 (`HDLBOARD_SIM_MEMORY_MB`) for the machines HDLBoard has been sized for, how
 those numbers were measured, and how to size a machine that is not listed.
 
@@ -23,7 +23,7 @@ those numbers were measured, and how to size a machine that is not listed.
 
 ## Quick reference
 
-| Host | CPU | RAM | `GHDL_MAX_SESSIONS` | `HDLBOARD_SIM_MEMORY_MB` | LED lag, all sessions running* |
+| Host | CPU | RAM | `HDL_MAX_SESSIONS` | `HDLBOARD_SIM_MEMORY_MB` | LED lag, all sessions running* |
 |---|---|---|---|---|---|
 | Render.com Free | 0.1 CPU | 512 MB | **4** | **96** | ~0.5 s |
 | Render.com Starter | 0.5 CPU | 512 MB | **8** | **48** | ~0.2 s |
@@ -37,11 +37,11 @@ time and cost far less.
 Two rules hold for every host:
 
 1. **CPU decides the session count.** Memory for normal lab designs is small.
-2. **Keep `GHDL_MAX_SESSIONS` × `HDLBOARD_SIM_MEMORY_MB` under the memory left
+2. **Keep `HDL_MAX_SESSIONS` × `HDLBOARD_SIM_MEMORY_MB` under the memory left
    after the base load** (about 400 MB on a 512 MB machine), so that no mix of
    student designs can push the machine into swap or the OOM killer.
 
-`GHDL_MAX_SESSIONS` counts *open browser tabs* (WebSocket sessions), not only
+`HDL_MAX_SESSIONS` counts *open browser tabs* (WebSocket sessions), not only
 running simulations. An idle tab costs no CPU, so real load is usually lower
 than the worst case in the table.
 
@@ -55,7 +55,7 @@ than the worst case in the table.
 
 ```yaml
 envVars:
-  - key: GHDL_MAX_SESSIONS
+  - key: HDL_MAX_SESSIONS
     value: "4"
   - key: HDLBOARD_SIM_MEMORY_MB
     value: "96"
@@ -87,7 +87,7 @@ on the `onrender` branch.
 
 | Variable | Value |
 |---|---|
-| `GHDL_MAX_SESSIONS` | `8` |
+| `HDL_MAX_SESSIONS` | `8` |
 | `HDLBOARD_SIM_MEMORY_MB` | `48` |
 
 | Sessions running | LED lag (median / p90) | Time to start |
@@ -105,14 +105,14 @@ Ubuntu 24.04, native Linux. About 576 MiB was free before HDLBoard started.
 
 | Variable | Value |
 |---|---|
-| `GHDL_MAX_SESSIONS` | `12` |
+| `HDL_MAX_SESSIONS` | `12` |
 | `HDLBOARD_SIM_MEMORY_MB` | `32` |
 
 Estimated from the measurements above (not measured on the Nanode itself):
 one full vCPU is about twice Render Starter, which served 8 sessions at
 ~0.2 s.
 
-| `GHDL_MAX_SESSIONS` | Expected LED lag, all running |
+| `HDL_MAX_SESSIONS` | Expected LED lag, all running |
 |---|---|
 | 8 | ~0.1 s |
 | **12** | **~0.15–0.2 s** |
@@ -159,7 +159,7 @@ Then:
 2. **Memory check.** Base load is about 130 MB (Node, nginx, page cache) plus
    about 7 MB per session. Use the RAM that is *free* before HDLBoard starts.
 3. **Choose the cap.** `HDLBOARD_SIM_MEMORY_MB` ≈ (free RAM − base load −
-   some margin) ÷ `GHDL_MAX_SESSIONS`. Anything from 16 MB up runs every
+   some margin) ÷ `HDL_MAX_SESSIONS`. Anything from 16 MB up runs every
    normal lab design. GHDL needs about **350 bytes per `std_logic` bit** of a
    signal; Icarus Verilog stores memories far more compactly.
 4. **Disk.** Sessions write small files under the system temp directory; a
@@ -187,7 +187,7 @@ for t in ghdl iverilog vvp; do sudo ln -sf simlimit.sh /usr/local/lib/hdlboard/$
 and start the backend with:
 
 ```bash
-GHDL_MAX_SESSIONS=12
+HDL_MAX_SESSIONS=12
 HDLBOARD_SIM_MEMORY_MB=32
 GHDL_EXE=/usr/local/lib/hdlboard/ghdl
 IVERILOG_EXE=/usr/local/lib/hdlboard/iverilog

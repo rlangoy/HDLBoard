@@ -29,16 +29,28 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
+import { resolveGhdlExe } from './ghdlPath.js';
 import { setToolPaths } from './verilog/tools.js';
-import { resolveToolPaths } from './verilog/toolPaths.js';
+import { resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
+import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
+import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
+import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
 
-const WSPATH = '/ghdlsim';
+const WSPATH = '/hdlsim';
+// The path's name from when GHDL was the only simulator; still accepted so an
+// older page or proxy config keeps working. New clients use WSPATH.
+const LEGACY_WSPATH = '/ghdlsim';
 const PROTOCOL_VERSION = '1';
 
 export interface BackendOptions {
-  /** Defaults to `GHDL_WS_PORT`, then 9010. */
+  /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
   port?: number;
+  /**
+   * A GHDL installation, the program in its `bin/` (the packaged app's `resources/ghdl`).
+   * Set, it wins over `ghdlExe` and over the environment. Defaults to `GHDL_DIR`.
+   */
+  ghdlDir?: string;
   /** Absolute path to the GHDL executable. Defaults to `GHDL_EXE`, then `'ghdl'`. */
   ghdlExe?: string;
   /**
@@ -55,13 +67,16 @@ export interface BackendOptions {
    * default) keeps today's WebSocket-only, LAN-bound behaviour.
    */
   serveDir?: string;
-  /** § 7.1/§ 11 — bounds how many students can concurrently fork GHDL. */
+  /**
+   * § 7.1/§ 11 — bounds how many students can simulate at once. Defaults to
+   * `HDL_MAX_SESSIONS` (or the legacy `GHDL_MAX_SESSIONS`), then 32.
+   */
   maxSessions?: number;
 }
 
 export interface BackendHandle {
   /**
-   * Destroys every session (and its GHDL child) and closes the socket.
+   * Destroys every session (and its simulator child) and closes the socket.
    * `onClosed` fires once the listening socket is fully released — the
    * script entry uses it to exit only after teardown, rather than racing
    * the sessions' own async temp-directory cleanup.
@@ -162,15 +177,22 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
  * `before-quit`, where a process signal never arrives.
  */
 export function startBackend(opts: BackendOptions = {}): BackendHandle {
-  const port = opts.port ?? parseInt(process.env.GHDL_WS_PORT ?? '9010', 10);
-  const maxSessions = opts.maxSessions ?? parseInt(process.env.GHDL_MAX_SESSIONS ?? '32', 10);
+  const port = opts.port ?? readIntSetting(WS_PORT);
+  const maxSessions = opts.maxSessions ?? readIntSetting(MAX_SESSIONS);
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
-  setGhdlExe(opts.ghdlExe ?? process.env.GHDL_EXE ?? 'ghdl');
-  const iverilogTools = resolveToolPaths(process.env, opts);
+  const ghdlExe = resolveGhdlExe(process.env, opts);
+  setGhdlExe(ghdlExe);
+  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), windowsShortPath);
   setToolPaths(iverilogTools);
+  if (process.platform === 'win32' && iverilogTools.bundledDir !== undefined && hasSpace(iverilogTools.bundledDir)) {
+    console.warn(
+      `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space and has no 8.3 short name; ` +
+        'Verilog compiles will fail. Install HDLBoard to a folder without spaces.',
+    );
+  }
 
-  // Desktop mode is a single-user app on one machine; exposing a GHDL
+  // Desktop mode is a single-user app on one machine; exposing a simulator
   // spawner to the LAN there would be a gratuitous attack surface.
   const host = serveDir ? '127.0.0.1' : '0.0.0.0';
 
@@ -187,14 +209,15 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
 
   /**
    * `noServer` rather than `{ port }`: the HTTP server above owns the
-   * port, and the upgrade is routed by path so `/ghdlsim` is a socket
+   * port, and the upgrade is routed by path so `/hdlsim` (or the legacy
+   * `/ghdlsim`) is a socket
    * while everything else stays a normal request.
    */
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
     const { pathname } = new URL(req.url ?? '/', 'http://localhost');
-    if (pathname !== WSPATH) {
+    if (pathname !== WSPATH && pathname !== LEGACY_WSPATH) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
@@ -295,7 +318,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   });
 
   httpServer.listen(port, host, () => {
-    console.log(`hdl-board GHDL backend listening on ws://${host}:${port}${WSPATH}`);
+    console.log(`hdl-board simulation backend listening on ws://${host}:${port}${WSPATH}`);
+    console.log(`hdl-board GHDL: ${ghdlExe}`);
     console.log(`hdl-board Icarus Verilog: ${iverilogTools.iverilog}${iverilogTools.bundledDir ? ' (bundled tree)' : ''}`);
     if (serveDir) console.log(`hdl-board serving frontend from ${serveDir} on http://${host}:${port}/`);
   });
@@ -331,15 +355,23 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
+// Re-exported for Electron, which reads the same flags from its own argv.
+export { parseToolArgs };
+
 if (invokedDirectly) {
-  const backend = startBackend();
+  const parsed = parseToolArgs(process.argv.slice(2), { strict: true });
+  if (!parsed.ok) {
+    console.error(`hdl-board backend: ${parsed.error}\n${TOOL_ARGS_USAGE}`);
+    process.exit(2);
+  }
+  const backend = startBackend(parsed.args);
   backend.ready.catch((err: unknown) => {
     console.error(`hdl-board backend could not listen on port ${backend.port}: ${String(err)}`);
     process.exit(1);
   });
 
   /**
-   * A signalled backend must not outlive its GHDL children (§ 5.10). Node's
+   * A signalled backend must not outlive its simulator children (§ 5.10). Node's
    * default SIGTERM/SIGINT disposition exits immediately without unwinding
    * anything, which is exactly how `stop.sh` (a plain `kill`) used to strand
    * them. Killing each child is synchronous, so it completes before the exit

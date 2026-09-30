@@ -14,6 +14,7 @@
 import { statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { repoRoot } from './fixture.js';
+import { ghdlInDir } from '../ghdlPath.js';
 
 export type ToolName = 'ghdl' | 'iverilog';
 
@@ -60,7 +61,7 @@ function firstExistingFile(candidates: ReadonlyArray<string | undefined>): strin
 }
 
 function fromEnvironment(name: ToolName, env: NodeJS.ProcessEnv): string | null {
-  if (name === 'ghdl') return firstExistingFile([env.GHDL_EXE]);
+  if (name === 'ghdl') return firstExistingFile([env.GHDL_DIR ? ghdlInDir(env.GHDL_DIR) : undefined, env.GHDL_EXE]);
   const bundled = env.IVERILOG_DIR ? join(env.IVERILOG_DIR, WINDOWS ? 'iverilog.exe' : 'iverilog') : undefined;
   return firstExistingFile([bundled, env.IVERILOG_EXE]);
 }
@@ -72,7 +73,7 @@ function fromVendoredTree(name: ToolName, root: string): string | null {
 }
 
 const ENVIRONMENT_HINT: Record<ToolName, string> = {
-  ghdl: 'GHDL_EXE',
+  ghdl: 'GHDL_DIR or GHDL_EXE',
   iverilog: 'IVERILOG_DIR or IVERILOG_EXE',
 };
 

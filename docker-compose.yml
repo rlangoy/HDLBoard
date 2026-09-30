@@ -2,7 +2,7 @@
 #
 #   docker compose up -d --build        then open http://<host>/
 #
-# One public port: nginx serves the page and proxies /ghdlsim to the backend,
+# One public port: nginx serves the page and proxies /hdlsim to the backend,
 # which is reachable only on the compose network (HOSTING.md § 8).
 # Settings go in a .env file next to this one.
 
@@ -21,7 +21,8 @@ services:
     restart: unless-stopped        # replaces the OpenRC service + default runlevel
     init: true                     # reaps ghdl/vvp children of a dead session
     environment:
-      GHDL_MAX_SESSIONS: ${GHDL_MAX_SESSIONS:-32}
+      # GHDL_MAX_SESSIONS is the setting's older name, still read from .env.
+      HDL_MAX_SESSIONS: ${HDL_MAX_SESSIONS:-${GHDL_MAX_SESSIONS:-32}}
     expose:
       - "9010"                     # compose network only — not published
     # Sessions write only under os.tmpdir() (work libraries, FIFOs, output),
@@ -37,7 +38,7 @@ services:
     # mem_limit: 5g
     healthcheck:
       # A plain GET answers 426 — that port speaks WebSocket only.
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+process.env.GHDL_WS_PORT+'/ghdlsim',r=>process.exit(r.statusCode===426?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+process.env.HDL_WS_PORT+'/hdlsim',r=>process.exit(r.statusCode===426?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -50,7 +51,7 @@ services:
       target: web
       args:
         ALPINE_VERSION: ${ALPINE_VERSION:-3.24}
-        # VITE_GHDL_WS_PORT stays empty: the page connects back to its own
+        # VITE_HDL_WS_PORT stays empty: the page connects back to its own
         # origin (nginx), whatever port or scheme it was loaded from.
     image: hdlboard-web:latest
     restart: unless-stopped

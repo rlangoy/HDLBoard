@@ -55,7 +55,6 @@ HDLBoard stands on the work of others. Thank you to all of these projects and th
 | [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows desktop app | MIT (Chromium: BSD-style) |
 | [electron-builder](https://www.electron.build/) and [NSIS](https://nsis.sourceforge.io/) | The Windows installer | MIT; zlib/libpng-style |
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |
-| [Playwright](https://playwright.dev/) | The screenshot helper in `tools/` (development only) | Apache-2.0 |
 
 The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
 DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/); HDLBoard is an independent

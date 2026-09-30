@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The Workbench's WebSocket client for the GHDL backend —
+ * The Workbench's WebSocket client for the simulation backend, which runs
+ * GHDL or Icarus Verilog behind one endpoint —
  * ../../../docs/ghdl_implementation_plan.md § 6, § 8.2. The only file in this
  * app that speaks the wire protocol; `Workbench.tsx` calls this, never
  * `WebSocket` directly.
@@ -20,7 +21,7 @@ import type { VhdlFile } from './files';
 const PROTOCOL_VERSION = '1';
 const STATE_LENGTH = 10 + 6 * 7;
 
-export interface GhdlClientHandlers {
+export interface HdlClientHandlers {
   onReady(): void;
   onState(ledr: BitVector, hex: SegmentVector[]): void;
   onLog(text: string): void;
@@ -33,13 +34,13 @@ export interface GhdlClientHandlers {
  * The backend's URL, on the page's own host — never a hardcoded `localhost`
  * (§ 6.4). With a `port` (dev: Vite on 5173, backend on 9010) it targets that
  * port; without one it is the page's own origin, for a reverse proxy that
- * forwards `/ghdlsim` (Docker, Render). `wss:` on an `https:` page, since
+ * forwards `/hdlsim` (Docker, Render). `wss:` on an `https:` page, since
  * browsers block a plain `ws:` socket from one.
  */
-export function ghdlBackendUrl(port?: number): string {
+export function hdlBackendUrl(port?: number): string {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const host = port ? `${window.location.hostname}:${port}` : window.location.host;
-  return `${scheme}://${host}/ghdlsim`;
+  return `${scheme}://${host}/hdlsim`;
 }
 
 /**
@@ -63,10 +64,20 @@ function parseState(bits: string): { ledr: BitVector; hex: SegmentVector[] } {
   return { ledr, hex };
 }
 
-export class GhdlClient {
+/**
+ * The files one run sends: those in the folder of the top file (`sourceFolderFor`:
+ * `verilog/` for a Verilog top, `vhdl/` otherwise). Shared by `HdlClient.run` and
+ * the diagnostics snapshot, so the snapshot is exactly what was uploaded.
+ */
+export function filesForRun(files: readonly VhdlFile[], topFileName?: string): VhdlFile[] {
+  const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
+  return files.filter((f) => f.folder === folder);
+}
+
+export class HdlClient {
   private ws: WebSocket | null = null;
   private readonly url: string;
-  private readonly handlers: GhdlClientHandlers;
+  private readonly handlers: HdlClientHandlers;
   // Whether the current socket has ever received READY. A close before
   // that happens means the backend was never actually reached — a plain
   // `onClosed()` there is indistinguishable from a normal Stop, and the
@@ -76,7 +87,7 @@ export class GhdlClient {
   // near-instant on localhost, and silent without this).
   private everReady = false;
 
-  constructor(url: string, handlers: GhdlClientHandlers) {
+  constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
     this.handlers = handlers;
   }
@@ -157,8 +168,7 @@ export class GhdlClient {
    */
   run(files: VhdlFile[], topFileName?: string): void {
     const ws = this.ensureSocket();
-    const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
-    const sourceFiles = files.filter((f) => f.folder === folder);
+    const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = topFileName ? `RUN ${topFileName}` : 'RUN';
     const send = () => ws.send(`${head}\n${body}`);

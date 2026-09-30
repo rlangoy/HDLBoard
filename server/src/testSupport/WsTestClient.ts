@@ -22,7 +22,7 @@ import {
 import { normalizeState, type BoardState } from './boardState.js';
 
 const PROTOCOL_VERSION = '1';
-const BACKEND_PATH = '/ghdlsim';
+const BACKEND_PATH = '/hdlsim';
 const DEFAULT_WAIT_MS = 10_000;
 
 type FramePredicate = (frame: ServerFrame) => boolean;

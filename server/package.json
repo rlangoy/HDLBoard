@@ -1,16 +1,16 @@
 {
   "name": "hdl-board-server",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "license": "GPL-2.0-only",
-  "description": "GHDL backend for HDLBoard — see ../docs/ghdl_implementation_plan.md",
+  "description": "Simulation backend for HDLBoard (GHDL and Icarus Verilog) — see ../docs/ghdl_implementation_plan.md",
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/server.js",
     "dev": "tsc -b && node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --no-error-on-unmatched-pattern src/verilog src/engines src/runtime.ts src/session.ts src/session.test.ts src/server.test.ts src/outputLimiter.ts src/testSupport",
+    "lint": "eslint --no-error-on-unmatched-pattern src/verilog src/engines src/runtime.ts src/session.ts src/session.test.ts src/server.test.ts src/outputLimiter.ts src/settings.ts src/settings.test.ts src/testSupport",
     "test": "tsc -b && node scripts/run-tests.mjs unit",
     "test:integration": "tsc -b && node scripts/run-tests.mjs integration"
   },

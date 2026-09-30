@@ -47,6 +47,11 @@ which remains the as-built reference for everything reused here (wire protocol
 
 ## Revision history
 
+**Revision 3.3 (2026-09-29)** — Playwright is gone from the repository: the
+`playwright` dev dependency, `tools/screenshot.mjs` and `npm run shot` are
+removed, and visual checks (`Design_Description.md` § 7) are done through the
+Claude-in-Chrome extension, like the end-to-end runbook (§ 7.7).
+
 **Revision 3.2 (2026-09-26)** — the browser end-to-end tests use **the Chrome
 extension instead of Playwright**: Claude drives a real Chrome window from a
 checked-in runbook (§ 7.7, step F6). The approach was checked first against
@@ -949,8 +954,8 @@ The browser path is tested by **Claude driving a real Chrome window through the
 Claude-in-Chrome extension**, following a checked-in runbook
 (`tests/e2e/verilog-browser.md`, step F6). This replaces the Playwright script
 of earlier revisions; it adds no dependency and no `npm` script. (The
-`playwright` dev dependency and `tools/screenshot.mjs` already in the repository
-are untouched — removing them is a separate decision.)
+`playwright` dev dependency and `tools/screenshot.mjs` have since been removed
+too — revision 3.3: visual checks go through the extension as well.)
 
 **Feasibility — verified 2026-09-26** against today's app (Vite dev server,
 real Chrome, extension connected):
@@ -1060,7 +1065,7 @@ that).
 **Tier 2 — `tools/verify-backend.mjs <ws-url>`, any backend.** Runs the whole
 scenario file (both languages) over the WebSocket and prints a pass/fail table
 with exit code. It works against a dev backend, a Linux server, and **the
-installed app** (`ws://127.0.0.1:9010/ghdlsim` while HDLBoard is running). It
+installed app** (`ws://127.0.0.1:9010/hdlsim` while HDLBoard is running). It
 needs Node, so it is for developers and CI, not a student VM.
 
 **Tier 3 — clean-VM acceptance, by hand** (the project's existing open
@@ -1549,7 +1554,7 @@ source URLs.
 
 **G4 — Build and verify the installer.** *M*
 Run `build.ps1`; install; on this machine run `tools/verify-backend.mjs
-ws://127.0.0.1:9010/ghdlsim` against the installed app (Tier 2); then the
+ws://127.0.0.1:9010/hdlsim` against the installed app (Tier 2); then the
 Tier 3 checklist V-1…V-8, V-10.
 Done when: Tier 2 is all green and V-1…V-8, V-10 are ticked. (V-9, the
 non-ASCII account, and the clean-VM run are the project's existing open

@@ -12,26 +12,25 @@ export interface SimToggleProps {
   disabled?: boolean;
   /** The file Play runs as top (or Stop stops), for the tooltip and screen readers. */
   fileName: string;
-  onStart: () => void;
-  onStop: () => void;
+  /** Start when showing Play, stop when showing Stop. */
+  onClick: () => void;
   className?: string;
 }
 
 /** The one-click play/stop icon on the editor's active tab. */
-export function SimToggle({ running, disabled = false, fileName, onStart, onStop, className }: SimToggleProps) {
+export function SimToggle({ running, disabled = false, fileName, onClick, className }: SimToggleProps) {
   const label = running ? `Stop simulation of ${fileName}` : `Start simulation with ${fileName} as top`;
   return (
     <button
       type="button"
-      className={cx('wb-simtoggle', running ? 'is-stop' : 'is-play', className)}
+      className={cx('wb-simtoggle', className)}
       aria-label={label}
       title={label}
       disabled={disabled}
       onClick={(e) => {
         // Inside an editor tab: pressing the icon must not also count as a click on the tab.
         e.stopPropagation();
-        if (running) onStop();
-        else onStart();
+        onClick();
       }}
     >
       {running ? <StopIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
