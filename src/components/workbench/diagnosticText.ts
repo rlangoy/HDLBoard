@@ -21,8 +21,9 @@ export const INLINE_MESSAGE_MAX_CHARS = 120;
 const ELLIPSIS = '…';
 const DETAIL_INDENT = '  ';
 export const CLEAR_HINT = 'Click or type in the file to clear the markers.';
-/** Put in front of the compiler's own sentence when advice is the headline. */
-const COMPILER_PREFIX = 'GHDL: ';
+/** Names the compiler in front of its own sentence when advice is the headline; GHDL's advice was the first and names none. */
+const DEFAULT_COMPILER = 'GHDL';
+const DEFAULT_LANGUAGE = 'VHDL';
 const ENDS_A_SENTENCE = /[.?!]$/;
 
 const code = (text: string): string => `\`${text}\``;
@@ -34,8 +35,11 @@ const code = (text: string): string => `\`${text}\``;
  */
 export const adviceText = {
   /** Rule B. */
-  keywordTypo: (word: string, keyword: string): string =>
-    `${code(word)} is not a VHDL keyword — did you mean ${code(keyword)}?`,
+  keywordTypo: (word: string, keyword: string, language = DEFAULT_LANGUAGE): string =>
+    `${code(word)} is not a ${language} keyword — did you mean ${code(keyword)}?`,
+  /** Rule B for Icarus, which often reports a misspelled keyword on the next line of code. */
+  keywordTypoOnLine: (word: string, line: number, keyword: string, language: string): string =>
+    `${code(word)} (line ${line}) is not a ${language} keyword — did you mean ${code(keyword)}?`,
   /** Rule C. */
   undeclared: (word: string, suggestion: string): string =>
     `${code(word)} is not declared — did you mean ${code(suggestion)}?`,
@@ -45,10 +49,19 @@ export const adviceText = {
   checkEndOfLine: (line: number): string =>
     `GHDL noticed this at the start of the line — check the end of line ${line}.`,
   /** Rule E: `end if` is two words, `elsif` one. */
-  joinedKeyword: (word: string, line: number, wanted: string): string =>
+  joinedKeyword: (word: string, line: number, wanted: string, language = DEFAULT_LANGUAGE): string =>
     wanted.includes(' ')
-      ? `${code(word)} (line ${line}) must be two words in VHDL: ${code(wanted)}.`
-      : `${code(word)} (line ${line}) is written ${code(wanted)} in VHDL.`,
+      ? `${code(word)} (line ${line}) must be two words in ${language}: ${code(wanted)}.`
+      : `${code(word)} (line ${line}) is written ${code(wanted)} in ${language}.`,
+  /** Rule G (Icarus): a misspelled name on the left of `assign` is not an error, only a new wire. */
+  implicitWire: (word: string, suggestion: string): string =>
+    `${code(word)} is not declared — did you mean ${code(suggestion)}? Verilog made a new, unconnected wire.`,
+  /** Rule H (Icarus): `assign` to a `reg`, where Icarus's own note points at SystemVerilog. */
+  regDrivenByAssign: (name: string): string =>
+    `${code(name)} is a ${code('reg')}: drive it inside an ${code('always')} block, or declare it as ${code('wire')}.`,
+  /** Rule H (Icarus): a `wire` assigned inside an `always` block. */
+  wireAssignedInAlways: (name: string): string =>
+    `${code(name)} is a ${code('wire')}: only a ${code('reg')} can be assigned inside an ${code('always')} block — declare it as ${code('reg')}.`,
   /** Rule F. */
   followOn: (line: number): string => `Probably caused by the error on line ${line} — fix that one first and run again.`,
   /** Rule F, on the line of the first error itself. */
@@ -76,14 +89,15 @@ function describeMessage(m: LineMessage): string {
   const details = m.details.map((d) => `${DETAIL_INDENT}${d}`);
   const headline = m.advice?.headline;
   if (headline === undefined) return [`${m.severity}: ${m.message}`, ...details].join('\n');
-  return [`${m.severity}: ${headline}`, '', `${COMPILER_PREFIX}${m.message}`, ...details].join('\n');
+  const compiler = m.advice?.compiler ?? DEFAULT_COMPILER;
+  return [`${m.severity}: ${headline}`, '', `${compiler}: ${m.message}`, ...details].join('\n');
 }
 
 /**
  * The tooltip: every kept message, errors first, each detail on its own indented
  * line. With advice, the headline comes first and the compiler's own sentence
- * follows after a blank line, prefixed `GHDL:`; a blank line then also separates
- * the messages.
+ * follows after a blank line, prefixed with its name (`GHDL:`, `Icarus:`); a
+ * blank line then also separates the messages.
  */
 export function describeLine(line: LineDiagnostic): string {
   const hasAdvice = line.messages.some((m) => m.advice?.headline !== undefined);

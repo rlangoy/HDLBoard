@@ -2,7 +2,10 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: research, not a plan yet (2026-09-30).** This is the "measure first" step that
+**Status: built (2026-09-30), on branch `imp_verilog_improv_debug_msg`.** § 8 records what
+was built, how it was tested, and where the build differs from §§ 3–7.
+
+**Original status: research, not a plan yet (2026-09-30).** This is the "measure first" step that
 [`editor_diagnostics_improvement_plan.md`](editor_diagnostics_improvement_plan.md) § 4.12
 asks for before any Verilog advice is designed. Every message below was produced by running
 the real tools with the backend's exact flags on the starter `tests/fixtures/verilog/blinkTest.v`,
@@ -27,6 +30,7 @@ Appendix A has the complete Icarus 13.0 output.
 - [5. Alternatives considered](#5-alternatives-considered)
 - [6. Recommendation and next steps](#6-recommendation-and-next-steps)
 - [7. Open decisions](#7-open-decisions)
+- [8. Build notes](#8-build-notes)
 - [Appendix A: Icarus 13.0 output](#appendix-a-icarus-130-output)
 
 ---
@@ -208,6 +212,83 @@ and the advice layer already knows the language of each file from the snapshot.
 | 2 | Allow 3-letter words in Verilog Rule B (`rge` → `reg`, `edn` → `end`)? | Yes, for the reserved words of 3 letters only, and only when the word is not declared: Verilog's core keywords are short. The guard lists must include 3-letter student names (`clk`, `rst`, `cnt`, `sum`, `led`). |
 | 3 | Rule B on the previous code line too? | Yes, but only when the reported line has no candidate (begin-typo, end-typo, endif). |
 | 4 | Remove Icarus's `This is allowed when SystemVerilog is enabled.` note from the tooltip? | No: keep the compiler's words (D1 of the improvement plan), and put Rule H's headline first. |
+
+---
+
+## 8. Build notes
+
+Built on 2026-09-30, following § 6 steps 0–4. § 7 was decided as recommended: #2 yes
+(3-letter words, only toward 3-letter keywords), #3 yes, #4 no; #1 (`default_nettype`) is left
+for later, with Rule G alone for now (§ 6 step 5).
+
+### 8.1 What was built
+
+| Module | Contents |
+|---|---|
+| `tools/iverilog-typo-corpus.mjs` | Step 0. The 33 mutations of § 2.1, plus the markers plan's `DE1_SoC.v` case (its A.7); runs the backend's two `iverilog` steps with its exact flags and `_hdlboard_ts.v`; `--bundled` passes `-B` as the Windows app does |
+| `diagnostics.verilog.corpus.ts` | Generated from the capture: each case's source edits, last step, exit code and complete stderr |
+| `verilogWords.ts` | Step 1. The reserved words are the highlighter's `VERILOG_KEYWORDS` + `VERILOG_TYPES`, which a test already pins to `lexor_keyword.gperf`. Config-only words (`design`, `cell`, …) are never suggested, like PSL for VHDL; common SystemVerilog words are never "corrected" |
+| `verilogDeclaredNames.ts` | Step 1. Ports, nets and variables, parameters, module/function/task names, instances, block labels, and names on a compiler-directive line |
+| `nearestWord.ts` | The "did you mean" search, moved out of `diagnosticAdvice.ts` unchanged so both advisors share it, with a case-sensitive option for Verilog |
+| `icarusAdvice.ts` | Steps 2–4. Rules B, C, D, E, F, G and H at line level |
+| `diagnosticAdvice.ts` | Picks the advisor by file extension (`languageOfName`): `.v`/`.vh` → Icarus's rules, anything else → GHDL's, which are unchanged. `adviseLogDiagnostics` gives LOG lines Rule G only |
+| `diagnosticText.ts` | The Verilog headlines; the tooltip names the compiler (`Icarus: …`) |
+
+### 8.2 The corpus, re-measured on Windows
+
+`tools/iverilog-typo-corpus.mjs` was run with the bundled Windows tree
+(`winInstaller/vendor/iverilog`, `Icarus Verilog version 13.0 (stable) (v13_0)`). All 33
+captures equal Appendix A.2 line for line, and `de1soc-semicolon` equals the markers plan's
+A.7 (`DE1_SoC.v:23: syntax error`, then line 19). Icarus 12.0 was not available to re-capture;
+its three differences (A.3) are unit tests instead.
+
+### 8.3 Result on the corpus (the golden test)
+
+`diagnosticAdvice.verilog.golden.test.ts` runs every capture through parse → locate → advise →
+store, the way the browser gets it (ERROR frame for a failed compile, LOG lines for the
+passing undeclared-port):
+
+| Result | Cases | Count |
+|---|---|---|
+| Headline naming the real mistake | module, input, output, wire, reg, localparam, always, assign, posedge, else, begin (line 31 from 32), end (`edn`, line 37 from 38), endmodule-typo (51 from 52), semicolon-nonblocking, -decl, -localparam, undeclared-counter, -led, -clock, undeclared-port (G), assign-to-reg (H), wire-in-always (H), elseif, endif | 24 |
+| Right as printed | semicolon-assign (line 41 already names the statement) | 1 |
+| Still vague | endmodule-missing, end-missing, begin-missing, paren-missing, assign-reversed, compare-assign | 6 |
+
+27 of 70 messages are muted. In both two-mistake files the second mistake stays visible:
+two-mistakes shows `alwyas` (B), line 37's cascade `syntax error`, and line 45 with *Probably a
+missing `;` at the end of line 41*; two-semantic shows `conter` (Icarus never reports `LEDRR`
+there, § 2.1).
+
+### 8.4 How it was tested
+
+| Level | What | Result |
+|---|---|---|
+| Unit | `verilogDeclaredNames.test.ts` (each pattern; comments and strings; the fixtures); `icarusAdvice.test.ts`: the Rule B guards of § 3 point 1 (every Verilog starter identifier, undeclared; 110 typical student names declared in another file, the 3-letter `clk`, `rst`, `bus`, `nxt` … included), ties, case sensitivity, each rule's structural checks, Icarus 12.0's wording (A.3), and that VHDL files and runtime LOG lines are unaffected | pass |
+| Golden | § 8.3, plus the reveal for the cross-line rules | pass |
+| VHDL unchanged | Every existing test passes untouched, including all 22 + 11 GHDL golden cases; a VHDL error advised next to a Verilog file gives exactly GHDL's advice | pass |
+| Real backend | The frontend's own `HdlClient`, in Node, against `server/` with the bundled Icarus 13.0 on Windows, as a board run of the edited file: 32 of the 33 failing cases give an ERROR frame equal to the corpus after `\r\n` → `\n` (the Windows backend forwards `\r\n`; the parser strips the `\r`), undeclared-port's warning arrives as a LOG line equal to the corpus, and every case's advice through the real frames equals the golden result | pass, with the finding below |
+| Browser | Claude-in-Chrome against the Vite dev server and the real backend: `tests/e2e/editor-diagnostics.md`, "Advice on Icarus errors" | see there |
+
+**Finding (not changed): module-typo never reaches Icarus in a real run.** With `modul` in the
+*top* file, the backend's own port check answers `Top file blinkTest.v declares no module.`
+(`server/src/verilog/ports.ts`) before Icarus runs. That message has no file and line, so nothing
+is marked. The rule still serves a misspelled `module` in a file that is not the top. Making that
+backend message say "is `module` misspelled?" would be a backend change, outside this work.
+
+### 8.5 Where the build differs from the text
+
+| # | Research text | Built | Why |
+|---|---|---|---|
+| V1 | Rule F mutes `Invalid module instantiation` / `Invalid module item.` after a syntax error | Muted only when the previous code line looks finished; otherwise Rule D explains it | Measured: two-mistakes reports its independent missing `;` (line 41) as `45: Invalid module item.`. Muting it would hide the second mistake, which the GHDL work ruled out (improvement plan V1) |
+| V2 | Rule F's lost-place list | Also `generate else is missing matching if.` | paren-missing prints it at line 35 while lost; a beginner design has no `generate` |
+| V3 | Rule F: "any message on line 1" | Only the measured bogus one, `Syntax error in variable list.` (`Errors in port declarations.` has no `error:` word, so the parser never marks it at all) | A file whose `module` line is line 1 can have a real error there |
+| V4 | Rule B looks at the previous code line when the reported line has no candidate | …and only when that line does not end in `;` | A finished line would have been reported itself; this keeps a complete line's names out of it |
+| V5 | § 4 expects begin-typo and semicolon-decl to fall to 2 visible | 3 visible each: a later bare `syntax error` in the cascade stays | Bare `syntax error` is not on the lost-place list: an independent mistake is also reported that way. Safe direction, as the GHDL plan's D7 |
+| V6 | wire-in-always is "right as printed" | Rule H rewrites it too, only when Icarus's note says the name is a wire | "l-value" and "procedural" are compiler vocabulary; the note makes the rewrite certain |
+| V7 | Rule C for `Unable to bind` | Also `Net x is not defined in this context.` (the `default_nettype none` wording, Appendix A) | Ready for § 7 #1 at no cost |
+| V8 | `declaredNamesVerilog` | A name counts as declared only where a name can end (`,` `;` `)` `=` `(` `#`, after its `[…]` dimensions) | Measured: in `input wire CLOCK, inptu wire [9:0] SW` the typo sits where a second port name could; without this, input-, output- and wire-typo got no advice |
+| V9 | Rule G: suggest on the implicit-wire warning | Also applied to LOG lines (`adviseLogDiagnostics`), and only there to that one warning | A successful compile's warnings reach the browser as LOG lines, which otherwise get no advice (improvement plan § 4.12) |
+| V10 | — | `Always` → `always` is suggested | Verilog is case-sensitive, so `Always` is a name to Icarus; the shared search compares names case-sensitively for Verilog |
 
 ---
 

@@ -54,3 +54,20 @@ Run in headless Chromium (`playwright-core`, the preinstalled Chromium) against 
 `server/` built from this branch, once with GHDL 5.0.1 and once with GHDL 6.0.0 (the Ubuntu packages of
 those versions on Linux, not the Windows desktop build or the Docker image). The same backends also
 answered all 39 cases of `diagnostics.corpus.ts` with byte-identical `ERROR` frames.
+
+## Advice on Icarus errors
+
+Acceptance steps of `docs/editor_diagnostics_verilog_research.md` § 8, on `blinkTest.v`, started with the
+tab's ▶ button. Same DOM hooks as above.
+
+| Step | Case | Expected | Result (2026-09-30) |
+|---|---|---|---|
+| 1 | `alwyas` for `always` (line 31) | `alwyas` underlined; inline "`alwyas` is not a Verilog keyword — did you mean `always`?"; tooltip continues `Icarus: syntax error`; 34, 36, 41 grey; 37 stays visible | pass |
+| 2 | `begn` for `begin` (line 31) | line 32 marked with "`begn` (line 31) is not a Verilog keyword — …"; line 31 hinted; caret on 31 | pass |
+| 3 | `;` left out of line 22 | line 26: "Probably a missing `;` at the end of line 22."; line 22 hinted; caret on 22 | pass |
+| 4 | `assign LEDRR` (line 41) | the design runs; line 41 amber: "`LEDRR` is not declared — did you mean `LEDR`? …" | checked by hand in the app |
+| 5 | fix the mistake, Start | markers and the previous run's console output gone | checked by hand in the app |
+
+Run with Claude-in-Chrome against the Vite dev server and `server/` with the bundled Icarus 13.0 on
+Windows. The same backend answered the 34 cases of `diagnostics.verilog.corpus.ts` with the corpus's text
+(after `\r\n` → `\n`), except `module-typo` in the top file (research § 8.4).
