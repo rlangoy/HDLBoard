@@ -3,10 +3,13 @@
 
 import { useId, useMemo, useRef, useState, type DragEvent, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
-import { describeLine, inlineText, summarize } from './diagnosticText';
+import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import {
   countSeverities,
+  hintLines,
+  isFollowOnLine,
   NO_DIAGNOSTICS,
+  visibleSpans,
   type DiagnosticsByFile,
   type LineDiagnostic,
 } from './diagnosticStore';
@@ -15,7 +18,7 @@ import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrol
 import { isOverflowing } from './scrollThumb';
 import { SimToggle } from './SimToggle';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
+import { markRanges, tokenizeVhdlLine, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
 export interface EditorTab {
@@ -57,6 +60,7 @@ export interface CodeEditorProps {
 }
 
 const NO_LINES: readonly LineDiagnostic[] = [];
+const NO_RANGES: readonly CharRange[] = [];
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   keyword: 'wb-tok-keyword',
@@ -67,26 +71,36 @@ const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   punctuation: 'wb-tok-punct',
 };
 
-function HighlightedLine({ line, diagnostic }: { line: string; diagnostic?: LineDiagnostic }) {
-  const tokens = tokenizeVhdlLine(line);
+/** The marker classes of a line: its severity, muted when every message is a follow-on; or a hint. */
+function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDiagnostic | undefined): string {
+  if (diagnostic) return cx(`is-${diagnostic.severity}`, isFollowOnLine(diagnostic) && 'is-followon');
+  return hintFrom ? 'is-hint' : '';
+}
+
+/** One highlighted piece; an underlined one is wrapped, and the underline never changes the glyphs. */
+function TokenPiece({ piece }: { piece: MarkedToken }) {
+  const className = TOKEN_CLASS[piece.type];
+  const text = className ? <span className={className}>{piece.text}</span> : piece.text;
+  return piece.marked ? <span className="wb-editor__diag-span">{text}</span> : <>{text}</>;
+}
+
+function HighlightedLine({
+  line,
+  diagnostic,
+  hintFrom,
+}: {
+  line: string;
+  diagnostic?: LineDiagnostic;
+  /** Rules D and E point at this line from that marked line. */
+  hintFrom?: LineDiagnostic;
+}) {
+  const pieces = markRanges(tokenizeVhdlLine(line), diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
+  const inline = diagnostic ? inlineText(diagnostic) : '';
   return (
-    <div className={cx('wb-editor__line', diagnostic && `is-${diagnostic.severity}`)}>
-      {line.length === 0 ? (
-        ' '
-      ) : (
-        tokens.map((token, i) => {
-          const className = TOKEN_CLASS[token.type];
-          return className ? (
-            <span key={i} className={className}>
-              {token.text}
-            </span>
-          ) : (
-            token.text
-          );
-        })
-      )}
-      {diagnostic && (
-        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inlineText(diagnostic)}</span>
+    <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
+      {line.length === 0 ? ' ' : pieces.map((piece, i) => <TokenPiece key={i} piece={piece} />)}
+      {diagnostic && inline && (
+        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inline}</span>
       )}
     </div>
   );
@@ -96,22 +110,22 @@ function HighlightedLine({ line, diagnostic }: { line: string; diagnostic?: Line
 function EditorGutter({
   lines,
   linesByNumber,
+  hints,
   gutterRef,
 }: {
   lines: string[];
   linesByNumber: ReadonlyMap<number, LineDiagnostic>;
+  hints: ReadonlyMap<number, LineDiagnostic>;
   gutterRef: RefObject<HTMLDivElement>;
 }) {
   return (
     <div className="wb-editor__gutter" ref={gutterRef} aria-hidden="true">
       {lines.map((_, i) => {
         const diagnostic = linesByNumber.get(i + 1);
+        const hintFrom = hints.get(i + 1);
+        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom);
         return (
-          <div
-            className={cx('wb-editor__gutter-line', diagnostic && `is-${diagnostic.severity}`)}
-            key={i}
-            title={diagnostic && describeLine(diagnostic)}
-          >
+          <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} key={i} title={title}>
             {i + 1}
           </div>
         );
@@ -160,6 +174,7 @@ export function CodeEditor({
   const lines = active ? active.content.split('\n') : [];
   const activeLines = (active && diagnostics[active.id]) || NO_LINES;
   const linesByNumber = useMemo(() => new Map(activeLines.map((d) => [d.line, d])), [activeLines]);
+  const hints = useMemo(() => hintLines(activeLines), [activeLines]);
   // Computed only from the stored lines, so a repeating assertion that adds
   // nothing leaves the text unchanged and the live region silent.
   const status = useMemo(() => (active ? summarize(active.name, activeLines) : ''), [active?.name, activeLines]);
@@ -290,11 +305,16 @@ export function CodeEditor({
           <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
             {status}
           </p>
-          <EditorGutter lines={lines} linesByNumber={linesByNumber} gutterRef={gutterRef} />
+          <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} gutterRef={gutterRef} />
           <div className="wb-editor__surface">
             <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
               {lines.map((line, i) => (
-                <HighlightedLine line={line} key={i} diagnostic={linesByNumber.get(i + 1)} />
+                <HighlightedLine
+                  line={line}
+                  key={i}
+                  diagnostic={linesByNumber.get(i + 1)}
+                  hintFrom={hints.get(i + 1)}
+                />
               ))}
             </pre>
             <textarea

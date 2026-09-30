@@ -105,7 +105,7 @@ export function locateDiagnostics(
  * DE1_SoC.v case that is line 19 (the statement), not line 23 (where Icarus
  * noticed it). Warnings alone never move the view.
  */
-export function firstRevealTarget(located: readonly LocatedDiagnostic[]): LocatedDiagnostic | undefined {
+export function firstRevealTarget<T extends LocatedDiagnostic>(located: readonly T[]): T | undefined {
   const errors = located.filter((d) => d.severity === 'error');
   if (errors.length === 0) return undefined;
   const { fileId } = errors[0];

@@ -46,6 +46,12 @@
   --wb-diag-warning: #b45309; /* 4.8:1 on the gutter (#d97706 would be only 3.0:1) */
   --wb-diag-warning-bg: rgba(245, 158, 11, 0.14);
   --wb-diag-warning-text: #92400e; /* inline message: 6.4:1 on the tint */
+  /* Advice (docs/editor_diagnostics_improvement_plan.md § 4.10): a muted
+     follow-on error, and the hint on a line another marker points at. */
+  --wb-diag-followon: #64748b; /* gutter number, glyph, edge: 4.5:1 on the gutter */
+  --wb-diag-followon-bg: rgba(148, 163, 184, 0.14);
+  --wb-diag-hint: #1d4ed8; /* gutter number and edge: 6.4:1 on the gutter */
+  --wb-diag-hint-bg: rgba(59, 130, 246, 0.1);
 
   --wb-console-bg: #0f172a;
 

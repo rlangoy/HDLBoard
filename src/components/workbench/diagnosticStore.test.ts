@@ -2,14 +2,19 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
+import type { Advice, AdvisedDiagnostic } from './diagnosticAdvice';
 import type { DiagnosticSeverity } from './diagnostics';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import {
   addToFiles,
+  byDisplayOrder,
   countSeverities,
+  hintLines,
+  isFollowOnLine,
   MAX_MARKED_LINES_PER_FILE,
   MAX_MESSAGES_PER_LINE,
   NO_DIAGNOSTICS,
+  visibleSpans,
   withoutFile,
   type DiagnosticsByFile,
 } from './diagnosticStore';
@@ -82,5 +87,59 @@ describe('countSeverities', () => {
   test('S-10: counts messages, not lines', () => {
     const stored = addToFiles(NO_DIAGNOSTICS, [at(1, 'a'), at(1, 'b'), at(2, 'c', 'warning')]);
     expect(countSeverities(stored.a)).toEqual({ errors: 2, warnings: 1 });
+  });
+});
+
+// ---- advice (docs/editor_diagnostics_improvement_plan.md § 4.1, § 4.10)
+
+const ADVICE: Advice = { headline: 'h', span: { start: 4, end: 9 } };
+const FOLLOW_ON: Advice = { headline: 'f', followOnOf: 3 };
+
+function advised(line: number, message: string, advice: Advice): AdvisedDiagnostic {
+  return { ...at(line, message), advice };
+}
+
+describe('advice in the store', () => {
+  test('is kept with its message', () => {
+    expect(addToFiles(NO_DIAGNOSTICS, [advised(3, 'x', ADVICE)]).a[0].messages[0].advice).toBe(ADVICE);
+  });
+
+  test('does not change the dedup: the same compiler text is stored once', () => {
+    expect(addToFiles(NO_DIAGNOSTICS, [advised(3, 'x', ADVICE), at(3, 'x')]).a[0].messages).toHaveLength(1);
+  });
+
+  test('muted follow-ons come after the other messages of a line', () => {
+    const [line] = addToFiles(NO_DIAGNOSTICS, [advised(3, 'late', FOLLOW_ON), at(3, 'w', 'warning')]).a;
+    expect([...line.messages].sort(byDisplayOrder).map((m) => m.message)).toEqual(['w', 'late']);
+  });
+
+  test('countSeverities leaves muted follow-ons out', () => {
+    const lines = addToFiles(NO_DIAGNOSTICS, [at(3, 'first'), advised(9, 'late', FOLLOW_ON)]).a;
+    expect(countSeverities(lines)).toEqual({ errors: 1, warnings: 0 });
+  });
+
+  test('a line of only muted follow-ons is a follow-on line', () => {
+    expect(isFollowOnLine(addToFiles(NO_DIAGNOSTICS, [advised(9, 'late', FOLLOW_ON)]).a[0])).toBe(true);
+  });
+
+  test('a line with one message that is not muted is not', () => {
+    const [line] = addToFiles(NO_DIAGNOSTICS, [at(3, 'first'), advised(3, 'late', FOLLOW_ON)]).a;
+    expect(isFollowOnLine(line)).toBe(false);
+  });
+
+  test('visibleSpans are the spans of the messages that are not muted', () => {
+    const muted: Advice = { ...FOLLOW_ON, span: { start: 0, end: 1 } };
+    const [line] = addToFiles(NO_DIAGNOSTICS, [advised(3, 'x', ADVICE), advised(3, 'y', muted)]).a;
+    expect(visibleSpans(line)).toEqual([ADVICE.span]);
+  });
+
+  test('hintLines maps a line named by a rule to the line that names it', () => {
+    const lines = addToFiles(NO_DIAGNOSTICS, [advised(41, 'x', { relatedLine: 40 })]).a;
+    expect(hintLines(lines).get(40)?.line).toBe(41);
+  });
+
+  test('a line that is marked itself gets no hint', () => {
+    const lines = addToFiles(NO_DIAGNOSTICS, [at(40, 'own'), advised(41, 'x', { relatedLine: 40 })]).a;
+    expect(hintLines(lines).has(40)).toBe(false);
   });
 });
