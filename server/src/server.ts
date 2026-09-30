@@ -29,8 +29,11 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
+import { resolveGhdlExe } from './ghdlPath.js';
 import { setToolPaths } from './verilog/tools.js';
-import { resolveToolPaths } from './verilog/toolPaths.js';
+import { resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
+import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
+import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
 import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
 
@@ -43,6 +46,11 @@ const PROTOCOL_VERSION = '1';
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
   port?: number;
+  /**
+   * A GHDL installation, the program in its `bin/` (the packaged app's `resources/ghdl`).
+   * Set, it wins over `ghdlExe` and over the environment. Defaults to `GHDL_DIR`.
+   */
+  ghdlDir?: string;
   /** Absolute path to the GHDL executable. Defaults to `GHDL_EXE`, then `'ghdl'`. */
   ghdlExe?: string;
   /**
@@ -173,9 +181,16 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const maxSessions = opts.maxSessions ?? readIntSetting(MAX_SESSIONS);
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
-  setGhdlExe(opts.ghdlExe ?? process.env.GHDL_EXE ?? 'ghdl');
-  const iverilogTools = resolveToolPaths(process.env, opts);
+  const ghdlExe = resolveGhdlExe(process.env, opts);
+  setGhdlExe(ghdlExe);
+  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), windowsShortPath);
   setToolPaths(iverilogTools);
+  if (process.platform === 'win32' && iverilogTools.bundledDir !== undefined && hasSpace(iverilogTools.bundledDir)) {
+    console.warn(
+      `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space and has no 8.3 short name; ` +
+        'Verilog compiles will fail. Install HDLBoard to a folder without spaces.',
+    );
+  }
 
   // Desktop mode is a single-user app on one machine; exposing a simulator
   // spawner to the LAN there would be a gratuitous attack surface.
@@ -304,6 +319,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
 
   httpServer.listen(port, host, () => {
     console.log(`hdl-board simulation backend listening on ws://${host}:${port}${WSPATH}`);
+    console.log(`hdl-board GHDL: ${ghdlExe}`);
     console.log(`hdl-board Icarus Verilog: ${iverilogTools.iverilog}${iverilogTools.bundledDir ? ' (bundled tree)' : ''}`);
     if (serveDir) console.log(`hdl-board serving frontend from ${serveDir} on http://${host}:${port}/`);
   });
@@ -339,8 +355,16 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
+// Re-exported for Electron, which reads the same flags from its own argv.
+export { parseToolArgs };
+
 if (invokedDirectly) {
-  const backend = startBackend();
+  const parsed = parseToolArgs(process.argv.slice(2), { strict: true });
+  if (!parsed.ok) {
+    console.error(`hdl-board backend: ${parsed.error}\n${TOOL_ARGS_USAGE}`);
+    process.exit(2);
+  }
+  const backend = startBackend(parsed.args);
   backend.ready.catch((err: unknown) => {
     console.error(`hdl-board backend could not listen on port ${backend.port}: ${String(err)}`);
     process.exit(1);

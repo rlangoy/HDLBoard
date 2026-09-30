@@ -141,6 +141,19 @@ them with Electron, and writes
 `winInstaller\output\HDLBoard-Setup-<version>.exe`. Details:
 [`winInstaller/README.md`](../winInstaller/README.md).
 
+### Bumping the version
+
+One command sets the version in all three `package.json` files and their lockfiles.
+The About dialog, the desktop app and the installer's file name all follow it:
+
+```sh
+npm run version:bump -- 1.2.0     # an exact version
+npm run version:bump -- minor     # or major / patch
+npm run version:bump -- --check   # do they all agree? (build.ps1 checks this and stops if not)
+```
+
+Then add a line to `docs/changelog.txt` and rebuild the installer.
+
 ## Project structure and design docs
 
 - [`HOSTING.md`](HOSTING.md) — running it as a server other people reach in a

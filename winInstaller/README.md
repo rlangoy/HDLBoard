@@ -178,8 +178,33 @@ The build also bundles **Icarus Verilog 13.0** (GPL-2.0-or-later), assembled by
 directory (~8 MB) at `resources\iverilog`. The backend runs it as
 `iverilog -B<dir>` and `vvp -M<dir>` (backslash Windows paths), because the
 DLLs must sit beside `ivl.exe`. `build.ps1` runs `verify-iverilog.ps1` first: a clean
-`PATH`, a directory containing a space and an `�`, every fixture compiled, a batch
+`PATH`, a directory containing a space and an `�`, every fixture compiled, a batch
 run and a board run through the file protocol. A failing tree aborts the build.
 The licence page carries the Icarus section with the source URLs; the licence texts and
 `VERSION.txt` (exact packages and checksums) are installed under `resources\iverilog`.
-In development the backend finds Icarus through `IVERILOG_DIR`, `IVERILOG_EXE`/`VVP_EXE` or `PATH`.
+In development the backend finds Icarus through `IVERILOG_DIR`, `IVERILOG_EXE`/`VVP_EXE` or `PATH`,
+and GHDL through `GHDL_DIR`, `GHDL_EXE` or `PATH`.
+
+### Where the installed app looks for the simulators
+
+The installer's `customInstall` hook (`build/installer.nsh`) rewrites the Start-menu
+and desktop shortcuts to pass the installation's own trees:
+
+```
+HDLBoard.exe --iverilog-dir "<INSTDIR>\resources\iverilog" --ghdl-dir "<INSTDIR>\resources\ghdl"
+```
+
+`main.js` reads these flags (with the backend's own parser), exports them as
+`IVERILOG_DIR` / `GHDL_DIR`, and hands them to `startBackend()`. Without them, for
+example when started straight from the `.exe`, the app uses the same `resources\`
+trees beside itself. Editing the shortcut's target is how to point an installation
+at a different GHDL or Icarus; `--ghdl-exe <path>` names a GHDL program directly.
+`<userData>\logs\backend.log` records which ones were used.
+
+**Install folders with a space** (`C:\Program Files\HDLBoard`, the all-users default).
+`iverilog` passes its `-B` folder unquoted to `cmd.exe`, so from such a folder every
+Verilog compile failed with `'C:\Program' is not recognized…`. The backend therefore
+hands Icarus the folder's 8.3 short name (`C:\PROGRA~1\…`; the log's `Icarus Verilog:`
+line shows it). On a volume with short names disabled it logs a warning instead, and
+the fix is to install to a folder without spaces. `verilog.spacedInstall.test.ts`
+covers this.

@@ -46,7 +46,8 @@ function resolvePaths() {
       frontend: path.join(res, 'frontend'),
       backend: path.join(res, 'backend.mjs'),
       preload: path.join(res, 'preload.js'),
-      ghdlExe: path.join(res, 'ghdl', 'bin', 'ghdl.exe'),
+      // GHDL's own tree, the program in bin\.
+      ghdlDir: path.join(res, 'ghdl'),
       // The flat Icarus tree; the backend runs it with -B/-M.
       iverilogDir: path.join(res, 'iverilog'),
     };
@@ -56,10 +57,37 @@ function resolvePaths() {
     frontend: path.join(repo, 'dist'),
     backend: path.join(repo, 'server', 'dist', 'server.js'),
     preload: path.join(__dirname, 'preload.js'),
-    ghdlExe: process.env.GHDL_EXE ?? 'ghdl',
-    // Dev: IVERILOG_DIR / IVERILOG_EXE / VVP_EXE or PATH, resolved by the backend itself.
+    // Dev: GHDL_DIR / GHDL_EXE / IVERILOG_DIR / IVERILOG_EXE / VVP_EXE or PATH,
+    // resolved by the backend itself.
+    ghdlDir: undefined,
     iverilogDir: undefined,
   };
+}
+
+/**
+ * The simulator locations the installer wrote into the shortcut
+ * (`--iverilog-dir`, `--ghdl-dir`, `--ghdl-exe` — the backend's own flags,
+ * parsed by the backend's own parser). A flag wins over the default above;
+ * with none, an installed app still finds its bundled trees beside itself.
+ *
+ * The chosen directories are also exported as IVERILOG_DIR / GHDL_DIR, so
+ * anything that reads the environment agrees with what the backend runs.
+ */
+function applyToolArgs(paths, parseToolArgs) {
+  const parsed = parseToolArgs(process.argv.slice(1), { strict: false });
+  if (!parsed.ok) throw new Error(`bad command line: ${parsed.error}`);
+  const { iverilogDir, ghdlDir, ghdlExe } = parsed.args;
+  if (iverilogDir) paths.iverilogDir = iverilogDir;
+  if (ghdlDir) paths.ghdlDir = ghdlDir;
+  if (ghdlExe) {
+    paths.ghdlExe = ghdlExe;
+    // An explicit program beats the bundled default directory, which would otherwise win.
+    if (!ghdlDir) paths.ghdlDir = undefined;
+  }
+  if (paths.iverilogDir) process.env.IVERILOG_DIR = paths.iverilogDir;
+  if (paths.ghdlDir) process.env.GHDL_DIR = paths.ghdlDir;
+  // The backend ranks GHDL_DIR above an explicit program; an inherited one must not win.
+  else if (ghdlExe) delete process.env.GHDL_DIR;
 }
 
 /**
@@ -279,9 +307,13 @@ async function startBackendOrDie(paths) {
   // because a bare Windows path like `C:\…` is not a valid module
   // specifier.
   const mod = await import(pathToFileURL(paths.backend).href);
+  applyToolArgs(paths, mod.parseToolArgs);
+  console.log(`ghdl:     ${paths.ghdlDir ?? paths.ghdlExe ?? '(dev: GHDL_DIR / GHDL_EXE / PATH)'}`);
+  console.log(`iverilog: ${paths.iverilogDir ?? '(dev: IVERILOG_DIR / PATH)'}`);
   const handle = mod.startBackend({
     port: PORT,
     serveDir: paths.frontend,
+    ghdlDir: paths.ghdlDir,
     ghdlExe: paths.ghdlExe,
     iverilogDir: paths.iverilogDir,
     // One window, one user, one machine: the multi-student bound that
@@ -300,8 +332,6 @@ app.whenReady().then(async () => {
   const paths = resolvePaths();
   console.log(`frontend: ${paths.frontend}`);
   console.log(`backend:  ${paths.backend}`);
-  console.log(`ghdl:     ${paths.ghdlExe}`);
-  console.log(`iverilog: ${paths.iverilogDir ?? '(dev: IVERILOG_DIR / PATH)'}`);
 
   const persistProjects = resolvePersistProjects();
   console.log(`persistProjects: ${persistProjects}`);

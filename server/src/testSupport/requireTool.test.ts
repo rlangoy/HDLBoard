@@ -65,6 +65,15 @@ describe('requireTool', () => {
     assert.equal(requireTool('ghdl', { ...NO_PATH, GHDL_EXE: exe }).exe, exe);
   });
 
+  test('finds ghdl in the bin directory of GHDL_DIR', (t) => {
+    const install = makeTempDir('hdlboard-ghdl-');
+    t.after(() => install.cleanup());
+    mkdirSync(join(install.path, 'bin'));
+    const exe = join(install.path, 'bin', process.platform === 'win32' ? 'ghdl.exe' : 'ghdl');
+    writeFileSync(exe, '');
+    assert.equal(requireTool('ghdl', { ...NO_PATH, GHDL_DIR: install.path }).exe, exe);
+  });
+
   test('explains what to set when the tool is missing', () => {
     const lookup = requireTool('ghdl', NO_PATH);
     assert.equal(lookup.exe, null);

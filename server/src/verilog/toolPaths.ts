@@ -73,6 +73,21 @@ export function resolveToolPaths(
 }
 
 /**
+ * The same bundled tree, named by a path `iverilog` can use: on Windows, `shorten`
+ * (the 8.3 short form, `shortPath.ts`) replaces a directory containing a space, because
+ * `iverilog` passes `-B` unquoted to `cmd.exe`. Anything else comes back unchanged.
+ */
+export function withUsableBundledDir(
+  paths: ToolPaths,
+  shorten: (dir: string) => string,
+  platform: NodeJS.Platform = process.platform,
+): ToolPaths {
+  if (platform !== 'win32' || paths.bundledDir === undefined || !/\s/.test(paths.bundledDir)) return paths;
+  const short = shorten(paths.bundledDir);
+  return short === paths.bundledDir ? paths : bundled(short, platform);
+}
+
+/**
  * `-B<dir>` for `iverilog`: where its compiler, preprocessor, modules and targets live.
  * The directory must be a native Windows path with backslashes — with `C:/…` iverilog
  * starts its compiler through `cmd.exe`, which cannot parse it (M21).

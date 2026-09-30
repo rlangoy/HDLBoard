@@ -12,17 +12,18 @@
 
 import { spawn } from 'node:child_process';
 import { createBatchHandle, createRunHandle, type BatchHandle, type RunHandle } from './runtime.js';
+import { resolveGhdlExe } from './ghdlPath.js';
 
 /**
  * Which GHDL to run. `'ghdl'` means "whatever is on PATH", which is what
- * every non-desktop deployment wants and what the environment variable
- * lets an operator override. The packaged Windows app is the case that
+ * every non-desktop deployment wants and what `GHDL_DIR` / `GHDL_EXE`
+ * let an operator override. The packaged Windows app is the case that
  * needs more: it ships its own GHDL under `resources/ghdl/` and must not
  * depend on the student having installed one, so Electron passes that
- * absolute path to `startBackend()`, which calls `setGhdlExe()` before
+ * directory to `startBackend()`, which calls `setGhdlExe()` before
  * anything can spawn.
  */
-let ghdlExe = process.env.GHDL_EXE ?? 'ghdl';
+let ghdlExe = resolveGhdlExe(process.env);
 
 export function setGhdlExe(path: string): void {
   ghdlExe = path;

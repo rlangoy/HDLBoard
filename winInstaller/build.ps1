@@ -45,6 +45,11 @@ function Invoke-Npm {
   }
 }
 
+# --- 0a. One version everywhere: the installer is named after it ----------
+Step "Checking version"
+& node (Join-Path $RepoRoot "tools\bump-version.mjs") --check
+if ($LASTEXITCODE -ne 0) { throw "package.json versions disagree - run: npm run version:bump -- <x.y.z>" }
+
 # --- 0. GHDL must be vendored before anything is assembled ---------------
 Step "Checking vendored GHDL"
 if (-not (Test-Path (Join-Path $VendorGhdl "bin\ghdl.exe"))) {

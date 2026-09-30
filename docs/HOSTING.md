@@ -793,9 +793,17 @@ Backend, read at startup:
 | `HDL_WS_PORT` | `9010` | Port the backend listens on |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
+| `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |
 | `VVP_EXE` | `vvp` beside `IVERILOG_EXE`, else on `PATH` | Path to Icarus's `vvp` runtime, if it is not beside the compiler |
 | `IVERILOG_DIR` | unset | A self-contained Icarus tree (the Windows app ships one); the backend runs it with `-B`/`-M`. Takes precedence over the two above |
+
+The simulator locations can also be given on the command line, where they win over
+the variables — `node dist/server.js --iverilog-dir <dir> --ghdl-dir <dir>` (or
+`--ghdl-exe <path>`; `--flag=value` works too). An unknown flag stops the backend
+with a usage message. The Windows installer uses these flags: it writes the
+installation's own `resources\iverilog` and `resources\ghdl` into the shortcuts it
+creates.
 
 `scripts/start.sh`:
 
