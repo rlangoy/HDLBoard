@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useRef, useState } from 'react';
-import { adviseDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
+import { adviseDiagnostics, adviseLogDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
 import { parseDiagnostics } from './diagnostics';
 import { locateDiagnostics, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { addToFiles, NO_DIAGNOSTICS, withoutFile, type DiagnosticsByFile } from './diagnosticStore';
@@ -11,8 +11,12 @@ export interface DiagnosticsApi {
   readonly byFile: DiagnosticsByFile;
   /** Clears everything and remembers what this run compiles. */
   startRun(snapshot: RunSnapshot): void;
-  /** Parses simulator text (a LOG line), keeps what locates, and returns it. */
-  record(text: string, currentFiles: RunSnapshot['files']): readonly LocatedDiagnostic[];
+  /**
+   * Parses simulator text (a LOG line), keeps what locates, and returns it. Only
+   * Icarus's implicit-wire warning gets advice here: the other LOG lines are the
+   * simulation's own output.
+   */
+  record(text: string, currentFiles: RunSnapshot['files']): readonly AdvisedDiagnostic[];
   /**
    * The same for the body of an ERROR frame — compiler output — plus the advice of
    * docs/editor_diagnostics_improvement_plan.md. Runtime LOG lines get none (§ 4.12).
@@ -64,7 +68,8 @@ export function useDiagnostics(): DiagnosticsApi {
   );
 
   const record = useCallback(
-    (text: string, currentFiles: RunSnapshot['files']) => guarded(() => keep(locate(text, currentFiles))),
+    (text: string, currentFiles: RunSnapshot['files']) =>
+      guarded(() => keep(adviseLogDiagnostics(locate(text, currentFiles), snapshotRef.current))),
     [keep, locate],
   );
 

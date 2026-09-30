@@ -66,6 +66,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
+  - [`verilogHighlight.ts` and `highlight.ts`](#veriloghighlightts-and-highlightts)
   - [`files.ts`](#filests)
   - [`fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`](#filekindsts-consolelinests-and-runiconts)
   - [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)
@@ -429,7 +430,8 @@ mutates it.
 ```ts
 function tokenizeVhdlLine(line: string): Token[]
 // Token = { text: string; type: 'keyword' | 'type' | 'comment' | 'string'
-//                        | 'number' | 'identifier' | 'punctuation' | 'whitespace' }
+//                        | 'number' | 'directive' | 'system' | 'identifier'
+//                        | 'punctuation' | 'whitespace' }   // directive/system: Verilog only
 function markRanges(tokens: readonly Token[], ranges: readonly CharRange[]): MarkedToken[]
 ```
 
@@ -441,6 +443,21 @@ no block comments and no multi-line strings, so no state needs to carry
 across lines, and this stays simple on purpose. `KEYWORDS` and `TYPES` are
 two `Set`s at the top of the file — add a word there, not in the regex, to
 extend the highlighter.
+
+### `verilogHighlight.ts` and `highlight.ts`
+
+```ts
+function tokenizeVerilog(lines: readonly string[]): Token[][]   // one Token[] per line
+function tokenizeSource(language: Language | undefined, lines: readonly string[]): Token[][]
+```
+
+Verilog has `/* … */` comments that span lines, so `tokenizeVerilog` takes all the
+lines of a file and carries a single "inside a block comment" flag from line to
+line. `tokenizeSource` is what the editor calls: Verilog files (`languageOfName` in
+`fileKinds.ts`) get `tokenizeVerilog`; everything else gets `tokenizeVhdlLine` per
+line, exactly as before. The Verilog word lists are Icarus Verilog's own 1364-2005
+keyword table, pinned by a test. Two extra token types exist for it, `directive`
+and `system`.
 
 ### `files.ts`
 
@@ -690,7 +707,7 @@ or protocol change: everything is parsed in the browser from the `ERROR` and
 | `diagnosticLocation.ts` | Pure. Matches a printed file name to the file that was sent at Start (`RunSnapshot`, from `filesForRun`), drops anything ambiguous, unknown, out of range or edited since; `firstRevealTarget`. |
 | `diagnosticStore.ts` | Pure. `DiagnosticsByFile` with the dedup and caps (5 messages per line, 200 lines per file); returns the same object when nothing was added. |
 | `diagnosticText.ts` | Pure. All student-facing wording: tooltip, inline text, screen-reader summary. |
-| `diagnosticAdvice.ts` | Pure. Advice on GHDL compile errors (below): the underline, the headline, and the muting of follow-on errors; `revealTarget`. |
+| `diagnosticAdvice.ts` | Pure. Advice on compile errors (below): the underline, the headline, and the muting of follow-on errors; `revealTarget`. Picks GHDL's or Icarus's rules by each file's extension. |
 | `useDiagnostics.ts`, `useRevealLine.ts` | The only stateful pieces: the store plus the run snapshot, and scroll-and-caret for a `RevealRequest`. |
 
 When markers change:
@@ -699,7 +716,7 @@ When markers change:
 |---|---|
 | Start pressed | all markers cleared; a new snapshot is taken |
 | `ERROR` frame (`recordError`) | parse, locate, advise, add; a failed compile (`analyze`, `elaborate`) reveals the first error |
-| `LOG` frame | parse, locate, add; never moves the view |
+| `LOG` frame | parse, locate, add (advice only for Icarus's implicit-wire warning); never moves the view |
 | click in the code pane (text or gutter) | the active file's markers are removed |
 | any edit of a file, or deleting it | that file's markers are removed |
 | console Clear, tab switch or close, Stop, rename | no effect |
@@ -745,6 +762,48 @@ golden test (`diagnosticAdvice.golden.test.ts`) then says what changed:
 ```bash
 node tools/ghdl-typo-corpus.mjs capture --ghdl /path/to/ghdl > ghdl.json
 node tools/ghdl-typo-corpus.mjs generate ghdl.json
+```
+
+### Advice on Icarus errors
+
+Icarus prints no column and often reports a mistake one code line late (a
+misspelled `begin` on line 31 is reported on 32). So the same rules work on
+whole lines for `.v`/`.vh` files: the reported line, then the previous line of
+code. The editor:
+
+- names a misspelled keyword on either line (`alwyas` → `always`, `begn` on the
+  line before → `begin`, Rule B), which Icarus calls an "Invalid module
+  instantiation";
+- suggests a declared name for one Icarus could not bind (`conter` → `counter`,
+  Rule C);
+- points at a missing `;` at the end of the previous code line (Rule D), and at
+  `endif` or `elseif` (Rule E);
+- warns about a misspelled name on the left of `assign`, which Verilog quietly
+  turns into a new, unconnected wire (`LEDRR` → `LEDR`, Rule G — a warning on a
+  successful compile, so it arrives as a `LOG` line);
+- rewrites Icarus's own advice where it misleads a beginner: `assign` to a `reg`
+  ("allowed when SystemVerilog is enabled"), a `wire` assigned in `always` (Rule H);
+- greys out the cascade after a syntax error (Rule F), but not an "Invalid module
+  item." that the line above explains, since a second, independent missing `;`
+  is reported that way.
+
+The tooltip shows the headline, then `Icarus: …`. Measurements, and what was
+built: [`editor_diagnostics_verilog_research.md`](../../../docs/editor_diagnostics_verilog_research.md).
+
+| Module | Role |
+|---|---|
+| `icarusAdvice.ts` | Pure. Rules B–H at line level; `adviseIcarusDiagnostics` (ERROR frames) and `adviseIcarusLog` (only Rule G). |
+| `verilogWords.ts` | The reserved words (the highlighter's, which are Icarus's own table), config-only words never suggested, SystemVerilog words never corrected, joined keywords. |
+| `verilogDeclaredNames.ts` | The names a Verilog file declares, by pattern (ports, nets, parameters, modules, instances, labels, macros). |
+| `nearestWord.ts` | The "did you mean" search both advisors share: same first letter, one or two edits, no tie. |
+| `diagnostics.verilog.corpus.ts` | Generated by `tools/iverilog-typo-corpus.mjs`: 34 measured mistakes and Icarus's complete output. |
+
+Re-measuring works as for GHDL, and the Verilog golden test
+(`diagnosticAdvice.verilog.golden.test.ts`) says what changed:
+
+```bash
+node tools/iverilog-typo-corpus.mjs capture --iverilog /path/to/iverilog [--bundled <tree>] > icarus.json
+node tools/iverilog-typo-corpus.mjs generate icarus.json
 ```
 
 ## Styling

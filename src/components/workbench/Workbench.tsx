@@ -719,7 +719,9 @@ export function Workbench() {
     getClient().stim(sw, next);
   };
 
+  // A new run starts with an empty console, so what it shows is this run's output only.
   const startRun = (fileId: string | null) => {
+    setLogLines([]);
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');

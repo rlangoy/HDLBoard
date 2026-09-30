@@ -13,12 +13,13 @@ import {
   type DiagnosticsByFile,
   type LineDiagnostic,
 } from './diagnosticStore';
-import { ACCEPTED_FILES_TEXT } from './fileKinds';
+import { ACCEPTED_FILES_TEXT, languageOfName } from './fileKinds';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
 import { SimToggle } from './SimToggle';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { markRanges, tokenizeVhdlLine, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
+import { tokenizeSource } from './highlight';
+import { markRanges, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
 import './CodeEditor.css';
 
 export interface EditorTab {
@@ -68,6 +69,8 @@ const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   comment: 'wb-tok-comment',
   string: 'wb-tok-string',
   number: 'wb-tok-number',
+  directive: 'wb-tok-directive',
+  system: 'wb-tok-system',
   punctuation: 'wb-tok-punct',
 };
 
@@ -86,15 +89,18 @@ function TokenPiece({ piece }: { piece: MarkedToken }) {
 
 function HighlightedLine({
   line,
+  tokens,
   diagnostic,
   hintFrom,
 }: {
   line: string;
+  /** The line's tokens (`tokenizeSource`); together they are `line`. */
+  tokens: readonly Token[];
   diagnostic?: LineDiagnostic;
   /** Rules D and E point at this line from that marked line. */
   hintFrom?: LineDiagnostic;
 }) {
-  const pieces = markRanges(tokenizeVhdlLine(line), diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
+  const pieces = markRanges(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
   const inline = diagnostic ? inlineText(diagnostic) : '';
   return (
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
@@ -145,7 +151,7 @@ function tabProblemsText(lines: readonly LineDiagnostic[]): string {
 }
 
 /**
- * The tabbed VHDL editor. A transparent `<textarea>` sits over a
+ * The tabbed VHDL and Verilog editor. A transparent `<textarea>` sits over a
  * highlighted `<pre>` with identical font metrics — the standard
  * overlay technique, so typing, selection and the caret are all native
  * while the visible text is coloured.
@@ -172,6 +178,12 @@ export function CodeEditor({
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
   const lines = active ? active.content.split('\n') : [];
+  const language = active ? languageOfName(active.name) : undefined;
+  // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
+  const tokenLines = useMemo(
+    () => tokenizeSource(language, active ? active.content.split('\n') : []),
+    [language, active?.content],
+  );
   const activeLines = (active && diagnostics[active.id]) || NO_LINES;
   const linesByNumber = useMemo(() => new Map(activeLines.map((d) => [d.line, d])), [activeLines]);
   const hints = useMemo(() => hintLines(activeLines), [activeLines]);
@@ -311,6 +323,7 @@ export function CodeEditor({
               {lines.map((line, i) => (
                 <HighlightedLine
                   line={line}
+                  tokens={tokenLines[i] ?? []}
                   key={i}
                   diagnostic={linesByNumber.get(i + 1)}
                   hintFrom={hints.get(i + 1)}

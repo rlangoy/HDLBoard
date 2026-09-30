@@ -587,7 +587,9 @@ recognises lines by shape alone (the markers plan's D2), and advice is a separat
 - **Icarus Verilog.** It prints no column, and its words (`syntax error`) are generic,
   not misleading. Rules B, C and E carry over at line level (misspelled `modul`,
   `alwyas`, `endmodle`; undeclared names), with Verilog's keywords. **Measure first**:
-  a phase-0-style corpus on `blinkTest.v` with Icarus 13.0, as in § 2.
+  a phase-0-style corpus on `blinkTest.v` with Icarus 13.0, as in § 2. Done 2026-09-30:
+  [`editor_diagnostics_verilog_research.md`](editor_diagnostics_verilog_research.md); built
+  the same day (its § 8), with the GHDL rules above unchanged.
 - **Runtime messages** (`LOG`: assertions, reports) get no advice.
 - **Operator typos** beyond what GHDL already says well (`=<` is measured and already
   fine) and **`else if`** for `elsif`, which is legal VHDL that fails later at the
