@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rlangoy.github.io/HDLBoard/sitemap.xml
