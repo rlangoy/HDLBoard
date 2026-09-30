@@ -36,8 +36,8 @@ import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } fro
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
 import type { RevealRequest } from './useRevealLine';
+import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
-import { firstRevealTarget } from './diagnosticLocation';
 import { runIconFor } from './runIcon';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
@@ -501,7 +501,12 @@ export function Workbench() {
 
   // Error markers: the compiler's messages, located in the files that were sent.
   const diagnostics = useDiagnostics();
-  const { record: recordDiagnostics, startRun: startDiagnosticsRun, dismissFile: dismissDiagnostics } = diagnostics;
+  const {
+    record: recordDiagnostics,
+    recordError: recordErrorDiagnostics,
+    startRun: startDiagnosticsRun,
+    dismissFile: dismissDiagnostics,
+  } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealSeq = useRef(0);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
@@ -511,8 +516,8 @@ export function Workbench() {
     setReveal({ fileId: target.fileId, line: target.line, id: revealSeq.current });
   }, []);
   const revealFirstError = useCallback(
-    (located: readonly LocatedDiagnostic[]) => {
-      const target = firstRevealTarget(located);
+    (advised: readonly AdvisedDiagnostic[]) => {
+      const target = revealTarget(advised);
       if (target) revealLocation(target);
     },
     [revealLocation],
@@ -543,8 +548,8 @@ export function Workbench() {
         },
         onError: (stage, text) => {
           appendLog(`${stage} error:\n${text}`, 'error');
-          const located = recordDiagnostics(text, filesRef.current);
-          if (REVEALING_STAGES.includes(stage)) revealFirstError(located);
+          const advised = recordErrorDiagnostics(text, filesRef.current);
+          if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
@@ -569,7 +574,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, revealFirstError]);
+  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError]);
 
   useEffect(
     () => () => {

@@ -262,8 +262,10 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           Error markers
         </h3>
         <p className="wb-dialog__lead">
-          Red and amber lines show where the compiler found a problem. Click or type in the file to clear them; the
-          full text stays in the console.
+          Red and amber lines show where the compiler found a problem. In VHDL a wavy line marks the word GHDL points
+          at, and where GHDL&apos;s words can mislead, the line says what the mistake probably is; hover the line
+          number for GHDL&apos;s own text. Grey lines are probably caused by an earlier error. Click or type in the file
+          to clear them; the full text stays in the console.
         </p>
       </section>
 

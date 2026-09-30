@@ -910,6 +910,7 @@ same set through nginx, so it tests the WebSocket proxy too.
 | Docker: `web` never starts, `backend` is `unhealthy` | `docker compose logs backend`. The healthcheck expects `426` from the backend, and `web` waits for it by design |
 | Docker: the build fails at the `RUN <<'PROBE'` step with exit code 2, and the command in the error is full of `\r\n` | The Dockerfile was checked out with CRLF line endings. `.gitattributes` forces LF for `docker/`; re-checkout with `git rm --cached -r docker && git checkout -- docker` |
 | Docker: port 80 is already in use | Set `HDLBOARD_PAGE_PORT` in `.env` ([§ 4.2](#42-settings)), then `docker compose up -d --build` |
+| Page is blank; console shows `ReferenceError: __APP_VERSION__ is not defined` | The dev server was started outside the repository root, so it never read `vite.config.ts`. Stop whatever holds port 5173 and start it again with `npm run dev` from the repository root — see [BUILDING.md](BUILDING.md#running-the-dev-servers-by-hand-native-windows) |
 | Page is stale after `git pull` | Rebuild: `npm run build`, and restart the backend. `start.sh` rebuilds the backend for you, not a production `dist/` |
 
 A design that prints on every clock edge is throttled to 200 console lines a

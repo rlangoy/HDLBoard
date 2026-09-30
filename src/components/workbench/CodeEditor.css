@@ -221,7 +221,8 @@
  * untouched, and nothing here may change a line's height. */
 
 .wb-editor__line.is-error,
-.wb-editor__line.is-warning {
+.wb-editor__line.is-warning,
+.wb-editor__line.is-hint {
   /* Tint the full visible width, padding included, without moving the text. */
   margin-inline: calc(-1 * var(--wb-code-pad-x));
   padding-inline: var(--wb-code-pad-x);
@@ -233,6 +234,22 @@
 }
 .wb-editor__line.is-warning {
   background: var(--wb-diag-warning-bg);
+}
+/* A muted follow-on error (Rule F): the same markers, in grey, and no inline text. */
+.wb-editor__line.is-followon {
+  background: var(--wb-diag-followon-bg);
+}
+/* A line another marker points at (Rules D and E): tint and edge, no glyph. */
+.wb-editor__line.is-hint {
+  background: var(--wb-diag-hint-bg);
+}
+
+/* The word GHDL points at. text-decoration only: the glyphs keep their exact
+   metrics, so the transparent textarea stays aligned with this layer. */
+.wb-editor__diag-span {
+  text-decoration: underline wavy var(--wb-diag-error);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
 }
 
 .wb-editor__diag-inline {
@@ -258,6 +275,16 @@
 .wb-editor__gutter-line.is-warning {
   color: var(--wb-diag-warning);
   box-shadow: inset -3px 0 0 var(--wb-diag-warning);
+}
+.wb-editor__gutter-line.is-followon {
+  font-weight: 400;
+  color: var(--wb-diag-followon);
+  box-shadow: inset -3px 0 0 var(--wb-diag-followon);
+}
+.wb-editor__gutter-line.is-hint {
+  cursor: help;
+  color: var(--wb-diag-hint);
+  box-shadow: inset -3px 0 0 var(--wb-diag-hint);
 }
 .wb-editor__gutter-line.is-error::before,
 .wb-editor__gutter-line.is-warning::before {

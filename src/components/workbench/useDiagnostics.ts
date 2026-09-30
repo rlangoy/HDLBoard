@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useRef, useState } from 'react';
+import { adviseDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
 import { parseDiagnostics } from './diagnostics';
 import { locateDiagnostics, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { addToFiles, NO_DIAGNOSTICS, withoutFile, type DiagnosticsByFile } from './diagnosticStore';
@@ -10,14 +11,32 @@ export interface DiagnosticsApi {
   readonly byFile: DiagnosticsByFile;
   /** Clears everything and remembers what this run compiles. */
   startRun(snapshot: RunSnapshot): void;
-  /** Parses simulator text, keeps what locates, and returns it (for reveal). */
+  /** Parses simulator text (a LOG line), keeps what locates, and returns it. */
   record(text: string, currentFiles: RunSnapshot['files']): readonly LocatedDiagnostic[];
+  /**
+   * The same for the body of an ERROR frame — compiler output — plus the advice of
+   * docs/editor_diagnostics_improvement_plan.md. Runtime LOG lines get none (§ 4.12).
+   */
+  recordError(text: string, currentFiles: RunSnapshot['files']): readonly AdvisedDiagnostic[];
   dismissFile(fileId: string): void;
   /** The place a console line names, if it is a marked one (console links). */
   locateText(line: string, currentFiles: RunSnapshot['files']): LocatedDiagnostic | undefined;
 }
 
 const NO_RUN: RunSnapshot = { files: [] };
+
+/**
+ * The boundary between the pure code and the client handlers: a parser bug may
+ * lose markers, but never the simulator's output or the run.
+ */
+function guarded<T>(work: () => readonly T[]): readonly T[] {
+  try {
+    return work();
+  } catch (err) {
+    console.error('Diagnostics:', err);
+    return [];
+  }
+}
 
 /**
  * The one stateful piece of the error markers
@@ -33,27 +52,39 @@ export function useDiagnostics(): DiagnosticsApi {
     setByFile(NO_DIAGNOSTICS);
   }, []);
 
-  const record = useCallback((text: string, currentFiles: RunSnapshot['files']): readonly LocatedDiagnostic[] => {
-    // The boundary between the pure code and the client handlers: a parser
-    // bug may lose markers, but never the simulator's output or the run.
-    try {
-      const located = locateDiagnostics(parseDiagnostics(text), snapshotRef.current, currentFiles);
-      if (located.length > 0) setByFile((prev) => addToFiles(prev, located));
-      return located;
-    } catch (err) {
-      console.error('Diagnostics:', err);
-      return [];
-    }
+  const keep = useCallback(<T extends AdvisedDiagnostic>(diagnostics: readonly T[]): readonly T[] => {
+    if (diagnostics.length > 0) setByFile((prev) => addToFiles(prev, diagnostics));
+    return diagnostics;
   }, []);
+
+  const locate = useCallback(
+    (text: string, currentFiles: RunSnapshot['files']) =>
+      locateDiagnostics(parseDiagnostics(text), snapshotRef.current, currentFiles),
+    [],
+  );
+
+  const record = useCallback(
+    (text: string, currentFiles: RunSnapshot['files']) => guarded(() => keep(locate(text, currentFiles))),
+    [keep, locate],
+  );
+
+  const recordError = useCallback(
+    (text: string, currentFiles: RunSnapshot['files']) =>
+      guarded(() => keep(adviseDiagnostics(locate(text, currentFiles), snapshotRef.current))),
+    [keep, locate],
+  );
 
   const dismissFile = useCallback((fileId: string) => {
     setByFile((prev) => withoutFile(prev, fileId));
   }, []);
 
-  const locateText = useCallback((line: string, currentFiles: RunSnapshot['files']) => {
-    if (snapshotRef.current.files.length === 0) return undefined; // no run yet: nothing to link
-    return locateDiagnostics(parseDiagnostics(line), snapshotRef.current, currentFiles)[0];
-  }, []);
+  const locateText = useCallback(
+    (line: string, currentFiles: RunSnapshot['files']) => {
+      if (snapshotRef.current.files.length === 0) return undefined; // no run yet: nothing to link
+      return locate(line, currentFiles)[0];
+    },
+    [locate],
+  );
 
-  return { byFile, startRun, record, dismissFile, locateText };
+  return { byFile, startRun, record, recordError, dismissFile, locateText };
 }

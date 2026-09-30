@@ -70,3 +70,44 @@ export function tokenizeVhdlLine(line: string): Token[] {
   }
   return tokens;
 }
+
+/** A range of characters in one line: 0-based offsets, end exclusive. */
+export interface CharRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** A piece of a token, and whether it lies inside one of the ranges. */
+export interface MarkedToken extends Token {
+  readonly marked: boolean;
+}
+
+function isInside(offset: number, ranges: readonly CharRange[]): boolean {
+  return ranges.some((range) => range.start <= offset && offset < range.end);
+}
+
+/** Where marking starts or stops strictly inside the token that spans `from`..`to`. */
+function cutsWithin(from: number, to: number, ranges: readonly CharRange[]): number[] {
+  const cuts = ranges.flatMap((range) => [range.start, range.end]).filter((cut) => cut > from && cut < to);
+  return [...new Set(cuts)].sort((a, b) => a - b);
+}
+
+/**
+ * Splits a line's tokens where the ranges start and end, so an underline can wrap
+ * exactly the marked characters while every piece keeps its token's colour. The
+ * pieces put together are the line, unchanged.
+ */
+export function markRanges(tokens: readonly Token[], ranges: readonly CharRange[]): MarkedToken[] {
+  const pieces: MarkedToken[] = [];
+  let offset = 0;
+  for (const token of tokens) {
+    const end = offset + token.text.length;
+    const cuts = [offset, ...cutsWithin(offset, end, ranges), end];
+    for (let k = 0; k < cuts.length - 1; k++) {
+      const text = token.text.slice(cuts[k] - offset, cuts[k + 1] - offset);
+      pieces.push({ text, type: token.type, marked: isInside(cuts[k], ranges) });
+    }
+    offset = end;
+  }
+  return pieces;
+}

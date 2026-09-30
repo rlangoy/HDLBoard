@@ -80,6 +80,48 @@ backend):
 npm run dev
 ```
 
+### Running the dev servers by hand (native Windows)
+
+`scripts/start.sh` needs a POSIX shell. On native Windows, start the two
+servers in two terminals instead:
+
+```powershell
+# terminal 1 — frontend, from the repository root
+npm run dev
+
+# terminal 2 — backend, from server/ (build it first if server/dist/ is missing)
+cd server
+$env:IVERILOG_DIR = "$PWD\..\winInstaller\vendor\iverilog"   # only needed for Verilog
+npm start
+```
+
+Open `http://localhost:5173/`. The backend listens on
+`ws://localhost:9010/hdlsim`.
+
+**Always start the frontend with `npm run dev` from the repository root.**
+Don't run `node node_modules/vite/bin/vite.js` or `npx vite` from another
+folder. Vite takes its project root from the working directory. Started
+anywhere else, it serves the source without reading `vite.config.ts`, so the
+`__APP_VERSION__` define is missing. `AboutDialog` then throws
+`ReferenceError: __APP_VERSION__ is not defined` and the whole page renders
+blank. You can spot this case in the browser console by dependency URLs under
+`/@fs/C:/Users/<you>/node_modules/.vite/`, outside the repository.
+
+**Check for an old server before starting a new one.** If port 5173 is already
+taken, the new server doesn't replace the one holding it, so an old, wrongly
+started server keeps serving the page. Find it and stop it first:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173,9010 -State Listen |
+  ForEach-Object { Get-CimInstance Win32_Process -Filter "ProcessId=$($_.OwningProcess)" } |
+  Select-Object ProcessId, CreationDate, CommandLine
+Stop-Process -Id <pid>        # the stale one
+```
+
+A `200` from `curl http://localhost:5173/` proves only that something is
+listening. To confirm the page works, open it and check that the board
+renders and the browser console has no errors.
+
 A production build on a specific port:
 
 ```bash
