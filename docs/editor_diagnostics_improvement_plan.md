@@ -2,7 +2,11 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: plan, not built. Revision 2 (2026-09-30), after review.** It builds on the
+**Status: built (2026-09-30), phases 0–5; phase 6 (optional) not done.** § 11 records what
+was measured and tested, and where the build differs from the text below. Every row of § 5
+and every file of § 2.5 holds, checked on real GHDL 5.0.1 and 6.0.0 output.
+
+**Revision 2 (2026-09-30), after review.** It builds on the
 error markers of [`editor_diagnostics_implementation_plan.md`](editor_diagnostics_implementation_plan.md)
 (phases 1–4, merged into `main` in 1.2.0), and calls that document *the markers plan*.
 Every GHDL message in this document was produced by running the real tools the
@@ -81,6 +85,7 @@ output, verbatim, for use as test data. Same conventions as the markers plan.
 - [8. Decisions](#8-decisions)
 - [9. Risks](#9-risks)
 - [10. Review log](#10-review-log)
+- [11. Build notes](#11-build-notes)
 - [Appendix A: measured GHDL output](#appendix-a-measured-ghdl-output)
 - [Appendix B: sources](#appendix-b-sources)
 
@@ -806,6 +811,68 @@ Each point of the written review, what was measured, and the outcome.
 | V13 | § 5 follow-on counts replaced by "restricted cascade" | **Declined**; exact counts under the new rule | An acceptance table needs numbers |
 | V14 | Appendix A reduced to "see the original measurements" | **Declined**; kept in full and extended (A.14) | It is the test data |
 | V15 | Open decisions resolved as recommended; new ones on scope and cascade extent | **Accepted** (§ 8) | — |
+
+---
+
+## 11. Build notes
+
+Built on 2026-09-30. What was measured, how it was tested, and every place where the
+code differs from §§ 4–7 above, with the reason.
+
+### 11.1 The corpus, re-measured
+
+`tools/ghdl-typo-corpus.mjs` (phase 0) applies 39 mutations to the starter `blinkTest.vhdl`
+(the 22 of § 2.2, the 9 files of § 2.5, 2 guards of § 6.2 and the 6 column lines of A.13) and
+keeps GHDL's complete stderr. It was run with three GHDL builds, and all three printed
+**identical text for all 39 cases**:
+
+| GHDL | Build |
+|---|---|
+| 5.0.1 (mcode) | Ubuntu package `ghdl-mcode 5.0.1+dfsg-1ubuntu1` |
+| 6.0.0 (mcode) | Ubuntu package `ghdl-mcode 6.0.0+dfsg3-1ubuntu2` |
+| 4.1.0 (mcode) | Ubuntu 24.04 package `ghdl-mcode 4.1.0+dfsg-0ubuntu2.1` |
+
+Every error line matches Appendix A, including the abridged cascades (A.3, A.5, A.6, A.9) and
+the column measurements (A.13). The generated `diagnostics.corpus.ts` holds the complete
+captures; `generate --check` reproduces it byte for byte. These are the Linux builds of the
+versions the Windows app and the Docker image ship, not those builds themselves.
+
+The two § 6.2 guards that needed new captures:
+
+```
+range-typo+end-name-typo   (rttange on 33, `end architecture rtll;` on 53)
+  33:39:error: missing ";" at end of object declaration
+  53:18:error: misspelling, "rtl" expected
+signal-first-letter        (`signal` → `zignal` on 34)
+  34:5:error: object class keyword such as 'variable' is expected
+```
+
+### 11.2 How it was tested
+
+| Level | What | Result |
+|---|---|---|
+| Unit | `ghdlColumn`, `editDistance`, `declaredNames`, `vhdlHighlight` (`markRanges`), `diagnosticStore`, `diagnosticText`, and the § 6.2 guards in `diagnosticAdvice.test.ts` (all starter identifiers, even undeclared; 105 typical student names declared in another file; ties; Rules C–F edge cases) | pass |
+| Golden | `diagnosticAdvice.golden.test.ts`: every corpus case through parse → locate → advise → store against § 5 (marked line, underlined text, headline, related line, muted / visible) and § 2.5 (every visible error of the file); 19 of 22 headlines; 62 of 93 muted; the § 4.10 reveal | pass |
+| Real backend | The frontend's own `HdlClient`, run in Node against `server/` with GHDL 5.0.1 and, separately, 6.0.0: all 39 `ERROR` frames equal the corpus byte for byte (stage `analyze`), and the same pipeline gives the § 5 results. Also the markers plan's E-D1 (`DE1_SoC.vhdl:27:15`, identical to its A.7) and a runtime assertion (`tb.vhdl:6:5:@0ms:(assertion error): values differ`, marked, no advice) | pass on both |
+| Browser | § 6.4 steps 1–6 in headless Chromium (Vite dev server, real backend, GHDL 5.0.1 and 6.0.0): underline, headline, tooltip `GHDL: …`, muted cascade, hint on line 25 with the reveal there, tab-indented line, both mistakes of `rttange` + `=<`, and fix + Start clears everything and runs. The underline's left edge is within 0.1 px of the same characters unmarked | pass on both |
+
+Not run: the Windows desktop build and the Docker image themselves, and the
+Claude-in-Chrome extension (headless Chromium via `playwright-core` was used instead).
+
+### 11.3 Where the build differs from the text
+
+| # | Plan text | Built | Why |
+|---|---|---|---|
+| B1 | Rule D fires whenever its structural check passes | Also skipped when the previous code line **already shows a visible error** | Measured: process-typo line 39 would read "Probably a missing `<=` at the end of line 38" right under line 38's correct `proces` advice. That line's own error is the explanation. No § 5 row changes. |
+| B2 | `was not analysed` is muted "whatever the primary is" | Muted when its file has another error to point at; alone in a file, it stays visible | Then its cause is in another file, and "caused by the error on line N" would name the wrong place. mode-typo is unchanged. |
+| B3 | Muted headline "Probably caused by the error on line N" | On the first error's own line: "Probably caused by the first error on this line — …" | "caused by the error on line 13", shown on line 13, reads as a loop. |
+| B4 | `useDiagnostics` calls `adviseDiagnostics` | A new `recordError` does, for `ERROR` frames; `record` (LOG lines) does not | § 4.12: runtime messages get no advice. A report text containing "expected" would otherwise count as a syntax error. |
+| B5 | `Advice.headline` is a string | Still a string, but built by `adviceText` in `diagnosticText.ts` | § 8 #5: every student-facing string in one module. `elseif` → `elsif` gets its own sentence ("is written `elsif`"), since it is not "two words". |
+| B6 | Muted follow-ons "rendered muted" | Also left out of the tab count, the screen-reader totals and "(+N more)", and sorted after the other messages of a line | They are what the student should not read first. Every existing test passes unchanged. |
+| B7 | Tooltip layout for one message | Messages of a line are separated by a blank line when any has advice | With a blank line inside each advised message, messages otherwise run together. Output without advice is unchanged. |
+| B8 | `declaredNames` patterns of § 4.5 | Also every name in a list before a lone `:` (parameters, record fields, several names in one declaration) and enumeration literals | The same rule covers ports, generics and labels; more names only make Rule B quieter (the safe direction). |
+| B9 | "hint marker" colour not given | Blue tint and edge (`--wb-diag-hint`), gutter tooltip "Line N: <headline>" | Red and amber are taken; blue is the usual "information" hue (Error Lens). Contrast: 6.4:1 on the gutter; the muted grey is 4.5:1. |
+| B10 | `firstRevealTarget` unchanged | Made generic over the diagnostic type | Typing only: `revealTarget` needs the advice back from it. |
 
 ---
 

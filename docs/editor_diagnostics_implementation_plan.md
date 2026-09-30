@@ -2,7 +2,11 @@
 
 > Licensed under the [GNU General Public License v2.0](../LICENSE).
 
-**Status: phases 1–4 built on branch `imp_syntax_error` (2026-09-29); phase 0.1 and phase 5 not done.**
+**Status: phases 1–4 built on branch `imp_syntax_error` (2026-09-29); phase 0.1 half done, phase 5 not done.**
+**Update (2026-09-30):** for GHDL, phase 0.1 is done. GHDL 5.0.1 and 6.0.0 print the A.7
+`DE1_SoC.vhdl` capture and the A.3 runtime-report shape exactly as 4.1.0 did, through the real
+backend (improvement plan § 11.2); Icarus 13.0 is still not re-captured. Phase 5.1 (underline at
+GHDL's column) is built as part of the improvement plan.
 Phase 0.1 (re-capturing Appendix A on GHDL 5.0.1/6.0.0 and Icarus 13.0) could not be run in the
 build environment, which has neither simulator, so the fixtures are still the GHDL 4.1.0 / Icarus 12.0
 captures. The runbook of § 6.4 is in `tests/e2e/editor-diagnostics.md`; the UI was checked in Chromium
@@ -162,7 +166,7 @@ appear in the Icarus 13.0 captures recorded in the Verilog plan (Appendix B ther
 1. **The text is line-oriented everywhere.** An `ERROR` body holds many lines; a `LOG` frame holds one. The parser works line by line, with one line of memory (the previous diagnostic, for notes).
 2. **File names are the project's own names**, except `./` in front of Icarus include paths and the generated files (`hdl_board_tb.vhdl`, `hdl_board_tb.v`, `_hdlboard_ts.v`). Those are dropped because they do not resolve (D5).
 3. **Line numbers refer to the text sent at Start.** If the student edits a file while it compiles, that file's positions are stale and must be dropped (§ 4.4, rule 3).
-4. **Reported lines are not always the mistake's line.** GHDL reports the position right after the last good token, which is on the faulty line (`DE1_SoC.vhdl:27:15` for the missing `;` on line 27). Icarus reports a syntax error on the *next token's* line. The plan shows what the compiler says (IDEs do not second-guess compilers), attaches a hint to Icarus's bare `syntax error` (§ 4.2), and reveals the *lowest* error line of the file (§ 4.4) so the student lands on the statement-level message. **Revisited (2026-09-30):** measured on GHDL 5.0.1/6.0.0, GHDL's *words* are misleading for most misspelled keywords while its *column* is reliable. [`editor_diagnostics_improvement_plan.md`](editor_diagnostics_improvement_plan.md) plans advice on top of the compiler's text (which stays), not built yet.
+4. **Reported lines are not always the mistake's line.** GHDL reports the position right after the last good token, which is on the faulty line (`DE1_SoC.vhdl:27:15` for the missing `;` on line 27). Icarus reports a syntax error on the *next token's* line. The plan shows what the compiler says (IDEs do not second-guess compilers), attaches a hint to Icarus's bare `syntax error` (§ 4.2), and reveals the *lowest* error line of the file (§ 4.4) so the student lands on the statement-level message. **Revisited (2026-09-30):** measured on GHDL 5.0.1/6.0.0, GHDL's *words* are misleading for most misspelled keywords while its *column* is reliable. [`editor_diagnostics_improvement_plan.md`](editor_diagnostics_improvement_plan.md) adds advice on top of the compiler's text (which stays); built 2026-09-30.
 5. **Windows:** `vvp` ends lines with `\r\n` (see `lineSplitter` in `server/src/runtime.ts`), so strip a trailing `\r`. Paths in messages are relative on every platform, so drive letters never appear in a location.
 
 ### 2.5 The recognizers were checked against all captures
