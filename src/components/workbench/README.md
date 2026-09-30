@@ -66,6 +66,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
+  - [`verilogHighlight.ts` and `highlight.ts`](#veriloghighlightts-and-highlightts)
   - [`files.ts`](#filests)
   - [`fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`](#filekindsts-consolelinests-and-runiconts)
   - [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)
@@ -429,7 +430,8 @@ mutates it.
 ```ts
 function tokenizeVhdlLine(line: string): Token[]
 // Token = { text: string; type: 'keyword' | 'type' | 'comment' | 'string'
-//                        | 'number' | 'identifier' | 'punctuation' | 'whitespace' }
+//                        | 'number' | 'directive' | 'system' | 'identifier'
+//                        | 'punctuation' | 'whitespace' }   // directive/system: Verilog only
 function markRanges(tokens: readonly Token[], ranges: readonly CharRange[]): MarkedToken[]
 ```
 
@@ -441,6 +443,21 @@ no block comments and no multi-line strings, so no state needs to carry
 across lines, and this stays simple on purpose. `KEYWORDS` and `TYPES` are
 two `Set`s at the top of the file — add a word there, not in the regex, to
 extend the highlighter.
+
+### `verilogHighlight.ts` and `highlight.ts`
+
+```ts
+function tokenizeVerilog(lines: readonly string[]): Token[][]   // one Token[] per line
+function tokenizeSource(language: Language | undefined, lines: readonly string[]): Token[][]
+```
+
+Verilog has `/* … */` comments that span lines, so `tokenizeVerilog` takes all the
+lines of a file and carries a single "inside a block comment" flag from line to
+line. `tokenizeSource` is what the editor calls: Verilog files (`languageOfName` in
+`fileKinds.ts`) get `tokenizeVerilog`; everything else gets `tokenizeVhdlLine` per
+line, exactly as before. The Verilog word lists are Icarus Verilog's own 1364-2005
+keyword table, pinned by a test. Two extra token types exist for it, `directive`
+and `system`.
 
 ### `files.ts`
 

@@ -184,8 +184,8 @@ machine, so each gets a check in the plan:
 | Clean Code; test the modules after implementation for quality and readability | § 6, § 7.9, phase I |
 
 **Non-goals** (each a separate decision): SystemVerilog `.sv` (§ 9 #1);
-Verilog syntax highlighting (§ 9 #6 — until then `.v` is coloured by the VHDL
-tokenizer); waveform capture; mixed-language projects (§ 9 #4); a Yosys
+Verilog syntax highlighting (§ 9 #6 — built later, see
+`verilog_syntax_colouring_imp.md`); waveform capture; mixed-language projects (§ 9 #4); a Yosys
 synthesis check (§ 9 #8).
 
 ---
@@ -1643,7 +1643,7 @@ From a clean checkout: unit, integration (both simulators), parity, e2e; then
 | 3 | **`tb_*.v` placement** | Everything `.v` → `verilog/` (AS3): `work/` is never simulated. |
 | 4 | **Mixed VHDL + Verilog in one run** | Out of scope. |
 | 5 | **`rst` for Verilog** | Not supported; add only if a course template needs it (one `assign`). |
-| 6 | **Verilog syntax highlighting** | Out of scope by request; a ~40-line `verilogHighlight.ts` chosen by extension is the follow-up. |
+| 6 | **Verilog syntax highlighting** | Done: `verilogHighlight.ts`, chosen by extension (docs/verilog_syntax_colouring_imp.md). |
 | 7 | **Long-term source of the Windows binaries** | Start with pinned MSYS2 URLs plus the `vendor/` cache; re-host the assembled tree as a release asset if a pin disappears (§ 5.8). |
 | 8 | **Synthesis / lint check** (Yosys `synth`, Verilator `--lint-only`) | Later, separately, off the Start path; no small Windows binary is published for either. |
 | 9 | **Ship the converted starters in the app** | Not by default (the `verilog/` folder stays hidden until used). They are ready in Appendix C if wanted; adding them to `STARTER_FILES` makes the folder appear on first launch. |

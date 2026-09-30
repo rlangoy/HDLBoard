@@ -383,3 +383,12 @@
 .wb-tok-punct {
   color: #475569;
 }
+
+/* Verilog only: `timescale / `define / a macro use, and $display-style system tasks. */
+.wb-tok-directive {
+  color: #be185d;
+}
+
+.wb-tok-system {
+  color: #0369a1;
+}

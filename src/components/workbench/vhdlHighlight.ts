@@ -7,7 +7,8 @@
  * Line-based on purpose: VHDL has no multi-line strings, and before
  * VHDL-2008 no block comments, so a whole file can be highlighted one
  * line at a time with no state carried across lines. VHDL-2008's
- * `/* … *\/` comments are therefore not coloured as comments.
+ * `/* … *\/` comments are therefore not coloured as comments. Verilog files use
+ * verilogHighlight.ts instead (see highlight.ts), which does track them.
  * ------------------------------------------------------------------ */
 
 export type TokenType =
@@ -16,6 +17,8 @@ export type TokenType =
   | 'comment'
   | 'string'
   | 'number'
+  | 'directive'
+  | 'system'
   | 'identifier'
   | 'punctuation'
   | 'whitespace';
