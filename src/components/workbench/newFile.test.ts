@@ -40,6 +40,10 @@ describe('newFileNameError', () => {
     expect(newFileNameError('Blinktest', 'verilog', ['blinkTest.v'])).toBeDefined();
     expect(newFileNameError('blinkTest', 'vhdl', ['blinkTest.v'])).toBeUndefined();
   });
+
+  test('rejects a name that starts with tb_, which is reserved for internal use', () => {
+    expect(newFileNameError('tb_counter', 'vhdl', [])).toBe('File names that start with tb_ are reserved for internal use.');
+  });
 });
 
 describe('newFileContent', () => {
