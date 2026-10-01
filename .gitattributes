@@ -18,3 +18,7 @@ tests/fixtures/** text eol=lf
 docker/**          text eol=lf
 docker-compose.yml text eol=lf
 .dockerignore      text eol=lf
+
+# Windows batch scripts: cmd.exe misreads labels and `call :label` in an LF file,
+# so they stay CRLF on every platform.
+*.cmd text eol=crlf

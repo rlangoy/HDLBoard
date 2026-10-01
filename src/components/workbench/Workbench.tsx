@@ -24,6 +24,7 @@ import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog } from './NewFileDialog';
+import { RefusedFilesDialog } from './RefusedFilesDialog';
 import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
@@ -31,7 +32,8 @@ import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { ACCEPTED_FILES_TEXT, UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
+import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
+import { fileNameRefusal, incomingFileRefusals, type RefusedFile } from './fileNameRules';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
@@ -193,6 +195,8 @@ export function Workbench() {
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
+  // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
+  const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   useEffect(() => {
     const openAbout = () => setDialog('about');
     window.addEventListener(ABOUT_EVENT, openAbout);
@@ -599,6 +603,14 @@ export function Workbench() {
   };
 
   const handleRenameFile = (id: string, name: string) => {
+    const current = files.find((f) => f.id === id);
+    if (current === undefined || current.name === name) return;
+    const otherNames = files.filter((f) => f.id !== id).map((f) => f.name);
+    const reason = fileNameRefusal(name, otherNames);
+    if (reason !== undefined) {
+      setRefusal({ title: 'File not renamed', refused: [{ name, reason }] });
+      return;
+    }
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name, folder: folderAfterRename(f.folder, name) } : f)));
   };
 
@@ -666,7 +678,7 @@ export function Workbench() {
 
   const handleCreateFile = (name: string, language: NewFileLanguage) => {
     setDialog(null);
-    // folderForUpload keeps the upload rules: .v to verilog/, a VHDL tb_* to work/.
+    // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     addFile(name, newFileContent(name, language), folderForUpload(name) ?? 'vhdl');
   };
 
@@ -677,17 +689,28 @@ export function Workbench() {
   // Files panel (below) — a browser drop is not filtered by `accept` at
   // all, so this is the one place other files actually get rejected, with
   // a console line explaining why rather than silently reading garbage in.
+  // A file whose name is taken or reserved, or that is no source file, is not added;
+  // the dialog says which and why (fileNameRules.ts), and the console keeps a line each.
   const readAndAddFiles = (incoming: Iterable<File>) => {
-    for (const file of incoming) {
-      const folder = folderForUpload(file.name);
-      if (folder === undefined) {
-        appendLog(`Skipped ${file.name}: not a ${ACCEPTED_FILES_TEXT} file.`, 'error');
-        continue;
-      }
-      const reader = new FileReader();
-      reader.onload = () => addFile(file.name, String(reader.result ?? ''), folder);
-      reader.readAsText(file);
-    }
+    const chosen = [...incoming];
+    const reasons = incomingFileRefusals(
+      chosen.map((file) => file.name),
+      filesRef.current.map((file) => file.name),
+    );
+    const refused: RefusedFile[] = [];
+    chosen.forEach((file, i) => {
+      const reason = reasons[i];
+      if (reason === undefined) readAndAddFile(file);
+      else refused.push({ name: file.name, reason });
+    });
+    for (const { name, reason } of refused) appendLog(`Skipped ${name}: ${reason}`, 'error');
+    if (refused.length > 0) setRefusal({ title: refused.length === 1 ? 'File not added' : 'Files not added', refused });
+  };
+
+  const readAndAddFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => addFile(file.name, String(reader.result ?? ''), folderForUpload(file.name) ?? 'vhdl');
+    reader.readAsText(file);
   };
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
@@ -786,6 +809,9 @@ export function Workbench() {
       <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
+      {refusal && (
+        <RefusedFilesDialog title={refusal.title} refused={refusal.refused} onClose={() => setRefusal(null)} />
+      )}
       {dialog === 'newFile' && (
         <NewFileDialog
           suggestedName={suggestedNewFileName}

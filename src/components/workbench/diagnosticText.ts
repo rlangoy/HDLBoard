@@ -11,8 +11,8 @@
 import {
   byDisplayOrder,
   countSeverities,
-  isFollowOn,
-  isFollowOnLine,
+  isMuted,
+  isMutedLine,
   type LineDiagnostic,
   type LineMessage,
 } from './diagnosticStore';
@@ -73,7 +73,7 @@ function inDisplayOrder(line: LineDiagnostic): LineMessage[] {
 }
 
 function visibleInDisplayOrder(line: LineDiagnostic): LineMessage[] {
-  return inDisplayOrder(line).filter((m) => !isFollowOn(m));
+  return inDisplayOrder(line).filter((m) => !isMuted(m));
 }
 
 /** What the student reads first about a message: the advice when there is one, else the compiler's text. */
@@ -131,7 +131,7 @@ function asSentence(text: string): string {
 
 /** The screen-reader and status summary of one file; `''` when nothing is marked. */
 export function summarize(fileName: string, lines: readonly LineDiagnostic[]): string {
-  const shown = lines.filter((line) => !isFollowOnLine(line));
+  const shown = lines.filter((line) => !isMutedLine(line));
   if (shown.length === 0) return '';
   const { errors, warnings } = countSeverities(lines);
   const totals = [errors > 0 && count(errors, 'error'), warnings > 0 && count(warnings, 'warning')].filter(Boolean);

@@ -17,7 +17,8 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
-import { explainUnconnectedPorts } from './unconnectedPorts.js';
+import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
+import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
 import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
@@ -76,8 +77,9 @@ function batchPlan(dir: string, entityName: string): RunPlan {
   return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages: [] };
 }
 
-function boardPlan(dir: string, timing: BoardTiming, banner: string | undefined): RunPlan {
-  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages: banner === undefined ? [] : [banner] };
+/** `messages`: the GHDL banner, then the warnings about extra ports. */
+function boardPlan(dir: string, timing: BoardTiming, messages: readonly string[]): RunPlan {
+  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages };
 }
 
 /**
@@ -109,13 +111,18 @@ async function prepareBatch(dir: string, entityName: string): Promise<PrepareRes
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
 async function prepareBoard(dir: string, top: TopEntity, topContent: string): Promise<PrepareResult> {
-  writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), generateTestbench(top.name, top.ports, { pacingFromStdin: PACING === 'stdin' }));
+  // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
+  // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
+  const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
+  const extraPorts = planExtraPorts(source);
+  const testbench = generateTestbench(top.name, top.ports, {
+    pacingFromStdin: PACING === 'stdin',
+    tiedInputs: extraPorts.tiedInputs,
+  });
+  writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), testbench);
 
   const analyzed = await ghdl(['-a', GHDL_STANDARD, `${TB_ENTITY}.vhdl`], dir);
   if (analyzed.code !== 0) {
-    // An input the board does not have is left open by the testbench: report it on the
-    // student's own declaration rather than on a line of a file they never wrote.
-    const source = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
     const explained = explainUnconnectedPorts(analyzed.err, source);
     if (explained !== undefined) return failure('elaborate', explained);
     return failure('internal', `Internal testbench build error:\n${analyzed.err}`);
@@ -126,14 +133,16 @@ async function prepareBoard(dir: string, top: TopEntity, topContent: string): Pr
     return failure(
       'elaborate',
       `GHDL elaboration error (check that your entity's port names match the board's — ` +
-        `CLOCK_50, SW, KEY_N, LEDR, HEX0_N..HEX5_N):\n${elaborated.err}`,
+        `${[...BOARD_INPUT_NAMES, ...BOARD_OUTPUT_NAMES].join(', ')}):\n${elaborated.err}`,
     );
   }
 
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(top.ports.has('clock_50'));
-  return { ok: true, plan: boardPlan(dir, timing, await ghdlBanner(dir)) };
+  const banner = await ghdlBanner(dir);
+  const messages = [...(banner === undefined ? [] : [banner]), ...extraPorts.warnings];
+  return { ok: true, plan: boardPlan(dir, timing, messages) };
 }
 
 async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {

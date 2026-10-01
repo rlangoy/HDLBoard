@@ -15,7 +15,7 @@
 
 import { declaredNames } from './declaredNames';
 import { firstRevealTarget, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
-import { isFollowOn } from './diagnosticStore';
+import { isMuted } from './diagnosticStore';
 import { adviceText } from './diagnosticText';
 import { languageOfName } from './fileKinds';
 import { ghdlColumnToIndex } from './ghdlColumn';
@@ -429,7 +429,7 @@ export function adviseLogDiagnostics(located: readonly LocatedDiagnostic[], snap
  * enough that both stay in view (§ 4.10).
  */
 export function revealTarget(advised: readonly AdvisedDiagnostic[]): Pick<LocatedDiagnostic, 'fileId' | 'line'> | undefined {
-  const target = firstRevealTarget(advised.filter((d) => !isFollowOn(d)));
+  const target = firstRevealTarget(advised.filter((d) => !isMuted(d)));
   if (target === undefined) return undefined;
   const related = target.advice?.relatedLine;
   const bothInView = related !== undefined && Math.abs(target.line - related) <= REVEAL_RELATED_WITHIN_LINES;
