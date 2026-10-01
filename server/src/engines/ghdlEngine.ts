@@ -17,6 +17,7 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
+import { explainUnconnectedPorts } from './unconnectedPorts.js';
 import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
@@ -107,18 +108,25 @@ async function prepareBatch(dir: string, entityName: string): Promise<PrepareRes
 }
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
-async function prepareBoard(dir: string, top: TopEntity): Promise<PrepareResult> {
+async function prepareBoard(dir: string, top: TopEntity, topContent: string): Promise<PrepareResult> {
   writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), generateTestbench(top.name, top.ports, { pacingFromStdin: PACING === 'stdin' }));
 
   const analyzed = await ghdl(['-a', GHDL_STANDARD, `${TB_ENTITY}.vhdl`], dir);
-  if (analyzed.code !== 0) return failure('internal', `Internal testbench build error:\n${analyzed.err}`);
+  if (analyzed.code !== 0) {
+    // An input the board does not have is left open by the testbench: report it on the
+    // student's own declaration rather than on a line of a file they never wrote.
+    const source = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
+    const explained = explainUnconnectedPorts(analyzed.err, source);
+    if (explained !== undefined) return failure('elaborate', explained);
+    return failure('internal', `Internal testbench build error:\n${analyzed.err}`);
+  }
 
   const elaborated = await ghdl(['-e', GHDL_STANDARD, TB_ENTITY], dir);
   if (elaborated.code !== 0) {
     return failure(
       'elaborate',
       `GHDL elaboration error (check that your entity's port names match the board's — ` +
-        `CLOCK_50, SW, KEY, LEDR, HEX0..HEX5):\n${elaborated.err}`,
+        `CLOCK_50, SW, KEY_N, LEDR, HEX0_N..HEX5_N):\n${elaborated.err}`,
     );
   }
 
@@ -139,7 +147,9 @@ async function prepare({ dir, files, topFile }: PrepareRequest): Promise<Prepare
 
   const top = findTopEntity([...files], topFile);
   if ('message' in top) return failure('elaborate', top.message);
-  return top.ports.size === 0 ? prepareBatch(dir, top.name) : prepareBoard(dir, top);
+  if (top.ports.size === 0) return prepareBatch(dir, top.name);
+  const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
+  return prepareBoard(dir, top, topContent);
 }
 
 /** File names arrive relative to the session directory; GHDL has always been given absolute paths. */

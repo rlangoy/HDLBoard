@@ -77,13 +77,13 @@ describe('GHDL path — current behaviour (characterization)', { skip: ghdl.skip
       assert.match(frame.text, /None of the declared entities \(aloof\)/);
     }));
 
-  test('I-G3b: an extra input port the board lacks is reported as an internal testbench error', () =>
+  test('I-G3b: an extra input port the board lacks is reported as an error on its declaration', () =>
     withSession(async (client) => {
       client.run([{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
       const frame = await client.until((f) => f.verb === 'ERROR');
       assert.ok(frame.verb === 'ERROR');
-      assert.equal(frame.stage, 'internal');
-      assert.match(frame.text, /Internal testbench build error/);
+      assert.equal(frame.stage, 'elaborate');
+      assert.match(frame.text, /^lonely\.vhdl:7:5:error: `BTN` is not a board input/);
     }));
 
   describe('I-G4: a project that spans two files works in either order', () => {
