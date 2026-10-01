@@ -1,0 +1,34 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The refused-files list; the shell is in Dialog.css. */
+
+.wb-refused {
+  margin: 0;
+  padding: 0 0 12px;
+  list-style: none;
+}
+
+.wb-refused__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-refused__item:last-child {
+  border-bottom: none;
+}
+
+.wb-refused__name {
+  font-family: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
+  font-size: 13px;
+  color: var(--wb-text);
+  overflow-wrap: anywhere;
+}
+
+.wb-refused__reason {
+  font-size: 13px;
+  color: var(--wb-danger);
+}

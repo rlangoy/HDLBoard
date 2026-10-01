@@ -7,6 +7,8 @@
  * dialog only asks, and the rules are tested on their own (newFile.test.ts).
  */
 
+import { fileNameRefusal } from './fileNameRules';
+
 export type NewFileLanguage = 'vhdl' | 'verilog';
 
 /** The extension a new file of each language gets; `.vhd` is what New File has always used. */
@@ -48,11 +50,7 @@ export function newFileNameError(
   if (language === 'vhdl' && !VHDL_IDENTIFIER.test(base)) {
     return 'Use letters, digits and single _ only, starting with a letter (it is also the entity name).';
   }
-  const name = newFileName(input, language).toLowerCase();
-  if (existingNames.some((existing) => existing.toLowerCase() === name)) {
-    return `A file named ${newFileName(input, language)} already exists.`;
-  }
-  return undefined;
+  return fileNameRefusal(newFileName(input, language), existingNames);
 }
 
 /**
