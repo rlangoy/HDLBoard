@@ -5,9 +5,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   explainUnconnectedPorts,
+  extraInputWarnings,
   findPortDeclaration,
   ghdlPosition,
+  portDeclarations,
   suggestBoardInput,
+  tiedInputs,
   unconnectedPorts,
 } from './unconnectedPorts.js';
 
@@ -97,5 +100,60 @@ describe('unconnected board inputs', () => {
   test('keeps GHDL\'s own text when the error is about something else or the port cannot be found', () => {
     assert.equal(explainUnconnectedPorts('hdl_board_tb.vhdl:55:15:error: actual constraints don\'t match formal ones', typoTop), undefined);
     assert.equal(explainUnconnectedPorts(GHDL_TYPO, { ...typoTop, content: 'entity DE1_SoC is end;' }), undefined);
+  });
+});
+
+const EXTRAS_TOP = `entity top is
+  port (
+    SW    : in  std_logic_vector(9 downto 0);
+    Dummy : in  std_logic_vector(9 downto 0);
+    btn   : in  ieee.std_logic_1164.std_logic;
+    cnt   : in  unsigned(3 downto 0);
+    keep  : in  std_logic := '1';
+    count : in  integer;
+    bus_x : inout std_logic_vector(7 downto 0);
+    LEDR  : out std_logic_vector(9 downto 0)
+  );
+end entity;`;
+
+const extrasTop = {
+  fileName: 'top.vhdl',
+  content: EXTRAS_TOP,
+  entityName: 'top',
+  ports: new Set(['sw', 'dummy', 'btn', 'cnt', 'keep', 'count', 'bus_x', 'ledr']),
+};
+
+describe('extra inputs held at 0', () => {
+  test('reads mode, type, constraint and default of every port', () => {
+    const ports = portDeclarations(EXTRAS_TOP, 'top').map(({ name, mode, type, constrained, hasDefault }) =>
+      [name, mode, type, constrained, hasDefault].join(' '));
+    assert.deepEqual(ports, [
+      'SW in std_logic_vector true false',
+      'Dummy in std_logic_vector true false',
+      'btn in std_logic false false',
+      'cnt in unsigned true false',
+      'keep in std_logic false true',
+      'count in integer false false',
+      'bus_x inout std_logic_vector true false',
+      'LEDR out std_logic_vector true false',
+    ]);
+  });
+
+  test('holds a bit at \'0\' and a vector at all zeros; not a board port, a default, an integer or an inout', () => {
+    const tied = tiedInputs(extrasTop).map(({ port, value }) => `${port.name} => ${value}`);
+    assert.deepEqual(tied, ["Dummy => (others => '0')", "btn => '0'", "cnt => (others => '0')"]);
+  });
+
+  test('warns on each held input\'s own declaration', () => {
+    const warnings = extraInputWarnings(extrasTop, tiedInputs(extrasTop));
+    assert.equal(warnings.length, 3);
+    const [headline, detail] = warnings[0].split('\n');
+    assert.equal(headline, 'top.vhdl:4:5:warning: `Dummy` is not a board input, so it is held at 0.');
+    assert.match(detail, /^top\.vhdl:4:5:warning: \(the board's inputs are CLOCK_50, CLOCK_500Hz, SW, KEY_N; /);
+  });
+
+  test('suggests the board input a held input was probably meant to be', () => {
+    const [warning] = extraInputWarnings(typoTop, tiedInputs(typoTop));
+    assert.equal(warning.split('\n')[0], 'DE1_SoC.vhdl:7:9:warning: `SdsW` is not a board input — did you mean `SW`? It is held at 0.');
   });
 });

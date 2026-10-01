@@ -2,14 +2,21 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Turns GHDL's complaint about the generated testbench — `hdl_board_tb.vhdl:52:3:error:
- * port "SdsW" of mode IN must be connected` — into an error on the student's own port
- * declaration. The testbench only connects the board's ports, so an input with any
- * other name (a typo of `SW`, a made-up `BTN`) is left open, and GHDL says so about an
- * internal file the student cannot open; the editor drops that line. Here the port is
- * found in the top file and reported there, in GHDL's own `file:line:col:error:` shape,
- * so the editor marks and underlines it like any compile error. Pure.
+ * Inputs of the top entity that are not board inputs — a typo of `SW` such as `SdsW`,
+ * or an extra `Dummy`. The board drives none of them. Pure.
+ *
+ * An input of a bit or vector type is held at 0 by the generated testbench, and the
+ * design runs with a warning on its declaration (`tiedInputs`, `extraInputWarnings`),
+ * as Quartus only warns about a top-level pin with no location. Any other extra input
+ * is left open, GHDL rejects the testbench with `hdl_board_tb.vhdl:52:3:error: port
+ * "X" of mode IN must be connected` — about an internal file the student cannot open
+ * — and `explainUnconnectedPorts` moves that error onto the student's declaration.
+ *
+ * Both are written in GHDL's own `file:line:col:level:` shape, so the editor marks and
+ * underlines them like any compiler message.
  */
+
+import { BOARD_PORTS } from './boardPorts.js';
 
 /**
  * GHDL's wording, and only on a line of the generated testbench: an error GHDL
@@ -25,6 +32,13 @@ const BOARD_INPUTS: ReadonlyMap<string, string> = new Map([
   ['sw', 'SW'],
   ['key_n', 'KEY_N'],
 ]);
+
+const BOARD_PORT_NAMES: ReadonlySet<string> = new Set(BOARD_PORTS);
+
+/** A single bit: held at `'0'`. */
+const BIT_TYPES: ReadonlySet<string> = new Set(['std_logic', 'std_ulogic', 'bit']);
+/** A constrained vector of bits: held at `(others => '0')`. */
+const VECTOR_TYPES: ReadonlySet<string> = new Set(['std_logic_vector', 'std_ulogic_vector', 'bit_vector', 'unsigned', 'signed']);
 
 /** From this length on, two edits are allowed: `SdsW` → `SW`, `KEY` → `KEY_N`. */
 const TWO_EDIT_WORD_LENGTH = 3;
@@ -70,6 +84,23 @@ export function unconnectedPorts(ghdlText: string): Array<{ name: string; messag
   }));
 }
 
+// ------------------------------------------------------------ reading the port clause
+
+/** One name of the entity's port clause. */
+export interface PortDeclaration {
+  /** As written. */
+  readonly name: string;
+  /** Of the name in the source. */
+  readonly offset: number;
+  /** Lower case; `in` when the declaration names none. */
+  readonly mode: string;
+  /** The type mark, lower case, without a library prefix: `std_logic_vector`. */
+  readonly type: string;
+  /** A `(` follows the type mark: `std_logic_vector(9 downto 0)`. */
+  readonly constrained: boolean;
+  readonly hasDefault: boolean;
+}
+
 /** Comments blanked to spaces, so every offset still points at the same character of the source. */
 function blankComments(src: string): string {
   return src.replace(/"[^"\n]*"|--[^\n]*|\/\*[\s\S]*?\*\//g, (text) =>
@@ -90,7 +121,7 @@ function portClauseStart(code: string, entityName: string): number | undefined {
 }
 
 /** Each declaration of the port clause starting at `start`, with its offset: split at `;` outside nested parentheses. */
-function portDeclarations(code: string, start: number): Array<{ offset: number; text: string }> {
+function declarationTexts(code: string, start: number): Array<{ offset: number; text: string }> {
   const declarations: Array<{ offset: number; text: string }> = [];
   let depth = 1;
   let offset = start;
@@ -105,21 +136,38 @@ function portDeclarations(code: string, start: number): Array<{ offset: number; 
   return declarations;
 }
 
+const MODE_AND_TYPE = /^\s*(?:(?<mode>in|out|inout|buffer|linkage)\b)?\s*(?<type>[\w.]+)\s*(?<constraint>\()?/i;
+
+/** `a, b : in std_logic := '0'` → one declaration per name. */
+function parseDeclaration(offset: number, text: string): PortDeclaration[] {
+  const colon = text.indexOf(':');
+  if (colon < 0) return [];
+  const rest = text.slice(colon + 1);
+  const groups = MODE_AND_TYPE.exec(rest)?.groups ?? {};
+  const shared = {
+    mode: (groups.mode ?? 'in').toLowerCase(),
+    type: (groups.type ?? '').toLowerCase().split('.').pop() ?? '',
+    constrained: groups.constraint !== undefined,
+    hasDefault: rest.includes(':='),
+  };
+  return [...text.slice(0, colon).matchAll(/\w+/g)].map((m) => ({ ...shared, name: m[0], offset: offset + (m.index ?? 0) }));
+}
+
+/** Every name of `entityName`'s port clause, in order; none when the clause cannot be found. */
+export function portDeclarations(src: string, entityName: string): PortDeclaration[] {
+  const code = blankComments(src);
+  const start = portClauseStart(code, entityName);
+  if (start === undefined) return [];
+  return declarationTexts(code, start).flatMap(({ offset, text }) => parseDeclaration(offset, text));
+}
+
 /**
  * Where `portName` is declared in `entityName`'s port clause: the offset of the name
  * itself, or `undefined` when the clause or the name cannot be found.
  */
 export function findPortDeclaration(src: string, entityName: string, portName: string): number | undefined {
-  const code = blankComments(src);
-  const start = portClauseStart(code, entityName);
-  if (start === undefined) return undefined;
   const wanted = portName.toLowerCase();
-  for (const { offset, text } of portDeclarations(code, start)) {
-    const names = text.slice(0, Math.max(text.indexOf(':'), 0));
-    const name = [...names.matchAll(/\w+/g)].find((m) => m[0].toLowerCase() === wanted);
-    if (name) return offset + (name.index ?? 0);
-  }
-  return undefined;
+  return portDeclarations(src, entityName).find((port) => port.name.toLowerCase() === wanted)?.offset;
 }
 
 /** GHDL's 1-based line and column of `offset`: a tab advances to the next multiple of 8, other characters count their UTF-8 bytes. */
@@ -136,6 +184,8 @@ export function ghdlPosition(src: string, offset: number): { line: number; colum
   return { line, column };
 }
 
+// ------------------------------------------------------------ extra inputs
+
 export interface TopSource {
   readonly fileName: string;
   readonly content: string;
@@ -144,7 +194,54 @@ export interface TopSource {
   readonly ports: ReadonlySet<string>;
 }
 
+/** An extra input the testbench holds at 0: its declaration, and the VHDL value it is given. */
+export interface TiedInput {
+  readonly port: PortDeclaration;
+  readonly value: string;
+}
+
+/** The constant 0 of the port's type, or `undefined` when it is not a bit or a constrained vector of bits. */
+function zeroOf(port: PortDeclaration): string | undefined {
+  if (BIT_TYPES.has(port.type) && !port.constrained) return "'0'";
+  if (VECTOR_TYPES.has(port.type) && port.constrained) return "(others => '0')";
+  return undefined;
+}
+
+/**
+ * The inputs that are not board ports and that the testbench can hold at 0. An input
+ * with a default value needs nothing (VHDL leaves it at that value), and an `inout`
+ * cannot be given a constant, so neither is listed.
+ */
+export function tiedInputs(top: TopSource): TiedInput[] {
+  return portDeclarations(top.content, top.entityName).flatMap((port) => {
+    const extra = port.mode === 'in' && !port.hasDefault && !BOARD_PORT_NAMES.has(port.name.toLowerCase());
+    const value = extra ? zeroOf(port) : undefined;
+    return value === undefined ? [] : [{ port, value }];
+  });
+}
+
 const code = (text: string): string => `\`${text}\``;
+
+/** The board's inputs, for the detail line under both the warning and the error. */
+function boardInputsDetail(at: string, remedy: string): string {
+  return `${at} (the board's inputs are ${[...BOARD_INPUTS.values()].join(', ')}; ${remedy})`;
+}
+
+/**
+ * GHDL-shaped warnings on the declarations of the inputs the testbench holds at 0: one
+ * message each, its `(…)` detail on a second line, so a LOG frame carries both together.
+ */
+export function extraInputWarnings(top: TopSource, tied: readonly TiedInput[]): string[] {
+  return tied.map(({ port }) => {
+    const { line, column } = ghdlPosition(top.content, port.offset);
+    const suggestion = suggestBoardInput(port.name, top.ports);
+    const headline = suggestion
+      ? `${code(port.name)} is not a board input — did you mean ${code(suggestion)}? It is held at 0.`
+      : `${code(port.name)} is not a board input, so it is held at 0.`;
+    const at = `${top.fileName}:${line}:${column}:warning:`;
+    return [`${at} ${headline}`, boardInputsDetail(at, 'nothing on the board drives this one')].join('\n');
+  });
+}
 
 /**
  * GHDL-shaped errors on the student's own declarations, one per open input GHDL
@@ -155,7 +252,6 @@ const code = (text: string): string => `\`${text}\``;
 export function explainUnconnectedPorts(ghdlText: string, top: TopSource): string | undefined {
   const open = unconnectedPorts(ghdlText);
   if (open.length === 0) return undefined;
-  const inputs = [...BOARD_INPUTS.values()].join(', ');
   const lines: string[] = [];
   for (const { name, message } of open) {
     const offset = findPortDeclaration(top.content, top.entityName, name);
@@ -169,7 +265,7 @@ export function explainUnconnectedPorts(ghdlText: string, top: TopSource): strin
     const at = `${top.fileName}:${line}:${column}:error:`;
     lines.push(
       `${at} ${headline}`,
-      `${at} (the board's inputs are ${inputs}; give the port a default value with := to keep it)`,
+      boardInputsDetail(at, 'give the port a default value with := to keep it'),
       `${at} (GHDL: ${message})`,
     );
   }
