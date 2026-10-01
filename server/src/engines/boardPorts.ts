@@ -28,3 +28,9 @@ export const BOARD_PORTS = [
   // `not key_n(0)` in the generated testbench when both are present.
   'rst',
 ] as const;
+
+/** The board's inputs as a student writes them in messages; `BOARD_PORTS` holds them lower-cased. */
+export const BOARD_INPUT_NAMES = ['CLOCK_50', 'CLOCK_500Hz', 'SW', 'KEY_N'] as const;
+
+/** The board's outputs as a student writes them in messages. */
+export const BOARD_OUTPUT_NAMES = ['LEDR', 'HEX0_N', 'HEX1_N', 'HEX2_N', 'HEX3_N', 'HEX4_N', 'HEX5_N'] as const;

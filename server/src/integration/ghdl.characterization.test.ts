@@ -77,13 +77,14 @@ describe('GHDL path — current behaviour (characterization)', { skip: ghdl.skip
       assert.match(frame.text, /None of the declared entities \(aloof\)/);
     }));
 
-  test('I-G3b: an extra input port the board lacks is reported as an error on its declaration', () =>
+  test('I-G3b: an extra input port the board lacks is held at 0, with a console warning naming its line', () =>
     withSession(async (client) => {
-      client.run([{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
-      const frame = await client.until((f) => f.verb === 'ERROR');
-      assert.ok(frame.verb === 'ERROR');
-      assert.equal(frame.stage, 'elaborate');
-      assert.match(frame.text, /^lonely\.vhdl:7:5:error: `BTN` is not a board input/);
+      await startRun(client, [{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
+      const warning = client.frames.find((f) => f.verb === 'LOG' && f.text.startsWith('Warning:'));
+      assert.ok(warning?.verb === 'LOG');
+      assert.equal(warning.text.split('\n')[0], 'Warning: `BTN` (lonely.vhdl, line 7) is not a board input, so the board holds it at 0.');
+      // BTN held at 0 selects the else branch: every LED off, whatever the switches say.
+      await playBoardScenario(client, [{ name: 'BTN is 0', sw: '1111111111', key: '1111', expect: { ledr: '0000000000' } }]);
     }));
 
   describe('I-G4: a project that spans two files works in either order', () => {

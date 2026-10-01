@@ -27,8 +27,15 @@ const TB_ENTITY = 'hdl_board_tb';
 
 const HEX_NAMES = ['hex0', 'hex1', 'hex2', 'hex3', 'hex4', 'hex5'] as const;
 
-/** `port =>` associations for whichever of these the entity declares. */
-function buildPortMap(ports: ReadonlySet<string>): string {
+/** An extra input of the entity, held at a constant: `dummy => (others => '0')`. */
+export interface TiedInput {
+  readonly name: string;
+  /** A VHDL expression of the port's own type. */
+  readonly value: string;
+}
+
+/** `port =>` associations for whichever of these the entity declares, then the tied inputs. */
+function buildPortMap(ports: ReadonlySet<string>, tied: readonly TiedInput[]): string {
   const known: Array<[string, string]> = [
     ['clock_50', 'clk_sig'],
     ['clock_500hz', 'clk500_sig'],
@@ -40,7 +47,8 @@ function buildPortMap(ports: ReadonlySet<string>): string {
   ];
   const assocs = known
     .filter(([formal]) => ports.has(formal))
-    .map(([formal, actual]) => `${formal} => ${actual}`);
+    .map(([formal, actual]) => `${formal} => ${actual}`)
+    .concat(tied.map(({ name, value }) => `${name} => ${value}`));
   if (assocs.length === 0) return '';
   return `\n    port map (\n      ${assocs.join(',\n      ')}\n    )`;
 }
@@ -74,6 +82,12 @@ export interface TestbenchOptions {
    * testbench owns the stream outright.
    */
   pacingFromStdin?: boolean;
+  /**
+   * Inputs of the entity that are not board ports, each held at a constant, so a
+   * design with an extra input still runs (engines/extraPorts.ts). None by
+   * default, and then the port map is exactly what it was without them.
+   */
+  tiedInputs?: readonly TiedInput[];
 }
 
 export function generateTestbench(
@@ -81,7 +95,7 @@ export function generateTestbench(
   ports: ReadonlySet<string>,
   options: TestbenchOptions = {},
 ): string {
-  const portMap = buildPortMap(ports);
+  const portMap = buildPortMap(ports, options.tiedInputs ?? []);
   const rstDrive = buildRstDrive(ports);
   const hasClock50 = ports.has('clock_50');
   const stdinPacing = options.pacingFromStdin === true;

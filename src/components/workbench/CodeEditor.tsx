@@ -8,6 +8,7 @@ import {
   countSeverities,
   hintLines,
   isFollowOnLine,
+  isQuietLine,
   NO_DIAGNOSTICS,
   visibleSpans,
   type DiagnosticsByFile,
@@ -74,9 +75,11 @@ const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   punctuation: 'wb-tok-punct',
 };
 
-/** The marker classes of a line: its severity, muted when every message is a follow-on; or a hint. */
+/** The marker classes of a line: its severity, muted when every message is a follow-on, untinted when every one is quiet; or a hint. */
 function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDiagnostic | undefined): string {
-  if (diagnostic) return cx(`is-${diagnostic.severity}`, isFollowOnLine(diagnostic) && 'is-followon');
+  if (diagnostic) {
+    return cx(`is-${diagnostic.severity}`, isFollowOnLine(diagnostic) && 'is-followon', isQuietLine(diagnostic) && 'is-quiet');
+  }
   return hintFrom ? 'is-hint' : '';
 }
 

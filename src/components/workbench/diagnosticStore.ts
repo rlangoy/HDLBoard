@@ -24,6 +24,8 @@ export interface LineMessage {
   readonly details: readonly string[];
   /** What HDLBoard adds (docs/editor_diagnostics_improvement_plan.md § 4.1). */
   readonly advice?: Advice;
+  /** Shown only in the gutter and the tooltip (`Diagnostic.quiet`). */
+  readonly quiet?: boolean;
 }
 
 /** Everything reported on one line; `severity` is the worst of its messages. */
@@ -48,25 +50,44 @@ export function isFollowOnLine(line: LineDiagnostic): boolean {
   return line.messages.every(isFollowOn);
 }
 
-function displayRank(message: LineMessage): number {
-  return (isFollowOn(message) ? 2 : 0) + (message.severity === 'error' ? 0 : 1);
+/**
+ * Shown only in the gutter and the tooltip: a muted follow-on error, or a quiet
+ * warning. Neither has inline text or an underline, counts on the file's tab, or is
+ * where the editor jumps.
+ */
+export function isMuted(message: { readonly advice?: Advice; readonly quiet?: boolean }): boolean {
+  return isFollowOn(message) || message.quiet === true;
 }
 
-/** Errors first, then warnings, then muted follow-ons; equal ranks keep arrival order (the sort is stable). */
+/** A line whose every message is muted. */
+export function isMutedLine(line: LineDiagnostic): boolean {
+  return line.messages.every(isMuted);
+}
+
+/** A line whose every message is a quiet warning: its `!` stays, its tint goes. */
+export function isQuietLine(line: LineDiagnostic): boolean {
+  return line.messages.every((m) => m.quiet === true);
+}
+
+function displayRank(message: LineMessage): number {
+  return (isMuted(message) ? 2 : 0) + (message.severity === 'error' ? 0 : 1);
+}
+
+/** Errors first, then warnings, then muted messages; equal ranks keep arrival order (the sort is stable). */
 export function byDisplayOrder(a: LineMessage, b: LineMessage): number {
   return displayRank(a) - displayRank(b);
 }
 
-/** Counts the messages the student is meant to read: muted follow-ons are left out. */
+/** Counts the messages the student is meant to read: muted ones are left out. */
 export function countSeverities(lines: readonly LineDiagnostic[]): { errors: number; warnings: number } {
-  const messages = lines.flatMap((line) => line.messages).filter((m) => !isFollowOn(m));
+  const messages = lines.flatMap((line) => line.messages).filter((m) => !isMuted(m));
   const errors = messages.filter((m) => m.severity === 'error').length;
   return { errors, warnings: messages.length - errors };
 }
 
 /** The words to underline on a line: those of its messages that are not muted. */
 export function visibleSpans(line: LineDiagnostic): Span[] {
-  return line.messages.flatMap((m) => (m.advice?.span && !isFollowOn(m) ? [m.advice.span] : []));
+  return line.messages.flatMap((m) => (m.advice?.span && !isMuted(m) ? [m.advice.span] : []));
 }
 
 /**
@@ -112,6 +133,7 @@ function addToLines(lines: readonly LineDiagnostic[], diagnostic: AdvisedDiagnos
     message: diagnostic.message,
     details: diagnostic.details,
     ...(diagnostic.advice && { advice: diagnostic.advice }),
+    ...(diagnostic.quiet && { quiet: true }),
   };
   const existing = lines.find((l) => l.line === diagnostic.line);
   if (existing) {

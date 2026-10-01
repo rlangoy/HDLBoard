@@ -110,33 +110,55 @@ describe('GhdlEngine.prepare', { skip: ghdl.skip }, () => {
     assert.match(result.text, /None of the declared entities \(aloof\)/);
   });
 
-  test('reports an input the board does not have on its own declaration', async (t) => {
+  test('runs a design with an extra input, held at 0, and warns on its declaration', async (t) => {
     const result = await prepare(t, [{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
-    assert.ok(!result.ok);
-    assert.equal(result.stage, 'elaborate');
-    assert.match(result.text, /^lonely\.vhdl:7:5:error: `BTN` is not a board input/);
-    assert.doesNotMatch(result.text, /hdl_board_tb/);
+    assert.ok(result.ok);
+    assert.equal(result.plan.mode, 'board');
+    assert.equal(
+      result.plan.messages[1]?.split('\n')[0],
+      'Warning: `BTN` (lonely.vhdl, line 7) is not a board input, so the board holds it at 0.',
+    );
   });
 
-  test('suggests the board input a misspelled port was meant to be', async (t) => {
-    const typo = `library ieee;
+  const typoTop = (portType: string): string => `library ieee;
 use ieee.std_logic_1164.all;
 
 entity typo is
   port (
-    SdsW : in  std_logic_vector(9 downto 0);
+    SdsW : in  ${portType};
     LEDR : out std_logic_vector(9 downto 0)
   );
 end entity;
 
 architecture rtl of typo is
 begin
-  LEDR <= SdsW;
+  LEDR <= (others => '1');
 end architecture;
 `;
-    const result = await prepare(t, [{ name: 'typo.vhdl', content: typo }], 'typo.vhdl');
+
+  test('suggests the board input a misspelled port was meant to be', async (t) => {
+    const result = await prepare(t, [{ name: 'typo.vhdl', content: typoTop('std_logic_vector(9 downto 0)') }], 'typo.vhdl');
+    assert.ok(result.ok);
+    assert.match(result.plan.messages[1] ?? '', /^Warning: `SdsW` \(typo\.vhdl, line 6\) is not a board input — did you mean `SW`\?/);
+  });
+
+  test('runs a design with an extra output, left open, and warns that the board does not show it', async (t) => {
+    const withDummy = readFixture('vhdl', 'DE1_SoC.vhdl')
+      .replace(/(HEX5_N\s*:\s*out std_logic_vector\(6 downto 0\))/, '$1;\n        Dummy    : out std_logic_vector(9 downto 0)')
+      .replace(/^(\s*LEDR <= SW;)$/m, '$1\n    Dummy <= SW;');
+    assert.match(withDummy, /Dummy <= SW;/);
+    const result = await prepare(t, [{ name: 'DE1_SoC.vhdl', content: withDummy }], 'DE1_SoC.vhdl');
+    assert.ok(result.ok);
+    assert.equal(result.plan.messages.length, 2);
+    assert.match(result.plan.messages[1] ?? '', /^Warning: `Dummy` \(DE1_SoC\.vhdl, line \d+\) is not a board output, so the board does not show it\./);
+  });
+
+  test('reports an extra input it cannot hold at 0 on its own declaration', async (t) => {
+    const result = await prepare(t, [{ name: 'typo.vhdl', content: typoTop('integer') }], 'typo.vhdl');
     assert.ok(!result.ok);
+    assert.equal(result.stage, 'elaborate');
     assert.match(result.text, /^typo\.vhdl:6:5:error: `SdsW` is not a board input — did you mean `SW`\?/);
+    assert.doesNotMatch(result.text, /^hdl_board_tb/m);
   });
 
   test('analyzes a project that spans two files whichever order it arrives in', async (t) => {
