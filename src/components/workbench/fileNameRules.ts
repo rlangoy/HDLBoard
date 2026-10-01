@@ -43,6 +43,8 @@ export function fileNameRefusal(name: string, existingNames: readonly string[]):
 
 export const NOT_SOURCE_REASON = `Only ${ACCEPTED_FILES_TEXT} files can be added.`;
 
+export const UNREADABLE_ZIP_REASON = 'This .zip could not be opened, so none of its files were added.';
+
 /**
  * Why each uploaded or dropped file may not be added, in order; `undefined` for one
  * that may. A name is taken by the project's files, and by an earlier file of the

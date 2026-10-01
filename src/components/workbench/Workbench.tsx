@@ -33,7 +33,8 @@ import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
 import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
-import { fileNameRefusal, incomingFileRefusals, type RefusedFile } from './fileNameRules';
+import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
+import { filesInZip, isZipName } from './zipUpload';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
@@ -690,13 +691,25 @@ export function Workbench() {
   // a console line explaining why rather than silently reading garbage in.
   // A file whose name is taken or reserved, or that is no source file, is not added;
   // the dialog says which and why (fileNameRules.ts), and the console keeps a line each.
-  const readAndAddFiles = (incoming: Iterable<File>) => {
-    const chosen = [...incoming];
+  // A .zip among them is opened first and stands for the files inside it (zipUpload.ts).
+  const readAndAddFiles = async (incoming: Iterable<File>) => {
+    const chosen: File[] = [];
+    const unreadable: RefusedFile[] = [];
+    for (const file of incoming) {
+      if (!isZipName(file.name)) chosen.push(file);
+      else {
+        try {
+          chosen.push(...(await filesInZip(file)));
+        } catch {
+          unreadable.push({ name: file.name, reason: UNREADABLE_ZIP_REASON });
+        }
+      }
+    }
     const reasons = incomingFileRefusals(
       chosen.map((file) => file.name),
       filesRef.current.map((file) => file.name),
     );
-    const refused: RefusedFile[] = [];
+    const refused: RefusedFile[] = [...unreadable];
     chosen.forEach((file, i) => {
       const reason = reasons[i];
       if (reason === undefined) readAndAddFile(file);
@@ -713,11 +726,11 @@ export function Workbench() {
   };
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) readAndAddFiles(e.target.files);
+    if (e.target.files) void readAndAddFiles([...e.target.files]);
     e.target.value = '';
   };
 
-  const handleFilesDropped = (list: FileList) => readAndAddFiles(list);
+  const handleFilesDropped = (list: FileList) => void readAndAddFiles([...list]);
 
   const handleContentChange = (id: string, content: string) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));

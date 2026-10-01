@@ -136,3 +136,70 @@ export function createZip(entries: ZipEntry[], modified: Date = new Date()) {
 
   return out;
 }
+
+/* ------------------------------------------------------------------ *
+ * Reading — for "Upload File" with a .zip, e.g. one "Download All"
+ * made. Stored entries (ours) and deflated ones (Windows Explorer,
+ * macOS Finder, 7-Zip) are read; deflate goes through the browser's
+ * own DecompressionStream, so there is still no dependency. Entries
+ * are found through the central directory, which is the one that
+ * holds the true sizes when a writer streamed its local headers.
+ * ------------------------------------------------------------------ */
+
+/** A file found in an archive: its full path and its bytes. */
+export interface ZipFile {
+  path: string;
+  data: Uint8Array<ArrayBuffer>;
+}
+
+const METHOD_STORED = 0;
+const METHOD_DEFLATE = 8;
+
+async function inflateRaw(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * Every file in a .zip, in archive order; folders are left out. Throws if `bytes`
+ * is not a ZIP archive, or an entry is encrypted or packed some other way.
+ */
+export async function readZip(bytes: Uint8Array<ArrayBuffer>): Promise<ZipFile[]> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // The end-of-central-directory record is 22 bytes plus a comment of up to 64 KiB.
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error('not a ZIP archive');
+
+  const count = view.getUint16(eocd + 10, true);
+  let p = view.getUint32(eocd + 16, true);
+  const utf8 = new TextDecoder();
+  const files: ZipFile[] = [];
+  for (let n = 0; n < count; n++) {
+    if (view.getUint32(p, true) !== 0x02014b50) throw new Error('damaged central directory');
+    const flags = view.getUint16(p + 8, true);
+    const method = view.getUint16(p + 10, true);
+    const compressedSize = view.getUint32(p + 20, true);
+    const nameLength = view.getUint16(p + 28, true);
+    const extraLength = view.getUint16(p + 30, true);
+    const commentLength = view.getUint16(p + 32, true);
+    const localOffset = view.getUint32(p + 42, true);
+    const path = utf8.decode(bytes.subarray(p + 46, p + 46 + nameLength));
+    p += 46 + nameLength + extraLength + commentLength;
+
+    if (path.endsWith('/')) continue; // a folder
+    if (flags & 1) throw new Error(`${path} is encrypted`);
+    if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error(`damaged entry ${path}`);
+    const start = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
+    const packed = bytes.slice(start, start + compressedSize);
+    if (method === METHOD_STORED) files.push({ path, data: packed });
+    else if (method === METHOD_DEFLATE) files.push({ path, data: await inflateRaw(packed) });
+    else throw new Error(`${path} uses an unsupported compression method`);
+  }
+  return files;
+}
