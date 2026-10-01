@@ -10,7 +10,9 @@ The quickest routes are **Docker** ([§ 4](#4-host-with-docker)) on any host
 that runs it, and a **one-command installer for Alpine Linux**
 ([§ 5](#5-alpine-linux-one-command-install)). Setting it up by hand is covered
 for **Debian**, **Ubuntu**, **Alpine Linux**, **macOS** and **Windows (via
-WSL2)**.
+WSL2)**. To try it on a Windows PC first, the scripts of
+[§ 7.5](#75-native-windows--test-it-on-this-machine) start and check it in two
+commands.
 
 ---
 
@@ -49,7 +51,7 @@ build time (default `9010`). So:
 
 | | Needed | Notes |
 |---|---|---|
-| **OS** | Linux, macOS, or Windows with WSL2 | `scripts/start.sh` / `stop.sh` are POSIX shell; Windows hosts run them inside WSL |
+| **OS** | Linux, macOS, or Windows with WSL2 | `scripts/start.sh` / `stop.sh` are POSIX shell; Windows hosts run them inside WSL. To test on native Windows, `scripts\start-windows.cmd` ([§ 7.5](#75-native-windows--test-it-on-this-machine)) |
 | **[Node.js](https://nodejs.org/)** | 18+ (20+ recommended) | Runs the backend and builds the page |
 | **[GHDL](https://ghdl.github.io/ghdl/)** | any build supporting `--std=08` and `-g<name>=<value>` | Verified against 5.0.1 and 6.0.0, mcode |
 | **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Install it if students will use Verilog |
@@ -99,8 +101,9 @@ or an authenticating proxy in front.
 | **Docker** | Any Linux host with Docker, or Windows/macOS with Docker Desktop. Nothing installed on the host but Docker | **1** (`80`) | [§ 4](#4-host-with-docker) |
 | **Alpine installer** | A dedicated Alpine Linux machine or VM. One script sets up everything as native services | 2 (`80` and `9010`) | [§ 5](#5-alpine-linux-one-command-install) |
 | **By hand** | Debian, Ubuntu, macOS, WSL2, or when you want to see every piece | 2 (`5173` and `9010`) | [§ 6](#6-install-the-prerequisites) and [§ 7](#7-get-it-running) |
+| **Native Windows, for testing** | Trying it on a Windows PC: two scripts start it and check it, nothing installed but Node.js | 2 (`5173` and `9010`) | [§ 7.5](#75-native-windows--test-it-on-this-machine) |
 
-All three end in the same place: a page students open in a browser and a
+All of them end in the same place: a page students open in a browser and a
 backend that runs their VHDL and Verilog. [§ 11](#11-check-it-works) checks
 any of them.
 
@@ -733,6 +736,86 @@ A backend with no page in front of it is the most common way this setup looks
 finished and isn't: `rc-status`/`systemctl` says started, the port answers
 `426`, and a browser still gets nothing.
 
+### 7.5 Native Windows — test it on this machine
+
+To try the server on a Windows PC before a lab, with no WSL and no Docker, use
+the scripts in `scripts\`. They are the Windows counterparts of `start.sh` and
+`stop.sh`, and they use the same GHDL and Icarus Verilog builds the Windows
+installer ships. You only need [Node.js](https://nodejs.org/) 18 or newer and
+[Git](https://git-scm.com/download/win). For a server that runs for weeks, use
+Docker ([§ 4](#4-host-with-docker)) or WSL2 ([§ 6](#windows-wsl2)) instead.
+
+In a Command Prompt or PowerShell window:
+
+```bat
+git clone https://github.com/rlangoy/HDLBoard.git
+cd HDLBoard
+scripts\start-windows.cmd
+scripts\test-windows.cmd
+```
+
+**`start-windows.cmd`** does every step, and skips each one that is already done:
+
+1. Checks that Node.js 18+ is installed.
+2. Runs `npm install` in the repository and in `server\` when `node_modules` is
+   missing or older than `package-lock.json`, as after a `git pull`.
+3. Downloads GHDL and Icarus Verilog into `winInstaller\vendor\` the first
+   time, verified against pinned checksums (about 90 MB, using the installer's
+   own `fetch-ghdl.ps1` and `fetch-iverilog.ps1`).
+4. Builds the backend.
+5. Starts the page (Vite, port `5173`) and the backend (port `9010`) in two
+   minimised windows, logging to `.run\frontend.log` and `.run\backend.log`.
+   It stops with a message, and starts nothing, if either port is already in use.
+
+It then prints the addresses to open, including one for each of the machine's
+network adapters.
+
+**`test-windows.cmd`** runs the checks of [§ 11](#11-check-it-works) in one go,
+and exits with 0 only when all of them pass:
+
+```text
+PASS  Page http://localhost:5173/ answered 200
+PASS  Backend http://localhost:9010/hdlsim answered 426
+
+=== Board scenarios through ws://localhost:9010/hdlsim ===
+de1_soc        vhdl     PASS
+de1_soc        verilog  PASS
+...
+7/7 passed against ws://localhost:9010/hdlsim
+
+PASS - the page, the backend, GHDL and Icarus Verilog all work.
+```
+
+The board scenarios are those of `tools\verify-backend.mjs`. They run real
+VHDL and Verilog designs through the backend, so a pass means the page, the
+backend, GHDL and Icarus Verilog all work. What they can't check is a browser on
+another machine. For that, open `http://<this-pc's-ip>:5173/` there, press
+**Start** and flip a switch.
+
+**From other machines.** The first time the servers start, Windows asks
+whether to let Node.js through the firewall. Allow it for **Private**
+networks. If you dismissed that prompt, or the network is set to Public, open
+the two ports in an administrator PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "HDLBoard" -Direction Inbound -Protocol TCP -LocalPort 5173,9010 -Action Allow
+```
+
+**Stop it** with `scripts\stop-windows.cmd`. It stops the Node.js process on
+each port and leaves a port held by any other program alone.
+
+**Other ports.** Set them before starting, and use the same values for all
+three scripts:
+
+```bat
+set STATIC_PORT=8080
+set HDL_WS_PORT=9090
+scripts\start-windows.cmd
+```
+
+If something goes wrong, look in `.run\backend.log` and `.run\frontend.log`
+first. A page that loads blank is covered in [§ 12](#12-troubleshooting).
+
 ---
 
 ## 8. One port, with a reverse proxy
@@ -858,14 +941,15 @@ out. (Using the one-port setup of § 8? Open `80` instead of both.)
 
 macOS prompts on first launch — allow `node` to accept incoming connections;
 the setting lives in **System Settings → Network → Firewall → Options**.
-Windows is the `New-NetFirewallRule` line in [§ 6](#windows-wsl2).
+Windows is the `New-NetFirewallRule` line in [§ 6](#windows-wsl2) (WSL2) or [§ 7.5](#75-native-windows--test-it-on-this-machine) (native).
 
 ---
 
 ## 11. Check it works
 
 From the host (use your own page port: `80` for Docker and the Alpine
-installer, `5173` for `start.sh`):
+installer, `5173` for `start.sh`). On native Windows, `scripts\test-windows.cmd`
+runs all of this section's checks from the host in one go ([§ 7.5](#75-native-windows--test-it-on-this-machine)):
 
 ```bash
 curl -I http://localhost:5173/                 # 200

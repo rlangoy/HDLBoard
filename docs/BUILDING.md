@@ -82,8 +82,13 @@ npm run dev
 
 ### Running the dev servers by hand (native Windows)
 
-`scripts/start.sh` needs a POSIX shell. On native Windows, start the two
-servers in two terminals instead:
+`scripts/start.sh` needs a POSIX shell. On native Windows,
+`scripts\start-windows.cmd` does the same: it installs what is missing, fetches
+the bundled GHDL and Icarus Verilog, builds the backend and starts both servers.
+`scripts\test-windows.cmd` then checks them, and `scripts\stop-windows.cmd`
+stops them ([HOSTING.md § 7.5](HOSTING.md#75-native-windows--test-it-on-this-machine)).
+To start the two servers by hand instead, with hot reload in a terminal you can
+watch, use two terminals:
 
 ```powershell
 # terminal 1 — frontend, from the repository root
@@ -167,6 +172,17 @@ The browser check is the runbook `tests/e2e/verilog-browser.md`.
 ## Building the Windows installer
 
 On Windows with Node 18+, from the repository root:
+
+```bat
+scripts\build-windows.cmd
+```
+
+It checks that Node.js is installed and HDLBoard is not running, since a
+running HDLBoard locks files the build overwrites. It then runs
+`winInstaller\build.ps1` with the execution policy it needs, and prints the
+installer's path. It passes on the script's options, `-SkipAppBuild` to
+repackage only and `-CleanInstall` to reinstall the Electron dependencies.
+Running the PowerShell script directly does the same:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File winInstaller\build.ps1
