@@ -110,11 +110,33 @@ describe('GhdlEngine.prepare', { skip: ghdl.skip }, () => {
     assert.match(result.text, /None of the declared entities \(aloof\)/);
   });
 
-  test('reports a testbench that cannot be built around an extra port as an internal failure', async (t) => {
+  test('reports an input the board does not have on its own declaration', async (t) => {
     const result = await prepare(t, [{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
     assert.ok(!result.ok);
-    assert.equal(result.stage, 'internal');
-    assert.match(result.text, /Internal testbench build error/);
+    assert.equal(result.stage, 'elaborate');
+    assert.match(result.text, /^lonely\.vhdl:7:5:error: `BTN` is not a board input/);
+    assert.doesNotMatch(result.text, /hdl_board_tb/);
+  });
+
+  test('suggests the board input a misspelled port was meant to be', async (t) => {
+    const typo = `library ieee;
+use ieee.std_logic_1164.all;
+
+entity typo is
+  port (
+    SdsW : in  std_logic_vector(9 downto 0);
+    LEDR : out std_logic_vector(9 downto 0)
+  );
+end entity;
+
+architecture rtl of typo is
+begin
+  LEDR <= SdsW;
+end architecture;
+`;
+    const result = await prepare(t, [{ name: 'typo.vhdl', content: typo }], 'typo.vhdl');
+    assert.ok(!result.ok);
+    assert.match(result.text, /^typo\.vhdl:6:5:error: `SdsW` is not a board input — did you mean `SW`\?/);
   });
 
   test('analyzes a project that spans two files whichever order it arrives in', async (t) => {
