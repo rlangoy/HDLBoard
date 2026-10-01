@@ -147,13 +147,24 @@ describe('extra inputs held at 0', () => {
   test('warns on each held input\'s own declaration', () => {
     const warnings = extraInputWarnings(extrasTop, tiedInputs(extrasTop));
     assert.equal(warnings.length, 3);
-    const [headline, detail] = warnings[0].split('\n');
-    assert.equal(headline, 'top.vhdl:4:5:warning: `Dummy` is not a board input, so it is held at 0.');
-    assert.match(detail, /^top\.vhdl:4:5:warning: \(the board's inputs are CLOCK_50, CLOCK_500Hz, SW, KEY_N; /);
+    const [headline, advice] = warnings[0].split('\n');
+    assert.equal(headline, 'Warning: `Dummy` (top.vhdl, line 4) is not a board input, so the board holds it at 0.');
+    assert.equal(
+      advice,
+      '  Not a syntax error: a port like this is normal in a design meant for a testbench. ' +
+        'To drive it, simulate a testbench that instantiates top.',
+    );
+  });
+
+  test('writes the warning so the editor does not mark it: no file:line: shape', () => {
+    for (const warning of extraInputWarnings(extrasTop, tiedInputs(extrasTop))) assert.doesNotMatch(warning, /:\d+:/);
   });
 
   test('suggests the board input a held input was probably meant to be', () => {
     const [warning] = extraInputWarnings(typoTop, tiedInputs(typoTop));
-    assert.equal(warning.split('\n')[0], 'DE1_SoC.vhdl:7:9:warning: `SdsW` is not a board input — did you mean `SW`? It is held at 0.');
+    assert.equal(
+      warning.split('\n')[0],
+      'Warning: `SdsW` (DE1_SoC.vhdl, line 7) is not a board input — did you mean `SW`? The board holds it at 0.',
+    );
   });
 });

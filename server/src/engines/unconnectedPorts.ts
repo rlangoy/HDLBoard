@@ -6,14 +6,14 @@
  * or an extra `Dummy`. The board drives none of them. Pure.
  *
  * An input of a bit or vector type is held at 0 by the generated testbench, and the
- * design runs with a warning on its declaration (`tiedInputs`, `extraInputWarnings`),
+ * design runs with a console warning that names its line (`tiedInputs`, `extraInputWarnings`),
  * as Quartus only warns about a top-level pin with no location. Any other extra input
  * is left open, GHDL rejects the testbench with `hdl_board_tb.vhdl:52:3:error: port
  * "X" of mode IN must be connected` — about an internal file the student cannot open
  * — and `explainUnconnectedPorts` moves that error onto the student's declaration.
  *
- * Both are written in GHDL's own `file:line:col:level:` shape, so the editor marks and
- * underlines them like any compiler message.
+ * The error is written in GHDL's own `file:line:col:error:` shape, so the editor marks and
+ * underlines it like any compiler message.
  */
 
 import { BOARD_PORTS } from './boardPorts.js';
@@ -222,24 +222,29 @@ export function tiedInputs(top: TopSource): TiedInput[] {
 
 const code = (text: string): string => `\`${text}\``;
 
-/** The board's inputs, for the detail line under both the warning and the error. */
+/** The board's inputs, for the detail line under the error. */
 function boardInputsDetail(at: string, remedy: string): string {
   return `${at} (the board's inputs are ${[...BOARD_INPUTS.values()].join(', ')}; ${remedy})`;
 }
 
 /**
- * GHDL-shaped warnings on the declarations of the inputs the testbench holds at 0: one
- * message each, its `(…)` detail on a second line, so a LOG frame carries both together.
+ * A console warning for each input the testbench holds at 0, with advice on a second
+ * line. Deliberately not in GHDL's `file:line:col:` shape (it says `line 21` instead):
+ * the editor marks only that shape, and a port meant for a testbench is no mistake, so
+ * neither the line nor the file's tab should look like one.
  */
 export function extraInputWarnings(top: TopSource, tied: readonly TiedInput[]): string[] {
   return tied.map(({ port }) => {
-    const { line, column } = ghdlPosition(top.content, port.offset);
+    const { line } = ghdlPosition(top.content, port.offset);
     const suggestion = suggestBoardInput(port.name, top.ports);
+    const where = `${code(port.name)} (${top.fileName}, line ${line})`;
     const headline = suggestion
-      ? `${code(port.name)} is not a board input — did you mean ${code(suggestion)}? It is held at 0.`
-      : `${code(port.name)} is not a board input, so it is held at 0.`;
-    const at = `${top.fileName}:${line}:${column}:warning:`;
-    return [`${at} ${headline}`, boardInputsDetail(at, 'nothing on the board drives this one')].join('\n');
+      ? `Warning: ${where} is not a board input — did you mean ${code(suggestion)}? The board holds it at 0.`
+      : `Warning: ${where} is not a board input, so the board holds it at 0.`;
+    const advice =
+      `  Not a syntax error: a port like this is normal in a design meant for a testbench. ` +
+      `To drive it, simulate a testbench that instantiates ${top.entityName}.`;
+    return [headline, advice].join('\n');
   });
 }
 

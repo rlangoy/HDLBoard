@@ -239,6 +239,10 @@
 .wb-editor__line.is-followon {
   background: var(--wb-diag-followon-bg);
 }
+/* A quiet warning (an extra input the board holds at 0): the gutter's ! only, no tint. */
+.wb-editor__line.is-quiet {
+  background: none;
+}
 /* A line another marker points at (Rules D and E): tint and edge, no glyph. */
 .wb-editor__line.is-hint {
   background: var(--wb-diag-hint-bg);

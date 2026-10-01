@@ -21,6 +21,12 @@ export interface Diagnostic {
   readonly message: string;
   /** Related notes printed right after it: Icarus "declared here", GHDL "(found: 'end')". */
   readonly details: readonly string[];
+  /**
+   * A warning about something that may well be intended — HDLBoard's own "not a board
+   * input" — shown only as the gutter's `!` and its tooltip: no inline text, no tint,
+   * not on the file's tab.
+   */
+  readonly quiet?: boolean;
 }
 
 export type LineResult =
@@ -170,6 +176,15 @@ const RECOGNIZERS: readonly Recognizer[] = [
     // Icarus missing include: "miss.v:2: Include file nope.vh not found"
     pattern: /^(?<file>.+?):(?<line>\d+): (?<message>Include file .+ not found)$/,
     interpret: (groups) => diagnosticOrNone(build(groups, 'error', { lineOffset: INCLUDE_LINE_OFFSET })),
+  },
+  {
+    // HDLBoard's backend, an input the board holds at 0 (server/src/engines/unconnectedPorts.ts):
+    // "Warning: `Dummy` (DE1_SoC.vhdl, line 21) is not a board input, so the board holds it at 0."
+    pattern: /^Warning: (?<message>`[^`]+` \((?<file>[^,()]+), line (?<line>\d+)\) .*)$/,
+    interpret: (groups) => {
+      const diagnostic = build(groups, 'warning');
+      return diagnostic ? { kind: 'diagnostic', diagnostic: { ...diagnostic, quiet: true } } : { kind: 'none' };
+    },
   },
 ];
 

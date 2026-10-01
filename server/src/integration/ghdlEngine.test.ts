@@ -114,7 +114,10 @@ describe('GhdlEngine.prepare', { skip: ghdl.skip }, () => {
     const result = await prepare(t, [{ name: 'lonely.vhdl', content: UNKNOWN_INPUT_PORT_VHDL }], 'lonely.vhdl');
     assert.ok(result.ok);
     assert.equal(result.plan.mode, 'board');
-    assert.equal(result.plan.messages[1]?.split('\n')[0], 'lonely.vhdl:7:5:warning: `BTN` is not a board input, so it is held at 0.');
+    assert.equal(
+      result.plan.messages[1]?.split('\n')[0],
+      'Warning: `BTN` (lonely.vhdl, line 7) is not a board input, so the board holds it at 0.',
+    );
   });
 
   const typoTop = (portType: string): string => `library ieee;
@@ -136,7 +139,7 @@ end architecture;
   test('suggests the board input a misspelled port was meant to be', async (t) => {
     const result = await prepare(t, [{ name: 'typo.vhdl', content: typoTop('std_logic_vector(9 downto 0)') }], 'typo.vhdl');
     assert.ok(result.ok);
-    assert.match(result.plan.messages[1] ?? '', /^typo\.vhdl:6:5:warning: `SdsW` is not a board input — did you mean `SW`\?/);
+    assert.match(result.plan.messages[1] ?? '', /^Warning: `SdsW` \(typo\.vhdl, line 6\) is not a board input — did you mean `SW`\?/);
   });
 
   test('reports an extra input it cannot hold at 0 on its own declaration', async (t) => {
