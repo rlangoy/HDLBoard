@@ -111,6 +111,8 @@ function detectPorts(src: string, entityName: string): Set<string> {
 export interface TopEntity {
   name: string;
   ports: Set<string>;
+  /** The file that declares it. */
+  fileName: string;
 }
 
 export interface TopEntityError {
@@ -150,7 +152,7 @@ export function findTopEntity(
       // its own, primary one — a later declaration in the same file (rare,
       // but legal VHDL) is more likely a locally-scoped helper.
       const name = names[0];
-      return { name, ports: detectPorts(preferred.content, name) };
+      return { name, ports: detectPorts(preferred.content, name), fileName: preferred.name };
     }
   }
 
@@ -158,7 +160,7 @@ export function findTopEntity(
   for (const file of files) {
     for (const name of findEntityNames(file.content)) {
       const ports = detectPorts(file.content, name);
-      candidates.push({ name, ports });
+      candidates.push({ name, ports, fileName: file.name });
     }
   }
 
