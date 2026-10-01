@@ -142,6 +142,17 @@ end architecture;
     assert.match(result.plan.messages[1] ?? '', /^Warning: `SdsW` \(typo\.vhdl, line 6\) is not a board input — did you mean `SW`\?/);
   });
 
+  test('runs a design with an extra output, left open, and warns that the board does not show it', async (t) => {
+    const withDummy = readFixture('vhdl', 'DE1_SoC.vhdl')
+      .replace(/(HEX5_N\s*:\s*out std_logic_vector\(6 downto 0\))/, '$1;\n        Dummy    : out std_logic_vector(9 downto 0)')
+      .replace(/^(\s*LEDR <= SW;)$/m, '$1\n    Dummy <= SW;');
+    assert.match(withDummy, /Dummy <= SW;/);
+    const result = await prepare(t, [{ name: 'DE1_SoC.vhdl', content: withDummy }], 'DE1_SoC.vhdl');
+    assert.ok(result.ok);
+    assert.equal(result.plan.messages.length, 2);
+    assert.match(result.plan.messages[1] ?? '', /^Warning: `Dummy` \(DE1_SoC\.vhdl, line \d+\) is not a board output, so the board does not show it\./);
+  });
+
   test('reports an extra input it cannot hold at 0 on its own declaration', async (t) => {
     const result = await prepare(t, [{ name: 'typo.vhdl', content: typoTop('integer') }], 'typo.vhdl');
     assert.ok(!result.ok);

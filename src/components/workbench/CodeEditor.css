@@ -239,7 +239,7 @@
 .wb-editor__line.is-followon {
   background: var(--wb-diag-followon-bg);
 }
-/* A quiet warning (an extra input the board holds at 0): the gutter's ! only, no tint. */
+/* A quiet warning (a port the board does not connect): the gutter's ! only, no tint. */
 .wb-editor__line.is-quiet {
   background: none;
 }

@@ -23,7 +23,7 @@ export interface Diagnostic {
   readonly details: readonly string[];
   /**
    * A warning about something that may well be intended — HDLBoard's own "not a board
-   * input" — shown only as the gutter's `!` and its tooltip: no inline text, no tint,
+   * port" — shown only as the gutter's `!` and its tooltip: no inline text, no tint,
    * not on the file's tab.
    */
   readonly quiet?: boolean;
@@ -178,7 +178,7 @@ const RECOGNIZERS: readonly Recognizer[] = [
     interpret: (groups) => diagnosticOrNone(build(groups, 'error', { lineOffset: INCLUDE_LINE_OFFSET })),
   },
   {
-    // HDLBoard's backend, an input the board holds at 0 (server/src/engines/unconnectedPorts.ts):
+    // HDLBoard's backend, a port the board does not connect (server/src/engines/extraPorts.ts):
     // "Warning: `Dummy` (DE1_SoC.vhdl, line 21) is not a board input, so the board holds it at 0."
     pattern: /^Warning: (?<message>`[^`]+` \((?<file>[^,()]+), line (?<line>\d+)\) .*)$/,
     interpret: (groups) => {

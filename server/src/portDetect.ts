@@ -15,6 +15,7 @@
  */
 
 import { BOARD_PORTS } from './engines/boardPorts.js';
+import { portDeclarations } from './engines/vhdlPorts.js';
 import type { VhdlFileInput } from './protocol.js';
 
 function stripComments(src: string): string {
@@ -32,80 +33,9 @@ function findEntityNames(src: string): string[] {
   return names;
 }
 
-/**
- * The named entity's own port clause, as a lowercase name set. A
- * balanced-paren scan bounded to that entity's own declaration, so it
- * does not spill into a later entity in the same file.
- */
+/** The named entity's own ports, as a lower-case name set. */
 function detectPorts(src: string, entityName: string): Set<string> {
-  const stripped = stripComments(src);
-  const escaped = entityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const entityRe = new RegExp(`entity\\s+${escaped}\\s+is`, 'i');
-  const m = entityRe.exec(stripped);
-  if (!m) return new Set();
-  const bodyStart = m.index + m[0].length;
-
-  let depth = 0;
-  const depthAt: number[] = [];
-  for (let i = bodyStart; i < stripped.length; i++) {
-    if (stripped[i] === '(') depth++;
-    else if (stripped[i] === ')') depth--;
-    depthAt[i] = depth;
-  }
-
-  // The entity declaration ends at the first "end" keyword at paren depth 0.
-  const endRe = /\bend\b/gi;
-  endRe.lastIndex = bodyStart;
-  let endIdx = stripped.length;
-  let em: RegExpExecArray | null;
-  while ((em = endRe.exec(stripped))) {
-    if ((depthAt[em.index] ?? 0) === 0) {
-      endIdx = em.index;
-      break;
-    }
-  }
-
-  const entityBody = stripped.slice(bodyStart, endIdx);
-  const portMatch = /port\s*\(/i.exec(entityBody);
-  if (!portMatch) return new Set();
-  const openParenIdx = entityBody.indexOf('(', portMatch.index);
-  let d = 0;
-  let closeIdx = entityBody.length;
-  for (let i = openParenIdx; i < entityBody.length; i++) {
-    if (entityBody[i] === '(') d++;
-    else if (entityBody[i] === ')') {
-      d--;
-      if (d === 0) {
-        closeIdx = i;
-        break;
-      }
-    }
-  }
-  const clause = entityBody.slice(openParenIdx + 1, closeIdx);
-
-  const names = new Set<string>();
-  let dd = 0;
-  let tokenStart = 0;
-  const decls: string[] = [];
-  for (let j = 0; j < clause.length; j++) {
-    const c = clause[j];
-    if (c === '(') dd++;
-    else if (c === ')') dd--;
-    else if (c === ';' && dd === 0) {
-      decls.push(clause.slice(tokenStart, j));
-      tokenStart = j + 1;
-    }
-  }
-  decls.push(clause.slice(tokenStart));
-  for (const decl of decls) {
-    const colon = decl.indexOf(':');
-    if (colon < 0) continue;
-    for (const n of decl.slice(0, colon).split(',')) {
-      const nm = n.trim().toLowerCase();
-      if (nm) names.add(nm);
-    }
-  }
-  return names;
+  return new Set(portDeclarations(src, entityName).map((port) => port.name.toLowerCase()));
 }
 
 export interface TopEntity {

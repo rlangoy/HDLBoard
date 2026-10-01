@@ -17,7 +17,8 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
-import { explainUnconnectedPorts, extraInputWarnings, tiedInputs, type TopSource } from './unconnectedPorts.js';
+import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
+import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
 import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
@@ -76,7 +77,7 @@ function batchPlan(dir: string, entityName: string): RunPlan {
   return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages: [] };
 }
 
-/** `messages`: the GHDL banner, then the warnings about extra inputs. */
+/** `messages`: the GHDL banner, then the warnings about extra ports. */
 function boardPlan(dir: string, timing: BoardTiming, messages: readonly string[]): RunPlan {
   return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages };
 }
@@ -110,13 +111,13 @@ async function prepareBatch(dir: string, entityName: string): Promise<PrepareRes
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
 async function prepareBoard(dir: string, top: TopEntity, topContent: string): Promise<PrepareResult> {
-  // An input the board does not have is held at 0 when its type allows, with a warning
-  // on its declaration; any other is left open, and GHDL's error about it is moved there.
+  // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
+  // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
   const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
-  const tied = tiedInputs(source);
+  const extraPorts = planExtraPorts(source);
   const testbench = generateTestbench(top.name, top.ports, {
     pacingFromStdin: PACING === 'stdin',
-    tiedInputs: tied.map(({ port, value }) => ({ name: port.name, value })),
+    tiedInputs: extraPorts.tiedInputs,
   });
   writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), testbench);
 
@@ -132,7 +133,7 @@ async function prepareBoard(dir: string, top: TopEntity, topContent: string): Pr
     return failure(
       'elaborate',
       `GHDL elaboration error (check that your entity's port names match the board's — ` +
-        `CLOCK_50, SW, KEY_N, LEDR, HEX0_N..HEX5_N):\n${elaborated.err}`,
+        `${[...BOARD_INPUT_NAMES, ...BOARD_OUTPUT_NAMES].join(', ')}):\n${elaborated.err}`,
     );
   }
 
@@ -140,7 +141,7 @@ async function prepareBoard(dir: string, top: TopEntity, topContent: string): Pr
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(top.ports.has('clock_50'));
   const banner = await ghdlBanner(dir);
-  const messages = [...(banner === undefined ? [] : [banner]), ...extraInputWarnings(source, tied)];
+  const messages = [...(banner === undefined ? [] : [banner]), ...extraPorts.warnings];
   return { ok: true, plan: boardPlan(dir, timing, messages) };
 }
 

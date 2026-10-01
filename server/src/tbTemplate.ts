@@ -84,7 +84,7 @@ export interface TestbenchOptions {
   pacingFromStdin?: boolean;
   /**
    * Inputs of the entity that are not board ports, each held at a constant, so a
-   * design with an extra input still runs (engines/unconnectedPorts.ts). None by
+   * design with an extra input still runs (engines/extraPorts.ts). None by
    * default, and then the port map is exactly what it was without them.
    */
   tiedInputs?: readonly TiedInput[];
