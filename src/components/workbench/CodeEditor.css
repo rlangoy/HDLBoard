@@ -166,16 +166,19 @@
 
 .wb-editor__gutter {
   flex: none;
-  width: 44px;
-  padding: var(--wb-code-pad-top) 10px 12px 0;
+  width: 49px;
+  padding: var(--wb-code-pad-top) 5px 12px 0;
   background: var(--wb-sidebar-bg);
   border-right: 1px solid var(--wb-border);
   overflow: hidden;
   text-align: right;
 }
 
+/* The right padding holds a marked line's 3px bar (the inset box-shadow below) with a
+   2px gap before the number, so the bar never touches the last digit. */
 .wb-editor__gutter-line {
   position: relative;
+  padding-right: 5px;
   height: var(--wb-code-line-h);
   line-height: var(--wb-code-line-h);
   font-family: var(--wb-code-font);

@@ -17,10 +17,13 @@ import type { VhdlFile } from './files';
 export type Folder = VhdlFile['folder'];
 export type Language = 'vhdl' | 'verilog';
 
-/** The `accept` of the upload picker; a drop is not filtered by it, so `folderForUpload` decides too. */
-export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh';
+/**
+ * The `accept` of the upload picker; a drop is not filtered by it, so `folderForUpload` decides too.
+ * A .zip is opened and its files are added one by one (zipUpload.ts).
+ */
+export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh,.zip';
 /** What the drop hint and the rejection line call the accepted files. */
-export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh';
+export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh / .zip';
 
 // Keep in step with server/src/engines/language.ts, which applies the same extension rules
 // on the backend (the two packages share no code).

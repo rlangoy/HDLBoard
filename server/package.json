@@ -1,7 +1,7 @@
 {
   "name": "hdl-board-server",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.2.2",
   "type": "module",
   "license": "GPL-2.0-only",
   "description": "Simulation backend for HDLBoard (GHDL and Icarus Verilog) — see ../docs/ghdl_implementation_plan.md",

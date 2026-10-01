@@ -299,6 +299,15 @@ a ~140-line stored-only writer (CRC-32, UTF-8 names), not jszip, to keep
 "no runtime deps beyond React". Duplicate names in one folder get ` (2)`,
 ` (3)` … so no file is lost on extraction. Tests: `zip.test.ts`.
 
+**Upload a .zip.** Upload File and a drop also take a `.zip` (such as one
+Download All saved). `zipUpload.ts` opens it with `readZip` (`zip.ts`:
+stored entries, and deflated ones from Windows Explorer / Finder / 7-Zip via
+the browser's `DecompressionStream`) and hands its files, by base name, to
+the same path as single uploads: each lands in the folder its extension
+picks, and one whose name already exists or starts with `tb_` is skipped and
+listed in the refusal dialog. `__MACOSX/` and hidden files are ignored; an
+unreadable archive is refused as a whole. Tests: `zipUpload.test.ts`.
+
 Folder and file names are wrapped in `.wb-files__label-text`
 (`overflow: hidden; text-overflow: ellipsis`), and every row/button it sits
 in carries `min-width: 0` — without both, a long filename resists the flex

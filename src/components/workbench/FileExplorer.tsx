@@ -171,7 +171,12 @@ export function FileExplorer({
       </div>
 
       <div className="wb-files__actions">
-        <button type="button" className="wb-files__upload" onClick={onUpload}>
+        <button
+          type="button"
+          className="wb-files__upload"
+          onClick={onUpload}
+          title="Add source files, or a .zip such as one Download All saved"
+        >
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
         </button>

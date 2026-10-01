@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useId, useMemo, useRef, useState, type DragEvent, type RefObject, type UIEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import {
@@ -175,6 +175,7 @@ export function CodeEditor({
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMetrics(textareaRef);
   // Where both bars show, each stops short of the corner the other one runs into.
   const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
@@ -195,6 +196,18 @@ export function CodeEditor({
   const status = useMemo(() => (active ? summarize(active.name, activeLines) : ''), [active?.name, activeLines]);
   const statusId = useId();
   useRevealLine(textareaRef, active, reveal);
+
+  // Keep the active tab in sight when many tabs overflow the strip, e.g. after
+  // opening a file from the Files panel. Only the strip scrolls, never the page.
+  useEffect(() => {
+    const strip = tabsRef.current;
+    const tab = strip?.querySelector<HTMLElement>('.wb-editor__tab.is-active');
+    if (!strip || !tab) return;
+    const stripBox = strip.getBoundingClientRect();
+    const tabBox = tab.getBoundingClientRect();
+    if (tabBox.left < stripBox.left) strip.scrollLeft -= stripBox.left - tabBox.left;
+    else if (tabBox.right > stripBox.right) strip.scrollLeft += tabBox.right - stripBox.right;
+  }, [activeTabId, tabs.length]);
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     const { scrollTop, scrollLeft } = e.currentTarget;
@@ -255,7 +268,7 @@ export function CodeEditor({
           Drop {ACCEPTED_FILES_TEXT} files
         </div>
       )}
-      <div className="wb-editor__tabs" role="tablist">
+      <div className="wb-editor__tabs" role="tablist" ref={tabsRef}>
         {tabs.map((tab) => {
           const tabLines = diagnostics[tab.id] ?? NO_LINES;
           const { errors, warnings } = countSeverities(tabLines);
