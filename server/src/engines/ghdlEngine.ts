@@ -9,7 +9,7 @@
  * rewritten: each stage does what it did, and the characterization tests pin it.
  */
 
-import { writeFileSync } from 'node:fs';
+import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getGhdlExe, runBatch, startPersistentRun } from '../ghdl.js';
 import { findTopEntity, type TopEntity } from '../portDetect.js';
@@ -145,7 +145,24 @@ async function prepareBoard(dir: string, top: TopEntity, topContent: string): Pr
   return { ok: true, plan: boardPlan(dir, timing, messages) };
 }
 
+/** GHDL's library index files: `work-obj08.cf` for `--std=08`. */
+const WORK_LIBRARY_FILE = /^work-obj\d*\.cf$/;
+
+/**
+ * Empties the session's work library, so every run analyses its files from scratch.
+ * A session keeps its directory from run to run, and with the last run's library still
+ * there a testbench sent before its design was analysed against the old design, which
+ * the new one then made obsolete: `architecture "sim" of "adder4_tb" is obsoleted by
+ * entity "adder4"`. A file deleted from the project would also have stayed analysed.
+ */
+function clearWorkLibrary(dir: string): void {
+  for (const name of readdirSync(dir)) {
+    if (WORK_LIBRARY_FILE.test(name)) rmSync(join(dir, name), { force: true });
+  }
+}
+
 async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {
+  clearWorkLibrary(dir);
   for (const file of files) writeFileSync(join(dir, file.name), file.content);
 
   // Every file is analysed before our own port scan, so a genuine syntax error gets

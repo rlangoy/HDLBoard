@@ -178,4 +178,56 @@ end architecture;
     assert.match(result.text, /one\.vhdl/);
     assert.match(result.text, /two\.vhdl/);
   });
+
+  test('runs the same testbench again in the same session, the testbench file sent first', async (t) => {
+    // A session keeps its directory, and GHDL's work library in it, from run to run. With
+    // the library of the first run still there, the testbench analysed against the old
+    // adder4 and adder4.vhd analysed after it made it obsolete:
+    // "architecture "sim" of "adder4_tb" is obsoleted by entity "adder4"".
+    const dir = newDir(t);
+    const files = [
+      { name: 'adder4_tb.vhd', content: ADDER4_TB_VHDL },
+      { name: 'adder4.vhd', content: ADDER4_VHDL },
+    ];
+    const first = await ghdlEngine.prepare({ dir, files, topFile: 'adder4_tb.vhd' });
+    const second = await ghdlEngine.prepare({ dir, files, topFile: 'adder4_tb.vhd' });
+    assert.ok(first.ok);
+    assert.ok(second.ok, second.ok ? '' : second.text);
+  });
 });
+
+const ADDER4_VHDL = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity adder4 is
+  port (a, b : in unsigned(3 downto 0); sum : out unsigned(4 downto 0));
+end entity;
+
+architecture rtl of adder4 is
+begin
+  sum <= resize(a, 5) + resize(b, 5);
+end architecture;
+`;
+
+const ADDER4_TB_VHDL = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity adder4_tb is
+end entity;
+
+architecture sim of adder4_tb is
+  signal a, b : unsigned(3 downto 0) := (others => '0');
+  signal sum  : unsigned(4 downto 0);
+begin
+  dut: entity work.adder4 port map (a => a, b => b, sum => sum);
+
+  process
+  begin
+    a <= "0011"; b <= "0101"; wait for 10 ns;
+    assert to_integer(sum) = 8 report "3 + 5 /= 8" severity error;
+    wait;
+  end process;
+end architecture;
+`;
