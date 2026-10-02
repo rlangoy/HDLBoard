@@ -15,6 +15,8 @@
   --band: #3A66B2;
   --band-text: #E3ECFA;
   --led: #EF4444;
+  --context: #8796AC;  /* the "other tool" in a comparison: a grey with 3:1 contrast on white */
+  --axis: #64748B;
 
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -73,6 +75,16 @@ p { margin: 0; }
   z-index: 100;
 }
 .skip-link:focus { left: 12px; top: 12px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -154,6 +166,8 @@ p { margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .live-dot::after { animation: none; }
+  .compare-shot { transition: none; }
+  .compare-shot:hover { transform: none; }
 }
 
 /* ---------- Hero ---------- */
@@ -243,6 +257,125 @@ p { margin: 0; }
 .split-media img { display: block; width: 100%; border-radius: 10px; }
 .split-text { display: flex; flex-direction: column; gap: 24px; }
 .split-text p { font-size: 1.25rem; line-height: 1.6; color: var(--muted); }
+
+/* ---------- Feedback: compile time and error messages ---------- */
+.feedback { padding: 0 0 128px; }
+.feedback-intro { gap: 24px; }
+.feedback-intro h2 span { display: inline-block; }  /* wrap between the sentences, not inside one */
+.feedback-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--muted); }
+
+/* Time-to-compile chart: HDLBoard in the accent, Quartus in the context grey */
+.race {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 16px;
+  max-width: 880px;
+  margin: 56px auto 0;
+  padding: 24px 32px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 30px 70px -35px rgba(15, 23, 42, 0.35);
+}
+.race-title { font-weight: 600; font-size: 1.125rem; }
+.race-replay {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 600 0.9375rem/1 var(--font-body);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.race-replay:hover { border-color: var(--accent); color: var(--accent); }
+.race-replay[hidden] { display: none; }
+.race-plot, .race-note { grid-column: 1 / -1; }
+.race-row, .race-axis {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr) 3.5rem;
+  column-gap: 20px;
+  align-items: center;
+}
+.race-name { font-weight: 600; }
+.race-track {
+  position: relative;
+  height: 56px;
+  /* hairline gridlines at every second, 0–5 s */
+  background: repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px 20%);
+  box-shadow: inset -1px 0 var(--line);
+}
+.race-bar {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: var(--value);
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+.is-context .race-bar { background: var(--context); }
+.race-value {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--value) + 6px);
+  transform: translateY(-50%);
+  padding: 0 6px;
+  background: var(--surface);  /* keeps the gridlines from running through the text */
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+.race-ticks {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 6px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--axis);
+}
+/* Zero-width ticks sit exactly on the gridlines, their text centred over them */
+.race-ticks span { display: flex; justify-content: center; width: 0; white-space: nowrap; }
+.race-note { font-size: 0.875rem; color: var(--muted); }
+
+/* With JavaScript the bars start empty and grow in real time when the chart is in view */
+.race.is-armed .race-bar { width: 0; }
+.race.is-armed .race-value { opacity: 0; }
+.race.is-running .race-bar { width: var(--value); transition: width var(--time) linear; }
+.race.is-running .race-value { opacity: 1; transition: opacity 0.3s ease var(--time); }
+
+/* Side-by-side screenshots of the same two typos */
+.compare {
+  display: grid;
+  /* both screenshots are 934px tall, so widths in this ratio keep them level */
+  grid-template-columns: minmax(0, 1072fr) minmax(0, 728fr);
+  gap: 32px;
+  align-items: start;
+  margin-top: 72px;
+}
+.compare-item { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.compare-label { display: flex; align-items: center; gap: 10px; font-size: 1.375rem; }
+.swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--accent); }
+.is-context .swatch { background: var(--context); }
+.compare-shot {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 30px 70px -35px rgba(15, 23, 42, 0.35);
+  cursor: zoom-in;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.compare-shot:hover { transform: translateY(-3px); box-shadow: 0 40px 80px -36px rgba(15, 23, 42, 0.45); }
+.compare-shot img { display: block; width: 100%; }
+.compare-item figcaption { max-width: 560px; font-size: 1.0625rem; line-height: 1.55; color: var(--muted); }
 
 /* ---------- Classroom (dark) ---------- */
 .classroom { background: var(--ink); color: #fff; padding: 120px 0; }
@@ -340,6 +473,8 @@ p { margin: 0; }
   .steps::before { display: none; }
   .classroom, .how { padding: 96px 0; }
   .github { padding: 96px 0; }
+  .feedback { padding-bottom: 96px; }
+  .compare { gap: 24px; margin-top: 56px; }
 }
 
 @media (max-width: 720px) {
@@ -350,6 +485,10 @@ p { margin: 0; }
   .split, .classroom, .how { padding: 72px 0; }
   .github { padding: 72px 0; }
   .how .center { gap: 40px; }
+  .feedback { padding-bottom: 72px; }
+  .race { margin-top: 40px; padding: 20px 20px 18px; }
+  .compare { grid-template-columns: 1fr; gap: 48px; margin-top: 48px; }
+  .compare-shot { border-radius: 10px; }
 }
 
 @media (max-width: 520px) {
@@ -361,4 +500,11 @@ p { margin: 0; }
   .actions { flex-direction: column; align-items: stretch; width: 100%; }
   .steps { grid-template-columns: 1fr; }
   .footer-inner { justify-content: center; text-align: center; }
+  /* Chart: the title gets the full width, the replay button moves below, each name above its bar */
+  .race { grid-template-columns: minmax(0, 1fr); }
+  .race-replay { grid-row: 4; justify-self: start; }
+  .race-row, .race-axis { grid-template-columns: minmax(0, 1fr) 3rem; column-gap: 12px; }
+  .race-name { grid-column: 1 / -1; padding-top: 4px; }
+  .race-track { height: 40px; }
+  .race-axis > span:first-child { display: none; }
 }

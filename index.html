@@ -128,6 +128,60 @@
     </div>
   </section>
 
+  <section class="feedback" id="feedback" aria-labelledby="feedback-heading">
+    <div class="wrap">
+      <div class="center feedback-intro">
+        <h2 id="feedback-heading"><span>Make a mistake.</span> <span>See why in a second.</span></h2>
+        <p>HDLBoard compiles your design in under a second, while Altera Quartus Prime needs more than five. Mistakes are marked right in your code, with a message that says what is wrong.</p>
+      </div>
+
+      <!-- The axis runs 0–5 s, so 1 s is 20% of the track, and both bars grow at that real-time speed. -->
+      <figure class="race">
+        <figcaption class="race-title">Time to compile the same VHDL file</figcaption>
+        <button class="race-replay" type="button" hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Run again
+        </button>
+        <div class="race-plot">
+          <div class="race-row" style="--value: 16%; --time: 0.8s">
+            <span class="race-name">HDLBoard</span>
+            <span class="race-track"><span class="race-bar"></span><span class="race-value">&lt; 1&nbsp;s</span></span>
+          </div>
+          <div class="race-row is-context" style="--value: 100%; --time: 5s">
+            <span class="race-name">Quartus Prime Lite</span>
+            <span class="race-track"><span class="race-bar"></span><span class="race-value">&gt; 5&nbsp;s</span></span>
+          </div>
+          <div class="race-axis" aria-hidden="true">
+            <span></span>
+            <span class="race-ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5&nbsp;s</span></span>
+          </div>
+        </div>
+        <p class="race-note">Quartus Prime Lite 25.1, Analysis &amp; Synthesis step only. A full compile takes longer.</p>
+      </figure>
+
+      <div class="compare">
+        <figure class="compare-item">
+          <h3 class="compare-label"><span class="swatch" aria-hidden="true"></span>HDLBoard</h3>
+          <a class="compare-shot" href="assets/errors-hdlboard.png" target="_blank" rel="noopener">
+            <span class="sr-only">Open full size: </span>
+            <img src="assets/errors-hdlboard.png" width="1072" height="934" loading="lazy"
+                 alt="HDLBoard after compiling a VHDL file with two typos: lines 17 and 20 are tinted red with a cross in the margin, the wrong character is underlined, and each line ends with its error message, interfaces must be separated by ';' (found ','), and extra ';' at end of interface list" />
+          </a>
+          <figcaption>Both typos are marked in your code. Each line turns red, the exact spot is underlined and the message sits right beside it.</figcaption>
+        </figure>
+        <figure class="compare-item is-context">
+          <h3 class="compare-label"><span class="swatch" aria-hidden="true"></span>Quartus Prime Lite</h3>
+          <a class="compare-shot" href="assets/errors-quartus.png" target="_blank" rel="noopener">
+            <span class="sr-only">Open full size: </span>
+            <img src="assets/errors-quartus.png" width="728" height="934" loading="lazy"
+                 alt="Quartus Prime Lite after compiling the same code: the editor shows no marks, and the message list below shows error 10500, VHDL syntax error at MyTest.vhd(17) near text ','; expecting ';', or ')', and Analysis and Synthesis unsuccessful with 1 error" />
+          </a>
+          <figcaption>Nothing is marked in the code. Error 10500 appears in the message list, and only the first typo is reported, so the second costs another compile.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
   <section class="classroom">
     <div class="wrap center">
       <h2>Made for the classroom</h2>
@@ -180,6 +234,30 @@
     </nav>
   </div>
 </footer>
+
+<script>
+  // The compile-time chart races in real time once it scrolls into view. Without
+  // JavaScript, or with reduced motion, it simply shows the finished chart.
+  (function () {
+    var race = document.querySelector('.race');
+    if (!race || !('IntersectionObserver' in window) ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var replay = race.querySelector('.race-replay');
+    function run() {
+      race.classList.remove('is-running');
+      void race.offsetWidth; // let the bars drop back to zero before they grow again
+      race.classList.add('is-running');
+    }
+    race.classList.add('is-armed');
+    replay.hidden = false;
+    replay.addEventListener('click', run);
+    new IntersectionObserver(function (entries, observer) {
+      if (!entries[0].isIntersecting) return;
+      observer.disconnect();
+      run();
+    }, { threshold: 0.6 }).observe(race);
+  })();
+</script>
 
 </body>
 </html>
