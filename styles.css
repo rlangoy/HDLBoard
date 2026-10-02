@@ -108,8 +108,8 @@ p { margin: 0; }
 .btn-outline { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
 .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
 
-.btn-ghost-dark { color: #fff; border-color: var(--muted); }
-.btn-ghost-dark:hover { color: #fff; border-color: #94A3B8; background: rgba(255, 255, 255, 0.06); }
+.btn-ghost-dark { color: #fff; border-color: rgba(255, 255, 255, 0.55); }
+.btn-ghost-dark:hover { color: #fff; border-color: #fff; background: rgba(255, 255, 255, 0.1); }
 
 .btn-light { background: #fff; color: var(--ink); }
 .btn-light:hover { background: var(--accent-soft); color: var(--ink); }
@@ -123,8 +123,7 @@ p { margin: 0; }
 
 /* ---------- Header ---------- */
 .site-header {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 50;
   background: rgba(242, 246, 252, 0.88);
   -webkit-backdrop-filter: saturate(1.4) blur(10px);
@@ -274,10 +273,11 @@ p { margin: 0; }
 .split-text .text-link { font-size: 1.0625rem; }
 
 /* ---------- Feedback: compile time and error messages ---------- */
-.feedback { padding: 0 0 128px; }
+.feedback { background: var(--band); color: #fff; padding: 128px 0; }
+.feedback h2 { color: #fff; }
 .feedback-intro { gap: 24px; }
 .feedback-intro h2 span { display: inline-block; }  /* wrap between the sentences, not inside one */
-.feedback-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--muted); }
+.feedback-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--band-text); }
 
 /* Time-to-compile chart: HDLBoard in the accent, Quartus in the context grey */
 .race {
@@ -286,10 +286,11 @@ p { margin: 0; }
   max-width: 880px;
   margin: 56px auto 0;
   padding: 24px 32px 22px;
+  color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: 0 30px 70px -35px rgba(15, 23, 42, 0.35);
+  box-shadow: none;
 }
 .race-title { font-weight: 600; font-size: 1.125rem; }
 .race-row, .race-axis {
@@ -346,14 +347,14 @@ p { margin: 0; }
 .race.is-running .race-bar { width: var(--value); transition: width var(--time) linear; }
 .race.is-running .race-value { opacity: 1; transition: opacity 0.3s ease var(--time); }
 
-/* Side-by-side screenshots of the same two typos */
+/* Side-by-side screenshots of the same two typos, on white below the black band */
+.compare-section { background: var(--surface); padding: 112px 0 128px; }
 .compare {
   display: grid;
   /* both screenshots are 934px tall, so widths in this ratio keep them level */
   grid-template-columns: minmax(0, 1072fr) minmax(0, 728fr);
   gap: 32px;
   align-items: start;
-  margin-top: 72px;
 }
 .compare-item { display: flex; flex-direction: column; gap: 16px; margin: 0; }
 .compare-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -395,11 +396,11 @@ p { margin: 0; }
 }
 .checks code { font-size: 0.92em; padding: 1px 5px; border-radius: 5px; background: #E8EEF8; color: var(--ink-2); }
 
-/* ---------- Classroom (dark) ---------- */
-.classroom { background: var(--ink); color: #fff; padding: 120px 0; }
+/* ---------- Classroom (blue) ---------- */
+.classroom { background: var(--band); color: #fff; padding: 120px 0; }
 .classroom-intro { gap: 24px; }
 .classroom h2, .classroom h3 { color: #fff; }
-.classroom-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--line-strong); }
+.classroom-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--band-text); }
 .paths {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -414,14 +415,14 @@ p { margin: 0; }
   align-items: flex-start;
   gap: 10px;
   padding: 28px 24px;
-  border: 1px solid #2A3854;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 18px;
-  background: linear-gradient(180deg, #18233B 0%, #131C31 100%);
+  background: rgba(255, 255, 255, 0.08);
 }
 .path-icon { width: 40px; height: 40px; margin-bottom: 6px; color: #fff; }
 .path-icon svg { display: block; width: 100%; height: 100%; }
 .path h3 { font-size: 1.375rem; }
-.path p { flex-grow: 1; font-size: 1rem; line-height: 1.5; color: var(--line-strong); }
+.path p { flex-grow: 1; font-size: 1rem; line-height: 1.5; color: var(--band-text); }
 .path .btn { margin-top: 14px; gap: 8px; white-space: nowrap; }
 
 /* ---------- How it works ---------- */
@@ -487,14 +488,14 @@ p { margin: 0; }
 .scope-col h3 { font-size: 1.375rem; }
 
 /* ---------- GitHub ---------- */
-.github { background: var(--accent-hover); color: #fff; padding: 40px 0; }
+.github { background: var(--band); color: #fff; padding: 40px 0; }
 .github-strip { display: flex; align-items: center; gap: 28px; }
 .github-mark { flex: none; display: flex; color: #fff; }
 .github-text { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .github h2 { color: #fff; font-size: clamp(1.5rem, 2.4vw, 1.875rem); letter-spacing: -0.02em; }
-.github p { font-size: 1.0625rem; line-height: 1.5; color: #E3ECFA; }
+.github p { font-size: 1.0625rem; line-height: 1.5; color: var(--band-text); }
 .btn-ghost-light { flex: none; height: 48px; padding: 0 22px; border-color: rgba(255, 255, 255, 0.75); color: #fff; font-size: 1rem; }
-.btn-ghost-light:hover { background: #fff; border-color: #fff; color: var(--accent-hover); }
+.btn-ghost-light:hover { background: #fff; border-color: #fff; color: var(--band); }
 
 /* ---------- Footer ---------- */
 .footer-inner {
@@ -526,8 +527,9 @@ p { margin: 0; }
   .scope { grid-template-columns: 1fr; }
   .steps::before { display: none; }
   .classroom, .how { padding: 96px 0; }
-  .feedback { padding-bottom: 96px; }
-  .compare { gap: 24px; margin-top: 56px; }
+  .feedback { padding: 96px 0; }
+  .compare { gap: 24px; }
+  .compare-section { padding: 88px 0 96px; }
 }
 
 @media (max-width: 720px) {
@@ -537,9 +539,10 @@ p { margin: 0; }
   .hero-shot { margin-top: 48px; border-radius: 10px; }
   .split, .classroom, .how { padding: 72px 0; }
   .how .center { gap: 40px; }
-  .feedback { padding-bottom: 72px; }
+  .feedback { padding: 72px 0; }
   .race { margin-top: 40px; padding: 20px 20px 18px; }
-  .compare { grid-template-columns: 1fr; gap: 48px; margin-top: 48px; }
+  .compare { grid-template-columns: 1fr; gap: 48px; }
+  .compare-section { padding: 64px 0 72px; }
   .compare-shot { border-radius: 10px; }
 }
 

@@ -69,11 +69,9 @@
 
 <section class="hero">
   <div class="wrap">
-
     <div class="hero-text">
       <h1><span>Write VHDL or Verilog.</span> <span>Watch it light up.</span></h1>
       <p class="lede">A virtual FPGA board on your screen. Flip switches, press buttons and see your design come alive. No hardware needed.</p>
-      <p class="hero-note">Uses the DE1-SoC board’s real pin names, so your design goes straight into Quartus.</p>
       <div class="actions">
         <a class="btn btn-primary btn-lg btn-glow" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.2.2/HDLBoard-Setup-1.2.2.exe">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
@@ -83,9 +81,6 @@
           <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M8 4h16a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM8 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM20 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM12 27v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-4zM24 27v4a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-4zM5 12H1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h4zM5 24H1a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4zM27 8h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM27 20h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM8 8v16h4v-6h8v6h4V8h-4v6h-8V8z"/></svg>
           Try online
         </a>
-      </div>
-      <p class="hero-sub">Free · Windows installer, 91 MB &nbsp;·&nbsp; <a href="https://github.com/rlangoy/HDLBoard">Source on GitHub</a></p>
-    </div>
 
     <img class="hero-shot" src="assets/workbench.png?v=3" width="1486" height="943" loading="eager"
          alt="HDLBoard running a Verilog design under Icarus Verilog: the file tree and editor on the left, and the virtual board on the right with lit LEDs, switches, 7-segment displays and pushbuttons" />
@@ -155,12 +150,16 @@
         </div>
         <p class="race-note">Measured with the same file on a Windows 11 laptop (Intel Core i7-1185G7, 32&nbsp;GB): GHDL 5.0.1 checks it in 0.02&nbsp;s, Quartus Prime Lite 25.1 needs 8.8&nbsp;s for Analysis &amp; Synthesis alone. A full Quartus compile takes longer.</p>
       </figure>
+    </div>
+  </section>
 
+  <section class="compare-section" aria-label="Error messages in HDLBoard and Quartus">
+    <div class="wrap">
       <div class="compare">
         <figure class="compare-item">
           <div class="compare-head">
             <h3 class="compare-label"><span class="swatch" aria-hidden="true"></span>HDLBoard</h3>
-            <a class="text-link" href="assets/errors-hdlboard.png" target="_blank" rel="noopener">Open full size<span class="sr-only"> HDLBoard screenshot</span> <span aria-hidden="true">↗</span></a>
+            
           </div>
           <a class="compare-shot" href="assets/errors-hdlboard.png" target="_blank" rel="noopener" tabindex="-1">
             <img src="assets/errors-hdlboard.png" width="1072" height="934" loading="lazy"
@@ -178,7 +177,7 @@
         <figure class="compare-item is-context">
           <div class="compare-head">
             <h3 class="compare-label"><span class="swatch" aria-hidden="true"></span>Quartus Prime Lite</h3>
-            <a class="text-link" href="assets/errors-quartus.png" target="_blank" rel="noopener">Open full size<span class="sr-only"> Quartus screenshot</span> <span aria-hidden="true">↗</span></a>
+          
           </div>
           <a class="compare-shot" href="assets/errors-quartus.png" target="_blank" rel="noopener" tabindex="-1">
             <img src="assets/errors-quartus.png" width="728" height="934" loading="lazy"
