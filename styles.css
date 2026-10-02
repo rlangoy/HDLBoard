@@ -267,9 +267,7 @@ p { margin: 0; }
 /* Time-to-compile chart: HDLBoard in the accent, Quartus in the context grey */
 .race {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px 16px;
+  gap: 18px;
   max-width: 880px;
   margin: 56px auto 0;
   padding: 24px 32px 22px;
@@ -279,23 +277,6 @@ p { margin: 0; }
   box-shadow: 0 30px 70px -35px rgba(15, 23, 42, 0.35);
 }
 .race-title { font-weight: 600; font-size: 1.125rem; }
-.race-replay {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink-2);
-  font: 600 0.9375rem/1 var(--font-body);
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-.race-replay:hover { border-color: var(--accent); color: var(--accent); }
-.race-replay[hidden] { display: none; }
-.race-plot, .race-note { grid-column: 1 / -1; }
 .race-row, .race-axis {
   display: grid;
   grid-template-columns: 9.5rem minmax(0, 1fr) 3.5rem;
@@ -500,9 +481,7 @@ p { margin: 0; }
   .actions { flex-direction: column; align-items: stretch; width: 100%; }
   .steps { grid-template-columns: 1fr; }
   .footer-inner { justify-content: center; text-align: center; }
-  /* Chart: the title gets the full width, the replay button moves below, each name above its bar */
-  .race { grid-template-columns: minmax(0, 1fr); }
-  .race-replay { grid-row: 4; justify-self: start; }
+  /* Chart: each name moves above its bar */
   .race-row, .race-axis { grid-template-columns: minmax(0, 1fr) 3rem; column-gap: 12px; }
   .race-name { grid-column: 1 / -1; padding-top: 4px; }
   .race-track { height: 40px; }

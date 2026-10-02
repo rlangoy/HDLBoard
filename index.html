@@ -138,10 +138,6 @@
       <!-- The axis runs 0–5 s, so 1 s is 20% of the track, and both bars grow at that real-time speed. -->
       <figure class="race">
         <figcaption class="race-title">Time to compile the same VHDL file</figcaption>
-        <button class="race-replay" type="button" hidden>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          Run again
-        </button>
         <div class="race-plot">
           <div class="race-row" style="--value: 16%; --time: 0.8s">
             <span class="race-name">HDLBoard</span>
@@ -236,26 +232,21 @@
 </footer>
 
 <script>
-  // The compile-time chart races in real time once it scrolls into view. Without
-  // JavaScript, or with reduced motion, it simply shows the finished chart.
+  // The compile-time chart races in real time each time the page is scrolled down to it.
+  // Without JavaScript, or with reduced motion, it simply shows the finished chart.
   (function () {
     var race = document.querySelector('.race');
     if (!race || !('IntersectionObserver' in window) ||
         window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var replay = race.querySelector('.race-replay');
-    function run() {
-      race.classList.remove('is-running');
-      void race.offsetWidth; // let the bars drop back to zero before they grow again
-      race.classList.add('is-running');
-    }
     race.classList.add('is-armed');
-    replay.hidden = false;
-    replay.addEventListener('click', run);
-    new IntersectionObserver(function (entries, observer) {
-      if (!entries[0].isIntersecting) return;
-      observer.disconnect();
-      run();
-    }, { threshold: 0.6 }).observe(race);
+    new IntersectionObserver(function (entries) {
+      var entry = entries[entries.length - 1];
+      if (entry.intersectionRatio >= 0.6 || entry.boundingClientRect.top < 0) {
+        race.classList.add('is-running');     // in view, or already scrolled past it
+      } else if (!entry.isIntersecting) {
+        race.classList.remove('is-running');  // below the screen again: race on the next way down
+      }
+    }, { threshold: [0, 0.6] }).observe(race);
   })();
 </script>
 
