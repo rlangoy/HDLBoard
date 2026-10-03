@@ -944,6 +944,15 @@ component work in §§ 1–7 is one half of it; this is the other.
   syntax highlighting, chosen by the file's extension (keywords, types,
   comments, strings, numbers; Verilog also colours `$system` tasks and
   `` `directives``), built on a real, editable `<textarea>`, not a static preview.
+- **Testbench split view** — the editor column splits into a testbench (TB)
+  pane on the left and a design (RTL) pane on the right when the file shown is,
+  or is paired with, a testbench. A lexical detector (`tbDetect/`) scores every
+  design unit for simulation-only code outside comments and strings (`wait for`,
+  clock generators, `#` delays, `$finish`…); strong evidence opens the split,
+  weak evidence offers a chip. A view switch [TB | Both | RTL] pins a view per
+  pair; Settings has Automatic / Always / Never. Play in a pane runs that pane's
+  unit (`RUN <file> @<unit>`), so a testbench inside its design's file, or a
+  legacy `work/` testbench, runs too. Spec: `docs/impl_split_screen.md`.
 - **Simulation controls** — Start/Stop drives a real `ghdl -a` / `-e` /
   `-r` compile → elaborate → run sequence for a VHDL top file, or
   `iverilog` / `vvp` for a Verilog one (the engine follows the top file's
