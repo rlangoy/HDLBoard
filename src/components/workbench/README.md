@@ -433,7 +433,7 @@ The IDE chrome around the two side panes.
 `<SidePanel id side title width collapsed onCollapse shortcut?>` is one
 side pane: an `<aside>` with an uppercase title strip — the same height as
 the editor's tab strip, so their bottom borders run on as one line — and a
-hide button (`PanelCloseIcon`) on the pane's inner edge, beside the editor:
+hide button (`PanelToggleIcon`) on the pane's inner edge, beside the editor:
 after the title on the left pane, before it on the right one. Collapsed,
 the `<aside>` goes to width 0 but
 stays mounted, so the pane keeps its state (scroll position, folded
@@ -454,7 +454,8 @@ like `<SidePanel>` it clips an inner column that keeps the full rail width,
 so it slides in and out with its pane. It holds:
 
 - `<ActivityBarShow id label controls shortcut onShow icon>` — opens the
-  shut pane again (`ExplorerIcon`, `BoardIcon`).
+  shut pane again, with the pane's own Hide icon mirrored
+  (`PanelToggleIcon` with `open`: the same side bar, the arrow pointing out).
 - `<ActivityBarRun status topFile onStart onStop>` — the Simulation card's
   Start/Stop with `PlayIcon` / `StopIcon`, and a corner dot for the status
   (amber compiling, green running, the same pulse as the card's).
@@ -604,10 +605,7 @@ ignores other schemes.
 
 ### `icons.tsx`
 
-`EditIcon`, `DeleteIcon`, `DownloadIcon`, `FilesIcon` and `GearIcon`, plus
-the side-bar chrome's line icons — `ExplorerIcon`, `BoardIcon` and
-`PanelCloseIcon` (drawn on `GearIcon`'s 24-unit grid and stroke, in
-`currentColor`). The one
+`EditIcon`, `DeleteIcon`, `DownloadIcon`, `FilesIcon` and `GearIcon`. The one
 deliberate exception to this folder's otherwise all-CSS icons (the upload
 arrow, `+`, chevron, folder and file glyphs are all drawn from
 `FileExplorer.css` pseudo-elements, same technique as the board parts):
@@ -620,6 +618,12 @@ fully-local guarantee. `fill="currentColor"` on the `<svg>` is what lets
 each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn icon
 in this folder already does.
+
+`PanelToggleIcon` is the side-bar chrome's one icon, a line drawing on
+`GearIcon`'s 24-unit grid and stroke, in `currentColor`: a window with its
+side bar ruled off, and an arrow pushing the bar shut — a pane's Hide button
+— or, with `open`, the same arrow mirrored, pulling it back out: the Show
+button on the rail a shut pane leaves.
 
 `PlayIcon` and `StopIcon` (`<SimToggle>`'s teal triangle and red square) are
 the exception to that: they carry their own fixed colours, since the

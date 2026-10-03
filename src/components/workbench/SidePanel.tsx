@@ -3,7 +3,7 @@
 
 import type { ReactNode } from 'react';
 import { cx } from '../board';
-import { PanelCloseIcon } from './icons';
+import { PanelToggleIcon } from './icons';
 import './SidePanel.css';
 
 export interface SidePanelProps {
@@ -60,7 +60,7 @@ export function SidePanel({
       aria-expanded={!collapsed}
       onClick={onCollapse}
     >
-      <PanelCloseIcon side={side} aria-hidden="true" />
+      <PanelToggleIcon side={side} aria-hidden="true" />
     </button>
   );
   return (

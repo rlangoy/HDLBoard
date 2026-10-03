@@ -92,36 +92,29 @@ const lineIconProps = {
   strokeLinejoin: 'round',
 } as const;
 
-/** Two stacked pages — the Explorer (Simulation + Files) side bar. */
-export function ExplorerIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...lineIconProps} {...props}>
-      <path d="M15 3H9.5A1.5 1.5 0 0 0 8 4.5v11A1.5 1.5 0 0 0 9.5 17h8a1.5 1.5 0 0 0 1.5-1.5V7z" />
-      <polyline points="15 3 15 7 19 7" />
-      <path d="M5 7.5v12A1.5 1.5 0 0 0 6.5 21H15" />
-    </svg>
-  );
-}
+// The arrow inside PanelToggleIcon, for a side bar on each edge: pointing
+// towards that edge pushes the bar shut, and the same arrow mirrored pulls it
+// back open.
+const PANEL_ARROW = {
+  left: { close: '15.5 9.5 13 12 15.5 14.5', open: '13 9.5 15.5 12 13 14.5' },
+  right: { close: '8.5 9.5 11 12 8.5 14.5', open: '11 9.5 8.5 12 11 14.5' },
+} as const;
 
-/** A chip with its pins — the Board I/O pane. */
-export function BoardIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...lineIconProps} {...props}>
-      <rect x="6" y="6" width="12" height="12" rx="1.5" />
-      <rect x="9.5" y="9.5" width="5" height="5" rx="0.75" />
-      <path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5" />
-    </svg>
-  );
-}
-
-/** A window with its side bar ruled off and an arrow pushing it shut. */
-export function PanelCloseIcon({ side, ...props }: SVGProps<SVGSVGElement> & { side: 'left' | 'right' }) {
-  const left = side === 'left';
+/**
+ * A window with its side bar ruled off on `side`, and an arrow: pushing the
+ * bar shut (the pane's Hide button), or — `open` — the same arrow mirrored,
+ * pulling it back out (the Show button on the rail left by a shut pane).
+ */
+export function PanelToggleIcon({
+  side,
+  open = false,
+  ...props
+}: SVGProps<SVGSVGElement> & { side: 'left' | 'right'; open?: boolean }) {
   return (
     <svg {...lineIconProps} {...props}>
       <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d={left ? 'M9 4v16' : 'M15 4v16'} />
-      <polyline points={left ? '15.5 9.5 13 12 15.5 14.5' : '8.5 9.5 11 12 8.5 14.5'} />
+      <path d={side === 'left' ? 'M9 4v16' : 'M15 4v16'} />
+      <polyline points={PANEL_ARROW[side][open ? 'open' : 'close']} />
     </svg>
   );
 }

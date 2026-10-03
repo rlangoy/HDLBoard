@@ -30,7 +30,7 @@ import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
-import { BoardIcon, ExplorerIcon } from './icons';
+import { PanelToggleIcon } from './icons';
 import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
@@ -935,7 +935,7 @@ export function Workbench() {
           controls={EXPLORER_ID}
           shortcut={EXPLORER_SHORTCUT}
           onShow={() => togglePane('sidebar')}
-          icon={<ExplorerIcon aria-hidden="true" />}
+          icon={<PanelToggleIcon side="left" open aria-hidden="true" />}
         />
         <ActivityBarSeparator />
         <ActivityBarRun status={status} topFile={topFileName} onStart={handleStart} onStop={handleStop} />
@@ -1044,7 +1044,7 @@ export function Workbench() {
           controls={BOARD_PANE_ID}
           shortcut={BOARD_SHORTCUT}
           onShow={() => togglePane('board')}
-          icon={<BoardIcon aria-hidden="true" />}
+          icon={<PanelToggleIcon side="right" open aria-hidden="true" />}
         />
       </ActivityBar>
 
