@@ -1,43 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type RefObject, type UIEvent } from 'react';
+import { useState, type DragEvent, type ReactNode } from 'react';
 import { cx } from '../board';
-import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
-import {
-  countSeverities,
-  hintLines,
-  isFollowOnLine,
-  isQuietLine,
-  NO_DIAGNOSTICS,
-  visibleSpans,
-  type DiagnosticsByFile,
-  type LineDiagnostic,
-} from './diagnosticStore';
-import { ACCEPTED_FILES_TEXT, languageOfName } from './fileKinds';
-import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
-import { isOverflowing } from './scrollThumb';
-import { SimToggle } from './SimToggle';
-import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { tokenizeSource } from './highlight';
-import { markRanges, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
+import { NO_DIAGNOSTICS, type DiagnosticsByFile, type LineDiagnostic } from './diagnosticStore';
+import { EditorSurface, type EditorTab } from './EditorSurface';
+import { EditorTabStrip, type TabRunControl } from './EditorTabStrip';
+import { ACCEPTED_FILES_TEXT } from './fileKinds';
+import { SplitEditor, type SplitEditorProps } from './SplitEditor';
+import type { RevealRequest } from './useRevealLine';
 import './CodeEditor.css';
 
-export interface EditorTab {
-  id: string;
-  name: string;
-  content: string;
-}
-
-/** Which tab carries the play/stop icon, and what it shows and does (SimToggle). */
-export interface TabRunControl {
-  tabId: string;
-  /** A simulation is running this tab's file: Stop rather than Play. */
-  running: boolean;
-  disabled: boolean;
-  /** Start the run (Play) or stop it (Stop). */
-  onClick: () => void;
-}
+export type { EditorTab, TabRunControl };
 
 export interface CodeEditorProps {
   tabs: EditorTab[];
@@ -59,106 +33,77 @@ export interface CodeEditorProps {
   onDismissDiagnostics?: (fileId: string) => void;
   /** Show this line of its file (opened and active), caret at its start. */
   reveal?: RevealRequest | null;
+  /**
+   * The testbench split (docs/impl_split_screen.md § 6.5): the editor shows these
+   * one or two panes instead of the active tab alone. Without it, as before.
+   */
+  split?: SplitEditorProps;
+  /** The split's other shown file, drawn lighter in the tab strip. */
+  visibleTabId?: string | null;
+  /** The role icon before each tab's name. */
+  tabIcon?: (tabId: string) => ReactNode;
+  /** At the tab strip's right end: the suggestion chip and the view switch. */
+  stripEnd?: ReactNode;
 }
 
 const NO_LINES: readonly LineDiagnostic[] = [];
-const NO_RANGES: readonly CharRange[] = [];
-
-const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
-  keyword: 'wb-tok-keyword',
-  type: 'wb-tok-type',
-  comment: 'wb-tok-comment',
-  string: 'wb-tok-string',
-  number: 'wb-tok-number',
-  directive: 'wb-tok-directive',
-  system: 'wb-tok-system',
-  punctuation: 'wb-tok-punct',
-};
-
-/** The marker classes of a line: its severity, muted when every message is a follow-on, untinted when every one is quiet; or a hint. */
-function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDiagnostic | undefined): string {
-  if (diagnostic) {
-    return cx(`is-${diagnostic.severity}`, isFollowOnLine(diagnostic) && 'is-followon', isQuietLine(diagnostic) && 'is-quiet');
-  }
-  return hintFrom ? 'is-hint' : '';
-}
-
-/** One highlighted piece; an underlined one is wrapped, and the underline never changes the glyphs. */
-function TokenPiece({ piece }: { piece: MarkedToken }) {
-  const className = TOKEN_CLASS[piece.type];
-  const text = className ? <span className={className}>{piece.text}</span> : piece.text;
-  return piece.marked ? <span className="wb-editor__diag-span">{text}</span> : <>{text}</>;
-}
-
-function HighlightedLine({
-  line,
-  tokens,
-  diagnostic,
-  hintFrom,
-}: {
-  line: string;
-  /** The line's tokens (`tokenizeSource`); together they are `line`. */
-  tokens: readonly Token[];
-  diagnostic?: LineDiagnostic;
-  /** Rules D and E point at this line from that marked line. */
-  hintFrom?: LineDiagnostic;
-}) {
-  const pieces = markRanges(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
-  const inline = diagnostic ? inlineText(diagnostic) : '';
-  return (
-    <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
-      {line.length === 0 ? ' ' : pieces.map((piece, i) => <TokenPiece key={i} piece={piece} />)}
-      {diagnostic && inline && (
-        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inline}</span>
-      )}
-    </div>
-  );
-}
-
-/** Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue). */
-function EditorGutter({
-  lines,
-  linesByNumber,
-  hints,
-  gutterRef,
-}: {
-  lines: string[];
-  linesByNumber: ReadonlyMap<number, LineDiagnostic>;
-  hints: ReadonlyMap<number, LineDiagnostic>;
-  gutterRef: RefObject<HTMLDivElement>;
-}) {
-  return (
-    <div className="wb-editor__gutter" ref={gutterRef} aria-hidden="true">
-      {lines.map((_, i) => {
-        const diagnostic = linesByNumber.get(i + 1);
-        const hintFrom = hints.get(i + 1);
-        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom);
-        return (
-          <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} key={i} title={title}>
-            {i + 1}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Hidden text after a tab's name, so the dot is not the only cue: ", 2 errors". */
-function tabProblemsText(lines: readonly LineDiagnostic[]): string {
-  const { errors, warnings } = countSeverities(lines);
-  const parts = [
-    errors > 0 && `${errors} error${errors === 1 ? '' : 's'}`,
-    warnings > 0 && `${warnings} warning${warnings === 1 ? '' : 's'}`,
-  ].filter(Boolean);
-  return parts.length > 0 ? `, ${parts.join(', ')}` : '';
-}
 
 /**
- * The tabbed VHDL and Verilog editor. A transparent `<textarea>` sits over a
- * highlighted `<pre>` with identical font metrics — the standard
- * overlay technique, so typing, selection and the caret are all native
- * while the visible text is coloured.
+ * The drop zone around the editor column. Same ref-counted-depth technique as
+ * FileExplorer's, and for the same reason (a child's dragenter and the parent's
+ * dragleave fire in the same tick, so a boolean flickers while crossing lines
+ * underneath the pointer). Dropped files are imported exactly like a drop on the
+ * Files panel — never inserted at the caret, which a plain <textarea> would do.
  */
+export function useFileDrop(onFilesDropped: (files: FileList) => void) {
+  const [dragDepth, setDragDepth] = useState(0);
+  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes('Files');
+  return {
+    dragging: dragDepth > 0,
+    handlers: {
+      onDragEnter: (e: DragEvent<HTMLDivElement>) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        setDragDepth((d) => d + 1);
+      },
+      onDragOver: (e: DragEvent<HTMLDivElement>) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); // required for onDrop to fire, and stops the textarea inserting the file as text
+        e.dataTransfer.dropEffect = 'copy';
+      },
+      onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        setDragDepth((d) => Math.max(0, d - 1));
+      },
+      onDrop: (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setDragDepth(0);
+        if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+      },
+    },
+  };
+}
+
+export function DropHint() {
+  return (
+    <div className="wb-editor__drop-hint" aria-hidden="true">
+      <span className="wb-icon wb-icon--upload" aria-hidden="true" />
+      Drop {ACCEPTED_FILES_TEXT} files
+    </div>
+  );
+}
+
+export function NoFileOpen() {
+  return (
+    <div className="wb-editor__empty">
+      <p>No file open</p>
+      <p className="wb-editor__empty-hint">Select a file from the Files panel to start editing.</p>
+    </div>
+  );
+}
+
+/** The tabbed VHDL and Verilog editor: one tab strip over one code surface, or over the testbench split. */
 export function CodeEditor({
   tabs,
   activeTabId,
@@ -171,201 +116,42 @@ export function CodeEditor({
   diagnostics = NO_DIAGNOSTICS,
   onDismissDiagnostics,
   reveal,
+  split,
+  visibleTabId,
+  tabIcon,
+  stripEnd,
 }: CodeEditorProps) {
-  const preRef = useRef<HTMLPreElement>(null);
-  const gutterRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const scroll = useScrollMetrics(textareaRef);
-  // Where both bars show, each stops short of the corner the other one runs into.
-  const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
-  const cornerInset = bothBars ? SCROLLBAR_PX : 0;
+  const drop = useFileDrop(onFilesDropped);
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
-  const lines = active ? active.content.split('\n') : [];
-  const language = active ? languageOfName(active.name) : undefined;
-  // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
-  const tokenLines = useMemo(
-    () => tokenizeSource(language, active ? active.content.split('\n') : []),
-    [language, active?.content],
-  );
-  const activeLines = (active && diagnostics[active.id]) || NO_LINES;
-  const linesByNumber = useMemo(() => new Map(activeLines.map((d) => [d.line, d])), [activeLines]);
-  const hints = useMemo(() => hintLines(activeLines), [activeLines]);
-  // Computed only from the stored lines, so a repeating assertion that adds
-  // nothing leaves the text unchanged and the live region silent.
-  const status = useMemo(() => (active ? summarize(active.name, activeLines) : ''), [active?.name, activeLines]);
-  const statusId = useId();
-  useRevealLine(textareaRef, active, reveal);
-
-  // Keep the active tab in sight when many tabs overflow the strip, e.g. after
-  // opening a file from the Files panel. Only the strip scrolls, never the page.
-  useEffect(() => {
-    const strip = tabsRef.current;
-    const tab = strip?.querySelector<HTMLElement>('.wb-editor__tab.is-active');
-    if (!strip || !tab) return;
-    const stripBox = strip.getBoundingClientRect();
-    const tabBox = tab.getBoundingClientRect();
-    if (tabBox.left < stripBox.left) strip.scrollLeft -= stripBox.left - tabBox.left;
-    else if (tabBox.right > stripBox.right) strip.scrollLeft += tabBox.right - stripBox.right;
-  }, [activeTabId, tabs.length]);
-
-  const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
-    const { scrollTop, scrollLeft } = e.currentTarget;
-    if (preRef.current) {
-      preRef.current.scrollTop = scrollTop;
-      preRef.current.scrollLeft = scrollLeft;
-    }
-    if (gutterRef.current) {
-      gutterRef.current.scrollTop = scrollTop;
-    }
-  };
-
-  // Same ref-counted-depth technique as FileExplorer's drop zone, and for
-  // the same reason (a child's dragenter and the parent's dragleave fire
-  // in the same tick, so a boolean flickers while crossing rows/lines
-  // underneath the pointer). Dropped files are imported exactly like a
-  // drop on the Files panel — this pane does not try to insert file
-  // content at the caret, which is what a plain <textarea> would
-  // otherwise do with a dropped file by default.
-  const [dragDepth, setDragDepth] = useState(0);
-
-  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragDepth((d) => d + 1);
-  };
-
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault(); // required for onDrop to fire, and stops the
-    // textarea's own default (inserting the dropped file as text)
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragDepth((d) => Math.max(0, d - 1));
-  };
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragDepth(0);
-    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
-  };
 
   return (
-    <div
-      className={cx('wb-editor', dragDepth > 0 && 'is-drag-over')}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {dragDepth > 0 && (
-        <div className="wb-editor__drop-hint" aria-hidden="true">
-          <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-          Drop {ACCEPTED_FILES_TEXT} files
-        </div>
-      )}
-      <div className="wb-editor__tabs" role="tablist" ref={tabsRef}>
-        {tabs.map((tab) => {
-          const tabLines = diagnostics[tab.id] ?? NO_LINES;
-          const { errors, warnings } = countSeverities(tabLines);
-          return (
-          <div
-            key={tab.id}
-            role="tab"
-            tabIndex={0}
-            aria-selected={tab.id === activeTabId}
-            className={cx(
-              'wb-editor__tab',
-              tab.id === activeTabId && 'is-active',
-              errors > 0 && 'has-errors',
-              errors === 0 && warnings > 0 && 'has-warnings',
-            )}
-            onClick={() => onSelectTab(tab.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') onSelectTab(tab.id);
-            }}
-          >
-            {tabRun?.tabId === tab.id && (
-              <SimToggle
-                className="wb-editor__tab-run"
-                fileName={tab.name}
-                running={tabRun.running}
-                disabled={tabRun.disabled}
-                onClick={tabRun.onClick}
-              />
-            )}
-            <span className="wb-editor__tab-name">
-              {tab.name}
-              <span className="wb-sr-only">{tabProblemsText(tabLines)}</span>
-            </span>
-            <button
-              type="button"
-              className="wb-editor__tab-close"
-              aria-label={`Close ${tab.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseTab(tab.id);
-              }}
-            >
-              ×
-            </button>
-          </div>
-          );
-        })}
-        <button type="button" className="wb-editor__tab-add" aria-label="New file" onClick={onAddTab}>
-          +
-        </button>
-      </div>
-
-      {active ? (
-        <div
-          className="wb-editor__body"
-          // A click in the text or on a line number clears this file's markers
-          // (hovering does not). The reveal's own focus and scroll are not clicks.
-          onPointerDown={() => {
-            if (activeLines.length > 0) onDismissDiagnostics?.(active.id);
-          }}
-        >
-          <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
-            {status}
-          </p>
-          <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} gutterRef={gutterRef} />
-          <div className="wb-editor__surface">
-            <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
-              {lines.map((line, i) => (
-                <HighlightedLine
-                  line={line}
-                  tokens={tokenLines[i] ?? []}
-                  key={i}
-                  diagnostic={linesByNumber.get(i + 1)}
-                  hintFrom={hints.get(i + 1)}
-                />
-              ))}
-            </pre>
-            <textarea
-              ref={textareaRef}
-              className="wb-editor__textarea wb-scrollbar-host"
-              value={active.content}
-              spellCheck={false}
-              wrap="off"
-              onScroll={handleScroll}
-              onChange={(e) => onChange(active.id, e.target.value)}
-              aria-label={`${active.name} source`}
-              aria-describedby={statusId}
-            />
-            <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
-            <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
-          </div>
-        </div>
+    <div className={cx('wb-editor', drop.dragging && 'is-drag-over')} {...drop.handlers}>
+      {drop.dragging && <DropHint />}
+      <EditorTabStrip
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelectTab={onSelectTab}
+        onCloseTab={onCloseTab}
+        onAddTab={onAddTab}
+        tabRun={tabRun}
+        diagnostics={diagnostics}
+        visibleTabId={visibleTabId}
+        tabIcon={tabIcon}
+      >
+        {stripEnd}
+      </EditorTabStrip>
+      {split ? (
+        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} />
+      ) : active ? (
+        <EditorSurface
+          file={active}
+          diagnostics={diagnostics[active.id] ?? NO_LINES}
+          onChange={onChange}
+          onDismissDiagnostics={onDismissDiagnostics}
+          reveal={reveal}
+        />
       ) : (
-        <div className="wb-editor__empty">
-          <p>No file open</p>
-          <p className="wb-editor__empty-hint">Select a file from the Files panel to start editing.</p>
-        </div>
+        <NoFileOpen />
       )}
     </div>
   );

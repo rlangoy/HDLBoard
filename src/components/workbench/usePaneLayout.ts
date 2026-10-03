@@ -114,16 +114,19 @@ export function usePaneLayout(): PaneLayoutState {
   // window regains room, instead of staying stuck at a once-clamped size.
   //
   // Everything starts from wherever it was last left (paneLayout.ts), and is
-  // stored again at the end of every drag and every open or close.
-  const [initialLayout] = useState(() =>
-    loadPaneLayout({
+  // stored again at the end of every drag and every open or close — except
+  // that the Board I/O pane always starts open: the board is what the app is
+  // for, and a board shut in an earlier session looks like a broken page.
+  const [initialLayout] = useState(() => ({
+    ...loadPaneLayout({
       sidebarWidth: SIDEBAR_DEFAULT_W,
       boardWidth: BOARD_DEFAULT_W,
       consoleHeight: CONSOLE_DEFAULT_H,
       sidebarCollapsed: false,
       boardCollapsed: false,
     }),
-  );
+    boardCollapsed: false,
+  }));
   const desiredWidth = useRef<Record<SidePane, number>>({
     sidebar: initialLayout.sidebarWidth,
     board: initialLayout.boardWidth,

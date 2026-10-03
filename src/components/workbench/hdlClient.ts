@@ -66,12 +66,21 @@ function parseState(bits: string): { ledr: BitVector; hex: SegmentVector[] } {
 
 /**
  * The files one run sends: those in the folder of the top file (`sourceFolderFor`:
- * `verilog/` for a Verilog top, `vhdl/` otherwise). Shared by `HdlClient.run` and
- * the diagnostics snapshot, so the snapshot is exactly what was uploaded.
+ * `verilog/` for a Verilog top, `vhdl/` otherwise). A `work/` testbench run from the
+ * TB pane is the top itself, so it goes too — every other `work/` file stays out
+ * (docs/impl_split_screen.md D21). Shared by `HdlClient.run` and the diagnostics
+ * snapshot, so the snapshot is exactly what was uploaded.
  */
 export function filesForRun(files: readonly VhdlFile[], topFileName?: string): VhdlFile[] {
-  const folder = sourceFolderFor(files.find((f) => f.name === topFileName));
-  return files.filter((f) => f.folder === folder);
+  const top = files.find((f) => f.name === topFileName);
+  const folder = sourceFolderFor(top);
+  return files.filter((f) => f.folder === folder || (f === top && f.folder === 'work'));
+}
+
+/** `RUN`'s head line: `RUN <top> [@<unit>]` (D20); keep in step with server/src/protocol.ts. */
+export function runHeader(topFileName?: string, runTarget?: string | null): string {
+  if (!topFileName) return 'RUN';
+  return runTarget ? `RUN ${topFileName} @${runTarget}` : `RUN ${topFileName}`;
 }
 
 export class HdlClient {
@@ -166,11 +175,11 @@ export class HdlClient {
    * rather than guessing from board-port matches — see `portDetect.ts`'s
    * `findTopEntity`.
    */
-  run(files: VhdlFile[], topFileName?: string): void {
+  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null): void {
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
-    const head = topFileName ? `RUN ${topFileName}` : 'RUN';
+    const head = runHeader(topFileName, runTarget);
     const send = () => ws.send(`${head}\n${body}`);
     // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.
     if (ws.readyState === WebSocket.OPEN) send();

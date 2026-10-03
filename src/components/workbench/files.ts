@@ -250,13 +250,181 @@ const KEY_COUNTER_2_LED_V = `module counter8 (
 endmodule
 `;
 
+const AND_GATE_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+
+entity and_gate is
+    port (
+        a : in  std_logic;
+        b : in  std_logic;
+        y : out std_logic
+    );
+end entity and_gate;
+
+architecture rtl of and_gate is
+begin
+    y <= a and b;
+end architecture rtl;
+`;
+
+const AND_GATE_TB_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+
+entity and_gate_tb is
+end entity and_gate_tb;
+
+architecture sim of and_gate_tb is
+
+    signal a : std_logic := '0';
+    signal b : std_logic := '0';
+    signal y : std_logic;
+
+begin
+
+    -- Unit Under Test
+    uut : entity work.and_gate(rtl)
+        port map (
+            a => a,
+            b => b,
+            y => y
+        );
+
+    -- Test stimulus and verification
+    process
+    begin
+
+        -- Test 1: 0 AND 0 = 0
+        a <= '0';
+        b <= '0';
+        wait for 10 ns;
+
+        assert y = '0'
+            report "Test 1 failed: 0 AND 0 should be 0"
+            severity error;
+
+
+        -- Test 2: 0 AND 1 = 0
+        a <= '0';
+        b <= '1';
+        wait for 10 ns;
+
+        assert y = '0'
+            report "Test 2 failed: 0 AND 1 should be 0"
+            severity error;
+
+
+        -- Test 3: 1 AND 0 = 0
+        a <= '1';
+        b <= '0';
+        wait for 10 ns;
+
+        assert y = '0'
+            report "Test 3 failed: 1 AND 0 should be 0"
+            severity error;
+
+
+        -- Test 4: 1 AND 1 = 1
+        a <= '1';
+        b <= '1';
+        wait for 10 ns;
+
+        assert y = '1'
+            report "Test 4 failed: 1 AND 1 should be 1"
+            severity error;
+
+
+        report "All tests passed" severity note;
+
+        wait;
+    end process;
+
+end architecture sim;
+`;
+
+const AND_GATE_V = `module and_gate (
+    input  wire a,
+    input  wire b,
+    output wire y
+);
+    assign y = a & b;
+endmodule
+`;
+
+const AND_GATE_TB_V = `// Self-checking testbench: no ports, so it runs on its own (batch mode).
+module and_gate_tb;
+
+    reg  a = 1'b0;
+    reg  b = 1'b0;
+    wire y;
+
+    // Unit Under Test
+    and_gate uut (
+        .a(a),
+        .b(b),
+        .y(y)
+    );
+
+    integer errors = 0;
+
+    // Test stimulus and verification
+    initial begin
+
+        // Test 1: 0 AND 0 = 0
+        a = 1'b0;
+        b = 1'b0;
+        #10;
+        if (y !== 1'b0) begin
+            $display("ERROR: Test 1 failed: 0 AND 0 should be 0");
+            errors = errors + 1;
+        end
+
+        // Test 2: 0 AND 1 = 0
+        a = 1'b0;
+        b = 1'b1;
+        #10;
+        if (y !== 1'b0) begin
+            $display("ERROR: Test 2 failed: 0 AND 1 should be 0");
+            errors = errors + 1;
+        end
+
+        // Test 3: 1 AND 0 = 0
+        a = 1'b1;
+        b = 1'b0;
+        #10;
+        if (y !== 1'b0) begin
+            $display("ERROR: Test 3 failed: 1 AND 0 should be 0");
+            errors = errors + 1;
+        end
+
+        // Test 4: 1 AND 1 = 1
+        a = 1'b1;
+        b = 1'b1;
+        #10;
+        if (y !== 1'b1) begin
+            $display("ERROR: Test 4 failed: 1 AND 1 should be 1");
+            errors = errors + 1;
+        end
+
+        if (errors == 0) $display("All tests passed");
+        else             $display("%0d test(s) failed", errors);
+
+        $finish;
+    end
+
+endmodule
+`;
+
 export const STARTER_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
+  { id: 'and_gate', name: 'and_gate.vhdl', folder: 'vhdl', content: AND_GATE_VHD },
+  { id: 'and_gate_tb', name: 'and_gate_tb.vhd', folder: 'vhdl', content: AND_GATE_TB_VHD },
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
+  { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
+  { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },
 ];
 
 export const DEFAULT_OPEN_TABS = ['de1_soc'];

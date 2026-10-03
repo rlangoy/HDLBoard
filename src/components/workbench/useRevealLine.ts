@@ -4,11 +4,21 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { countLines, lineHeightOrFallback, offsetOfLine } from './diagnosticLocation';
 
+let revealSeq = 0;
+
+/** A fresh `RevealRequest.id`, shared by every source of reveals so the newest always wins. */
+export function nextRevealId(): number {
+  revealSeq += 1;
+  return revealSeq;
+}
+
 /** Ask the editor to show a line: `id` changes on every request, so the same line can be revealed twice. */
 export interface RevealRequest {
   readonly fileId: string;
   readonly line: number;
   readonly id: number;
+  /** Move the caret and focus there (default); false only scrolls, for the pane the student did not click. */
+  readonly focus?: boolean;
 }
 
 /**
@@ -35,6 +45,7 @@ export function useRevealLine(
       countLines(active.content),
     );
     textarea.scrollTop = Math.max(0, (reveal.line - 1) * lineHeight - textarea.clientHeight / 2);
+    if (reveal.focus === false) return;
     const caret = offsetOfLine(active.content, reveal.line);
     textarea.focus({ preventScroll: true });
     textarea.setSelectionRange(caret, caret);

@@ -62,7 +62,7 @@ const sentNames = (): string[] =>
     .filter((line) => line.startsWith('@@FILE '))
     .map((line) => line.slice('@@FILE '.length, -'@@'.length));
 
-function runWith(topFileName?: string): string {
+function runWith(topFileName?: string, runTarget?: string | null): string {
   const client = new HdlClient('ws://test', {
     onReady: vi.fn(),
     onState: vi.fn(),
@@ -71,7 +71,7 @@ function runWith(topFileName?: string): string {
     onDone: vi.fn(),
     onClosed: vi.fn(),
   });
-  client.run(PROJECT, topFileName);
+  client.run(PROJECT, topFileName, runTarget);
   return lastFrame();
 }
 
@@ -109,5 +109,18 @@ describe('HdlClient.run', () => {
     FakeSocket.last?.open();
     const verbs = (FakeSocket.last?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
     expect(verbs).toEqual(['HELLO', 'RUN']);
+  });
+
+  test('R-1 / AC-6: no run target, the header is exactly as before', () => {
+    expect(runWith('top.vhd', null).split('\n')[0]).toBe('RUN top.vhd');
+  });
+
+  test('R-2: a run target is sent as RUN <file> @<unit>', () => {
+    expect(runWith('top.vhd', 'top_tb').split('\n')[0]).toBe('RUN top.vhd @top_tb');
+  });
+
+  test('R-4 / D21: a work/ testbench as top is sent with the vhdl/ files, and no other work/ file', () => {
+    expect(runWith('tb_top.vhd', 'top_tb').split('\n')[0]).toBe('RUN tb_top.vhd @top_tb');
+    expect(sentNames()).toEqual(['top.vhd', 'tb_top.vhd']);
   });
 });

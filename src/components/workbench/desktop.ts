@@ -9,6 +9,7 @@
  * ------------------------------------------------------------------ */
 
 import type { VhdlFile } from './files';
+import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
 export interface HdlBoardBridge {
   /** Whether project storage is on for this launch. */
@@ -36,6 +37,10 @@ export interface Workspace {
   openTabs: string[];
   activeTabId: string | null;
   topFileId: string | null;
+  /** The top file's unit a pane's Play chose (`RUN <file> @<unit>`); kept only with `topFileId`. */
+  topUnit?: string | null;
+  /** Role and pair overrides (docs/impl_split_screen.md § 6.7); missing reads as none. */
+  testbench?: TestbenchOverrides;
 }
 
 const WORKSPACE_VERSION = 1;
@@ -82,10 +87,24 @@ export function parseWorkspace(json: string | null | undefined): Workspace | und
   const openTabs = Array.isArray(r.openTabs) ? [...new Set(r.openTabs.filter(known))] : [];
   const activeTabId = known(r.activeTabId) && openTabs.includes(r.activeTabId) ? r.activeTabId : openTabs[0] ?? null;
   const topFileId = known(r.topFileId) ? r.topFileId : null;
+  const topUnit = topFileId !== null && typeof r.topUnit === 'string' ? r.topUnit : null;
   return {
     files: files.map(({ id, name, folder, content }) => ({ id, name, folder, content })),
     openTabs,
     activeTabId,
     topFileId,
+    topUnit,
+    testbench: parseOverrides(r.testbench, known),
   };
+}
+
+const ROLES: readonly UnitRole[] = ['tb', 'rtl'];
+
+/** Overrides naming files that are not there are dropped, like tabs are. */
+function parseOverrides(raw: unknown, known: (id: unknown) => id is string): TestbenchOverrides {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const entries = (value: unknown) => (value && typeof value === 'object' ? Object.entries(value) : []);
+  const roles = entries(r.roles).filter(([id, role]) => known(id) && ROLES.includes(role as UnitRole));
+  const pairs = entries(r.pairs).filter(([design, tb]) => known(design) && known(tb));
+  return { roles: Object.fromEntries(roles), pairs: Object.fromEntries(pairs) };
 }

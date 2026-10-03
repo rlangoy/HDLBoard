@@ -46,6 +46,7 @@ export const LIBRARY_NAMES: readonly string[] = [
   'integer', 'natural', 'positive', 'boolean', 'bit', 'bit_vector', 'character', 'string',
   'time', 'real', 'rising_edge', 'falling_edge', 'to_integer', 'to_unsigned', 'to_signed',
   'resize', 'shift_left', 'shift_right', 'ieee', 'std_logic_1164', 'numeric_std', 'work', 'now',
+  'note', 'warning', 'error', 'failure',
 ];
 
 /** Keywords written as one word, and what VHDL wants instead (§ 4.7). */

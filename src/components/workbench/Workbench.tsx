@@ -24,7 +24,7 @@ import { SettingsDialog } from './SettingsDialog';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog } from './NewFileDialog';
 import { RefusedFilesDialog } from './RefusedFilesDialog';
-import { newFileContent, type NewFileLanguage } from './newFile';
+import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { SidePanel } from './SidePanel';
@@ -34,13 +34,19 @@ import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
+import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, hasTopDot, topAfterDelete } from './fileKinds';
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName } from './zipUpload';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
-import type { RevealRequest } from './useRevealLine';
+import { nextRevealId, type RevealRequest } from './useRevealLine';
+import type { PaneRun } from './EditorPaneHeader';
+import { routeRun, runTargetFor, type PaneRole } from './editorView';
+import { RunTestbenchDialog } from './RunTestbenchDialog';
+import type { TestbenchChoice } from './splitModel';
+import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
+import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { runIconFor } from './runIcon';
@@ -82,6 +88,14 @@ const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
 const AUTOSAVE_DELAY_MS = 600;
 
+/** A design run waiting on RunTestbenchDialog: what runs if the student picks "Run … anyway". */
+interface RunChoice {
+  readonly fileId: string;
+  readonly runTarget: string | null;
+  readonly unitName: string | null;
+  readonly choices: readonly TestbenchChoice[];
+}
+
 // Named for what the board pane is — the design's inputs and outputs — not
 // for one particular board.
 const BOARD_PANE_TITLE = 'Board I/O';
@@ -109,6 +123,10 @@ export function Workbench() {
   const [topFileId, setTopFileId] = useState<string | null>(
     () => STARTER_FILES.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
   );
+  // The top file's unit a pane's Play chose (docs/impl_split_screen.md D20); null = the backend chooses, as always.
+  const [topUnit, setTopUnit] = useState<string | null>(null);
+  // Set once the split's state exists below; the workspace load may answer before or after.
+  const restoreOverridesRef = useRef<(o: typeof EMPTY_OVERRIDES) => void>(() => undefined);
 
   // Desktop project storage (desktop.ts): only when the Electron preload
   // exposes it. Load once on mount, and hold auto-save back until that has
@@ -133,6 +151,8 @@ export function Workbench() {
         setOpenTabs(ws.openTabs);
         setActiveTabId(ws.activeTabId);
         setTopFileId(ws.topFileId);
+        setTopUnit(ws.topUnit ?? null);
+        restoreOverridesRef.current(ws.testbench ?? EMPTY_OVERRIDES);
       })
       .catch((err: unknown) => console.error('Could not load the saved workspace:', err))
       .finally(() => {
@@ -142,29 +162,6 @@ export function Workbench() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    const save = desktopBridge()?.saveWorkspace;
-    if (!hydrated || !save) return;
-    const json = serializeWorkspace({ files, openTabs, activeTabId, topFileId });
-    const flush = () => {
-      save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
-    };
-    const timer = window.setTimeout(() => {
-      window.removeEventListener('pagehide', onHide);
-      flush();
-    }, AUTOSAVE_DELAY_MS);
-    // A reload or close inside the debounce window still gets stored.
-    const onHide = () => {
-      window.clearTimeout(timer);
-      flush();
-    };
-    window.addEventListener('pagehide', onHide);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('pagehide', onHide);
-    };
-  }, [hydrated, files, openTabs, activeTabId, topFileId]);
 
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
@@ -182,6 +179,12 @@ export function Workbench() {
   // The file the current (or last) run was started with as top — the tab
   // that carries the Stop icon while it runs.
   const [runFileId, setRunFileId] = useState<string | null>(null);
+  // …and the unit it runs, so only the pane showing that unit shows Stop (B5).
+  const [runUnitName, setRunUnitName] = useState<string | null>(null);
+  // "Create testbench" for this design file: the New File dialog makes a testbench paired with it.
+  const [newTestbenchFor, setNewTestbenchFor] = useState<string | null>(null);
+  // A design run the board cannot drive, with the testbench units that could run it instead (§ 4.10).
+  const [runChoice, setRunChoice] = useState<RunChoice | null>(null);
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
 
@@ -282,12 +285,10 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealSeq = useRef(0);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
     setOpenTabs((prev) => (prev.includes(target.fileId) ? prev : [...prev, target.fileId]));
     setActiveTabId(target.fileId);
-    revealSeq.current += 1;
-    setReveal({ fileId: target.fileId, line: target.line, id: revealSeq.current });
+    setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
   }, []);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
   const openConsoleDiagnostic = useCallback(
@@ -366,12 +367,14 @@ export function Workbench() {
     [],
   );
 
+  // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
   const handleOpenFile = (id: string) => {
     setOpenTabs((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    setActiveTabId(id);
+    tb.showFile(id, 'open');
   };
 
   const handleCloseTab = (id: string) => {
+    tb.onTabClosing(id);
     const closedIndex = openTabs.indexOf(id);
     const remaining = openTabs.filter((t) => t !== id);
     setOpenTabs(remaining);
@@ -395,6 +398,7 @@ export function Workbench() {
   const handleDeleteFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
     dismissDiagnostics(id);
+    tb.onFileDeleted(id);
     // Also closes the tab, if it had one open — same "next tab takes over"
     // logic as a plain close, since a deleted file can't stay open.
     handleCloseTab(id);
@@ -405,6 +409,7 @@ export function Workbench() {
     // before any file was ever marked top).
     if (id === topFileId) {
       setTopFileId(topAfterDelete(files, id));
+      setTopUnit(null);
     }
   };
 
@@ -412,7 +417,9 @@ export function Workbench() {
   const isSimulating = status !== 'stopped';
 
   const handleSetTopFile = (id: string) => {
-    if (!isSimulating) setTopFileId(id);
+    if (isSimulating) return;
+    setTopFileId(id);
+    setTopUnit(null);
   };
 
   const handleDownloadFile = (id: string) => {
@@ -441,11 +448,12 @@ export function Workbench() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl') => {
+  const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl'): string => {
     const id = `file-${nextFileSeq++}`;
     setFiles((prev) => [...prev, { id, name, folder, content }]);
     setOpenTabs((prev) => [...prev, id]);
     setActiveTabId(id);
+    return id;
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is
@@ -456,9 +464,22 @@ export function Workbench() {
 
   const handleCreateFile = (name: string, language: NewFileLanguage) => {
     setDialog(null);
+    const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
+    setNewTestbenchFor(null);
+    const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
+    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newFileContent(name, language);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
-    addFile(name, newFileContent(name, language), folderForUpload(name) ?? 'vhdl');
+    const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
+    // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
+    if (design) tb.setPairOverride(design.id, id);
   };
+
+  // "Create testbench" (§ 4.6): New File, named <stem>_tb (the tb_ prefix is reserved), in the design's language.
+  const handleCreateTestbench = (designFileId: string) => {
+    setNewTestbenchFor(designFileId);
+    setDialog('newFile');
+  };
+  const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
   const handleUploadClick = () => uploadInputRef.current?.click();
 
@@ -533,24 +554,54 @@ export function Workbench() {
   };
 
   // A new run starts with an empty console, so what it shows is this run's output only.
-  const startRun = (fileId: string | null) => {
+  // `runTarget`: the unit to elaborate when the backend must be told (`RUN <file> @<unit>`, D20).
+  const startRun = (fileId: string | null, runTarget: string | null = null, unitName: string | null = null) => {
     setLogLines([]);
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');
     setRunFileId(fileId);
+    setRunUnitName(unitName);
     blankBoard();
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
-    getClient().run(files, topFile?.name);
+    getClient().run(files, topFile?.name, runTarget);
+  };
+
+  /**
+   * § 4.10's run check, for a design: one without board ports that a testbench
+   * instantiates asks first (RunTestbenchDialog); anything else runs at once.
+   */
+  const checkAndRun = (fileId: string, runTarget: string | null, unitName: string | null, pane: PaneRole) => {
+    const choices = pane === 'rtl' ? tb.testbenchesFor(fileId, unitName) : [];
+    if (choices.length > 0) setRunChoice({ fileId, runTarget, unitName, choices });
+    else runAsTop(fileId, runTarget, unitName);
+  };
+
+  /** The file becomes top — the blue dot and "Top: file › unit" — and runs. Only once a run really starts. */
+  const runAsTop = (fileId: string, runTarget: string | null, unitName: string | null) => {
+    setTopFileId(fileId);
+    setTopUnit(runTarget);
+    startRun(fileId, runTarget, unitName);
+  };
+
+  /**
+   * Start and a tab's Play (B4, D24): the panes are arranged first, then the file's
+   * testbench unit runs if it has one (the remembered unit while it exists), else
+   * its design — naming the unit only when the file holds more than one (B7).
+   */
+  const runFile = (id: string) => {
+    const route = routeRun(tb.fileAnalysis(id), id === topFileId ? topUnit : null);
+    tb.showFile(id, 'run', { pane: route.pane, unitName: route.unitName });
+    checkAndRun(id, route.runTarget, route.unitName, route.pane);
   };
 
   // The Start button runs the file named as "Top:" — open it and make it the
   // active file (Files panel highlight and editor tab), so what runs is what shows.
   const handleStart = () => {
-    if (topFileId !== null) handleOpenFile(topFileId);
-    startRun(topFileId);
+    if (topFileId === null) startRun(null);
+    else runFile(topFileId);
   };
 
   // The active tab's play icon (only offered while nothing runs): that file
@@ -558,8 +609,35 @@ export function Workbench() {
   // run starts from it.
   const handleRunFile = (id: string) => {
     if (isSimulating) return;
-    setTopFileId(id);
-    startRun(id);
+    runFile(id);
+  };
+
+  /** Play in a pane header: exactly that pane's unit (§ 4.10). */
+  const handleRunPane = (pane: PaneRole, target: PaneTarget) => {
+    if (isSimulating) return;
+    const runTarget = runTargetFor(target, tb.fileAnalysis(target.fileId), pane);
+    tb.focusPane(pane);
+    checkAndRun(target.fileId, runTarget, target.unitName, pane);
+  };
+
+  /** A pane's Play / Stop: Stop only on the pane whose unit runs (B5); Play where a run can start. */
+  const paneRun = (pane: PaneRole, target: PaneTarget): PaneRun | null => {
+    const file = files.find((f) => f.id === target.fileId);
+    if (!file) return null;
+    if (isSimulating) {
+      const runsThisUnit = runUnitName === null || target.unitName === null || runUnitName.toLowerCase() === target.unitName.toLowerCase();
+      const running = runFileId === target.fileId && runsThisUnit;
+      return running ? { running: true, disabled: status === 'compiling', onClick: handleStop } : null;
+    }
+    // A work/ testbench has no top dot, but its TB pane can run it (D21).
+    const canRun = hasTopDot(file.folder) || pane === 'tb';
+    return canRun ? { running: false, disabled: false, onClick: () => handleRunPane(pane, target) } : null;
+  };
+
+  const handleRunTestbenchChoice = (choice: TestbenchChoice) => {
+    setRunChoice(null);
+    tb.showFile(choice.fileId, 'run', { pane: 'tb', unitName: choice.unitName });
+    runAsTop(choice.fileId, choice.unitName, choice.unitName);
   };
 
   const handleStop = () => {
@@ -571,12 +649,49 @@ export function Workbench() {
 
   const handleClearConsole = () => setLogLines([]);
 
+  // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
+  const tb = useTestbenchSplit({
+    files,
+    activeTabId,
+    setActiveTabId,
+    setOpenTabs,
+    reveal,
+    paneRun,
+    onCreateTestbench: handleCreateTestbench,
+  });
+  restoreOverridesRef.current = tb.restoreOverrides;
+
+  useEffect(() => {
+    const save = desktopBridge()?.saveWorkspace;
+    if (!hydrated || !save) return;
+    const json = serializeWorkspace({ files, openTabs, activeTabId, topFileId, topUnit, testbench: tb.overrides });
+    const flush = () => {
+      save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
+    };
+    const timer = window.setTimeout(() => {
+      window.removeEventListener('pagehide', onHide);
+      flush();
+    }, AUTOSAVE_DELAY_MS);
+    // A reload or close inside the debounce window still gets stored.
+    const onHide = () => {
+      window.clearTimeout(timer);
+      flush();
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [hydrated, files, openTabs, activeTabId, topFileId, topUnit, tb.overrides]);
+
   const tabs = openTabs
     .map((id) => files.find((f) => f.id === id))
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
 
-  const topFileName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
+  const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
+  // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
+  const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
 
   // Stop is greyed out until compiling finishes, as the card's button is.
   const runIcon = runIconFor(status, runFileId, files.find((f) => f.id === activeTabId));
@@ -598,7 +713,12 @@ export function Workbench() {
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
       />
-      <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
+      <SettingsDialog
+        open={dialog === 'settings'}
+        onClose={() => setDialog(null)}
+        splitPreference={tb.split.prefs.preference}
+        onSplitPreferenceChange={tb.split.setPreference}
+      />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
       {refusal && (
@@ -606,10 +726,28 @@ export function Workbench() {
       )}
       {dialog === 'newFile' && (
         <NewFileDialog
-          suggestedName={suggestedNewFileName}
+          suggestedName={testbenchDesign ? `${baseName(testbenchDesign.name)}_tb` : suggestedNewFileName}
+          initialLanguage={testbenchDesign?.folder === 'verilog' ? 'verilog' : 'vhdl'}
+          subtitle={testbenchDesign ? `A testbench for ${testbenchDesign.name}` : undefined}
+          kind={testbenchDesign ? 'testbench' : 'design'}
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            setNewTestbenchFor(null);
+          }}
+        />
+      )}
+      {runChoice && (
+        <RunTestbenchDialog
+          designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
+          choices={runChoice.choices}
+          onRunTestbench={handleRunTestbenchChoice}
+          onRunAnyway={() => {
+            setRunChoice(null);
+            runAsTop(runChoice.fileId, runChoice.runTarget, runChoice.unitName);
+          }}
+          onClose={() => setRunChoice(null)}
         />
       )}
 
@@ -679,7 +817,7 @@ export function Workbench() {
         <CodeEditor
           tabs={tabs}
           activeTabId={activeTabId}
-          onSelectTab={setActiveTabId}
+          onSelectTab={(id) => tb.showFile(id, 'open')}
           onCloseTab={handleCloseTab}
           onAddTab={handleNewFile}
           onChange={handleContentChange}
@@ -688,6 +826,7 @@ export function Workbench() {
           diagnostics={diagnostics.byFile}
           onDismissDiagnostics={dismissDiagnostics}
           reveal={reveal}
+          {...tb.editorProps}
         />
 
         <div

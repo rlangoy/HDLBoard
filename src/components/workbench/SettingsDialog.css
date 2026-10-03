@@ -120,3 +120,17 @@ div.wb-settings__empty {
     grid-template-columns: 1fr;
   }
 }
+
+/* The testbench split preference (docs/impl_split_screen.md § 4.2), in both builds. */
+.wb-settings__group {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 0 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-settings__group .wb-settings__heading {
+  padding: 0;
+}

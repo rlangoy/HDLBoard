@@ -98,6 +98,9 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  │     ├─ SimulationCard             (card: Start/Stop + status)
 │  │     └─ FileExplorer               (card: Upload/New File/Download All + the vhdl/verilog/work tree)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
+│  │  CodeEditor: EditorTabStrip (+ suggestion chip, ViewSwitch), then one
+│  │  EditorSurface, or SplitEditor: TB pane | .wb-split__divider | RTL pane,
+│  │  each an EditorPaneHeader over an EditorSurface or an empty state
 │  ├─ CodeEditor                       (flex: 1 — takes the remaining width)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
 │  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
@@ -148,6 +151,11 @@ The composed component. Owns:
 - `openTabs: string[]` / `activeTabId: string | null` — which files are open
   in the editor and which one is showing.
 - `topFileId: string | null` — the design file a run starts from.
+- `topUnit: string | null` — the unit of the top file a pane's Play chose
+  (`RUN <file> @<unit>`); null lets the backend choose, as before.
+- The testbench split (`useTestbenchSplit`, docs/impl_split_screen.md): the
+  shown pair, its view and focused pane, pins, role and pair overrides. Every
+  pair change goes through its `showFile`; typing never changes the layout.
 - `status: SimStatus` — `'stopped' | 'compiling' | 'running'`.
 - `elapsedSeconds: number` — ticks up once a second while `status` is
   `'running'`; reset to `0` on the next Start.

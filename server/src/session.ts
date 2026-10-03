@@ -217,7 +217,7 @@ export class Session {
     };
   }
 
-  async handleRun(files: VhdlFileInput[], topFile?: string): Promise<void> {
+  async handleRun(files: VhdlFileInput[], topFile?: string, runTarget?: string): Promise<void> {
     this.stopActive('stopped');
     this.state = 'compiling';
     const request = ++this.runRequest;
@@ -229,7 +229,7 @@ export class Session {
       return;
     }
 
-    const prepared = await engine.prepare({ dir: this.dir, files, topFile });
+    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (this.destroyed || request !== this.runRequest) return;

@@ -58,6 +58,8 @@ export interface PrepareRequest {
   readonly dir: string;
   readonly files: readonly VhdlFileInput[];
   readonly topFile?: string;
+  /** The unit of the top file to elaborate (`RUN <file> @<unit>`); omitted, the engine chooses. */
+  readonly runTarget?: string;
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */

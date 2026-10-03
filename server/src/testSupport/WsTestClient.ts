@@ -61,8 +61,8 @@ export class WsTestClient {
     await this.until((frame) => frame.verb === 'WELCOME');
   }
 
-  run(files: VhdlFileInput[], topFile?: string): void {
-    this.sendFrame({ verb: 'RUN', files, topFile });
+  run(files: VhdlFileInput[], topFile?: string, runTarget?: string): void {
+    this.sendFrame(runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget });
   }
 
   stim(bits: string): void {

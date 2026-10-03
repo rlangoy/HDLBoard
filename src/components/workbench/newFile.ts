@@ -120,3 +120,49 @@ begin
 end architecture;
 `;
 }
+
+/**
+ * What "Create testbench" (docs/impl_split_screen.md § 4.6) starts a file with: an
+ * empty testbench — no ports, the design under test as a comment to fill in, and a
+ * stimulus block that ends the run. Detected as a testbench as it stands, so the
+ * new file opens in the TB pane. (Ports read from the design are phase 2.)
+ */
+export function testbenchContent(input: string, language: NewFileLanguage, dut: string): string {
+  const name = baseName(input);
+  if (language === 'verilog') {
+    return `\`timescale 1ns / 1ps
+
+module ${name};
+    // ${dut} dut (
+    //     .port(signal)
+    // );
+
+    initial begin
+        // Stimulus: drive the design's inputs here.
+        #10;
+        $finish;
+    end
+endmodule
+`;
+  }
+  return `library ieee;
+use ieee.std_logic_1164.all;
+
+entity ${name} is
+end entity;
+
+architecture sim of ${name} is
+begin
+    -- dut : entity work.${dut}
+    --     port map (port => signal);
+
+    stimulus : process
+    begin
+        -- Stimulus: drive the design's inputs here.
+        wait for 10 ns;
+        std.env.stop;
+        wait;
+    end process;
+end architecture;
+`;
+}
