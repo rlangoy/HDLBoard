@@ -1,0 +1,125 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * A collapsible side pane (SidePanel.tsx). The <aside> is what takes width
+ * in .wb-body's row — its width is set inline, 0 while collapsed — and
+ * clips the inner column, which always keeps the open width. Shutting the
+ * pane therefore slides the contents off towards the window edge instead of
+ * squeezing and re-wrapping them on the way.
+ */
+.wb-sidepanel {
+  flex: none;
+  min-width: 0;
+  /* border-box so the width set inline is the width on screen —
+     the layout arithmetic in paneLayout.ts budgets in rendered pixels. */
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Anchored to the window edge it collapses towards: a right pane's column
+   overflows (and is clipped) on its left side, so it slides out rightwards. */
+.wb-sidepanel--right {
+  justify-content: flex-end;
+}
+
+.wb-sidepanel__inner {
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Visible again the moment the pane starts to open... */
+  transition: visibility 0s;
+}
+
+/* ...and hidden only once it has finished shutting, which also takes the
+   contents out of the tab order and the accessibility tree while shut. */
+.wb-sidepanel.is-collapsed .wb-sidepanel__inner {
+  visibility: hidden;
+  transition: visibility 0s linear var(--wb-pane-slide);
+}
+
+/* The width only animates for an open/close (usePaneLayout's togglePane
+   puts .is-sliding on .wb for one slide) — never during a divider drag or a
+   window resize, where the pane has to track the pointer or the window. */
+.wb.is-sliding .wb-sidepanel {
+  transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.wb-sidepanel__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--wb-pane-header-h);
+  padding: 0 8px 0 16px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+/* Mirrored: the hide button leads on a right pane (SidePanel.tsx). */
+.wb-sidepanel--right .wb-sidepanel__header {
+  padding: 0 16px 0 8px;
+}
+
+.wb-sidepanel__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wb-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-sidepanel__hide {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.wb-sidepanel__hide svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+.wb-sidepanel__hide:hover {
+  background: rgba(15, 23, 42, 0.07);
+  color: var(--wb-text);
+}
+
+.wb-sidepanel__hide:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+}
+
+.wb-sidepanel__body {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb.is-sliding .wb-sidepanel {
+    transition: none;
+  }
+  .wb-sidepanel.is-collapsed .wb-sidepanel__inner {
+    transition: none;
+  }
+}

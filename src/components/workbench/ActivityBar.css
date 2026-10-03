@@ -1,0 +1,155 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * The icon rails down each edge of the workbench (ActivityBar.tsx), each in
+ * its own .wb grid column (Workbench.css) beside the panes' row — the console
+ * underneath keeps the full width. A rail shows only while its pane is shut:
+ * .is-hidden takes it to width 0, so its column closes and .wb-body gets the
+ * room. Like a SidePanel, the rail clips an inner column that always keeps
+ * the full rail width, so the icons slide in rather than squeezing.
+ */
+.wb-activitybar {
+  grid-row: 2;
+  display: flex;
+  width: var(--wb-rail-w);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--wb-rail-bg);
+}
+
+.wb-activitybar.is-hidden {
+  width: 0;
+}
+
+/* Only an open/close from a button or a shortcut animates (usePaneLayout's
+   togglePane puts .is-sliding on .wb) — the same slide as the pane's own. */
+.wb.is-sliding .wb-activitybar {
+  transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.wb-activitybar--left {
+  grid-column: 1;
+}
+
+/* Anchored to the window edge, so the right rail's column is clipped on its
+   left side while it slides. */
+.wb-activitybar--right {
+  grid-column: 3;
+  justify-content: flex-end;
+}
+
+.wb-activitybar__inner {
+  flex: none;
+  width: var(--wb-rail-w);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  /* Visible again the moment the rail starts to slide in... */
+  transition: visibility 0s;
+}
+
+/* ...and hidden once it has slid away, which also takes its buttons out of
+   the tab order. */
+.wb-activitybar.is-hidden .wb-activitybar__inner {
+  visibility: hidden;
+  transition: visibility 0s linear var(--wb-pane-slide);
+}
+
+.wb-activitybar--left .wb-activitybar__inner {
+  border-right: 1px solid var(--wb-border);
+}
+
+.wb-activitybar--right .wb-activitybar__inner {
+  border-left: 1px solid var(--wb-border);
+}
+
+.wb-activitybar__item {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.wb-activitybar__item svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.wb-activitybar__item:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.07);
+  color: var(--wb-text);
+}
+
+.wb-activitybar__item:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: -2px;
+}
+
+.wb-activitybar__separator {
+  flex: none;
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--wb-divider-edge);
+}
+
+/* Start/Stop: PlayIcon and StopIcon keep their own teal and red. */
+.wb-activitybar__run svg {
+  width: 20px;
+  height: 20px;
+}
+
+.wb-activitybar__run:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wb-activitybar__badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--wb-rail-bg);
+  display: none;
+}
+
+.wb-activitybar__run.is-running .wb-activitybar__badge {
+  display: block;
+  background: var(--wb-success);
+  animation: wb-pulse 1200ms ease-in-out infinite;
+}
+
+.wb-activitybar__run.is-compiling .wb-activitybar__badge {
+  display: block;
+  background: #f59e0b;
+  animation: wb-pulse 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb.is-sliding .wb-activitybar {
+    transition: none;
+  }
+  .wb-activitybar.is-hidden .wb-activitybar__inner {
+    transition: none;
+  }
+  .wb-activitybar__badge {
+    animation: none !important;
+  }
+}

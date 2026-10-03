@@ -75,6 +75,50 @@ export function GearIcon() {
   );
 }
 
+/*
+ * The side-bar chrome (ActivityBar, SidePanel): line icons drawn on the same
+ * 24-unit grid and stroke as GearIcon, in `currentColor` so the rail's
+ * muted/active/hover colours carry through.
+ */
+const lineIconProps = {
+  xmlns: 'http://www.w3.org/2000/svg',
+  width: 24,
+  height: 24,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+// The arrow inside PanelToggleIcon, for a side bar on each edge: pointing
+// towards that edge pushes the bar shut, and the same arrow mirrored pulls it
+// back open.
+const PANEL_ARROW = {
+  left: { close: '15.5 9.5 13 12 15.5 14.5', open: '13 9.5 15.5 12 13 14.5' },
+  right: { close: '8.5 9.5 11 12 8.5 14.5', open: '11 9.5 8.5 12 11 14.5' },
+} as const;
+
+/**
+ * A window with its side bar ruled off on `side`, and an arrow: pushing the
+ * bar shut (the pane's Hide button), or — `open` — the same arrow mirrored,
+ * pulling it back out (the Show button on the rail left by a shut pane).
+ */
+export function PanelToggleIcon({
+  side,
+  open = false,
+  ...props
+}: SVGProps<SVGSVGElement> & { side: 'left' | 'right'; open?: boolean }) {
+  return (
+    <svg {...lineIconProps} {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d={side === 'left' ? 'M9 4v16' : 'M15 4v16'} />
+      <polyline points={PANEL_ARROW[side][open ? 'open' : 'close']} />
+    </svg>
+  );
+}
+
 /** An outlined teal triangle — starts a simulation (SimToggle). */
 export function PlayIcon(props: SVGProps<SVGSVGElement>) {
   return (

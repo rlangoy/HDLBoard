@@ -63,6 +63,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
   - [`<SimToggle>`](#simtoggle)
+  - [`<ActivityBar>` and `<SidePanel>`](#activitybar-and-sidepanel)
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
@@ -86,29 +87,45 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 ## Layout
 
 ```
-Workbench                              (CSS grid: header / body / divider / console)
+Workbench                              (CSS grid: header / body / divider / console rows,
+│                                       rail / panes / rail columns)
 ├─ Header                              (grid row 1, full width)
-└─ .wb-body                            (grid row 2, flex row)
-   ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
-   │  ├─ SimulationCard                (card: Start/Stop + status)
-   │  └─ FileExplorer                  (card: Upload/New File/Download All + the vhdl/verilog/work tree)
-   ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
-   ├─ CodeEditor                       (flex: 1 — takes the remaining width)
-   ├─ .wb-resizer                      (drag handle — resizes .wb-right)
-   └─ .wb-right                        (draggable width panel)
-      └─ Board                        (LEDs + HEX on top, SW + KEY underneath)
-├─ .wb-resizer--row                    (grid row 3, drag handle — resizes the console)
-└─ ConsoleOutput                       (grid row 4, full width, draggable height)
+├─ ActivityBar side="left"             (row 2, column 1 — only while the Explorer is shut:
+│                                       Show Explorer, Start/Stop)
+├─ .wb-body                            (row 2, column 2, flex row)
+│  ├─ SidePanel .wb-sidebar "Explorer" (draggable width, collapsible, tinted strip)
+│  │  └─ .wb-sidebar__content          (scrolls as one)
+│  │     ├─ SimulationCard             (card: Start/Stop + status)
+│  │     └─ FileExplorer               (card: Upload/New File/Download All + the vhdl/verilog/work tree)
+│  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
+│  ├─ CodeEditor                       (flex: 1 — takes the remaining width)
+│  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
+│  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
+│     └─ Board                         (LEDs + HEX on top, SW + KEY underneath)
+├─ ActivityBar side="right"            (row 2, column 3 — only while Board I/O is shut:
+│                                       Show Board I/O)
+├─ .wb-resizer--row                    (row 3, full width, drag handle — resizes the console)
+└─ ConsoleOutput                       (row 4, full width, draggable height)
 ```
+
+The two side panes behave like an IDE's side bars: each can be shut from the
+hide button in its own title strip, with a shortcut (Ctrl+B for the
+Explorer, Ctrl+Alt+B for Board I/O — Cmd on a Mac), or by dragging its
+divider — see [Resizing](#resizing). A shut pane leaves an activity bar
+on its edge in its place, with the button that opens it again; the left one
+also carries the Simulation card's Start/Stop, which keeps a run in reach
+while the Explorer is shut. An open pane has no activity bar beside it.
 
 `SimulationCard` and `FileExplorer` are two independent white, rounded,
 drop-shadowed cards stacked inside `.wb-sidebar`'s tinted background — not
 one merged panel. Each owns its own border/radius/shadow (`.wb-simcard`,
 `.wb-files`); the sidebar only owns their shared width, background tint and
-outer scrolling.
+outer scrolling (on `.wb-sidebar__content`, under the title strip).
 
-All state lives in `Workbench.tsx` — every other component here is a plain,
-props-driven function component. This mirrors the board layer's own rule
+All state lives in `Workbench.tsx` — the pane geometry (widths, which side
+panes are shut, the console's height, the dividers and the shortcuts) in its
+[`usePaneLayout`](./usePaneLayout.ts) hook — and every other component here
+is a plain, props-driven function component. This mirrors the board layer's own rule
 (`Design_Description.md` § 1.1): a component holds only its own UI state,
 the caller owns the data.
 
@@ -411,6 +428,48 @@ The outlined teal play triangle / red stop square on `<CodeEditor>`'s active tab
 Its click stops propagating, so pressing it inside a tab isn't also a click
 on the tab.
 
+### `<ActivityBar>` and `<SidePanel>`
+
+The IDE chrome around the two side panes.
+
+`<SidePanel id side title width collapsed onCollapse shortcut?>` is one
+side pane: an `<aside>` with an uppercase title strip — the same height as
+the editor's tab strip, so their bottom borders run on as one line — and a
+hide button (`PanelToggleIcon`) on the pane's inner edge, beside the editor:
+after the title on the left pane, before it on the right one. Collapsed,
+the `<aside>` goes to width 0 but
+stays mounted, so the pane keeps its state (scroll position, folded
+folders, a rename in progress). Its inner column always keeps the open
+width and the `<aside>` clips it, so the contents slide off towards the
+window edge rather than reflowing on the way; the right pane's column is
+anchored to its right edge (`justify-content: flex-end`) for the same
+reason. Once shut, the column turns `visibility: hidden` — after the slide,
+via a delayed `visibility` transition — which also takes its controls out of
+the tab order.
+
+`<ActivityBar side label hidden>` is a 44px rail, one per edge, in its own
+grid column beside the panes' row (the console runs underneath at full
+width). It stands in for a shut pane, so it shows only while that pane is
+shut: `hidden` (the pane is open) takes it to width 0, which closes its
+`auto`-sized grid column and gives `.wb-body` the room. It stays mounted, and
+like `<SidePanel>` it clips an inner column that keeps the full rail width,
+so it slides in and out with its pane. It holds:
+
+- `<ActivityBarShow id label controls shortcut onShow icon>` — opens the
+  shut pane again, with the pane's own Hide icon mirrored
+  (`PanelToggleIcon` with `open`: the same side bar, the arrow pointing out).
+- `<ActivityBarRun status topFile onStart onStop>` — the Simulation card's
+  Start/Stop with `PlayIcon` / `StopIcon`, and a corner dot for the status
+  (amber compiling, green running, the same pulse as the card's).
+- `<ActivityBarSeparator>` — a short rule between groups.
+
+Every button carries its action and shortcut as a tooltip, and the Show
+buttons `aria-expanded` / `aria-controls` pointing at their pane. Keyboard
+focus follows a toggle: from a pane's Hide button (`<id>-hide`) to its
+rail's Show button (`<id>-show`) as the pane shuts, and back as it opens —
+`togglePane` notes the target and an effect moves focus once the new button
+has rendered.
+
 ### `<ConsoleOutput>`
 
 ```tsx
@@ -561,6 +620,12 @@ fully-local guarantee. `fill="currentColor"` on the `<svg>` is what lets
 each icon inherit its button's colour, including the red hover state on
 delete (`.wb-files__row-action--danger`), the same way every CSS-drawn icon
 in this folder already does.
+
+`PanelToggleIcon` is the side-bar chrome's one icon, a line drawing on
+`GearIcon`'s 24-unit grid and stroke, in `currentColor`: a window with its
+side bar ruled off, and an arrow pushing the bar shut — a pane's Hide button
+— or, with `open`, the same arrow mirrored, pulling it back out: the Show
+button on the rail a shut pane leaves.
 
 `PlayIcon` and `StopIcon` (`<SimToggle>`'s teal triangle and red square) are
 the exception to that: they carry their own fixed colours, since the
@@ -838,17 +903,46 @@ and pointer capture keeps the drag on the handle, so the panes follow the
 pointer continuously wherever it goes.
 
 **The console** is resized from the horizontal divider on its top edge
-(`handleConsoleResizerPointerDown`). Its height goes into `--wb-console-h`
+(`onConsoleDividerPointerDown`). Its height goes into `--wb-console-h`
 inline on `.wb`, clamped by `applyConsoleHeight` between `CONSOLE_MIN_H` and
 whatever leaves the panes above `BODY_MIN_H`; a `ResizeObserver` on `.wb`
 re-applies the clamp when the window height changes.
 
+**Collapsing.** Dragging a side pane's divider until the pane would be
+under half its own minimum width snaps the pane shut (`collapsesAt` in
+`paneLayout.ts`), and dragging back past the same point opens it again —
+within the one drag. A shut pane's divider stays in place (it keeps
+`CHROME_W` honest) but drops its own bar until hovered
+(`.is-beside-collapsed`), and a drag that starts on it starts from width 0,
+so it pulls the pane back out. A pane snapped shut keeps the width it had
+*before* the drag to reopen at, not the sliver it was dragged down to.
+A collapsed pane takes no room in `fitSidePanes`, so the open one may grow
+into the space it leaves.
+
+A pane's activity bar comes and goes with it, which moves that pane's outer
+edge — and changes `.wb-body`'s width — by `RAIL_W`. Two places allow for
+it. A drag measures the pane from the edge as it stood when the drag began
+and adds or takes `RAIL_W` once the pane has opened or shut on the way,
+rather than re-measuring the edge, because the next pointer move can arrive
+before React has rendered the rail's change; that keeps the divider under
+the pointer, and gives the snap a `RAIL_W`-wide band of hysteresis. And
+`togglePane` lays the panes out at once for the room `.wb-body` will have
+after the slide, with the `ResizeObserver` ignoring the in-between widths
+while `.is-sliding` is on, and fits them to the measured room at the end.
+
+Opening or shutting from a button or a shortcut (`togglePane`) slides the
+pane and its rail over `--wb-pane-slide`: `.is-sliding` goes on `.wb` for
+the one slide only, so neither width animates during a drag or a window
+resize, where it has to keep up with the pointer or the window.
+
 Both side panels are draggable, each via its own `.wb-resizer` handle:
 `.wb-sidebar` from the one between it and the editor
-(`handleSidebarResizerPointerDown`), `.wb-right` from the one on its own
-left edge (`handleBoardResizerPointerDown`). Neither width is applied
+(`onSidebarDividerPointerDown`), `.wb-right` from the one on its own
+left edge (`onBoardDividerPointerDown`). Neither width is applied
 directly from the drag delta: every move of either handle, and every resize
-of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout`, which
+of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout` — a thin
+wrapper over `fitSidePanes` in [`paneLayout.ts`](./paneLayout.ts), which is
+pure and unit-tested — which
 
 - clamps each panel's requested width between its own minimum and a
   *computed* ceiling — whatever the other two panes don't need,
@@ -869,13 +963,14 @@ of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout`, which
   widths if that panel had been dragged wider than its default.
 
 Each panel remembers the user's actual last-requested width in a ref
-(`desiredSidebarWidth` / `desiredBoardWidth`) separately from its rendered,
+(`desiredWidth`) separately from its rendered,
 possibly-clamped state — so dragging the sidebar wide, which shrinks the
 board out of the way, doesn't forget the board's preferred width: drag the
 sidebar back and the board grows back to it.
 
 Those three requested sizes — both desired widths and the console height —
-are also written to `localStorage` at the end of every drag
+and whether each side pane is shut are also written to `localStorage` at the
+end of every drag and every open or close
 ([`paneLayout.ts`](./paneLayout.ts)) and read back as the starting values on
 mount, so the app reopens with its dividers where they were left. The
 desktop app always serves the page from the same origin, so this survives a
