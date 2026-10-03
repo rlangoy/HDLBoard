@@ -14,7 +14,8 @@
 .wb {
   --wb-header-h: 56px;
   --wb-console-h: 180px;
-  /* The icon rails down each edge (ActivityBar.css) and the title strip
+  /* The icon rails down each edge (ActivityBar.css; Workbench.tsx's RAIL_W
+     matches the width) and the title strip
      across the top of each side pane (SidePanel.css) — the editor's tab
      strip's height, border included (CodeEditor.css), so the three strips'
      bottom borders run on as one line. */
@@ -74,9 +75,10 @@
   /* --wb-console-h is overridden inline by Workbench.tsx as the console's
      divider is dragged; the value above is only the initial/no-JS height. */
   grid-template-rows: var(--wb-header-h) 1fr var(--wb-divider-size) var(--wb-console-h);
-  /* An activity bar either side of the panes' row (row 2); the header, the
-     console divider and the console run the full width across all three. */
-  grid-template-columns: var(--wb-rail-w) minmax(0, 1fr) var(--wb-rail-w);
+  /* An activity bar either side of the panes' row (row 2), each column as
+     wide as its rail — 0 while that rail is hidden (ActivityBar.css); the
+     header, the console divider and the console run the full width. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
   background: #ffffff;

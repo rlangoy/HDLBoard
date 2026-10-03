@@ -7,7 +7,10 @@ import { PanelCloseIcon } from './icons';
 import './SidePanel.css';
 
 export interface SidePanelProps {
-  /** The element id the activity-bar button and the divider point at (aria-controls). */
+  /**
+   * The element id the activity-bar button and the divider point at
+   * (aria-controls); the hide button is `${id}-hide`.
+   */
   id: string;
   /** Which edge of the window the pane sits against — it slides shut towards it. */
   side: 'left' | 'right';
@@ -49,6 +52,7 @@ export function SidePanel({
   const hideButton = (
     <button
       type="button"
+      id={`${id}-hide`}
       className="wb-sidepanel__hide"
       aria-label={hideLabel}
       title={shortcut ? `${hideLabel} (${shortcut})` : hideLabel}

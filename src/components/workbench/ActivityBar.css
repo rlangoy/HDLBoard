@@ -2,31 +2,68 @@
 /* Copyright (C) 2026 Rune Langøy */
 
 /*
- * The icon rails down each edge of the workbench (ActivityBar.tsx). Each
- * runs the height of the panes' row only — the console underneath keeps the
- * full width — in its own .wb grid column, so .wb-body's measured width
- * (paneLayout.ts) never includes them.
+ * The icon rails down each edge of the workbench (ActivityBar.tsx), each in
+ * its own .wb grid column (Workbench.css) beside the panes' row — the console
+ * underneath keeps the full width. A rail shows only while its pane is shut:
+ * .is-hidden takes it to width 0, so its column closes and .wb-body gets the
+ * room. Like a SidePanel, the rail clips an inner column that always keeps
+ * the full rail width, so the icons slide in rather than squeezing.
  */
 .wb-activitybar {
   grid-row: 2;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 0;
-  box-sizing: border-box;
+  width: var(--wb-rail-w);
   min-height: 0;
   overflow: hidden;
   background: var(--wb-rail-bg);
 }
 
+.wb-activitybar.is-hidden {
+  width: 0;
+}
+
+/* Only an open/close from a button or a shortcut animates (Workbench.tsx's
+   togglePane puts .is-sliding on .wb) — the same slide as the pane's own. */
+.wb.is-sliding .wb-activitybar {
+  transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);
+}
+
 .wb-activitybar--left {
   grid-column: 1;
+}
+
+/* Anchored to the window edge, so the right rail's column is clipped on its
+   left side while it slides. */
+.wb-activitybar--right {
+  grid-column: 3;
+  justify-content: flex-end;
+}
+
+.wb-activitybar__inner {
+  flex: none;
+  width: var(--wb-rail-w);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  /* Visible again the moment the rail starts to slide in... */
+  transition: visibility 0s;
+}
+
+/* ...and hidden once it has slid away, which also takes its buttons out of
+   the tab order. */
+.wb-activitybar.is-hidden .wb-activitybar__inner {
+  visibility: hidden;
+  transition: visibility 0s linear var(--wb-pane-slide);
+}
+
+.wb-activitybar--left .wb-activitybar__inner {
   border-right: 1px solid var(--wb-border);
 }
 
-.wb-activitybar--right {
-  grid-column: 3;
+.wb-activitybar--right .wb-activitybar__inner {
   border-left: 1px solid var(--wb-border);
 }
 
@@ -61,31 +98,6 @@
 .wb-activitybar__item:focus-visible {
   outline: 2px solid var(--wb-accent);
   outline-offset: -2px;
-}
-
-/* The open pane's button: accent icon on a soft tile, and a marker bar on
-   the rail's outer edge, pointing at the pane it opened. */
-.wb-activitybar__item.is-active {
-  color: var(--wb-accent-dark);
-  background: var(--wb-accent-soft);
-}
-
-.wb-activitybar__item.is-active::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--wb-accent);
-}
-
-.wb-activitybar--left .wb-activitybar__item.is-active::before {
-  left: -4px;
-}
-
-.wb-activitybar--right .wb-activitybar__item.is-active::before {
-  right: -4px;
 }
 
 .wb-activitybar__separator {
@@ -131,6 +143,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .wb.is-sliding .wb-activitybar {
+    transition: none;
+  }
+  .wb-activitybar.is-hidden .wb-activitybar__inner {
+    transition: none;
+  }
   .wb-activitybar__badge {
     animation: none !important;
   }

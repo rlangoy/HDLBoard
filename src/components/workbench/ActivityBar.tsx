@@ -8,51 +8,60 @@ import type { SimStatus } from './SimulationCard';
 import './ActivityBar.css';
 
 export interface ActivityBarProps {
-  /** The window edge the rail runs down; its active marker sits on that edge. */
+  /** The window edge the rail runs down. */
   side: 'left' | 'right';
   /** What the rail is, for screen readers. */
   label: string;
+  /** True while the pane the rail stands in for is open: the rail slides away. */
+  hidden: boolean;
   children: ReactNode;
 }
 
 /**
- * A narrow, full-height icon rail on one edge of the workbench, as in an
- * IDE: one button per side pane to show or hide it, and room for actions
- * that have to stay in reach while that pane is shut.
+ * A narrow icon rail on one edge of the workbench, as in an IDE, standing in
+ * for a shut side pane: the button that opens it again, and the actions that
+ * have to stay in reach while it is shut. It shows only while that pane is
+ * shut — open, the pane carries all of it — and stays mounted either way, so
+ * it can slide in and out with the pane.
  */
-export function ActivityBar({ side, label, children }: ActivityBarProps) {
+export function ActivityBar({ side, label, hidden, children }: ActivityBarProps) {
   return (
-    <nav className={cx('wb-activitybar', `wb-activitybar--${side}`)} aria-label={label}>
-      {children}
+    <nav
+      className={cx('wb-activitybar', `wb-activitybar--${side}`, hidden && 'is-hidden')}
+      aria-label={label}
+      aria-hidden={hidden || undefined}
+    >
+      <div className="wb-activitybar__inner">{children}</div>
     </nav>
   );
 }
 
-export interface ActivityBarToggleProps {
+export interface ActivityBarShowProps {
+  /** The element id, which the pane's own Hide button hands focus back to. */
+  id: string;
   /** The pane's name, e.g. "Explorer". */
   label: string;
-  /** Whether the pane it controls is open — drawn as the active marker. */
-  open: boolean;
   /** The pane's element id. */
   controls: string;
   /** The keyboard shortcut that does the same, for the tooltip. */
   shortcut?: string;
-  onToggle: () => void;
+  onShow: () => void;
   icon: ReactNode;
 }
 
-/** Shows or hides one side pane. */
-export function ActivityBarToggle({ label, open, controls, shortcut, onToggle, icon }: ActivityBarToggleProps) {
-  const action = `${open ? 'Hide' : 'Show'} ${label}`;
+/** Opens the shut side pane the rail stands in for. */
+export function ActivityBarShow({ id, label, controls, shortcut, onShow, icon }: ActivityBarShowProps) {
+  const action = `Show ${label}`;
   return (
     <button
       type="button"
-      className={cx('wb-activitybar__item', open && 'is-active')}
-      aria-label={label}
-      aria-expanded={open}
+      id={id}
+      className="wb-activitybar__item"
+      aria-label={action}
+      aria-expanded={false}
       aria-controls={controls}
       title={shortcut ? `${action} (${shortcut})` : action}
-      onClick={onToggle}
+      onClick={onShow}
     >
       {icon}
     </button>

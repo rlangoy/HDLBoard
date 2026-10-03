@@ -29,7 +29,7 @@ import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { SidePanel } from './SidePanel';
-import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarToggle } from './ActivityBar';
+import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
 import { BoardIcon, ExplorerIcon } from './icons';
 import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
@@ -108,8 +108,11 @@ const ROW_DIVIDER_H = 5;
 type ResizeAxis = 'x' | 'y';
 
 // The side panes' element ids, which their rail buttons and dividers control.
+// Each pane's Hide button is `<id>-hide` (SidePanel) and its rail's Show
+// button `<id>-show`.
 const EXPLORER_ID = 'wb-explorer';
 const BOARD_PANE_ID = 'wb-board-pane';
+const PANE_ID: Record<SidePane, string> = { sidebar: EXPLORER_ID, board: BOARD_PANE_ID };
 // Named for what the pane is — the design's inputs and outputs — not for one
 // particular board.
 const BOARD_PANE_TITLE = 'Board I/O';
@@ -119,8 +122,13 @@ const EXPLORER_SHORTCUT = 'Ctrl+B';
 const BOARD_SHORTCUT = 'Ctrl+Alt+B';
 
 // A little longer than --wb-pane-slide (Workbench.css): how long .is-sliding
-// stays on .wb-body after a pane is opened or shut.
+// stays on .wb after a pane is opened or shut.
 const SLIDE_MS = 260;
+
+// An activity bar's width (Workbench.css's --wb-rail-w). Each rail shows only
+// while its pane is shut, so opening or shutting a pane also gives .wb-body
+// this much more or less room.
+const RAIL_W = 44;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -347,10 +355,17 @@ export function Workbench() {
     setBoardWidth(fitted.board);
   }, []);
 
+  // True for the length of a pane's slide (togglePane), while its rail is
+  // still sliding in or out and .wb-body's width with it.
+  const sliding = useRef(false);
+
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
+      // Mid-slide, togglePane has already laid the panes out for where the
+      // slide ends, and fits them again once it has.
+      if (sliding.current) return;
       const width = entries[0]?.contentRect.width;
       if (width) applyLayout(width);
     });
@@ -431,44 +446,88 @@ export function Workbench() {
   // within the one drag. A shut pane starts the drag at zero width, so its
   // divider pulls it back open. A pane snapped shut keeps the width it had
   // before the drag to reopen at, not the sliver it was dragged down to.
-  const resizePane = (e: ReactPointerEvent<HTMLDivElement>, pane: SidePane, direction: 1 | -1) => {
+  //
+  // The width is measured from the pane's outer edge — .wb-body's own edge on
+  // that side — which is not fixed for the whole drag: shutting or opening
+  // the pane mid-drag shows or hides its rail, and that moves the edge (and
+  // .wb-body's width) by the rail's width. The shift is worked out from the
+  // collapsed flag rather than measured, since the next pointer move can
+  // arrive before React has rendered the rail's change. `grab` keeps the
+  // pointer where it took hold of the divider.
+  const resizePane = (e: ReactPointerEvent<HTMLDivElement>, pane: SidePane) => {
+    const body = bodyRef.current;
+    if (!body) return;
     const minWidth = pane === 'sidebar' ? SIDEBAR_MIN_W : BOARD_MIN_W;
     const openWidth = pane === 'sidebar' ? sidebarWidth : boardWidth;
-    const startWidth = collapsedRef.current[pane] ? 0 : openWidth;
+    const startCollapsed = collapsedRef.current[pane];
+    const startWidth = startCollapsed ? 0 : openWidth;
     const widthBeforeDrag = desiredWidthRef[pane].current;
+    const start = body.getBoundingClientRect();
+    const widthFromStartEdge = (pointerX: number) =>
+      pane === 'sidebar' ? pointerX - start.left : start.right - pointerX;
+    const railShift = () => {
+      if (collapsedRef.current[pane] === startCollapsed) return 0;
+      return startCollapsed ? RAIL_W : -RAIL_W;
+    };
+    const startX = e.clientX;
+    const grab = widthFromStartEdge(startX) - startWidth;
     beginResize(e, 'x', (deltaX) => {
-      const next = startWidth + direction * deltaX;
-      const shut = collapsesAt(next, minWidth);
-      desiredWidthRef[pane].current = shut ? widthBeforeDrag : next;
+      const measured = widthFromStartEdge(startX + deltaX) - grab;
+      const shut = collapsesAt(measured + railShift(), minWidth);
       if (shut !== collapsedRef.current[pane]) setCollapsed({ ...collapsedRef.current, [pane]: shut });
-      applyLayout(bodyWidth(), otherPane(pane));
+      desiredWidthRef[pane].current = shut ? widthBeforeDrag : measured + railShift();
+      applyLayout(start.width + railShift(), otherPane(pane));
     });
   };
 
-  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'sidebar', 1);
+  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'sidebar');
+  const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'board');
 
-  // This handle sits on the board panel's left edge, so dragging it left
-  // (negative clientX delta) should grow the board — the opposite sign
-  // from the sidebar handle, which grows its panel by dragging right.
-  const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'board', -1);
+  // Keyboard focus moves to whichever control takes over from the one about
+  // to be hidden: from a shutting pane to its rail's Show button, and from a
+  // rail that goes as its pane opens to the pane's Hide button. Focus
+  // anywhere else (the editor, for a shortcut) stays where it is. The move
+  // waits for the commit below, once the new control is visible.
+  const focusAfterToggle = useRef<string | null>(null);
+  const handOffFocus = (pane: SidePane, opening: boolean) => {
+    const id = PANE_ID[pane];
+    const going = opening
+      ? document.getElementById(`${id}-show`)?.closest('.wb-activitybar')
+      : document.getElementById(id);
+    if (going?.contains(document.activeElement)) focusAfterToggle.current = opening ? `${id}-hide` : `${id}-show`;
+  };
+  useEffect(() => {
+    const id = focusAfterToggle.current;
+    focusAfterToggle.current = null;
+    if (id) document.getElementById(id)?.focus();
+  }, [collapsed]);
 
-  // Opening or shutting a pane from a button or a shortcut slides it: the
-  // width only animates while .wb-body has .is-sliding (SidePanel.css), so a
-  // drag or a window resize never lags behind. An opening pane keeps its own
-  // width and the other one gives way, as in a drag.
+  // Opening or shutting a pane from a button or a shortcut slides it, and its
+  // rail the other way: widths only animate while .wb has .is-sliding
+  // (SidePanel.css, ActivityBar.css), so a drag or a window resize never lags
+  // behind. The panes are laid out at once for the room .wb-body will have
+  // once the rail has come or gone, and fitted again to the measured room at
+  // the end. An opening pane keeps its own width and the other one gives way,
+  // as in a drag.
   const slideTimer = useRef<number | null>(null);
   const togglePane = (pane: SidePane) => {
-    const body = bodyRef.current;
-    if (body) {
-      body.classList.add('is-sliding');
+    const opening = collapsedRef.current[pane];
+    const shrinkFirst = otherPane(pane);
+    handOffFocus(pane, opening);
+    const wb = wbRef.current;
+    if (wb) {
+      sliding.current = true;
+      wb.classList.add('is-sliding');
       if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
       slideTimer.current = window.setTimeout(() => {
-        body.classList.remove('is-sliding');
+        wb.classList.remove('is-sliding');
+        sliding.current = false;
         slideTimer.current = null;
+        applyLayout(bodyWidth(), shrinkFirst);
       }, SLIDE_MS);
     }
-    setCollapsed({ ...collapsedRef.current, [pane]: !collapsedRef.current[pane] });
-    applyLayout(bodyWidth(), otherPane(pane));
+    setCollapsed({ ...collapsedRef.current, [pane]: !opening });
+    applyLayout(bodyWidth() + (opening ? RAIL_W : -RAIL_W), shrinkFirst);
     storePaneLayout();
   };
   // For the shortcut listener below, attached once.
@@ -869,13 +928,13 @@ export function Workbench() {
         />
       )}
 
-      <ActivityBar side="left" label="Explorer and simulation">
-        <ActivityBarToggle
+      <ActivityBar side="left" label="Explorer and simulation" hidden={!collapsed.sidebar}>
+        <ActivityBarShow
+          id={`${EXPLORER_ID}-show`}
           label="Explorer"
-          open={!collapsed.sidebar}
           controls={EXPLORER_ID}
           shortcut={EXPLORER_SHORTCUT}
-          onToggle={() => togglePane('sidebar')}
+          onShow={() => togglePane('sidebar')}
           icon={<ExplorerIcon aria-hidden="true" />}
         />
         <ActivityBarSeparator />
@@ -978,13 +1037,13 @@ export function Workbench() {
         </SidePanel>
       </div>
 
-      <ActivityBar side="right" label={BOARD_PANE_TITLE}>
-        <ActivityBarToggle
+      <ActivityBar side="right" label={BOARD_PANE_TITLE} hidden={!collapsed.board}>
+        <ActivityBarShow
+          id={`${BOARD_PANE_ID}-show`}
           label={BOARD_PANE_TITLE}
-          open={!collapsed.board}
           controls={BOARD_PANE_ID}
           shortcut={BOARD_SHORTCUT}
-          onToggle={() => togglePane('board')}
+          onShow={() => togglePane('board')}
           icon={<BoardIcon aria-hidden="true" />}
         />
       </ActivityBar>

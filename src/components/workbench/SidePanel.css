@@ -42,9 +42,9 @@
 }
 
 /* The width only animates for an open/close (Workbench.tsx puts
-   .is-sliding on .wb-body for one slide) — never during a divider drag or a
+   .is-sliding on .wb for one slide) — never during a divider drag or a
    window resize, where the pane has to track the pointer or the window. */
-.wb-body.is-sliding .wb-sidepanel {
+.wb.is-sliding .wb-sidepanel {
   transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -116,7 +116,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-body.is-sliding .wb-sidepanel {
+  .wb.is-sliding .wb-sidepanel {
     transition: none;
   }
   .wb-sidepanel.is-collapsed .wb-sidepanel__inner {

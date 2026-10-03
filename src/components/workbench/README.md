@@ -90,7 +90,8 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 Workbench                              (CSS grid: header / body / divider / console rows,
 │                                       rail / panes / rail columns)
 ├─ Header                              (grid row 1, full width)
-├─ ActivityBar side="left"             (row 2, column 1 — Explorer toggle, Start/Stop)
+├─ ActivityBar side="left"             (row 2, column 1 — only while the Explorer is shut:
+│                                       Show Explorer, Start/Stop)
 ├─ .wb-body                            (row 2, column 2, flex row)
 │  ├─ SidePanel .wb-sidebar "Explorer" (draggable width, collapsible, tinted strip)
 │  │  └─ .wb-sidebar__content          (scrolls as one)
@@ -101,18 +102,19 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
 │  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
 │     └─ Board                         (LEDs + HEX on top, SW + KEY underneath)
-├─ ActivityBar side="right"            (row 2, column 3 — Board I/O toggle)
+├─ ActivityBar side="right"            (row 2, column 3 — only while Board I/O is shut:
+│                                       Show Board I/O)
 ├─ .wb-resizer--row                    (row 3, full width, drag handle — resizes the console)
 └─ ConsoleOutput                       (row 4, full width, draggable height)
 ```
 
-The two side panes behave like an IDE's side bars: each can be shut and
-opened again from its activity-bar button, from the hide button in its own
-title strip, with a shortcut (Ctrl+B for the Explorer, Ctrl+Alt+B for the
-Board I/O — Cmd on a Mac), or by dragging its divider — see
-[Resizing](#resizing). The activity bars stay put either way, so the left
-one also carries the Simulation card's Start/Stop, which keeps a run in
-reach while the Explorer is shut.
+The two side panes behave like an IDE's side bars: each can be shut from the
+hide button in its own title strip, with a shortcut (Ctrl+B for the
+Explorer, Ctrl+Alt+B for Board I/O — Cmd on a Mac), or by dragging its
+divider — see [Resizing](#resizing). A shut pane leaves an activity bar
+on its edge in its place, with the button that opens it again; the left one
+also carries the Simulation card's Start/Stop, which keeps a run in reach
+while the Explorer is shut. An open pane has no activity bar beside it.
 
 `SimulationCard` and `FileExplorer` are two independent white, rounded,
 drop-shadowed cards stacked inside `.wb-sidebar`'s tinted background — not
@@ -432,7 +434,8 @@ The IDE chrome around the two side panes.
 side pane: an `<aside>` with an uppercase title strip — the same height as
 the editor's tab strip, so their bottom borders run on as one line — and a
 hide button (`PanelCloseIcon`) on the pane's inner edge, beside the editor:
-after the title on the left pane, before it on the right one. Collapsed, the `<aside>` goes to width 0 but
+after the title on the left pane, before it on the right one. Collapsed,
+the `<aside>` goes to width 0 but
 stays mounted, so the pane keeps its state (scroll position, folded
 folders, a rename in progress). Its inner column always keeps the open
 width and the `<aside>` clips it, so the contents slide off towards the
@@ -442,21 +445,27 @@ reason. Once shut, the column turns `visibility: hidden` — after the slide,
 via a delayed `visibility` transition — which also takes its controls out of
 the tab order.
 
-`<ActivityBar side label>` is a 44px rail, one per edge, in its own grid
-column beside the panes' row (the console runs underneath both rails at full
-width). It holds:
+`<ActivityBar side label hidden>` is a 44px rail, one per edge, in its own
+grid column beside the panes' row (the console runs underneath at full
+width). It stands in for a shut pane, so it shows only while that pane is
+shut: `hidden` (the pane is open) takes it to width 0, which closes its
+`auto`-sized grid column and gives `.wb-body` the room. It stays mounted, and
+like `<SidePanel>` it clips an inner column that keeps the full rail width,
+so it slides in and out with its pane. It holds:
 
-- `<ActivityBarToggle label open controls shortcut onToggle icon>` — shows
-  or hides a pane (`ExplorerIcon`, `BoardIcon`). While its pane is open it
-  is drawn active: accent icon on a soft tile, with a marker bar on the
-  rail's outer edge.
+- `<ActivityBarShow id label controls shortcut onShow icon>` — opens the
+  shut pane again (`ExplorerIcon`, `BoardIcon`).
 - `<ActivityBarRun status topFile onStart onStop>` — the Simulation card's
   Start/Stop with `PlayIcon` / `StopIcon`, and a corner dot for the status
   (amber compiling, green running, the same pulse as the card's).
 - `<ActivityBarSeparator>` — a short rule between groups.
 
-Every button carries its action and shortcut as a tooltip, and
-`aria-expanded` / `aria-controls` pointing at its pane.
+Every button carries its action and shortcut as a tooltip, and the Show
+buttons `aria-expanded` / `aria-controls` pointing at their pane. Keyboard
+focus follows a toggle: from a pane's Hide button (`<id>-hide`) to its
+rail's Show button (`<id>-show`) as the pane shuts, and back as it opens —
+`togglePane` notes the target and an effect moves focus once the new button
+has rendered.
 
 ### `<ConsoleOutput>`
 
@@ -902,10 +911,23 @@ within the one drag. A shut pane's divider stays in place (it keeps
 so it pulls the pane back out. A pane snapped shut keeps the width it had
 *before* the drag to reopen at, not the sliver it was dragged down to.
 A collapsed pane takes no room in `fitSidePanes`, so the open one may grow
-into the space it leaves. Opening or shutting from a button or a shortcut
-(`togglePane`) slides the pane over `--wb-pane-slide`: `.is-sliding` goes on
-`.wb-body` for the one slide only, so the width never animates during a drag
-or a window resize, where it has to keep up with the pointer or the window.
+into the space it leaves.
+
+A pane's activity bar comes and goes with it, which moves that pane's outer
+edge — and changes `.wb-body`'s width — by `RAIL_W`. Two places allow for
+it. A drag measures the pane from the edge as it stood when the drag began
+and adds or takes `RAIL_W` once the pane has opened or shut on the way,
+rather than re-measuring the edge, because the next pointer move can arrive
+before React has rendered the rail's change; that keeps the divider under
+the pointer, and gives the snap a `RAIL_W`-wide band of hysteresis. And
+`togglePane` lays the panes out at once for the room `.wb-body` will have
+after the slide, with the `ResizeObserver` ignoring the in-between widths
+while `.is-sliding` is on, and fits them to the measured room at the end.
+
+Opening or shutting from a button or a shortcut (`togglePane`) slides the
+pane and its rail over `--wb-pane-slide`: `.is-sliding` goes on `.wb` for
+the one slide only, so neither width animates during a drag or a window
+resize, where it has to keep up with the pointer or the window.
 
 Both side panels are draggable, each via its own `.wb-resizer` handle:
 `.wb-sidebar` from the one between it and the editor
