@@ -272,6 +272,15 @@ p { margin: 0; }
 .split-text .split-note { font-size: 1.0625rem; }
 .split-text .text-link { font-size: 1.0625rem; }
 
+/* ---------- Testbench: split view, one wide screenshot ---------- */
+.testbench-intro { gap: 24px; }
+.testbench-intro h2 span { display: inline-block; }  /* wrap between the sentences, not inside one */
+.testbench-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--muted); }
+.testbench-intro code { font-size: 0.92em; padding: 1px 5px; border-radius: 5px; background: #E8EEF8; color: var(--ink-2); }
+.testbench-shot { display: block; max-width: 990px; margin: 64px auto 0;  /* the screenshot's own width plus the frame: never scaled up */ cursor: zoom-in; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.testbench-shot:hover { transform: translateY(-3px); box-shadow: 0 40px 80px -36px rgba(15, 23, 42, 0.45); }
+.testbench-note { max-width: 720px; margin: 40px auto 0; text-align: center; font-size: 1.0625rem; line-height: 1.6; color: var(--muted); }
+
 /* ---------- Feedback: compile time and error messages ---------- */
 .feedback { background: var(--band); color: #fff; padding: 128px 0; }
 .feedback h2 { color: #fff; }
