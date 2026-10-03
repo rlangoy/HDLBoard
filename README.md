@@ -1,7 +1,7 @@
 # HDLBoard - Write VHDL or Verilog and watch it run [![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
 
 Write VHDL or Verilog and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL (VHDL) and Icarus Verilog (Verilog), it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
-![HDLBoard running DE1_SoC.v, a Verilog design: the file tree with its vhdl/ and verilog/ starter folders and the editor with Verilog syntax colouring on the left, the board's LEDs, 7-segment displays, switches and pushbuttons on the right, and Icarus Verilog's banner in the console; five switches are up and their LEDs are lit.](docs/images/workbench.png)
+![HDLBoard in split view with the Explorer and Board I/O panes collapsed: the and_gate_tb.vhd testbench on the left, the and_gate.vhdl design it tests on the right, and the console below showing the testbench report All tests passed.](docs/images/testbench.png)
 
 ## Features
 
