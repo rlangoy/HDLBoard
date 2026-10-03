@@ -11,3 +11,6 @@ Examples/
 # scripts/start.sh and stop.sh PID + log tracking (ghdl_implementation_plan.md § 7)
 .run/
 /Claude outputs
+
+# Logs from running the dev server and backend by hand (server.log, server.err.log, vite.log)
+*.log
