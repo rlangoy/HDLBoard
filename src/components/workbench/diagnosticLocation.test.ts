@@ -8,6 +8,7 @@ import {
   firstRevealTarget,
   lineHeightOrFallback,
   locateDiagnostics,
+  locateLink,
   normalizeFileName,
   offsetOfLine,
   type LocatedDiagnostic,
@@ -92,6 +93,27 @@ describe('locateDiagnostics', () => {
   test('the reveal target stays in the file of the first error', () => {
     const list = [located('a', 9, 'error'), located('b', 1, 'error'), located('a', 4, 'error')];
     expect(firstRevealTarget(list)?.line).toBe(4);
+  });
+});
+
+describe('locateLink', () => {
+  const snapshot = { files: [file('a', 'a.v')] };
+
+  test('a file edited since Start still links to the line the message named', () => {
+    const edited = file('a', 'a.v', 'one\nTWO\nthree\nfour');
+    expect(locateLink([diag('a.v', 2)], snapshot, [edited])).toMatchObject({ fileId: 'a', line: 2 });
+  });
+
+  test('a file that got shorter links to its last line', () => {
+    expect(locateLink([diag('a.v', 3)], snapshot, [file('a', 'a.v', 'one')])?.line).toBe(1);
+  });
+
+  test('a file deleted since Start does not link', () => {
+    expect(locateLink([diag('a.v')], snapshot, [])).toBeUndefined();
+  });
+
+  test('before any run nothing links', () => {
+    expect(locateLink([diag('a.v')], { files: [] }, snapshot.files)).toBeUndefined();
   });
 });
 

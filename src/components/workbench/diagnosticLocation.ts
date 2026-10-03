@@ -101,6 +101,25 @@ export function locateDiagnostics(
 }
 
 /**
+ * Where a console link goes: the first place the text names, as it was at Start.
+ * Unlike a marker, a link stays useful after the student edits the file (fixing
+ * the error is the usual edit) — landing a line or two off is fine for a jump.
+ * Only a file deleted since breaks it, and a line past the end of a file that
+ * has since got shorter goes to its last line.
+ */
+export function locateLink(
+  diagnostics: readonly Diagnostic[],
+  snapshot: RunSnapshot,
+  currentFiles: RunSnapshot['files'],
+): LocatedDiagnostic | undefined {
+  // The snapshot stands in for the current files, so an edit does not count as stale.
+  const [place] = locateDiagnostics(diagnostics, snapshot, snapshot.files);
+  const current = place && currentFiles.find((file) => file.id === place.fileId);
+  if (current === undefined) return undefined;
+  return { ...place, line: Math.min(place.line, countLines(current.content)) };
+}
+
+/**
  * The file of the first error, at that file's lowest error line — for the
  * DE1_SoC.v case that is line 19 (the statement), not line 23 (where Icarus
  * noticed it). Warnings alone never move the view.

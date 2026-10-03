@@ -278,6 +278,7 @@ export function Workbench() {
     recordError: recordErrorDiagnostics,
     startRun: startDiagnosticsRun,
     dismissFile: dismissDiagnostics,
+    show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealSeq = useRef(0);
@@ -287,6 +288,14 @@ export function Workbench() {
     revealSeq.current += 1;
     setReveal({ fileId: target.fileId, line: target.line, id: revealSeq.current });
   }, []);
+  // A console link marks just its own message, as a run marks errors, and jumps to it.
+  const openConsoleDiagnostic = useCallback(
+    (diagnostic: LocatedDiagnostic) => {
+      showDiagnostic(diagnostic);
+      revealLocation(diagnostic);
+    },
+    [showDiagnostic, revealLocation],
+  );
   const revealFirstError = useCallback(
     (advised: readonly AdvisedDiagnostic[]) => {
       const target = revealTarget(advised);
@@ -740,7 +749,7 @@ export function Workbench() {
         lines={logLines}
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
-        onOpenLocation={revealLocation}
+        onOpenLocation={openConsoleDiagnostic}
       />
 
       {/* Outside the Explorer, so Upload still opens it while that pane is shut. */}
