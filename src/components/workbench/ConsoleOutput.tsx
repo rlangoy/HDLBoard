@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from 'react';
 import { cx } from '../board';
+import type { LocatedDiagnostic } from './diagnosticLocation';
 import { DeleteIcon } from './icons';
 import './ConsoleOutput.css';
 
@@ -13,19 +14,13 @@ export interface ConsoleLine {
   tone?: 'success' | 'error';
 }
 
-/** A place in a project file that a console line names. */
-export interface ConsoleLocation {
-  fileId: string;
-  line: number;
-}
-
 export interface ConsoleOutputProps {
   lines: ConsoleLine[];
   onClear: () => void;
-  /** Resolves one line of console text to a marked place, if it names one. */
-  locate?: (line: string) => ConsoleLocation | undefined;
+  /** Resolves one line of console text to the message it names in a project file, if any. */
+  locate?: (line: string) => LocatedDiagnostic | undefined;
   /** A located line was clicked. */
-  onOpenLocation?: (location: ConsoleLocation) => void;
+  onOpenLocation?: (diagnostic: LocatedDiagnostic) => void;
 }
 
 /**

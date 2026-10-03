@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { adviseDiagnostics, adviseLogDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
 import { parseDiagnostics } from './diagnostics';
-import { locateDiagnostics, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
+import { locateDiagnostics, locateLink, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { addToFiles, NO_DIAGNOSTICS, withoutFile, type DiagnosticsByFile } from './diagnosticStore';
 
 export interface DiagnosticsApi {
@@ -23,7 +23,9 @@ export interface DiagnosticsApi {
    */
   recordError(text: string, currentFiles: RunSnapshot['files']): readonly AdvisedDiagnostic[];
   dismissFile(fileId: string): void;
-  /** The place a console line names, if it is a marked one (console links). */
+  /** Marks only this message in its file, the way a run marks its errors (console links). */
+  show(diagnostic: LocatedDiagnostic): void;
+  /** The place a console line names, still after the file was edited (console links). */
   locateText(line: string, currentFiles: RunSnapshot['files']): LocatedDiagnostic | undefined;
 }
 
@@ -83,13 +85,15 @@ export function useDiagnostics(): DiagnosticsApi {
     setByFile((prev) => withoutFile(prev, fileId));
   }, []);
 
+  const show = useCallback((diagnostic: LocatedDiagnostic) => {
+    setByFile((prev) => addToFiles(withoutFile(prev, diagnostic.fileId), [diagnostic]));
+  }, []);
+
   const locateText = useCallback(
-    (line: string, currentFiles: RunSnapshot['files']) => {
-      if (snapshotRef.current.files.length === 0) return undefined; // no run yet: nothing to link
-      return locate(line, currentFiles)[0];
-    },
-    [locate],
+    (line: string, currentFiles: RunSnapshot['files']) =>
+      locateLink(parseDiagnostics(line), snapshotRef.current, currentFiles),
+    [],
   );
 
-  return { byFile, startRun, record, recordError, dismissFile, locateText };
+  return { byFile, startRun, record, recordError, dismissFile, show, locateText };
 }
