@@ -30,18 +30,18 @@ its own license and its own copyright.
 GHDL
 ----
 
-  Version:    5.0.1 (mcode, ucrt64 build for Windows x86-64)
-  Copyright:  (C) 2003-2025 Tristan Gingold and the GHDL contributors
+  Version:    6.0.0 (mcode, ucrt64 build for Windows x86-64)
+  Copyright:  (C) 2003-2026 Tristan Gingold and the GHDL contributors
   License:    GNU General Public License, version 2
   Source:     https://github.com/ghdl/ghdl
-  This release: https://github.com/ghdl/ghdl/releases/tag/v5.0.1
+  This release: https://github.com/ghdl/ghdl/releases/tag/v6.0.0
 
   GHDL is the VHDL analyzer, elaborator and simulator that actually runs
   your designs. HDLBoard starts it as a separate program; it is not
   linked into HDLBoard's own code.
 
   The complete corresponding source for this GHDL binary is the public
-  repository above, at tag v5.0.1.
+  repository above, at tag v6.0.0.
 
   GHDL's license text is installed as:
 

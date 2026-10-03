@@ -22,9 +22,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$GhdlTag    = "v5.0.1"
-$GhdlAsset  = "ghdl-mcode-5.0.1-ucrt64.zip"
-$GhdlSha256 = "1B5F203DD498A2C17715E832762B849C3230878C80258430436E76A48123E793"
+$GhdlTag    = "v6.0.0"
+$GhdlAsset  = "ghdl-mcode-6.0.0-ucrt64.zip"
+$GhdlSha256 = "76E160CEEC35834C73ADA6E4E484416D13AED4B64CBC7C74C5CCA53A7EF60E41"
 
 $AssetUrl   = "https://github.com/ghdl/ghdl/releases/download/$GhdlTag/$GhdlAsset"
 # The release zip carries no license text; GPL-2.0 distribution requires it,
@@ -80,7 +80,7 @@ Repository at this tag: https://github.com/ghdl/ghdl/tree/$GhdlTag
 SHA-256 ($GhdlAsset): $GhdlSha256
 Fetched: $(Get-Date -Format 'yyyy-MM-dd')
 
-GHDL is Copyright (C) 2003-2025 Tristan Gingold and the GHDL contributors,
+GHDL is Copyright (C) 2003-2026 Tristan Gingold and the GHDL contributors,
 licensed under GPL-2.0. Full text in COPYING, alongside this file.
 "@
 

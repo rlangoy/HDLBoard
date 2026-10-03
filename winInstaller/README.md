@@ -130,8 +130,8 @@ output is already confined to `winInstaller/` and gitignored.
 
 ## Vendored GHDL and GPL-2.0
 
-The bundled build is **GHDL 5.0.1, mcode, ucrt64** — the
-`ghdl-mcode-5.0.1-ucrt64.zip` release asset. It is chosen over the
+The bundled build is **GHDL 6.0.0, mcode, ucrt64** — the
+`ghdl-mcode-6.0.0-ucrt64.zip` release asset. It is chosen over the
 `mingw-w64-*.pkg.tar.zst` packages because it is self-contained
 (`ghdl.exe`, three DLLs, and the analyzed standard libraries), so
 installing it is just an unpack; the MSYS2 packages would drag in a
@@ -145,7 +145,7 @@ the build:
 - the exact release and its SHA-256 are recorded in
   `resources\ghdl\VERSION.txt`;
 - the installer's license page credits GHDL and points at the public
-  source at tag `v5.0.1`;
+  source at tag `v6.0.0`;
 - the IEEE library license ships at
   `resources\ghdl\lib\ghdl\src\ieee2008\LICENSE`.
 

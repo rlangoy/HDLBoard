@@ -52,14 +52,12 @@ if ($LASTEXITCODE -ne 0) { throw "package.json versions disagree - run: npm run 
 
 # --- 0. GHDL must be vendored before anything is assembled ---------------
 Step "Checking vendored GHDL"
-if (-not (Test-Path (Join-Path $VendorGhdl "bin\ghdl.exe"))) {
-  Write-Host "vendor/ghdl missing - running fetch-ghdl.ps1"
-  & (Join-Path $WinDir "fetch-ghdl.ps1")
-  if ($LASTEXITCODE -ne 0) { throw "fetch-ghdl.ps1 failed" }
-} else {
-  $v = & (Join-Path $VendorGhdl "bin\ghdl.exe") --version | Select-Object -First 1
-  Write-Host "  $v"
-}
+# Always run: it is a no-op while vendor/ghdl's VERSION.txt matches the
+# pinned release, and replaces the tree when the pin has moved.
+& (Join-Path $WinDir "fetch-ghdl.ps1")
+if ($LASTEXITCODE -ne 0) { throw "fetch-ghdl.ps1 failed" }
+$v = & (Join-Path $VendorGhdl "bin\ghdl.exe") --version | Select-Object -First 1
+Write-Host "  $v"
 
 # --- 0b. Icarus Verilog: vendored, then smoke-tested before anything is packaged
 Step "Checking vendored Icarus Verilog"
