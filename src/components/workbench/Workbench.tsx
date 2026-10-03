@@ -10,7 +10,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Board, zeroBits, type BitVector } from '../board';
+import { Board, cx, zeroBits, type BitVector } from '../board';
 import { Leds } from '../Leds';
 import { Pushbuttons } from '../Pushbuttons';
 import { Switches } from '../Switches';
@@ -28,6 +28,9 @@ import { RefusedFilesDialog } from './RefusedFilesDialog';
 import { newFileContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
+import { SidePanel } from './SidePanel';
+import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarToggle } from './ActivityBar';
+import { BoardIcon, ExplorerIcon } from './icons';
 import { CodeEditor, type TabRunControl } from './CodeEditor';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
@@ -44,7 +47,19 @@ import type { LocatedDiagnostic } from './diagnosticLocation';
 import { runIconFor } from './runIcon';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
-import { loadPaneLayout, savePaneLayout } from './paneLayout';
+import {
+  BOARD_DEFAULT_W,
+  BOARD_MIN_W,
+  SIDEBAR_DEFAULT_W,
+  SIDEBAR_MIN_W,
+  collapsesAt,
+  fitSidePanes,
+  loadPaneLayout,
+  savePaneLayout,
+  type ShrinkFirst,
+  type SidePane,
+  type SidePaneFlags,
+} from './paneLayout';
 import './Workbench.css';
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
@@ -79,25 +94,8 @@ const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
 const AUTOSAVE_DELAY_MS = 600;
 
-// The space each pane needs to stay usable, and the width each starts at —
-// see the "Resizing" note in this folder's README before changing these.
-// These are *rendered* widths: both side panes are border-box, so the width
-// set here is the width measured on screen, padding included.
-//
-// There is deliberately no maximum for either side pane. A fixed ceiling is
-// what stops a divider being dragged back to where it sat before the window
-// grew: widen the window and the pane stays pinned at its cap while the
-// editor swallows the new space, so the divider can never travel back. Each
-// pane's real ceiling is whatever the other two panes' minimums leave, which
-// applyLayout works out per call.
-const SIDEBAR_MIN_W = 208;
-const SIDEBAR_DEFAULT_W = 278;
-const EDITOR_MIN_W = 200;
-const BOARD_MIN_W = 200;
-const BOARD_DEFAULT_W = 792;
-// The two vertical .wb-resizer handles, which sit between the panes and take
-// width of their own (Workbench.css keeps them at 5px each).
-const CHROME_W = 10;
+// The side panes' widths and minimums live in paneLayout.ts, with the
+// arithmetic that fits them into the row.
 
 // The same rules for the console below the panes: a minimum it can't be
 // dragged under, a starting height, and the height the panes above must keep.
@@ -108,6 +106,21 @@ const BODY_MIN_H = 160;
 const ROW_DIVIDER_H = 5;
 
 type ResizeAxis = 'x' | 'y';
+
+// The side panes' element ids, which their rail buttons and dividers control.
+const EXPLORER_ID = 'wb-explorer';
+const BOARD_PANE_ID = 'wb-board-pane';
+// Named for what the pane is — the design's inputs and outputs — not for one
+// particular board.
+const BOARD_PANE_TITLE = 'Board I/O';
+
+// Shown in tooltips; the handler below takes Cmd as well as Ctrl.
+const EXPLORER_SHORTCUT = 'Ctrl+B';
+const BOARD_SHORTCUT = 'Ctrl+Alt+B';
+
+// A little longer than --wb-pane-slide (Workbench.css): how long .is-sliding
+// stays on .wb-body after a pane is opened or shut.
+const SLIDE_MS = 260;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -249,6 +262,8 @@ export function Workbench() {
       sidebarWidth: SIDEBAR_DEFAULT_W,
       boardWidth: BOARD_DEFAULT_W,
       consoleHeight: CONSOLE_DEFAULT_H,
+      sidebarCollapsed: false,
+      boardCollapsed: false,
     }),
   );
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -256,6 +271,20 @@ export function Workbench() {
   const desiredBoardWidth = useRef(initialLayout.boardWidth);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [boardWidth, setBoardWidth] = useState(initialLayout.boardWidth);
+
+  // Either side pane can be shut — from its rail button, its header, a
+  // shortcut, or by dragging its divider most of the way to the window
+  // edge. `collapsedRef` mirrors the state for the layout code, which runs
+  // from a ResizeObserver and mid-drag, both outside React's render.
+  const [collapsed, setCollapsedState] = useState<SidePaneFlags>({
+    sidebar: initialLayout.sidebarCollapsed,
+    board: initialLayout.boardCollapsed,
+  });
+  const collapsedRef = useRef(collapsed);
+  const setCollapsed = (next: SidePaneFlags) => {
+    collapsedRef.current = next;
+    setCollapsedState(next);
+  };
 
   // The console's height, reconciled the same way against the page's height:
   // `desiredConsoleHeight` is what the last drag left it at, `consoleHeight`
@@ -269,6 +298,8 @@ export function Workbench() {
       sidebarWidth: desiredSidebarWidth.current,
       boardWidth: desiredBoardWidth.current,
       consoleHeight: desiredConsoleHeight.current,
+      sidebarCollapsed: collapsedRef.current.sidebar,
+      boardCollapsed: collapsedRef.current.board,
     });
 
   // The board keeps one fixed 2x2 arrangement at one fixed internal size and
@@ -301,77 +332,27 @@ export function Workbench() {
     return () => observer.disconnect();
   }, []);
 
-  // `shrinkFirst` says which panel gives way when both requested widths
-  // don't fit alongside the editor's minimum:
-  // - 'sidebar' / 'board': the panel *not* currently being dragged gives
-  //   way first, so the one the user is actively resizing tracks the
-  //   pointer exactly.
-  // - 'proportional' (a plain window resize, no active drag): both panels
-  //   give way together, in proportion to how much each has left above
-  //   its own minimum. Giving one panel strict priority here (as earlier
-  //   drafts did, always shrinking the board first) left the sidebar
-  //   looking frozen across a wide range of window widths — it wouldn't
-  //   move until the board had already been squeezed to its floor.
-  const applyLayout = useCallback(
-    (
-      containerWidth: number,
-      desiredSidebar: number,
-      desiredBoard: number,
-      shrinkFirst: 'sidebar' | 'board' | 'proportional' = 'proportional',
-    ) => {
-      if (containerWidth <= 0) return;
-      // What is left for the three panes once the drag handles take theirs.
-      const room = containerWidth - CHROME_W;
-      // Each pane may claim anything the other two don't need, so a pane can
-      // always be dragged back out to where the window allows.
-      const sidebarMax = Math.max(SIDEBAR_MIN_W, room - BOARD_MIN_W - EDITOR_MIN_W);
-      const boardMax = Math.max(BOARD_MIN_W, room - SIDEBAR_MIN_W - EDITOR_MIN_W);
-      let sidebar = clamp(desiredSidebar, SIDEBAR_MIN_W, sidebarMax);
-      let board = clamp(desiredBoard, BOARD_MIN_W, boardMax);
-
-      const overflow = sidebar + board + EDITOR_MIN_W - room;
-      if (overflow > 0) {
-        if (shrinkFirst === 'proportional') {
-          const sidebarRoom = sidebar - SIDEBAR_MIN_W;
-          const boardRoom = board - BOARD_MIN_W;
-          const totalRoom = sidebarRoom + boardRoom;
-          if (totalRoom > 0) {
-            const sidebarShrink = Math.min(sidebarRoom, (overflow * sidebarRoom) / totalRoom);
-            sidebar -= sidebarShrink;
-            board -= Math.min(boardRoom, overflow - sidebarShrink);
-          }
-        } else {
-          const shrinkSidebarFirst = shrinkFirst === 'sidebar';
-          const first = shrinkSidebarFirst
-            ? Math.min(overflow, sidebar - SIDEBAR_MIN_W)
-            : Math.min(overflow, board - BOARD_MIN_W);
-          if (shrinkSidebarFirst) sidebar -= first;
-          else board -= first;
-
-          const remaining = overflow - first;
-          if (remaining > 0) {
-            // Still too tight even at the other panel's minimum — take the
-            // rest from whichever panel wasn't shrunk first.
-            if (shrinkSidebarFirst) board = Math.max(BOARD_MIN_W, board - remaining);
-            else sidebar = Math.max(SIDEBAR_MIN_W, sidebar - remaining);
-          }
-        }
-      }
-
-      setSidebarWidth(sidebar);
-      setBoardWidth(board);
-    },
-    [],
-  );
+  // Fits both side panes into the body's measured width from the user's
+  // desired widths and the collapsed flags (paneLayout.ts's fitSidePanes,
+  // which also explains `shrinkFirst`).
+  const applyLayout = useCallback((containerWidth: number, shrinkFirst: ShrinkFirst = 'proportional') => {
+    if (containerWidth <= 0) return;
+    const fitted = fitSidePanes(
+      containerWidth,
+      { sidebar: desiredSidebarWidth.current, board: desiredBoardWidth.current },
+      collapsedRef.current,
+      shrinkFirst,
+    );
+    setSidebarWidth(fitted.sidebar);
+    setBoardWidth(fitted.board);
+  }, []);
 
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
-      if (width) {
-        applyLayout(width, desiredSidebarWidth.current, desiredBoardWidth.current);
-      }
+      if (width) applyLayout(width);
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -442,26 +423,79 @@ export function Workbench() {
 
   const bodyWidth = () => bodyRef.current?.getBoundingClientRect().width ?? 0;
 
-  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const startWidth = sidebarWidth;
+  const desiredWidthRef = { sidebar: desiredSidebarWidth, board: desiredBoardWidth };
+  const otherPane = (pane: SidePane): SidePane => (pane === 'sidebar' ? 'board' : 'sidebar');
+
+  // Dragging a divider resizes its pane; dragged past half the pane's
+  // minimum the pane snaps shut, and dragged back out it opens again, all
+  // within the one drag. A shut pane starts the drag at zero width, so its
+  // divider pulls it back open. A pane snapped shut keeps the width it had
+  // before the drag to reopen at, not the sliver it was dragged down to.
+  const resizePane = (e: ReactPointerEvent<HTMLDivElement>, pane: SidePane, direction: 1 | -1) => {
+    const minWidth = pane === 'sidebar' ? SIDEBAR_MIN_W : BOARD_MIN_W;
+    const openWidth = pane === 'sidebar' ? sidebarWidth : boardWidth;
+    const startWidth = collapsedRef.current[pane] ? 0 : openWidth;
+    const widthBeforeDrag = desiredWidthRef[pane].current;
     beginResize(e, 'x', (deltaX) => {
-      const next = startWidth + deltaX;
-      desiredSidebarWidth.current = next;
-      applyLayout(bodyWidth(), next, desiredBoardWidth.current, 'board');
+      const next = startWidth + direction * deltaX;
+      const shut = collapsesAt(next, minWidth);
+      desiredWidthRef[pane].current = shut ? widthBeforeDrag : next;
+      if (shut !== collapsedRef.current[pane]) setCollapsed({ ...collapsedRef.current, [pane]: shut });
+      applyLayout(bodyWidth(), otherPane(pane));
     });
   };
+
+  const handleSidebarResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'sidebar', 1);
 
   // This handle sits on the board panel's left edge, so dragging it left
   // (negative clientX delta) should grow the board — the opposite sign
   // from the sidebar handle, which grows its panel by dragging right.
-  const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const startWidth = boardWidth;
-    beginResize(e, 'x', (deltaX) => {
-      const next = startWidth - deltaX;
-      desiredBoardWidth.current = next;
-      applyLayout(bodyWidth(), desiredSidebarWidth.current, next, 'sidebar');
-    });
+  const handleBoardResizerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => resizePane(e, 'board', -1);
+
+  // Opening or shutting a pane from a button or a shortcut slides it: the
+  // width only animates while .wb-body has .is-sliding (SidePanel.css), so a
+  // drag or a window resize never lags behind. An opening pane keeps its own
+  // width and the other one gives way, as in a drag.
+  const slideTimer = useRef<number | null>(null);
+  const togglePane = (pane: SidePane) => {
+    const body = bodyRef.current;
+    if (body) {
+      body.classList.add('is-sliding');
+      if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
+      slideTimer.current = window.setTimeout(() => {
+        body.classList.remove('is-sliding');
+        slideTimer.current = null;
+      }, SLIDE_MS);
+    }
+    setCollapsed({ ...collapsedRef.current, [pane]: !collapsedRef.current[pane] });
+    applyLayout(bodyWidth(), otherPane(pane));
+    storePaneLayout();
   };
+  // For the shortcut listener below, attached once.
+  const togglePaneRef = useRef(togglePane);
+  togglePaneRef.current = togglePane;
+
+  useEffect(
+    () => () => {
+      if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
+    },
+    [],
+  );
+
+  // Ctrl+B shows or hides the Explorer and Ctrl+Alt+B the board — the keys
+  // an IDE uses for its primary and secondary side bars. Matched on `code`,
+  // the physical B key, so it works on every keyboard layout; AltGr, which
+  // Windows reports as Ctrl+Alt, is told apart by its own modifier state.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.code !== 'KeyB') return;
+      if (e.getModifierState('AltGraph')) return;
+      e.preventDefault();
+      if (!e.repeat) togglePaneRef.current(e.altKey ? 'board' : 'sidebar');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // This handle sits on the console's top edge, so dragging it up (negative
   // clientY delta) grows the console. The clamped height is what's
@@ -798,6 +832,8 @@ export function Workbench() {
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
 
+  const topFileName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
+
   // Stop is greyed out until compiling finishes, as the card's button is.
   const runIcon = runIconFor(status, runFileId, files.find((f) => f.id === activeTabId));
   const tabRun: TabRunControl | null = runIcon && {
@@ -833,12 +869,35 @@ export function Workbench() {
         />
       )}
 
+      <ActivityBar side="left" label="Explorer and simulation">
+        <ActivityBarToggle
+          label="Explorer"
+          open={!collapsed.sidebar}
+          controls={EXPLORER_ID}
+          shortcut={EXPLORER_SHORTCUT}
+          onToggle={() => togglePane('sidebar')}
+          icon={<ExplorerIcon aria-hidden="true" />}
+        />
+        <ActivityBarSeparator />
+        <ActivityBarRun status={status} topFile={topFileName} onStart={handleStart} onStop={handleStop} />
+      </ActivityBar>
+
       <div className="wb-body" ref={bodyRef}>
-        <div className="wb-sidebar" style={{ width: sidebarWidth }}>
+        <SidePanel
+          id={EXPLORER_ID}
+          side="left"
+          title="Explorer"
+          width={sidebarWidth}
+          collapsed={collapsed.sidebar}
+          onCollapse={() => togglePane('sidebar')}
+          shortcut={EXPLORER_SHORTCUT}
+          className="wb-sidebar"
+          bodyClassName="wb-sidebar__content"
+        >
           <SimulationCard
             status={status}
             elapsedSeconds={elapsedSeconds}
-            topFile={files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY}
+            topFile={topFileName}
             onStart={handleStart}
             onStop={handleStop}
           />
@@ -857,21 +916,14 @@ export function Workbench() {
             onSetTopFile={handleSetTopFile}
             topLocked={isSimulating}
           />
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept={UPLOAD_ACCEPT}
-            multiple
-            className="wb-files__hidden-input"
-            onChange={handleFilesChosen}
-          />
-        </div>
+        </SidePanel>
 
         <div
-          className="wb-resizer"
+          className={cx('wb-resizer', collapsed.sidebar && 'is-beside-collapsed')}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize file panel"
+          aria-label="Resize Explorer"
+          aria-controls={EXPLORER_ID}
           onPointerDown={handleSidebarResizerPointerDown}
         />
 
@@ -890,14 +942,25 @@ export function Workbench() {
         />
 
         <div
-          className="wb-resizer"
+          className={cx('wb-resizer', collapsed.board && 'is-beside-collapsed')}
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize board panel"
+          aria-controls={BOARD_PANE_ID}
           onPointerDown={handleBoardResizerPointerDown}
         />
 
-        <div className="wb-right" style={{ width: boardWidth }}>
+        <SidePanel
+          id={BOARD_PANE_ID}
+          side="right"
+          title={BOARD_PANE_TITLE}
+          width={boardWidth}
+          collapsed={collapsed.board}
+          onCollapse={() => togglePane('board')}
+          shortcut={BOARD_SHORTCUT}
+          className="wb-right"
+          bodyClassName="wb-right__content"
+        >
           <div className="wb-board-fit" ref={boardViewportRef}>
             <div
               className="wb-board-fit__inner"
@@ -912,8 +975,19 @@ export function Workbench() {
               </Board>
             </div>
           </div>
-        </div>
+        </SidePanel>
       </div>
+
+      <ActivityBar side="right" label={BOARD_PANE_TITLE}>
+        <ActivityBarToggle
+          label={BOARD_PANE_TITLE}
+          open={!collapsed.board}
+          controls={BOARD_PANE_ID}
+          shortcut={BOARD_SHORTCUT}
+          onToggle={() => togglePane('board')}
+          icon={<BoardIcon aria-hidden="true" />}
+        />
+      </ActivityBar>
 
       <div
         className="wb-resizer wb-resizer--row"
@@ -928,6 +1002,16 @@ export function Workbench() {
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
         onOpenLocation={revealLocation}
+      />
+
+      {/* Outside the Explorer, so Upload still opens it while that pane is shut. */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={UPLOAD_ACCEPT}
+        multiple
+        className="wb-files__hidden-input"
+        onChange={handleFilesChosen}
       />
     </div>
   );

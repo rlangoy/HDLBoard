@@ -1,0 +1,137 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * The icon rails down each edge of the workbench (ActivityBar.tsx). Each
+ * runs the height of the panes' row only — the console underneath keeps the
+ * full width — in its own .wb grid column, so .wb-body's measured width
+ * (paneLayout.ts) never includes them.
+ */
+.wb-activitybar {
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--wb-rail-bg);
+}
+
+.wb-activitybar--left {
+  grid-column: 1;
+  border-right: 1px solid var(--wb-border);
+}
+
+.wb-activitybar--right {
+  grid-column: 3;
+  border-left: 1px solid var(--wb-border);
+}
+
+.wb-activitybar__item {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.wb-activitybar__item svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.wb-activitybar__item:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.07);
+  color: var(--wb-text);
+}
+
+.wb-activitybar__item:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: -2px;
+}
+
+/* The open pane's button: accent icon on a soft tile, and a marker bar on
+   the rail's outer edge, pointing at the pane it opened. */
+.wb-activitybar__item.is-active {
+  color: var(--wb-accent-dark);
+  background: var(--wb-accent-soft);
+}
+
+.wb-activitybar__item.is-active::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--wb-accent);
+}
+
+.wb-activitybar--left .wb-activitybar__item.is-active::before {
+  left: -4px;
+}
+
+.wb-activitybar--right .wb-activitybar__item.is-active::before {
+  right: -4px;
+}
+
+.wb-activitybar__separator {
+  flex: none;
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--wb-divider-edge);
+}
+
+/* Start/Stop: PlayIcon and StopIcon keep their own teal and red. */
+.wb-activitybar__run svg {
+  width: 20px;
+  height: 20px;
+}
+
+.wb-activitybar__run:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wb-activitybar__badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--wb-rail-bg);
+  display: none;
+}
+
+.wb-activitybar__run.is-running .wb-activitybar__badge {
+  display: block;
+  background: var(--wb-success);
+  animation: wb-pulse 1200ms ease-in-out infinite;
+}
+
+.wb-activitybar__run.is-compiling .wb-activitybar__badge {
+  display: block;
+  background: #f59e0b;
+  animation: wb-pulse 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-activitybar__badge {
+    animation: none !important;
+  }
+}

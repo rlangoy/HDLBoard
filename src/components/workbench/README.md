@@ -63,6 +63,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
   - [`<SimToggle>`](#simtoggle)
+  - [`<ActivityBar>` and `<SidePanel>`](#activitybar-and-sidepanel)
   - [`<ConsoleOutput>`](#consoleoutput)
 - [Supporting modules](#supporting-modules)
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
@@ -86,26 +87,38 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 ## Layout
 
 ```
-Workbench                              (CSS grid: header / body / divider / console)
+Workbench                              (CSS grid: header / body / divider / console rows,
+│                                       rail / panes / rail columns)
 ├─ Header                              (grid row 1, full width)
-└─ .wb-body                            (grid row 2, flex row)
-   ├─ .wb-sidebar                      (draggable width, tinted strip, scrolls as one)
-   │  ├─ SimulationCard                (card: Start/Stop + status)
-   │  └─ FileExplorer                  (card: Upload/New File/Download All + the vhdl/verilog/work tree)
-   ├─ .wb-resizer                      (drag handle — resizes .wb-sidebar)
-   ├─ CodeEditor                       (flex: 1 — takes the remaining width)
-   ├─ .wb-resizer                      (drag handle — resizes .wb-right)
-   └─ .wb-right                        (draggable width panel)
-      └─ Board                        (LEDs + HEX on top, SW + KEY underneath)
-├─ .wb-resizer--row                    (grid row 3, drag handle — resizes the console)
-└─ ConsoleOutput                       (grid row 4, full width, draggable height)
+├─ ActivityBar side="left"             (row 2, column 1 — Explorer toggle, Start/Stop)
+├─ .wb-body                            (row 2, column 2, flex row)
+│  ├─ SidePanel .wb-sidebar "Explorer" (draggable width, collapsible, tinted strip)
+│  │  └─ .wb-sidebar__content          (scrolls as one)
+│  │     ├─ SimulationCard             (card: Start/Stop + status)
+│  │     └─ FileExplorer               (card: Upload/New File/Download All + the vhdl/verilog/work tree)
+│  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
+│  ├─ CodeEditor                       (flex: 1 — takes the remaining width)
+│  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
+│  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
+│     └─ Board                         (LEDs + HEX on top, SW + KEY underneath)
+├─ ActivityBar side="right"            (row 2, column 3 — Board I/O toggle)
+├─ .wb-resizer--row                    (row 3, full width, drag handle — resizes the console)
+└─ ConsoleOutput                       (row 4, full width, draggable height)
 ```
+
+The two side panes behave like an IDE's side bars: each can be shut and
+opened again from its activity-bar button, from the hide button in its own
+title strip, with a shortcut (Ctrl+B for the Explorer, Ctrl+Alt+B for the
+Board I/O — Cmd on a Mac), or by dragging its divider — see
+[Resizing](#resizing). The activity bars stay put either way, so the left
+one also carries the Simulation card's Start/Stop, which keeps a run in
+reach while the Explorer is shut.
 
 `SimulationCard` and `FileExplorer` are two independent white, rounded,
 drop-shadowed cards stacked inside `.wb-sidebar`'s tinted background — not
 one merged panel. Each owns its own border/radius/shadow (`.wb-simcard`,
 `.wb-files`); the sidebar only owns their shared width, background tint and
-outer scrolling.
+outer scrolling (on `.wb-sidebar__content`, under the title strip).
 
 All state lives in `Workbench.tsx` — every other component here is a plain,
 props-driven function component. This mirrors the board layer's own rule
@@ -411,6 +424,40 @@ The outlined teal play triangle / red stop square on `<CodeEditor>`'s active tab
 Its click stops propagating, so pressing it inside a tab isn't also a click
 on the tab.
 
+### `<ActivityBar>` and `<SidePanel>`
+
+The IDE chrome around the two side panes.
+
+`<SidePanel id side title width collapsed onCollapse shortcut?>` is one
+side pane: an `<aside>` with an uppercase title strip — the same height as
+the editor's tab strip, so their bottom borders run on as one line — and a
+hide button (`PanelCloseIcon`) on the pane's inner edge, beside the editor:
+after the title on the left pane, before it on the right one. Collapsed, the `<aside>` goes to width 0 but
+stays mounted, so the pane keeps its state (scroll position, folded
+folders, a rename in progress). Its inner column always keeps the open
+width and the `<aside>` clips it, so the contents slide off towards the
+window edge rather than reflowing on the way; the right pane's column is
+anchored to its right edge (`justify-content: flex-end`) for the same
+reason. Once shut, the column turns `visibility: hidden` — after the slide,
+via a delayed `visibility` transition — which also takes its controls out of
+the tab order.
+
+`<ActivityBar side label>` is a 44px rail, one per edge, in its own grid
+column beside the panes' row (the console runs underneath both rails at full
+width). It holds:
+
+- `<ActivityBarToggle label open controls shortcut onToggle icon>` — shows
+  or hides a pane (`ExplorerIcon`, `BoardIcon`). While its pane is open it
+  is drawn active: accent icon on a soft tile, with a marker bar on the
+  rail's outer edge.
+- `<ActivityBarRun status topFile onStart onStop>` — the Simulation card's
+  Start/Stop with `PlayIcon` / `StopIcon`, and a corner dot for the status
+  (amber compiling, green running, the same pulse as the card's).
+- `<ActivityBarSeparator>` — a short rule between groups.
+
+Every button carries its action and shortcut as a tooltip, and
+`aria-expanded` / `aria-controls` pointing at its pane.
+
 ### `<ConsoleOutput>`
 
 ```tsx
@@ -548,7 +595,10 @@ ignores other schemes.
 
 ### `icons.tsx`
 
-`EditIcon`, `DeleteIcon`, `DownloadIcon`, `FilesIcon` and `GearIcon`. The one
+`EditIcon`, `DeleteIcon`, `DownloadIcon`, `FilesIcon` and `GearIcon`, plus
+the side-bar chrome's line icons — `ExplorerIcon`, `BoardIcon` and
+`PanelCloseIcon` (drawn on `GearIcon`'s 24-unit grid and stroke, in
+`currentColor`). The one
 deliberate exception to this folder's otherwise all-CSS icons (the upload
 arrow, `+`, chevron, folder and file glyphs are all drawn from
 `FileExplorer.css` pseudo-elements, same technique as the board parts):
@@ -843,12 +893,28 @@ inline on `.wb`, clamped by `applyConsoleHeight` between `CONSOLE_MIN_H` and
 whatever leaves the panes above `BODY_MIN_H`; a `ResizeObserver` on `.wb`
 re-applies the clamp when the window height changes.
 
+**Collapsing.** Dragging a side pane's divider until the pane would be
+under half its own minimum width snaps the pane shut (`collapsesAt` in
+`paneLayout.ts`), and dragging back past the same point opens it again —
+within the one drag. A shut pane's divider stays in place (it keeps
+`CHROME_W` honest) but drops its own bar until hovered
+(`.is-beside-collapsed`), and a drag that starts on it starts from width 0,
+so it pulls the pane back out. A pane snapped shut keeps the width it had
+*before* the drag to reopen at, not the sliver it was dragged down to.
+A collapsed pane takes no room in `fitSidePanes`, so the open one may grow
+into the space it leaves. Opening or shutting from a button or a shortcut
+(`togglePane`) slides the pane over `--wb-pane-slide`: `.is-sliding` goes on
+`.wb-body` for the one slide only, so the width never animates during a drag
+or a window resize, where it has to keep up with the pointer or the window.
+
 Both side panels are draggable, each via its own `.wb-resizer` handle:
 `.wb-sidebar` from the one between it and the editor
 (`handleSidebarResizerPointerDown`), `.wb-right` from the one on its own
 left edge (`handleBoardResizerPointerDown`). Neither width is applied
 directly from the drag delta: every move of either handle, and every resize
-of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout`, which
+of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout` — a thin
+wrapper over `fitSidePanes` in [`paneLayout.ts`](./paneLayout.ts), which is
+pure and unit-tested — which
 
 - clamps each panel's requested width between its own minimum and a
   *computed* ceiling — whatever the other two panes don't need,
@@ -875,7 +941,8 @@ board out of the way, doesn't forget the board's preferred width: drag the
 sidebar back and the board grows back to it.
 
 Those three requested sizes — both desired widths and the console height —
-are also written to `localStorage` at the end of every drag
+and whether each side pane is shut are also written to `localStorage` at the
+end of every drag and every open or close
 ([`paneLayout.ts`](./paneLayout.ts)) and read back as the starting values on
 mount, so the app reopens with its dividers where they were left. The
 desktop app always serves the page from the same origin, so this survives a

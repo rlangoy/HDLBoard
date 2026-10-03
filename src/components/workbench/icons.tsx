@@ -75,6 +75,57 @@ export function GearIcon() {
   );
 }
 
+/*
+ * The side-bar chrome (ActivityBar, SidePanel): line icons drawn on the same
+ * 24-unit grid and stroke as GearIcon, in `currentColor` so the rail's
+ * muted/active/hover colours carry through.
+ */
+const lineIconProps = {
+  xmlns: 'http://www.w3.org/2000/svg',
+  width: 24,
+  height: 24,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+/** Two stacked pages — the Explorer (Simulation + Files) side bar. */
+export function ExplorerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...lineIconProps} {...props}>
+      <path d="M15 3H9.5A1.5 1.5 0 0 0 8 4.5v11A1.5 1.5 0 0 0 9.5 17h8a1.5 1.5 0 0 0 1.5-1.5V7z" />
+      <polyline points="15 3 15 7 19 7" />
+      <path d="M5 7.5v12A1.5 1.5 0 0 0 6.5 21H15" />
+    </svg>
+  );
+}
+
+/** A chip with its pins — the Board I/O pane. */
+export function BoardIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...lineIconProps} {...props}>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="0.75" />
+      <path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5" />
+    </svg>
+  );
+}
+
+/** A window with its side bar ruled off and an arrow pushing it shut. */
+export function PanelCloseIcon({ side, ...props }: SVGProps<SVGSVGElement> & { side: 'left' | 'right' }) {
+  const left = side === 'left';
+  return (
+    <svg {...lineIconProps} {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d={left ? 'M9 4v16' : 'M15 4v16'} />
+      <polyline points={left ? '15.5 9.5 13 12 15.5 14.5' : '8.5 9.5 11 12 8.5 14.5'} />
+    </svg>
+  );
+}
+
 /** An outlined teal triangle — starts a simulation (SimToggle). */
 export function PlayIcon(props: SVGProps<SVGSVGElement>) {
   return (

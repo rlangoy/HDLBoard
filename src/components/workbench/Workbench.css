@@ -14,10 +14,15 @@
 .wb {
   --wb-header-h: 56px;
   --wb-console-h: 180px;
-  --wb-sidebar-w: 278px;
-  /* Wide enough for the board's own 2-column grid at size={24} — see
-     the comment on .wb-right below before shrinking this. */
-  --wb-right-w: 792px;
+  /* The icon rails down each edge (ActivityBar.css) and the title strip
+     across the top of each side pane (SidePanel.css) — the editor's tab
+     strip's height, border included (CodeEditor.css), so the three strips'
+     bottom borders run on as one line. */
+  --wb-rail-w: 44px;
+  --wb-rail-bg: #f1f5f9;
+  --wb-pane-header-h: 39px;
+  /* How long a side pane takes to slide open or shut. */
+  --wb-pane-slide: 200ms;
 
   --wb-border: #e2e8f0;
   --wb-sidebar-bg: #f8fafc;
@@ -56,7 +61,8 @@
   --wb-console-bg: #0f172a;
 
   /* The pane dividers (.wb-resizer): a light gray bar with darker edges,
-     5px thick — Workbench.tsx's CHROME_W / ROW_DIVIDER_H budget for it. */
+     5px thick — paneLayout.ts's CHROME_W and Workbench.tsx's ROW_DIVIDER_H
+     budget for it. */
   --wb-divider-size: 5px;
   --wb-divider-bg: #e5e9f0;
   --wb-divider-edge: #cbd5e1;
@@ -68,11 +74,14 @@
   /* --wb-console-h is overridden inline by Workbench.tsx as the console's
      divider is dragged; the value above is only the initial/no-JS height. */
   grid-template-rows: var(--wb-header-h) 1fr var(--wb-divider-size) var(--wb-console-h);
+  /* An activity bar either side of the panes' row (row 2); the header, the
+     console divider and the console run the full width across all three. */
+  grid-template-columns: var(--wb-rail-w) minmax(0, 1fr) var(--wb-rail-w);
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
   background: #ffffff;
   /* The sidebar and board panel widths below are reconciled in JS against
-     the body's measured width (see Workbench.tsx's applyLayout) so they
+     the body's measured width (see paneLayout.ts's fitSidePanes) so they
      always fit; this is the hard backstop in case they ever don't. */
   overflow-x: hidden;
 }
@@ -82,11 +91,12 @@
  * min-width: auto — its min-content width — and because every pane inside
  * is `flex: none`, that min-content is the panes' full combined width. The
  * row would then refuse to shrink below it, so the width applyLayout
- * measures here would be that frozen sum rather than the space actually
+ * (Workbench.tsx) measures here would be that frozen sum rather than the space actually
  * available, and the reconciliation below would never see a window resize.
  */
 .wb-body {
   grid-row: 2;
+  grid-column: 2;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -96,9 +106,9 @@
  * Pane dividers. The two vertical ones sit either side of the editor — one
  * resizes .wb-sidebar, the other .wb-right (Workbench.tsx's
  * handleSidebarResizerPointerDown / handleBoardResizerPointerDown); both
- * panels' widths are set inline from that drag state, not from
- * --wb-sidebar-w / --wb-right-w below — those vars only supply the
- * initial/no-JS width. The horizontal one (.wb-resizer--row) sits on the
+ * panels' widths are set inline from that drag state, and dragging either
+ * past half its pane's minimum collapses the pane (paneLayout.ts's
+ * collapsesAt). The horizontal one (.wb-resizer--row) sits on the
  * console's top edge and sets --wb-console-h
  * (handleConsoleResizerPointerDown).
  *
@@ -131,6 +141,7 @@
 
 .wb-resizer--row {
   grid-row: 3;
+  grid-column: 1 / -1;
   width: auto;
   height: var(--wb-divider-size);
   border: 0;
@@ -168,46 +179,50 @@
   cursor: ns-resize !important;
 }
 
+/* A divider beside a collapsed pane: no bar of its own until hovered, so the
+   shut pane leaves only the rail — but still there to drag the pane back out. */
+.wb-resizer.is-beside-collapsed:not(:hover):not(.is-dragging) {
+  background: transparent;
+  border-color: transparent;
+}
+
 /*
- * The left pane: a tinted strip holding two stacked cards (Simulation,
- * then Files) rather than one flush panel — matches the reference
- * Simulate-and-Files-pane mockup. Width, background and the scrollbar
- * all live here now; FileExplorer.css's .wb-files is just the card
- * underneath it. The border against the editor is the .wb-resizer bar
- * above, not a border here — a plain border would double up with it.
+ * The left pane (a SidePanel titled Explorer): a tinted strip holding two
+ * stacked cards (Simulation, then Files) rather than one flush panel —
+ * matches the reference Simulate-and-Files-pane mockup. The background
+ * lives on the pane, the padding and the scrolling on its body, under the
+ * title strip; FileExplorer.css's .wb-files is just the card underneath.
+ * The border against the editor is the .wb-resizer bar beside it, not a
+ * border here — a plain border would double up with it.
  */
 .wb-sidebar {
-  width: var(--wb-sidebar-w);
-  flex: none;
-  min-width: 0;
-  /* border-box so the width Workbench.tsx sets is the width on screen —
-     the layout arithmetic there budgets in rendered pixels. */
-  box-sizing: border-box;
+  background: var(--wb-sidebar-bg);
+}
+
+.wb-sidebar__content {
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 14px;
   overflow-y: auto;
-  background: var(--wb-sidebar-bg);
 }
 
 /*
- * The board pane. It never scrolls and the board inside it never reflows:
- * the parts keep one fixed arrangement and are scaled to fit whatever
- * width the drag/window leaves (Workbench.tsx's board-fit effect). No
- * border-left here — the .wb-resizer bar on this panel's left edge
- * is that border.
+ * The board pane (a SidePanel titled Board I/O). It never scrolls and
+ * the board inside it never reflows: the parts keep one fixed arrangement
+ * and are scaled to fit whatever the drag/window leaves (Workbench.tsx's
+ * board-fit effect). No border-left here — the .wb-resizer bar on this
+ * pane's left edge is that border.
  */
 .wb-right {
-  width: var(--wb-right-w);
-  flex: none;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 16px;
+  background: #ffffff;
+}
+
+.wb-right__content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  background: #ffffff;
+  padding: 16px;
+  overflow: hidden;
 }
 
 .wb-board-fit {
