@@ -36,7 +36,8 @@ export interface EditorSplit {
 
 export interface EditorSplitHandlers {
   /** A drag snapped this pane shut and was released: show only the other one. */
-  readonly onCollapse: (pane: PaneRole) => void;
+  /** `fromKeyboard`: Enter on the divider, which hands focus to the view switch (§ 4.8). */
+  readonly onCollapse: (pane: PaneRole, fromKeyboard: boolean) => void;
 }
 
 /**
@@ -79,7 +80,7 @@ export function useEditorSplit(handlers: EditorSplitHandlers): EditorSplit {
     const next = fractionForKey(e.key, e.shiftKey, prefsRef.current.tbFraction, bounds);
     if (next === undefined) return;
     e.preventDefault();
-    if (next === 'collapse') handlersRef.current.onCollapse('tb');
+    if (next === 'collapse') handlersRef.current.onCollapse('tb', true);
     else update({ tbFraction: next });
   };
 
@@ -112,7 +113,8 @@ function useDividerDrag(
     e.preventDefault();
     const handle = e.currentTarget;
     const room = columnWidth.current - SPLIT_DIVIDER_W;
-    const startTb = prefs.current.tbFraction * room;
+    const startFraction = prefs.current.tbFraction;
+    const startTb = startFraction * room;
     const startX = e.clientX;
     let collapsed: PaneRole | null = null;
     handle.setPointerCapture(e.pointerId);
@@ -133,8 +135,9 @@ function useDividerDrag(
       handle.removeEventListener('pointerup', onUp);
       handle.removeEventListener('pointercancel', onUp);
       setDragCollapsed(null);
-      update({}, true);
-      if (collapsed) handlers.current.onCollapse(collapsed);
+      // A pane snapped shut keeps the split it had before the drag, for Both to restore.
+      update(collapsed ? { tbFraction: startFraction } : {}, true);
+      if (collapsed) handlers.current.onCollapse(collapsed, false);
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', onUp);

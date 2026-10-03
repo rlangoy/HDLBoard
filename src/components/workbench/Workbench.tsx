@@ -724,6 +724,7 @@ export function Workbench() {
           suggestedName={testbenchDesign ? `${baseName(testbenchDesign.name)}_tb` : suggestedNewFileName}
           initialLanguage={testbenchDesign?.folder === 'verilog' ? 'verilog' : 'vhdl'}
           subtitle={testbenchDesign ? `A testbench for ${testbenchDesign.name}` : undefined}
+          kind={testbenchDesign ? 'testbench' : 'design'}
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
           onClose={() => {

@@ -51,7 +51,12 @@ export function analyzeFile(file: SourceFile): FileAnalysis | undefined {
   return withUnits({ fileId: file.id, name: file.name, folder: file.folder, content: file.content, language }, units);
 }
 
-const sortEvidence = (evidence: Evidence[]): Evidence[] => evidence.sort((a, b) => a.line - b.line);
+/** Line order, one row per rule and line (`assert … report` on one line is one piece of evidence). */
+function sortEvidence(evidence: Evidence[]): Evidence[] {
+  const seen = new Set<string>();
+  const unique = evidence.filter((e) => !seen.has(`${e.ruleId}:${e.line}`) && !!seen.add(`${e.ruleId}:${e.line}`));
+  return unique.sort((a, b) => a.line - b.line);
+}
 
 /** A file analysis built from its units: the file role and the regions follow from them. */
 export function withUnits(

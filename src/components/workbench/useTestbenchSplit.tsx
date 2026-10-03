@@ -88,7 +88,13 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const dismissed = useRef(new Set<string>());
   const recentFileIds = useRef<string[]>([]);
   const [, rerender] = useState(0);
-  const split = useEditorSplit({ onCollapse: (pane) => pinView(pane === 'tb' ? 'rtl' : 'tb') });
+  const split = useEditorSplit({
+    onCollapse: (pane, fromKeyboard) => {
+      pinView(pane === 'tb' ? 'rtl' : 'tb');
+      // The divider is gone: focus the view switch's checked radio, as usePaneLayout's handOffFocus does.
+      if (fromKeyboard) window.setTimeout(() => document.querySelector<HTMLElement>('.wb-viewswitch [aria-checked="true"]')?.focus());
+    },
+  });
   const preferenceRef = useRef(split.prefs.preference);
   preferenceRef.current = split.prefs.preference;
 

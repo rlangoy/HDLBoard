@@ -59,7 +59,7 @@ export function EvidencePopover({ pane, unit, roleOverride, onRevealLine }: Evid
                     <strong>
                       {evidenceLine(e.line)} — <code>{RULE_TEXT[e.ruleId].title}</code>
                     </strong>{' '}
-                    {RULE_TEXT[e.ruleId].explanation}
+                    <WithCode text={RULE_TEXT[e.ruleId].explanation} />
                   </button>
                 </li>
               ))}
@@ -69,4 +69,9 @@ export function EvidencePopover({ pane, unit, roleOverride, onRevealLine }: Evid
       )}
     </span>
   );
+}
+
+/** The explanations mark code with backticks, as the docs do: `wait for` -> <code>wait for</code>. */
+function WithCode({ text }: { text: string }) {
+  return <>{text.split('`').map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : part))}</>;
 }

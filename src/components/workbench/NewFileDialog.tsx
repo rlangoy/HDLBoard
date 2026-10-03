@@ -18,6 +18,8 @@ export interface NewFileDialogProps {
   initialLanguage?: NewFileLanguage;
   /** Replaces the "Choose a name and a language" subtitle. */
   subtitle?: string;
+  /** What the new file starts as: a board design (default) or an empty testbench. */
+  kind?: 'design' | 'testbench';
 }
 
 /**
@@ -29,7 +31,7 @@ export interface NewFileDialogProps {
  * Mounted only while it is open, so every opening starts over with the suggested
  * name and VHDL.
  */
-export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose, initialLanguage = 'vhdl', subtitle }: NewFileDialogProps) {
+export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose, initialLanguage = 'vhdl', subtitle, kind = 'design' }: NewFileDialogProps) {
   const [name, setName] = useState(suggestedName);
   const [language, setLanguage] = useState<NewFileLanguage>(initialLanguage);
   const formId = useId();
@@ -89,7 +91,8 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
           ) : (
             <>
               Creates <strong>{newFileName(name, language)}</strong>
-              {language === 'verilog' ? ' with a module' : ' with an entity'} of the same name and the board's ports.
+              {language === 'verilog' ? ' with a module' : ' with an entity'} of the same name
+              {kind === 'testbench' ? ': an empty testbench, no ports.' : " and the board's ports."}
             </>
           )}
         </p>
