@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useState, type DragEvent } from 'react';
+import { useState, type DragEvent, type ReactNode } from 'react';
 import { cx } from '../board';
 import { NO_DIAGNOSTICS, type DiagnosticsByFile, type LineDiagnostic } from './diagnosticStore';
 import { EditorSurface, type EditorTab } from './EditorSurface';
 import { EditorTabStrip, type TabRunControl } from './EditorTabStrip';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
+import { SplitEditor, type SplitEditorProps } from './SplitEditor';
 import type { RevealRequest } from './useRevealLine';
 import './CodeEditor.css';
 
@@ -32,6 +33,17 @@ export interface CodeEditorProps {
   onDismissDiagnostics?: (fileId: string) => void;
   /** Show this line of its file (opened and active), caret at its start. */
   reveal?: RevealRequest | null;
+  /**
+   * The testbench split (docs/impl_split_screen.md § 6.5): the editor shows these
+   * one or two panes instead of the active tab alone. Without it, as before.
+   */
+  split?: SplitEditorProps;
+  /** The split's other shown file, drawn lighter in the tab strip. */
+  visibleTabId?: string | null;
+  /** The role icon before each tab's name. */
+  tabIcon?: (tabId: string) => ReactNode;
+  /** At the tab strip's right end: the suggestion chip and the view switch. */
+  stripEnd?: ReactNode;
 }
 
 const NO_LINES: readonly LineDiagnostic[] = [];
@@ -91,7 +103,7 @@ export function NoFileOpen() {
   );
 }
 
-/** The tabbed VHDL and Verilog editor: one tab strip over one code surface. */
+/** The tabbed VHDL and Verilog editor: one tab strip over one code surface, or over the testbench split. */
 export function CodeEditor({
   tabs,
   activeTabId,
@@ -104,6 +116,10 @@ export function CodeEditor({
   diagnostics = NO_DIAGNOSTICS,
   onDismissDiagnostics,
   reveal,
+  split,
+  visibleTabId,
+  tabIcon,
+  stripEnd,
 }: CodeEditorProps) {
   const drop = useFileDrop(onFilesDropped);
   const active = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -119,8 +135,14 @@ export function CodeEditor({
         onAddTab={onAddTab}
         tabRun={tabRun}
         diagnostics={diagnostics}
-      />
-      {active ? (
+        visibleTabId={visibleTabId}
+        tabIcon={tabIcon}
+      >
+        {stripEnd}
+      </EditorTabStrip>
+      {split ? (
+        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} />
+      ) : active ? (
         <EditorSurface
           file={active}
           diagnostics={diagnostics[active.id] ?? NO_LINES}

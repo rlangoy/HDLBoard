@@ -14,6 +14,10 @@ export interface NewFileDialogProps {
   existingNames: readonly string[];
   onCreate: (name: string, language: NewFileLanguage) => void;
   onClose: () => void;
+  /** The language selected at first; VHDL unless given. */
+  initialLanguage?: NewFileLanguage;
+  /** Replaces the "Choose a name and a language" subtitle. */
+  subtitle?: string;
 }
 
 /**
@@ -25,9 +29,9 @@ export interface NewFileDialogProps {
  * Mounted only while it is open, so every opening starts over with the suggested
  * name and VHDL.
  */
-export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose }: NewFileDialogProps) {
+export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose, initialLanguage = 'vhdl', subtitle }: NewFileDialogProps) {
   const [name, setName] = useState(suggestedName);
-  const [language, setLanguage] = useState<NewFileLanguage>('vhdl');
+  const [language, setLanguage] = useState<NewFileLanguage>(initialLanguage);
   const formId = useId();
   const errorId = `${formId}-error`;
 
@@ -47,7 +51,7 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose 
       open
       onClose={onClose}
       title="New File"
-      subtitle="Choose a name and a language"
+      subtitle={subtitle ?? 'Choose a name and a language'}
       icon={<FilesIcon />}
       footer={
         <div className="wb-newfile__buttons">

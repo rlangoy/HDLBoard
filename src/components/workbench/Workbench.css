@@ -21,6 +21,17 @@
      one line. */
   --wb-rail-w: 44px;
   --wb-rail-bg: #f1f5f9;
+  /* Role colours (docs/impl_split_screen.md § 4.13): a tint for the badge, an ink
+     for its text and icon. Distinct from the diagnostics' red/amber so a role is
+     never read as a problem. */
+  --wb-role-tb-ink: #6d28d9;
+  --wb-role-tb-tint: #f3e8ff;
+  --wb-role-rtl-ink: #0f766e;
+  --wb-role-rtl-tint: #ccfbf1;
+  /* Pane header accent (D25): top border in the ink, strip in the tint. */
+  --wb-role-accent-w: 3px;
+  /* Same width as .wb-resizer, so the split divider looks like the other three. */
+  --wb-split-divider-w: 5px;
   --wb-pane-header-h: 39px;
   /* How long a side pane takes to slide open or shut. */
   --wb-pane-slide: 200ms;

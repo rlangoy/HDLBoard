@@ -4,6 +4,14 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { countLines, lineHeightOrFallback, offsetOfLine } from './diagnosticLocation';
 
+let revealSeq = 0;
+
+/** A fresh `RevealRequest.id`, shared by every source of reveals so the newest always wins. */
+export function nextRevealId(): number {
+  revealSeq += 1;
+  return revealSeq;
+}
+
 /** Ask the editor to show a line: `id` changes on every request, so the same line can be revealed twice. */
 export interface RevealRequest {
   readonly fileId: string;

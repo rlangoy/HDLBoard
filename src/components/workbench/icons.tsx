@@ -136,3 +136,49 @@ export function StopIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/*
+ * The testbench split view's role icons (docs/impl_split_screen.md § 4.13): 16×16,
+ * stroke 1.5, round caps, in `currentColor` so a badge's ink colours them.
+ */
+const roleIconProps = {
+  xmlns: 'http://www.w3.org/2000/svg',
+  width: 16,
+  height: 16,
+  viewBox: '0 0 16 16',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.5,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+/** A chip with pins — design (RTL) code. */
+export function ChipIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1" />
+      <path d="M6.5 1.75v2.25M9.5 1.75v2.25M6.5 12v2.25M9.5 12v2.25M1.75 6.5h2.25M1.75 9.5h2.25M12 6.5h2.25M12 9.5h2.25" />
+    </svg>
+  );
+}
+
+/** A lab flask — testbench (simulation-only) code. */
+export function FlaskIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} {...props}>
+      <path d="M6 1.75h4M6.75 1.75v4.5L2.6 12.9a.9.9 0 0 0 .77 1.35h9.26a.9.9 0 0 0 .77-1.35L9.25 6.25v-4.5" />
+      <path d="M4.4 10h7.2" />
+    </svg>
+  );
+}
+
+/** Two panes side by side — the view switch's Both. */
+export function SplitViewIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} {...props}>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M8 2.75v10.5" />
+    </svg>
+  );
+}

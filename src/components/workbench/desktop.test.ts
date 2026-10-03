@@ -12,6 +12,8 @@ const ws: Workspace = {
   openTabs: ['a', 'file-3'],
   activeTabId: 'file-3',
   topFileId: 'a',
+  topUnit: 'a_tb',
+  testbench: { roles: { a: 'tb' }, pairs: { 'file-3': 'a' } },
 };
 
 describe('workspace storage format', () => {
@@ -33,12 +35,21 @@ describe('workspace storage format', () => {
       openTabs: ['gone', 'a', 'a'],
       activeTabId: 'gone',
       topFileId: 'gone',
+      topUnit: 'x',
+      testbench: { roles: { a: 'maybe', gone: 'tb' }, pairs: { a: 'gone' } },
     });
     expect(parseWorkspace(stored)).toEqual({
       files: [ws.files[0]],
       openTabs: ['a'],
       activeTabId: 'a',
       topFileId: null,
+      topUnit: null,
+      testbench: { roles: {}, pairs: {} },
     });
+  });
+
+  it('reads a workspace stored before the testbench split as having no overrides', () => {
+    const { topUnit: _unit, testbench: _overrides, ...old } = ws;
+    expect(parseWorkspace(serializeWorkspace(old))).toEqual({ ...old, topUnit: null, testbench: { roles: {}, pairs: {} } });
   });
 });

@@ -5,25 +5,53 @@ import { useState } from 'react';
 import { Dialog } from './Dialog';
 import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
+import type { SplitPreference } from './editorView';
 import { APP_NAME, ISSUES_URL } from './project';
+import { TEXT } from './testbenchText';
 import './SettingsDialog.css';
 
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Editor → Testbench split view (docs/impl_split_screen.md § 4.2). */
+  splitPreference: SplitPreference;
+  onSplitPreferenceChange: (preference: SplitPreference) => void;
+}
+
+const SPLIT_CHOICES: readonly { value: SplitPreference; label: string; hint: string }[] = [
+  { value: 'auto', label: TEXT.settingAuto, hint: TEXT.settingAutoHint },
+  { value: 'always', label: TEXT.settingAlways, hint: TEXT.settingAlwaysHint },
+  { value: 'never', label: TEXT.settingNever, hint: TEXT.settingNeverHint },
+];
+
+/** The split preference, a radio group; stored in this browser (localStorage). */
+function SplitSetting({ value, onChange }: { value: SplitPreference; onChange: (p: SplitPreference) => void }) {
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">Editor &rsaquo; {TEXT.settingTitle}</legend>
+      {SPLIT_CHOICES.map((c) => (
+        <label key={c.value} className="wb-settings__option">
+          <input type="radio" name="wb-split-preference" checked={value === c.value} onChange={() => onChange(c.value)} />
+          <span>
+            <strong>{c.label}</strong>
+            <span className="wb-settings__note">{c.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
 }
 
 const NEW_ISSUE = `${ISSUES_URL}/new`;
 
 /**
- * In a browser there is nothing to configure, so instead of an empty form
- * this says so. The desktop app has one setting — project storage — which
+ * Both builds have the testbench split preference. The desktop app also has — project storage — which
  * its preload exposes on `window.hdlboard` (desktop.ts); it applies on the
  * next launch. Either way the dialog points at the one thing a user can do
  * to change the program: open an issue. The two buttons open GitHub's new-issue page with a title
  * prefix, so a report arrives already sorted into bug or suggestion.
  */
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ open, onClose, splitPreference, onSplitPreferenceChange }: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
   const [persist, setPersist] = useState(() => bridge?.enabled ?? false);
@@ -47,7 +75,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
-      {bridge ? (
+      <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
+      {bridge && (
         <div className="wb-settings__empty">
           <label className="wb-settings__option">
             <input
@@ -69,11 +98,6 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             </span>
           </label>
         </div>
-      ) : (
-        <p className="wb-dialog__lead wb-settings__empty">
-          <strong>No settings are available for now.</strong> {APP_NAME} works out
-          of the box &mdash; nothing needs configuring yet :)
-        </p>
       )}
 
       <section className="wb-settings__help" aria-labelledby="wb-settings-help">

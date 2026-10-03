@@ -1,0 +1,470 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* ---- the testbench split (docs/impl_split_screen.md § 4, § 6.5) -------- */
+
+.wb-split {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
+.wb-split.is-both {
+  display: grid;
+  grid-template-columns:
+    minmax(0, var(--wb-split-tb)) var(--wb-split-divider-w) minmax(0, var(--wb-split-rtl));
+}
+
+.wb-split__pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb-split__pane.is-drag-hidden {
+  visibility: hidden;
+}
+
+.wb-split__divider {
+  width: auto;
+}
+
+.wb-split__divider:focus-visible {
+  outline: 2px solid var(--wb-focus-ring, #2563eb);
+  outline-offset: -1px;
+}
+
+/* ---- pane header (§ 4.4, D25) --------------------------------------- */
+
+.wb-panehead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border-top: var(--wb-role-accent-w) solid var(--wb-role-ink);
+  border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-role-tint);
+  font-size: 12px;
+  color: var(--wb-text);
+}
+
+.wb-panehead.is-tb,
+.wb-rolebadge.is-tb,
+.wb-split-empty.is-tb,
+.wb-roleicon.is-tb {
+  --wb-role-ink: var(--wb-role-tb-ink);
+  --wb-role-tint: var(--wb-role-tb-tint);
+}
+
+.wb-panehead.is-rtl,
+.wb-rolebadge.is-rtl,
+.wb-split-empty.is-rtl,
+.wb-roleicon.is-rtl {
+  --wb-role-ink: var(--wb-role-rtl-ink);
+  --wb-role-tint: var(--wb-role-rtl-tint);
+}
+
+/* An unfocused pane's header is quieter, so the focused one (what runs) stands out. */
+.wb-split.is-both .wb-split__pane:not(.is-focused) .wb-panehead {
+  background: color-mix(in srgb, var(--wb-role-tint) 45%, #ffffff);
+}
+
+.wb-panehead__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wb-panehead__badge-wrap,
+.wb-panehead__why {
+  position: relative;
+  display: inline-flex;
+}
+
+.wb-panehead__why {
+  margin-left: auto;
+}
+
+.wb-rolebadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px 0 5px;
+  border: 1px solid var(--wb-role-ink);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--wb-role-ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.wb-rolebadge:hover {
+  background: var(--wb-role-tint);
+}
+
+.wb-panehead__btn {
+  min-width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--wb-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wb-panehead__btn:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.wb-panehead__why-btn {
+  border-color: var(--wb-role-ink);
+  border-radius: 11px;
+  color: var(--wb-role-ink);
+  background: #ffffff;
+}
+
+.wb-panehead__regions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.wb-panehead__regions + .wb-panehead__why {
+  margin-left: 4px;
+}
+
+.wb-panehead__region {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--wb-text-muted);
+}
+
+.wb-panehead__region-label {
+  color: var(--wb-text);
+}
+
+.wb-split__note {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--wb-border);
+  background: #fffbeb;
+  font-size: 12px;
+}
+
+.wb-split__note button {
+  border: 1px solid var(--wb-border);
+  border-radius: 4px;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---- menus and popovers --------------------------------------------- */
+
+.wb-menu,
+.wb-evidence {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 220px;
+  max-width: min(420px, 80vw);
+  padding: 4px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  font-size: 12px;
+  color: var(--wb-text);
+}
+
+.wb-menu {
+  left: 0;
+}
+
+.wb-evidence {
+  right: 0;
+  width: 380px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.wb-menu__info,
+.wb-evidence__note {
+  margin: 4px 8px 6px;
+  color: var(--wb-text-muted);
+}
+
+.wb-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wb-menu__item:hover,
+.wb-menu__item:focus-visible {
+  background: var(--wb-hover);
+}
+
+.wb-menu__check {
+  width: 12px;
+}
+
+.wb-menu__list {
+  max-height: 220px;
+  overflow: auto;
+  padding-left: 12px;
+}
+
+.wb-evidence__title {
+  margin: 4px 8px 6px;
+  font-weight: 700;
+}
+
+.wb-evidence__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-evidence__row {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wb-evidence__row:hover,
+.wb-evidence__row:focus-visible {
+  background: var(--wb-hover);
+}
+
+/* ---- role icons (tabs, pickers) -------------------------------------- */
+
+.wb-roleicon {
+  display: inline-flex;
+  flex: none;
+  color: var(--wb-role-ink);
+}
+
+/* ---- empty states (§ 4.6) ------------------------------------------- */
+
+.wb-split-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  border-top: var(--wb-role-accent-w) solid var(--wb-role-ink);
+  background: #ffffff;
+  text-align: center;
+}
+
+.wb-split-empty__message {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-role-ink);
+}
+
+.wb-split-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wb-split-empty__open {
+  position: relative;
+}
+
+.wb-split-empty__btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wb-split-empty__btn:hover {
+  background: var(--wb-hover);
+}
+
+.wb-split-empty__btn.is-primary {
+  border-color: var(--wb-role-ink);
+  background: var(--wb-role-ink);
+  color: #ffffff;
+}
+
+/* ---- tab strip additions: view switch, suggestion chip (§ 4.2, § 4.7) ---- */
+
+.wb-editor__tabbar {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  min-width: 0;
+  border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-sidebar-bg);
+}
+
+.wb-editor__tabbar > .wb-editor__tabs {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.wb-editor__tabbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 0 8px;
+}
+
+.wb-editor__tab.is-visible {
+  background: #ffffff;
+  color: var(--wb-text);
+  box-shadow: inset 0 -2px 0 var(--wb-divider-edge);
+}
+
+.wb-editor__tab .wb-roleicon,
+.wb-editor__tab > svg {
+  margin-right: -2px;
+}
+
+.wb-viewswitch {
+  display: inline-flex;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.wb-viewswitch__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--wb-border);
+  background: transparent;
+  color: var(--wb-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wb-viewswitch__option:last-child {
+  border-right: 0;
+}
+
+.wb-viewswitch__option.is-checked {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
+  font-weight: 600;
+}
+
+.wb-viewswitch__option.is-tb {
+  --wb-role-ink: var(--wb-role-tb-ink);
+}
+
+.wb-viewswitch__option.is-rtl {
+  --wb-role-ink: var(--wb-role-rtl-ink);
+}
+
+.wb-viewswitch__option.is-tb svg,
+.wb-viewswitch__option.is-rtl svg {
+  color: var(--wb-role-ink);
+}
+
+.wb-viewswitch__option[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-tbchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--wb-role-tb-ink);
+  border-radius: 13px;
+  background: var(--wb-role-tb-tint);
+  color: var(--wb-role-tb-ink);
+  font-size: 12px;
+}
+
+.wb-tbchip__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.wb-tbchip__open,
+.wb-tbchip__dismiss {
+  height: 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-tbchip__open {
+  padding: 0 8px;
+}
+
+.wb-tbchip__dismiss {
+  width: 20px;
+  background: transparent;
+}
