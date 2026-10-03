@@ -14,11 +14,11 @@
 .wb {
   --wb-header-h: 56px;
   --wb-console-h: 180px;
-  /* The icon rails down each edge (ActivityBar.css; Workbench.tsx's RAIL_W
-     matches the width) and the title strip
-     across the top of each side pane (SidePanel.css) — the editor's tab
-     strip's height, border included (CodeEditor.css), so the three strips'
-     bottom borders run on as one line. */
+  /* The icon rails down each edge (ActivityBar.css; usePaneLayout.ts's
+     RAIL_W matches the width) and the title strip across the top of each
+     side pane (SidePanel.css) — the editor's tab strip's height, border
+     included (CodeEditor.css), so the three strips' bottom borders run on as
+     one line. */
   --wb-rail-w: 44px;
   --wb-rail-bg: #f1f5f9;
   --wb-pane-header-h: 39px;
@@ -62,8 +62,8 @@
   --wb-console-bg: #0f172a;
 
   /* The pane dividers (.wb-resizer): a light gray bar with darker edges,
-     5px thick — paneLayout.ts's CHROME_W and Workbench.tsx's ROW_DIVIDER_H
-     budget for it. */
+     5px thick — paneLayout.ts's CHROME_W and usePaneLayout.ts's
+     ROW_DIVIDER_H budget for it. */
   --wb-divider-size: 5px;
   --wb-divider-bg: #e5e9f0;
   --wb-divider-edge: #cbd5e1;
@@ -72,7 +72,7 @@
 
   height: 100vh;
   display: grid;
-  /* --wb-console-h is overridden inline by Workbench.tsx as the console's
+  /* --wb-console-h is overridden inline (usePaneLayout.ts) as the console's
      divider is dragged; the value above is only the initial/no-JS height. */
   grid-template-rows: var(--wb-header-h) 1fr var(--wb-divider-size) var(--wb-console-h);
   /* An activity bar either side of the panes' row (row 2), each column as
@@ -93,8 +93,9 @@
  * min-width: auto — its min-content width — and because every pane inside
  * is `flex: none`, that min-content is the panes' full combined width. The
  * row would then refuse to shrink below it, so the width applyLayout
- * (Workbench.tsx) measures here would be that frozen sum rather than the space actually
- * available, and the reconciliation below would never see a window resize.
+ * (usePaneLayout.ts) measures here would be that frozen sum rather than the
+ * space actually available, and the reconciliation below would never see a
+ * window resize.
  */
 .wb-body {
   grid-row: 2;
@@ -106,13 +107,13 @@
 
 /*
  * Pane dividers. The two vertical ones sit either side of the editor — one
- * resizes .wb-sidebar, the other .wb-right (Workbench.tsx's
- * handleSidebarResizerPointerDown / handleBoardResizerPointerDown); both
+ * resizes .wb-sidebar, the other .wb-right (usePaneLayout.ts's
+ * onSidebarDividerPointerDown / onBoardDividerPointerDown); both
  * panels' widths are set inline from that drag state, and dragging either
  * past half its pane's minimum collapses the pane (paneLayout.ts's
  * collapsesAt). The horizontal one (.wb-resizer--row) sits on the
  * console's top edge and sets --wb-console-h
- * (handleConsoleResizerPointerDown).
+ * (onConsoleDividerPointerDown).
  *
  * The bar itself is only --wb-divider-size thick; the ::before strip
  * widens the grab area by --wb-divider-reach on each side, over the
@@ -165,7 +166,7 @@
   border-color: var(--wb-accent);
 }
 
-/* Set on <body> for the duration of a drag (Workbench.tsx's beginResize). */
+/* Set on <body> for the duration of a drag (usePaneLayout.ts's beginResize). */
 .wb-is-resizing-x,
 .wb-is-resizing-y {
   user-select: none;

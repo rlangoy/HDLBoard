@@ -4,14 +4,12 @@
 import type { ReactNode } from 'react';
 import { cx } from '../board';
 import { PanelToggleIcon } from './icons';
+import type { PaneElementIds } from './usePaneLayout';
 import './SidePanel.css';
 
 export interface SidePanelProps {
-  /**
-   * The element id the activity-bar button and the divider point at
-   * (aria-controls); the hide button is `${id}-hide`.
-   */
-  id: string;
+  /** The pane's own id and its Hide button's (the rest are its rail's). */
+  ids: Pick<PaneElementIds, 'pane' | 'hide'>;
   /** Which edge of the window the pane sits against — it slides shut towards it. */
   side: 'left' | 'right';
   /** The pane's name, shown in its header and read out for the region. */
@@ -36,7 +34,7 @@ export interface SidePanelProps {
  * instead of reflowing on the way.
  */
 export function SidePanel({
-  id,
+  ids,
   side,
   title,
   width,
@@ -48,15 +46,14 @@ export function SidePanel({
   children,
 }: SidePanelProps) {
   const hideLabel = `Hide ${title}`;
-  const heading = <h2 className="wb-sidepanel__title">{title}</h2>;
   const hideButton = (
     <button
       type="button"
-      id={`${id}-hide`}
+      id={ids.hide}
       className="wb-sidepanel__hide"
       aria-label={hideLabel}
       title={shortcut ? `${hideLabel} (${shortcut})` : hideLabel}
-      aria-controls={id}
+      aria-controls={ids.pane}
       aria-expanded={!collapsed}
       onClick={onCollapse}
     >
@@ -65,7 +62,7 @@ export function SidePanel({
   );
   return (
     <aside
-      id={id}
+      id={ids.pane}
       className={cx('wb-sidepanel', `wb-sidepanel--${side}`, collapsed && 'is-collapsed', className)}
       style={{ width: collapsed ? 0 : width }}
       aria-label={title}
@@ -74,17 +71,9 @@ export function SidePanel({
         {/* The hide button sits on the pane's inner edge, beside the editor:
             after the title on a left pane, before it on a right one. */}
         <div className="wb-sidepanel__header">
-          {side === 'left' ? (
-            <>
-              {heading}
-              {hideButton}
-            </>
-          ) : (
-            <>
-              {hideButton}
-              {heading}
-            </>
-          )}
+          {side === 'right' && hideButton}
+          <h2 className="wb-sidepanel__title">{title}</h2>
+          {side === 'left' && hideButton}
         </div>
         <div className={cx('wb-sidepanel__body', bodyClassName)}>{children}</div>
       </div>

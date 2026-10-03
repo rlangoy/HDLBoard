@@ -3,7 +3,7 @@
 
 /*
  * A collapsible side pane (SidePanel.tsx). The <aside> is what takes width
- * in .wb-body's row — Workbench.tsx sets it inline, 0 while collapsed — and
+ * in .wb-body's row — its width is set inline, 0 while collapsed — and
  * clips the inner column, which always keeps the open width. Shutting the
  * pane therefore slides the contents off towards the window edge instead of
  * squeezing and re-wrapping them on the way.
@@ -11,7 +11,7 @@
 .wb-sidepanel {
   flex: none;
   min-width: 0;
-  /* border-box so the width Workbench.tsx sets is the width on screen —
+  /* border-box so the width set inline is the width on screen —
      the layout arithmetic in paneLayout.ts budgets in rendered pixels. */
   box-sizing: border-box;
   display: flex;
@@ -41,8 +41,8 @@
   transition: visibility 0s linear var(--wb-pane-slide);
 }
 
-/* The width only animates for an open/close (Workbench.tsx puts
-   .is-sliding on .wb for one slide) — never during a divider drag or a
+/* The width only animates for an open/close (usePaneLayout's togglePane
+   puts .is-sliding on .wb for one slide) — never during a divider drag or a
    window resize, where the pane has to track the pointer or the window. */
 .wb.is-sliding .wb-sidepanel {
   transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);

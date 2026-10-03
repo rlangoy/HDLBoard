@@ -122,8 +122,10 @@ one merged panel. Each owns its own border/radius/shadow (`.wb-simcard`,
 `.wb-files`); the sidebar only owns their shared width, background tint and
 outer scrolling (on `.wb-sidebar__content`, under the title strip).
 
-All state lives in `Workbench.tsx` — every other component here is a plain,
-props-driven function component. This mirrors the board layer's own rule
+All state lives in `Workbench.tsx` — the pane geometry (widths, which side
+panes are shut, the console's height, the dividers and the shortcuts) in its
+[`usePaneLayout`](./usePaneLayout.ts) hook — and every other component here
+is a plain, props-driven function component. This mirrors the board layer's own rule
 (`Design_Description.md` § 1.1): a component holds only its own UI state,
 the caller owns the data.
 
@@ -901,7 +903,7 @@ and pointer capture keeps the drag on the handle, so the panes follow the
 pointer continuously wherever it goes.
 
 **The console** is resized from the horizontal divider on its top edge
-(`handleConsoleResizerPointerDown`). Its height goes into `--wb-console-h`
+(`onConsoleDividerPointerDown`). Its height goes into `--wb-console-h`
 inline on `.wb`, clamped by `applyConsoleHeight` between `CONSOLE_MIN_H` and
 whatever leaves the panes above `BODY_MIN_H`; a `ResizeObserver` on `.wb`
 re-applies the clamp when the window height changes.
@@ -935,8 +937,8 @@ resize, where it has to keep up with the pointer or the window.
 
 Both side panels are draggable, each via its own `.wb-resizer` handle:
 `.wb-sidebar` from the one between it and the editor
-(`handleSidebarResizerPointerDown`), `.wb-right` from the one on its own
-left edge (`handleBoardResizerPointerDown`). Neither width is applied
+(`onSidebarDividerPointerDown`), `.wb-right` from the one on its own
+left edge (`onBoardDividerPointerDown`). Neither width is applied
 directly from the drag delta: every move of either handle, and every resize
 of `.wb-body` itself (`ResizeObserver`), goes through `applyLayout` — a thin
 wrapper over `fitSidePanes` in [`paneLayout.ts`](./paneLayout.ts), which is
@@ -961,7 +963,7 @@ pure and unit-tested — which
   widths if that panel had been dragged wider than its default.
 
 Each panel remembers the user's actual last-requested width in a ref
-(`desiredSidebarWidth` / `desiredBoardWidth`) separately from its rendered,
+(`desiredWidth`) separately from its rendered,
 possibly-clamped state — so dragging the sidebar wide, which shrinks the
 board out of the way, doesn't forget the board's preferred width: drag the
 sidebar back and the board grows back to it.

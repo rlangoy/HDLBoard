@@ -22,7 +22,7 @@
   width: 0;
 }
 
-/* Only an open/close from a button or a shortcut animates (Workbench.tsx's
+/* Only an open/close from a button or a shortcut animates (usePaneLayout's
    togglePane puts .is-sliding on .wb) — the same slide as the pane's own. */
 .wb.is-sliding .wb-activitybar {
   transition: width var(--wb-pane-slide) cubic-bezier(0.2, 0, 0, 1);

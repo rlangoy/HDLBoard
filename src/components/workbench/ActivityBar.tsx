@@ -8,6 +8,7 @@ import type { SimStatus } from './SimulationCard';
 import './ActivityBar.css';
 
 export interface ActivityBarProps {
+  id: string;
   /** The window edge the rail runs down. */
   side: 'left' | 'right';
   /** What the rail is, for screen readers. */
@@ -24,9 +25,10 @@ export interface ActivityBarProps {
  * shut — open, the pane carries all of it — and stays mounted either way, so
  * it can slide in and out with the pane.
  */
-export function ActivityBar({ side, label, hidden, children }: ActivityBarProps) {
+export function ActivityBar({ id, side, label, hidden, children }: ActivityBarProps) {
   return (
     <nav
+      id={id}
       className={cx('wb-activitybar', `wb-activitybar--${side}`, hidden && 'is-hidden')}
       aria-label={label}
       aria-hidden={hidden || undefined}
@@ -37,7 +39,7 @@ export function ActivityBar({ side, label, hidden, children }: ActivityBarProps)
 }
 
 export interface ActivityBarShowProps {
-  /** The element id, which the pane's own Hide button hands focus back to. */
+  /** The element id, which focus moves to as the pane shuts. */
   id: string;
   /** The pane's name, e.g. "Explorer". */
   label: string;
