@@ -11,7 +11,7 @@ import { STARTER_FILES } from './files';
  * unless something stops them; this is that guard (case K-10).
  */
 
-const fixtureTexts = import.meta.glob<string>('../../../tests/fixtures/{vhdl,verilog}/*.{vhdl,v}', {
+const fixtureTexts = import.meta.glob<string>('../../../tests/fixtures/{vhdl,verilog}/*.{vhdl,vhd,v}', {
   query: '?raw',
   import: 'default',
   eager: true,
