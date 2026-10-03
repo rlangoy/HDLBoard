@@ -157,7 +157,11 @@ function rejectAmbiguousTop(topFileName: string, names: readonly string[]): TopC
  * the candidates. Never a guess: a heuristic that picks a module the student did not
  * mean becomes a bug report, while a clear error costs one rename.
  */
-export function chooseTopModule(topFileName: string, names: readonly string[]): TopChoice {
+export function chooseTopModule(topFileName: string, names: readonly string[], runTarget?: string): TopChoice {
+  if (runTarget !== undefined) {
+    // `RUN <file> @<unit>` (docs/impl_split_screen.md D20): that module or nothing.
+    return names.includes(runTarget) ? { ok: true, name: runTarget } : { ok: false, reason: `${topFileName} declares no module ${runTarget}.` };
+  }
   const [first] = names;
   if (first === undefined) return { ok: false, reason: `Top file ${topFileName} declares no module.` };
   if (names.length === 1) return { ok: true, name: first };

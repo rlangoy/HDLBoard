@@ -33,7 +33,10 @@ export type ClientFrame =
   // elaborated as top, e.g. from a "set as top" click in the Files
   // panel. Optional — omitted, the backend falls back to matching board
   // ports across every submitted entity (§ 7.3's original heuristic).
-  | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string }
+  // `runTarget`: the unit of the top file to elaborate (`RUN <file> @<unit>`,
+  // docs/impl_split_screen.md D20) — a testbench inside a file that also holds its
+  // design. Omitted, the backend picks the unit as it always has.
+  | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string; runTarget?: string }
   | { verb: 'STIM'; bits: string }
   | { verb: 'RESET' }
   | { verb: 'STOP' }
@@ -101,6 +104,19 @@ function splitRunBody(body: string): VhdlFileInput[] | ProtocolError {
   return files;
 }
 
+/**
+ * `RUN`'s inline args: the top file, optionally followed by ` @<unit>`. A file name may
+ * contain spaces, so the target is a trailing ` @<identifier>` after an accepted
+ * extension, which no file name can end in (D20).
+ */
+const RUN_TARGET = /^(.*\.(?:vhdl?|vh?))\s+@([A-Za-z_]\w*)$/i;
+
+export function parseRunHeader(inline: string): { topFile?: string; runTarget?: string } {
+  const found = RUN_TARGET.exec(inline);
+  if (found) return { topFile: found[1], runTarget: found[2] };
+  return { topFile: inline || undefined };
+}
+
 export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
   const nl = text.indexOf('\n');
   const head = nl === -1 ? text : text.slice(0, nl);
@@ -120,7 +136,8 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       if (files.length === 0) {
         return { message: 'RUN body contains no @@FILE ...@@ sections' };
       }
-      return { verb: 'RUN', files, topFile: inline || undefined };
+      const { topFile, runTarget } = parseRunHeader(inline);
+      return runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget };
     }
     case 'STIM': {
       if (!new RegExp(`^[01]{${STIM_LENGTH}}$`).test(inline)) {
@@ -149,7 +166,8 @@ export function encodeClientFrame(frame: ClientFrame): string {
       const body = frame.files
         .map((f) => `@@FILE ${f.name}@@\n${f.content}`)
         .join('\n');
-      const head = frame.topFile ? `RUN ${frame.topFile}` : 'RUN';
+      const target = frame.topFile && frame.runTarget ? ` @${frame.runTarget}` : '';
+      const head = frame.topFile ? `RUN ${frame.topFile}${target}` : 'RUN';
       return `${head}\n${body}`;
     }
     case 'STIM':

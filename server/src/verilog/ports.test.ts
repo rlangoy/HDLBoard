@@ -185,4 +185,13 @@ describe('chooseTopModule', () => {
   test('removes only the extension from the file name before comparing', () => {
     assert.deepEqual(chooseTopModule('blink_top.v', ['blink', 'blink_top']), { ok: true, name: 'blink_top' });
   });
+
+  test('R-3: a run target picks that module, even when another is named like the file', () => {
+    assert.deepEqual(chooseTopModule('alu_tb.v', ['alu', 'alu_tb'], 'alu'), { ok: true, name: 'alu' });
+  });
+
+  test('a run target the file does not declare is an error naming both', () => {
+    const result = chooseTopModule('alu.v', ['alu'], 'nosuch');
+    assert.deepEqual(result, { ok: false, reason: 'alu.v declares no module nosuch.' });
+  });
 });

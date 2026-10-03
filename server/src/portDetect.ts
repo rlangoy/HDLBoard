@@ -22,6 +22,17 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, '');
 }
 
+/**
+ * `RUN <file> @<unit>` (docs/impl_split_screen.md D20): exactly that entity of that
+ * file; board / batch mode then follows from its own ports, as for any top.
+ */
+function namedEntity(files: VhdlFileInput[], fileName: string, unit: string): TopEntity | TopEntityError {
+  const file = files.find((f) => f.name === fileName);
+  const name = file && findEntityNames(file.content).find((n) => n.toLowerCase() === unit.toLowerCase());
+  if (!file || name === undefined) return { message: `${fileName} declares no entity ${unit}.` };
+  return { name, ports: detectPorts(file.content, name), fileName };
+}
+
 function findEntityNames(src: string): string[] {
   const stripped = stripComments(src);
   const names: string[] = [];
@@ -68,7 +79,9 @@ export interface TopEntityError {
 export function findTopEntity(
   files: VhdlFileInput[],
   preferredFileName?: string,
+  runTarget?: string,
 ): TopEntity | TopEntityError {
+  if (preferredFileName && runTarget) return namedEntity(files, preferredFileName, runTarget);
   if (preferredFileName) {
     const preferred = files.find((f) => f.name === preferredFileName);
     if (preferred) {

@@ -56,12 +56,12 @@ function checkNames(files: readonly VhdlFileInput[]): { readonly problem?: strin
 }
 
 /** The file names, the top file's presence and its module: everything decidable before Icarus runs. */
-function checkProject(files: readonly VhdlFileInput[], topFile: string | undefined): Checked {
+function checkProject(files: readonly VhdlFileInput[], topFile: string | undefined, runTarget?: string): Checked {
   const { problem, sources } = checkNames(files);
   if (problem !== undefined) return { ok: false, stage: 'analyze', text: problem };
   const top = files.find((file) => file.name === topFile);
   if (top === undefined) return { ok: false, stage: 'analyze', text: `Top file ${topFile ?? '(none)'} was not among the files sent.` };
-  const choice = chooseTopModule(top.name, moduleNames(top.content));
+  const choice = chooseTopModule(top.name, moduleNames(top.content), runTarget);
   if (!choice.ok) return { ok: false, stage: 'elaborate', text: choice.reason };
   return { ok: true, top: choice.name, sources };
 }
@@ -120,8 +120,8 @@ async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
   return notes;
 }
 
-async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {
-  const checked = checkProject(files, topFile);
+async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Promise<PrepareResult> {
+  const checked = checkProject(files, topFile, runTarget);
   if (!checked.ok) return failure(checked.stage, checked.text);
   writeProject(dir, files);
 

@@ -161,7 +161,7 @@ function clearWorkLibrary(dir: string): void {
   }
 }
 
-async function prepare({ dir, files, topFile }: PrepareRequest): Promise<PrepareResult> {
+async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Promise<PrepareResult> {
   clearWorkLibrary(dir);
   for (const file of files) writeFileSync(join(dir, file.name), file.content);
 
@@ -171,7 +171,7 @@ async function prepare({ dir, files, topFile }: PrepareRequest): Promise<Prepare
   const analysisErrors = await analyzeToFixedPoint(dir, files);
   if (analysisErrors !== undefined) return failure('analyze', analysisErrors);
 
-  const top = findTopEntity([...files], topFile);
+  const top = findTopEntity([...files], topFile, runTarget);
   if ('message' in top) return failure('elaborate', top.message);
   if (top.ports.size === 0) return prepareBatch(dir, top.name);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
