@@ -376,6 +376,17 @@
   margin-right: -2px;
 }
 
+/* In the tab strip the role icons are plain dark grey line icons: many coloured tabs
+   are noise, and the pane headers carry the role colours. The Play / Stop icon keeps
+   its own colours (SimToggle). */
+.wb-editor__tab .wb-roleicon {
+  color: #374151;
+}
+
+.wb-editor__tab > svg.wb-roleicon {
+  stroke: #374151;
+}
+
 .wb-viewswitch {
   display: inline-flex;
   border: 1px solid var(--wb-border);
