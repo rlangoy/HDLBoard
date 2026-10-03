@@ -15,6 +15,10 @@ export type EditorView = 'tb' | 'both' | 'rtl';
 export type PairEvent = 'open' | 'run';
 export type PaneRole = 'tb' | 'rtl';
 
+/** In a column too narrow for two panes, Both shows the focused pane only (§ 4.9). */
+export const narrowView = (view: EditorView, focusedPane: PaneRole, canSplit: boolean): EditorView =>
+  view === 'both' && !canSplit ? focusedPane : view;
+
 export function pairKey(pair: EditorPair): string {
   return `${pair.tb?.fileId ?? '-'}|${pair.rtl?.fileId ?? '-'}`;
 }
@@ -32,8 +36,11 @@ export function resolveView(
   pinned: EditorView | undefined,
   event: PairEvent,
 ): EditorView {
-  if (pinned) return pinned;
   const anchorView = anchorRoleView(pair);
+  // A pin wins (B6), except that it never hides the file being opened: a pair pinned to
+  // its design, opened from its testbench, shows the testbench.
+  const pinHidesAnchor = pinned !== undefined && pinned !== 'both' && pair[pinned]?.fileId !== pair.anchorId;
+  if (pinned) return pinHidesAnchor ? anchorView : pinned;
   if (preference === 'never') return anchorView;
   if (preference === 'always') return 'both';
   const enough = event === 'run' ? pair.tbConfidence !== 'low' : pair.tbConfidence === 'high';

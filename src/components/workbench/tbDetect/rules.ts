@@ -30,7 +30,7 @@ export interface DetectionRule {
   readonly strength: 'strong' | 'weak' | 'veto';
   /** Matches in one unit's blanked code; each match gives one evidence line. */
   readonly find: (unit: UnitText) => readonly number[];
-  /** The "Why?" sentence, from testbenchText.ts. */
+  /** Why the rule's construct is simulation-only, from testbenchText.ts. */
   readonly explanation: string;
 }
 

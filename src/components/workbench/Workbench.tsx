@@ -44,8 +44,7 @@ import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
-import { findUnit, testbenchesFor, type TestbenchChoice } from './splitModel';
-import { effectiveFile } from './tbDetect';
+import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
@@ -87,6 +86,14 @@ let nextFileSeq = 1;
 const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
 const AUTOSAVE_DELAY_MS = 600;
+
+/** A design run waiting on RunTestbenchDialog: what runs if the student picks "Run … anyway". */
+interface RunChoice {
+  readonly fileId: string;
+  readonly runTarget: string | null;
+  readonly unitName: string | null;
+  readonly choices: readonly TestbenchChoice[];
+}
 
 // Named for what the board pane is — the design's inputs and outputs — not
 // for one particular board.
@@ -176,7 +183,7 @@ export function Workbench() {
   // "Create testbench" for this design file: the New File dialog makes a testbench paired with it.
   const [newTestbenchFor, setNewTestbenchFor] = useState<string | null>(null);
   // A design run the board cannot drive, with the testbench units that could run it instead (§ 4.10).
-  const [runChoice, setRunChoice] = useState<{ fileId: string; runTarget: string | null; unitName: string | null; choices: TestbenchChoice[] } | null>(null);
+  const [runChoice, setRunChoice] = useState<RunChoice | null>(null);
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
   const logSeq = useRef(0);
 
@@ -458,7 +465,7 @@ export function Workbench() {
     setDialog(null);
     const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
     setNewTestbenchFor(null);
-    const dut = design && tb.analysis.current.byFile.get(design.id)?.units[0]?.name;
+    const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
     const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newFileContent(name, language);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
@@ -566,10 +573,16 @@ export function Workbench() {
    * instantiates asks first (RunTestbenchDialog); anything else runs at once.
    */
   const checkAndRun = (fileId: string, runTarget: string | null, unitName: string | null, pane: PaneRole) => {
-    const project = tb.analysis.current;
-    const choices = pane === 'rtl' ? testbenchesFor(project, tb.overridesRef.current, fileId, unitName, tb.recentFileIds.current) : [];
+    const choices = pane === 'rtl' ? tb.testbenchesFor(fileId, unitName) : [];
     if (choices.length > 0) setRunChoice({ fileId, runTarget, unitName, choices });
-    else startRun(fileId, runTarget, unitName);
+    else runAsTop(fileId, runTarget, unitName);
+  };
+
+  /** The file becomes top — the blue dot and "Top: file › unit" — and runs. Only once a run really starts. */
+  const runAsTop = (fileId: string, runTarget: string | null, unitName: string | null) => {
+    setTopFileId(fileId);
+    setTopUnit(runTarget);
+    startRun(fileId, runTarget, unitName);
   };
 
   /**
@@ -578,10 +591,7 @@ export function Workbench() {
    * its design — naming the unit only when the file holds more than one (B7).
    */
   const runFile = (id: string) => {
-    const project = tb.analysis.flush();
-    const route = routeRun(effectiveFile(project, tb.overridesRef.current, id), id === topFileId ? topUnit : null);
-    setTopFileId(id);
-    setTopUnit(route.runTarget);
+    const route = routeRun(tb.fileAnalysis(id), id === topFileId ? topUnit : null);
     tb.showFile(id, 'run', { pane: route.pane, unitName: route.unitName });
     checkAndRun(id, route.runTarget, route.unitName, route.pane);
   };
@@ -604,10 +614,7 @@ export function Workbench() {
   /** Play in a pane header: exactly that pane's unit (§ 4.10). */
   const handleRunPane = (pane: PaneRole, target: PaneTarget) => {
     if (isSimulating) return;
-    const file = effectiveFile(tb.analysis.flush(), tb.overridesRef.current, target.fileId);
-    const runTarget = runTargetFor(target, file, pane);
-    setTopFileId(target.fileId);
-    setTopUnit(runTarget);
+    const runTarget = runTargetFor(target, tb.fileAnalysis(target.fileId), pane);
     tb.focusPane(pane);
     checkAndRun(target.fileId, runTarget, target.unitName, pane);
   };
@@ -616,23 +623,20 @@ export function Workbench() {
   const paneRun = (pane: PaneRole, target: PaneTarget): PaneRun | null => {
     const file = files.find((f) => f.id === target.fileId);
     if (!file) return null;
-    const sameUnit = runUnitName === null || target.unitName === null || runUnitName.toLowerCase() === target.unitName.toLowerCase();
     if (isSimulating) {
-      const running = runFileId === target.fileId && sameUnit;
+      const runsThisUnit = runUnitName === null || target.unitName === null || runUnitName.toLowerCase() === target.unitName.toLowerCase();
+      const running = runFileId === target.fileId && runsThisUnit;
       return running ? { running: true, disabled: status === 'compiling', onClick: handleStop } : null;
     }
-    if (!hasTopDot(file.folder) && pane !== 'tb') return null;
-    return { running: false, disabled: false, onClick: () => handleRunPane(pane, target) };
+    // A work/ testbench has no top dot, but its TB pane can run it (D21).
+    const canRun = hasTopDot(file.folder) || pane === 'tb';
+    return canRun ? { running: false, disabled: false, onClick: () => handleRunPane(pane, target) } : null;
   };
 
   const handleRunTestbenchChoice = (choice: TestbenchChoice) => {
     setRunChoice(null);
-    const file = effectiveFile(tb.analysis.current, tb.overridesRef.current, choice.fileId);
-    const unit = file && findUnit(file, choice.unitName);
-    setTopFileId(choice.fileId);
-    setTopUnit(choice.unitName);
-    tb.showFile(choice.fileId, 'run', { pane: 'tb', unitName: unit?.name ?? choice.unitName });
-    startRun(choice.fileId, choice.unitName, choice.unitName);
+    tb.showFile(choice.fileId, 'run', { pane: 'tb', unitName: choice.unitName });
+    runAsTop(choice.fileId, choice.unitName, choice.unitName);
   };
 
   const handleStop = () => {
@@ -740,7 +744,7 @@ export function Workbench() {
           onRunTestbench={handleRunTestbenchChoice}
           onRunAnyway={() => {
             setRunChoice(null);
-            startRun(runChoice.fileId, runChoice.runTarget, runChoice.unitName);
+            runAsTop(runChoice.fileId, runChoice.runTarget, runChoice.unitName);
           }}
           onClose={() => setRunChoice(null)}
         />

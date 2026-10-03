@@ -71,7 +71,7 @@ export interface Evidence {
 }
 
 export interface EvidenceSummary {
-  /** clamp(sum of distinct rule weights, 0, 100) — for "Why?". */
+  /** clamp(sum of distinct rule weights, 0, 100). */
   readonly score: number;
   /** Any rule of class strong fired. */
   readonly hasStrongEvidence: boolean;

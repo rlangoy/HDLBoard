@@ -83,14 +83,9 @@
   font-weight: 600;
 }
 
-.wb-panehead__badge-wrap,
-.wb-panehead__why {
+.wb-panehead__badge-wrap {
   position: relative;
   display: inline-flex;
-}
-
-.wb-panehead__why {
-  margin-left: auto;
 }
 
 .wb-rolebadge {
@@ -130,23 +125,12 @@
   background: rgba(15, 23, 42, 0.08);
 }
 
-.wb-panehead__why-btn {
-  border-color: var(--wb-role-ink);
-  border-radius: 11px;
-  color: var(--wb-role-ink);
-  background: #ffffff;
-}
-
 .wb-panehead__regions {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   min-width: 0;
   margin-left: auto;
-}
-
-.wb-panehead__regions + .wb-panehead__why {
-  margin-left: 4px;
 }
 
 .wb-panehead__region {
@@ -182,10 +166,10 @@
 
 /* ---- menus and popovers --------------------------------------------- */
 
-.wb-menu,
-.wb-evidence {
+.wb-menu {
   position: absolute;
   top: calc(100% + 4px);
+  left: 0;
   z-index: 20;
   min-width: 220px;
   max-width: min(420px, 80vw);
@@ -198,19 +182,7 @@
   color: var(--wb-text);
 }
 
-.wb-menu {
-  left: 0;
-}
-
-.wb-evidence {
-  right: 0;
-  width: 380px;
-  max-height: 60vh;
-  overflow: auto;
-}
-
-.wb-menu__info,
-.wb-evidence__note {
+.wb-menu__info {
   margin: 4px 8px 6px;
   color: var(--wb-text-muted);
 }
@@ -245,35 +217,6 @@
   padding-left: 12px;
 }
 
-.wb-evidence__title {
-  margin: 4px 8px 6px;
-  font-weight: 700;
-}
-
-.wb-evidence__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wb-evidence__row {
-  display: block;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  font: inherit;
-  line-height: 1.4;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
-}
-
-.wb-evidence__row:hover,
-.wb-evidence__row:focus-visible {
-  background: var(--wb-hover);
-}
 
 /* ---- role icons (tabs, pickers) -------------------------------------- */
 

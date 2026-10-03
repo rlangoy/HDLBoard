@@ -75,6 +75,12 @@ export function withRoleOverride(file: FileAnalysis, role: UnitRole | undefined)
 /** VHDL names compare case-insensitively, Verilog's exactly. */
 export const unitKey = (language: Language, name: string): string => (language === 'vhdl' ? name.toLowerCase() : name);
 
+/** The unit named `name` in `file`, compared as the file's language compares names. */
+export function findUnit(file: FileAnalysis, name: string | null): AnalyzedUnit | undefined {
+  if (name === null) return undefined;
+  return file.units.find((u) => unitKey(file.language, u.name) === unitKey(file.language, name));
+}
+
 function indexUnits(byFile: ReadonlyMap<string, FileAnalysis>): ProjectAnalysis['unitIndex'] {
   const index = { vhdl: new Map<string, string>(), verilog: new Map<string, string>() };
   for (const file of byFile.values()) {

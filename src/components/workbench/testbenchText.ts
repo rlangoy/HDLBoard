@@ -3,8 +3,8 @@
 
 /**
  * Every string of the testbench split view (docs/impl_split_screen.md D16, § 4.14):
- * labels, tooltips, empty states, the suggestion chip, the run dialog, and the
- * "Why?" sentence of every detection rule. English; one file is all a later
+ * labels, tooltips, empty states, the suggestion chip, the run dialog, and a
+ * sentence on every detection rule (for an explanation view, not shown yet). English; one file is all a later
  * translation needs. Pure.
  */
 
@@ -28,9 +28,6 @@ export const TEXT = {
   useDetection: 'Use detection',
   pairWith: 'Pair with another file…',
   noPairCandidates: 'No other file of the same language to pair with.',
-  why: 'Why?',
-  whyTitle: 'Why this is shown as a testbench',
-  whyTitleDesign: 'Why this is shown as a design',
   noEvidence: 'Nothing in this unit is simulation-only code.',
   roleFromOverride: 'You marked this file yourself; detection is not used for it.',
   previousRegion: 'Previous testbench region (Alt+PageUp)',
@@ -54,10 +51,8 @@ export const TEXT = {
   settingAlwaysHint: 'Always show testbench and design side by side.',
   settingNever: 'Never',
   settingNeverHint: 'Never open the split on its own; the view switch still works.',
-  runPane: 'Run this unit',
 } as const;
 
-export const confidenceWord = (c: 'low' | 'medium' | 'high'): string => c;
 export const detectedAs = (role: 'tb' | 'rtl', confidence: string): string =>
   `Detected: ${role === 'tb' ? 'Testbench' : 'Design'} (${confidence})`;
 export const noTestbenchFor = (name: string): string => `No testbench for ${name}`;
@@ -68,7 +63,6 @@ export const rtlPaneLabel = (name: string): string => `Design (RTL) editor, ${na
 export const noBoardPorts = (name: string): string => `${name} has no board ports, so the board can't drive it.`;
 export const runAnyway = (name: string): string => `Run ${name} anyway`;
 export const regionCount = (n: number, m: number): string => `${n}/${m}`;
-export const evidenceLine = (line: number): string => `Line ${line}`;
 
 export interface RuleText {
   /** The construct, as the student would write it. */

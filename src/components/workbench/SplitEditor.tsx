@@ -6,14 +6,14 @@ import { cx } from '../board';
 import type { DiagnosticsByFile, LineDiagnostic } from './diagnosticStore';
 import { EditorPaneHeader, type EditorPaneHeaderProps } from './EditorPaneHeader';
 import { EditorSurface, type EditorTab } from './EditorSurface';
-import type { EditorView, PaneRole } from './editorView';
+import { narrowView, type EditorView, type PaneRole } from './editorView';
 import { TestbenchEmptyState, type TestbenchEmptyStateProps } from './TestbenchEmptyState';
 import { TEXT, rtlPaneLabel, tbPaneLabel } from './testbenchText';
 import type { EditorSplit } from './useEditorSplit';
 import type { RevealRequest } from './useRevealLine';
 import './SplitEditor.css';
 
-export const TB_PANE_ID = 'wb-split-tb';
+const TB_PANE_ID = 'wb-split-tb';
 const RTL_PANE_ID = 'wb-split-rtl';
 const NO_LINES: readonly LineDiagnostic[] = [];
 
@@ -45,17 +45,13 @@ interface SharedProps {
   onDismissDiagnostics?: (fileId: string) => void;
 }
 
-/** The view shown: in a column too narrow for two panes, Both shows the focused pane only (§ 4.9). */
-export const shownViewOf = (view: EditorView, focusedPane: PaneRole, canSplit: boolean): EditorView =>
-  view === 'both' && !canSplit ? focusedPane : view;
-
 /**
  * The editor column as one or two panes (docs/impl_split_screen.md § 4.1, § 6.5):
  * TB left, RTL right, the divider between. Exposes its state as
  * `data-editor-view` / `data-focused-pane` for CSS and the e2e scripts.
  */
 export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ...shared }: SplitEditorProps & SharedProps) {
-  const shown = shownViewOf(view, focusedPane, split.canSplit);
+  const shown = narrowView(view, focusedPane, split.canSplit);
   const both = shown === 'both';
   const fraction = split.prefs.tbFraction;
   const columns = split.dragCollapsed === 'tb' ? [0, 1] : split.dragCollapsed === 'rtl' ? [1, 0] : [fraction, 1 - fraction];

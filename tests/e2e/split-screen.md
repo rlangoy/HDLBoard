@@ -37,7 +37,7 @@ Run after changing `tbDetect/`, `editorView.ts`, `editorSplit.ts`, `useTestbench
 9. Keyboard only: Tab to the view switch (arrows move it), the pane headers, and the divider
    (arrows 2 %, Shift 10 %, Home/End, double-click 50 %, Enter collapses the TB pane and
    focuses the switch). Alt+PageDown / Alt+PageUp cycle TB regions.
-10. "?" in a pane header lists each rule with its line; clicking a row moves the caret there.
+10. The pane headers show no "?" button (the explanation view is left for later).
 11. Settings → Testbench split view → Never: opening `counter.vhd` shows one pane; the view
     switch still splits. Always: every file shows both panes. Back to Automatic.
 12. Desktop app only: restart; the divider position, the preference and a role override

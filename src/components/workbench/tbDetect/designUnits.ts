@@ -163,12 +163,15 @@ function vhdlInstances(text: string, base: number, lineOf: LineOf): Instance[] {
   });
 }
 
+/** How far before `process` to look for the `end` (and `postponed`) of an `end process`. */
+const END_LOOKBEHIND = 20;
+
 function vhdlBlocks(code: string, arch: Range, lineOf: LineOf): CodeBlock[] {
   const blocks: CodeBlock[] = [];
   const text = code.slice(arch.from, arch.to);
   const start = /\b(?:(\w+)\s*:\s*)?(?:postponed\s+)?process\b/gi;
   for (let m = start.exec(text); m; m = start.exec(text)) {
-    if (/\bend\s+(?:postponed\s+)?$/i.test(text.slice(Math.max(0, m.index - 20), m.index))) continue;
+    if (/\bend\s+(?:postponed\s+)?$/i.test(text.slice(Math.max(0, m.index - END_LOOKBEHIND), m.index))) continue;
     const end = /\bend\s+(?:postponed\s+)?process\b[^;]*;/gi;
     end.lastIndex = m.index + m[0].length;
     const to = end.exec(text)?.index ?? text.length;
@@ -286,6 +289,11 @@ function verilogBlocks(code: string, body: Range, lineOf: LineOf): CodeBlock[] {
 
 const STATEMENT_TOKEN = /\b(begin|fork|case|casex|casez|end|join|join_any|join_none|endcase)\b|[;()]/g;
 
+const OPENS_BLOCK = /^(begin|fork|case|casex|casez)$/;
+const CLOSES_BLOCK = /^(end|join|join_any|join_none|endcase)$/;
+/** How far past a statement's end to look for the `else` that continues it. */
+const ELSE_LOOKAHEAD = 40;
+
 /** The end of the statement starting at `from`: a `begin … end`, or up to `;`, `else` branches included. */
 function statementEnd(code: string, from: number, limit: number): number {
   let depth = 0;
@@ -296,12 +304,12 @@ function statementEnd(code: string, from: number, limit: number): number {
     if (t === '(') parens++;
     else if (t === ')') parens--;
     else if (parens > 0) continue;
-    else if (/^(begin|fork|case|casex|casez)$/.test(t)) depth++;
-    else if (t !== ';') depth--;
+    else if (OPENS_BLOCK.test(t)) depth++;
+    else if (CLOSES_BLOCK.test(t)) depth--;
     const after = m.index + t.length;
-    if (depth <= 0 && (t === ';' || /^(end|join|join_any|join_none|endcase)$/.test(t)) && !/^\s*else\b/.test(code.slice(after, after + 40))) {
-      return after;
-    }
+    const endsHere = depth <= 0 && (t === ';' || CLOSES_BLOCK.test(t));
+    const elseFollows = /^\s*else\b/.test(code.slice(after, after + ELSE_LOOKAHEAD));
+    if (endsHere && !elseFollows) return after;
   }
   return limit;
 }

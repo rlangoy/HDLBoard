@@ -3,7 +3,6 @@
 
 import { useId } from 'react';
 import type { PaneRole } from './editorView';
-import { EvidencePopover } from './EvidencePopover';
 import { ChipIcon, FlaskIcon } from './icons';
 import { RoleIcon, usePopover } from './RoleIcon';
 import { SimToggle } from './SimToggle';
@@ -42,12 +41,11 @@ export interface EditorPaneHeaderProps {
   onSetRole: (role: UnitRole | undefined) => void;
   pairOptions: readonly PairOption[];
   onPairWith: (fileId: string) => void;
-  onRevealLine: (line: number) => void;
 }
 
 /**
  * A pane's header (docs/impl_split_screen.md § 4.4): run control, role badge (a
- * menu), file name, region navigator (TB pane), and "Why?". Tinted in the role
+ * menu), file name and region navigator (TB pane). Tinted in the role
  * colour with a top accent (D25); icon and text, never colour alone.
  */
 export function EditorPaneHeader(props: EditorPaneHeaderProps) {
@@ -60,7 +58,6 @@ export function EditorPaneHeader(props: EditorPaneHeaderProps) {
         {fileName}
       </span>
       {regions && regions.count > 1 && <RegionNavigator regions={regions} />}
-      <EvidencePopover pane={pane} unit={props.unit} roleOverride={props.roleOverride} onRevealLine={props.onRevealLine} />
     </div>
   );
 }

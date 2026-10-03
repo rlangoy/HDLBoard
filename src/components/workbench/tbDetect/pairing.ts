@@ -8,7 +8,7 @@
  * the panes show — never whether the split opens (B2). Pure.
  */
 
-import { unitKey, withRoleOverride } from './analyzeProject';
+import { findUnit, unitKey, withRoleOverride } from './analyzeProject';
 import { maxConfidence } from './score';
 import type {
   AnalyzedUnit, Confidence, EditorPair, FileAnalysis, PaneTarget, ProjectAnalysis, TestbenchOverrides,
@@ -75,8 +75,7 @@ function pairForTestbench(anchor: FileAnalysis, analysis: ProjectAnalysis, overr
   const dut = defined.find((n) => unitKey(anchor.language, n) === unitKey(anchor.language, stem)) ?? defined[0];
   if (dut === undefined) return { ...base, rtl: null, missingDut: names[0] ?? null };
   const design = effectiveFile(analysis, overrides, definingFile(analysis, anchor, dut) ?? '');
-  const dutUnit = design?.units.find((u) => unitKey(anchor.language, u.name) === unitKey(anchor.language, dut));
-  return { ...base, rtl: design ? rtlTarget(design, dutUnit) : null, missingDut: null };
+  return { ...base, rtl: design ? rtlTarget(design, findUnit(design, dut)) : null, missingDut: null };
 }
 
 const definingFile = (analysis: ProjectAnalysis, from: FileAnalysis, unitName: string): string | undefined =>

@@ -9,7 +9,7 @@
  */
 
 import type { PaneRole } from './editorView';
-import { effectiveFile, testbenchCandidates, unitKey } from './tbDetect';
+import { effectiveFile, findUnit, testbenchCandidates, unitKey } from './tbDetect';
 import type {
   AnalyzedUnit, FileAnalysis, FileRole, PaneTarget, ProjectAnalysis, TestbenchOverrides, UnitRole,
 } from './tbDetect/types';
@@ -68,12 +68,6 @@ export function testbenchesFor(
   return ordered.flatMap((f) =>
     f.units.filter(drives).map((u) => ({ fileId: f.fileId, name: f.name, role: f.role, unitName: u.name })),
   );
-}
-
-/** The unit named `name` in `file` (VHDL ignoring case). */
-export function findUnit(file: FileAnalysis, name: string | null): AnalyzedUnit | undefined {
-  if (name === null) return undefined;
-  return file.units.find((u) => unitKey(file.language, u.name) === unitKey(file.language, name));
 }
 
 /** The unit a pane target shows, from the current analysis. */

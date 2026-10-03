@@ -36,8 +36,9 @@ export interface EditorSplit {
 
 export interface EditorSplitHandlers {
   /** A drag snapped this pane shut and was released: show only the other one. */
-  /** `fromKeyboard`: Enter on the divider, which hands focus to the view switch (§ 4.8). */
-  readonly onCollapse: (pane: PaneRole, fromKeyboard: boolean) => void;
+  readonly onCollapse: (pane: PaneRole) => void;
+  /** Enter on the divider collapsed the TB pane: focus has to go somewhere (§ 4.8). */
+  readonly onCollapseByKeyboard: () => void;
 }
 
 /**
@@ -57,12 +58,18 @@ export function useEditorSplit(handlers: EditorSplitHandlers): EditorSplit {
   columnWidthRef.current = columnWidth;
   const observer = useRef<ResizeObserver | null>(null);
 
-  const update = useCallback((next: Partial<EditorSplitPrefs>, store = true) => {
-    const merged = { ...prefsRef.current, ...next };
-    prefsRef.current = merged;
-    setPrefs(merged);
-    if (store) saveEditorSplitPrefs(merged);
+  /** Shown at once, not stored: a drag in progress. */
+  const preview = useCallback((next: Partial<EditorSplitPrefs>) => {
+    prefsRef.current = { ...prefsRef.current, ...next };
+    setPrefs(prefsRef.current);
   }, []);
+  const store = useCallback(
+    (next: Partial<EditorSplitPrefs>) => {
+      preview(next);
+      saveEditorSplitPrefs(prefsRef.current);
+    },
+    [preview],
+  );
 
   const columnRef = useCallback((element: HTMLDivElement | null) => {
     observer.current?.disconnect();
@@ -74,37 +81,53 @@ export function useEditorSplit(handlers: EditorSplitHandlers): EditorSplit {
   useEffect(() => () => observer.current?.disconnect(), []);
 
   const bounds = fractionBounds(columnWidth);
-  const onDividerPointerDown = useDividerDrag(columnWidthRef, prefsRef, update, setDragCollapsed, handlersRef);
+  const onDividerPointerDown = useDividerDrag(columnWidthRef, prefsRef, { preview, store }, setDragCollapsed, handlersRef);
 
   const onDividerKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const next = fractionForKey(e.key, e.shiftKey, prefsRef.current.tbFraction, bounds);
     if (next === undefined) return;
     e.preventDefault();
-    if (next === 'collapse') handlersRef.current.onCollapse('tb', true);
-    else update({ tbFraction: next });
+    if (next === 'collapse') {
+      handlersRef.current.onCollapse('tb');
+      handlersRef.current.onCollapseByKeyboard();
+    } else store({ tbFraction: next });
   };
 
+  // Before the column is first measured, assume it is wide enough rather than flash one pane.
+  const notMeasuredYet = columnWidth === 0;
   return {
     prefs,
-    setPreference: (preference) => update({ preference }),
+    setPreference: (preference) => store({ preference }),
     columnWidth,
-    canSplit: columnWidth === 0 || canSplit(columnWidth),
+    canSplit: notMeasuredYet || canSplit(columnWidth),
     bounds,
     dragCollapsed,
     columnRef,
     onDividerPointerDown,
     onDividerKeyDown,
-    resetFraction: () => update({ tbFraction: SPLIT_DEFAULT_TB_FRACTION }),
+    resetFraction: () => store({ tbFraction: SPLIT_DEFAULT_TB_FRACTION }),
   };
 }
 
 type Ref<T> = { readonly current: T };
 
+interface PrefsWriter {
+  readonly preview: (next: Partial<EditorSplitPrefs>) => void;
+  readonly store: (next: Partial<EditorSplitPrefs>) => void;
+}
+
+/** The pane a TB width of `tb` (of `room`) snaps shut, if any (paneLayout's collapsesAt rule). */
+function collapsedPane(tb: number, room: number): PaneRole | null {
+  if (collapsesAt(tb, SPLIT_PANE_MIN_W)) return 'tb';
+  if (collapsesAt(room - tb, SPLIT_PANE_MIN_W)) return 'rtl';
+  return null;
+}
+
 /** Drag: resize, snap a pane shut under half its minimum, reopen within the same drag. */
 function useDividerDrag(
   columnWidth: Ref<number>,
   prefs: Ref<EditorSplitPrefs>,
-  update: (next: Partial<EditorSplitPrefs>, store?: boolean) => void,
+  prefsWriter: PrefsWriter,
   setDragCollapsed: (pane: PaneRole | null) => void,
   handlers: Ref<EditorSplitHandlers>,
 ) {
@@ -123,9 +146,9 @@ function useDividerDrag(
 
     const onMove = (ev: PointerEvent) => {
       const tb = startTb + ev.clientX - startX;
-      collapsed = collapsesAt(tb, SPLIT_PANE_MIN_W) ? 'tb' : collapsesAt(room - tb, SPLIT_PANE_MIN_W) ? 'rtl' : null;
+      collapsed = collapsedPane(tb, room);
       setDragCollapsed(collapsed);
-      if (!collapsed) update({ tbFraction: clampFraction(tb / room, fractionBounds(columnWidth.current)) }, false);
+      if (collapsed === null) prefsWriter.preview({ tbFraction: clampFraction(tb / room, fractionBounds(columnWidth.current)) });
     };
     const onUp = () => {
       document.body.classList.remove('wb-is-resizing-x');
@@ -136,8 +159,8 @@ function useDividerDrag(
       handle.removeEventListener('pointercancel', onUp);
       setDragCollapsed(null);
       // A pane snapped shut keeps the split it had before the drag, for Both to restore.
-      update(collapsed ? { tbFraction: startFraction } : {}, true);
-      if (collapsed) handlers.current.onCollapse(collapsed, false);
+      prefsWriter.store(collapsed ? { tbFraction: startFraction } : {});
+      if (collapsed) handlers.current.onCollapse(collapsed);
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', onUp);

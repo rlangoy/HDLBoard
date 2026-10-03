@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { analyzeFile } from './tbDetect/analyzeProject';
 import { fixtureFile } from './tbDetect/fixtures.testSupport';
 import type { Confidence, EditorPair } from './tbDetect/types';
-import { anchorRoleView, pairKey, resolveView, routeRun, runTargetFor, showsSuggestion, type EditorView, type PairEvent, type SplitPreference } from './editorView';
+import { anchorRoleView, narrowView, pairKey, resolveView, routeRun, runTargetFor, showsSuggestion, type EditorView, type PairEvent, type SplitPreference } from './editorView';
 
 /** docs/impl_split_screen.md § 4.2, § 6.3, D24. */
 
@@ -27,9 +27,9 @@ describe('resolveView', () => {
   const events: PairEvent[] = ['open', 'run'];
   const sides: DesignSide[] = ['paired', 'missingDut', 'none'];
 
-  test('a pin always wins', () => {
+  test('a pin wins over every preference, confidence and event (B6)', () => {
     for (const p of preferences) for (const c of confidences) for (const e of events) {
-      expect(resolveView(pair('tb', c, 'paired'), p, 'rtl', e)).toBe('rtl');
+      expect(resolveView(pair('rtl', c, 'paired'), p, 'rtl', e)).toBe('rtl');
     }
   });
 
@@ -109,4 +109,13 @@ describe('routeRun (D24)', () => {
     expect(routeRun(file, 'ALU')).toEqual({ unitName: 'alu', pane: 'rtl', runTarget: 'alu' });
     expect(routeRun(file, 'gone').unitName).toBe('alu_tb');
   });
+});
+
+test('narrowView: Both shows the focused pane only when the column cannot split (§ 4.9)', () => {
+  expect([narrowView('both', 'tb', false), narrowView('both', 'tb', true), narrowView('rtl', 'tb', false)]).toEqual(['tb', 'both', 'rtl']);
+});
+
+test('a pin never hides the file being opened', () => {
+  const opened: EditorPair = { anchorId: 'tb.vhd', tb: { fileId: 'tb.vhd', line: 1, unitName: 'x_tb' }, rtl: { fileId: 'rtl.vhd', line: 1, unitName: 'x' }, tbConfidence: 'high', missingDut: null };
+  expect([resolveView(opened, 'auto', 'rtl', 'open'), resolveView(opened, 'auto', 'tb', 'open')]).toEqual(['tb', 'tb']);
 });
