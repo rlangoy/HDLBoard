@@ -2,6 +2,11 @@
 /* Copyright (C) 2026 Rune Langøy */
 
 .wb-simcard {
+  /* Always its full height: when the sidebar gets short, the Files card
+     below shrinks (its tree scrolls) and then the sidebar scrolls. Without
+     this, overflow: hidden drops the card's automatic min-height to 0 and
+     it gets squeezed and clipped along with the Files card. */
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
