@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 import { verilogDeclaredNames } from './verilogDeclaredNames';
 
 const fixtures = import.meta.glob<string>('../../../tests/fixtures/verilog/*.v', {
@@ -84,7 +84,7 @@ describe('verilogDeclaredNames: the Verilog fixtures', () => {
   });
 
   test('every Verilog starter declares at least its module and a port', () => {
-    for (const file of STARTER_FILES.filter((f) => f.folder === 'verilog')) {
+    for (const file of EXAMPLE_FILES.filter((f) => f.folder === 'verilog')) {
       expect(verilogDeclaredNames(file.content).length).toBeGreaterThan(1);
     }
   });

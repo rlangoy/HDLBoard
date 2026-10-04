@@ -6,7 +6,7 @@ import { ICARUS_SYNTAX_HINT, parseDiagnostics, type Diagnostic } from './diagnos
 import * as fixture from './diagnostics.fixtures';
 import { locateDiagnostics, type RunSnapshot } from './diagnosticLocation';
 import { addToFiles, NO_DIAGNOSTICS } from './diagnosticStore';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 
 /** `severity fileName:line[:column] message` and ` | detail` for each detail. */
 function golden(d: Diagnostic): string {
@@ -118,7 +118,7 @@ describe('golden: whole captures', () => {
 
 /** The starter design `name` with the `;` ending line `line` (1-based) removed. */
 function starterWithoutSemicolon(name: string, line: number): RunSnapshot {
-  const file = STARTER_FILES.find((f) => f.name === name);
+  const file = EXAMPLE_FILES.find((f) => f.name === name);
   if (!file) throw new Error(`no starter file ${name}`);
   const lines = file.content.split('\n');
   lines[line - 1] = lines[line - 1].replace(/;\s*$/, '');

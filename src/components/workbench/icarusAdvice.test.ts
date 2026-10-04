@@ -14,7 +14,7 @@ import { locateDiagnostics, type LocatedDiagnostic, type RunSnapshot } from './d
 import { parseDiagnostics } from './diagnostics';
 import { VERILOG_CORPUS, verilogCorpusSource } from './diagnostics.verilog.corpus';
 import { isFollowOn } from './diagnosticStore';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 import { tokenizeVerilog } from './verilogHighlight';
 
 const SYNTAX_ERROR = 'syntax error';
@@ -38,7 +38,7 @@ function adviseText(snapshot: RunSnapshot, output: string): AdvisedDiagnostic[] 
 
 /** Identifiers of the Verilog starter designs (files.ts). */
 function starterIdentifiers(): string[] {
-  const words = STARTER_FILES.filter((file) => file.folder === 'verilog')
+  const words = EXAMPLE_FILES.filter((file) => file.folder === 'verilog')
     .flatMap((file) => tokenizeVerilog(file.content.split('\n')).flat())
     .filter((token) => token.type === 'identifier')
     .map((token) => token.text);

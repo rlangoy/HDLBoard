@@ -45,7 +45,7 @@ export default function Page() {
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 `SettingsDialog`, `HelpDialog`, `FileExplorer`, `CodeEditor`,
 `SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
-`ISSUES_URL`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
+`ISSUES_URL`, `EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
 `VhdlFile`, `EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
@@ -96,12 +96,15 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  ├─ SidePanel .wb-sidebar "Explorer" (draggable width, collapsible, tinted strip)
 │  │  └─ .wb-sidebar__content          (scrolls as one)
 │  │     ├─ SimulationCard             (card: Start/Stop + status)
-│  │     └─ FileExplorer               (card: Upload/New File/Download All + the vhdl/verilog/work tree)
+│  │     └─ FileExplorer               (card: Upload/New File/Download All on one row, Examples below,
+│  │                                     then the vhdl/verilog/work tree)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
 │  │  CodeEditor: EditorTabStrip (+ suggestion chip, ViewSwitch), then one
 │  │  EditorSurface, or SplitEditor: TB pane | .wb-split__divider | RTL pane,
 │  │  each an EditorPaneHeader over an EditorSurface or an empty state
-│  ├─ CodeEditor                       (flex: 1 — takes the remaining width)
+│  ├─ .wb-center                       (flex: 1 — takes the remaining width)
+│  │  ├─ CodeEditor
+│  │  └─ ExamplesPane                  (only while open: covers the editor, which stays mounted)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
 │  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
 │     └─ Board                         (LEDs + HEX on top, SW + KEY underneath)
@@ -537,10 +540,12 @@ and `system`.
 
 ### `files.ts`
 
-`STARTER_FILES: VhdlFile[]` — the starter project shown in the tree:
-`DE1_SoC.vhdl`, `blinkTest.vhdl`, `keyCouter2Led.vhdl` under `vhdl/`, and
-their Verilog twins `DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v` under
-`verilog/`. The twins are copies of `tests/fixtures/{vhdl,verilog}/`, and
+`EXAMPLE_FILES: VhdlFile[]` — every built-in file: `DE1_SoC.vhdl`,
+`blinkTest.vhdl`, `keyCouter2Led.vhdl`, `and_gate.vhdl`, `and_gate_tb.vhd` under
+`vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v`,
+`and_gate.v`, `and_gate_tb.v` under `verilog/`. `STARTER_FILES` is what a first
+start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are
+offered by the Examples pane (`examples.ts`, below). The files are copies of `tests/fixtures/{vhdl,verilog}/`, and
 `files.fixtures.test.ts` fails if either side drifts. `blinkTest.vhdl` and
 `keyCouter2Led.vhdl` are both standalone examples (their own
 `blinkTest`/`counter8` entities, not wired into `DE1_SoC.vhdl`) — mark
@@ -560,6 +565,19 @@ top-level ports (`CLOCK_50`, `SW`, `KEY_N`, `LEDR`, `HEX0_N..HEX5_N` —
 than the board's literal pin names (`KEY`/`HEX0..HEX5`), the one exception
 to that otherwise-literal contract; see § 3.2's note. Every starter file
 compiles and runs under GHDL (`--std=08`) or Icarus Verilog.
+
+### `examples.ts` and `ExamplesPane`
+
+The **Examples** button under the Files panel's actions toggles `ExamplesPane`, which
+covers the editor ("Available Examples": a search box and one card per example and
+language, with a VHDL/Verilog badge and a teal dot for a design, purple for a
+testbench). `EXAMPLES` names each card's `EXAMPLE_FILES` ids, the opened file first;
+the AND gate testbench brings `and_gate` along so it runs. `copyExample` (pure,
+tested) copies them into the project under fresh `file-N` ids, but never a file
+whose name the project already has (ignoring case): that one is kept as it is and
+opened instead, so a student's edits are never overwritten. The console gets a line
+per copied or kept file. Opening a file, adding one, or a jump to an error closes the
+pane; so do its ✕ and Escape.
 
 ### `fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`
 

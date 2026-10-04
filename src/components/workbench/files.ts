@@ -2,10 +2,11 @@
 // Copyright (C) 2026 Rune Langøy
 
 /* ------------------------------------------------------------------ *
- * Starter project shown in the Files panel — the DE1-SoC top-level
- * entity plus a few small example designs (each in VHDL and Verilog; the
- * Verilog ones sit in `verilog/`), so the workbench opens
- * looking like a project mid-course, not empty.
+ * The built-in source files: the DE1-SoC top-level entity plus a few
+ * small example designs, each in VHDL and Verilog (the Verilog ones sit in
+ * `verilog/`). A fresh workspace starts with only the two top-level files
+ * (STARTER_FILES); the rest are offered by the Examples pane (examples.ts),
+ * which copies one into the Files panel when it is opened.
  * ------------------------------------------------------------------ */
 
 export interface VhdlFile {
@@ -414,7 +415,7 @@ module and_gate_tb;
 endmodule
 `;
 
-export const STARTER_FILES: VhdlFile[] = [
+export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
@@ -426,6 +427,9 @@ export const STARTER_FILES: VhdlFile[] = [
   { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
   { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },
 ];
+
+/** What a first start shows in the Files panel: the board's top level, in both languages. */
+export const STARTER_FILES: VhdlFile[] = EXAMPLE_FILES.filter((f) => f.id === 'de1_soc' || f.id === 'de1_soc_v');
 
 export const DEFAULT_OPEN_TABS = ['de1_soc'];
 

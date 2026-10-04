@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 import { tokenizeVerilog, VERILOG_KEYWORDS, VERILOG_TYPES } from './verilogHighlight';
 import { markRanges, type Token } from './vhdlHighlight';
 
@@ -127,7 +127,7 @@ describe('tokenizeVerilog: the keyword table', () => {
 
 describe('tokenizeVerilog: whole files', () => {
   const sources = [
-    ...STARTER_FILES.filter((file) => file.folder === 'verilog').map((file) => [file.name, file.content] as const),
+    ...EXAMPLE_FILES.filter((file) => file.folder === 'verilog').map((file) => [file.name, file.content] as const),
     ...Object.entries(fixtureTexts).map(([path, text]) => [path.slice(path.lastIndexOf('/') + 1), text] as const),
   ];
 

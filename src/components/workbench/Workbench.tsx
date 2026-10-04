@@ -27,6 +27,8 @@ import { RefusedFilesDialog } from './RefusedFilesDialog';
 import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
+import { ExamplesPane } from './ExamplesPane';
+import { copyExample, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
 import { PanelToggleIcon } from './icons';
@@ -168,6 +170,8 @@ export function Workbench() {
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
+  // The Examples pane, shown over the editor (which stays mounted underneath).
+  const [examplesOpen, setExamplesOpen] = useState(false);
   useEffect(() => {
     const openAbout = () => setDialog('about');
     window.addEventListener(ABOUT_EVENT, openAbout);
@@ -285,6 +289,7 @@ export function Workbench() {
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
+    setExamplesOpen(false);
     setOpenTabs((prev) => (prev.includes(target.fileId) ? prev : [...prev, target.fileId]));
     setActiveTabId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
@@ -368,6 +373,7 @@ export function Workbench() {
 
   // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
   const handleOpenFile = (id: string) => {
+    setExamplesOpen(false);
     setOpenTabs((prev) => (prev.includes(id) ? prev : [...prev, id]));
     tb.showFile(id, 'open');
   };
@@ -452,7 +458,25 @@ export function Workbench() {
     setFiles((prev) => [...prev, { id, name, folder, content }]);
     setOpenTabs((prev) => [...prev, id]);
     setActiveTabId(id);
+    setExamplesOpen(false);
     return id;
+  };
+
+  // An example is copied into the project (a file it already has by that name is
+  // kept as it is, never overwritten) and its first file opens in the editor.
+  const handleOpenExample = (example: Example) => {
+    const { added, kept, openId } = copyExample(example, filesRef.current, () => `file-${nextFileSeq++}`);
+    for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
+    for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
+    if (openId === null) return;
+    if (added.length > 0) setFiles((prev) => [...prev, ...added]);
+    if (added.some((f) => f.id === openId)) {
+      setOpenTabs((prev) => [...prev, openId]);
+      setActiveTabId(openId);
+      setExamplesOpen(false);
+    } else {
+      handleOpenFile(openId);
+    }
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is
@@ -797,6 +821,8 @@ export function Workbench() {
             onDelete={handleDeleteFile}
             onDownload={handleDownloadFile}
             onDownloadAll={handleDownloadAll}
+            onExamples={() => setExamplesOpen((open) => !open)}
+            examplesOpen={examplesOpen}
             onFilesDropped={handleFilesDropped}
             topFileId={topFileId}
             onSetTopFile={handleSetTopFile}
@@ -813,20 +839,23 @@ export function Workbench() {
           onPointerDown={layout.onSidebarDividerPointerDown}
         />
 
-        <CodeEditor
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelectTab={(id) => tb.showFile(id, 'open')}
-          onCloseTab={handleCloseTab}
-          onAddTab={handleNewFile}
-          onChange={handleContentChange}
-          onFilesDropped={handleFilesDropped}
-          tabRun={tabRun}
-          diagnostics={diagnostics.byFile}
-          onDismissDiagnostics={dismissDiagnostics}
-          reveal={reveal}
-          {...tb.editorProps}
-        />
+        <div className="wb-center">
+          <CodeEditor
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={(id) => tb.showFile(id, 'open')}
+            onCloseTab={handleCloseTab}
+            onAddTab={handleNewFile}
+            onChange={handleContentChange}
+            onFilesDropped={handleFilesDropped}
+            tabRun={tabRun}
+            diagnostics={diagnostics.byFile}
+            onDismissDiagnostics={dismissDiagnostics}
+            reveal={reveal}
+            {...tb.editorProps}
+          />
+          {examplesOpen && <ExamplesPane onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />}
+        </div>
 
         <div
           className={cx('wb-resizer', collapsed.board && 'is-beside-collapsed')}

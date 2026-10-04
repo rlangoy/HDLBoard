@@ -21,7 +21,7 @@ export { SimToggle } from './SimToggle';
 export type { SimToggleProps } from './SimToggle';
 export { ConsoleOutput } from './ConsoleOutput';
 export type { ConsoleLine, ConsoleOutputProps } from './ConsoleOutput';
-export { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY } from './files';
+export { EXAMPLE_FILES, STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY } from './files';
 export type { VhdlFile } from './files';
 export { tokenizeVhdlLine } from './vhdlHighlight';
 export { tokenizeVerilog } from './verilogHighlight';

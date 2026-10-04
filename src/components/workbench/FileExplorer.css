@@ -63,8 +63,34 @@
 .wb-files__actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 0 16px 14px;
+}
+
+/* Upload, New File and Download All always share one row. Too narrow for
+   their labels (the sidebar's default width), they show only their icons,
+   each with a tooltip naming it. */
+.wb-files__action-row {
+  display: flex;
+  gap: 6px;
+  container: wb-file-actions / inline-size;
+}
+
+.wb-files__action-row > button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 320px: the three full labels side by side. */
+@container wb-file-actions (max-width: 319px) {
+  .wb-files__action-row .wb-files__label-text {
+    display: none;
+  }
+
+  .wb-files__action-row > button {
+    flex-basis: 0;
+    padding: 8px 0;
+  }
 }
 
 .wb-files__upload,
@@ -73,12 +99,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 6px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 7px;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
@@ -118,6 +143,40 @@
 .wb-files__download-all:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* The way into the examples: wider and brighter than the file actions above,
+   in the header's blue running into the editor's design-pane teal. */
+.wb-files__examples {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #14a394, var(--wb-accent));
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  color: #ffffff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 140ms ease, box-shadow 140ms ease;
+}
+
+.wb-files__examples:hover {
+  filter: brightness(0.93);
+}
+
+.wb-files__examples[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--wb-accent);
+}
+
+.wb-files__examples-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
 }
 
 .wb-files__action-icon {

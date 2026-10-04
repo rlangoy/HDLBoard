@@ -14,7 +14,7 @@ import { parseDiagnostics } from './diagnostics';
 import { CORPUS, CORPUS_BASES, corpusSource, type CorpusCase } from './diagnostics.corpus';
 import { addToFiles, isFollowOn, NO_DIAGNOSTICS } from './diagnosticStore';
 import { inlineText } from './diagnosticText';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 
 const FILE_ID = 'corpus';
 
@@ -177,7 +177,7 @@ describe('the corpus', () => {
   });
 
   test('was measured on the starter blinkTest.vhdl as it is now (re-run tools/ghdl-typo-corpus.mjs if it changed)', () => {
-    const starter = STARTER_FILES.find((file) => file.name === 'blinkTest.vhdl');
+    const starter = EXAMPLE_FILES.find((file) => file.name === 'blinkTest.vhdl');
     expect(CORPUS_BASES['blinkTest.vhdl']).toBe(starter?.content.replace(/\r\n/g, '\n'));
   });
 });

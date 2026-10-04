@@ -20,7 +20,7 @@ import {
 } from './diagnostics.verilog.corpus';
 import { addToFiles, isFollowOn, NO_DIAGNOSTICS } from './diagnosticStore';
 import { describeLine, inlineText } from './diagnosticText';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 
 const FILE_ID = 'corpus';
 
@@ -193,7 +193,7 @@ describe('the corpus', () => {
   test.each(['blinkTest.v', 'DE1_SoC.v'])(
     'was measured on the starter %s as it is now (re-run tools/iverilog-typo-corpus.mjs if it changed)',
     (name) => {
-      const starter = STARTER_FILES.find((file) => file.name === name);
+      const starter = EXAMPLE_FILES.find((file) => file.name === name);
       expect(VERILOG_CORPUS_BASES[name]).toBe(starter?.content.replace(/\r\n/g, '\n'));
     },
   );
