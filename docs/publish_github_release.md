@@ -15,7 +15,7 @@ every time a tag starting with `v` is pushed:
 - `winInstaller\build.ps1` builds the installer, the same way as locally
   (see [winInstaller/README.md](../winInstaller/README.md)).
 - If the release does not exist yet, it is created as a **draft** with the
-  installer attached. If the version contains a hyphen (e.g. `-rc.1`), it is
+  installer attached. If the version contains a hyphen (e.g. `-rc1`), it is
   marked as a pre-release. If the release already exists, only the `.exe` file
   is uploaded to it.
 
@@ -24,8 +24,8 @@ every time a tag starting with `v` is pushed:
 **Test release (draft pre-release):**
 
 ```powershell
-git tag v1.2.4-rc.1
-git push origin v1.2.4-rc.1
+git tag v1.2.4-rc1
+git push origin v1.2.4-rc1
 ```
 
 After about 3 minutes the draft appears under **Releases** with the installer
@@ -34,7 +34,7 @@ attached. Drafts are visible only to you.
 **Deleting the test afterwards:**
 
 ```powershell
-gh release delete v1.2.4-rc.1 --cleanup-tag --yes
+gh release delete v1.2.4-rc1 --cleanup-tag --yes
 ```
 
 **Real release:**

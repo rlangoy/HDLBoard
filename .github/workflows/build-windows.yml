@@ -5,7 +5,7 @@
 # GitHub release.
 #
 #   git tag v1.2.4        && git push origin v1.2.4         -> draft release
-#   git tag v1.2.4-rc.1   && git push origin v1.2.4-rc.1    -> draft pre-release
+#   git tag v1.2.4-rc1   && git push origin v1.2.4-rc1    -> draft pre-release
 #   Actions -> "Build Windows installer" -> Run workflow    -> artifact only
 #
 # The version comes from the tag (v1.2.4 -> 1.2.4) and is stamped into every
@@ -73,7 +73,7 @@ jobs:
             $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
-            throw "'$version' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc.1"
+            throw "'$version' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc1"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$($version.Contains('-').ToString().ToLower())" >> $env:GITHUB_OUTPUT
