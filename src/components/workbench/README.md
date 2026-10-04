@@ -43,10 +43,11 @@ export default function Page() {
   the About dialog from outside React (a native menu, for instance).
 
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
-`SettingsDialog`, `HelpDialog`, `FileExplorer`, `CodeEditor`,
+`SettingsDialog`, `HelpDialog`, `FileExplorer`, `ExamplesPane`, `CodeEditor`,
 `SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
-`ISSUES_URL`, `EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
-`VhdlFile`, `EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
+`ISSUES_URL`, `EXAMPLES`, `copyExample`, `filterExamples`, `Example`, `ExampleLanguage`,
+`EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`, `VhdlFile`,
+`EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
 ---

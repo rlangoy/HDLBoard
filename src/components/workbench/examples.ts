@@ -12,6 +12,10 @@ import { EXAMPLE_FILES, type VhdlFile } from './files';
 
 export type ExampleLanguage = 'vhdl' | 'verilog';
 
+export const EXAMPLE_LANGUAGES: readonly ExampleLanguage[] = ['vhdl', 'verilog'];
+
+export const LANGUAGE_LABEL: Record<ExampleLanguage, string> = { vhdl: 'VHDL', verilog: 'Verilog' };
+
 export interface Example {
   id: string;
   title: string;
@@ -23,103 +27,89 @@ export interface Example {
   fileIds: readonly string[];
 }
 
-interface ExampleText {
+/** One catalogue entry, written once for both languages. */
+interface ExampleEntry {
   key: string;
   title: string;
   description: string;
   role: Example['role'];
-  /** File ids per language, primary file first. */
-  vhdl: readonly string[];
-  verilog: readonly string[];
+  /** EXAMPLE_FILES ids in each language, the file to open first. */
+  files: Record<ExampleLanguage, readonly string[]>;
 }
 
-const EXAMPLE_TEXTS: readonly ExampleText[] = [
+const CATALOGUE: readonly ExampleEntry[] = [
   {
     key: 'de1_soc',
     title: 'DE1-SoC Top Level',
     description: "The board's top-level interface, with the switches wired to the LEDs.",
     role: 'design',
-    vhdl: ['de1_soc'],
-    verilog: ['de1_soc_v'],
+    files: { vhdl: ['de1_soc'], verilog: ['de1_soc_v'] },
   },
   {
     key: 'blink',
     title: 'Blink LED',
     description: 'Simple blinking LED example using a counter.',
     role: 'design',
-    vhdl: ['blink_test'],
-    verilog: ['blink_test_v'],
+    files: { vhdl: ['blink_test'], verilog: ['blink_test_v'] },
   },
   {
     key: 'key_counter',
     title: 'Key Counter to LED',
     description: 'Counts key presses and displays the count on the LEDs.',
     role: 'design',
-    vhdl: ['key_counter_2_led'],
-    verilog: ['key_counter_2_led_v'],
+    files: { vhdl: ['key_counter_2_led'], verilog: ['key_counter_2_led_v'] },
   },
   {
     key: 'key_counter_7seg',
     title: 'Key Counter to 7-Segment',
     description: 'Press KEY0 to count up on the 7-segment displays (00-99); KEY1 resets.',
     role: 'design',
-    vhdl: ['key_counter_7seg'],
-    verilog: ['key_counter_7seg_v'],
+    files: { vhdl: ['key_counter_7seg'], verilog: ['key_counter_7seg_v'] },
   },
   {
     key: 'and_gate',
     title: 'AND Gate',
     description: 'Basic AND gate implementation.',
     role: 'design',
-    vhdl: ['and_gate'],
-    verilog: ['and_gate_v'],
+    files: { vhdl: ['and_gate'], verilog: ['and_gate_v'] },
   },
   {
     key: 'and_gate_tb',
     title: 'AND Gate Testbench',
     description: 'Self-checking testbench for the AND gate. Copies the AND gate too.',
     role: 'testbench',
-    vhdl: ['and_gate_tb', 'and_gate'],
-    verilog: ['and_gate_tb_v', 'and_gate_v'],
+    files: { vhdl: ['and_gate_tb', 'and_gate'], verilog: ['and_gate_tb_v', 'and_gate_v'] },
   },
 ];
 
-export const EXAMPLES: readonly Example[] = EXAMPLE_TEXTS.flatMap(({ key, vhdl, verilog, ...text }) =>
-  (['vhdl', 'verilog'] as const).map((language) => ({
-    ...text,
-    id: `${key}_${language}`,
-    language,
-    fileIds: language === 'vhdl' ? vhdl : verilog,
-  })),
+/** One card per catalogue entry and language. */
+export const EXAMPLES: readonly Example[] = CATALOGUE.flatMap(({ key, files, ...text }) =>
+  EXAMPLE_LANGUAGES.map((language) => ({ ...text, id: `${key}_${language}`, language, fileIds: files[language] })),
 );
 
-export const LANGUAGE_LABEL: Record<ExampleLanguage, string> = { vhdl: 'VHDL', verilog: 'Verilog' };
+/** The built-in file an example names. The catalogue is fixed (and tested), so a missing id is a bug. */
+function exampleFile(id: string): VhdlFile {
+  const file = EXAMPLE_FILES.find((f) => f.id === id);
+  if (!file) throw new Error(`No built-in file "${id}"`);
+  return file;
+}
 
-export const EXAMPLE_LANGUAGES: readonly ExampleLanguage[] = ['vhdl', 'verilog'];
+/** Everything a search matches against: title, description, language and file names. */
+function searchText(example: Example): string {
+  const fileNames = example.fileIds.map((id) => exampleFile(id).name);
+  return [example.title, example.description, LANGUAGE_LABEL[example.language], ...fileNames].join(' ').toLowerCase();
+}
 
-/**
- * The examples in one of `languages` whose title, description, language or file
- * names contain every word of `query`.
- */
+/** The examples in one of `languages` whose search text contains every word of `query`. */
 export function filterExamples(
   examples: readonly Example[],
   query: string,
   languages: ReadonlySet<ExampleLanguage> = new Set(EXAMPLE_LANGUAGES),
 ): readonly Example[] {
-  const inLanguage = examples.filter((example) => languages.has(example.language));
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return inLanguage;
-  return inLanguage.filter((example) => {
-    const haystack = [
-      example.title,
-      example.description,
-      LANGUAGE_LABEL[example.language],
-      ...example.fileIds.map((id) => EXAMPLE_FILES.find((f) => f.id === id)?.name ?? ''),
-    ]
-      .join(' ')
-      .toLowerCase();
-    return words.every((word) => haystack.includes(word));
-  });
+  return examples.filter(
+    (example) => languages.has(example.language) && words.every((word) => searchText(example).includes(word)),
+  );
 }
 
 export interface ExampleCopy {
@@ -127,8 +117,8 @@ export interface ExampleCopy {
   added: VhdlFile[];
   /** Names left alone because the project already has a file by that name. */
   kept: string[];
-  /** The project file to open: the new copy of the primary file, or the existing one it matched. */
-  openId: string | null;
+  /** The project file to open: the new copy of the first file, or the existing one it matched. */
+  openId: string;
 }
 
 /**
@@ -139,20 +129,16 @@ export interface ExampleCopy {
 export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string): ExampleCopy {
   const added: VhdlFile[] = [];
   const kept: string[] = [];
-  let openId: string | null = null;
-  example.fileIds.forEach((fileId, i) => {
-    const source = EXAMPLE_FILES.find((f) => f.id === fileId);
-    if (!source) return;
+  const projectIdOf = (source: VhdlFile): string => {
     const existing = files.find((f) => f.name.toLowerCase() === source.name.toLowerCase());
-    let id: string;
     if (existing) {
       kept.push(existing.name);
-      id = existing.id;
-    } else {
-      id = newId();
-      added.push({ ...source, id });
+      return existing.id;
     }
-    if (i === 0) openId = id;
-  });
+    const copy = { ...source, id: newId() };
+    added.push(copy);
+    return copy.id;
+  };
+  const [openId] = example.fileIds.map((id) => projectIdOf(exampleFile(id)));
   return { added, kept, openId };
 }

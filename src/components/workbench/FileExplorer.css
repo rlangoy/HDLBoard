@@ -114,23 +114,15 @@
   background: var(--wb-accent-dark);
 }
 
-.wb-files__new {
-  border: 1px solid var(--wb-border);
-  background: #ffffff;
-  color: var(--wb-text);
-}
-
-.wb-files__new:hover {
-  background: var(--wb-hover);
-}
-
-/* Same secondary look as New File (a muted label read as disabled). */
+/* New File and Download All: the secondary look beside Upload File. */
+.wb-files__new,
 .wb-files__download-all {
   border: 1px solid var(--wb-border);
   background: #ffffff;
   color: var(--wb-text);
 }
 
+.wb-files__new:hover,
 .wb-files__download-all:hover:not(:disabled) {
   background: var(--wb-hover);
 }
