@@ -469,7 +469,8 @@ export function Workbench() {
   };
 
   // An example is copied into the project (a file it already has by that name is
-  // kept as it is, never overwritten) and its first file opens in the editor.
+  // kept as it is, never overwritten) and its first file opens in the editor as the
+  // Top File, so Start runs it (unless a simulation is running: the top stays put).
   const handleOpenExample = (example: Example) => {
     const { added, kept, openId } = copyExample(example, filesRef.current, nextFileId);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
@@ -477,6 +478,7 @@ export function Workbench() {
     setFiles((prev) => [...prev, ...added]);
     if (added.some((f) => f.id === openId)) showNewFile(openId);
     else handleOpenFile(openId);
+    handleSetTopFile(openId);
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is

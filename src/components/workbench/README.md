@@ -579,7 +579,9 @@ testbench). `EXAMPLES` names each card's `EXAMPLE_FILES` ids, the opened file fi
 the AND gate testbench brings `and_gate` along so it runs. `copyExample` (pure,
 tested) copies them into the project under fresh `file-N` ids, but never a file
 whose name the project already has (ignoring case): that one is kept as it is and
-opened instead, so a student's edits are never overwritten. The console gets a line
+opened instead, so a student's edits are never overwritten. The opened file also
+becomes the Top File, so Start runs it, unless a simulation is running (the top
+file is locked until it stops, as for its dot in the Files panel). The console gets a line
 per copied or kept file. Opening a file, adding one, or a jump to an error closes the
 pane; so do its ✕ and Escape.
 
