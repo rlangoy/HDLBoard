@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 import { tokenizeSource } from './highlight';
 import { tokenizeVerilog } from './verilogHighlight';
 import { tokenizeVhdlLine } from './vhdlHighlight';
@@ -15,7 +15,7 @@ const vhdlFixtures = import.meta.glob<string>('../../../tests/fixtures/vhdl/*.vh
 
 /** Every VHDL file we have: the starters and the fixtures. */
 const VHDL_SOURCES = [
-  ...STARTER_FILES.filter((file) => file.folder !== 'verilog').map((file) => [file.name, file.content] as const),
+  ...EXAMPLE_FILES.filter((file) => file.folder !== 'verilog').map((file) => [file.name, file.content] as const),
   ...Object.entries(vhdlFixtures).map(([path, text]) => [path.slice(path.lastIndexOf('/') + 1), text] as const),
 ];
 

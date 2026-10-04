@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# Builds the Windows installer (winInstaller\build.ps1) and attaches it to a
+# GitHub release.
+#
+#   git tag v1.2.4        && git push origin v1.2.4         -> draft release
+#   git tag v1.2.4-rc1   && git push origin v1.2.4-rc1    -> draft pre-release
+#   Actions -> "Build Windows installer" -> Run workflow    -> artifact only
+#
+# The version comes from the tag (v1.2.4 -> 1.2.4) and is stamped into every
+# package.json by tools/bump-version.mjs before the build, so the installer is
+# HDLBoard-Setup-1.2.4.exe and the app reports 1.2.4. That change is made on
+# the runner only and is never committed.
+#
+# A new release is created as a DRAFT: check the installer, edit the notes,
+# then press "Publish release". If the release already exists (it was made in
+# the GitHub UI first), the installer is uploaded to it and nothing else changes.
+
+name: Build Windows installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (x.y.z or x.y.z-pre). Empty: package.json's own version."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            winInstaller/electron/package-lock.json
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:REF_TYPE -eq "tag") {
+            $version = $env:REF_NAME -replace '^v', ''
+          } elseif ($env:INPUT_VERSION) {
+            $version = $env:INPUT_VERSION -replace '^v', ''
+          } else {
+            $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "'$version' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc1"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "HDLBoard version: $version"
+
+      - name: Stamp version into package.json files
+        shell: pwsh
+        run: |
+          node tools/bump-version.mjs "${{ steps.version.outputs.version }}"
+          if ($LASTEXITCODE -ne 0) { throw "bump-version failed" }
+
+      # GHDL (~55 MB) and the Icarus packages are pinned and checksum-verified
+      # by the fetch scripts, so the cache key is the scripts themselves.
+      - name: Cache vendored GHDL and Icarus Verilog
+        uses: actions/cache@v6
+        with:
+          path: winInstaller/vendor
+          key: vendor-${{ hashFiles('winInstaller/fetch-ghdl.ps1', 'winInstaller/fetch-iverilog.ps1') }}
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed (root)" }
+          npm ci --prefix server
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed (server)" }
+
+      - name: Build installer
+        shell: pwsh
+        run: winInstaller\build.ps1
+
+      - name: List generated files
+        shell: pwsh
+        run: |
+          Get-ChildItem winInstaller\output -Filter "*.exe" |
+            Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } |
+            Format-Table -AutoSize
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: HDLBoard-Setup-${{ steps.version.outputs.version }}
+          path: winInstaller/output/HDLBoard-Setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+          # Already compressed by NSIS; zipping it again only costs time.
+          compression-level: 0
+
+      - name: Attach installer to GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          $exe = "winInstaller\output\HDLBoard-Setup-$env:VERSION.exe"
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $env:TAG exists - uploading the installer to it"
+            gh release upload $env:TAG $exe --clobber
+          } else {
+            Write-Host "Creating draft release $env:TAG"
+            $flags = @("--draft", "--verify-tag", "--generate-notes", "--title", "HDLBoard $env:VERSION")
+            if ($env:PRERELEASE -eq "true") { $flags += "--prerelease" }
+            gh release create $env:TAG $exe @flags
+          }
+          if ($LASTEXITCODE -ne 0) { throw "gh release failed (exit $LASTEXITCODE)" }

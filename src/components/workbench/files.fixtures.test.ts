@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 
 /**
  * `tests/fixtures/vhdl/` and `tests/fixtures/verilog/` hold copies of the starter
@@ -31,7 +31,7 @@ function fixturesIn(folder: 'vhdl' | 'verilog'): Map<string, string> {
 
 describe.each(['vhdl', 'verilog'] as const)('the %s test fixtures', (folder) => {
   const fixtures = fixturesIn(folder);
-  const starters = STARTER_FILES.filter((file) => file.folder === folder);
+  const starters = EXAMPLE_FILES.filter((file) => file.folder === folder);
 
   test.each(starters.map((starter) => [starter.name, starter.content] as const))(
     '%s equals the starter design it was copied from',

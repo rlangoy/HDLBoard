@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { adviseDiagnostics, isSyntaxError, revealTarget } from './diagnosticAdvice';
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
-import { STARTER_FILES } from './files';
+import { EXAMPLE_FILES } from './files';
 import { tokenizeVhdlLine } from './vhdlHighlight';
 import { isReservedWord } from './vhdlWords';
 
@@ -26,7 +26,7 @@ function headlineFor(snapshot: RunSnapshot, diagnostic: LocatedDiagnostic): stri
 
 /** Identifiers of the VHDL starter designs (files.ts), without the reserved words. */
 function starterIdentifiers(): string[] {
-  const words = STARTER_FILES.filter((file) => file.folder === 'vhdl')
+  const words = EXAMPLE_FILES.filter((file) => file.folder === 'vhdl')
     .flatMap((file) => file.content.split('\n').flatMap((line) => tokenizeVhdlLine(line)))
     .filter((token) => token.type === 'identifier' && !isReservedWord(token.text))
     .map((token) => token.text);

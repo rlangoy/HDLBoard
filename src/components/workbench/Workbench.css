@@ -116,6 +116,14 @@
   min-height: 0;
 }
 
+/* The editor's slot between the two dividers; the Examples pane covers it when open. */
+.wb-center {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
 /*
  * Pane dividers. The two vertical ones sit either side of the editor — one
  * resizes .wb-sidebar, the other .wb-right (usePaneLayout.ts's

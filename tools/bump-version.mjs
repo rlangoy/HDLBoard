@@ -10,7 +10,7 @@
  * The frontend's About dialog, the desktop app and the installer's file name
  * (HDLBoard-Setup-<version>.exe) all read these, so nothing else needs editing.
  *
- *   npm run version:bump -- 1.2.0     an exact version
+ *   npm run version:bump -- 1.2.0     an exact version (1.2.0-rc.1: a pre-release)
  *   npm run version:bump -- minor     1.1.1 -> 1.2.0   (also: major, patch)
  *   npm run version:bump -- --check   fail unless every field agrees (build.ps1 runs this)
  *
@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PROJECTS = ['.', 'server', join('winInstaller', 'electron')];
-const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
 
 /** Every file and version field this script owns. */
 function targets() {
@@ -56,7 +56,7 @@ function readVersions() {
 function bumped(current, part) {
   const m = SEMVER.exec(current);
   if (!m) throw new Error(`current version "${current}" is not x.y.z`);
-  const [major, minor, patch] = m.slice(1).map(Number);
+  const [major, minor, patch] = m.slice(1, 4).map(Number);
   if (part === 'major') return `${major + 1}.0.0`;
   if (part === 'minor') return `${major}.${minor + 1}.0`;
   return `${major}.${minor}.${patch + 1}`;
@@ -95,7 +95,7 @@ function main(arg) {
   const current = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
   const next = ['major', 'minor', 'patch'].includes(arg) ? bumped(current, arg) : arg;
   if (!SEMVER.test(next)) {
-    console.error(`"${arg}" is not a version (x.y.z) or major/minor/patch`);
+    console.error(`"${arg}" is not a version (x.y.z[-pre]) or major/minor/patch`);
     return 2;
   }
   setVersion(next);

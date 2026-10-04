@@ -60,11 +60,32 @@
   color: var(--wb-text);
 }
 
+
+/* Upload, New File and Download All always share one row. Too narrow for
+   their labels (the sidebar's default width), they show only their icons,
+   each with a tooltip naming it. */
 .wb-files__actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   padding: 0 16px 14px;
+  container: wb-file-actions / inline-size;
+}
+
+.wb-files__actions > button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 360px: the three full labels side by side. */
+@container wb-file-actions (max-width: 359px) {
+  .wb-files__actions .wb-files__label-text {
+    display: none;
+  }
+
+  .wb-files__actions > button {
+    flex-basis: 0;
+    padding: 10px 0;
+  }
 }
 
 .wb-files__upload,
@@ -74,12 +95,11 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 0;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  padding: 8px 10px;
-  border-radius: 7px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
 }
@@ -120,9 +140,45 @@
   cursor: default;
 }
 
-.wb-files__action-icon {
+/* The way into the examples: a light pill at the right of the panel's title. */
+.wb-files__examples {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid #c7dafc;
+  border-radius: 999px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-files__examples:hover {
+  background: #d6e5ff;
+  border-color: var(--wb-accent);
+}
+
+.wb-files__examples[aria-pressed='true'] {
+  background: var(--wb-accent);
+  border-color: var(--wb-accent-dark);
+  color: #ffffff;
+}
+
+.wb-files__examples-icon {
   width: 15px;
   height: 15px;
+  flex: none;
+}
+
+.wb-files__action-icon {
+  width: 18px;
+  height: 18px;
   flex: none;
 }
 

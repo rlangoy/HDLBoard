@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { STARTER_FILES } from '../files';
+import { EXAMPLE_FILES } from '../files';
 import { analyzeProject } from './analyzeProject';
 import { FIXTURES, fixtureFile } from './fixtures.testSupport';
 
@@ -51,7 +51,7 @@ describe('analyzeProject budgets', () => {
   });
 
   test('the starter project plus every fixture, cold, in under 150 ms', async () => {
-    const files = [...STARTER_FILES, ...[...FIXTURES.keys()].map((path) => fixtureFile(path))];
+    const files = [...EXAMPLE_FILES, ...[...FIXTURES.keys()].map((path) => fixtureFile(path))];
     expect(await timed(() => analyzeProject(files), 150)).toBeLessThan(150);
   });
 
