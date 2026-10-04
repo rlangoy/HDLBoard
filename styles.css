@@ -359,8 +359,8 @@ p { margin: 0; }
 .compare-section { background: var(--surface); padding: 112px 0 128px; }
 .compare {
   display: grid;
-  /* both screenshots are 934px tall, so widths in this ratio keep them level */
-  grid-template-columns: minmax(0, 1072fr) minmax(0, 728fr);
+  /* columns in the ratio of the screenshots' aspect ratios (899/925 : 728/934) so both render at the same height */
+  grid-template-columns: minmax(0, 972fr) minmax(0, 779fr);
   gap: 32px;
   align-items: start;
 }
