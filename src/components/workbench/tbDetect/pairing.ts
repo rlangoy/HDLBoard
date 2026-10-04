@@ -57,8 +57,32 @@ function pairFromOverride(anchor: FileAnalysis, analysis: ProjectAnalysis, overr
     tbId !== undefined
       ? [anchor, effectiveFile(analysis, overrides, tbId)]
       : [designId === undefined ? undefined : effectiveFile(analysis, overrides, designId), anchor];
-  if (!tb || !design) return undefined;
+  if (!tb || !design || contradictsCode(analysis, overrides, design.fileId, tb.fileId)) return undefined;
   return { anchorId: anchor.fileId, tb: tbTarget(tb), rtl: rtlTarget(design), tbConfidence: 'high', missingDut: null };
+}
+
+/**
+ * A pairing the code rules out: the testbench instantiates designs that other
+ * project files define, and none of them is in the design's file - `adder4_tb`,
+ * which instantiates `adder4`, paired with `keyCouter2Led.vhdl`. Such a pair was
+ * stored for code that has since changed, or picked by mistake, so it is never
+ * offered, used or kept. A testbench that instantiates nothing the project
+ * defines (yet) contradicts nothing.
+ */
+export function contradictsCode(analysis: ProjectAnalysis, overrides: TestbenchOverrides, designId: string, tbId: string): boolean {
+  const design = effectiveFile(analysis, overrides, designId);
+  const tb = effectiveFile(analysis, overrides, tbId);
+  if (!design || !tb || design.language !== tb.language) return false;
+  const key = (name: string) => unitKey(tb.language, name);
+  const designUnits = new Set(design.units.map((u) => key(u.name)));
+  const drivers = tbUnits(tb).length > 0 ? tbUnits(tb) : tb.units;
+  const instances = drivers.flatMap((u) => u.instances.map((i) => i.name));
+  const definedInAnotherFile = (name: string) => {
+    const fileId = definingFile(analysis, tb, name);
+    return fileId !== undefined && fileId !== tbId;
+  };
+  const testsThisDesign = instances.some((name) => designUnits.has(key(name)));
+  return !testsThisDesign && instances.some(definedInAnotherFile);
 }
 
 function selfPair(anchor: FileAnalysis): EditorPair {

@@ -48,7 +48,7 @@ export const TEXT = {
   settingAuto: 'Automatic',
   settingAutoHint: 'Open the split when a file is, or has, a testbench.',
   settingAlways: 'Always',
-  settingAlwaysHint: 'Always show testbench and design side by side.',
+  settingAlwaysHint: 'Show testbench and design side by side whenever a file has a testbench.',
   settingNever: 'Never',
   settingNeverHint: 'Never open the split on its own; the view switch still works.',
 } as const;

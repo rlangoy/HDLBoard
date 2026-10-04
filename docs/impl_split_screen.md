@@ -61,7 +61,7 @@ section seems to say otherwise, this list wins and the section is the bug.
 | **B3** | **The layout changes only on open, tab switch, Simulate, reveal or create** — never while typing. |
 | **B4** | **Simulate routes to the testbench**: Start or a tab's Play on a file that contains a testbench unit runs that unit and focuses the TB pane; on a design file it runs the design and focuses the RTL pane. A pane's own Play always runs that pane's unit. |
 | **B5** | **What runs is what is focused.** After any Simulate, the pane whose unit runs has focus and shows Stop. |
-| **B6** | **The user's word beats detection**: a pin from the view switch, a role override and a pair override are never overruled by detection. *Never* never auto-opens; *Always* always splits. |
+| **B6** | **The user's word beats detection**: a pin from the view switch, a role override and a pair override are never overruled by detection. *Never* never auto-opens; *Always* splits whenever the file has a testbench (a design with none keeps a single pane). A pair override the code contradicts - the testbench instantiates designs defined in other files, none in the paired one - is not the user's word about this code: it is never offered, used or kept (`contradictsCode`, pruned at startup and after every analysis). |
 | **B7** | **A one-unit design file runs exactly as today** (AC-6). |
 
 ---

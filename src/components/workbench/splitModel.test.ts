@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { pairOptions, testbenchesFor, withPair, withRole, withoutFile } from './splitModel';
+import { pairOptions, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile } from './splitModel';
 import { analyzeProject } from './tbDetect/analyzeProject';
 import { fixtureFile, sourceFile } from './tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES } from './tbDetect/types';
@@ -20,7 +20,8 @@ const project = analyzeProject([
 describe('pairOptions', () => {
   test('the TB pane is offered the same-language designs', () => {
     const names = pairOptions(project, EMPTY_OVERRIDES, 'vhdl/counter_tb.vhd', 'tb').map((o) => o.name);
-    expect(names).toEqual(['alu_with_tb.vhd', 'counter.vhd', 'de1_soc_stray.vhd']);
+    // counter_tb instantiates counter: every other design is ruled out by the code.
+    expect(names).toEqual(['counter.vhd']);
   });
 
   test('the RTL pane is offered the same-language testbenches', () => {
@@ -71,4 +72,25 @@ test('a role override changes what pairOptions offers', () => {
 test('files of the other language are never offered', () => {
   const extra = analyzeProject([fixtureFile('vhdl/counter.vhd'), sourceFile('verilog/counter_tb.v', 'module counter_tb; counter d (); initial $finish; endmodule')]);
   expect(pairOptions(extra, EMPTY_OVERRIDES, 'vhdl/counter.vhd', 'rtl')).toEqual([]);
+});
+
+describe('withoutContradictedPairs', () => {
+  const ADDER4 = 'entity adder4 is\n  port (a : in bit; y : out bit);\nend entity;\narchitecture rtl of adder4 is\nbegin\n  y <= a;\nend architecture;\n';
+  const ADDER4_TB = 'entity adder4_tb is\nend entity;\narchitecture sim of adder4_tb is\n  signal a, y : bit;\nbegin\n  dut: entity work.adder4 port map (a => a, y => y);\n  process begin\n    a <= \'1\';\n    wait for 10 ns;\n    assert y = \'1\' report "bad" severity error;\n    wait;\n  end process;\nend architecture;\n';
+  const OTHER = 'entity counter8 is\n  port (CLOCK_50 : in bit; LEDR : out bit_vector(9 downto 0));\nend entity;\narchitecture rtl of counter8 is\nbegin\nend architecture;\n';
+  const files = analyzeProject([sourceFile('vhdl/adder4.vhd', ADDER4), sourceFile('vhdl/adder4_tb.vhd', ADDER4_TB), sourceFile('vhdl/other.vhd', OTHER)]);
+
+  test('drops a stored pairing the testbench contradicts, keeps the rest', () => {
+    const stored = { roles: { 'vhdl/other.vhd': 'rtl' as const }, pairs: { 'vhdl/other.vhd': 'vhdl/adder4_tb.vhd' } };
+    expect(withoutContradictedPairs(files, stored)).toEqual({ roles: { 'vhdl/other.vhd': 'rtl' }, pairs: {} });
+  });
+
+  test('returns the same object when nothing is dropped', () => {
+    const stored = { roles: {}, pairs: { 'vhdl/adder4.vhd': 'vhdl/adder4_tb.vhd' } };
+    expect(withoutContradictedPairs(files, stored)).toBe(stored);
+  });
+
+  test('the RTL pane of a design is not offered a testbench that tests another design', () => {
+    expect(pairOptions(files, EMPTY_OVERRIDES, 'vhdl/other.vhd', 'rtl')).toEqual([]);
+  });
 });

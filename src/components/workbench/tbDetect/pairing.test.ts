@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { analyzeProject, type SourceFile } from './analyzeProject';
 import { fixtureFile, sourceFile } from './fixtures.testSupport';
-import { findPair } from './pairing';
+import { contradictsCode, findPair } from './pairing';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from './types';
 
 /** docs/impl_split_screen.md § 7.1, pairing projects P-1 … P-9. */
@@ -15,6 +15,13 @@ const aluTb = (name: string) => `module ${name};\nreg a; wire y;\nalu dut (.a(a)
 function pairOf(files: SourceFile[], anchor: string, overrides: TestbenchOverrides = EMPTY_OVERRIDES, mru: string[] = []) {
   return findPair(anchor, analyzeProject(files), overrides, mru);
 }
+
+/** The desktop workspace this came from: adder4_tb tests adder4, but was once paired with keyCouter2Led. */
+const ADDER4 = 'entity adder4 is\n  port (a, b : in bit_vector(3 downto 0); sum : out bit_vector(4 downto 0));\nend entity;\narchitecture rtl of adder4 is\nbegin\nend architecture;\n';
+const ADDER4_TB = 'entity adder4_tb is\nend entity;\narchitecture sim of adder4_tb is\n  signal a, b : bit_vector(3 downto 0);\n  signal sum : bit_vector(4 downto 0);\nbegin\n  dut: entity work.adder4 port map (a => a, b => b, sum => sum);\n  process begin\n    wait for 10 ns;\n    assert sum = "00000" report "bad" severity error;\n    wait;\n  end process;\nend architecture;\n';
+const COUNTER8 = 'entity counter8 is\n  port (CLOCK_50 : in bit; LEDR : out bit_vector(9 downto 0));\nend entity;\narchitecture rtl of counter8 is\nbegin\nend architecture;\n';
+const STALE = [sourceFile('vhdl/adder4.vhd', ADDER4), sourceFile('vhdl/adder4_tb.vhd', ADDER4_TB), sourceFile('vhdl/keyCouter2Led.vhdl', COUNTER8)];
+const STALE_PAIR: TestbenchOverrides = { roles: {}, pairs: { 'vhdl/keyCouter2Led.vhdl': 'vhdl/adder4_tb.vhd' } };
 
 const P2 = [sourceFile('verilog/alu.v', ALU_V), sourceFile('verilog/alu_test.v', aluTb('alu_test')), sourceFile('verilog/alu_tb_old.v', aluTb('alu_tb_old'))];
 const P3 = [sourceFile('verilog/alu.v', ALU_V), sourceFile('verilog/test_alu.v', aluTb('test_alu')), sourceFile('verilog/alu_tb.v', aluTb('alu_tb'))];
@@ -92,5 +99,29 @@ describe('findPair', () => {
 
   test('a design with no testbench pairs with nothing', () => {
     expect(pairOf([fixtureFile('vhdl/counter.vhd')], 'vhdl/counter.vhd')).toMatchObject({ tb: null, rtl: { fileId: 'vhdl/counter.vhd' } });
+  });
+});
+
+describe('a stored pairing the code rules out', () => {
+  test('is ignored: the testbench shows the design it instantiates, from either side', () => {
+    expect(pairOf(STALE, 'vhdl/adder4_tb.vhd', STALE_PAIR).rtl?.fileId).toBe('vhdl/adder4.vhd');
+    expect(pairOf(STALE, 'vhdl/adder4.vhd', STALE_PAIR).tb?.fileId).toBe('vhdl/adder4_tb.vhd');
+  });
+
+  test('leaves the unrelated design with no testbench', () => {
+    expect(pairOf(STALE, 'vhdl/keyCouter2Led.vhdl', STALE_PAIR).tb).toBeNull();
+  });
+
+  test('contradictsCode: true only when the testbench tests another file and not this one', () => {
+    const project = analyzeProject(STALE);
+    expect(contradictsCode(project, EMPTY_OVERRIDES, 'vhdl/keyCouter2Led.vhdl', 'vhdl/adder4_tb.vhd')).toBe(true);
+    expect(contradictsCode(project, EMPTY_OVERRIDES, 'vhdl/adder4.vhd', 'vhdl/adder4_tb.vhd')).toBe(false);
+  });
+
+  test('a testbench that instantiates nothing the project defines keeps any pairing', () => {
+    const files = [STALE[2], sourceFile('vhdl/new_tb.vhd', 'entity new_tb is\nend entity;\narchitecture sim of new_tb is\nbegin\n  process begin wait; end process;\nend architecture;\n')];
+    const pairs: TestbenchOverrides = { roles: {}, pairs: { 'vhdl/keyCouter2Led.vhdl': 'vhdl/new_tb.vhd' } };
+    expect(contradictsCode(analyzeProject(files), pairs, 'vhdl/keyCouter2Led.vhdl', 'vhdl/new_tb.vhd')).toBe(false);
+    expect(pairOf(files, 'vhdl/keyCouter2Led.vhdl', pairs).tb?.fileId).toBe('vhdl/new_tb.vhd');
   });
 });
