@@ -1,55 +1,58 @@
-# Publisere en GitHub-release
+# Publishing a GitHub release
 
-En **GitHub-release** er en versjon av HDLBoard som er knyttet til en git-tag
-(f.eks. `v1.2.4`). Den har en releasetekst og nedlastbare filer, og vises under
+A **GitHub release** is a version of HDLBoard tied to a git tag (e.g. `v1.2.4`).
+It has release notes and downloadable files, and is listed under
 [Releases](https://github.com/rlangoy/HDLBoard/releases).
 
-Windows-installeren (`HDLBoard-Setup-<versjon>.exe`) bygges automatisk av
+The Windows installer (`HDLBoard-Setup-<version>.exe`) is built automatically by
 GitHub Actions ([`.github/workflows/build-windows.yml`](../.github/workflows/build-windows.yml))
-hver gang en tag som starter med `v` pushes:
+every time a tag starting with `v` is pushed:
 
-- Versjonen hentes fra taggen (`v1.2.4` blir `1.2.4`) og skrives inn i alle
-  `package.json` før bygget. Dermed får installeren, appen og About-dialogen
-  samme versjon. Endringen skjer bare på build-maskinen og blir ikke committet.
-- `winInstaller\build.ps1` bygger installeren, på samme måte som lokalt
-  (se [winInstaller/README.md](../winInstaller/README.md)).
-- Finnes ikke releasen fra før, lages den som **draft** med installeren vedlagt.
-  Er det en bindestrek i versjonen (f.eks. `-rc.1`), merkes den som pre-release.
-  Finnes releasen allerede, lastes bare `.exe`-filen opp til den.
+- The version is taken from the tag (`v1.2.4` becomes `1.2.4`) and written into
+  every `package.json` before the build, so the installer, the app and the About
+  dialog all show the same version. This change happens on the build machine
+  only and is never committed.
+- `winInstaller\build.ps1` builds the installer, the same way as locally
+  (see [winInstaller/README.md](../winInstaller/README.md)).
+- If the release does not exist yet, it is created as a **draft** with the
+  installer attached. If the version contains a hyphen (e.g. `-rc.1`), it is
+  marked as a pre-release. If the release already exists, only the `.exe` file
+  is uploaded to it.
 
-## Slik lager du en test- eller draft-release
+## Creating a test or draft release
 
-**Test-release (draft pre-release):**
+**Test release (draft pre-release):**
 
 ```powershell
 git tag v1.2.4-rc.1
 git push origin v1.2.4-rc.1
 ```
 
-Etter cirka 3 minutter ligger draften under **Releases** med installeren vedlagt.
-Draften er bare synlig for deg.
+After about 3 minutes the draft appears under **Releases** with the installer
+attached. Drafts are visible only to you.
 
-**Slette testen etterpå:**
+**Deleting the test afterwards:**
 
 ```powershell
 gh release delete v1.2.4-rc.1 --cleanup-tag --yes
 ```
 
-**Ekte release:**
+**Real release:**
 
 ```powershell
-npm run version:bump -- 1.2.4    # + linje i docs/changelog.txt, commit, push
+npm run version:bump -- 1.2.4    # + a line in docs/changelog.txt, commit, push
 git tag v1.2.4
 git push origin v1.2.4
 ```
 
-Gå deretter til **Releases**, se over draften, rediger teksten og trykk
+Then go to **Releases**, review the draft, edit the notes and press
 **Publish release**.
 
-**Bygge uten release:** gå til **Actions**, velg "Build Windows installer" og
-trykk **Run workflow**. Installeren lastes da bare ned som artifact.
+**Building without a release:** go to **Actions**, choose "Build Windows
+installer" and press **Run workflow**. The installer is then only available for
+download as an artifact.
 
-En ting å vite: hvis du lager en draft i GitHub-grensesnittet
-("Draft a new release"), lages ikke taggen før du publiserer. Bygget starter
-derfor først når du trykker **Publish release**, og da legges `.exe`-filen til
-releasen som allerede er publisert.
+One thing to know: if you create a draft in the GitHub web interface
+("Draft a new release"), the tag is not created until you publish. The build
+therefore starts only when you press **Publish release**, and the `.exe` file is
+then added to the already published release.
