@@ -60,36 +60,31 @@
   color: var(--wb-text);
 }
 
-.wb-files__actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 16px 14px;
-}
 
 /* Upload, New File and Download All always share one row. Too narrow for
    their labels (the sidebar's default width), they show only their icons,
    each with a tooltip naming it. */
-.wb-files__action-row {
+.wb-files__actions {
   display: flex;
   gap: 6px;
+  padding: 0 16px 14px;
   container: wb-file-actions / inline-size;
 }
 
-.wb-files__action-row > button {
+.wb-files__actions > button {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-/* 320px: the three full labels side by side. */
-@container wb-file-actions (max-width: 319px) {
-  .wb-files__action-row .wb-files__label-text {
+/* 360px: the three full labels side by side. */
+@container wb-file-actions (max-width: 359px) {
+  .wb-files__actions .wb-files__label-text {
     display: none;
   }
 
-  .wb-files__action-row > button {
+  .wb-files__actions > button {
     flex-basis: 0;
-    padding: 8px 0;
+    padding: 10px 0;
   }
 }
 
@@ -99,12 +94,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 8px;
-  border-radius: 7px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
 }
@@ -145,37 +140,39 @@
   cursor: default;
 }
 
-/* The way into the examples: wider and brighter than the file actions above,
-   in the header's blue running into the editor's design-pane teal. */
+/* The way into the examples: a light pill at the right of the panel's title. */
 .wb-files__examples {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #14a394, var(--wb-accent));
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
-  color: #ffffff;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid #c7dafc;
+  border-radius: 999px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
   font: inherit;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 140ms ease, box-shadow 140ms ease;
+  transition: background 140ms ease, border-color 140ms ease;
 }
 
 .wb-files__examples:hover {
-  filter: brightness(0.93);
+  background: #d6e5ff;
+  border-color: var(--wb-accent);
 }
 
 .wb-files__examples[aria-pressed='true'] {
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--wb-accent);
+  background: var(--wb-accent);
+  border-color: var(--wb-accent-dark);
+  color: #ffffff;
 }
 
 .wb-files__examples-icon {
-  width: 22px;
-  height: 22px;
+  width: 15px;
+  height: 15px;
   flex: none;
 }
 

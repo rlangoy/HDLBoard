@@ -70,8 +70,8 @@ function TopDotButton({ file, isTop, locked, onSetTop }: TopDotButtonProps) {
 }
 
 /**
- * The "Files" panel: upload / new-file / download-all on one row and Examples
- * below them, above the folder tree —
+ * The "Files" panel: Examples beside the title, upload / new-file / download-all
+ * on one row below, then the folder tree —
  * `vhdl/` and `verilog/` for designs and `work/` for an uploaded VHDL `tb_*`
  * testbench. A folder with no files is not drawn, so the starter project
  * shows only `vhdl/`.
@@ -174,34 +174,6 @@ export function FileExplorer({
       <div className="wb-files__header">
         <FilesIcon className="wb-icon wb-icon--files" aria-hidden="true" />
         <h2 className="wb-files__title">Files</h2>
-      </div>
-
-      <div className="wb-files__actions">
-        <div className="wb-files__action-row">
-          <button
-            type="button"
-            className="wb-files__upload"
-            onClick={onUpload}
-            title="Upload File: add source files, or a .zip such as one Download All saved"
-          >
-            <span className="wb-icon wb-icon--upload" aria-hidden="true" />
-            <span className="wb-files__label-text">Upload File</span>
-          </button>
-          <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
-            <span className="wb-icon wb-icon--plus" aria-hidden="true" />
-            <span className="wb-files__label-text">New File</span>
-          </button>
-          <button
-            type="button"
-            className="wb-files__download-all"
-            onClick={onDownloadAll}
-            disabled={files.length === 0}
-            title="Download All: save every file as one .zip, keeping the folders"
-          >
-            <DownloadIcon className="wb-files__action-icon" aria-hidden="true" />
-            <span className="wb-files__label-text">Download All</span>
-          </button>
-        </div>
         <button
           type="button"
           className="wb-files__examples"
@@ -211,6 +183,32 @@ export function FileExplorer({
         >
           <BookIcon className="wb-files__examples-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Examples</span>
+        </button>
+      </div>
+
+      <div className="wb-files__actions">
+        <button
+          type="button"
+          className="wb-files__upload"
+          onClick={onUpload}
+          title="Upload File: add source files, or a .zip such as one Download All saved"
+        >
+          <span className="wb-icon wb-icon--upload" aria-hidden="true" />
+          <span className="wb-files__label-text">Upload File</span>
+        </button>
+        <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
+          <span className="wb-icon wb-icon--plus" aria-hidden="true" />
+          <span className="wb-files__label-text">New File</span>
+        </button>
+        <button
+          type="button"
+          className="wb-files__download-all"
+          onClick={onDownloadAll}
+          disabled={files.length === 0}
+          title="Download All: save every file as one .zip, keeping the folders"
+        >
+          <DownloadIcon className="wb-files__action-icon" aria-hidden="true" />
+          <span className="wb-files__label-text">Download All</span>
         </button>
       </div>
 

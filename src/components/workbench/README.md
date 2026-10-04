@@ -96,8 +96,8 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  ├─ SidePanel .wb-sidebar "Explorer" (draggable width, collapsible, tinted strip)
 │  │  └─ .wb-sidebar__content          (scrolls as one)
 │  │     ├─ SimulationCard             (card: Start/Stop + status)
-│  │     └─ FileExplorer               (card: Upload/New File/Download All on one row, Examples below,
-│  │                                     then the vhdl/verilog/work tree)
+│  │     └─ FileExplorer               (card: title + Examples pill, Upload/New File/Download All
+│  │                                     on one row, then the vhdl/verilog/work tree)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
 │  │  CodeEditor: EditorTabStrip (+ suggestion chip, ViewSwitch), then one
 │  │  EditorSurface, or SplitEditor: TB pane | .wb-split__divider | RTL pane,
@@ -568,7 +568,7 @@ compiles and runs under GHDL (`--std=08`) or Icarus Verilog.
 
 ### `examples.ts` and `ExamplesPane`
 
-The **Examples** button under the Files panel's actions toggles `ExamplesPane`, which
+The **Examples** pill beside the Files panel's title toggles `ExamplesPane`, which
 covers the editor ("Available Examples": a search box and one card per example and
 language, with a VHDL/Verilog badge and a teal dot for a design, purple for a
 testbench). `EXAMPLES` names each card's `EXAMPLE_FILES` ids, the opened file first;
