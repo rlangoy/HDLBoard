@@ -5,7 +5,7 @@ import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import type { VhdlFile } from './files';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon } from './icons';
+import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './FileExplorer.css';
 
@@ -193,7 +193,7 @@ export function FileExplorer({
           onClick={onUpload}
           title="Upload File: add source files, or a .zip such as one Download All saved"
         >
-          <span className="wb-icon wb-icon--upload" aria-hidden="true" />
+          <UploadIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
         </button>
         <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
@@ -207,7 +207,7 @@ export function FileExplorer({
           disabled={files.length === 0}
           title="Download All: save every file as one .zip, keeping the folders"
         >
-          <DownloadIcon className="wb-files__action-icon" aria-hidden="true" />
+          <FolderZipIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Download All</span>
         </button>
       </div>

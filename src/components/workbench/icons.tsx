@@ -4,8 +4,8 @@
 import type { SVGProps } from 'react';
 
 /*
- * Material Symbols Outlined — "edit", "delete", "download", "menu_book", "search",
- * "close", "folder_open" and "info", wght 400 / GRAD 0 /
+ * Material Symbols Outlined — "edit", "delete", "download", "upload", "folder_zip",
+ * "menu_book", "search", "close", "folder_open" and "info", wght 400 / GRAD 0 /
  * opsz 24 / FILL 0 (Google's default web variant), inlined as plain SVG
  * rather than pulled in as an icon font: this project runs fully local,
  * with no runtime dependency beyond React (see README "Prerequisites").
@@ -41,6 +41,24 @@ export function FilesIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
       <path d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z" />
+    </svg>
+  );
+}
+
+/** Material Symbols "upload": the Files panel's Upload File button. */
+export function UploadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
+      <path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z" />
+    </svg>
+  );
+}
+
+/** Material Symbols "folder_zip": Download All, which saves the project as one .zip. */
+export function FolderZipIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
+      <path d="M640-480v-80h80v80h-80Zm0 80h-80v-80h80v80Zm0 80v-80h80v80h-80ZM447-640l-80-80H160v480h400v-80h80v80h160v-400H640v80h-80v-80H447ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80v-480 480Z" />
     </svg>
   );
 }
