@@ -39,7 +39,15 @@ describe('the examples catalogue', () => {
 
 describe('filterExamples', () => {
   test('an empty query keeps everything', () => {
-    expect(filterExamples(EXAMPLES, '  ')).toBe(EXAMPLES);
+    expect(filterExamples(EXAMPLES, '  ')).toEqual(EXAMPLES);
+  });
+
+  test('keeps only the chosen languages', () => {
+    const verilogOnly = filterExamples(EXAMPLES, '', new Set(['verilog']));
+    expect(verilogOnly.length).toBe(EXAMPLES.length / 2);
+    expect(verilogOnly.every((e) => e.language === 'verilog')).toBe(true);
+    expect(filterExamples(EXAMPLES, 'blink', new Set(['vhdl'])).map((e) => e.id)).toEqual(['blink_vhdl']);
+    expect(filterExamples(EXAMPLES, '', new Set())).toEqual([]);
   });
 
   test('matches title, language and file name, every word required', () => {

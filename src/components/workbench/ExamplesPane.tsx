@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cx } from '../board';
-import { EXAMPLES, LANGUAGE_LABEL, filterExamples, type Example } from './examples';
+import { EXAMPLES, EXAMPLE_LANGUAGES, LANGUAGE_LABEL, filterExamples, type Example, type ExampleLanguage } from './examples';
 import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './ExamplesPane.css';
@@ -21,8 +21,16 @@ export interface ExamplesPaneProps {
  */
 export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
   const [query, setQuery] = useState('');
+  const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(() => new Set(EXAMPLE_LANGUAGES));
   const searchRef = useRef<HTMLInputElement>(null);
-  const shown = filterExamples(EXAMPLES, query);
+  const shown = filterExamples(EXAMPLES, query, languages);
+
+  const toggleLanguage = (language: ExampleLanguage) =>
+    setLanguages((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(language)) next.add(language);
+      return next;
+    });
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -68,8 +76,26 @@ export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
             />
           </label>
 
+          <fieldset className="wb-examples__languages">
+            <legend className="wb-examples__languages-legend">Show</legend>
+            {EXAMPLE_LANGUAGES.map((language) => (
+              <label key={language} className={cx('wb-examples__language', `is-${language}`)}>
+                <input
+                  type="checkbox"
+                  checked={languages.has(language)}
+                  onChange={() => toggleLanguage(language)}
+                />
+                {LANGUAGE_LABEL[language]}
+              </label>
+            ))}
+          </fieldset>
+
           {shown.length === 0 ? (
-            <p className="wb-examples__empty">No examples match “{query.trim()}”.</p>
+            <p className="wb-examples__empty">
+              {languages.size === 0
+                ? 'Tick VHDL or Verilog to see the examples.'
+                : `No examples match “${query.trim()}”.`}
+            </p>
           ) : (
             <ul className="wb-examples__grid">
               {shown.map((example) => (

@@ -95,11 +95,21 @@ export const EXAMPLES: readonly Example[] = EXAMPLE_TEXTS.flatMap(({ key, vhdl, 
 
 export const LANGUAGE_LABEL: Record<ExampleLanguage, string> = { vhdl: 'VHDL', verilog: 'Verilog' };
 
-/** The examples whose title, description, language or file names contain every word of `query`. */
-export function filterExamples(examples: readonly Example[], query: string): readonly Example[] {
+export const EXAMPLE_LANGUAGES: readonly ExampleLanguage[] = ['vhdl', 'verilog'];
+
+/**
+ * The examples in one of `languages` whose title, description, language or file
+ * names contain every word of `query`.
+ */
+export function filterExamples(
+  examples: readonly Example[],
+  query: string,
+  languages: ReadonlySet<ExampleLanguage> = new Set(EXAMPLE_LANGUAGES),
+): readonly Example[] {
+  const inLanguage = examples.filter((example) => languages.has(example.language));
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return examples;
-  return examples.filter((example) => {
+  if (words.length === 0) return inLanguage;
+  return inLanguage.filter((example) => {
     const haystack = [
       example.title,
       example.description,

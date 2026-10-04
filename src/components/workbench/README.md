@@ -571,7 +571,8 @@ compiles and runs under GHDL (`--std=08`) or Icarus Verilog.
 ### `examples.ts` and `ExamplesPane`
 
 The **Examples** pill beside the Files panel's title toggles `ExamplesPane`, which
-covers the editor ("Available Examples": a search box and one card per example and
+covers the editor ("Available Examples": a search box, VHDL and Verilog checkboxes
+(both ticked at first) choosing which languages' cards show, and one card per example and
 language, with a VHDL/Verilog badge and a teal dot for a design, purple for a
 testbench). `EXAMPLES` names each card's `EXAMPLE_FILES` ids, the opened file first;
 the AND gate testbench brings `and_gate` along so it runs. `copyExample` (pure,
