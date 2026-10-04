@@ -556,7 +556,7 @@ p { margin: 0; }
 
 @media (max-width: 520px) {
   .nav-links { gap: 16px; }
-  .nav-docs, .nav-github { display: none; }  /* both are in the footer */
+  .nav-github { display: none; }  /* it is in the footer */
   .nav-downloads { display: none; }          /* a Windows installer is no use on a phone */
   .nav-live { height: 40px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-weight: 600; color: var(--ink); }
   .paths { grid-template-columns: 1fr; margin-top: 40px; }
