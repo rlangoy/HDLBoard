@@ -158,7 +158,9 @@ if (-not (Test-Path (Join-Path $ResDir "iverilog\COPYING"))) {
 Step "Running electron-builder (NSIS)"
 Push-Location $ElectronDir
 try {
-  & (Join-Path $ElectronDir "node_modules\.bin\electron-builder.cmd") --win
+  # --publish never: on CI with a tag, electron-builder would otherwise try to
+  # upload to GitHub itself; the workflow attaches the installer instead.
+  & (Join-Path $ElectronDir "node_modules\.bin\electron-builder.cmd") --win --publish never
   if ($LASTEXITCODE -ne 0) { throw "electron-builder failed (exit $LASTEXITCODE)" }
 } finally {
   Pop-Location
