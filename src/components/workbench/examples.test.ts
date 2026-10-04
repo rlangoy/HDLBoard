@@ -11,7 +11,8 @@ const example = (id: string): Example => {
   return found;
 };
 
-const counter = () => {
+/** Hands out file-1, file-2, … as Workbench's own id sequence does. */
+const idSequence = () => {
   let n = 0;
   return () => `file-${++n}`;
 };
@@ -39,7 +40,15 @@ describe('the examples catalogue', () => {
 
 describe('filterExamples', () => {
   test('an empty query keeps everything', () => {
-    expect(filterExamples(EXAMPLES, '  ')).toBe(EXAMPLES);
+    expect(filterExamples(EXAMPLES, '  ')).toEqual(EXAMPLES);
+  });
+
+  test('keeps only the chosen languages', () => {
+    const verilogOnly = filterExamples(EXAMPLES, '', new Set(['verilog']));
+    expect(verilogOnly.length).toBe(EXAMPLES.length / 2);
+    expect(verilogOnly.every((e) => e.language === 'verilog')).toBe(true);
+    expect(filterExamples(EXAMPLES, 'blink', new Set(['vhdl'])).map((e) => e.id)).toEqual(['blink_vhdl']);
+    expect(filterExamples(EXAMPLES, '', new Set())).toEqual([]);
   });
 
   test('matches title, language and file name, every word required', () => {
@@ -50,8 +59,13 @@ describe('filterExamples', () => {
 });
 
 describe('copyExample', () => {
+  test('an example naming a file that is not built in is a bug, not a silent skip', () => {
+    const broken: Example = { ...example('blink_vhdl'), fileIds: ['no_such_file'] };
+    expect(() => copyExample(broken, STARTER_FILES, idSequence())).toThrow('no_such_file');
+  });
+
   test('copies the file under a fresh id and opens it', () => {
-    const result = copyExample(example('blink_vhdl'), STARTER_FILES, counter());
+    const result = copyExample(example('blink_vhdl'), STARTER_FILES, idSequence());
     expect(result.added).toHaveLength(1);
     expect(result.added[0]).toMatchObject({ id: 'file-1', name: 'blinkTest.vhdl', folder: 'vhdl' });
     expect(result.openId).toBe('file-1');
@@ -59,18 +73,18 @@ describe('copyExample', () => {
   });
 
   test('a testbench brings its design along, and opens the testbench', () => {
-    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, counter());
+    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence());
     expect(result.added.map((f) => f.name)).toEqual(['and_gate_tb.v', 'and_gate.v']);
     expect(result.openId).toBe('file-1');
   });
 
   test('never overwrites a file the project already has: it is opened instead', () => {
     const edited: VhdlFile = { id: 'file-9', name: 'and_gate.v', folder: 'verilog', content: '// mine' };
-    const result = copyExample(example('and_gate_tb_verilog'), [...STARTER_FILES, edited], counter());
+    const result = copyExample(example('and_gate_tb_verilog'), [...STARTER_FILES, edited], idSequence());
     expect(result.added.map((f) => f.name)).toEqual(['and_gate_tb.v']);
     expect(result.kept).toEqual(['and_gate.v']);
 
-    const again = copyExample(example('and_gate_verilog'), [edited], counter());
+    const again = copyExample(example('and_gate_verilog'), [edited], idSequence());
     expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9' });
   });
 });

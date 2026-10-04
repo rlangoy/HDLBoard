@@ -55,7 +55,7 @@ function readVersions() {
 
 function bumped(current, part) {
   const m = SEMVER.exec(current);
-  if (!m) throw new Error(`current version "${current}" is not x.y.z`);
+  if (!m) throw new Error(`current version "${current}" is not x.y.z[-pre]`);
   const [major, minor, patch] = m.slice(1, 4).map(Number);
   if (part === 'major') return `${major + 1}.0.0`;
   if (part === 'minor') return `${major}.${minor + 1}.0`;

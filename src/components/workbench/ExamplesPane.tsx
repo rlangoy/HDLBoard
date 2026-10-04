@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
-import { EXAMPLES, LANGUAGE_LABEL, filterExamples, type Example } from './examples';
+import { EXAMPLES, EXAMPLE_LANGUAGES, LANGUAGE_LABEL, filterExamples, type Example, type ExampleLanguage } from './examples';
 import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './ExamplesPane.css';
@@ -21,22 +21,20 @@ export interface ExamplesPaneProps {
  */
 export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
   const [query, setQuery] = useState('');
+  const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(() => new Set(EXAMPLE_LANGUAGES));
   const searchRef = useRef<HTMLInputElement>(null);
-  const shown = filterExamples(EXAMPLES, query);
+  const shown = filterExamples(EXAMPLES, query, languages);
 
   useEffect(() => searchRef.current?.focus(), []);
 
+  const closeOnEscape = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    onClose();
+  };
+
   return (
-    <section
-      className="wb-examples"
-      aria-labelledby="wb-examples-title"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          onClose();
-        }
-      }}
-    >
+    <section className="wb-examples" aria-labelledby="wb-examples-title" onKeyDown={closeOnEscape}>
       <ScrollArea className="wb-examples__scroll">
         <div className="wb-examples__inner">
           <header className="wb-examples__header">
@@ -68,30 +66,14 @@ export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
             />
           </label>
 
+          <LanguageFilter languages={languages} onChange={setLanguages} />
+
           {shown.length === 0 ? (
-            <p className="wb-examples__empty">No examples match “{query.trim()}”.</p>
+            <p className="wb-examples__empty">{emptyMessage(languages, query)}</p>
           ) : (
             <ul className="wb-examples__grid">
               {shown.map((example) => (
-                <li key={example.id} className="wb-examples__card">
-                  <h3 className="wb-examples__card-title">
-                    <span className={cx('wb-examples__dot', `is-${example.role}`)} aria-hidden="true" />
-                    {example.title}
-                  </h3>
-                  <p className="wb-examples__card-text">{example.description}</p>
-                  <span className={cx('wb-examples__badge', `is-${example.language}`)}>
-                    {LANGUAGE_LABEL[example.language]}
-                  </span>
-                  <button
-                    type="button"
-                    className="wb-examples__open"
-                    onClick={() => onOpen(example)}
-                    aria-label={`Open ${example.title} (${LANGUAGE_LABEL[example.language]})`}
-                  >
-                    <FolderOpenIcon aria-hidden="true" />
-                    Open
-                  </button>
-                </li>
+                <ExampleCard key={example.id} example={example} onOpen={onOpen} />
               ))}
             </ul>
           )}
@@ -103,6 +85,67 @@ export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
         </div>
       </ScrollArea>
     </section>
+  );
+}
+
+/** What the pane says when no card is left to show. */
+function emptyMessage(languages: ReadonlySet<ExampleLanguage>, query: string): string {
+  return languages.size === 0 ? 'Tick VHDL or Verilog to see the examples.' : `No examples match “${query.trim()}”.`;
+}
+
+interface LanguageFilterProps {
+  languages: ReadonlySet<ExampleLanguage>;
+  onChange: (languages: ReadonlySet<ExampleLanguage>) => void;
+}
+
+/** "Show [x] VHDL [x] Verilog": which languages' cards are listed. */
+function LanguageFilter({ languages, onChange }: LanguageFilterProps) {
+  const toggle = (language: ExampleLanguage) => {
+    const next = new Set(languages);
+    if (next.has(language)) next.delete(language);
+    else next.add(language);
+    onChange(next);
+  };
+
+  return (
+    <fieldset className="wb-examples__languages">
+      <legend className="wb-examples__languages-legend">Show</legend>
+      {EXAMPLE_LANGUAGES.map((language) => (
+        <label key={language} className={cx('wb-examples__language', `is-${language}`)}>
+          <input type="checkbox" checked={languages.has(language)} onChange={() => toggle(language)} />
+          {LANGUAGE_LABEL[language]}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+interface ExampleCardProps {
+  example: Example;
+  onOpen: (example: Example) => void;
+}
+
+/** One example: its role dot, title, description, language badge and Open button. */
+function ExampleCard({ example, onOpen }: ExampleCardProps) {
+  const language = LANGUAGE_LABEL[example.language];
+  return (
+    <li className="wb-examples__card">
+      <h3 className="wb-examples__card-title">
+        <span className={cx('wb-examples__dot', `is-${example.role}`)} aria-hidden="true" />
+        {example.title}
+      </h3>
+      <p className="wb-examples__card-text">{example.description}</p>
+      <span className={cx('wb-examples__badge', `is-${example.language}`)}>{language}</span>
+      <button
+        type="button"
+        className="wb-examples__open"
+        onClick={() => onOpen(example)}
+        aria-label={`Open ${example.title} (${language})`}
+      >
+        <FolderOpenIcon aria-hidden="true" />
+        Open
+      </button>
+    </li>
   );
 }
 

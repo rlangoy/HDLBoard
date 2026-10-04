@@ -43,10 +43,11 @@ export default function Page() {
   the About dialog from outside React (a native menu, for instance).
 
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
-`SettingsDialog`, `HelpDialog`, `FileExplorer`, `CodeEditor`,
+`SettingsDialog`, `HelpDialog`, `FileExplorer`, `ExamplesPane`, `CodeEditor`,
 `SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
-`ISSUES_URL`, `EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`,
-`VhdlFile`, `EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
+`ISSUES_URL`, `EXAMPLES`, `copyExample`, `filterExamples`, `Example`, `ExampleLanguage`,
+`EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`, `VhdlFile`,
+`EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
 ---
@@ -571,13 +572,16 @@ compiles and runs under GHDL (`--std=08`) or Icarus Verilog.
 ### `examples.ts` and `ExamplesPane`
 
 The **Examples** pill beside the Files panel's title toggles `ExamplesPane`, which
-covers the editor ("Available Examples": a search box and one card per example and
+covers the editor ("Available Examples": a search box, VHDL and Verilog checkboxes
+(both ticked at first) choosing which languages' cards show, and one card per example and
 language, with a VHDL/Verilog badge and a teal dot for a design, purple for a
 testbench). `EXAMPLES` names each card's `EXAMPLE_FILES` ids, the opened file first;
 the AND gate testbench brings `and_gate` along so it runs. `copyExample` (pure,
 tested) copies them into the project under fresh `file-N` ids, but never a file
 whose name the project already has (ignoring case): that one is kept as it is and
-opened instead, so a student's edits are never overwritten. The console gets a line
+opened instead, so a student's edits are never overwritten. The opened file also
+becomes the Top File, so Start runs it, unless a simulation is running (the top
+file is locked until it stops, as for its dot in the Files panel). The console gets a line
 per copied or kept file. Opening a file, adding one, or a jump to an error closes the
 pane; so do its ✕ and Escape.
 

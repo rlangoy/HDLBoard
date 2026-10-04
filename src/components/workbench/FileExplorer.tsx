@@ -21,8 +21,9 @@ export interface FileExplorerProps {
   onDownload: (id: string) => void;
   /** Save the whole project (every folder) as one .zip. */
   onDownloadAll: () => void;
-  /** Show the Examples pane over the editor (or hide it again). */
-  onExamples: () => void;
+  /** Show the Examples pane over the editor, or hide it again. */
+  onToggleExamples: () => void;
+  /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList) => void;
@@ -86,7 +87,7 @@ export function FileExplorer({
   onDelete,
   onDownload,
   onDownloadAll,
-  onExamples,
+  onToggleExamples,
   examplesOpen = false,
   onFilesDropped,
   topFileId,
@@ -177,7 +178,7 @@ export function FileExplorer({
         <button
           type="button"
           className="wb-files__examples"
-          onClick={onExamples}
+          onClick={onToggleExamples}
           aria-pressed={examplesOpen}
           title="Browse the example designs and copy one into your files"
         >

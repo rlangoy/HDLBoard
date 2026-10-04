@@ -79,6 +79,7 @@ function timestamp(): string {
 }
 
 let nextFileSeq = 1;
+const nextFileId = () => `file-${nextFileSeq++}`;
 
 // How long typing has to pause before the desktop app stores the workspace.
 /**
@@ -455,29 +456,30 @@ export function Workbench() {
   }, []);
 
   const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl'): string => {
-    const id = `file-${nextFileSeq++}`;
+    const id = nextFileId();
     setFiles((prev) => [...prev, { id, name, folder, content }]);
-    setOpenTabs((prev) => [...prev, id]);
-    setActiveTabId(id);
-    setExamplesOpen(false);
+    showNewFile(id);
     return id;
   };
 
+  // A file just added to `files`: its tab opens and becomes the active one.
+  const showNewFile = (id: string) => {
+    setOpenTabs((prev) => [...prev, id]);
+    setActiveTabId(id);
+    setExamplesOpen(false);
+  };
+
   // An example is copied into the project (a file it already has by that name is
-  // kept as it is, never overwritten) and its first file opens in the editor.
+  // kept as it is, never overwritten) and its first file opens in the editor as the
+  // Top File, so Start runs it (unless a simulation is running: the top stays put).
   const handleOpenExample = (example: Example) => {
-    const { added, kept, openId } = copyExample(example, filesRef.current, () => `file-${nextFileSeq++}`);
+    const { added, kept, openId } = copyExample(example, filesRef.current, nextFileId);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
     for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
-    if (openId === null) return;
-    if (added.length > 0) setFiles((prev) => [...prev, ...added]);
-    if (added.some((f) => f.id === openId)) {
-      setOpenTabs((prev) => [...prev, openId]);
-      setActiveTabId(openId);
-      setExamplesOpen(false);
-    } else {
-      handleOpenFile(openId);
-    }
+    setFiles((prev) => [...prev, ...added]);
+    if (added.some((f) => f.id === openId)) showNewFile(openId);
+    else handleOpenFile(openId);
+    handleSetTopFile(openId);
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is
@@ -822,7 +824,7 @@ export function Workbench() {
             onDelete={handleDeleteFile}
             onDownload={handleDownloadFile}
             onDownloadAll={handleDownloadAll}
-            onExamples={() => setExamplesOpen((open) => !open)}
+            onToggleExamples={() => setExamplesOpen((open) => !open)}
             examplesOpen={examplesOpen}
             onFilesDropped={handleFilesDropped}
             topFileId={topFileId}
