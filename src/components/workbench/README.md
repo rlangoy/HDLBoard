@@ -541,9 +541,11 @@ and `system`.
 ### `files.ts`
 
 `EXAMPLE_FILES: VhdlFile[]` — every built-in file: `DE1_SoC.vhdl`,
-`blinkTest.vhdl`, `keyCouter2Led.vhdl`, `and_gate.vhdl`, `and_gate_tb.vhd` under
-`vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v`,
-`and_gate.v`, `and_gate_tb.v` under `verilog/`. `STARTER_FILES` is what a first
+`blinkTest.vhdl`, `keyCouter2Led.vhdl`, `keyCounter7Seg.vhdl`, `and_gate.vhdl`,
+`and_gate_tb.vhd` under `vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`,
+`keyCouter2Led.v`, `keyCounter7Seg.v`, `and_gate.v`, `and_gate_tb.v` under `verilog/`.
+`keyCounter7Seg` counts KEY0 presses 00-99 in decimal on HEX1/HEX0 (KEY1 resets),
+detecting a press as a falling edge of the key sampled on `CLOCK_50`. `STARTER_FILES` is what a first
 start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are
 offered by the Examples pane (`examples.ts`, below). The files are copies of `tests/fixtures/{vhdl,verilog}/`, and
 `files.fixtures.test.ts` fails if either side drifts. `blinkTest.vhdl` and

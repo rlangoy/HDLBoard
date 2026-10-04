@@ -251,6 +251,151 @@ const KEY_COUNTER_2_LED_V = `module counter8 (
 endmodule
 `;
 
+const KEY_COUNTER_7SEG_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+-- Press KEY0 to count up, KEY1 to reset. The count (00..99) is shown in
+-- decimal on HEX1 (tens) and HEX0 (ones); the other displays stay blank.
+entity keyCounter7Seg is
+    port (
+        CLOCK_50 : in  std_logic;
+        KEY_N    : in  std_logic_vector(3 downto 0);
+        HEX0_N   : out std_logic_vector(6 downto 0);
+        HEX1_N   : out std_logic_vector(6 downto 0);
+        HEX2_N   : out std_logic_vector(6 downto 0);
+        HEX3_N   : out std_logic_vector(6 downto 0);
+        HEX4_N   : out std_logic_vector(6 downto 0);
+        HEX5_N   : out std_logic_vector(6 downto 0)
+    );
+end entity keyCounter7Seg;
+
+architecture rtl of keyCounter7Seg is
+
+    -- One digit (0..9) to its segments, active low: bit 0 is segment a,
+    -- bit 6 is segment g, and '0' lights a segment.
+    function to_segments(digit : integer range 0 to 9) return std_logic_vector is
+    begin
+        case digit is
+            when 0 => return "1000000";
+            when 1 => return "1111001";
+            when 2 => return "0100100";
+            when 3 => return "0110000";
+            when 4 => return "0011001";
+            when 5 => return "0010010";
+            when 6 => return "0000010";
+            when 7 => return "1111000";
+            when 8 => return "0000000";
+            when 9 => return "0010000";
+        end case;
+    end function;
+
+    signal ones     : integer range 0 to 9 := 0;
+    signal tens     : integer range 0 to 9 := 0;
+    -- The keys as they were on the previous clock edge: a press is the
+    -- edge where a key goes from released ('1') to pressed ('0').
+    signal key_prev : std_logic_vector(1 downto 0) := "11";
+
+begin
+
+    process (CLOCK_50)
+    begin
+        if rising_edge(CLOCK_50) then
+            key_prev <= KEY_N(1 downto 0);
+
+            if key_prev(1) = '1' and KEY_N(1) = '0' then         -- KEY1: reset
+                ones <= 0;
+                tens <= 0;
+            elsif key_prev(0) = '1' and KEY_N(0) = '0' then      -- KEY0: count up
+                if ones = 9 then
+                    ones <= 0;
+                    if tens = 9 then
+                        tens <= 0;                               -- 99 wraps to 00
+                    else
+                        tens <= tens + 1;
+                    end if;
+                else
+                    ones <= ones + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    HEX0_N <= to_segments(ones);
+    HEX1_N <= to_segments(tens);
+
+    -- Unused displays: all segments off (active low).
+    HEX2_N <= (others => '1');
+    HEX3_N <= (others => '1');
+    HEX4_N <= (others => '1');
+    HEX5_N <= (others => '1');
+
+end architecture rtl;
+`;
+
+const KEY_COUNTER_7SEG_V = `// Press KEY0 to count up, KEY1 to reset. The count (00..99) is shown in
+// decimal on HEX1 (tens) and HEX0 (ones); the other displays stay blank.
+module keyCounter7Seg (
+    input  wire        CLOCK_50,
+    input  wire [3:0]  KEY_N,
+    output wire [6:0]  HEX0_N,
+    output wire [6:0]  HEX1_N,
+    output wire [6:0]  HEX2_N,
+    output wire [6:0]  HEX3_N,
+    output wire [6:0]  HEX4_N,
+    output wire [6:0]  HEX5_N
+);
+    // One digit (0..9) to its segments, active low: bit 0 is segment a,
+    // bit 6 is segment g, and 0 lights a segment.
+    function [6:0] to_segments(input [3:0] digit);
+        case (digit)
+            4'd0: to_segments = 7'b1000000;
+            4'd1: to_segments = 7'b1111001;
+            4'd2: to_segments = 7'b0100100;
+            4'd3: to_segments = 7'b0110000;
+            4'd4: to_segments = 7'b0011001;
+            4'd5: to_segments = 7'b0010010;
+            4'd6: to_segments = 7'b0000010;
+            4'd7: to_segments = 7'b1111000;
+            4'd8: to_segments = 7'b0000000;
+            4'd9: to_segments = 7'b0010000;
+            default: to_segments = 7'b1111111;
+        endcase
+    endfunction
+
+    reg [3:0] ones = 4'd0;
+    reg [3:0] tens = 4'd0;
+    // The keys as they were on the previous clock edge: a press is the
+    // edge where a key goes from released (1) to pressed (0).
+    reg [1:0] key_prev = 2'b11;
+
+    always @(posedge CLOCK_50) begin
+        key_prev <= KEY_N[1:0];
+
+        if (key_prev[1] && !KEY_N[1]) begin              // KEY1: reset
+            ones <= 4'd0;
+            tens <= 4'd0;
+        end else if (key_prev[0] && !KEY_N[0]) begin     // KEY0: count up
+            if (ones == 4'd9) begin
+                ones <= 4'd0;
+                tens <= (tens == 4'd9) ? 4'd0 : tens + 4'd1; // 99 wraps to 00
+            end else begin
+                ones <= ones + 4'd1;
+            end
+        end
+    end
+
+    assign HEX0_N = to_segments(ones);
+    assign HEX1_N = to_segments(tens);
+
+    // Unused displays: all segments off (active low).
+    assign HEX2_N = 7'b1111111;
+    assign HEX3_N = 7'b1111111;
+    assign HEX4_N = 7'b1111111;
+    assign HEX5_N = 7'b1111111;
+endmodule
+`;
+
 const AND_GATE_VHD = `library ieee;
 use ieee.std_logic_1164.all;
 
@@ -419,11 +564,13 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
+  { id: 'key_counter_7seg', name: 'keyCounter7Seg.vhdl', folder: 'vhdl', content: KEY_COUNTER_7SEG_VHD },
   { id: 'and_gate', name: 'and_gate.vhdl', folder: 'vhdl', content: AND_GATE_VHD },
   { id: 'and_gate_tb', name: 'and_gate_tb.vhd', folder: 'vhdl', content: AND_GATE_TB_VHD },
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
+  { id: 'key_counter_7seg_v', name: 'keyCounter7Seg.v', folder: 'verilog', content: KEY_COUNTER_7SEG_V },
   { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
   { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },
 ];

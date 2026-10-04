@@ -59,6 +59,14 @@ const EXAMPLE_TEXTS: readonly ExampleText[] = [
     verilog: ['key_counter_2_led_v'],
   },
   {
+    key: 'key_counter_7seg',
+    title: 'Key Counter to 7-Segment',
+    description: 'Press KEY0 to count up on the 7-segment displays (00-99); KEY1 resets.',
+    role: 'design',
+    vhdl: ['key_counter_7seg'],
+    verilog: ['key_counter_7seg_v'],
+  },
+  {
     key: 'and_gate',
     title: 'AND Gate',
     description: 'Basic AND gate implementation.',
