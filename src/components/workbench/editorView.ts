@@ -42,7 +42,8 @@ export function resolveView(
   const pinHidesAnchor = pinned !== undefined && pinned !== 'both' && pair[pinned]?.fileId !== pair.anchorId;
   if (pinned) return pinHidesAnchor ? anchorView : pinned;
   if (preference === 'never') return anchorView;
-  if (preference === 'always') return 'both';
+  // Always splits whenever there is a testbench, however weak; a design without one keeps a single pane.
+  if (preference === 'always') return pair.tb ? 'both' : anchorView;
   const enough = event === 'run' ? pair.tbConfidence !== 'low' : pair.tbConfidence === 'high';
   return pair.tb && enough ? 'both' : anchorView; // B1, B2: the design side never decides
 }

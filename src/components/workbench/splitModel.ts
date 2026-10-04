@@ -9,7 +9,7 @@
  */
 
 import type { PaneRole } from './editorView';
-import { effectiveFile, findUnit, testbenchCandidates, unitKey } from './tbDetect';
+import { contradictsCode, effectiveFile, findUnit, testbenchCandidates, unitKey } from './tbDetect';
 import type {
   AnalyzedUnit, FileAnalysis, FileRole, PaneTarget, ProjectAnalysis, TestbenchOverrides, UnitRole,
 } from './tbDetect/types';
@@ -22,7 +22,8 @@ export interface FileChoice {
 
 /**
  * The same-language files a pane can be paired with: for the TB pane the designs,
- * for the RTL pane the testbenches — a file holding both counts as either.
+ * for the RTL pane the testbenches — a file holding both counts as either. A
+ * pairing the code rules out (contradictsCode) is not offered.
  */
 export function pairOptions(
   project: ProjectAnalysis,
@@ -33,8 +34,10 @@ export function pairOptions(
   const self = project.byFile.get(fileId);
   if (!self) return [];
   const wanted: readonly (FileRole | undefined)[] = pane === 'tb' ? ['rtl', 'mixed', undefined] : ['tb', 'mixed'];
+  const contradicts = (otherId: string) =>
+    pane === 'tb' ? contradictsCode(project, overrides, otherId, fileId) : contradictsCode(project, overrides, fileId, otherId);
   return [...project.byFile.keys()]
-    .filter((id) => id !== fileId)
+    .filter((id) => id !== fileId && !contradicts(id))
     .map((id) => effectiveFile(project, overrides, id))
     .filter((f): f is FileAnalysis => f !== undefined && f.language === self.language && wanted.includes(f.role))
     .map((f) => ({ fileId: f.fileId, name: f.name, role: f.role }))
@@ -80,6 +83,17 @@ export function unitOf(project: ProjectAnalysis, overrides: TestbenchOverrides, 
 export function withPair(overrides: TestbenchOverrides, designId: string, tbId: string): TestbenchOverrides {
   const pairs = Object.fromEntries(Object.entries(overrides.pairs).filter(([, tb]) => tb !== tbId));
   return { ...overrides, pairs: { ...pairs, [designId]: tbId } };
+}
+
+/**
+ * Overrides without the pairings the code rules out (contradictsCode): run at
+ * startup and after every analysis, so a stale pairing is neither shown nor saved.
+ * The same object when nothing is dropped.
+ */
+export function withoutContradictedPairs(project: ProjectAnalysis, overrides: TestbenchOverrides): TestbenchOverrides {
+  const kept = Object.entries(overrides.pairs).filter(([designId, tbId]) => !contradictsCode(project, overrides, designId, tbId));
+  if (kept.length === Object.keys(overrides.pairs).length) return overrides;
+  return { ...overrides, pairs: Object.fromEntries(kept) };
 }
 
 /** A role override, or `undefined` to clear it. */

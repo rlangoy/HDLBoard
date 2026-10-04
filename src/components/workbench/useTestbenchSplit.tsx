@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import type { PaneRun } from './EditorPaneHeader';
 import { paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
-import { testbenchesFor, withPair, withRole, withoutFile, type TestbenchChoice } from './splitModel';
+import { testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
 import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type EditorSplitProps } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
 import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
@@ -64,6 +64,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const { files, activeTabId, setActiveTabId, setOpenTabs } = options;
   const analysis = useTestbenchAnalysis(files);
   const overrides = useOverrides();
+  usePruneContradictedPairs(analysis.current, overrides);
   const [display, setDisplay] = useState<EditorDisplay | null>(null);
   const displayRef = useRef(display);
   displayRef.current = display;
@@ -173,6 +174,18 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
     editorProps,
   };
+}
+
+/**
+ * Drops stored pairings the code rules out whenever the analysis or the overrides
+ * change: at startup (a workspace restored from an older session) and after edits.
+ */
+function usePruneContradictedPairs(project: ProjectAnalysis, overrides: ReturnType<typeof useOverrides>) {
+  const { value, set } = overrides;
+  useEffect(() => {
+    const pruned = withoutContradictedPairs(project, value);
+    if (pruned !== value) set(pruned);
+  }, [project, value, set]);
 }
 
 /** Overrides as state, mirrored in a ref so event handlers read the newest without waiting for a render. */

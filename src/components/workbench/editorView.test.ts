@@ -53,8 +53,13 @@ describe('resolveView', () => {
     expect(resolveView(pair('rtl', 'high', 'paired'), 'never', undefined, 'run')).toBe('rtl');
   });
 
-  test('Always: both, testbench or not', () => {
-    expect(resolveView(pair('rtl', 'low', 'paired', false), 'always', undefined, 'open')).toBe('both');
+  test('Always: both whenever there is a testbench, however weak', () => {
+    for (const c of confidences) expect(resolveView(pair('rtl', c, 'paired'), 'always', undefined, 'open')).toBe('both');
+    expect(resolveView(pair('tb', 'low', 'none'), 'always', undefined, 'open')).toBe('both');
+  });
+
+  test('Always: a design with no testbench keeps a single pane, as in Automatic', () => {
+    for (const e of events) expect(resolveView(pair('rtl', 'low', 'paired', false), 'always', undefined, e)).toBe('rtl');
   });
 });
 
