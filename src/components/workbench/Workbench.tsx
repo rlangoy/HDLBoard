@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
+  type MutableRefObject,
 } from 'react';
 import { Board, cx, zeroBits, type BitVector } from '../board';
 import { Leds } from '../Leds';
@@ -74,6 +75,13 @@ const DEFAULT_WS_PORT = 9010;
 const HDL_WS_PORT = Number(
   import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT,
 );
+
+/** Whether `flag` was set; reading it clears it. */
+function takeFlag(flag: MutableRefObject<boolean>): boolean {
+  const wasSet = flag.current;
+  flag.current = false;
+  return wasSet;
+}
 
 function timestamp(): string {
   const d = new Date();
@@ -256,6 +264,10 @@ export function Workbench() {
     return () => observer.disconnect();
   }, []);
 
+  // The ongoing run is to end without its closing messages, because an example was
+  // opened and the console now belongs to it (handleOpenExample).
+  const quietEnd = useRef(false);
+
   const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
     logSeq.current += 1;
     setLogLines((prev) => appendCapped(prev, { id: logSeq.current, time: timestamp(), text, tone }));
@@ -321,6 +333,11 @@ export function Workbench() {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
         onReady: () => {
+          // A quiet end asked for while it compiled: the server takes Stop only now.
+          if (quietEnd.current) {
+            clientRef.current?.stop();
+            return;
+          }
           setStatus('running');
           appendLog('Simulation running ...', 'success');
           elapsedTimer.current = window.setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
@@ -340,9 +357,11 @@ export function Workbench() {
           recordDiagnostics(text, filesRef.current);
         },
         onError: (stage, text) => {
-          appendLog(`${stage} error:\n${text}`, 'error');
-          const advised = recordErrorDiagnostics(text, filesRef.current);
-          if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
+          if (!takeFlag(quietEnd)) {
+            appendLog(`${stage} error:\n${text}`, 'error');
+            const advised = recordErrorDiagnostics(text, filesRef.current);
+            if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
+          }
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
@@ -355,8 +374,9 @@ export function Workbench() {
           // on its own, distinct from the user clicking Stop — the green
           // tone matches 'Simulation running ...' above, since this is
           // the design finishing correctly, not being interrupted.
-          if (reason === 'completed') appendLog('Simulation complete.', 'success');
-          else appendLog('Simulation stopped.');
+          // A run ended for an opened example adds nothing: the console is the example's now.
+          const completed = reason === 'completed';
+          if (!takeFlag(quietEnd)) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
           blankBoard();
         },
         onClosed: () => {
@@ -422,10 +442,20 @@ export function Workbench() {
   // A compiling or running simulation: its top file stays put until it stops.
   const isSimulating = status !== 'stopped';
 
-  const handleSetTopFile = (id: string) => {
-    if (isSimulating) return;
+  const makeTop = (id: string) => {
     setTopFileId(id);
     setTopUnit(null);
+  };
+
+  const handleSetTopFile = (id: string) => {
+    if (!isSimulating) makeTop(id);
+  };
+
+  /** Ends an ongoing run without its closing messages: now if it runs, as soon as it is ready if it still compiles. */
+  const endRunQuietly = () => {
+    if (!isSimulating) return;
+    quietEnd.current = true;
+    if (status === 'running') getClient().stop();
   };
 
   const handleDownloadFile = (id: string) => {
@@ -469,15 +499,18 @@ export function Workbench() {
 
   // An example is copied into the project (a file it already has by that name is
   // kept as it is, never overwritten) and its first file opens in the editor as the
-  // Top File, so Start runs it (unless a simulation is running: the top stays put).
+  // Top File, so Start runs it. It starts from a clean slate: an ongoing simulation
+  // ends and the console is cleared, keeping only what the copy did.
   const handleOpenExample = (example: Example) => {
+    endRunQuietly();
+    setLogLines([]);
     const { added, kept, openId } = copyExample(example, filesRef.current, nextFileId);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
     for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
     setFiles((prev) => [...prev, ...added]);
     if (added.some((f) => f.id === openId)) showNewFile(openId);
     else handleOpenFile(openId);
-    handleSetTopFile(openId);
+    makeTop(openId);
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is
@@ -580,6 +613,7 @@ export function Workbench() {
   // A new run starts with an empty console, so what it shows is this run's output only.
   // `runTarget`: the unit to elaborate when the backend must be told (`RUN <file> @<unit>`, D20).
   const startRun = (fileId: string | null, runTarget: string | null = null, unitName: string | null = null) => {
+    quietEnd.current = false;
     setLogLines([]);
     stopElapsedTimer();
     setElapsedSeconds(0);
