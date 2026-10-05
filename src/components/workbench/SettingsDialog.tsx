@@ -6,6 +6,8 @@ import { Dialog } from './Dialog';
 import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
 import type { SplitPreference } from './editorView';
+import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL, type ExampleLanguage } from './examples';
+import type { PreferredLanguages } from './languagePrefs';
 import { APP_NAME, ISSUES_URL } from './project';
 import { TEXT } from './testbenchText';
 import './SettingsDialog.css';
@@ -13,9 +15,44 @@ import './SettingsDialog.css';
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Languages: the Examples pane opens with these ticked (languagePrefs.ts). */
+  preferredLanguages: PreferredLanguages;
+  onPreferredLanguagesChange: (languages: PreferredLanguages) => void;
   /** Editor → Testbench split view (docs/impl_split_screen.md § 4.2). */
   splitPreference: SplitPreference;
   onSplitPreferenceChange: (preference: SplitPreference) => void;
+}
+
+/**
+ * VHDL and/or Verilog: which examples the Examples pane opens with. At least one
+ * stays ticked — the last one cannot be cleared.
+ */
+function LanguageSetting({ value, onChange }: { value: PreferredLanguages; onChange: (l: PreferredLanguages) => void }) {
+  const toggle = (language: ExampleLanguage) => {
+    const next = new Set(value);
+    if (next.has(language)) next.delete(language);
+    else next.add(language);
+    onChange(next);
+  };
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">Languages</legend>
+      <div className="wb-settings__languages">
+        {EXAMPLE_LANGUAGES.map((language) => {
+          const isLastTicked = value.size === 1 && value.has(language);
+          return (
+            <label key={language} className="wb-settings__option" title={isLastTicked ? 'Keep at least one language' : undefined}>
+              <input type="checkbox" checked={value.has(language)} disabled={isLastTicked} onChange={() => toggle(language)} />
+              <strong>{LANGUAGE_LABEL[language]}</strong>
+            </label>
+          );
+        })}
+      </div>
+      <span className="wb-settings__note">
+        The languages you work in. Examples opens with these ticked; you can still change it there.
+      </span>
+    </fieldset>
+  );
 }
 
 const SPLIT_CHOICES: readonly { value: SplitPreference; label: string; hint: string }[] = [
@@ -45,13 +82,21 @@ function SplitSetting({ value, onChange }: { value: SplitPreference; onChange: (
 const NEW_ISSUE = `${ISSUES_URL}/new`;
 
 /**
- * Both builds have the testbench split preference. The desktop app also has — project storage — which
+ * Both builds have the language and testbench split preferences, kept in localStorage,
+ * which the desktop app also keeps between launches. The desktop app also has project storage, which
  * its preload exposes on `window.hdlboard` (desktop.ts); it applies on the
  * next launch. Either way the dialog points at the one thing a user can do
  * to change the program: open an issue. The two buttons open GitHub's new-issue page with a title
  * prefix, so a report arrives already sorted into bug or suggestion.
  */
-export function SettingsDialog({ open, onClose, splitPreference, onSplitPreferenceChange }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  onClose,
+  preferredLanguages,
+  onPreferredLanguagesChange,
+  splitPreference,
+  onSplitPreferenceChange,
+}: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
   const [persist, setPersist] = useState(() => bridge?.enabled ?? false);
@@ -75,6 +120,7 @@ export function SettingsDialog({ open, onClose, splitPreference, onSplitPreferen
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
+      <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       {bridge && (
         <div className="wb-settings__empty">

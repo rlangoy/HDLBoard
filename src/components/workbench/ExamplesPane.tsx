@@ -5,10 +5,16 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { EXAMPLES, EXAMPLE_LANGUAGES, LANGUAGE_LABEL, filterExamples, type Example, type ExampleLanguage } from './examples';
 import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
+import type { PreferredLanguages } from './languagePrefs';
 import { ScrollArea } from './ScrollArea';
 import './ExamplesPane.css';
 
 export interface ExamplesPaneProps {
+  /**
+   * The languages ticked when the pane opens: Settings › Languages. Ticking here
+   * changes this visit's list only, never the setting.
+   */
+  initialLanguages: PreferredLanguages;
   /** Copy the example's files into the project and open the first one. */
   onOpen: (example: Example) => void;
   onClose: () => void;
@@ -19,9 +25,9 @@ export interface ExamplesPaneProps {
  * mounted underneath, so its scroll position and undo history survive). Each card copies
  * its example into the Files panel; the built-in files are never edited.
  */
-export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
+export function ExamplesPane({ initialLanguages, onOpen, onClose }: ExamplesPaneProps) {
   const [query, setQuery] = useState('');
-  const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(() => new Set(EXAMPLE_LANGUAGES));
+  const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
   const shown = filterExamples(EXAMPLES, query, languages);
 
