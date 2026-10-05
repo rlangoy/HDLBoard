@@ -56,8 +56,13 @@ export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ..
   const both = shown === 'both';
   // A fraction stored for a wider column (or older, smaller minimums) still keeps each pane at its minimum.
   const fraction = clampFraction(split.prefs.tbFraction, split.bounds);
-  const columns = split.dragCollapsed === 'tb' ? [0, 1] : split.dragCollapsed === 'rtl' ? [1, 0] : [fraction, 1 - fraction];
-  const style = { '--wb-split-tb': `${columns[0]}fr`, '--wb-split-rtl': `${columns[1]}fr` } as CSSProperties;
+  const tracks =
+    split.dragCollapsed === 'tb'
+      ? ['0px', '1fr']
+      : split.dragCollapsed === 'rtl'
+        ? ['1fr', '0px']
+        : [`${fraction}fr`, `${1 - fraction}fr`];
+  const style = { '--wb-split-tb': tracks[0], '--wb-split-rtl': tracks[1] } as CSSProperties;
   const pane = (role: PaneRole, model: SplitPaneModel) => (
     <SplitPane role={role} model={model} focused={focusedPane === role} onFocus={() => onFocusPane(role)} hidden={split.dragCollapsed === role} {...shared} />
   );
