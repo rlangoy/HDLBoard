@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { before, describe, test, type TestContext } from 'node:test';
 import { TIMING_WITHOUT_CLOCK_50, TIMING_WITH_CLOCK_50 } from '../engines/boardTiming.js';
 import { selectEngine } from '../engines/selectEngine.js';
-import type { PrepareResult } from '../engines/types.js';
+import type { PrepareResult, RunPlan } from '../engines/types.js';
 import { verilogEngine } from '../engines/verilogEngine.js';
 import { icarusForTests } from '../testSupport/icarus.js';
 import { readFixture } from '../testSupport/fixture.js';
@@ -124,4 +124,52 @@ describe('VerilogEngine.prepare', { skip: icarus.skip }, () => {
     assert.ok(result.ok, result.ok ? '' : result.text);
     assert.equal(result.plan.mode, 'board');
   });
+
+  test('runs the top file’s own module when another file declares one by the same name', async (t) => {
+    // A copied testbench that kept its module name: both files declare dup_tb. Icarus
+    // refuses a module declared twice, so neither could run before.
+    const original = { name: 'dup_tb.v', content: displayingTestbench('dup_tb', 'from the original') };
+    const copy = { name: 'mytest_tb.v', content: displayingTestbench('dup_tb', 'from my copy') };
+    for (const files of [[copy, original], [original, copy]]) {
+      const result = await verilogEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
+      assert.ok(result.ok, result.ok ? '' : result.text);
+      const output = await batchOutput(result.plan);
+      assert.match(output, /from my copy/);
+      assert.doesNotMatch(output, /from the original/);
+    }
+  });
+
+  test('says which file a run uses when another file declares the same module', async (t) => {
+    const files = [
+      { name: 'dup_tb.v', content: displayingTestbench('dup_tb', 'from the original') },
+      { name: 'mytest_tb.v', content: displayingTestbench('dup_tb', 'from my copy') },
+    ];
+    const result = await verilogEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
+    assert.ok(result.ok, result.ok ? '' : result.text);
+    assert.ok(
+      result.plan.messages.includes(
+        'Note: dup_tb is declared in mytest_tb.v and in dup_tb.v. This run uses the one in mytest_tb.v; ' +
+          'give each its own module name to keep them apart.',
+      ),
+      result.plan.messages.join('\n'),
+    );
+  });
 });
+
+/** A portless testbench that only prints `text`. */
+function displayingTestbench(module: string, text: string): string {
+  return `module ${module};
+  initial begin
+    $display("${text}");
+    $finish;
+  end
+endmodule
+`;
+}
+
+/** Everything a batch run prints. */
+async function batchOutput(plan: RunPlan): Promise<string> {
+  const lines: string[] = [];
+  await verilogEngine.startBatchRun(plan, (line) => lines.push(line), 20_000).done;
+  return lines.join('\n');
+}

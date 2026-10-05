@@ -19,6 +19,7 @@ import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
+import { sameNameNotes } from './sameNameNotes.js';
 import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
@@ -156,15 +157,6 @@ function otherFilesDeclaring(files: readonly VhdlFileInput[], top: TopEntity): s
     .map((file) => file.name);
 }
 
-/** Tells the student which declaration ran, and how to keep them apart; none when no other file declares it. */
-function sameNameNotes(top: TopEntity, others: readonly string[]): string[] {
-  if (others.length === 0) return [];
-  return [
-    `Note: ${top.name} is declared in ${top.fileName} and in ${others.join(', ')}. ` +
-      `This run uses the one in ${top.fileName}; give each its own entity name to keep them apart.`,
-  ];
-}
-
 /** GHDL's library index files: `work-obj08.cf` for `--std=08`. */
 const WORK_LIBRARY_FILE = /^work-obj\d*\.cf$/;
 
@@ -199,7 +191,7 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
   const others = otherFilesDeclaring(files, top);
   const reanalysisError = others.length > 0 ? await analyzeFile(dir, top.fileName) : undefined;
   if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
-  const notes = sameNameNotes(top, others);
+  const notes = sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others });
 
   if (top.ports.size === 0) return prepareBatch(dir, top.name, notes);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';

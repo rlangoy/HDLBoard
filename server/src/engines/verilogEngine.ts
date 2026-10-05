@@ -21,6 +21,7 @@ import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench
 import { getToolPaths } from '../verilog/tools.js';
 import type { ToolPaths } from '../verilog/toolPaths.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
+import { sameNameNotes, type SameNameDeclarations } from './sameNameNotes.js';
 import type { PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const CLOCK_BOARD_NAME = 'clock_50';
@@ -41,7 +42,7 @@ interface Build {
 }
 
 type Checked =
-  | { readonly ok: true; readonly top: string; readonly sources: readonly string[] }
+  | { readonly ok: true; readonly topFile: string; readonly top: string; readonly sources: readonly string[] }
   | { readonly ok: false; readonly stage: ErrorStage; readonly text: string };
 
 /** Each name checked once: the first reason a name is unusable, or else the names of the `.v` sources. */
@@ -63,7 +64,27 @@ function checkProject(files: readonly VhdlFileInput[], topFile: string | undefin
   if (top === undefined) return { ok: false, stage: 'analyze', text: `Top file ${topFile ?? '(none)'} was not among the files sent.` };
   const choice = chooseTopModule(top.name, moduleNames(top.content), runTarget);
   if (!choice.ok) return { ok: false, stage: 'elaborate', text: choice.reason };
-  return { ok: true, top: choice.name, sources };
+  return { ok: true, topFile: top.name, top: choice.name, sources };
+}
+
+/**
+ * The sources besides the top file that declare a module the top file declares too — a
+ * testbench copied to a new file that kept its module name, say — and those modules.
+ * Icarus refuses a module declared twice, so these files are left out of the run and the
+ * top file's own module is the one that runs.
+ */
+function sameNamedElsewhere(files: readonly VhdlFileInput[], checked: Extract<Checked, { ok: true }>): SameNameDeclarations {
+  const topModules = moduleNames(files.find((file) => file.name === checked.topFile)?.content ?? '');
+  const topModulesIn = (file: VhdlFileInput) => moduleNames(file.content).filter((name) => topModules.includes(name));
+  const others = files.filter(
+    (file) => file.name !== checked.topFile && checked.sources.includes(file.name) && topModulesIn(file).length > 0,
+  );
+  return {
+    unitKind: 'module',
+    names: [...new Set(others.flatMap(topModulesIn))],
+    topFile: checked.topFile,
+    otherFiles: others.map((file) => file.name),
+  };
 }
 
 function writeProject(dir: string, files: readonly VhdlFileInput[]): void {
@@ -126,7 +147,10 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
   writeProject(dir, files);
 
   const tools = getToolPaths();
-  const build: Build = { tools, dir, top: checked.top, sources: checked.sources, notes: await versionNotes(tools, dir) };
+  const sameNamed = sameNamedElsewhere(files, checked);
+  const sources = checked.sources.filter((name) => !sameNamed.otherFiles.includes(name));
+  const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
+  const build: Build = { tools, dir, top: checked.top, sources, notes };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
   return isBoardDesign(ports.ports) ? prepareBoard(build, ports.ports) : prepareBatch(build, ports.ports);
