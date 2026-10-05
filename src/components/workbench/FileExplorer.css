@@ -490,3 +490,29 @@
   height: 16px;
   flex: none;
 }
+
+/* Older browsers can miss flex gap support. Keep the intended spacing by
+   applying equivalent margins only when gap itself is unavailable. */
+@supports not (gap: 1px) {
+  .wb-files__drop-hint > * + *,
+  .wb-files__header > * + * {
+    margin-left: 8px;
+  }
+
+  .wb-files__actions > * + *,
+  .wb-files__examples > * + *,
+  .wb-files__folder-label > * + * {
+    margin-left: 6px;
+  }
+
+  .wb-files__upload > * + *,
+  .wb-files__new > * + *,
+  .wb-files__download-all > * + *,
+  .wb-files__file > * + * {
+    margin-left: 8px;
+  }
+
+  .wb-files__row-actions > * + * {
+    margin-left: 2px;
+  }
+}
