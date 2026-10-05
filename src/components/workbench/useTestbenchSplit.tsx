@@ -3,12 +3,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { PaneRun } from './EditorPaneHeader';
-import { paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
+import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
 import { testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
 import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type EditorSplitProps } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
-import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
+import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
 import { useEditorSplit, type EditorSplit } from './useEditorSplit';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
@@ -41,6 +41,10 @@ export interface TestbenchSplit {
   readonly restoreOverrides: (overrides: TestbenchOverrides) => void;
   /** Pair a design with a testbench without re-pairing now: the file may not be in state yet. */
   readonly setPairOverride: (designId: string, tbId: string) => void;
+  /** The files in the editor's panes now, as the panes show them. */
+  readonly shownFileIds: readonly string[];
+  /** A file's role from the current analysis, with its override applied; for the file lists. */
+  readonly roleOf: (fileId: string) => FileRole | undefined;
   /** A file's analysis, up to date and with its role override applied. */
   readonly fileAnalysis: (fileId: string) => FileAnalysis | undefined;
   /** The testbench units that could run this design unit instead of the board (§ 4.10). */
@@ -164,6 +168,8 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     split,
     overrides: overrides.value,
     restoreOverrides: overrides.set,
+    shownFileIds: display ? shownFileIds(display, narrowView(display.view, display.focusedPane, split.canSplit)) : [],
+    roleOf: (fileId) => effectiveFile(analysis.current, overrides.value, fileId)?.role,
     setPairOverride: (designId, tbId) => overrides.set(withPair(overrides.ref.current, designId, tbId)),
     fileAnalysis: (fileId) => effectiveFile(analysis.flush(), overrides.ref.current, fileId),
     testbenchesFor: (fileId, unitName) =>
@@ -199,9 +205,9 @@ function useOverrides() {
   return { value, ref, set };
 }
 
-const shownFileIds = (d: EditorDisplay): string[] => {
-  const tb = d.view === 'rtl' ? undefined : d.pair.tb?.fileId;
-  const rtl = d.view === 'tb' ? undefined : d.pair.rtl?.fileId;
+const shownFileIds = (d: EditorDisplay, view: EditorView = d.view): string[] => {
+  const tb = view === 'rtl' ? undefined : d.pair.tb?.fileId;
+  const rtl = view === 'tb' ? undefined : d.pair.rtl?.fileId;
   return [tb, rtl].filter((id): id is string => id !== undefined);
 };
 

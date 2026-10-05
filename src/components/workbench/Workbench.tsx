@@ -42,6 +42,8 @@ import { filesInZip, isZipName } from './zipUpload';
 import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
+import { countSeverities, type LineDiagnostic } from './diagnosticStore';
+import { fileRows } from './fileRows';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, type PaneRole } from './editorView';
@@ -89,6 +91,8 @@ const nextFileId = () => `file-${nextFileSeq++}`;
 const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
 const AUTOSAVE_DELAY_MS = 600;
+
+const NO_LINES: readonly LineDiagnostic[] = [];
 
 /** A design run waiting on RunTestbenchDialog: what runs if the student picks "Run … anyway". */
 interface RunChoice {
@@ -714,6 +718,14 @@ export function Workbench() {
     .filter((f): f is VhdlFile => f !== undefined)
     .map((f) => ({ id: f.id, name: f.name, content: f.content }));
 
+  // The files as the Files panel draws them (docs/cleanup_file_tabs.md § 5.5).
+  const rows = fileRows(files, {
+    shownIds: tb.shownFileIds,
+    topFileId,
+    roleOf: tb.roleOf,
+    problemsOf: (id) => countSeverities(diagnostics.byFile[id] ?? NO_LINES),
+  });
+
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
   const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
@@ -814,8 +826,7 @@ export function Workbench() {
             onStop={handleStop}
           />
           <FileExplorer
-            files={files}
-            activeFileId={activeTabId}
+            rows={rows}
             onSelect={handleOpenFile}
             onUpload={handleUploadClick}
             onNewFile={handleNewFile}
@@ -826,7 +837,6 @@ export function Workbench() {
             onToggleExamples={() => setExamplesOpen((open) => !open)}
             examplesOpen={examplesOpen}
             onFilesDropped={handleFilesDropped}
-            topFileId={topFileId}
             onSetTopFile={handleSetTopFile}
             topLocked={isSimulating}
           />

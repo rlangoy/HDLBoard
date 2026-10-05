@@ -28,6 +28,11 @@
   --wb-role-tb-tint: #f3e8ff;
   --wb-role-rtl-ink: #0f766e;
   --wb-role-rtl-tint: #ccfbf1;
+  /* A design's chip in the file lists and the plain header (docs/cleanup_file_tabs.md
+     D6): quiet, so a testbench's flask stands out. >= 3:1 on every row background. */
+  --wb-role-quiet-ink: #7c8aa0;
+  /* The header's file menu (§ 5.4). */
+  --wb-file-menu-w: 280px;
   /* Pane header accent (D25): top border in the ink, strip in the tint. */
   --wb-role-accent-w: 3px;
   /* Same width as .wb-resizer, so the split divider looks like the other three. */

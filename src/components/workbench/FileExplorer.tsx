@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
-import type { VhdlFile } from './files';
+import { rowsByFolder, type FileRow } from './fileRows';
+import { FileRowLabel } from './FileRowLabel';
 import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
-  files: VhdlFile[];
-  activeFileId: string | null;
+  /** Every file, in Files order, with what its row shows (fileRows.ts). */
+  rows: readonly FileRow[];
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
@@ -27,18 +28,13 @@ export interface FileExplorerProps {
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList) => void;
-  /** The design file a run starts from — a blue dot, vs. every other design file's gray circle. Its folder picks the simulator. */
-  topFileId: string | null;
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
 }
 
-const FOLDER_ORDER: VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
-
 interface TopDotButtonProps {
-  file: VhdlFile;
-  isTop: boolean;
+  file: FileRow;
   /** A simulation is running: no other file can become top until it stops. */
   locked: boolean;
   onSetTop: (id: string) => void;
@@ -54,7 +50,8 @@ function topDotTitle(isTop: boolean, locked: boolean): string {
  * click a grey one to make that file top. Disabled on the top file (a second
  * click there would do nothing) and, while `locked`, on every other one too.
  */
-function TopDotButton({ file, isTop, locked, onSetTop }: TopDotButtonProps) {
+function TopDotButton({ file, locked, onSetTop }: TopDotButtonProps) {
+  const { isTop } = file;
   return (
     <button
       type="button"
@@ -71,15 +68,15 @@ function TopDotButton({ file, isTop, locked, onSetTop }: TopDotButtonProps) {
 }
 
 /**
- * The "Files" panel: Examples beside the title, upload / new-file / download-all
+ * The "Files" panel, the project's one file list (docs/cleanup_file_tabs.md F1):
+ * Examples beside the title, upload / new-file / download-all
  * on one row below, then the folder tree —
  * `vhdl/` and `verilog/` for designs and `work/` for an uploaded VHDL `tb_*`
  * testbench. A folder with no files is not drawn, so the starter project
  * shows only `vhdl/`.
  */
 export function FileExplorer({
-  files,
-  activeFileId,
+  rows,
   onSelect,
   onUpload,
   onNewFile,
@@ -90,7 +87,6 @@ export function FileExplorer({
   onToggleExamples,
   examplesOpen = false,
   onFilesDropped,
-  topFileId,
   onSetTopFile,
   topLocked = false,
 }: FileExplorerProps) {
@@ -102,6 +98,7 @@ export function FileExplorer({
   // so a naive "set false on dragleave" flickers the highlight off and on
   // as the pointer crosses every row underneath it.
   const [dragDepth, setDragDepth] = useState(0);
+  const treeRef = useScrollShownIntoView(rows);
 
   const handleDragEnter = (e: DragEvent<HTMLElement>) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -131,7 +128,7 @@ export function FileExplorer({
     setCollapsed((prev) => ({ ...prev, [folder]: !prev[folder] }));
   };
 
-  const startRename = (f: VhdlFile) => {
+  const startRename = (f: FileRow) => {
     setRenamingId(f.id);
     setDraftName(f.name);
   };
@@ -152,7 +149,7 @@ export function FileExplorer({
     }
   };
 
-  const handleDelete = (f: VhdlFile) => {
+  const handleDelete = (f: FileRow) => {
     if (window.confirm(`Delete ${f.name}? This cannot be undone.`)) {
       onDelete(f.id);
     }
@@ -205,7 +202,7 @@ export function FileExplorer({
           type="button"
           className="wb-files__download-all"
           onClick={onDownloadAll}
-          disabled={files.length === 0}
+          disabled={rows.length === 0}
           title="Download All: save every file as one .zip, keeping the folders"
         >
           <FolderZipIcon className="wb-files__action-icon" aria-hidden="true" />
@@ -215,10 +212,8 @@ export function FileExplorer({
 
       {/* Only the tree scrolls: the header and buttons above stay put. */}
       <ScrollArea className="wb-files__scroll">
-        <div className="wb-files__tree" role="tree">
-          {FOLDER_ORDER.map((folder) => {
-            const inFolder = files.filter((f) => f.folder === folder);
-            if (inFolder.length === 0) return null;
+        <div className="wb-files__tree" role="tree" ref={treeRef}>
+          {rowsByFolder(rows).map(({ folder, rows: inFolder }) => {
             const isCollapsed = Boolean(collapsed[folder]);
             return (
               <div className="wb-files__folder" key={folder}>
@@ -236,13 +231,10 @@ export function FileExplorer({
                   <ul className="wb-files__list" role="group">
                     {inFolder.map((f) => (
                       <li key={f.id}>
-                        <div
-                          className={cx('wb-files__row', f.id === activeFileId && 'is-active')}
-                        >
+                        <div className={cx('wb-files__row', f.shown && 'is-shown')}>
                           {hasTopDot(folder) && (
                             <TopDotButton
                               file={f}
-                              isTop={f.id === topFileId}
                               locked={topLocked}
                               onSetTop={onSetTopFile}
                             />
@@ -271,13 +263,13 @@ export function FileExplorer({
                             <button
                               type="button"
                               role="treeitem"
-                              aria-selected={f.id === activeFileId}
+                              aria-selected={f.shown}
+                              title={f.name}
                               className={cx('wb-files__file', hasTopDot(folder) && 'wb-files__file--has-top-dot')}
                               onClick={() => onSelect(f.id)}
                               onDoubleClick={() => startRename(f)}
                             >
-                              <FileIcon className="wb-icon--file" aria-hidden="true" />
-                              <span className="wb-files__label-text">{f.name}</span>
+                              <FileRowLabel row={f} />
                             </button>
                           )}
                           {renamingId !== f.id && (
@@ -323,6 +315,22 @@ export function FileExplorer({
       </ScrollArea>
     </aside>
   );
+}
+
+/**
+ * Keeps a shown file's row in sight when what is shown changes, e.g. after a pick in
+ * the header's file menu. A collapsed folder stays collapsed: the student closed it.
+ */
+function useScrollShownIntoView(rows: readonly FileRow[]) {
+  const treeRef = useRef<HTMLDivElement>(null);
+  const shownKey = rows
+    .filter((row) => row.shown)
+    .map((row) => row.id)
+    .join('|');
+  useEffect(() => {
+    treeRef.current?.querySelector('.wb-files__row.is-shown')?.scrollIntoView({ block: 'nearest' });
+  }, [shownKey]);
+  return treeRef;
 }
 
 export default FileExplorer;
