@@ -12,7 +12,7 @@
 import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getGhdlExe, runBatch, startPersistentRun } from '../ghdl.js';
-import { findTopEntity, type TopEntity } from '../portDetect.js';
+import { findEntityNames, findTopEntity, type TopEntity } from '../portDetect.js';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
@@ -73,11 +73,11 @@ async function analyzeToFixedPoint(dir: string, files: readonly VhdlFileInput[])
 }
 
 /** A standalone testbench supplies its own stimuli, so its polling timing is never used. */
-function batchPlan(dir: string, entityName: string): RunPlan {
-  return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages: [] };
+function batchPlan(dir: string, entityName: string, messages: readonly string[]): RunPlan {
+  return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
 }
 
-/** `messages`: the GHDL banner, then the warnings about extra ports. */
+/** `messages`: the GHDL banner, a note on a same-named entity, then the warnings about extra ports. */
 function boardPlan(dir: string, timing: BoardTiming, messages: readonly string[]): RunPlan {
   return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages };
 }
@@ -103,14 +103,14 @@ async function ghdlBanner(dir: string): Promise<string | undefined> {
 }
 
 /** A genuinely portless entity: no wrapper, run directly (see `runBatch`'s own doc comment). */
-async function prepareBatch(dir: string, entityName: string): Promise<PrepareResult> {
+async function prepareBatch(dir: string, entityName: string, notes: readonly string[]): Promise<PrepareResult> {
   const elaborated = await ghdl(['-e', GHDL_STANDARD, entityName], dir);
   if (elaborated.code !== 0) return failure('elaborate', elaborated.err);
-  return { ok: true, plan: batchPlan(dir, entityName) };
+  return { ok: true, plan: batchPlan(dir, entityName, notes) };
 }
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
-async function prepareBoard(dir: string, top: TopEntity, topContent: string): Promise<PrepareResult> {
+async function prepareBoard(dir: string, top: TopEntity, topContent: string, notes: readonly string[]): Promise<PrepareResult> {
   // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
   // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
   const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
@@ -141,8 +141,28 @@ async function prepareBoard(dir: string, top: TopEntity, topContent: string): Pr
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(top.ports.has('clock_50'));
   const banner = await ghdlBanner(dir);
-  const messages = [...(banner === undefined ? [] : [banner]), ...extraPorts.warnings];
+  const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...extraPorts.warnings];
   return { ok: true, plan: boardPlan(dir, timing, messages) };
+}
+
+/**
+ * The other files that declare an entity by the top's name — a testbench copied to a
+ * new file that kept its entity name, say. VHDL names ignore case.
+ */
+function otherFilesDeclaring(files: readonly VhdlFileInput[], top: TopEntity): string[] {
+  const sameName = (name: string) => name.toLowerCase() === top.name.toLowerCase();
+  return files
+    .filter((file) => file.name !== top.fileName && findEntityNames(file.content).some(sameName))
+    .map((file) => file.name);
+}
+
+/** Tells the student which declaration ran, and how to keep them apart; none when no other file declares it. */
+function sameNameNotes(top: TopEntity, others: readonly string[]): string[] {
+  if (others.length === 0) return [];
+  return [
+    `Note: ${top.name} is declared in ${top.fileName} and in ${others.join(', ')}. ` +
+      `This run uses the one in ${top.fileName}; give each its own entity name to keep them apart.`,
+  ];
 }
 
 /** GHDL's library index files: `work-obj08.cf` for `--std=08`. */
@@ -173,9 +193,17 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
 
   const top = findTopEntity([...files], topFile, runTarget);
   if ('message' in top) return failure('elaborate', top.message);
-  if (top.ports.size === 0) return prepareBatch(dir, top.name);
+
+  // The library holds whichever same-named entity was analysed last: analysing the top's
+  // file once more makes its own entity the one that is elaborated and run.
+  const others = otherFilesDeclaring(files, top);
+  const reanalysisError = others.length > 0 ? await analyzeFile(dir, top.fileName) : undefined;
+  if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
+  const notes = sameNameNotes(top, others);
+
+  if (top.ports.size === 0) return prepareBatch(dir, top.name, notes);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
-  return prepareBoard(dir, top, topContent);
+  return prepareBoard(dir, top, topContent, notes);
 }
 
 /** File names arrive relative to the session directory; GHDL has always been given absolute paths. */
