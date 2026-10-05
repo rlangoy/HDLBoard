@@ -17,6 +17,14 @@ import type { VhdlFile } from './files';
 export type Folder = VhdlFile['folder'];
 export type Language = 'vhdl' | 'verilog';
 
+/** The order the Files panel and the file menu list folders in. */
+export const FOLDER_ORDER: readonly Folder[] = ['vhdl', 'verilog', 'work'];
+
+/** Every file in Files order: folder by folder, each in project order. */
+export function filesInFolderOrder<T extends Pick<VhdlFile, 'folder'>>(files: readonly T[]): T[] {
+  return FOLDER_ORDER.flatMap((folder) => files.filter((file) => file.folder === folder));
+}
+
 /**
  * The `accept` of the upload picker; a drop is not filtered by it, so `folderForUpload` decides too.
  * A .zip is opened and its files are added one by one (zipUpload.ts).

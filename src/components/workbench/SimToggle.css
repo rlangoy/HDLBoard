@@ -24,11 +24,11 @@
   height: 100%;
 }
 
-.wb-simtoggle:hover:not(:disabled) {
+.wb-simtoggle:hover:not(:disabled, .is-blocked) {
   background: rgba(15, 23, 42, 0.08); /* same tint as the tab's close button */
 }
 
-.wb-simtoggle:active:not(:disabled) {
+.wb-simtoggle:active:not(:disabled, .is-blocked) {
   transform: scale(0.95);
 }
 
@@ -37,7 +37,8 @@
   outline-offset: 2px;
 }
 
-.wb-simtoggle:disabled {
+.wb-simtoggle:disabled,
+.wb-simtoggle.is-blocked {
   opacity: 0.45;
   cursor: not-allowed;
 }

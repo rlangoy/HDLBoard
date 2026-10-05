@@ -21,9 +21,11 @@ const OPTIONS: readonly { view: EditorView; label: string; title: string; icon: 
 ];
 
 /**
- * [TB | Both | RTL], a radio group in the tab strip (docs/impl_split_screen.md
- * § 4.2, § 4.11): order matches the panes, arrows move the checked radio, a choice
- * pins the view for the shown pair. Icon and text on every option.
+ * [TB | Both | RTL], a radio group at the right end of the rightmost pane header
+ * (docs/impl_split_screen.md § 4.2, § 4.11; docs/cleanup_file_tabs.md § 5.3): order
+ * matches the panes, arrows move the checked radio, a choice pins the view for the
+ * shown pair. Icon and text on every option; beside the split's role badges the text
+ * is only read out and shown as a tooltip.
  */
 export function ViewSwitch({ view, onChange, bothDisabled }: ViewSwitchProps) {
   const groupRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export function ViewSwitch({ view, onChange, bothDisabled }: ViewSwitchProps) {
             onClick={() => !disabled && onChange(o.view)}
           >
             {o.icon}
-            <span>{o.label}</span>
+            <span className="wb-viewswitch__label">{o.label}</span>
           </button>
         );
       })}

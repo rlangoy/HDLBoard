@@ -3,50 +3,30 @@
 
 import { useState, type DragEvent, type ReactNode } from 'react';
 import { cx } from '../board';
-import { NO_DIAGNOSTICS, type DiagnosticsByFile, type LineDiagnostic } from './diagnosticStore';
-import { EditorSurface, type EditorTab } from './EditorSurface';
-import { EditorTabStrip, type TabRunControl } from './EditorTabStrip';
+import { NO_DIAGNOSTICS, type DiagnosticsByFile } from './diagnosticStore';
+import type { EditorTab } from './EditorSurface';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
 import { SplitEditor, type SplitEditorProps } from './SplitEditor';
-import type { RevealRequest } from './useRevealLine';
 import './CodeEditor.css';
 
-export type { EditorTab, TabRunControl };
+export type { EditorTab };
 
 export interface CodeEditorProps {
-  tabs: EditorTab[];
-  activeTabId: string | null;
-  onSelectTab: (id: string) => void;
-  onCloseTab: (id: string) => void;
-  onAddTab: () => void;
   onChange: (id: string, content: string) => void;
   /** Files dropped anywhere on the editor pane — imported the same way a drop on the Files panel is. */
   onFilesDropped: (files: FileList) => void;
-  /**
-   * The one tab with a play/stop icon — Play on the active tab while nothing
-   * runs, Stop on the running file's tab while a simulation runs — or null.
-   */
-  tabRun?: TabRunControl | null;
   /** Compiler problems to mark, per file id (see diagnosticStore.ts). */
   diagnostics?: DiagnosticsByFile;
   /** The student clicked in, or edited, this file's code pane: its markers should go. */
   onDismissDiagnostics?: (fileId: string) => void;
-  /** Show this line of its file (opened and active), caret at its start. */
-  reveal?: RevealRequest | null;
   /**
-   * The testbench split (docs/impl_split_screen.md § 6.5): the editor shows these
-   * one or two panes instead of the active tab alone. Without it, as before.
+   * The one or two panes, each under its header (docs/impl_split_screen.md § 6.5,
+   * docs/cleanup_file_tabs.md F3); none while nothing is shown.
    */
   split?: SplitEditorProps;
-  /** The split's other shown file, drawn lighter in the tab strip. */
-  visibleTabId?: string | null;
-  /** The role icon before each tab's name. */
-  tabIcon?: (tabId: string) => ReactNode;
-  /** At the tab strip's right end: the suggestion chip and the view switch. */
-  stripEnd?: ReactNode;
+  /** Shown instead of panes while the project has no files (docs/cleanup_file_tabs.md § 5.6). */
+  emptyProject?: ReactNode;
 }
-
-const NO_LINES: readonly LineDiagnostic[] = [];
 
 /**
  * The drop zone around the editor column. Same ref-counted-depth technique as
@@ -94,64 +74,23 @@ export function DropHint() {
   );
 }
 
-export function NoFileOpen() {
-  return (
-    <div className="wb-editor__empty">
-      <p>No file open</p>
-      <p className="wb-editor__empty-hint">Select a file from the Files panel to start editing.</p>
-    </div>
-  );
-}
-
-/** The tabbed VHDL and Verilog editor: one tab strip over one code surface, or over the testbench split. */
+/** The VHDL and Verilog editor: the file picked in the Files panel, alone or beside its testbench, with no tab strip. */
 export function CodeEditor({
-  tabs,
-  activeTabId,
-  onSelectTab,
-  onCloseTab,
-  onAddTab,
   onChange,
   onFilesDropped,
-  tabRun,
   diagnostics = NO_DIAGNOSTICS,
   onDismissDiagnostics,
-  reveal,
   split,
-  visibleTabId,
-  tabIcon,
-  stripEnd,
+  emptyProject,
 }: CodeEditorProps) {
   const drop = useFileDrop(onFilesDropped);
-  const active = tabs.find((t) => t.id === activeTabId) ?? null;
-
   return (
     <div className={cx('wb-editor', drop.dragging && 'is-drag-over')} {...drop.handlers}>
       {drop.dragging && <DropHint />}
-      <EditorTabStrip
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelectTab={onSelectTab}
-        onCloseTab={onCloseTab}
-        onAddTab={onAddTab}
-        tabRun={tabRun}
-        diagnostics={diagnostics}
-        visibleTabId={visibleTabId}
-        tabIcon={tabIcon}
-      >
-        {stripEnd}
-      </EditorTabStrip>
       {split ? (
         <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} />
-      ) : active ? (
-        <EditorSurface
-          file={active}
-          diagnostics={diagnostics[active.id] ?? NO_LINES}
-          onChange={onChange}
-          onDismissDiagnostics={onDismissDiagnostics}
-          reveal={reveal}
-        />
       ) : (
-        <NoFileOpen />
+        emptyProject
       )}
     </div>
   );

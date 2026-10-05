@@ -17,20 +17,20 @@ Run after changing `tbDetect/`, `editorView.ts`, `editorSplit.ts`, `useTestbench
 
 1. Click `counter.vhd` in the Explorer: TB pane left (`counter_tb.vhd`, violet header,
    "1/2 clock generator"), RTL pane right (`counter.vhd`, teal header) at `entity counter`.
-   The `counter_tb.vhd` tab is drawn lighter than the active one.
+   Both headers sit on one row (no tab strip); both files are highlighted in the Files panel.
 2. Play in the TB pane: the console shows `simulation stopped @225ns` and "Simulation
    complete."; the Simulation card reads `Top: counter_tb.vhd › counter_tb`.
 3. Click `alu_with_tb.vhd`: both panes show the same file, TB at the `alu_tb` process, RTL at
    `entity alu`. Type in one pane: the other updates at once.
-4. The tab's Play on `alu_with_tb.vhd` runs `alu_tb` (TB pane focused). Play in the RTL pane
+4. Mark `alu_with_tb.vhd` top (its dot) and press Start: it runs `alu_tb` (TB pane focused). Play in the RTL pane
    asks "Run testbench" (alu has no board ports) listing `alu_with_tb.vhd › alu_tb`.
 5. New File `scratch` (VHDL), replace its content with a portless entity and type
    `wait for 10 ns;` into a process: the layout does not change; about half a second after
    typing stops the chip "Testbench code found in scratch.vhd" appears. Open split view:
    TB pane left, RTL pane "This testbench does not instantiate a design".
-6. View switch: RTL pins the single design pane; switch tabs away and back: still RTL. Both
-   restores the split.
-7. Close the partner's tab while split: the split collapses and stays collapsed for that pair.
+6. View switch: RTL pins the single design pane; show another file and come back: still RTL.
+   Both restores the split.
+7. While a pane's run goes, the other pane's Play is greyed out with "Stop the simulation first".
 8. Narrow the window (or open Explorer and board wide) until the editor column is under
    405 px: one pane shows, Both is disabled with the "Too narrow" tooltip, TB/RTL toggle.
    Widen again: both panes return.

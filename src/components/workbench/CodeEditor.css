@@ -10,8 +10,8 @@
   background: #ffffff;
 }
 
-/* Drag-and-drop: dropping anywhere on the editor pane (tabs, the open
-   file, or the "No file open" empty state) imports the file(s) into the
+/* Drag-and-drop: dropping anywhere on the editor pane (a header, the
+   code, or the empty project) imports the file(s) into the
    project, the same as a drop on the Files panel — see FileExplorer.css
    for the matching treatment there and why dragDepth is a ref-counted
    integer rather than a boolean. */
@@ -64,82 +64,6 @@
   height: 2.3px;
   background: currentColor;
   border-radius: 1px;
-}
-
-/* ---- tab strip ------------------------------------------------------ */
-
-.wb-editor__tabs {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-sidebar-bg);
-  overflow-x: auto;
-  flex: none;
-}
-
-.wb-editor__tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px 0 14px;
-  height: 38px;
-  font-size: 13px;
-  color: var(--wb-text-muted);
-  background: transparent;
-  border-right: 1px solid var(--wb-border);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-
-.wb-editor__tab:hover {
-  background: var(--wb-hover);
-}
-
-.wb-editor__tab.is-active {
-  background: #ffffff;
-  color: var(--wb-text);
-  font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--wb-accent);
-}
-
-/* The play/stop icon, ahead of the file name (CodeEditor's tabRun): pulled
-   into the tab's left padding so the name doesn't sit far from the edge. */
-.wb-editor__tab-run {
-  margin-left: -4px;
-}
-
-.wb-editor__tab-close {
-  border: none;
-  background: transparent;
-  color: inherit;
-  opacity: 0.55;
-  font-size: 15px;
-  line-height: 1;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.wb-editor__tab-close:hover {
-  opacity: 1;
-  background: rgba(15, 23, 42, 0.08);
-}
-
-.wb-editor__tab-add {
-  flex: none;
-  width: 36px;
-  border: none;
-  background: transparent;
-  color: var(--wb-text-muted);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.wb-editor__tab-add:hover {
-  background: var(--wb-hover);
-  color: var(--wb-text);
 }
 
 /* ---- editor surface --------------------------------------------------
@@ -306,23 +230,6 @@
   content: '!';
 }
 
-.wb-editor__tab.has-errors .wb-editor__tab-name::after,
-.wb-editor__tab.has-warnings .wb-editor__tab-name::after {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-left: 6px;
-  border-radius: 50%;
-  vertical-align: middle;
-}
-.wb-editor__tab.has-errors .wb-editor__tab-name::after {
-  background: var(--wb-diag-error);
-}
-.wb-editor__tab.has-warnings .wb-editor__tab-name::after {
-  background: var(--wb-diag-warning);
-}
-
 .wb-editor__textarea {
   overflow: auto;
   resize: none;
@@ -342,23 +249,80 @@
   background: rgba(37, 99, 235, 0.25);
 }
 
+/* A project with no files (docs/cleanup_file_tabs.md § 5.6). */
 .wb-editor__empty {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 24px;
   color: var(--wb-text-muted);
+  text-align: center;
 }
 
 .wb-editor__empty p {
   margin: 0;
-  font-size: 14px;
+}
+
+.wb-editor__empty-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+.wb-editor__empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wb-text);
 }
 
 .wb-editor__empty-hint {
-  font-size: 12.5px;
+  font-size: 13px;
+}
+
+.wb-editor__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* As the Files panel's buttons: Examples is the way in for a beginner, so it leads. */
+.wb-editor__empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wb-text);
+  cursor: pointer;
+}
+
+.wb-editor__empty-btn:hover {
+  background: var(--wb-hover);
+}
+
+.wb-editor__empty-btn.is-primary {
+  border-color: var(--wb-accent-dark);
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-editor__empty-btn.is-primary:hover {
+  background: var(--wb-accent-dark);
+}
+
+.wb-editor__empty-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ---- token colours ---------------------------------------------------

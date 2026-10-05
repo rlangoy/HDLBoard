@@ -242,3 +242,12 @@ export function SplitViewIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** A small downward chevron — the pane header's file name opens a menu. */
+export function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} strokeWidth={1.6} {...props}>
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}

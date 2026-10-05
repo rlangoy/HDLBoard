@@ -54,6 +54,10 @@ describe('filterExamples', () => {
   test('matches title, language and file name, every word required', () => {
     expect(filterExamples(EXAMPLES, 'blink verilog').map((e) => e.id)).toEqual(['blink_verilog']);
     expect(filterExamples(EXAMPLES, 'and_gate_tb.vhd').map((e) => e.id)).toEqual(['and_gate_tb_vhdl']);
+    expect(filterExamples(EXAMPLES, 'truth table').map((e) => e.id)).toEqual([
+      'and_gate_truthtable_tb_vhdl',
+      'and_gate_truthtable_tb_verilog',
+    ]);
     expect(filterExamples(EXAMPLES, 'nothing like this')).toEqual([]);
   });
 });

@@ -4,9 +4,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { cx } from '../board';
 import type { DiagnosticsByFile, LineDiagnostic } from './diagnosticStore';
-import { EditorPaneHeader, type EditorPaneHeaderProps } from './EditorPaneHeader';
 import { EditorSurface, type EditorTab } from './EditorSurface';
 import { narrowView, type EditorView, type PaneRole } from './editorView';
+import { clampFraction } from './editorSplit';
 import { TestbenchEmptyState, type TestbenchEmptyStateProps } from './TestbenchEmptyState';
 import { TEXT, rtlPaneLabel, tbPaneLabel } from './testbenchText';
 import type { EditorSplit } from './useEditorSplit';
@@ -17,17 +17,17 @@ const TB_PANE_ID = 'wb-split-tb';
 const RTL_PANE_ID = 'wb-split-rtl';
 const NO_LINES: readonly LineDiagnostic[] = [];
 
-/** What one pane shows: a file with its header, or an empty state. */
+/** What one pane shows under its header (docs/cleanup_file_tabs.md F3): a file, or an empty state. */
 export type SplitPaneModel =
   | {
       readonly kind: 'file';
       readonly file: EditorTab;
-      readonly header: Omit<EditorPaneHeaderProps, 'pane' | 'fileName'>;
+      readonly header: ReactNode;
       readonly reveal: RevealRequest | null;
       /** A line above the code, e.g. "No testbench code left in this file." */
       readonly note?: ReactNode;
     }
-  | { readonly kind: 'empty'; readonly empty: Omit<TestbenchEmptyStateProps, 'pane'> };
+  | { readonly kind: 'empty'; readonly header: ReactNode; readonly empty: Omit<TestbenchEmptyStateProps, 'pane'> };
 
 export interface SplitEditorProps {
   /** The resolved view, before narrowing to one pane in a narrow column. */
@@ -46,16 +46,23 @@ interface SharedProps {
 }
 
 /**
- * The editor column as one or two panes (docs/impl_split_screen.md § 4.1, § 6.5):
+ * The editor column as one or two panes (docs/impl_split_screen.md § 4.1, § 6.5),
+ * each under its own header (docs/cleanup_file_tabs.md F3):
  * TB left, RTL right, the divider between. Exposes its state as
  * `data-editor-view` / `data-focused-pane` for CSS and the e2e scripts.
  */
 export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ...shared }: SplitEditorProps & SharedProps) {
   const shown = narrowView(view, focusedPane, split.canSplit);
   const both = shown === 'both';
-  const fraction = split.prefs.tbFraction;
-  const columns = split.dragCollapsed === 'tb' ? [0, 1] : split.dragCollapsed === 'rtl' ? [1, 0] : [fraction, 1 - fraction];
-  const style = { '--wb-split-tb': `${columns[0]}fr`, '--wb-split-rtl': `${columns[1]}fr` } as CSSProperties;
+  // A fraction stored for a wider column (or older, smaller minimums) still keeps each pane at its minimum.
+  const fraction = clampFraction(split.prefs.tbFraction, split.bounds);
+  const tracks =
+    split.dragCollapsed === 'tb'
+      ? ['0px', '1fr']
+      : split.dragCollapsed === 'rtl'
+        ? ['1fr', '0px']
+        : [`${fraction}fr`, `${1 - fraction}fr`];
+  const style = { '--wb-split-tb': tracks[0], '--wb-split-rtl': tracks[1] } as CSSProperties;
   const pane = (role: PaneRole, model: SplitPaneModel) => (
     <SplitPane role={role} model={model} focused={focusedPane === role} onFocus={() => onFocusPane(role)} hidden={split.dragCollapsed === role} {...shared} />
   );
@@ -106,11 +113,11 @@ function SplitPane({
       className={cx('wb-split__pane', `is-${role}`, focused && 'is-focused', hidden && 'is-drag-hidden')}
       aria-label={label}
     >
+      {model.header}
       {model.kind === 'empty' ? (
         <TestbenchEmptyState pane={role} {...model.empty} />
       ) : (
         <>
-          <EditorPaneHeader pane={role} fileName={model.file.name} {...model.header} />
           {model.note}
           <EditorSurface
             file={model.file}

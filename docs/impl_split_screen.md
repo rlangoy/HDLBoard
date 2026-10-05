@@ -9,6 +9,7 @@
 | **Status** | Ready for implementation |
 | **Changes in 1.1** | Simulate runs the testbench the student is looking at (D10, D20, D21: `runTarget`, `work/` runs); a high-confidence testbench opens the split even when its design is missing (D22). New testbenches are named `<stem>_tb` (the `tb_` prefix is reserved); fixtures renamed. Q1/Q2 decided. |
 | **Changes in 1.2** | One normative rule set (§ 1.1). The split opens on **any strong testbench evidence**; the design side never decides (D22, D23). Rules are classed *strong* / *weak* and UI decisions use the class, not score bands (D23). Simulate routes to the testbench unit and focuses its pane (D24). Role-coloured pane headers (D25). New rule `vlog-event-wait`; `vlog-delay` split from `vlog-assign-delay`; `vhdl-file-io` is weak. |
+| **Changes in 1.3** | The editor's tab strip is gone (`docs/cleanup_file_tabs.md`, 1.3.1): every pane has its own header on the strip's line, the file name in it opens a menu of all files, and the Files panel shows role icons and which files are shown. Replaced here: D8, D14 b, the tab rows of § 4.3, § 4.5, AC-15; § 4.1 updated. B5: while a run goes, other panes show Play greyed out. |
 | **Supersedes** | *Split-Screen RTL/Testbench Editor Specification* v2.0 where § 3 (Decisions) says so |
 | **Target** | HDLBoard (`src/components/workbench/`), React 18.3 + TypeScript 5.6 + Vite 5, plain CSS |
 | **Languages** | VHDL (GHDL, `--std=08`) and Verilog (Icarus Verilog) |
@@ -60,7 +61,7 @@ section seems to say otherwise, this list wins and the section is the bug.
 | **B2** | **Pairing only decides what the RTL pane shows**: the paired design, the same file's design unit, or an empty state. It never decides *whether* the split opens. |
 | **B3** | **The layout changes only on open, tab switch, Simulate, reveal or create** — never while typing. |
 | **B4** | **Simulate routes to the testbench**: Start or a tab's Play on a file that contains a testbench unit runs that unit and focuses the TB pane; on a design file it runs the design and focuses the RTL pane. A pane's own Play always runs that pane's unit. |
-| **B5** | **What runs is what is focused.** After any Simulate, the pane whose unit runs has focus and shows Stop. |
+| **B5** | **What runs is what is focused.** After any Simulate, the pane whose unit runs has focus and shows Stop. Since 1.3 every other pane shows Play greyed out (*Stop the simulation first*) while the run goes. |
 | **B6** | **The user's word beats detection**: a pin from the view switch, a role override and a pair override are never overruled by detection. *Never* never auto-opens; *Always* splits whenever the file has a testbench (a design with none keeps a single pane). A pair override the code contradicts - the testbench instantiates designs defined in other files, none in the paired one - is not the user's word about this code: it is never offered, used or kept (`contradictsCode`, pruned at startup and after every analysis). |
 | **B7** | **A one-unit design file runs exactly as today** (AC-6). |
 
@@ -100,13 +101,13 @@ refers to the reviewer's notes that came with v2.0.
 | D5 | **Re-weighted rules** (§ 5.4). Notable: `$readmemh`/`$readmemb` score **0**, `initial` **+5**, `wait until` **+10**, `after` **+10**, `assert` **+5**; **board ports −50**; `$finish`/`std.env.stop` **+30**; translate_off / `` `ifndef SYNTHESIS `` **+20**. | v2.0 § 6–7. | Memory init with `$readmemh` in an `initial` block is synthesizable for FPGAs, `wait until rising_edge(clk)` is synthesizable, `after` and `assert` appear in student RTL. A design with DE1-SoC ports is never a testbench. |
 | D6 | The score (0…100) is kept for the "Why?" popover and as the **medium** bar (≥ 40 with weak evidence only). It no longer decides *high*: that comes from evidence class (D23). | v2.0 § 8; review "score thresholds brittle". | A score is a sum of guesses; whether a construct can exist in hardware is a fact about the construct. |
 | D7 | **The layout changes only on a pair-change event** (open, tab switch, Simulate, reveal, create) — **never while typing.** Typing may show a suggestion chip. | Review "auto-close when last TB region deleted". | A layout that jumps under the caret is worse than one that is a step behind. |
-| D8 | **One tab strip, paired view** — not VS Code-style editor groups with a tab strip each. Clicking a tab shows that file and its partner. | v2.0 § 3–4. | Students get one place to find files; state stays a pair, not two tab lists. VS Code's own "Split in Group" shows the same file twice inside one group, which is the single-file case here. |
+| D8 | *Replaced in 1.3: there is no tab strip; the Files panel lists the files and each pane header names its file (`docs/cleanup_file_tabs.md`).* **One tab strip, paired view** — not VS Code-style editor groups with a tab strip each. Clicking a tab shows that file and its partner. | v2.0 § 3–4. | Students get one place to find files; state stays a pair, not two tab lists. VS Code's own "Split in Group" shows the same file twice inside one group, which is the single-file case here. |
 | D9 | **Phase 1 ships both** single-file dual view and multi-file pairing. | Review step 5 ("decide whether the first implementation supports same-document dual view"). | Content is already single-sourced in `Workbench` state, so the dual view costs two textareas and two reveal targets. |
 | D10 | **The pane you press Play in decides what runs.** Simulate arranges the panes first (medium confidence suffices). Play in the TB pane runs that testbench **unit**; Play in the RTL pane, a tab's Play and Start on a design run the design as today — naming its unit only when the file holds more than one. v2.0's "No testbench detected" dialog is **dropped**; a `RunTestbenchDialog` (testbench *units*) appears only when a design without board ports is run and a testbench instantiates it. | v2.0 § 11; 1.0's "Simulate never changes what runs"; review "run-target behaviour". | A TB pane that Simulate ignores is decoration: in 1.0 a mixed `alu.v` ran `alu`, and a `work/` testbench could not run at all. In HDLBoard the board *is* the stimulus for most labs, so nagging on every board run would still be wrong. |
 | D11 | Region navigation on **Alt+PageDown / Alt+PageUp** (plus buttons). | v2.0 § 10 (Alt+[ / Alt+]). | On Norwegian and other Nordic layouts `[` is AltGr+8, so Alt+[ cannot be typed. |
 | D12 | **UI preferences in `localStorage`** (`hdlboard.editorSplit.v1`); **role and pair overrides in the project** (`Workspace`, desktop) and session-only in the browser. Last-visited TB region **not persisted** (D18). | v2.0 § 12 vs § 13 contradiction. | Preferences belong to the person, overrides to the project. |
 | D13 | **No quick-scan pass and no Web Worker.** Full analysis is a few milliseconds; a budget test guards it. | Review "quick scan on open"; v2.0 § 15 incremental analysis. | Two code paths for one result is dead weight at student file sizes. `analyzeProject` is pure, so moving it to a Worker later is mechanical (§ 5.9). |
-| D14 | Auto-close policy: (a) opening a file without TB in *Automatic* → single pane; (b) **closing the partner's tab** collapses the split and pins that pair single for the session; (c) deleting TB code shows a note in the TB pane, the layout updates at the next pair change. | Review "pure RTL file while in split mode", "auto-close". | Each case follows from D7 and from "never override user intent". |
+| D14 | Auto-close policy: (a) opening a file without TB in *Automatic* → single pane; (b) *(gone in 1.3 with the tabs: the view switch pins a single pane)* **closing the partner's tab** collapses the split and pins that pair single for the session; (c) deleting TB code shows a note in the TB pane, the layout updates at the next pair change. | Review "pure RTL file while in split mode", "auto-close". | Each case follows from D7 and from "never override user intent". |
 | D15 | Badge colours are tokens in `Workbench.css`; text + icon on every badge. | Review "theme support". | Only a light theme exists; tokens make a dark theme a token swap. Colour is never the only cue (existing editor rule). |
 | D16 | All new UI text in **`testbenchText.ts`**, English, no i18n library. | Review "internationalisation". | The UI is English; one file is all a later translation needs. |
 | D17 | Pairing uses HDLBoard's folders (`vhdl/`, `verilog/`, `work/`), instantiation and naming. v2.0 § 16 directories (`tb/`, `sim/`…) do not exist here. | v2.0 § 16; review "how the system chooses left/right with multiple candidates". | Rules in § 5.8 are deterministic, with a tie-break chain. |
@@ -154,12 +155,12 @@ their existing dividers and behaviour.
   [F] = flask icon (TB)   [C] = chip icon (RTL)   # = split divider   (?) = "Why?"
 ```
 
-- One tab strip spans the editor column (D8). The view switch sits at its
-  right end, where VS Code puts its split button.
-- Each pane has a **pane header**: role icon + badge, file name, (TB pane)
-  region navigator, and a "Why?" button (§ 4.4).
-- The partner's tab is visible in the strip and drawn with `is-visible`
-  (lighter than `is-active`), so both shown files are findable.
+- *Since 1.3 (`docs/cleanup_file_tabs.md`):* there is no tab strip. Each pane's header
+  sits on its line, and the view switch at the right end of the rightmost
+  header, where VS Code puts its split button.
+- Each pane has a **pane header**: role icon + badge, file name (a button
+  that opens a menu of all files), (TB pane) region navigator (§ 4.4).
+- Both shown files are highlighted in the Files panel, so both are findable.
 
 ### 4.2 View modes
 
@@ -199,12 +200,11 @@ anchor role is `rtl`.
 
 | Event | What happens |
 |---|---|
-| Open from Explorer, click a tab, open via console diagnostic | Flush analysis for that file → find pair → resolve view → show. Partner is added to the tab strip if not open. |
+| Open from Explorer, pick in a header's file menu, open via console diagnostic | Flush analysis for that file → find pair → resolve view → show. |
 | Click inside the other pane | `activeTabId` becomes that pane's file (Play icon moves with it). **Pair and view do not change.** |
 | Typing | Analysis re-runs 500 ms after the last keystroke. Badges, regions and the suggestion chip update. **Layout does not change.** |
 | Simulate (Start, a tab's Play, or a pane's Play) | Flush analysis for all files → pair anchored at the run file → resolve view with medium allowed → show → **focus the pane whose unit will run** (B4, B5) → run the target of § 4.10. |
-| Close the partner's tab | Split collapses to the anchor; the pair is pinned single for the session (D14 b). |
-| Close the anchor's tab | Existing tab-close rule picks the next active tab → that is a pair-change event. |
+| Delete the shown file | The next file in the Files list is shown → a pair-change event (`docs/cleanup_file_tabs.md` § 5.7). |
 | Create testbench (empty state) | New file opens in the TB pane; a pair override links it to the design. |
 | Window or column too narrow | See § 4.9. |
 
@@ -237,9 +237,11 @@ anchor role is `rtl`.
   Clicking a row reveals that line. This turns detection into teaching material
   for PB1180 rather than a black box.
 
-### 4.5 Tab strip icons
+### 4.5 Role icons in file lists
 
-Every tab shows the flask (file role `tb` or `mixed`) or the chip (`rtl`) before
+*Since 1.3 the tab strip is gone; these icons are in the Files panel and the
+header's file menu, where a design's chip is quiet grey and a testbench's flask
+violet (`docs/cleanup_file_tabs.md` D6).* Every file shows the flask (file role `tb` or `mixed`) or the chip (`rtl`) before
 its name; tooltip *"Testbench"*, *"Design"*, or *"Design + testbench"*. A file
 with no units (empty, or not yet parsed) shows the existing `FileIcon`. The
 same icon precedes every file in *Pair with another file…*, *Open existing…*
@@ -1611,7 +1613,7 @@ The feature is complete when **all** of the following hold.
 - **AC-14** Empty states appear as in § 4.6 and every action works
   (*Create testbench* creates `<stem>_tb` in the right folder, opens it in the
   TB pane, paired).
-- **AC-15** Closing the partner's tab collapses the split and it stays
+- **AC-15** *(Gone in 1.3 with the tabs.)* Closing the partner's tab collapses the split and it stays
   collapsed for that pair until the session ends or the user picks *Both*.
 - **AC-21** With *Never*, nothing opens on its own (open or Simulate); the
   switch still works. With *Always*, every pair is split.

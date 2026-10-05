@@ -935,14 +935,18 @@ component work in §§ 1–7 is one half of it; this is the other.
 - **File explorer** — a `vhdl/` / `verilog/` / `work/` project tree with upload (a
   picker, or drag-and-drop `.vhd`/`.vhdl`/`.v`/`.vh` files onto the panel), new-file,
   rename and delete (the last two on hover, or double-click a name to
-  rename).
+  rename). It is the project's one file list: each row shows the file's role (a
+  grey chip for a design, a violet flask for a testbench), an error dot or a
+  warning ring, and a highlight on every file shown in the editor.
 - **Resizable panes** — drag the handles either side of the editor to
   resize the file panel and the board panel; both stay within the window,
   shrinking together (or giving way to whichever one is being dragged)
   rather than overflowing it.
-- **Tabbed code editor** — closable tabs, line numbers and VHDL or Verilog
-  syntax highlighting, chosen by the file's extension (keywords, types,
-  comments, strings, numbers; Verilog also colours `$system` tasks and
+- **Code editor** — no tabs: the editor shows the file picked in the Files
+  panel, under a header with Play and the file's name; the name drops down
+  every file to switch to (spec: `docs/cleanup_file_tabs.md`). Line numbers and
+  VHDL or Verilog syntax highlighting, chosen by the file's extension (keywords,
+  types, comments, strings, numbers; Verilog also colours `$system` tasks and
   `` `directives``), built on a real, editable `<textarea>`, not a static preview.
 - **Testbench split view** — the editor column splits into a testbench (TB)
   pane on the left and a design (RTL) pane on the right when the file shown is,
