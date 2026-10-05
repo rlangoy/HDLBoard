@@ -10,6 +10,7 @@ import {
   describeLine,
   INLINE_MESSAGE_MAX_CHARS,
   inlineText,
+  problemCountText,
   summarize,
 } from './diagnosticText';
 
@@ -125,5 +126,19 @@ describe('advice wording, several messages', () => {
   test('a blank line separates the messages of a line with advice', () => {
     const line = lineOf(advised('first', { headline: 'h' }), advised('late', { headline: 'f', followOnOf: 13 }));
     expect(describeLine(line)).toBe('error: h\n\nGHDL: first\n\nerror: f\n\nGHDL: late');
+  });
+});
+
+describe('problemCountText', () => {
+  test('names both counts', () => {
+    expect(problemCountText({ errors: 2, warnings: 1 })).toBe('2 errors, 1 warning');
+  });
+
+  test('leaves out a count of zero', () => {
+    expect(problemCountText({ errors: 0, warnings: 3 })).toBe('3 warnings');
+  });
+
+  test('is empty with no problems', () => {
+    expect(problemCountText({ errors: 0, warnings: 0 })).toBe('');
   });
 });
