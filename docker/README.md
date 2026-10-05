@@ -65,7 +65,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 
 | Variable | Default | Effect |
 |---|---|---|
-| `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. It is baked into the page, so rebuild after changing it (`up -d --build`) |
+| `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. The page connects back to whatever origin it was loaded from, so no rebuild is needed |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused (the older name `GHDL_MAX_SESSIONS` is still read) |
 | `GHDL_REF` | `master` | GHDL branch or tag to build, for example `v6.0.0` for a pinned release |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
@@ -82,7 +82,29 @@ published.
   To cap CPU and memory on a shared server, uncomment `cpus` and `mem_limit`
   in `docker-compose.yml`. Budget roughly 1 core and 150 MB per active
   simulation.
-- **HTTPS.** HTTPS does not work as shipped, for the same reason given in
-  [HOSTING.md § 8](../docs/HOSTING.md#8-one-port-with-a-reverse-proxy): the page
-  always opens `ws://`.
+- **HTTPS.** Put a TLS front end before nginx and it works: the image's page
+  opens `wss://` on an `https://` page, to the same host and port.
 - **Architecture.** The Alpine GHDL build is verified on x86_64 only.
+
+## Render
+
+[Render](https://render.com) runs one container and ignores
+`docker-compose.yml`, so the Dockerfile's last stage, `render`, puts nginx and
+the backend in one container. nginx listens on Render's default `PORT`, 10000
+([`nginx.single.conf`](nginx.single.conf)), and proxies `/hdlsim` to the
+backend on `127.0.0.1:9010`. Render terminates TLS, and the page connects back
+over `wss://` to the same host.
+
+Set it up as a **Blueprint** from [`render.yaml`](../render.yaml), or by hand as
+a **Web Service** with runtime *Docker*, Dockerfile path `./docker/Dockerfile`
+and build context `.` (the repository root). Leave `PORT` unset, or set it to
+`10000`.
+
+- **Size it.** A free or starter instance has 512 MB and a fraction of a core.
+  At roughly 150 MB and one core per active simulation, that is two or three
+  students at once, so the stage sets `HDL_MAX_SESSIONS=4`. Raise it on a
+  bigger instance. Fine for a demo, not for a full lab session.
+- **Cold starts.** Free instances spin down when idle; the first visit after a
+  pause takes a while to come up.
+- **Security.** The same caveat as above: anyone who can load the page runs
+  code in the container. A public Render URL is reachable by everyone.

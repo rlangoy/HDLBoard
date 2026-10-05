@@ -71,10 +71,11 @@ import './Workbench.css';
 // VITE_GHDL_WS_PORT is the setting's name from when GHDL was the only
 // simulator, still honoured so an older build script keeps working.
 // The default must match the backend's own (server/src/settings.ts).
+// Built with it set but empty (Docker, Render), Number('') is 0 and the page
+// connects to its own origin, where a reverse proxy forwards /hdlsim.
 const DEFAULT_WS_PORT = 9010;
-const HDL_WS_PORT = Number(
-  import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT,
-);
+const HDL_WS_PORT =
+  Number(import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT) || undefined;
 
 /** Whether `flag` was set; reading it clears it. */
 function takeFlag(flag: MutableRefObject<boolean>): boolean {

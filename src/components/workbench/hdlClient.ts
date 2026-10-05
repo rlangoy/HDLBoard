@@ -30,9 +30,17 @@ export interface HdlClientHandlers {
   onClosed(): void;
 }
 
-/** `ws://<page host>:<port>/hdlsim` — never a hardcoded `localhost` (§ 6.4). */
-export function hdlBackendUrl(port: number): string {
-  return `ws://${window.location.hostname}:${port}/hdlsim`;
+/**
+ * The backend's URL, on the page's own host — never a hardcoded `localhost`
+ * (§ 6.4). With a `port` (dev: Vite on 5173, backend on 9010) it targets that
+ * port; without one it is the page's own origin, for a reverse proxy that
+ * forwards `/hdlsim` (Docker, Render). `wss:` on an `https:` page, since
+ * browsers block a plain `ws:` socket from one.
+ */
+export function hdlBackendUrl(port?: number): string {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = port ? `${window.location.hostname}:${port}` : window.location.host;
+  return `${scheme}://${host}/hdlsim`;
 }
 
 /**

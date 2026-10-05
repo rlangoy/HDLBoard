@@ -198,11 +198,13 @@ start at sign-in.
   It is still arbitrary code execution on your hardware, so § 3 applies in
   full. To cap CPU and memory on a shared server, uncomment `cpus` and
   `mem_limit` in `docker-compose.yml`, using the sizing in § 2.
-- **No port mismatch.** The page is built with `VITE_HDL_WS_PORT` set to the
-  page port, and nginx forwards the WebSocket, so the two-places rule of
-  [§ 9](#9-configuration-reference) is handled for you.
-- **HTTPS** still does not work as shipped, for the reason in
-  [§ 8](#8-one-port-with-a-reverse-proxy).
+- **No port mismatch.** The page is built with `VITE_HDL_WS_PORT` empty, so
+  it connects back to its own origin, and nginx forwards the WebSocket. The
+  two-places rule of [§ 9](#9-configuration-reference) is handled for you.
+- **HTTPS** works behind a TLS front end: the page opens `wss://` on an
+  `https://` page.
+- **Render.com** and other single-container hosts use the Dockerfile's
+  `render` stage — see [`docker/README.md`](../docker/README.md#render).
 
 [`docker/README.md`](../docker/README.md) has the same reference in short
 form, next to the Dockerfile.
@@ -825,7 +827,7 @@ servers. You can collapse them into one by telling the build that the backend
 lives on the web port, and having the web server proxy `/hdlsim` to it:
 
 ```bash
-VITE_HDL_WS_PORT=80 npm run build     # bake port 80 into the page
+VITE_HDL_WS_PORT= npm run build       # empty: connect to the page's own origin
 ```
 
 ```nginx
@@ -852,18 +854,9 @@ Now only port 80 has to be open, and 9010 can be bound to loopback by a
 firewall rule. `proxy_read_timeout` matters: the default 60 s closes a socket
 that's merely waiting for the student to flip a switch.
 
-**HTTPS does not work as shipped.** The page always builds a `ws://` URL, and
-browsers block a plain WebSocket from an `https://` page, so a TLS front end
-gets you a dark board. It's a one-line change if you need it —
-`src/components/workbench/hdlClient.ts:34`:
-
-```ts
-const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-return `${scheme}://${window.location.hostname}:${port}/hdlsim`;
-```
-
-Rebuild, then terminate TLS at nginx and proxy `/hdlsim` exactly as above.
-That change isn't in the repository; you're maintaining a local patch.
+**HTTPS** needs nothing extra: the page opens `wss://` when it was loaded over
+`https://`, and with an empty `VITE_HDL_WS_PORT` it uses the page's own host
+and port. Terminate TLS at nginx and proxy `/hdlsim` exactly as above.
 
 ---
 
@@ -901,7 +894,7 @@ Frontend, read at **build** time only:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VITE_HDL_WS_PORT` | `9010` | Backend port the page will connect to |
+| `VITE_HDL_WS_PORT` | `9010` | Backend port the page will connect to. Set but empty = the page's own origin (behind a reverse proxy) |
 
 **Changing the backend port means changing it in two places:** rebuild the
 page with `VITE_HDL_WS_PORT=<n> npm run build` *and* start the backend with

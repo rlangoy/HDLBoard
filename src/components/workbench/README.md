@@ -724,7 +724,7 @@ export class HdlClient {
   close(): void;
 }
 
-export function hdlBackendUrl(port: number): string;  // ws://<page host>:<port>/hdlsim
+export function hdlBackendUrl(port?: number): string; // ws[s]://<page host>[:<port>]/hdlsim, no port = page origin
 ```
 
 The only file in this component that speaks WebSocket to the backend — full
