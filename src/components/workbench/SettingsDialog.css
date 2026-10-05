@@ -121,7 +121,7 @@ div.wb-settings__empty {
   }
 }
 
-/* The testbench split preference (docs/impl_split_screen.md § 4.2), in both builds. */
+/* The language and testbench split preferences, in both builds. */
 .wb-settings__group {
   display: grid;
   gap: 10px;
@@ -133,4 +133,15 @@ div.wb-settings__empty {
 
 .wb-settings__group .wb-settings__heading {
   padding: 0;
+}
+
+/* VHDL and Verilog side by side. */
+.wb-settings__languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.wb-settings__option:has(input:disabled) {
+  cursor: default;
 }

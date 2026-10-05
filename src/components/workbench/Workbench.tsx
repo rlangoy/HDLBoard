@@ -22,6 +22,7 @@ import {
 import { Header } from './Header';
 import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog } from './NewFileDialog';
 import { RefusedFilesDialog } from './RefusedFilesDialog';
@@ -188,6 +189,12 @@ export function Workbench() {
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // The Examples pane, shown over the editor (which stays mounted underneath).
   const [examplesOpen, setExamplesOpen] = useState(false);
+  // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
+  const [preferredLanguages, setPreferredLanguages] = useState(loadPreferredLanguages);
+  const handlePreferredLanguagesChange = (languages: PreferredLanguages) => {
+    setPreferredLanguages(languages);
+    savePreferredLanguages(languages);
+  };
   useEffect(() => {
     const openAbout = () => setDialog('about');
     window.addEventListener(ABOUT_EVENT, openAbout);
@@ -760,6 +767,8 @@ export function Workbench() {
       <SettingsDialog
         open={dialog === 'settings'}
         onClose={() => setDialog(null)}
+        preferredLanguages={preferredLanguages}
+        onPreferredLanguagesChange={handlePreferredLanguagesChange}
         splitPreference={tb.split.prefs.preference}
         onSplitPreferenceChange={tb.split.setPreference}
       />
@@ -873,7 +882,9 @@ export function Workbench() {
                 )
               }
             />
-            {examplesOpen && <ExamplesPane onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />}
+            {examplesOpen && (
+            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />
+          )}
           </div>
 
           <div

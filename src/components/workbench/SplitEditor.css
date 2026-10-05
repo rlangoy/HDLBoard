@@ -77,6 +77,45 @@
   flex: 1;
 }
 
+/* Copy the code (CopyCodeButton.tsx): a quiet icon beside the file name, a tick once copied. */
+.wb-copycode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-copycode svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wb-copycode:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--wb-text);
+}
+
+.wb-copycode:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+}
+
+.wb-copycode.is-copied {
+  color: var(--wb-success-dark);
+}
+
+.wb-copycode.is-failed {
+  color: var(--wb-danger-dark);
+}
+
 /* Designs are the usual case: a quiet chip before the name (D6). */
 .wb-panehead.is-plain .wb-roleicon.is-rtl {
   color: var(--wb-role-quiet-ink);

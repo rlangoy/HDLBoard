@@ -199,10 +199,12 @@ state, so at most one is open.
   the **"ABSOLUTELY NO WARRANTY — use it at your own risk"** notice. Opened
   from the header's About button, or by dispatching `ABOUT_EVENT` on
   `window`, which `<Workbench>` listens for.
-- **Settings** — with a host bridge present it has one option, "Keep my
-  project between sessions" (applies after restart; see
-  [`desktop.ts`](#desktopts)); without one the dialog says there are no
-  settings. Either way it invites users to file suggestions and bug reports
+- **Settings** — *Languages* (VHDL and/or Verilog, at least one; the Examples
+  pane opens with these ticked and never changes them: `languagePrefs.ts`) and
+  *Editor › Testbench split view* (`editorSplit.ts`), both in localStorage, which
+  the desktop app keeps between launches too. With a host bridge present it also
+  has "Keep my project between sessions" (applies after restart; see
+  [`desktop.ts`](#desktopts)). It also invites users to file suggestions and bug reports
   as GitHub issues: "Report a bug" and "Suggest an improvement" open
   `ISSUES_URL/new` with a prefilled title, and "Browse existing issues"
   opens the issue list. The links open in a new tab (`target="_blank"`); an
@@ -519,6 +521,12 @@ A scrolling, auto-scroll-to-bottom log. `tone` only changes text colour
 (green/red); the line's timestamp is always dimmed. `onClear` asks the
 caller to empty the log — the caller owns the array, this component never
 mutates it.
+
+A run of consecutive GHDL `report` / `assert` lines
+(`file:line:col:@time:(report note): text`) is drawn as one table —
+Time, Filename, Timestamp, Report Text — instead of one line each
+(`ghdlReport.ts`: `parseGhdlReport`, `consoleBlocks`). Failed asserts are
+rows of the same table, coloured by severity and labelled in words.
 
 ## Supporting modules
 
