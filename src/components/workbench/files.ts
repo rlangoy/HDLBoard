@@ -591,9 +591,9 @@ begin
     begin
 
         report "AND Truth Table" severity note;
-        report "---------------" severity note;
-        report "A B | Y" severity note;
-        report "---+---" severity note;
+        report "--------------"  severity note;
+        report " A   B  |  Y  "  severity note;
+        report "--------+-----"  severity note;
 
         -- Test all four input combinations
         for i in 0 to 3 loop
@@ -630,7 +630,7 @@ begin
 
         end loop;
 
-        report "---------------" severity note;
+        report "--------------" severity note;
         report "All tests passed!" severity note;
 
         wait;
