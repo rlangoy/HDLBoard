@@ -41,9 +41,15 @@ Run after changing the Files panel, the pane headers, the file menu, `fileRows.t
 11. Keyboard only, then NVDA + Chrome: the name button ("…, switch file", expanded/collapsed),
     the menu (folder groups, ticked items), Files rows, the greyed-out Play and its reason.
 12. Desktop app: restart keeps the shown file; a workspace saved by 1.3.0 opens on its file.
+13. A copied testbench, in VHDL and in Verilog: open the AND Gate Testbench example and add
+    `mytest_tb.vhd` / `mytest_tb.v` with the same entity / module name `and_gate_tb` but its own
+    messages. Play in its TB pane runs the copy's code, after the note "and_gate_tb is declared in
+    mytest_tb… and in and_gate_tb…"; Play on `and_gate_tb.vhd` / `.v` still runs the original.
+    Rename the copy's entity / module to `mytest_tb` and press Play at once: it runs as
+    `mytest_tb`, with no note.
 
 ## Results
 
 | Date | Build | Steps passed | Not run | Notes |
 |---|---|---|---|---|
-| 2026-10-05 | branch `cleanup_filetabs`, browser (Chrome, Vite + GHDL backend) | 1–9 | 10, 11, 12 | Checked by measuring the page, then by screenshots once the Chrome window was in front: header bottom 94.99 px = side strips; menu right edge 8 px inside the editor; at 255 px per pane (50/50, 1440 px window) both names fit in full, at the 200 px minimum a name keeps about 41–47 px. A 260 px minimum pane width (the plan) was tried and dropped: it disabled the split at a 1440 px window. Found and fixed during the run: a stored split fraction was not clamped (a pane could drop below its minimum), the menu's shift-left was undone by React StrictMode's second effect run, and the view switch's labels were clipped at a 200 px editor column. |
+| 2026-10-05 | branch `cleanup_filetabs`, browser (Chrome, Vite + GHDL and Icarus backend) | 1–9, 13 | 10, 11, 12 | Checked by measuring the page, then by screenshots once the Chrome window was in front: header bottom 94.99 px = side strips; menu right edge 8 px inside the editor; at 255 px per pane (50/50, 1440 px window) both names fit in full, at the 200 px minimum a name keeps about 41–47 px. A 260 px minimum pane width (the plan) was tried and dropped: it disabled the split at a 1440 px window. Found and fixed during the run: a stored split fraction was not clamped (a pane could drop below its minimum), the menu's shift-left was undone by React StrictMode's second effect run, and the view switch's labels were clipped at a 200 px editor column. | Step 13 found two bugs, both fixed: a copy that kept its name ran the original (VHDL) or did not compile (Verilog), and after a rename Play still asked for the old name.

@@ -3,7 +3,7 @@
 
 import type { ReactNode } from 'react';
 import { EmptyPaneHeader, PlainPaneHeader, RolePaneHeader, type PaneRun } from './EditorPaneHeader';
-import { narrowView, type EditorView, type PaneRole } from './editorView';
+import { narrowView, withCurrentUnit, type EditorView, type PaneRole } from './editorView';
 import { FileNameButton, type FileMenuProps } from './FileMenu';
 import type { VhdlFile } from './files';
 import { RoleIcon } from './RoleIcon';
@@ -80,9 +80,11 @@ export function editorPropsFor(ctx: ModelContext, split: EditorSplit, chip: Reac
 
 /** One pane's header and content: its file, or its empty state (§ 4.6). */
 function paneModel(ctx: ModelContext, d: EditorDisplay, pane: PaneRole, end: ReactNode): SplitPaneModel {
-  const target = d.pair[pane];
-  const file = target && ctx.files.find((f) => f.id === target.fileId);
-  if (!target || !file) return { kind: 'empty', header: <EmptyPaneHeader pane={pane} end={end} />, empty: emptyModel(ctx, d, pane) };
+  const shownTarget = d.pair[pane];
+  const file = shownTarget && ctx.files.find((f) => f.id === shownTarget.fileId);
+  if (!shownTarget || !file) return { kind: 'empty', header: <EmptyPaneHeader pane={pane} end={end} />, empty: emptyModel(ctx, d, pane) };
+  // The badge, Play / Stop and a run follow a unit renamed since the pair was shown.
+  const target = withCurrentUnit(shownTarget, effectiveFile(ctx.project, ctx.overrides, file.id), pane);
   const showsFileTwice = paneFile(d, otherPane(pane)) === file.id;
   const takesDiagnosticReveal = pane === d.focusedPane || !showsFileTwice;
   return {

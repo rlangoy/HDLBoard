@@ -4,11 +4,12 @@
 /**
  * Which view the editor column shows, and what a run runs
  * (docs/impl_split_screen.md § 1.1, § 4.2, § 4.10, § 6.3, § 6.6). Pure — the
- * Workbench calls these on pair-change events only (D7), never while typing.
+ * Workbench decides the view on pair-change events only (D7), never while typing;
+ * only a pane's unit (`withCurrentUnit`) follows the code as it is edited.
  */
 
 import { unitKey } from './tbDetect/analyzeProject';
-import type { EditorPair, FileAnalysis, PaneTarget } from './tbDetect/types';
+import type { AnalyzedUnit, EditorPair, FileAnalysis, PaneTarget } from './tbDetect/types';
 
 export type SplitPreference = 'auto' | 'always' | 'never';
 export type EditorView = 'tb' | 'both' | 'rtl';
@@ -64,6 +65,24 @@ export function showsSuggestion(
   return pair.tb !== null && pair.tbConfidence !== 'low';
 }
 
+/** The file's unit called `name`, matched as its language does: VHDL ignores case. */
+function findUnit(file: FileAnalysis | undefined, name: string | null): AnalyzedUnit | undefined {
+  if (!file || name === null) return undefined;
+  return file.units.find((unit) => unitKey(file.language, unit.name) === unitKey(file.language, name));
+}
+
+/**
+ * A pane's target with its unit checked against the file as it reads now: the pane keeps
+ * its file between pair changes (D7), but its unit may have been renamed since — a
+ * copied testbench whose module the student renamed, say. Then the file's first unit of
+ * the pane's role runs, else its first unit.
+ */
+export function withCurrentUnit(target: PaneTarget, file: FileAnalysis | undefined, pane: PaneRole): PaneTarget {
+  const units = file?.units ?? [];
+  const unit = findUnit(file, target.unitName) ?? units.find((u) => u.role === pane) ?? units[0];
+  return { ...target, unitName: unit?.name ?? null };
+}
+
 /** The unit a pane runs, when the backend has to be told: a TB pane, or a file of more than one unit (B7). */
 export function runTargetFor(target: PaneTarget, file: FileAnalysis | undefined, pane: PaneRole): string | null {
   if (target.unitName === null) return null;
@@ -83,9 +102,7 @@ export interface RunRoute {
  */
 export function routeRun(file: FileAnalysis | undefined, topUnit: string | null): RunRoute {
   const units = file?.units ?? [];
-  const key = (name: string) => (file ? unitKey(file.language, name) : name);
-  const remembered = topUnit === null ? undefined : units.find((u) => key(u.name) === key(topUnit));
-  const unit = remembered ?? units.find((u) => u.role === 'tb') ?? units[0];
+  const unit = findUnit(file, topUnit) ?? units.find((u) => u.role === 'tb') ?? units[0];
   if (!unit) return { unitName: null, pane: 'rtl', runTarget: null };
   return { unitName: unit.name, pane: unit.role, runTarget: units.length > 1 ? unit.name : null };
 }

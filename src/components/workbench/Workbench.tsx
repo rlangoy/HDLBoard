@@ -48,7 +48,7 @@ import { fileAfterDelete, fileRows } from './fileRows';
 import type { FileMenuProps } from './FileMenu';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
-import { routeRun, runTargetFor, type PaneRole } from './editorView';
+import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
@@ -631,9 +631,11 @@ export function Workbench() {
   /** Play in a pane header: exactly that pane's unit (§ 4.10). */
   const handleRunPane = (pane: PaneRole, target: PaneTarget) => {
     if (isSimulating) return;
-    const runTarget = runTargetFor(target, tb.fileAnalysis(target.fileId), pane);
+    // Checked against the code as it reads now, so a unit renamed a moment ago runs by its new name.
+    const file = tb.fileAnalysis(target.fileId);
+    const current = withCurrentUnit(target, file, pane);
     tb.focusPane(pane);
-    checkAndRun(target.fileId, runTarget, target.unitName, pane);
+    checkAndRun(target.fileId, runTargetFor(current, file, pane), current.unitName, pane);
   };
 
   /** A pane's Play / Stop (paneRun.ts): Stop only on the pane whose unit runs (B5), Play greyed out while another runs. */
