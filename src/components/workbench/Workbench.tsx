@@ -795,132 +795,135 @@ export function Workbench() {
         />
       )}
 
-      <ActivityBar
-        id={PANE_IDS.sidebar.rail}
-        side="left"
-        label="Explorer and simulation"
-        hidden={!collapsed.sidebar}
-      >
-        <ActivityBarShow
-          id={PANE_IDS.sidebar.show}
-          label="Explorer"
-          controls={PANE_IDS.sidebar.pane}
-          shortcut={PANE_SHORTCUT.sidebar}
-          onShow={() => togglePane('sidebar')}
-          icon={<PanelToggleIcon side="left" open aria-hidden="true" />}
-        />
-        <ActivityBarSeparator />
-        <ActivityBarRun status={status} topFile={topFileName} onStart={handleStart} onStop={handleStop} />
-      </ActivityBar>
-
-      <div className="wb-body" ref={layout.bodyRef}>
-        <SidePanel
-          ids={PANE_IDS.sidebar}
+      {/* The panes' row: a rail either side of them (docs/cleanup_file_tabs.md). */}
+      <div className="wb-main">
+        <ActivityBar
+          id={PANE_IDS.sidebar.rail}
           side="left"
-          title="Explorer"
-          width={layout.sidebarWidth}
-          collapsed={collapsed.sidebar}
-          onCollapse={() => togglePane('sidebar')}
-          shortcut={PANE_SHORTCUT.sidebar}
-          className="wb-sidebar"
-          bodyClassName="wb-sidebar__content"
+          label="Explorer and simulation"
+          hidden={!collapsed.sidebar}
         >
-          <SimulationCard
-            status={status}
-            elapsedSeconds={elapsedSeconds}
-            topFile={topFileName}
-            onStart={handleStart}
-            onStop={handleStop}
+          <ActivityBarShow
+            id={PANE_IDS.sidebar.show}
+            label="Explorer"
+            controls={PANE_IDS.sidebar.pane}
+            shortcut={PANE_SHORTCUT.sidebar}
+            onShow={() => togglePane('sidebar')}
+            icon={<PanelToggleIcon side="left" open aria-hidden="true" />}
           />
-          <FileExplorer
-            rows={rows}
-            onSelect={handleOpenFile}
-            onUpload={handleUploadClick}
-            onNewFile={handleNewFile}
-            onRename={handleRenameFile}
-            onDelete={handleDeleteFile}
-            onDownload={handleDownloadFile}
-            onDownloadAll={handleDownloadAll}
-            onToggleExamples={() => setExamplesOpen((open) => !open)}
-            examplesOpen={examplesOpen}
-            onFilesDropped={handleFilesDropped}
-            onSetTopFile={handleSetTopFile}
-            topLocked={isSimulating}
-          />
-        </SidePanel>
+          <ActivityBarSeparator />
+          <ActivityBarRun status={status} topFile={topFileName} onStart={handleStart} onStop={handleStop} />
+        </ActivityBar>
 
-        <div
-          className={cx('wb-resizer', collapsed.sidebar && 'is-beside-collapsed')}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize Explorer"
-          aria-controls={PANE_IDS.sidebar.pane}
-          onPointerDown={layout.onSidebarDividerPointerDown}
-        />
+        <div className="wb-body" ref={layout.bodyRef}>
+          <SidePanel
+            ids={PANE_IDS.sidebar}
+            side="left"
+            title="Explorer"
+            width={layout.sidebarWidth}
+            collapsed={collapsed.sidebar}
+            onCollapse={() => togglePane('sidebar')}
+            shortcut={PANE_SHORTCUT.sidebar}
+            className="wb-sidebar"
+            bodyClassName="wb-sidebar__content"
+          >
+            <SimulationCard
+              status={status}
+              elapsedSeconds={elapsedSeconds}
+              topFile={topFileName}
+              onStart={handleStart}
+              onStop={handleStop}
+            />
+            <FileExplorer
+              rows={rows}
+              onSelect={handleOpenFile}
+              onUpload={handleUploadClick}
+              onNewFile={handleNewFile}
+              onRename={handleRenameFile}
+              onDelete={handleDeleteFile}
+              onDownload={handleDownloadFile}
+              onDownloadAll={handleDownloadAll}
+              onToggleExamples={() => setExamplesOpen((open) => !open)}
+              examplesOpen={examplesOpen}
+              onFilesDropped={handleFilesDropped}
+              onSetTopFile={handleSetTopFile}
+              topLocked={isSimulating}
+            />
+          </SidePanel>
 
-        <div className="wb-center">
-          <CodeEditor
-            onChange={handleContentChange}
-            onFilesDropped={handleFilesDropped}
-            diagnostics={diagnostics.byFile}
-            onDismissDiagnostics={dismissDiagnostics}
-            split={tb.editorSplit(fileMenu)}
-            emptyProject={
-              files.length === 0 && (
-                <EmptyProject onExamples={() => setExamplesOpen(true)} onNewFile={handleNewFile} onUpload={handleUploadClick} />
-              )
-            }
+          <div
+            className={cx('wb-resizer', collapsed.sidebar && 'is-beside-collapsed')}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize Explorer"
+            aria-controls={PANE_IDS.sidebar.pane}
+            onPointerDown={layout.onSidebarDividerPointerDown}
           />
-          {examplesOpen && <ExamplesPane onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />}
+
+          <div className="wb-center">
+            <CodeEditor
+              onChange={handleContentChange}
+              onFilesDropped={handleFilesDropped}
+              diagnostics={diagnostics.byFile}
+              onDismissDiagnostics={dismissDiagnostics}
+              split={tb.editorSplit(fileMenu)}
+              emptyProject={
+                files.length === 0 && (
+                  <EmptyProject onExamples={() => setExamplesOpen(true)} onNewFile={handleNewFile} onUpload={handleUploadClick} />
+                )
+              }
+            />
+            {examplesOpen && <ExamplesPane onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />}
+          </div>
+
+          <div
+            className={cx('wb-resizer', collapsed.board && 'is-beside-collapsed')}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize board panel"
+            aria-controls={PANE_IDS.board.pane}
+            onPointerDown={layout.onBoardDividerPointerDown}
+          />
+
+          <SidePanel
+            ids={PANE_IDS.board}
+            side="right"
+            title={BOARD_PANE_TITLE}
+            width={layout.boardWidth}
+            collapsed={collapsed.board}
+            onCollapse={() => togglePane('board')}
+            shortcut={PANE_SHORTCUT.board}
+            className="wb-right"
+            bodyClassName="wb-right__content"
+          >
+            <div className="wb-board-fit" ref={boardViewportRef}>
+              <div
+                className="wb-board-fit__inner"
+                ref={boardScalerRef}
+                style={{ transform: `scale(${boardScale})` }}
+              >
+                <Board size={24}>
+                  <Leds value={ledState} />
+                  <SevenSegmentDisplays value={hexState} />
+                  <Switches value={sw} onChange={handleSwChange} />
+                  <Pushbuttons value={key} onChange={handleKeyChange} showHint={false} />
+                </Board>
+              </div>
+            </div>
+          </SidePanel>
         </div>
 
-        <div
-          className={cx('wb-resizer', collapsed.board && 'is-beside-collapsed')}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize board panel"
-          aria-controls={PANE_IDS.board.pane}
-          onPointerDown={layout.onBoardDividerPointerDown}
-        />
-
-        <SidePanel
-          ids={PANE_IDS.board}
-          side="right"
-          title={BOARD_PANE_TITLE}
-          width={layout.boardWidth}
-          collapsed={collapsed.board}
-          onCollapse={() => togglePane('board')}
-          shortcut={PANE_SHORTCUT.board}
-          className="wb-right"
-          bodyClassName="wb-right__content"
-        >
-          <div className="wb-board-fit" ref={boardViewportRef}>
-            <div
-              className="wb-board-fit__inner"
-              ref={boardScalerRef}
-              style={{ transform: `scale(${boardScale})` }}
-            >
-              <Board size={24}>
-                <Leds value={ledState} />
-                <SevenSegmentDisplays value={hexState} />
-                <Switches value={sw} onChange={handleSwChange} />
-                <Pushbuttons value={key} onChange={handleKeyChange} showHint={false} />
-              </Board>
-            </div>
-          </div>
-        </SidePanel>
+        <ActivityBar id={PANE_IDS.board.rail} side="right" label={BOARD_PANE_TITLE} hidden={!collapsed.board}>
+          <ActivityBarShow
+            id={PANE_IDS.board.show}
+            label={BOARD_PANE_TITLE}
+            controls={PANE_IDS.board.pane}
+            shortcut={PANE_SHORTCUT.board}
+            onShow={() => togglePane('board')}
+            icon={<PanelToggleIcon side="right" open aria-hidden="true" />}
+          />
+        </ActivityBar>
       </div>
-
-      <ActivityBar id={PANE_IDS.board.rail} side="right" label={BOARD_PANE_TITLE} hidden={!collapsed.board}>
-        <ActivityBarShow
-          id={PANE_IDS.board.show}
-          label={BOARD_PANE_TITLE}
-          controls={PANE_IDS.board.pane}
-          shortcut={PANE_SHORTCUT.board}
-          onShow={() => togglePane('board')}
-          icon={<PanelToggleIcon side="right" open aria-hidden="true" />}
-        />
-      </ActivityBar>
 
       <div
         className="wb-resizer wb-resizer--row"
