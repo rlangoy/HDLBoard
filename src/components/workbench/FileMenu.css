@@ -71,6 +71,9 @@
   max-height: 60vh;
   overflow-y: auto;
   padding: 4px;
+  /* A thin scrollbar, close to the Files panel's overlay one. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--wb-divider-edge) transparent;
 }
 
 /* As the Files panel's folder labels. */
