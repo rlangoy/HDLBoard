@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* A file's icon, name and problem mark (docs/cleanup_file_tabs.md § 5.5). */
+
+.wb-filerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-filerow__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Designs are the usual case: a quiet chip, so a testbench's violet flask stands
+   out (D6). Teal is kept for the split's pane headers. */
+.wb-filerow .wb-roleicon.is-rtl {
+  color: var(--wb-role-quiet-ink);
+}
+
+/* An error is a filled dot, a warning only an outlined ring: shape and colour
+   both differ, so colour is never the only cue. */
+.wb-problemmark {
+  flex: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.wb-problemmark.is-error {
+  background: var(--wb-diag-error);
+}
+
+.wb-problemmark.is-warning {
+  border: 2px solid var(--wb-diag-warning);
+}

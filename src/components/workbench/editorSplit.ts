@@ -11,7 +11,10 @@
 import type { SplitPreference } from './editorView';
 import { EDITOR_MIN_W } from './paneLayout';
 
-/** Each half must stay as usable as the editor alone. */
+/**
+ * Each half must stay as usable as the editor alone. A header this narrow drops
+ * its words so the file name keeps its room (docs/cleanup_file_tabs.md § 5.3).
+ */
 export const SPLIT_PANE_MIN_W = EDITOR_MIN_W;
 /** = --wb-split-divider-w */
 export const SPLIT_DIVIDER_W = 5;

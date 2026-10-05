@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { before, describe, test, type TestContext } from 'node:test';
 import { TIMING_WITHOUT_CLOCK_50, TIMING_WITH_CLOCK_50 } from '../engines/boardTiming.js';
 import { ghdlEngine } from '../engines/ghdlEngine.js';
-import type { PrepareResult } from '../engines/types.js';
+import type { PrepareResult, RunPlan } from '../engines/types.js';
 import { setGhdlExe } from '../ghdl.js';
 import { readFixture } from '../testSupport/fixture.js';
 import { requireTool } from '../testSupport/requireTool.js';
@@ -194,7 +194,57 @@ end architecture;
     assert.ok(first.ok);
     assert.ok(second.ok, second.ok ? '' : second.text);
   });
+
+  test('runs the top file’s own entity when another file declares one by the same name', async (t) => {
+    // A copied testbench that kept its entity name: both files declare dup_tb. The run
+    // must be the top file's, whichever file was analysed last.
+    const original = { name: 'dup_tb.vhd', content: reportingTestbench('dup_tb', 'from the original') };
+    const copy = { name: 'mytest_tb.vhd', content: reportingTestbench('dup_tb', 'from my copy') };
+    for (const files of [[copy, original], [original, copy]]) {
+      const result = await ghdlEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
+      assert.ok(result.ok, result.ok ? '' : result.text);
+      const output = await batchOutput(result.plan);
+      assert.match(output, /from my copy/);
+      assert.doesNotMatch(output, /from the original/);
+    }
+  });
+
+  test('says which file a run uses when another file declares the same entity', async (t) => {
+    const files = [
+      { name: 'dup_tb.vhd', content: reportingTestbench('dup_tb', 'from the original') },
+      { name: 'mytest_tb.vhd', content: reportingTestbench('dup_tb', 'from my copy') },
+    ];
+    const result = await ghdlEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
+    assert.ok(result.ok);
+    assert.deepEqual(result.plan.messages, [
+      'Note: dup_tb is declared in mytest_tb.vhd and in dup_tb.vhd. This run uses the one in mytest_tb.vhd; ' +
+        'give each its own entity name to keep them apart.',
+    ]);
+  });
 });
+
+/** A portless testbench that only prints `text`. */
+function reportingTestbench(entity: string, text: string): string {
+  return `entity ${entity} is
+end entity;
+
+architecture sim of ${entity} is
+begin
+  process
+  begin
+    report "${text}" severity note;
+    wait;
+  end process;
+end architecture;
+`;
+}
+
+/** Everything a batch run prints. */
+async function batchOutput(plan: RunPlan): Promise<string> {
+  const lines: string[] = [];
+  await ghdlEngine.startBatchRun(plan, (line) => lines.push(line), 20_000).done;
+  return lines.join('\n');
+}
 
 const ADDER4_VHDL = `library ieee;
 use ieee.std_logic_1164.all;

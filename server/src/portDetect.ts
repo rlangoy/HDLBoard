@@ -33,7 +33,8 @@ function namedEntity(files: VhdlFileInput[], fileName: string, unit: string): To
   return { name, ports: detectPorts(file.content, name), fileName };
 }
 
-function findEntityNames(src: string): string[] {
+/** Every entity the source declares, in source order, outside comments. */
+export function findEntityNames(src: string): string[] {
   const stripped = stripComments(src);
   const names: string[] = [];
   const re = /\bentity\s+(\w+)\s+is\b/gi;

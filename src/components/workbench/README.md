@@ -46,8 +46,8 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 `SettingsDialog`, `HelpDialog`, `FileExplorer`, `ExamplesPane`, `CodeEditor`,
 `SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
 `ISSUES_URL`, `EXAMPLES`, `copyExample`, `filterExamples`, `Example`, `ExampleLanguage`,
-`EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_OPEN_TABS`, `TOP_LEVEL_ENTITY`, `VhdlFile`,
-`EditorTab`, `TabRunControl`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
+`EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_SHOWN_FILE`, `TOP_LEVEL_ENTITY`, `VhdlFile`,
+`EditorTab`, `SimStatus`, `ConsoleLine`, `tokenizeVhdlLine`,
 `Token` and `TokenType`.
 
 ---
@@ -70,7 +70,7 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
   - [`vhdlHighlight.ts`](#vhdlhighlightts)
   - [`verilogHighlight.ts` and `highlight.ts`](#veriloghighlightts-and-highlightts)
   - [`files.ts`](#filests)
-  - [`fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`](#filekindsts-consolelinests-and-runiconts)
+  - [`fileKinds.ts`, `fileRows.ts`, `consoleLines.ts` and `paneRun.ts`](#filekindsts-filerowsts-consolelinests-and-panerunts)
   - [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)
   - [`helpResources.ts`](#helpresourcests)
   - [`icons.tsx`](#iconstsx)
@@ -100,9 +100,11 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  │     └─ FileExplorer               (card: title + Examples pill, Upload/New File/Download All
 │  │                                     on one row, then the vhdl/verilog/work tree)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-sidebar)
-│  │  CodeEditor: EditorTabStrip (+ suggestion chip, ViewSwitch), then one
-│  │  EditorSurface, or SplitEditor: TB pane | .wb-split__divider | RTL pane,
-│  │  each an EditorPaneHeader over an EditorSurface or an empty state
+│  │  CodeEditor: SplitEditor — one pane, or TB pane | .wb-split__divider |
+│  │  RTL pane — each a header (PlainPaneHeader, RolePaneHeader or
+│  │  EmptyPaneHeader; the rightmost ends with the suggestion chip and the
+│  │  ViewSwitch) over an EditorSurface or an empty state; EmptyProject when
+│  │  there are no files
 │  ├─ .wb-center                       (flex: 1 — takes the remaining width)
 │  │  ├─ CodeEditor
 │  │  └─ ExamplesPane                  (only while open: covers the editor, which stays mounted)
@@ -152,8 +154,10 @@ The composed component. Owns:
 - `files: VhdlFile[]` — every file that exists (the starter project, or the
   stored workspace when a host bridge provides one, plus anything uploaded
   or created since).
-- `openTabs: string[]` / `activeTabId: string | null` — which files are open
-  in the editor and which one is showing.
+- `activeFileId: string | null` — the file in the editor's focused pane (the
+  Files highlight, what Ctrl+S saves, the file the split pairs from). There
+  are no tabs: every file is always loaded, and the Files panel is the one
+  file list (docs/cleanup_file_tabs.md).
 - `topFileId: string | null` — the design file a run starts from.
 - `topUnit: string | null` — the unit of the top file a pane's Play chose
   (`RUN <file> @<unit>`); null lets the backend choose, as before.
@@ -169,7 +173,7 @@ The composed component. Owns:
   `<SevenSegmentDisplays>`.
 
 It takes no props, so there is no API beyond mounting it. Read the source
-for the handlers (`handleOpenFile`, `handleCloseTab`, `handleNewFile`,
+for the handlers (`handleOpenFile`, `handlePickFile`, `handleNewFile`,
 `handleUploadClick`, `handleFilesChosen`, `handleContentChange`,
 `handleStart`, `handleStop`, `handleClearConsole`); each is small and named
 for exactly what it does.
@@ -220,8 +224,7 @@ state, so at most one is open.
 
 ```tsx
 interface FileExplorerProps {
-  files: VhdlFile[];
-  activeFileId: string | null;
+  rows: readonly FileRow[];   // every file in Files order, as fileRows.ts builds them
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
@@ -230,19 +233,28 @@ interface FileExplorerProps {
   onDownload: (id: string) => void;
   onDownloadAll: () => void;
   onFilesDropped: (files: FileList) => void;
-  topFileId: string | null;
   onSetTopFile: (id: string) => void;
   topLocked?: boolean;   // a simulation is compiling/running: no new top
 }
 ```
 
-Renders the `vhdl/`, `verilog/` and `work/` folders from `files`, grouped by
-each file's `folder`; a folder with no files is not drawn, so `work/` only
-appears once a VHDL `tb_*` file has been uploaded (the starter project has
-none; it has `vhdl/` and `verilog/`). Folders are collapsible (own local
-`collapsed` state — purely a UI concern, not lifted to the caller). Clicking
-a file calls `onSelect`; `Workbench` opens it as a tab if it isn't already
-and makes it active. `onUpload` is wired to a hidden `<input type="file">`
+The project's one file list (docs/cleanup_file_tabs.md F1). Renders the
+`vhdl/`, `verilog/` and `work/` folders from `rows` (`rowsByFolder`); a folder
+with no files is not drawn, so `work/` only appears once a VHDL `tb_*` file has
+been uploaded (the starter project has none; it has `vhdl/` and `verilog/`).
+Folders are collapsible (own local `collapsed` state — purely a UI concern,
+not lifted to the caller). Clicking a file calls `onSelect`; `Workbench` shows
+it (with its testbench partner, by the split's rules).
+
+Each row is a `FileRowLabel` (shared with the header's file menu): the role
+icon — a quiet grey chip for a design, the violet flask for a testbench, the
+plain file icon for a file with no code yet — the name, and a problem mark (a
+red dot for errors, an amber ring for warnings only, the counts in its tooltip
+and as screen-reader text). Every file shown in the editor, both files of a
+split alike, gets the `is-shown` highlight; the top file is told apart by its
+dot, never by the highlight. When what is shown changes, the first shown row
+is scrolled into view. The panel never reads the analysis or the diagnostics
+itself: `fileRows.ts` puts all of that in the rows. `onUpload` is wired to a hidden `<input type="file">`
 in `Workbench`, not owned by this component — `FileExplorer` only asks for
 the click.
 
@@ -297,10 +309,12 @@ the top file of a running simulation can't change until it stops.
 entity specifically, rather than guessing from board-port matches — with
 two files declaring the same board ports, the dot decides which one runs.
 
-**Rename and delete.** Each row reveals an edit and a delete button
-(`icons.tsx`) on hover/focus (`.wb-files__row-actions`, `opacity: 0` until
-`:hover` / `:focus-within` — kept mounted rather than conditionally
-rendered, so Tab can still reach them without a hover first). The edit
+**Rename and delete.** Each row reveals a download, an edit and a delete
+button (`icons.tsx`) on hover/focus (`.wb-files__row-actions`, `max-width: 0`
+until `:hover` / `:focus-within`, so the name has the whole row at rest and
+ellipsizes before the buttons, never under them — kept mounted rather than
+conditionally rendered or `display: none`, so Tab can still reach them
+without a hover first). The edit
 button, or a double-click on the file name, swaps the row's `<button>` for
 an `<input>` — they can't nest, hence the row being a `<div>` wrapping
 either one, not the button itself. Enter or blur commits via `onRename`;
@@ -312,15 +326,14 @@ and then calls `onDelete`.
 Only the *editing* state (`renamingId` / `draftName`) is local to
 `FileExplorer`; the rename and delete themselves are owned by the caller
 (`Workbench`'s `handleRenameFile`, `handleDeleteFile`), same as every other
-file mutation. `handleDeleteFile` reuses `handleCloseTab`'s "hand off to
-the next tab" logic — a deleted file cannot stay open — so deleting the
-active file behaves exactly like closing its tab, plus removing it from
-`files`.
+file mutation. Deleting the shown file shows the next file in Files order
+(the one before, if it was the last: `fileAfterDelete`); deleting the last
+file leaves the empty project.
 
 **Download.** Each row also has a download button (before rename), and the
 actions column has **Download All**, which saves the whole project as one
 `.zip` laid out like the tree (`vhdl/…`, `verilog/…`, `work/…`), named
-`HDLBoard-project-YYYY-MM-DD.zip`. Ctrl+S / Cmd+S downloads the active tab
+`HDLBoard-project-YYYY-MM-DD.zip`. Ctrl+S / Cmd+S downloads the shown file
 instead of the browser's "Save page as…". It is all client-side
 (`download.ts`: a Blob plus an `<a download>` click; an Electron host shows
 its native Save As dialog for the same click). The ZIP comes from `zip.ts`,
@@ -348,38 +361,43 @@ sidebar's own box did shrink underneath it.
 
 ```tsx
 interface CodeEditorProps {
-  tabs: EditorTab[];               // { id, name, content }[], open files only
-  activeTabId: string | null;
-  onSelectTab: (id: string) => void;
-  onCloseTab: (id: string) => void;
-  onAddTab: () => void;            // the tab strip's "+"
   onChange: (id: string, content: string) => void;
   onFilesDropped: (files: FileList) => void;
-  tabRun?: TabRunControl | null;   // the one tab with a play/stop icon
-}
-
-interface TabRunControl {
-  tabId: string;
-  running: boolean;   // a simulation is running this tab's file: Stop
-  disabled: boolean;  // while a run is compiling
-  onClick: () => void; // start (Play) or stop (Stop)
+  diagnostics?: DiagnosticsByFile;
+  onDismissDiagnostics?: (fileId: string) => void;
+  split?: SplitEditorProps;   // the one or two panes, each under its header
+  emptyProject?: ReactNode;   // shown instead while the project has no files
 }
 ```
 
-The tab strip plus one editing surface for the active tab.
+The editor column: a drop zone around `SplitEditor` (one pane, or the
+testbench split), with no tab strip (docs/cleanup_file_tabs.md). Every pane has
+one header row, 39 px like the side panes' title strips, so the three run on
+as one line:
 
-**Play/stop on one tab.** At most one tab — `tabRun.tabId` — shows a
-[`<SimToggle>`](#simtoggle) icon, ahead of its name. `Workbench` picks it:
-while nothing runs, the active tab gets Play (unless its file can't be top,
-a `work/` testbench), and Play makes that file top and starts the run from
-it; while a simulation compiles or runs, only the running file's tab gets
-Stop — whichever tab is active, and greyed out until compiling finishes —
-and no tab offers Play. The rule itself is the pure `runIconFor` in
-`runIcon.ts`, unit-tested in `runIcon.test.ts`. See
+- **`PlainPaneHeader`** — one design file with no testbench: white, Play, a
+  divider, then the file name, the header's main element.
+- **`RolePaneHeader`** — a testbench or design pane of the split
+  (docs/impl_split_screen.md § 4.4): role tint and accent, Play, the role badge
+  (a menu), the name, the region navigator.
+- **`EmptyPaneHeader`** — a pane with nothing to show: its role only.
+
+The rightmost header ends with the suggestion chip and the view switch (icons
+only beside the split's badges). The name is a `FileNameButton`
+(`FileMenu.tsx`): it drops down every file, grouped by folder as in Files, the
+shown file ticked, *New file…* at the bottom — the role badge's menu pattern
+(`usePopover`, arrows, Home/End; Esc and Tab hand focus back to the name). A
+pick shows the file as a click in Files does and puts the caret in its code.
+Below 280 px a header drops its words, so only the name gives way.
+
+Play in a header is a [`<SimToggle>`](#simtoggle) whose state comes from the
+pure `paneRunFor` (`paneRun.ts`): Play where the file can run, Stop on the pane
+whose unit runs, and Play greyed out — *Stop the simulation first* — on every
+other pane while a run goes, so nothing in the header moves. See
 ["How the editor overlay works"](#how-the-editor-overlay-works) for the
-textarea/`<pre>` mechanism. With no tabs open it renders a plain "No file
-open" placeholder rather than an empty editor — which is itself a valid
-drop target (below), a quick way back to a non-empty project.
+textarea/`<pre>` mechanism. With no files, `emptyProject` (`EmptyProject.tsx`:
+*No files yet* with Examples, New file and Upload) takes the panes' place; it is
+a drop target too.
 
 **Drag-and-drop.** Same mechanism and `onFilesDropped` contract as
 `<FileExplorer>` (see its own entry above for the ref-counted `dragDepth`
@@ -389,8 +407,8 @@ default behavior for a dropped file is to insert its content (or, in some
 browsers, its path) as text at the drop position, and `onDragOver`'s
 `e.preventDefault()` is what suppresses that, same call that also makes
 `onDrop` fire at all — dropping onto the textarea imports the file and
-leaves the text being edited untouched. The whole `.wb-editor` root — tab
-strip, the open file, and the empty state — is one drop target, so where
+leaves the text being edited untouched. The whole `.wb-editor` root — the
+headers, the code, and the empty project — is one drop target, so where
 exactly the pointer lands doesn't matter.
 
 ### `<SimulationCard>`
@@ -428,17 +446,16 @@ long enough to otherwise resist the sidebar shrinking.
 
 ```tsx
 interface SimToggleProps {
-  running: boolean;     // Stop while true, Play otherwise
+  running: boolean;        // Stop while true, Play otherwise
   disabled?: boolean;
-  fileName: string;     // for the tooltip / aria-label
-  onClick: () => void;  // start when showing Play, stop when showing Stop
+  fileName: string;        // for the tooltip / aria-label
+  blockedReason?: string;  // Play greyed out but focusable, with this as its tooltip
+  onClick: () => void;     // start when showing Play, stop when showing Stop
   className?: string;
 }
 ```
 
-The outlined teal play triangle / red stop square on `<CodeEditor>`'s active tab.
-Its click stops propagating, so pressing it inside a tab isn't also a click
-on the tab.
+The outlined teal play triangle / red stop square in an editor pane's header.
 
 ### `<ActivityBar>` and `<SidePanel>`
 
@@ -446,7 +463,7 @@ The IDE chrome around the two side panes.
 
 `<SidePanel id side title width collapsed onCollapse shortcut?>` is one
 side pane: an `<aside>` with an uppercase title strip — the same height as
-the editor's tab strip, so their bottom borders run on as one line — and a
+the editor's pane headers, so their bottom borders run on as one line — and a
 hide button (`PanelToggleIcon`) on the pane's inner edge, beside the editor:
 after the title on the left pane, before it on the right one. Collapsed,
 the `<aside>` goes to width 0 but
@@ -543,8 +560,11 @@ and `system`.
 
 `EXAMPLE_FILES: VhdlFile[]` — every built-in file: `DE1_SoC.vhdl`,
 `blinkTest.vhdl`, `keyCouter2Led.vhdl`, `keyCounter7Seg.vhdl`, `and_gate.vhdl`,
-`and_gate_tb.vhd` under `vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`,
-`keyCouter2Led.v`, `keyCounter7Seg.v`, `and_gate.v`, `and_gate_tb.v` under `verilog/`.
+`and_gate_tb.vhd`, `and_gate_truthtable_tb.vhd` under `vhdl/`, and their Verilog twins
+`DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v`, `keyCounter7Seg.v`, `and_gate.v`,
+`and_gate_tb.v`, `and_gate_truthtable_tb.v` under `verilog/`. `and_gate_truthtable_tb`
+tests the AND gate and prints its truth table (the Examples pane's AND Gate Truth Table
+Testbench).
 `keyCounter7Seg` counts KEY0 presses 00-99 in decimal on HEX1/HEX0 (KEY1 resets),
 detecting a press as a falling edge of the key sampled on `CLOCK_50`. `STARTER_FILES` is what a first
 start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are
@@ -557,7 +577,7 @@ demonstrates `CLOCK_500Hz` (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a
 `CLOCK_50`/`KEY_N`-driven up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets)
 displayed on `LEDR`.
 
-`DEFAULT_OPEN_TABS` is the one tab open on first load (`DE1_SoC.vhdl`).
+`DEFAULT_SHOWN_FILE` is the file shown on first load (`DE1_SoC.vhdl`).
 `TOP_LEVEL_ENTITY` (`"DE1_SoC.vhdl"`) is only the *initial* top file —
 `Workbench`'s `topFileId` starts pointed at whichever starter file has this
 name, then moves independently once a user clicks another design file's
@@ -585,7 +605,7 @@ file is locked until it stops, as for its dot in the Files panel). The console g
 per copied or kept file. Opening a file, adding one, or a jump to an error closes the
 pane; so do its ✕ and Escape.
 
-### `fileKinds.ts`, `consoleLines.ts` and `runIcon.ts`
+### `fileKinds.ts`, `fileRows.ts`, `consoleLines.ts` and `paneRun.ts`
 
 Pure modules, so `Workbench` and `FileExplorer` never look at a file name
 themselves, and covered by vitest (`npm test`):
@@ -599,10 +619,15 @@ themselves, and covered by vitest (`npm test`):
 - `topAfterDelete(files, id)` — the deleted top's successor comes from the
   same folder, so a Verilog run stays a Verilog run.
 - `hasTopDot(folder)`, `UPLOAD_ACCEPT`, `ACCEPTED_FILES_TEXT`.
+- `FOLDER_ORDER`, `filesInFolderOrder(files)` — the order the Files panel and
+  the file menu list files in.
+- `fileRows(files, context)` (`fileRows.ts`) — each file as both lists draw
+  it: role, shown, top, problem counts; `rowsByFolder(rows)`;
+  `fileAfterDelete(files, id)` — the file shown after the shown one is deleted.
 - `appendCapped(lines, line)` (`consoleLines.ts`) — the console keeps the
   newest 2000 lines.
-- `runIconFor(status, runFileId, activeFile)` (`runIcon.ts`) — which editor
-  tab shows the play/stop icon, and which of the two (see `<CodeEditor>`).
+- `paneRunFor(input)` (`paneRun.ts`) — Play, Stop, greyed-out Play or nothing,
+  per pane header (see `<CodeEditor>`).
 
 The extension rules mirror `server/src/engines/language.ts`; the two packages
 share no code, so a change to one must be made in the other.
@@ -680,8 +705,10 @@ The optional host bridge for project storage. `<Workbench>` feature-detects
 workspace on mount (holding auto-save back until that answers, so the
 starter files never overwrite it), then saves, debounced, on every change
 and on `pagehide`. What is stored is `serializeWorkspace` output — `files`,
-`openTabs`, `activeTabId`, `topFileId` and a version number;
-`parseWorkspace` rejects anything else. Where it is stored is up to the
+`activeFileId`, `topFileId`, `topUnit`, the testbench overrides and a version
+number; `parseWorkspace` rejects anything else, and reads the shown file of a
+workspace from 1.3.0 or earlier from its `activeTabId` (its `openTabs` are
+ignored). Where it is stored is up to the
 host (the desktop build's implementation is in `winInstaller/electron/`).
 Tests: `desktop.test.ts`.
 
@@ -718,12 +745,13 @@ first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
-`handleStart` (the card's Start button) opens the file with the blue dot
-and makes it the active file (Files panel and editor tab), then runs it; `handleRunFile` (the active tab's play icon) first makes that tab's file
-top, then does the same. Both go through `startRun`, which:
+`handleStart` (the card's Start button) shows the file with the blue dot
+(Files panel highlight and pane header), then runs it; `handleRunPane` (Play in
+a pane header) first makes that pane's file top, then does the same. Both go
+through `startRun`, which:
 
 1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file
-   as `runFileId` (the one tab that shows Stop while it runs), blanks the
+   as `runFileId` (the pane showing it shows Stop while it runs), blanks the
    board (`blankBoard()` — LEDs off, HEX blank; see
    `Design_Description.md` § 5 convention 11), and calls
    `client.run(files, topFileName)`, which sends the files of the top file's
@@ -801,7 +829,8 @@ dependencies beyond React" rule.
 When a run fails to compile, the code pane shows where: the line is tinted
 red (warnings amber), its line number carries a ✕ (or `!`) and a tooltip with
 the compiler's message, the message is written at the end of the line, and
-the tab gets a dot. The file with the first error is opened and scrolled to
+the file gets a problem mark in the Files panel, its pane header and the file
+menu (a red dot for errors, an amber ring for warnings only). The file with the first error is opened and scrolled to
 it. Console lines that name a marked place are links to it. There is no backend
 or protocol change: everything is parsed in the browser from the `ERROR` and
 `LOG` text the console already shows. Design:
@@ -825,7 +854,7 @@ When markers change:
 | `LOG` frame | parse, locate, add (advice only for Icarus's implicit-wire warning); never moves the view |
 | click in the code pane (text or gutter) | the active file's markers are removed |
 | any edit of a file, or deleting it | that file's markers are removed |
-| console Clear, tab switch or close, Stop, rename | no effect |
+| console Clear, showing another file, Stop, rename | no effect |
 
 A new message shape is one new entry in `RECOGNIZERS` plus a test row in
 `diagnostics.test.ts`; the real compiler output the tests use is in
@@ -1073,8 +1102,8 @@ pane instead. Standalone `Board` users keep the stacking fallback.
 - **A backend is required.** Simulation runs server-side (`server/`), not in
   the browser — see [Using the component](#using-the-component) and
   "Install and run" in [`BUILDING.md`](../../../docs/BUILDING.md).
-- **No persistence without a host bridge.** In a plain browser, files, tabs
-  and console output live in React state and are lost on reload; only a host
+- **No persistence without a host bridge.** In a plain browser, files, the
+  shown file and console output live in React state and are lost on reload; only a host
   that provides `window.hdlboard` ([`desktop.ts`](#desktopts)) keeps the
   workspace. The backend's per-session temp directory is deleted when the
   socket closes (`ghdl_implementation_plan.md` § 7.2).

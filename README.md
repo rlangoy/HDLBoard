@@ -7,7 +7,7 @@ Write VHDL or Verilog and watch it run on a virtual board — flip switches, lig
 
 - **Real simulation** — your VHDL runs on [GHDL](https://github.com/ghdl/ghdl) and your Verilog on [Icarus Verilog](https://github.com/steveicarus/iverilog), not an approximation; the simulator's own output and errors (file:line included) appear in the console. Drop a `.v` file, mark it as top, and Start runs the Verilog engine.
 - **A live DE1-SoC board** — clickable switches and pushbuttons, with LEDs and 7-segment displays driven by the simulation.
-- **A small IDE** — file explorer with upload and drag-and-drop, tabbed editor (VHDL and Verilog syntax highlighting), resizable panes.
+- **A small IDE** — one file list with upload and drag-and-drop, an editor with no tabs to tidy (click a file, or its name above the code, to switch; VHDL and Verilog syntax highlighting), resizable panes.
 - **Testbenc support** — in VHDL or Verilog prints its messages live in the console. Open a design or a testbench and the editor splits: testbench on the left, the design it drives on the right, each at its own code; Play in a pane runs that pane's unit.
 - **Real-time pacing** — simulated time tracks real time, so a design's timing here predicts its timing on the board.
 

@@ -80,6 +80,16 @@ const CATALOGUE: readonly ExampleEntry[] = [
     role: 'testbench',
     files: { vhdl: ['and_gate_tb', 'and_gate'], verilog: ['and_gate_tb_v', 'and_gate_v'] },
   },
+  {
+    key: 'and_gate_truthtable_tb',
+    title: 'AND Gate Truth Table Testbench',
+    description: 'Tests the AND gate and prints its truth table. Copies the AND gate too.',
+    role: 'testbench',
+    files: {
+      vhdl: ['and_gate_truthtable_tb', 'and_gate'],
+      verilog: ['and_gate_truthtable_tb_v', 'and_gate_v'],
+    },
+  },
 ];
 
 /** One card per catalogue entry and language. */

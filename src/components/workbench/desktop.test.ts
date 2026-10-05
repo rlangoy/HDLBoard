@@ -9,8 +9,7 @@ const ws: Workspace = {
     { id: 'a', name: 'a.vhdl', folder: 'vhdl', content: 'x' },
     { id: 'file-3', name: 'b.v', folder: 'verilog', content: 'y' },
   ],
-  openTabs: ['a', 'file-3'],
-  activeTabId: 'file-3',
+  activeFileId: 'file-3',
   topFileId: 'a',
   topUnit: 'a_tb',
   testbench: { roles: { a: 'tb' }, pairs: { 'file-3': 'a' } },
@@ -32,16 +31,14 @@ describe('workspace storage format', () => {
     const stored = JSON.stringify({
       version: 1,
       files: [ws.files[0], { id: 'bad', name: 1 }, { ...ws.files[0], content: 'dup' }],
-      openTabs: ['gone', 'a', 'a'],
-      activeTabId: 'gone',
+      activeFileId: 'gone',
       topFileId: 'gone',
       topUnit: 'x',
       testbench: { roles: { a: 'maybe', gone: 'tb' }, pairs: { a: 'gone' } },
     });
     expect(parseWorkspace(stored)).toEqual({
       files: [ws.files[0]],
-      openTabs: ['a'],
-      activeTabId: 'a',
+      activeFileId: 'a',
       topFileId: null,
       topUnit: null,
       testbench: { roles: {}, pairs: {} },
@@ -51,5 +48,27 @@ describe('workspace storage format', () => {
   it('reads a workspace stored before the testbench split as having no overrides', () => {
     const { topUnit: _unit, testbench: _overrides, ...old } = ws;
     expect(parseWorkspace(serializeWorkspace(old))).toEqual({ ...old, topUnit: null, testbench: { roles: {}, pairs: {} } });
+  });
+
+  it('stores the shown file as activeFileId, and no tabs', () => {
+    const stored = JSON.parse(serializeWorkspace(ws));
+    expect(stored.activeFileId).toBe('file-3');
+    expect(stored).not.toHaveProperty('openTabs');
+  });
+
+  it('reads the shown file of a workspace from 1.3.0 or earlier from its active tab', () => {
+    const { activeFileId: _shown, ...rest } = ws;
+    const old = JSON.stringify({ version: 1, ...rest, openTabs: ['a', 'file-3'], activeTabId: 'a' });
+    expect(parseWorkspace(old)?.activeFileId).toBe('a');
+  });
+
+  it('shows the first file in Files order when the stored one is gone', () => {
+    const stored = JSON.stringify({ version: 1, ...ws, activeFileId: 'gone' });
+    expect(parseWorkspace(stored)?.activeFileId).toBe('a');
+  });
+
+  it('shows nothing in a workspace with no files', () => {
+    const stored = JSON.stringify({ version: 1, ...ws, files: [] });
+    expect(parseWorkspace(stored)?.activeFileId).toBeNull();
   });
 });

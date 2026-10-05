@@ -236,7 +236,9 @@
   background: var(--wb-hover);
 }
 
-.wb-files__row.is-active {
+/* A file shown in the editor (docs/cleanup_file_tabs.md § 5.5): both files of a
+   split alike. The top file is told apart by its blue dot, not by this. */
+.wb-files__row.is-shown {
   background: var(--wb-accent-soft);
 }
 
@@ -257,9 +259,13 @@
   cursor: pointer;
 }
 
-.wb-files__row.is-active .wb-files__file {
+.wb-files__row.is-shown .wb-files__file {
   color: var(--wb-accent-dark);
   font-weight: 600;
+}
+
+.wb-files__row.is-shown .wb-roleicon.is-rtl {
+  color: var(--wb-accent-dark);
 }
 
 /* A `vhdl/` row's top-dot button (below) already supplies the row's
@@ -340,19 +346,22 @@
   box-shadow: 0 0 0 2px var(--wb-accent-soft);
 }
 
-/* Hidden until the row is hovered/focused, rather than unmounted, so
-   Tab can still reach them from the keyboard without a hover first. */
+/* No width at rest, so the name has the whole row (docs/cleanup_file_tabs.md
+   § 5.5); on hover or keyboard focus they open at the row's end and the name
+   ellipsizes before them, never under them. Collapsed rather than unmounted or
+   display: none, so Tab still reaches them without a hover first. */
 .wb-files__row-actions {
   display: flex;
   gap: 2px;
   flex: none;
-  padding-right: 6px;
-  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
 }
 
 .wb-files__row:hover .wb-files__row-actions,
 .wb-files__row:focus-within .wb-files__row-actions {
-  opacity: 1;
+  max-width: none;
+  padding-right: 6px;
 }
 
 .wb-files__row-action {

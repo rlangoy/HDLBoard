@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { analyzeFile } from './tbDetect/analyzeProject';
 import { fixtureFile } from './tbDetect/fixtures.testSupport';
 import type { Confidence, EditorPair } from './tbDetect/types';
-import { anchorRoleView, narrowView, pairKey, resolveView, routeRun, runTargetFor, showsSuggestion, type EditorView, type PairEvent, type SplitPreference } from './editorView';
+import { anchorRoleView, narrowView, pairKey, resolveView, routeRun, runTargetFor, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type SplitPreference } from './editorView';
 
 /** docs/impl_split_screen.md § 4.2, § 6.3, D24. */
 
@@ -93,6 +93,28 @@ describe('runTargetFor', () => {
 
   test('the TB pane always names its unit', () => {
     expect(runTargetFor({ fileId: 'a', line: 1, unitName: 'alu_tb' }, mixed, 'tb')).toBe('alu_tb');
+  });
+});
+
+describe('withCurrentUnit', () => {
+  const mixed = analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'));
+  const shown = (unitName: string | null) => ({ fileId: 'a', line: 1, unitName });
+
+  test('keeps the pane’s unit while the file declares it, case-insensitively for VHDL', () => {
+    expect(withCurrentUnit(shown('ALU'), mixed, 'rtl').unitName).toBe('alu');
+  });
+
+  test('a unit renamed since the pane opened: the file’s first unit of the pane’s role', () => {
+    expect(withCurrentUnit(shown('old_tb'), mixed, 'tb').unitName).toBe('alu_tb');
+    expect(withCurrentUnit(shown('old'), mixed, 'rtl').unitName).toBe('alu');
+  });
+
+  test('keeps the rest of the target', () => {
+    expect(withCurrentUnit(shown('old_tb'), mixed, 'tb')).toEqual({ fileId: 'a', line: 1, unitName: 'alu_tb' });
+  });
+
+  test('no unit for a file not analysed', () => {
+    expect(withCurrentUnit(shown('gone'), undefined, 'tb').unitName).toBeNull();
   });
 });
 

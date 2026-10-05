@@ -133,9 +133,12 @@ function asSentence(text: string): string {
 export function summarize(fileName: string, lines: readonly LineDiagnostic[]): string {
   const shown = lines.filter((line) => !isMutedLine(line));
   if (shown.length === 0) return '';
-  const { errors, warnings } = countSeverities(lines);
-  const totals = [errors > 0 && count(errors, 'error'), warnings > 0 && count(warnings, 'warning')].filter(Boolean);
   const first = [...shown].sort((a, b) => a.line - b.line)[0];
   const [message] = visibleInDisplayOrder(first);
-  return `${fileName}: ${totals.join(', ')}. First on line ${first.line}: ${asSentence(headlineOf(message))} ${CLEAR_HINT}`;
+  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))} ${CLEAR_HINT}`;
+}
+
+/** "2 errors, 1 warning" — the counts a file's problem mark stands for; `''` for none. */
+export function problemCountText({ errors, warnings }: { errors: number; warnings: number }): string {
+  return [errors > 0 && count(errors, 'error'), warnings > 0 && count(warnings, 'warning')].filter(Boolean).join(', ');
 }

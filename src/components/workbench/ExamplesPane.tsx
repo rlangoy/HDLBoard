@@ -16,7 +16,7 @@ export interface ExamplesPaneProps {
 
 /**
  * "Available Examples": shown over the editor while open (the editor stays
- * mounted underneath, so its tabs and undo history survive). Each card copies
+ * mounted underneath, so its scroll position and undo history survive). Each card copies
  * its example into the Files panel; the built-in files are never edited.
  */
 export function ExamplesPane({ onOpen, onClose }: ExamplesPaneProps) {
