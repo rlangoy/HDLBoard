@@ -91,10 +91,12 @@
   /* --wb-console-h is overridden inline (usePaneLayout.ts) as the console's
      divider is dragged; the value above is only the initial/no-JS height. */
   grid-template-rows: var(--wb-header-h) 1fr var(--wb-divider-size) var(--wb-console-h);
-  /* An activity bar either side of the panes' row (row 2), each column as
-     wide as its rail — 0 while that rail is hidden (ActivityBar.css); the
-     header, the console divider and the console run the full width. */
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* One column: the header, the panes' row (.wb-main), the console divider and the
+     console each run the full width. The rails sit inside .wb-main rather than in
+     grid columns of their own: an `auto` column that the header and the console
+     span is widened by them in Chromium before 93 (a 308 px empty band either side
+     in Chromium 80), however narrow the rail. */
+  grid-template-columns: minmax(0, 1fr);
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
   background: #ffffff;
@@ -104,8 +106,16 @@
   overflow-x: hidden;
 }
 
+/* Row 2: the left rail, the panes (.wb-body) and the right rail (ActivityBar.css). */
+.wb-main {
+  grid-row: 2;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
 /*
- * min-width: 0 is load-bearing. As a grid item this defaults to
+ * min-width: 0 is load-bearing. As a flex item this defaults to
  * min-width: auto — its min-content width — and because every pane inside
  * is `flex: none`, that min-content is the panes' full combined width. The
  * row would then refuse to shrink below it, so the width applyLayout
@@ -114,8 +124,7 @@
  * window resize.
  */
 .wb-body {
-  grid-row: 2;
-  grid-column: 2;
+  flex: 1;
   display: flex;
   min-width: 0;
   min-height: 0;
