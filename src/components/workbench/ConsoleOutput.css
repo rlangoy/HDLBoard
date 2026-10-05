@@ -81,6 +81,60 @@
   flex: none;
 }
 
+/* A run of GHDL report / assert messages as a table (ConsoleOutput's ReportTable). */
+.wb-console__reports {
+  border-collapse: collapse;
+  margin: 2px 0 4px;
+  color: #cbd5e1;
+}
+
+.wb-console__reports th {
+  padding: 0 18px 2px 0;
+  border-bottom: 1px solid #1e293b;
+  font-weight: 600;
+  text-align: left;
+  color: #64748b;
+}
+
+.wb-console__reports td {
+  padding: 0 18px 0 0;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.wb-console__reports td.wb-console__report-text {
+  padding-right: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wb-console__reports tbody tr:hover {
+  background: #1e293b;
+}
+
+.wb-console__report-line {
+  color: #64748b;
+}
+
+.wb-console__reports tr.is-warning {
+  color: #fbbf24;
+}
+
+.wb-console__reports tr.is-error,
+.wb-console__reports tr.is-failure {
+  color: #f87171;
+}
+
+/* The severity of anything but a note, in words too: colour is never the only cue. */
+.wb-console__severity {
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
 /* A console line that names a marked place in a project file (ConsoleOutput's `locate`). */
 .wb-console__link {
   all: unset;

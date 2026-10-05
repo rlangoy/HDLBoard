@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { cx } from '../board';
 import type { LocatedDiagnostic } from './diagnosticLocation';
+import { consoleBlocks, readableSimTime, type ReportRow } from './ghdlReport';
 import { DeleteIcon } from './icons';
 import './ConsoleOutput.css';
 
@@ -21,6 +22,31 @@ export interface ConsoleOutputProps {
   locate?: (line: string) => LocatedDiagnostic | undefined;
   /** A located line was clicked. */
   onOpenLocation?: (diagnostic: LocatedDiagnostic) => void;
+}
+
+/** A link to the marked place a console line names, around `children`. */
+function LocationLink({
+  target,
+  onOpenLocation,
+  children,
+}: {
+  target: LocatedDiagnostic;
+  onOpenLocation: (diagnostic: LocatedDiagnostic) => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="wb-console__link"
+      onClick={() => {
+        // Ending a text selection over the link is a copy, not a navigation.
+        if (window.getSelection()?.toString()) return;
+        onOpenLocation(target);
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 /**
@@ -45,17 +71,9 @@ function LineText({
           <span key={i}>
             {i > 0 && '\n'}
             {target ? (
-              <button
-                type="button"
-                className="wb-console__link"
-                onClick={() => {
-                  // Ending a text selection over the link is a copy, not a navigation.
-                  if (window.getSelection()?.toString()) return;
-                  onOpenLocation(target);
-                }}
-              >
+              <LocationLink target={target} onOpenLocation={onOpenLocation}>
                 {part}
-              </button>
+              </LocationLink>
             ) : (
               part
             )}
@@ -66,9 +84,65 @@ function LineText({
   );
 }
 
+/**
+ * A run of GHDL `report` / `assert` messages (ghdlReport.ts) as one table, so the
+ * messages line up instead of each repeating `file:line:col:@time:(report note):`.
+ */
+function ReportTable({
+  rows,
+  locate,
+  onOpenLocation,
+}: { rows: readonly ReportRow[] } & Pick<ConsoleOutputProps, 'locate' | 'onOpenLocation'>) {
+  return (
+    <table className="wb-console__reports">
+      <thead>
+        <tr>
+          <th scope="col">Time</th>
+          <th scope="col">Filename</th>
+          <th scope="col">Timestamp</th>
+          <th scope="col">Report Text</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ line, report }) => {
+          const target = locate?.(line.text);
+          const fileName = (
+            <>
+              {report.file}
+              <span className="wb-console__report-line">:{report.line}</span>
+            </>
+          );
+          return (
+            <tr key={line.id} className={cx(`is-${report.severity}`)}>
+              <td className="wb-console__time">{line.time}</td>
+              <td>
+                {target && onOpenLocation ? (
+                  <LocationLink target={target} onOpenLocation={onOpenLocation}>
+                    {fileName}
+                  </LocationLink>
+                ) : (
+                  fileName
+                )}
+              </td>
+              <td>{readableSimTime(report.simTime)}</td>
+              <td className="wb-console__report-text">
+                {report.severity !== 'note' && (
+                  <span className="wb-console__severity">{`${report.kind} ${report.severity}`}</span>
+                )}
+                {report.text}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 /** The bottom "Simulator Output / Status" panel — a scrolling, clearable log. */
 export function ConsoleOutput({ lines, onClear, locate, onOpenLocation }: ConsoleOutputProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const blocks = useMemo(() => consoleBlocks(lines), [lines]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -84,12 +158,21 @@ export function ConsoleOutput({ lines, onClear, locate, onOpenLocation }: Consol
         </button>
       </div>
       <div className="wb-console__body" role="log" aria-live="polite">
-        {lines.map((line) => (
-          <div className={cx('wb-console__line', line.tone && `is-${line.tone}`)} key={line.id}>
-            <span className="wb-console__time">[{line.time}]</span>{' '}
-            <LineText text={line.text} locate={locate} onOpenLocation={onOpenLocation} />
-          </div>
-        ))}
+        {blocks.map((block) =>
+          block.kind === 'reports' ? (
+            <ReportTable
+              key={`reports-${block.rows[0].line.id}`}
+              rows={block.rows}
+              locate={locate}
+              onOpenLocation={onOpenLocation}
+            />
+          ) : (
+            <div className={cx('wb-console__line', block.line.tone && `is-${block.line.tone}`)} key={block.line.id}>
+              <span className="wb-console__time">[{block.line.time}]</span>{' '}
+              <LineText text={block.line.text} locate={locate} onOpenLocation={onOpenLocation} />
+            </div>
+          ),
+        )}
         <div ref={endRef} />
       </div>
     </section>

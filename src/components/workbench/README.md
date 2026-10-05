@@ -522,6 +522,12 @@ A scrolling, auto-scroll-to-bottom log. `tone` only changes text colour
 caller to empty the log — the caller owns the array, this component never
 mutates it.
 
+A run of consecutive GHDL `report` / `assert` lines
+(`file:line:col:@time:(report note): text`) is drawn as one table —
+Time, Filename, Timestamp, Report Text — instead of one line each
+(`ghdlReport.ts`: `parseGhdlReport`, `consoleBlocks`). Failed asserts are
+rows of the same table, coloured by severity and labelled in words.
+
 ## Supporting modules
 
 ### `vhdlHighlight.ts`
