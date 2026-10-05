@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useId, type ReactNode } from 'react';
+import { CopyCodeButton } from './CopyCodeButton';
 import type { PaneRole } from './editorView';
 import { ChipIcon, FlaskIcon } from './icons';
 import { RoleIcon, usePopover } from './RoleIcon';
@@ -36,6 +37,8 @@ interface FilePaneHeaderProps {
   fileName: string;
   /** The file's name as the button that opens the file menu (FileMenu.tsx). */
   nameButton: ReactNode;
+  /** The file's text, for the Copy button beside its name. */
+  code: string;
   run: PaneRun | null;
   /** At the right end, in the rightmost pane only: the suggestion chip and the view switch. */
   end?: ReactNode;
@@ -60,12 +63,13 @@ export interface RolePaneHeaderProps extends FilePaneHeaderProps {
  * between Play and the name.
  */
 export function RolePaneHeader(props: RolePaneHeaderProps) {
-  const { pane, fileName, nameButton, run, regions, end } = props;
+  const { pane, fileName, nameButton, code, run, regions, end } = props;
   return (
     <div className={`wb-panehead is-${pane}`}>
       {run && <PaneRunButton fileName={fileName} run={run} />}
       <RoleBadge {...props} />
       {nameButton}
+      <CopyCodeButton fileName={fileName} code={code} />
       <span className="wb-panehead__spacer" />
       {regions && regions.count > 1 && <RegionNavigator regions={regions} />}
       {end}
@@ -77,7 +81,7 @@ export function RolePaneHeader(props: RolePaneHeaderProps) {
  * The header of one design file with no testbench (docs/cleanup_file_tabs.md § 5.2):
  * no tint and no badge; a divider sets Play apart from the name, the main element.
  */
-export function PlainPaneHeader({ fileName, nameButton, run, end }: FilePaneHeaderProps) {
+export function PlainPaneHeader({ fileName, nameButton, code, run, end }: FilePaneHeaderProps) {
   return (
     <div className="wb-panehead is-plain">
       {run && (
@@ -87,6 +91,7 @@ export function PlainPaneHeader({ fileName, nameButton, run, end }: FilePaneHead
         </>
       )}
       {nameButton}
+      <CopyCodeButton fileName={fileName} code={code} />
       <span className="wb-panehead__spacer" />
       {end}
     </div>

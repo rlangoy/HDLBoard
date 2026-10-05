@@ -111,7 +111,7 @@ const isPlainDesign = (d: EditorDisplay): boolean => d.view === 'rtl' && !d.pair
 function plainHeader(ctx: ModelContext, { pane, target, file, end }: ShownFile): ReactNode {
   const role = effectiveFile(ctx.project, ctx.overrides, file.id)?.role;
   const nameButton = fileNameButton(ctx, file, <RoleIcon role={role} />);
-  return <PlainPaneHeader fileName={file.name} nameButton={nameButton} run={ctx.paneRun(pane, target)} end={end} />;
+  return <PlainPaneHeader fileName={file.name} nameButton={nameButton} code={file.content} run={ctx.paneRun(pane, target)} end={end} />;
 }
 
 function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, end }: ShownFile): ReactNode {
@@ -120,6 +120,7 @@ function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, e
       pane={pane}
       fileName={file.name}
       nameButton={fileNameButton(ctx, file)}
+      code={file.content}
       run={ctx.paneRun(pane, target)}
       end={end}
       unit={unitOf(ctx.project, ctx.overrides, target)}

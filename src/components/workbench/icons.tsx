@@ -251,3 +251,21 @@ export function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Two overlapping pages (Material Symbols "content_copy") — a pane header's Copy the code. */
+export function CopyIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
+      <path d="M361.54-280q-25.94 0-43.74-17.8T300-341.54v-430.77q0-25.94 17.8-43.74t43.74-17.8h310.77q25.94 0 43.74 17.8t17.8 43.74v430.77q0 25.94-17.8 43.74T672.31-280H361.54Zm0-36.92h310.77q9.23 0 16.92-7.7 7.69-7.69 7.69-16.92v-430.77q0-9.23-7.69-16.92-7.69-7.69-16.92-7.69H361.54q-9.23 0-16.92 7.69-7.7 7.69-7.7 16.92v430.77q0 9.23 7.7 16.92 7.69 7.7 16.92 7.7ZM247.69-166.15q-25.94 0-43.74-17.8t-17.8-43.74v-467.69h36.93v467.69q0 9.23 7.69 16.92 7.69 7.69 16.92 7.69h347.69v36.93H247.69Zm89.23-150.77v-480 480Z" />
+    </svg>
+  );
+}
+
+/** A tick (Material Symbols "check") — confirms a copy. */
+export function CheckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" {...props}>
+      <path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z" />
+    </svg>
+  );
+}
