@@ -5,8 +5,9 @@
 | | |
 |---|---|
 | **Document** | `docs/cleanup_file_tabs.md` |
-| **Version** | 1.2 |
-| **Status** | Ready for implementation on branch `cleanup_filetabs`; merge to `main` after the student try-out (§ 7.3) |
+| **Version** | 1.3 |
+| **Status** | Implemented on branch `cleanup_filetabs` (version 1.3.1); merge to `main` after the student try-out (§ 7.3) |
+| **Changes in 1.3** | As built (§ 12): the split keeps its 200 px minimum pane width (D9 changed: 260 px made the split unavailable at a common 1440 px window); narrow headers drop their words instead; an empty pane gets a header too. |
 | **Changes in 1.2** | Simplified for novices and for Clean Code (§ 12): the file picker is a plain menu (no search box, no `Ctrl+P`, no recent-file history); deleting a shown file shows its neighbour in the list; one narrow-pane rule; no flag props; fewer modules; a shorter test plan. |
 | **Changes elsewhere** | `docs/impl_split_screen.md`: replaces D8 (one tab strip), D14 b (closing the partner's tab), § 4.1 and § 4.5 (the tab strip), the tab-closing rows of § 4.3, and raises the split's minimum pane width (§ 6.5). |
 | **Audience** | Beginners: PB1180 students writing their first VHDL or Verilog. Not an expert IDE. |
@@ -122,7 +123,7 @@ experts' answers (shortcuts, caps, pins) manage clutter; a beginner tool can rem
 | D6 | **Colour only where it means something.** Design files: a quiet grey chip. Testbenches: the violet flask. Errors and warnings: a red dot and an amber ring. | Ten teal chips are noise (tried in the prototype); with grey designs the testbench stands out. |
 | D7 | **Deleting the shown file shows the next file in the list** (the one before it if it was last). | It is what lists do everywhere, and it needs no history. |
 | D8 | **While a simulation runs, other panes show Play greyed out**, with *Stop the simulation first*. | Nothing in the header jumps when a run starts, and the reason is given. |
-| D9 | **The split needs 260 px per pane (was 200 px).** Below that the editor shows one pane, as it already does when narrow. | One rule instead of special narrow layouts; 200 px of code is about 22 characters anyway. |
+| D9 | **The split keeps its 200 px minimum pane width; a header narrower than 280 px drops its words** (badge, region navigator, view switch: icons only, tighter spacing), so only the name gives way. | One CSS rule, no special layouts. Raising the minimum to 260 px, the plan in 1.2, made the split unavailable at a common 1440 px window with both side panes open (tried in the build). |
 | D10 | **The workspace stores `activeFileId`**; the old `activeTabId` is read when it is missing; `openTabs` is no longer written. | A clear name. An older app version opening a newer workspace keeps every file and shows none: nothing is lost. |
 
 ---
@@ -166,9 +167,13 @@ The split's pane headers keep their role tint, accent line, Play and role badge
 - The rightmost pane's header ends with the view switch, icons only (the TB and RTL
   badges right beside it label the icons; the labels stay as tooltips and
   screen-reader text).
-- Panes narrower than 280 px show the role badge and the region navigator without
-  their text. The name ellipsizes; its full text is in its tooltip and in the menu.
-  With the 260 px minimum (D9) a name always keeps at least about 90 px.
+- Panes narrower than 280 px show the role badge, the region navigator and the view
+  switch without their text, with tighter spacing (D9). Only the name ellipsizes;
+  its full text is in its tooltip and in the menu. Measured in the build: at 255 px
+  per pane (50/50 in a 1440 px window) "and_gate_tb.v" fits in full; at the 200 px
+  minimum a name keeps about 45 px.
+- A pane with nothing to show (impl_split_screen.md § 4.6) gets a header too: its
+  role, and the view switch when it is the rightmost, so the switch is always there.
 
 ### 5.4 The file menu
 
@@ -267,7 +272,7 @@ The rules are from the Clean Code summary (wojteklu) the repo already follows.
 | *Encapsulate boundary conditions* | "Which file after a delete" lives in one function, `fileAfterDelete`. |
 | *Law of Demeter* | `FileExplorer` gets ready-made rows, not the analysis or diagnostics stores. |
 | *Descriptive names* | `activeTabId` → `activeFileId`, `DEFAULT_OPEN_TABS` → `DEFAULT_SHOWN_FILE`, `runIcon.ts` → `paneRun.ts` (`paneRunFor`). |
-| *Named constants* | `SPLIT_PANE_MIN_W = 260` and `NARROW_PANE_W = 280` (the CSS container query repeats it with a comment naming the constant). |
+| *Named constants* | `BLOCKED_REASON`, `EDITOR_EDGE_GAP_PX`, `DEFAULT_SHOWN_FILE`; the 280 px narrow-pane width lives once, in the CSS container query, with a comment. |
 | *Boy scout rule* | `EditorTabStrip`, the tab CSS, the tab-only run logic, `withShownTabs` and `onTabClosing` are deleted, not left unused. |
 | *Tests: one concept each, fast, independent* | Pure modules are tested without React. |
 | *Comments explain intent only* | No comments that repeat the code. |
@@ -278,7 +283,7 @@ The rules are from the Clean Code summary (wojteklu) the repo already follows.
 |---|---|
 | **New** | `fileRows.ts` (pure: `fileRows`, `fileAfterDelete`), `FileRowLabel.tsx`, `FileMenu.tsx` + `.css`, `EmptyProject.tsx` |
 | **Renamed** | `runIcon.ts` → `paneRun.ts`: one rule per pane, Play / Stop / greyed-out Play (D8) |
-| **Changed** | `EditorPaneHeader.tsx` (the two headers), `SplitEditor.tsx`, `splitPaneModels.tsx`, `useTestbenchSplit.tsx`, `CodeEditor.tsx`, `FileExplorer.tsx` / `.css`, `Workbench.tsx`, `SimToggle.tsx` (a disabled reason), `editorSplit.ts` (D9), `desktop.ts` (D10), `files.ts`, `index.ts`, `icons.tsx`, `Workbench.css` |
+| **Changed** | `EditorPaneHeader.tsx` (the two headers), `SplitEditor.tsx`, `splitPaneModels.tsx`, `useTestbenchSplit.tsx`, `CodeEditor.tsx`, `FileExplorer.tsx` / `.css`, `Workbench.tsx`, `SimToggle.tsx` (a disabled reason), `desktop.ts` (D10), `files.ts`, `index.ts`, `icons.tsx`, `Workbench.css` |
 | **Deleted** | `EditorTabStrip.tsx`, the tab-strip CSS |
 
 ```ts
@@ -315,10 +320,8 @@ file in Files order. Stop writing `openTabs`. `WORKSPACE_VERSION` stays 1.
 
 ### 6.5 Changes to `docs/impl_split_screen.md`
 
-Point these to this spec: D8, D14 b, § 4.1, § 4.3 (tab-closing rows), § 4.5, § 4.9 and
-AC-13 (405 px becomes `2 × 260 + 5` = 525 px), AC-15, and B5 (D8 here). Update
-`tests/e2e/split-screen.md` steps 1, 4, 7 and 8, and `editorSplit.test.ts`'s 404/405 px
-case.
+Point these to this spec: D8, D14 b, § 4.1, § 4.3 (tab-closing rows), § 4.5, AC-15,
+and B5 (D8 here). Update `tests/e2e/split-screen.md` steps 1, 4 and 7.
 
 ---
 
@@ -332,7 +335,6 @@ case.
 - `paneRun.test.ts`: the old `runIcon` cases per pane, plus the greyed-out Play.
 - `desktop.test.ts`: `activeFileId` written and read; old `activeTabId` read; unknown
   ids fall back to the first file.
-- `editorSplit.test.ts`: `canSplit` at 524 / 525 px.
 
 ### 7.2 Manual checks
 
@@ -364,7 +366,7 @@ Each step leaves `npm run typecheck` and `npm test` clean and the app working.
 |---|---|
 | **S1** | `fileRows.ts`, `paneRun.ts` (from `runIcon.ts`), their tests. |
 | **S2** | Files panel: `FileRowLabel`, shown highlight, problem marks, hover actions. |
-| **S3** | Headers: `PlainPaneHeader` / `RolePaneHeader`, 39 px, the view switch at the right end, greyed-out Play, `SPLIT_PANE_MIN_W = 260`. |
+| **S3** | Headers: `PlainPaneHeader` / `RolePaneHeader`, 39 px, the view switch at the right end, greyed-out Play, the narrow-header rule. |
 | **S4** | Remove the tab strip and `openTabs`; `activeFileId`; `fileAfterDelete`; the empty project; the workspace field. |
 | **S5** | The file menu. |
 | **S6** | Docs (§ 6.5, README, `Design_Description.md` § 9, `changelog.txt`, a new `workbench.png`), the manual checks, the try-out; then merge. |
@@ -422,6 +424,15 @@ Each step leaves `npm run typecheck` and `npm test` clean and the app working.
   rule: the next file in the list), invariant tables, a separate strings module and
   four of six new modules. Replaced flag props (`variant`, `compact`) with two
   components and CSS. Cut the test plan to what a person can run in one sitting.
+- **1.3** — as built on `cleanup_filetabs`. D9 changed: the 260 px minimum pane width
+  made the split unavailable at a 1440 px window (a 515 px editor column), so the
+  minimum stays 200 px and a narrow header drops its words instead. An empty pane got a
+  header, so the view switch is always there. Found and fixed while checking the build:
+  a split fraction stored for a wider window was used unclamped (a pane could drop
+  below its minimum and the editor scrolled sideways); the file menu's move away from
+  the editor's edge was undone by React StrictMode's second effect run; the view
+  switch's labels were clipped in a 200 px editor column. Results:
+  `tests/e2e/file-switching.md`.
 
 ---
 
