@@ -9,10 +9,13 @@
  */
 
 import type { SplitPreference } from './editorView';
-import { EDITOR_MIN_W } from './paneLayout';
 
-/** Each half must stay as usable as the editor alone. */
-export const SPLIT_PANE_MIN_W = EDITOR_MIN_W;
+/**
+ * Each pane's narrowest: room for about 30 characters of code, and for its header
+ * (Play, badge, file name, view switch) without squeezing the name
+ * (docs/cleanup_file_tabs.md D9). Narrower, the editor shows one pane.
+ */
+export const SPLIT_PANE_MIN_W = 260;
 /** = --wb-split-divider-w */
 export const SPLIT_DIVIDER_W = 5;
 export const SPLIT_DEFAULT_TB_FRACTION = 0.5;

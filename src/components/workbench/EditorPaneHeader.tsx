@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { PaneRole } from './editorView';
 import { ChipIcon, FlaskIcon } from './icons';
 import { RoleIcon, usePopover } from './RoleIcon';
@@ -18,6 +18,8 @@ export interface PairOption {
 export interface PaneRun {
   readonly running: boolean;
   readonly disabled: boolean;
+  /** Play greyed out while another simulation runs, and why (paneRun.ts). */
+  readonly blockedReason?: string;
   readonly onClick: () => void;
 }
 
@@ -29,14 +31,22 @@ export interface RegionNav {
   readonly onStep: (step: 1 | -1) => void;
 }
 
-export interface EditorPaneHeaderProps {
-  pane: PaneRole;
+/** What every pane header with a file has (docs/cleanup_file_tabs.md § 5.2, § 5.3). */
+interface FilePaneHeaderProps {
   fileName: string;
+  /** The file's name as the button that opens the file menu (FileMenu.tsx). */
+  nameButton: ReactNode;
+  run: PaneRun | null;
+  /** At the right end, in the rightmost pane only: the suggestion chip and the view switch. */
+  end?: ReactNode;
+}
+
+export interface RolePaneHeaderProps extends FilePaneHeaderProps {
+  pane: PaneRole;
   /** The unit this pane shows and runs, from the current analysis. */
   unit: AnalyzedUnit | undefined;
   /** The file's role override, if the student set one. */
   roleOverride: UnitRole | undefined;
-  run: PaneRun | null;
   regions: RegionNav | null;
   onSetRole: (role: UnitRole | undefined) => void;
   pairOptions: readonly PairOption[];
@@ -44,21 +54,69 @@ export interface EditorPaneHeaderProps {
 }
 
 /**
- * A pane's header (docs/impl_split_screen.md § 4.4): run control, role badge (a
- * menu), file name and region navigator (TB pane). Tinted in the role
- * colour with a top accent (D25); icon and text, never colour alone.
+ * A testbench or design pane's header (docs/impl_split_screen.md § 4.4): run control,
+ * role badge (a menu), file name and region navigator (TB pane). Tinted in the role
+ * colour with a top accent (D25); icon and text, never colour alone. The badge sits
+ * between Play and the name.
  */
-export function EditorPaneHeader(props: EditorPaneHeaderProps) {
-  const { pane, fileName, run, regions } = props;
+export function RolePaneHeader(props: RolePaneHeaderProps) {
+  const { pane, fileName, nameButton, run, regions, end } = props;
   return (
     <div className={`wb-panehead is-${pane}`}>
-      {run && <SimToggle fileName={fileName} running={run.running} disabled={run.disabled} onClick={run.onClick} />}
+      {run && <PaneRunButton fileName={fileName} run={run} />}
       <RoleBadge {...props} />
-      <span className="wb-panehead__name" title={fileName}>
-        {fileName}
-      </span>
+      {nameButton}
+      <span className="wb-panehead__spacer" />
       {regions && regions.count > 1 && <RegionNavigator regions={regions} />}
+      {end}
     </div>
+  );
+}
+
+/**
+ * The header of one design file with no testbench (docs/cleanup_file_tabs.md § 5.2):
+ * no tint and no badge; a divider sets Play apart from the name, the main element.
+ */
+export function PlainPaneHeader({ fileName, nameButton, run, end }: FilePaneHeaderProps) {
+  return (
+    <div className="wb-panehead is-plain">
+      {run && (
+        <>
+          <PaneRunButton fileName={fileName} run={run} />
+          <span className="wb-panehead__divider" aria-hidden="true" />
+        </>
+      )}
+      {nameButton}
+      <span className="wb-panehead__spacer" />
+      {end}
+    </div>
+  );
+}
+
+/** A pane with no file to show (impl_split_screen.md § 4.6): its role, and the view switch when rightmost, on the header line. */
+export function EmptyPaneHeader({ pane, end }: { pane: PaneRole; end?: ReactNode }) {
+  const Icon = pane === 'tb' ? FlaskIcon : ChipIcon;
+  return (
+    <div className={`wb-panehead is-${pane}`}>
+      <span className={`wb-rolebadge is-${pane} is-static`}>
+        <Icon aria-hidden="true" />
+        <span className="wb-rolebadge__label">{pane === 'tb' ? TEXT.tbLabel : TEXT.rtlLabel}</span>
+      </span>
+      <span className="wb-panehead__spacer" />
+      {end}
+    </div>
+  );
+}
+
+function PaneRunButton({ fileName, run }: { fileName: string; run: PaneRun }) {
+  return (
+    <SimToggle
+      fileName={fileName}
+      running={run.running}
+      disabled={run.disabled}
+      blockedReason={run.blockedReason}
+      onClick={run.onClick}
+    />
   );
 }
 
@@ -79,7 +137,7 @@ function RegionNavigator({ regions }: { regions: RegionNav }) {
 }
 
 /** The role badge, a menu button: detection, role override, pairing. */
-function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith }: EditorPaneHeaderProps) {
+function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith }: RolePaneHeaderProps) {
   const menu = usePopover<HTMLSpanElement>();
   const pairList = usePopover<HTMLDivElement>();
   const menuId = useId();
@@ -100,7 +158,7 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
         onClick={() => menu.setOpen(!menu.open)}
       >
         <Icon aria-hidden="true" />
-        {pane === 'tb' ? TEXT.tbLabel : TEXT.rtlLabel}
+        <span className="wb-rolebadge__label">{pane === 'tb' ? TEXT.tbLabel : TEXT.rtlLabel}</span>
       </button>
       {menu.open && (
         <div className="wb-menu" role="menu" id={menuId}>

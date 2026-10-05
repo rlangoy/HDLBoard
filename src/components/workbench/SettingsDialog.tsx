@@ -87,7 +87,7 @@ export function SettingsDialog({ open, onClose, splitPreference, onSplitPreferen
             <span>
               <strong>Keep my project between sessions</strong>
               <span className="wb-settings__note">
-                Saves your files and open tabs on this computer and restores them
+                Saves your files and the one you were editing on this computer and restores them
                 when {APP_NAME} starts. Applies after restart.
               </span>
               {saveError && (

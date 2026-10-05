@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { PaneRun } from './EditorPaneHeader';
 import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
 import { testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
-import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type EditorSplitProps } from './splitPaneModels';
+import type { FileMenuProps } from './FileMenu';
+import type { SplitEditorProps } from './SplitEditor';
+import { editorPropsFor, otherPane, paneFile, type EditorDisplay } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
 import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
@@ -16,9 +18,9 @@ import { useTestbenchAnalysis } from './useTestbenchAnalysis';
 
 export interface TestbenchSplitOptions {
   files: readonly VhdlFile[];
-  activeTabId: string | null;
-  setActiveTabId: (id: string | null) => void;
-  setOpenTabs: Dispatch<SetStateAction<string[]>>;
+  /** The file in the focused pane. */
+  activeFileId: string | null;
+  setActiveFileId: (id: string | null) => void;
   /** A diagnostic or console reveal; shown in the pane that shows its file. */
   reveal: RevealRequest | null;
   /** The run control a pane header shows, or null for none. */
@@ -52,10 +54,9 @@ export interface TestbenchSplit {
   /** The one place the layout is decided (D7). */
   readonly showFile: (fileId: string, event: PairEvent, options?: ShowOptions) => void;
   readonly focusPane: (pane: PaneRole) => void;
-  readonly onTabClosing: (id: string) => void;
   readonly onFileDeleted: (id: string) => void;
-  /** Props for CodeEditor: the split, partner tab, role icons, chip and view switch. */
-  readonly editorProps: EditorSplitProps;
+  /** CodeEditor's panes, with their headers, the chip and the view switch; none while nothing is shown. */
+  readonly editorSplit: (fileMenu: FileMenuProps) => SplitEditorProps | undefined;
 }
 
 /**
@@ -65,7 +66,7 @@ export interface TestbenchSplit {
  * files and the runs; this owns the layout.
  */
 export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSplit {
-  const { files, activeTabId, setActiveTabId, setOpenTabs } = options;
+  const { files, activeFileId, setActiveFileId } = options;
   const analysis = useTestbenchAnalysis(files);
   const overrides = useOverrides();
   usePruneContradictedPairs(analysis.current, overrides);
@@ -85,13 +86,12 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       recentFileIds.current = [fileId, ...recentFileIds.current.filter((id) => id !== fileId)];
       const focusedPane = opts.pane ?? (view === 'both' ? paneOf(pair, fileId, opts.unitName) : view);
       const next = { pair, view, focusedPane, regionIndex: 0, reveals: initialReveals(pair, view, focusedPane) };
-      setOpenTabs(withShownTabs(next));
-      setActiveTabId(paneFile(next, focusedPane) ?? fileId);
+      setActiveFileId(paneFile(next, focusedPane) ?? fileId);
       setDisplay(next);
     },
-    [analysis, overrides.ref, setActiveTabId, setOpenTabs],
+    [analysis, overrides.ref, setActiveFileId],
   );
-  useFollowActiveFile(activeTabId, files, displayRef, setDisplay, showFile);
+  useFollowActiveFile(activeFileId, files, displayRef, setDisplay, showFile);
 
   function pinView(view: EditorView) {
     const d = displayRef.current;
@@ -100,10 +100,9 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     const focusedPane = view === 'both' ? d.focusedPane : view;
     const reveals = view === 'both' ? initialReveals(d.pair, view, null) : d.reveals;
     const next = { ...d, view, focusedPane, reveals };
-    setOpenTabs(withShownTabs(next));
     setDisplay(next);
     const file = paneFile(next, focusedPane);
-    if (file) setActiveTabId(file);
+    if (file) setActiveFileId(file);
   }
 
   const focusPane = (pane: PaneRole) => {
@@ -111,21 +110,12 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     if (!d) return;
     const file = paneFile(d, pane);
     if (d.focusedPane !== pane) setDisplay({ ...d, focusedPane: pane });
-    if (file && file !== activeTabId) setActiveTabId(file);
-  };
-
-  /** D14 b: closing the partner's tab collapses the split to the other pane, for the session. */
-  const onTabClosing = (id: string) => {
-    const d = displayRef.current;
-    if (!d || d.view !== 'both' || id === activeTabId) return;
-    const pane = paneShowing(d, id);
-    const isPartnerOnly = paneFile(d, pane) === id && paneFile(d, otherPane(pane)) !== id;
-    if (isPartnerOnly) pinView(otherPane(pane));
+    if (file && file !== activeFileId) setActiveFileId(file);
   };
 
   const changeOverrides = (next: TestbenchOverrides) => {
     overrides.set(next);
-    const anchor = displayRef.current?.pair.anchorId ?? activeTabId;
+    const anchor = displayRef.current?.pair.anchorId ?? activeFileId;
     if (anchor) showFile(anchor, 'open');
   };
 
@@ -145,7 +135,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     showFile(pair.anchorId, 'open');
   });
 
-  const editorProps = editorPropsFor(
+  const editorSplit = (fileMenu: FileMenuProps) => editorPropsFor(
     {
       project: analysis.current,
       overrides: overrides.value,
@@ -159,6 +149,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       onPin: pinView,
       onFocusPane: focusPane,
       onCreateTestbench: options.onCreateTestbench,
+      fileMenu,
     },
     split,
     chip,
@@ -176,9 +167,8 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       testbenchesFor(analysis.flush(), overrides.ref.current, fileId, unitName, recentFileIds.current),
     showFile,
     focusPane,
-    onTabClosing,
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
-    editorProps,
+    editorSplit,
   };
 }
 
@@ -211,12 +201,6 @@ const shownFileIds = (d: EditorDisplay, view: EditorView = d.view): string[] => 
   return [tb, rtl].filter((id): id is string => id !== undefined);
 };
 
-/** The open tabs with the shown files added: a partner joins the tab strip (§ 4.3). */
-const withShownTabs = (d: EditorDisplay) => (prev: string[]): string[] => [
-  ...prev,
-  ...[...new Set(shownFileIds(d))].filter((id) => !prev.includes(id)),
-];
-
 /** The shown pane that shows `fileId`, the focused one first. */
 function paneShowing(d: EditorDisplay, fileId: string): PaneRole {
   if (paneFile(d, d.focusedPane) === fileId) return d.focusedPane;
@@ -245,11 +229,11 @@ function initialReveals(pair: EditorPair, view: EditorView, focused: PaneRole | 
 }
 
 /**
- * Every other way the active file changes (a tab closed, a file created, a
+ * Every other way the active file changes (a file created or deleted, a
  * diagnostic revealed, the workspace restored) is a pair-change event too.
  */
 function useFollowActiveFile(
-  activeTabId: string | null,
+  activeFileId: string | null,
   files: readonly VhdlFile[],
   displayRef: { readonly current: EditorDisplay | null },
   setDisplay: (d: EditorDisplay | null) => void,
@@ -259,15 +243,15 @@ function useFollowActiveFile(
   showFileRef.current = showFile;
   useEffect(() => {
     const d = displayRef.current;
-    if (activeTabId === null) {
+    if (activeFileId === null) {
       if (d) setDisplay(null);
       return;
     }
     const exists = (id: string | undefined) => id === undefined || files.some((f) => f.id === id);
     const stale = !d || !exists(d.pair.tb?.fileId) || !exists(d.pair.rtl?.fileId);
-    if (stale || !shownFileIds(d).includes(activeTabId)) showFileRef.current(activeTabId, 'open');
-    else if (paneFile(d, d.focusedPane) !== activeTabId) setDisplay({ ...d, focusedPane: paneShowing(d, activeTabId) });
-  }, [activeTabId, files, displayRef, setDisplay]);
+    if (stale || !shownFileIds(d).includes(activeFileId)) showFileRef.current(activeFileId, 'open');
+    else if (paneFile(d, d.focusedPane) !== activeFileId) setDisplay({ ...d, focusedPane: paneShowing(d, activeFileId) });
+  }, [activeFileId, files, displayRef, setDisplay]);
 }
 
 /** Alt+PageDown / Alt+PageUp: next / previous testbench region, from either pane (§ 4.11). */

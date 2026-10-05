@@ -578,7 +578,8 @@ export const EXAMPLE_FILES: VhdlFile[] = [
 /** What a first start shows in the Files panel: the board's top level, in both languages. */
 export const STARTER_FILES: VhdlFile[] = EXAMPLE_FILES.filter((f) => f.id === 'de1_soc' || f.id === 'de1_soc_v');
 
-export const DEFAULT_OPEN_TABS = ['de1_soc'];
+/** The file shown on a first start. */
+export const DEFAULT_SHOWN_FILE = 'de1_soc';
 
 /** The top-level entity a simulation run elaborates — shown in the Simulation card. */
 export const TOP_LEVEL_ENTITY = 'DE1_SoC.vhdl';

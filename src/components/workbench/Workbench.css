@@ -16,8 +16,8 @@
   --wb-console-h: 180px;
   /* The icon rails down each edge (ActivityBar.css; usePaneLayout.ts's
      RAIL_W matches the width) and the title strip across the top of each
-     side pane (SidePanel.css) — the editor's tab strip's height, border
-     included (CodeEditor.css), so the three strips' bottom borders run on as
+     side pane (SidePanel.css) — the editor's pane header height, border
+     included (SplitEditor.css), so the three strips' bottom borders run on as
      one line. */
   --wb-rail-w: 44px;
   --wb-rail-bg: #f1f5f9;

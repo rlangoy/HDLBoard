@@ -16,6 +16,9 @@ import type { PaneTarget } from './tbDetect/types';
 /** `blocked`: Play, greyed out, because something else is simulating. */
 export type PaneRunKind = 'play' | 'stop' | 'blocked';
 
+/** The tooltip of a greyed-out Play. */
+export const BLOCKED_REASON = 'Stop the simulation first';
+
 export interface PaneRunInput {
   readonly status: SimStatus;
   /** The file the current (or last) run started from. */

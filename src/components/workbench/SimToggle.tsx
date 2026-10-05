@@ -12,25 +12,29 @@ export interface SimToggleProps {
   disabled?: boolean;
   /** The file Play runs as top (or Stop stops), for the tooltip and screen readers. */
   fileName: string;
+  /**
+   * Why Play cannot start now (another simulation runs): greyed out, but still
+   * focusable so the reason is read (docs/cleanup_file_tabs.md D8).
+   */
+  blockedReason?: string;
   /** Start when showing Play, stop when showing Stop. */
   onClick: () => void;
   className?: string;
 }
 
-/** The one-click play/stop icon on the editor's active tab. */
-export function SimToggle({ running, disabled = false, fileName, onClick, className }: SimToggleProps) {
-  const label = running ? `Stop simulation of ${fileName}` : `Start simulation with ${fileName} as top`;
+/** The one-click play/stop icon in an editor pane's header. */
+export function SimToggle({ running, disabled = false, fileName, blockedReason, onClick, className }: SimToggleProps) {
+  const action = running ? `Stop simulation of ${fileName}` : `Start simulation with ${fileName} as top`;
   return (
     <button
       type="button"
-      className={cx('wb-simtoggle', className)}
-      aria-label={label}
-      title={label}
+      className={cx('wb-simtoggle', blockedReason && 'is-blocked', className)}
+      aria-label={blockedReason ? `${action}. ${blockedReason}.` : action}
+      aria-disabled={blockedReason ? true : undefined}
+      title={blockedReason ?? action}
       disabled={disabled}
-      onClick={(e) => {
-        // Inside an editor tab: pressing the icon must not also count as a click on the tab.
-        e.stopPropagation();
-        onClick();
+      onClick={() => {
+        if (!blockedReason) onClick();
       }}
     >
       {running ? <StopIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}

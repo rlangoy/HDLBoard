@@ -32,28 +32,30 @@ import { copyExample, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
 import { PanelToggleIcon } from './icons';
-import { CodeEditor, type TabRunControl } from './CodeEditor';
+import { CodeEditor } from './CodeEditor';
+import { EmptyProject } from './EmptyProject';
 import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
-import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, hasTopDot, topAfterDelete } from './fileKinds';
+import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName } from './zipUpload';
-import { STARTER_FILES, DEFAULT_OPEN_TABS, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
+import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
-import { fileRows } from './fileRows';
+import { fileAfterDelete, fileRows } from './fileRows';
+import type { FileMenuProps } from './FileMenu';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
+import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
-import { runIconFor } from './runIcon';
 import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
@@ -119,11 +121,12 @@ const BOARD_PANE_TITLE = 'Board I/O';
  */
 export function Workbench() {
   const [files, setFiles] = useState<VhdlFile[]>(STARTER_FILES);
-  const [openTabs, setOpenTabs] = useState<string[]>(DEFAULT_OPEN_TABS);
-  const [activeTabId, setActiveTabId] = useState<string | null>(DEFAULT_OPEN_TABS[0] ?? null);
+  // The file in the editor's focused pane (docs/cleanup_file_tabs.md): the Files
+  // highlight, what Ctrl+S saves, and the file the split pairs from.
+  const [activeFileId, setActiveFileId] = useState<string | null>(DEFAULT_SHOWN_FILE);
 
   // The design file (vhdl/ or verilog/) a run starts from as top-level (FileExplorer's blue dot),
-  // independent of which tab is open/active — starts on whichever starter
+  // independent of which file is shown (docs/cleanup_file_tabs.md F6) — starts on whichever starter
   // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
   // showed as a static label before this was selectable.
   const [topFileId, setTopFileId] = useState<string | null>(
@@ -154,8 +157,7 @@ export function Workbench() {
           if (seq) nextFileSeq = Math.max(nextFileSeq, Number(seq[1]) + 1);
         }
         setFiles(ws.files);
-        setOpenTabs(ws.openTabs);
-        setActiveTabId(ws.activeTabId);
+        setActiveFileId(ws.activeFileId);
         setTopFileId(ws.topFileId);
         setTopUnit(ws.topUnit ?? null);
         restoreOverridesRef.current(ws.testbench ?? EMPTY_OVERRIDES);
@@ -295,8 +297,7 @@ export function Workbench() {
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
     setExamplesOpen(false);
-    setOpenTabs((prev) => (prev.includes(target.fileId) ? prev : [...prev, target.fileId]));
-    setActiveTabId(target.fileId);
+    setActiveFileId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
   }, []);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
@@ -379,18 +380,13 @@ export function Workbench() {
   // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
   const handleOpenFile = (id: string) => {
     setExamplesOpen(false);
-    setOpenTabs((prev) => (prev.includes(id) ? prev : [...prev, id]));
     tb.showFile(id, 'open');
   };
 
-  const handleCloseTab = (id: string) => {
-    tb.onTabClosing(id);
-    const closedIndex = openTabs.indexOf(id);
-    const remaining = openTabs.filter((t) => t !== id);
-    setOpenTabs(remaining);
-    if (activeTabId === id) {
-      setActiveTabId(remaining[closedIndex] ?? remaining[closedIndex - 1] ?? null);
-    }
+  // A pick in a pane header's file menu: as a click in Files, then the caret goes to its code.
+  const handlePickFile = (id: string) => {
+    handleOpenFile(id);
+    window.setTimeout(() => document.querySelector<HTMLElement>('.wb-split__pane.is-focused textarea')?.focus());
   };
 
   const handleRenameFile = (id: string, name: string) => {
@@ -409,9 +405,9 @@ export function Workbench() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
     dismissDiagnostics(id);
     tb.onFileDeleted(id);
-    // Also closes the tab, if it had one open — same "next tab takes over"
-    // logic as a plain close, since a deleted file can't stay open.
-    handleCloseTab(id);
+    // The shown file gone, its neighbour in the Files list is shown (D7); a file shown
+    // only in the other pane is dropped when the pair is worked out again.
+    if (id === activeFileId) setActiveFileId(fileAfterDelete(files, id));
     // A deleted top file can't stay top either — hand the role to
     // whatever file is first afterward in the same folder (so a Verilog
     // run stays a Verilog run), or to nothing if that was the last one
@@ -441,17 +437,17 @@ export function Workbench() {
     if (files.length > 0) downloadProjectZip(files);
   };
 
-  // Ctrl+S / Cmd+S saves the active tab to disk instead of the browser's
+  // Ctrl+S / Cmd+S saves the shown file to disk instead of the browser's
   // "Save page as…" (which would save the app's HTML, not the design).
   // Refs rather than deps so the listener is attached once, not on every
   // keystroke's re-render.
-  const activeTabRef = useRef(activeTabId);
-  activeTabRef.current = activeTabId;
+  const activeFileRef = useRef(activeFileId);
+  activeFileRef.current = activeFileId;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return;
       e.preventDefault();
-      const file = filesRef.current.find((f) => f.id === activeTabRef.current);
+      const file = filesRef.current.find((f) => f.id === activeFileRef.current);
       if (file) downloadSourceFile(file);
     };
     window.addEventListener('keydown', onKeyDown);
@@ -465,10 +461,9 @@ export function Workbench() {
     return id;
   };
 
-  // A file just added to `files`: its tab opens and becomes the active one.
+  // A file just added to `files` is shown.
   const showNewFile = (id: string) => {
-    setOpenTabs((prev) => [...prev, id]);
-    setActiveTabId(id);
+    setActiveFileId(id);
     setExamplesOpen(false);
   };
 
@@ -626,19 +621,11 @@ export function Workbench() {
     checkAndRun(id, route.runTarget, route.unitName, route.pane);
   };
 
-  // The Start button runs the file named as "Top:" — open it and make it the
-  // active file (Files panel highlight and editor tab), so what runs is what shows.
+  // The Start button runs the file named as "Top:" — show it (Files panel
+  // highlight and pane header), so what runs is what shows.
   const handleStart = () => {
     if (topFileId === null) startRun(null);
     else runFile(topFileId);
-  };
-
-  // The active tab's play icon (only offered while nothing runs): that file
-  // becomes top — the blue dot, and the Simulation card's "Top:" — and the
-  // run starts from it.
-  const handleRunFile = (id: string) => {
-    if (isSimulating) return;
-    runFile(id);
   };
 
   /** Play in a pane header: exactly that pane's unit (§ 4.10). */
@@ -649,18 +636,14 @@ export function Workbench() {
     checkAndRun(target.fileId, runTarget, target.unitName, pane);
   };
 
-  /** A pane's Play / Stop: Stop only on the pane whose unit runs (B5); Play where a run can start. */
+  /** A pane's Play / Stop (paneRun.ts): Stop only on the pane whose unit runs (B5), Play greyed out while another runs. */
   const paneRun = (pane: PaneRole, target: PaneTarget): PaneRun | null => {
     const file = files.find((f) => f.id === target.fileId);
-    if (!file) return null;
-    if (isSimulating) {
-      const runsThisUnit = runUnitName === null || target.unitName === null || runUnitName.toLowerCase() === target.unitName.toLowerCase();
-      const running = runFileId === target.fileId && runsThisUnit;
-      return running ? { running: true, disabled: status === 'compiling', onClick: handleStop } : null;
-    }
-    // A work/ testbench has no top dot, but its TB pane can run it (D21).
-    const canRun = hasTopDot(file.folder) || pane === 'tb';
-    return canRun ? { running: false, disabled: false, onClick: () => handleRunPane(pane, target) } : null;
+    const kind = file && paneRunFor({ status, runFileId, runUnitName, target, folder: file.folder, pane });
+    if (!kind) return null;
+    if (kind === 'stop') return { running: true, disabled: status === 'compiling', onClick: handleStop };
+    const blockedReason = kind === 'blocked' ? BLOCKED_REASON : undefined;
+    return { running: false, disabled: false, blockedReason, onClick: () => handleRunPane(pane, target) };
   };
 
   const handleRunTestbenchChoice = (choice: TestbenchChoice) => {
@@ -681,9 +664,8 @@ export function Workbench() {
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
     files,
-    activeTabId,
-    setActiveTabId,
-    setOpenTabs,
+    activeFileId,
+    setActiveFileId,
     reveal,
     paneRun,
     onCreateTestbench: handleCreateTestbench,
@@ -693,7 +675,7 @@ export function Workbench() {
   useEffect(() => {
     const save = desktopBridge()?.saveWorkspace;
     if (!hydrated || !save) return;
-    const json = serializeWorkspace({ files, openTabs, activeTabId, topFileId, topUnit, testbench: tb.overrides });
+    const json = serializeWorkspace({ files, activeFileId, topFileId, topUnit, testbench: tb.overrides });
     const flush = () => {
       save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
     };
@@ -711,12 +693,7 @@ export function Workbench() {
       window.clearTimeout(timer);
       window.removeEventListener('pagehide', onHide);
     };
-  }, [hydrated, files, openTabs, activeTabId, topFileId, topUnit, tb.overrides]);
-
-  const tabs = openTabs
-    .map((id) => files.find((f) => f.id === id))
-    .filter((f): f is VhdlFile => f !== undefined)
-    .map((f) => ({ id: f.id, name: f.name, content: f.content }));
+  }, [hydrated, files, activeFileId, topFileId, topUnit, tb.overrides]);
 
   // The files as the Files panel draws them (docs/cleanup_file_tabs.md § 5.5).
   const rows = fileRows(files, {
@@ -725,19 +702,12 @@ export function Workbench() {
     roleOf: tb.roleOf,
     problemsOf: (id) => countSeverities(diagnostics.byFile[id] ?? NO_LINES),
   });
+  const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
   const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
 
-  // Stop is greyed out until compiling finishes, as the card's button is.
-  const runIcon = runIconFor(status, runFileId, files.find((f) => f.id === activeTabId));
-  const tabRun: TabRunControl | null = runIcon && {
-    tabId: runIcon.tabId,
-    running: runIcon.kind === 'stop',
-    disabled: status === 'compiling',
-    onClick: runIcon.kind === 'stop' ? handleStop : () => handleRunFile(runIcon.tabId),
-  };
 
   return (
     <div
@@ -853,18 +823,16 @@ export function Workbench() {
 
         <div className="wb-center">
           <CodeEditor
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={(id) => tb.showFile(id, 'open')}
-            onCloseTab={handleCloseTab}
-            onAddTab={handleNewFile}
             onChange={handleContentChange}
             onFilesDropped={handleFilesDropped}
-            tabRun={tabRun}
             diagnostics={diagnostics.byFile}
             onDismissDiagnostics={dismissDiagnostics}
-            reveal={reveal}
-            {...tb.editorProps}
+            split={tb.editorSplit(fileMenu)}
+            emptyProject={
+              files.length === 0 && (
+                <EmptyProject onExamples={() => setExamplesOpen(true)} onNewFile={handleNewFile} onUpload={handleUploadClick} />
+              )
+            }
           />
           {examplesOpen && <ExamplesPane onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />}
         </div>

@@ -8,9 +8,9 @@ import {
 
 /** docs/impl_split_screen.md § 4.8, § 4.9, § 6.4. */
 
-test('canSplit at 404 / 405 px', () => {
-  expect(canSplit(404)).toBe(false);
-  expect(canSplit(405)).toBe(true);
+test('canSplit at 524 / 525 px', () => {
+  expect(canSplit(524)).toBe(false);
+  expect(canSplit(525)).toBe(true);
 });
 
 test('fractionBounds keep each pane at its minimum', () => {

@@ -8,6 +8,7 @@
  * process; the renderer only feature-detects it and hands over JSON.
  * ------------------------------------------------------------------ */
 
+import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
 import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
@@ -31,11 +32,11 @@ export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
 }
 
-/** What is stored: the Files panel and the editor's tabs, nothing else. */
+/** What is stored: the project's files and which one is shown, nothing else. */
 export interface Workspace {
   files: VhdlFile[];
-  openTabs: string[];
-  activeTabId: string | null;
+  /** The file in the editor's focused pane (docs/cleanup_file_tabs.md D10). */
+  activeFileId: string | null;
   topFileId: string | null;
   /** The top file's unit a pane's Play chose (`RUN <file> @<unit>`); kept only with `topFileId`. */
   topUnit?: string | null;
@@ -44,7 +45,6 @@ export interface Workspace {
 }
 
 const WORKSPACE_VERSION = 1;
-const FOLDERS: readonly VhdlFile['folder'][] = ['vhdl', 'verilog', 'work'];
 
 export function serializeWorkspace(ws: Workspace): string {
   return JSON.stringify({ version: WORKSPACE_VERSION, ...ws });
@@ -57,14 +57,14 @@ function isFile(value: unknown): value is VhdlFile {
     typeof f.id === 'string' &&
     typeof f.name === 'string' &&
     typeof f.content === 'string' &&
-    FOLDERS.includes(f.folder as VhdlFile['folder'])
+    FOLDER_ORDER.includes(f.folder as VhdlFile['folder'])
   );
 }
 
 /**
  * Anything that does not look like a workspace we wrote comes back as
  * `undefined`, so the caller falls back to the starter project instead of
- * opening a broken one. Tab and top-file references to files that are not
+ * opening a broken one. Shown-file and top-file references to files that are not
  * there are dropped rather than trusted.
  */
 export function parseWorkspace(json: string | null | undefined): Workspace | undefined {
@@ -84,14 +84,13 @@ export function parseWorkspace(json: string | null | undefined): Workspace | und
   const ids = new Set(files.map((f) => f.id));
   const known = (id: unknown): id is string => typeof id === 'string' && ids.has(id);
 
-  const openTabs = Array.isArray(r.openTabs) ? [...new Set(r.openTabs.filter(known))] : [];
-  const activeTabId = known(r.activeTabId) && openTabs.includes(r.activeTabId) ? r.activeTabId : openTabs[0] ?? null;
+  // Up to 1.3.0 the shown file was the active tab, `activeTabId`; the tabs, `openTabs`, are gone.
+  const activeFileId = [r.activeFileId, r.activeTabId].find(known) ?? filesInFolderOrder(files)[0]?.id ?? null;
   const topFileId = known(r.topFileId) ? r.topFileId : null;
   const topUnit = topFileId !== null && typeof r.topUnit === 'string' ? r.topUnit : null;
   return {
     files: files.map(({ id, name, folder, content }) => ({ id, name, folder, content })),
-    openTabs,
-    activeTabId,
+    activeFileId,
     topFileId,
     topUnit,
     testbench: parseOverrides(r.testbench, known),
@@ -100,7 +99,7 @@ export function parseWorkspace(json: string | null | undefined): Workspace | und
 
 const ROLES: readonly UnitRole[] = ['tb', 'rtl'];
 
-/** Overrides naming files that are not there are dropped, like tabs are. */
+/** Overrides naming files that are not there are dropped, like a missing shown file is. */
 function parseOverrides(raw: unknown, known: (id: unknown) => id is string): TestbenchOverrides {
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const entries = (value: unknown) => (value && typeof value === 'object' ? Object.entries(value) : []);
