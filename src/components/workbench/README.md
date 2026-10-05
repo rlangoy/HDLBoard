@@ -560,8 +560,11 @@ and `system`.
 
 `EXAMPLE_FILES: VhdlFile[]` — every built-in file: `DE1_SoC.vhdl`,
 `blinkTest.vhdl`, `keyCouter2Led.vhdl`, `keyCounter7Seg.vhdl`, `and_gate.vhdl`,
-`and_gate_tb.vhd` under `vhdl/`, and their Verilog twins `DE1_SoC.v`, `blinkTest.v`,
-`keyCouter2Led.v`, `keyCounter7Seg.v`, `and_gate.v`, `and_gate_tb.v` under `verilog/`.
+`and_gate_tb.vhd`, `and_gate_truthtable_tb.vhd` under `vhdl/`, and their Verilog twins
+`DE1_SoC.v`, `blinkTest.v`, `keyCouter2Led.v`, `keyCounter7Seg.v`, `and_gate.v`,
+`and_gate_tb.v`, `and_gate_truthtable_tb.v` under `verilog/`. `and_gate_truthtable_tb`
+tests the AND gate and prints its truth table (the Examples pane's AND Gate Truth Table
+Testbench).
 `keyCounter7Seg` counts KEY0 presses 00-99 in decimal on HEX1/HEX0 (KEY1 resets),
 detecting a press as a falling edge of the key sampled on `CLOCK_50`. `STARTER_FILES` is what a first
 start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are

@@ -560,6 +560,147 @@ module and_gate_tb;
 endmodule
 `;
 
+const AND_GATE_TRUTHTABLE_TB_VHD = `-- Tests the AND gate and prints its truth table.
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity and_gate_truthtable_tb is
+end entity and_gate_truthtable_tb;
+
+architecture sim of and_gate_truthtable_tb is
+
+    signal a : std_logic := '0';
+    signal b : std_logic := '0';
+    signal y : std_logic;
+
+begin
+
+    -- Device Under Test
+    uut : entity work.and_gate
+        port map (
+            a => a,
+            b => b,
+            y => y
+        );
+
+    -- Test process
+    process
+        variable pattern : std_logic_vector(1 downto 0);
+        variable expected : std_logic;
+    begin
+
+        report "AND Truth Table" severity note;
+        report "---------------" severity note;
+        report "A B | Y" severity note;
+        report "---+---" severity note;
+
+        -- Test all four input combinations
+        for i in 0 to 3 loop
+
+            -- Generate A and B
+            pattern := std_logic_vector(to_unsigned(i, 2));
+
+            a <= pattern(1);
+            b <= pattern(0);
+
+            -- Wait for the DUT to respond
+            wait for 10 ns;
+
+            -- Calculate expected result
+            expected := a and b;
+
+            -- Print truth table row
+            report
+                std_logic'image(a) & " " &
+                std_logic'image(b) & " | " &
+                std_logic'image(y)
+                severity note;
+
+            -- Check result
+            assert y = expected
+                report
+                    "ERROR: " &
+                    std_logic'image(a) & " AND " &
+                    std_logic'image(b) & " should be " &
+                    std_logic'image(expected) &
+                    ", but got " &
+                    std_logic'image(y)
+                severity error;
+
+        end loop;
+
+        report "---------------" severity note;
+        report "All tests passed!" severity note;
+
+        wait;
+    end process;
+
+end architecture sim;
+`;
+
+const AND_GATE_TRUTHTABLE_TB_V = `// Tests the AND gate and prints its truth table.
+\`timescale 1ns/1ps
+
+module and_gate_truthtable_tb;
+
+    reg a;
+    reg b;
+    wire y;
+
+    // Device Under Test
+    and_gate uut (
+        .a(a),
+        .b(b),
+        .y(y)
+    );
+
+    integer i;
+    integer j;
+    reg expected;
+
+    initial begin
+
+        $display("");
+        $display("AND Truth Table");
+        $display("---------------");
+        $display("A B | Y");
+        $display("---+---");
+
+        // Test all four input combinations
+        for (i = 0; i <= 1; i = i + 1) begin
+            for (j = 0; j <= 1; j = j + 1) begin
+
+                a = i;
+                b = j;
+
+                #10;
+
+                expected = a & b;
+
+                // Print truth table row
+                $display("%d %d | %d", a, b, y);
+
+                // Check result
+                if (y !== expected) begin
+                    $display(
+                        "ERROR: %d AND %d should be %d, but got %d",
+                        a, b, expected, y
+                    );
+                end
+
+            end
+        end
+
+        $display("---------------");
+        $display("All tests passed!");
+
+        $finish;
+    end
+
+endmodule
+`;
+
 export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
@@ -567,12 +708,14 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'key_counter_7seg', name: 'keyCounter7Seg.vhdl', folder: 'vhdl', content: KEY_COUNTER_7SEG_VHD },
   { id: 'and_gate', name: 'and_gate.vhdl', folder: 'vhdl', content: AND_GATE_VHD },
   { id: 'and_gate_tb', name: 'and_gate_tb.vhd', folder: 'vhdl', content: AND_GATE_TB_VHD },
+  { id: 'and_gate_truthtable_tb', name: 'and_gate_truthtable_tb.vhd', folder: 'vhdl', content: AND_GATE_TRUTHTABLE_TB_VHD },
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
   { id: 'key_counter_7seg_v', name: 'keyCounter7Seg.v', folder: 'verilog', content: KEY_COUNTER_7SEG_V },
   { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
   { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },
+  { id: 'and_gate_truthtable_tb_v', name: 'and_gate_truthtable_tb.v', folder: 'verilog', content: AND_GATE_TRUTHTABLE_TB_V },
 ];
 
 /** What a first start shows in the Files panel: the board's top level, in both languages. */
