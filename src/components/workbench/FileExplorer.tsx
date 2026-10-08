@@ -6,7 +6,7 @@ import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
+import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, LinkIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './FileExplorer.css';
 
@@ -16,6 +16,8 @@ export interface FileExplorerProps {
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
+  /** Open a project file by its URL or, in the Windows app, its path. */
+  onOpenProject: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   /** Save one file to the user's disk, as it currently reads in the editor. */
@@ -85,6 +87,7 @@ export function FileExplorer({
   onSelect,
   onUpload,
   onNewFile,
+  onOpenProject,
   onRename,
   onDelete,
   onDownload,
@@ -205,6 +208,15 @@ export function FileExplorer({
         <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
           <span className="wb-files__label-text">New File</span>
+        </button>
+        <button
+          type="button"
+          className="wb-files__open-project"
+          onClick={onOpenProject}
+          title="Open Project: open a project file by its URL (e.g. a GitHub gist) or, in the Windows app, its path"
+        >
+          <LinkIcon className="wb-files__action-icon" aria-hidden="true" />
+          <span className="wb-files__label-text">Open Project</span>
         </button>
         <button
           type="button"

@@ -152,3 +152,18 @@ describe('names', () => {
     expect(pickProjectUpload([{ name: 'a.vhd' }])).toBeUndefined();
   });
 });
+
+describe('a project opened by its path (Windows app)', () => {
+  it('reads files without a URL next to the project file', async () => {
+    const { files, project } = await openProject({
+      text: projectJson([entry('a.vhd'), entry('b.vhd')]),
+      location: 'C:\Labs\p.hdlboard.json',
+      readLocal: async (name) => {
+        if (name === 'a.vhd') return 'A';
+        throw new Error('ENOENT');
+      },
+    });
+    expect(files).toEqual([{ name: 'a.vhd', content: 'A' }]);
+    expect(project.unloaded['b.vhd']).toMatch(/ENOENT/);
+  });
+});

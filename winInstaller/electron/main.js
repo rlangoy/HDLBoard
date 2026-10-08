@@ -218,7 +218,42 @@ function fromApp(event) {
   if (!url.startsWith(`http://127.0.0.1:${PORT}/`)) throw new Error(`IPC refused from ${url}`);
 }
 
+// Open Project / Save project by path: only project and source files, only by a full
+// path, and only text of a sensible size.
+const LOCAL_FILE_EXTENSIONS = ['.json', '.vhd', '.vhdl', '.v', '.vh'];
+
+function localFilePath(filePath) {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw new Error(`not a full path: ${filePath}`);
+  const resolved = path.resolve(filePath);
+  if (!LOCAL_FILE_EXTENSIONS.includes(path.extname(resolved).toLowerCase())) {
+    throw new Error(`only ${LOCAL_FILE_EXTENSIONS.join(' ')} files can be opened or saved: ${resolved}`);
+  }
+  return resolved;
+}
+
+function registerLocalFileIpc() {
+  ipcMain.handle('hdlboard:read-local-file', (event, filePath) => {
+    fromApp(event);
+    const file = localFilePath(filePath);
+    if (fs.statSync(file).size > MAX_WORKSPACE_BYTES) throw new Error(`too large: ${file}`);
+    return fs.readFileSync(file, 'utf8');
+  });
+
+  ipcMain.handle('hdlboard:write-local-file', (event, filePath, text) => {
+    fromApp(event);
+    const file = localFilePath(filePath);
+    if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > MAX_WORKSPACE_BYTES) {
+      throw new Error('file rejected: not a string, or too large');
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text, 'utf8');
+    return true;
+  });
+}
+
 function registerIpc(persistProjects) {
+  registerLocalFileIpc();
+
   ipcMain.handle('hdlboard:set-enabled', (event, value) => {
     fromApp(event);
     const file = userSettingsPath();

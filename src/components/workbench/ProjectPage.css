@@ -73,7 +73,7 @@
 
 .wb-project__names {
   display: flex;
-  flex: 1 1 340px;
+  flex: 1 1 220px;
   min-width: 0;
   flex-direction: column;
 }
@@ -112,7 +112,11 @@
   font: inherit;
   font-size: 24px;
   font-weight: 700;
+  line-height: 1.25;
   color: var(--wb-text);
+  display: block;
+  overflow: hidden;
+  resize: none;
 }
 
 .wb-project__name-input:hover {
@@ -613,8 +617,12 @@ button.wb-project__file:hover {
   text-decoration: underline;
 }
 
-/* A narrow editor: the table's cells stack, one file per block. */
+/* A narrow editor: a smaller heading, and the table's cells stack, one file per block. */
 @container wb-project (max-width: 640px) {
+  .wb-project__name-input {
+    font-size: 20px;
+  }
+
   .wb-project__table thead {
     display: none;
   }

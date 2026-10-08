@@ -125,3 +125,36 @@
 .wb-newfile__buttons .wb-dialog__close:disabled:hover {
   background: var(--wb-accent);
 }
+
+/* Open Project: the kinds of address it takes. */
+.wb-openproject__examples {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.wb-openproject__examples code,
+.wb-openproject__example {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.wb-openproject__example {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-accent-dark);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-openproject__example:hover {
+  text-decoration: underline;
+}
+
+.wb-openproject__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}

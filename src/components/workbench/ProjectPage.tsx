@@ -9,7 +9,6 @@ import {
   DeleteIcon,
   FileIcon,
   FolderOpenIcon,
-  FolderZipIcon,
   InfoIcon,
   LinkIcon,
   OpenInIcon,
@@ -47,10 +46,10 @@ export interface ProjectPageProps {
   onReloadFromUrl: (name: string) => void;
   /** The files of a folder the student chose, to fill in entries that were not found. */
   onFolderChosen: (files: File[]) => void;
-  /** Download the project file. */
+  /** Save the project file and every file of the project, side by side (projectSave.ts). */
   onSave: () => void;
-  /** Download the project file and every file as one .zip. */
-  onDownloadAll: () => void;
+  /** Where Save project writes, for its tooltip. */
+  saveHint: string;
   /** Stop working in a project: Files keeps its files. */
   onCloseProject: () => void;
   /** Back to the code. */
@@ -93,13 +92,14 @@ export function ProjectPage(props: ProjectPageProps) {
                   {unsaved && <span className="wb-project__unsaved">Unsaved changes</span>}
                 </span>
                 <h2 id={`${ids}-title`} className="wb-project__title">
-                  <input
+                  <AutoTextArea
                     className="wb-project__name-input"
                     value={project.name}
-                    onChange={(e) => onDetailsChange({ name: e.target.value })}
+                    onChange={(name) => onDetailsChange({ name: name.replace(/\s*\n\s*/g, ' ') })}
                     placeholder="Project name"
-                    aria-label="Project name"
-                    spellCheck={false}
+                    ariaLabel="Project name"
+                    minRows={1}
+                    singleLine
                   />
                 </h2>
               </div>
@@ -109,20 +109,10 @@ export function ProjectPage(props: ProjectPageProps) {
                   className="wb-project__btn wb-project__btn--primary"
                   onClick={props.onSave}
                   disabled={busy !== null}
-                  title={`Save ${project.fileName}: the project file, listing the files in Files`}
+                  title={props.saveHint}
                 >
                   <SaveIcon aria-hidden="true" />
-                  Save project file
-                </button>
-                <button
-                  type="button"
-                  className="wb-project__btn"
-                  onClick={props.onDownloadAll}
-                  disabled={busy !== null}
-                  title="Download the project file and every file as one .zip; upload the .zip to open the project again"
-                >
-                  <FolderZipIcon aria-hidden="true" />
-                  Download All
+                  Save project
                 </button>
                 <button type="button" className="wb-project__close" onClick={onClose} aria-label="Close the project page" title="Back to the code (Esc)">
                   <CloseIcon aria-hidden="true" />
@@ -185,7 +175,7 @@ export function ProjectPage(props: ProjectPageProps) {
             </dl>
             {project.location !== '' && (
               <p className="wb-project__location">
-                Opened from <span className="wb-project__mono">{project.location}</span>
+                Location <span className="wb-project__mono">{project.location}</span>
               </p>
             )}
           </section>
@@ -253,9 +243,9 @@ export function ProjectPage(props: ProjectPageProps) {
             <InfoIcon className="wb-project__note-icon" aria-hidden="true" />
             <span>
               The project file lists the project's files, each with a description. A file without a URL is stored next to the
-              project file; one with a URL is downloaded from it. To open a project, choose Upload File and select the project
-              file together with its files, or a .zip that Download All saved. Files you add, rename or delete in Files are
-              added, renamed or removed here too.
+              project file; one with a URL is downloaded from it. Save project writes the project file and all its files into one
+              folder. To open a project, use Open Project with its URL or path, or Upload File with the project file and its
+              files selected together. Files you add, rename or delete in Files are added, renamed or removed here too.
             </span>
           </p>
           <div className="wb-project__footer">
@@ -453,6 +443,10 @@ function CommitField({ value, validate, onCommit, id, placeholder, ariaLabel, ic
 
 interface AutoTextAreaProps {
   value: string;
+  /** Replaces the field look, e.g. the project name drawn as the page heading. */
+  className?: string;
+  /** Enter does not start a new line: the text wraps, but stays one line. */
+  singleLine?: boolean;
   onChange: (value: string) => void;
   minRows: number;
   id?: string;
@@ -461,7 +455,7 @@ interface AutoTextAreaProps {
 }
 
 /** A textarea as tall as its text, so a description is read without scrolling inside it. */
-function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel }: AutoTextAreaProps) {
+function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, className, singleLine }: AutoTextAreaProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => fitHeight(ref.current), [value]);
   // A change of width rewraps the text: the column narrowing, or the page first laid out.
@@ -482,8 +476,10 @@ function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel }: 
     <textarea
       ref={ref}
       id={id}
-      className="wb-project__field wb-project__textarea"
+      className={className ?? 'wb-project__field wb-project__textarea'}
       value={value}
+      spellCheck={singleLine ? false : undefined}
+      onKeyDown={singleLine ? (e) => e.key === 'Enter' && e.preventDefault() : undefined}
       rows={minRows}
       placeholder={placeholder}
       aria-label={ariaLabel}

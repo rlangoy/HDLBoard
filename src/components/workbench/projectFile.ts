@@ -215,6 +215,8 @@ export interface ProjectSource {
   location: string;
   /** Files chosen together with the project file: the project folder. Matched by name, ignoring case. */
   localFiles?: readonly ProjectSourceFile[];
+  /** Reads a file next to the project file (the Windows app, for a project opened by its path). */
+  readLocal?: (name: string) => Promise<string>;
   fetch?: FetchFn;
 }
 
@@ -248,7 +250,13 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
       }
       if (entry.url === '') {
         const content = local.get(nameKey(entry.name));
-        return content === undefined ? { entry, problem: MISSING_LOCAL_FILE } : { entry, content };
+        if (content !== undefined) return { entry, content };
+        if (!source.readLocal) return { entry, problem: MISSING_LOCAL_FILE };
+        try {
+          return { entry, content: await source.readLocal(entry.name) };
+        } catch (error) {
+          return { entry, problem: `Not found next to the project file: ${(error as Error).message}` };
+        }
       }
       try {
         return { entry, content: await fetchText(entry.url, fetchFn) };

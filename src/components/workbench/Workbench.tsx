@@ -58,9 +58,12 @@ import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
-import { downloadBlob, downloadProjectZip, downloadSourceFile } from './download';
+import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
+import { OpenProjectDialog } from './OpenProjectDialog';
+import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
+import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToFolder, type PickedFolder } from './projectSave';
 import {
   MISSING_LOCAL_FILE,
   hasUnsavedChanges,
@@ -122,6 +125,12 @@ function timestamp(): string {
 function projectTopFile(files: readonly VhdlFile[]): VhdlFile | undefined {
   const designs = files.filter((f) => f.folder === 'vhdl' || f.folder === 'verilog');
   return designs.find((f) => !/(^tb_|_tb\.|_tb_|testbench)/i.test(f.name)) ?? designs[0];
+}
+
+/** An error's message, without Electron's "Error invoking remote method …: Error:" wrapping. */
+function errorText(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
 }
 
 let nextFileSeq = 1;
@@ -218,7 +227,7 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane or the project page.
@@ -227,6 +236,10 @@ export function Workbench() {
   const [project, setProject] = useState<OpenProject | null>(null);
   // What the project is busy with, e.g. downloading a file; shown on the project page.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
+  // Open Project: why the last try failed, shown in the dialog.
+  const [openProjectError, setOpenProjectError] = useState<string | null>(null);
+  // The folder Save project wrote to last (browser folder picker), so saving again asks no more.
+  const saveFolderRef = useRef<PickedFolder | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
   const [preferredLanguages, setPreferredLanguages] = useState(loadPreferredLanguages);
   const handlePreferredLanguagesChange = (languages: PreferredLanguages) => {
@@ -660,24 +673,70 @@ export function Workbench() {
     for (const extra of others.filter((file) => isProjectUpload(file.name))) {
       appendLog(`Ignored ${extra.name}: only one project file is opened at a time (${projectFile.name}).`, 'error');
     }
-    await openProjectText(await projectFile.text(), projectFile.name, localFiles);
+    const error = await openProjectText(await projectFile.text(), projectFile.name, localFiles);
+    if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
   };
 
-  /** Opens a project file's text: its files replace what Files holds, and the project page shows. */
-  const openProjectText = async (text: string, location: string, localFiles: readonly ProjectSourceFile[] = []) => {
+  /**
+   * Opens a project file's text: its files replace what Files holds, and the project page
+   * shows. Returns why it could not be opened, or null.
+   */
+  const openProjectText = async (
+    text: string,
+    location: string,
+    localFiles: readonly ProjectSourceFile[] = [],
+    readLocal?: (name: string) => Promise<string>,
+  ): Promise<string | null> => {
     setProjectBusy(`Opening ${location}…`);
     let opened: OpenedProject;
     try {
-      opened = await openProject({ text, location, localFiles });
+      opened = await openProject({ text, location, localFiles, readLocal });
     } catch (err) {
-      const reason = (err as Error).message;
+      const reason = errorText(err);
       appendLog(`Project not opened: ${location}: ${reason}`, 'error');
-      setRefusal({ title: 'Project not opened', refused: [{ name: location, reason }] });
-      return;
+      return reason;
     } finally {
       setProjectBusy(null);
     }
     applyOpenedProject(opened, localFiles);
+    return null;
+  };
+
+  /**
+   * Open Project and ?project=: a project file by its URL — absolute, a GitHub gist, or
+   * relative to this page — or, in the Windows app, by its path. Returns why not, or null.
+   */
+  const openProjectFrom = async (input: string): Promise<string | null> => {
+    const location = parseProjectLocation(input, window.location.href);
+    if (typeof location === 'string') return location;
+    if (location.kind === 'path') {
+      const read = desktopBridge()?.readLocalFile;
+      if (!read) return PATH_NEEDS_DESKTOP;
+      let text: string;
+      try {
+        text = await read(location.path);
+      } catch (err) {
+        return `Could not read ${location.path}: ${errorText(err)}`;
+      }
+      const folder = folderOfPath(location.path);
+      return openProjectText(text, location.path, [], (name) => read(pathInFolder(folder, name)));
+    }
+    let text: string;
+    let url: string;
+    try {
+      url = await resolveProjectUrl(location.url);
+      text = await fetchText(url);
+    } catch (err) {
+      return errorText(err);
+    }
+    return openProjectText(text, url);
+  };
+
+  const handleOpenProjectFrom = async (input: string) => {
+    setOpenProjectError(null);
+    const error = await openProjectFrom(input);
+    if (error === null) setDialog(null);
+    else setOpenProjectError(error);
   };
 
   const applyOpenedProject = ({ project: opened, files: projectFiles }: OpenedProject, localFiles: readonly ProjectSourceFile[]) => {
@@ -693,6 +752,7 @@ export function Workbench() {
     }));
     setFiles(added);
     tb.restoreOverrides(EMPTY_OVERRIDES);
+    saveFolderRef.current = null;
     const top = projectTopFile(added);
     setTopFileId(top?.id ?? null);
     setTopUnit(null);
@@ -714,14 +774,9 @@ export function Workbench() {
   useEffect(() => {
     const url = new URLSearchParams(window.location.search).get('project');
     if (!url) return;
-    void (async () => {
-      try {
-        const location = await resolveProjectUrl(url);
-        await openProjectText(await fetchText(location), location);
-      } catch (err) {
-        appendLog(`Project not opened: ${url}: ${(err as Error).message}`, 'error');
-      }
-    })();
+    void openProjectFrom(url).then((error) => {
+      if (error !== null) appendLog(`Project not opened: ${url}: ${error}`, 'error');
+    });
   }, []);
 
   /** Project page: the files of the folder the student chose, for the entries that were not found. */
@@ -786,18 +841,63 @@ export function Workbench() {
     appendLog(`Downloaded ${name} from its URL.`, 'success');
   };
 
-  const handleSaveProject = () => {
+  /**
+   * Save project (projectSave.ts): the project file and every file, side by side — back
+   * into the folder the Windows app opened it from, else into a folder the student picks
+   * (asked once), else as one download per file.
+   */
+  const handleSaveProject = async () => {
     if (!project) return;
-    const text = projectFileText(project, fileNames);
-    downloadBlob(new Blob([text], { type: 'application/json;charset=utf-8' }), project.fileName);
-    setProject(withSaved(project, fileNames));
-    appendLog(`Saved ${project.fileName}.`, 'success');
+    const names = filesRef.current.map((f) => f.name);
+    const toSave = projectSaveFiles(
+      project.fileName,
+      projectFileText(project, names),
+      filesRef.current.map((f) => ({ name: f.name, text: f.content })),
+    );
+    const saved = (location: string, message: string) => {
+      setProject((p) => p && withSaved({ ...p, location }, names));
+      appendLog(message, 'success');
+    };
+    const write = desktopBridge()?.writeLocalFile;
+    setProjectBusy('Saving the project…');
+    try {
+      if (write && isFilePath(project.location)) {
+        const folder = folderOfPath(project.location);
+        for (const file of toSave) await write(pathInFolder(folder, file.name), file.text);
+        saved(pathInFolder(folder, project.fileName), `Saved ${project.fileName} and ${toSave.length - 1} file(s) in ${folder}.`);
+      } else if (canPickFolder()) {
+        const folder = saveFolderRef.current ?? (await pickSaveFolder());
+        if (!folder) return;
+        await writeToFolder(folder, toSave);
+        saveFolderRef.current = folder;
+        saved(`${folder.name}/${project.fileName}`, `Saved ${project.fileName} and ${toSave.length - 1} file(s) in the folder ${folder.name}.`);
+      } else {
+        downloadEach(toSave);
+        saved(project.location, `Downloaded ${project.fileName} and ${toSave.length - 1} file(s); keep them in one folder.`);
+      }
+    } catch (err) {
+      appendLog(`Project not saved: ${errorText(err)}`, 'error');
+    } finally {
+      setProjectBusy(null);
+    }
   };
+
+  // What Save project will do, for its tooltip.
+  const saveHint = !project
+    ? ''
+    : desktopBridge()?.writeLocalFile && isFilePath(project.location)
+      ? `Save the project file and all its files in ${folderOfPath(project.location)}`
+      : canPickFolder()
+        ? saveFolderRef.current
+          ? `Save the project file and all its files in the folder ${saveFolderRef.current.name}`
+          : 'Choose a folder, and save the project file and all its files in it'
+        : 'Download the project file and each of its files';
 
   const handleCloseProject = () => {
     if (project) appendLog(`Closed project ${project.name}; Files keeps its files.`);
     setProject(null);
     setOverlay(null);
+    saveFolderRef.current = null;
   };
 
   const handleOpenProjectFile = (name: string) => {
@@ -809,6 +909,7 @@ export function Workbench() {
   const handleCreateProject = (name: string) => {
     setDialog(null);
     const created = newProject(name, fileNames);
+    saveFolderRef.current = null;
     setProject(created);
     setOverlay('project');
     appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project page.`, 'success');
@@ -1021,6 +1122,15 @@ export function Workbench() {
           }}
         />
       )}
+      {dialog === 'openProject' && (
+        <OpenProjectDialog
+          canOpenPaths={desktopBridge()?.readLocalFile !== undefined}
+          busy={projectBusy !== null}
+          error={openProjectError}
+          onOpen={(location) => void handleOpenProjectFrom(location)}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {runChoice && (
         <RunTestbenchDialog
           designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
@@ -1078,6 +1188,10 @@ export function Workbench() {
               onSelect={handleOpenFile}
               onUpload={handleUploadClick}
               onNewFile={handleNewFile}
+              onOpenProject={() => {
+                setOpenProjectError(null);
+                setDialog('openProject');
+              }}
               onRename={handleRenameFile}
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
@@ -1130,8 +1244,8 @@ export function Workbench() {
                 onRemoveEntry={(name) => setProject((p) => p && withEntryRemoved(p, name))}
                 onReloadFromUrl={(name) => void handleReloadFromUrl(name)}
                 onFolderChosen={(chosen) => void handleProjectFolderChosen(chosen)}
-                onSave={handleSaveProject}
-                onDownloadAll={handleDownloadAll}
+                onSave={() => void handleSaveProject()}
+                saveHint={saveHint}
                 onCloseProject={handleCloseProject}
                 onClose={() => setOverlay(null)}
               />

@@ -23,6 +23,11 @@ const api = {
   setEnabled: (value) => ipcRenderer.invoke('hdlboard:set-enabled', value === true),
 };
 
+// Open Project by a file path, and Save project back into its folder (docs/PROJECTS.md).
+// Always there: they do not depend on workspace storage being on.
+api.readLocalFile = (filePath) => ipcRenderer.invoke('hdlboard:read-local-file', String(filePath));
+api.writeLocalFile = (filePath, text) => ipcRenderer.invoke('hdlboard:write-local-file', String(filePath), String(text));
+
 if (enabled) {
   api.saveWorkspace = (json) => ipcRenderer.invoke('hdlboard:save-workspace', String(json));
   api.loadWorkspace = () => ipcRenderer.invoke('hdlboard:load-workspace');

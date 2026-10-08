@@ -21,6 +21,10 @@ export interface HdlBoardBridge {
   /** Present only while storage is enabled — feature-detect on these. */
   saveWorkspace?(json: string): Promise<boolean>;
   loadWorkspace?(): Promise<string | null>;
+  /** Reads a project file, or a source file next to it, by its full path (Open Project, docs/PROJECTS.md). */
+  readLocalFile?(path: string): Promise<string>;
+  /** Writes one, by its full path (Save project into the folder a project was opened from). */
+  writeLocalFile?(path: string, text: string): Promise<boolean>;
 }
 
 declare global {

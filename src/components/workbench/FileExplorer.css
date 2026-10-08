@@ -76,8 +76,8 @@
   min-width: 0;
 }
 
-/* 360px: the three full labels side by side. */
-@container wb-file-actions (max-width: 359px) {
+/* 480px: the four full labels side by side. */
+@container wb-file-actions (max-width: 479px) {
   .wb-files__actions .wb-files__label-text {
     display: none;
   }
@@ -90,6 +90,7 @@
 
 .wb-files__upload,
 .wb-files__new,
+.wb-files__open-project,
 .wb-files__download-all {
   display: flex;
   align-items: center;
@@ -114,8 +115,9 @@
   background: var(--wb-accent-dark);
 }
 
-/* New File and Download All: the secondary look beside Upload File. */
+/* New File, Open Project and Download All: the secondary look beside Upload File. */
 .wb-files__new,
+.wb-files__open-project,
 .wb-files__download-all {
   border: 1px solid var(--wb-border);
   background: #ffffff;
@@ -123,6 +125,7 @@
 }
 
 .wb-files__new:hover,
+.wb-files__open-project:hover,
 .wb-files__download-all:hover:not(:disabled) {
   background: var(--wb-hover);
 }
