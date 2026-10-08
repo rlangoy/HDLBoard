@@ -6,7 +6,7 @@ import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, UploadIcon } from './icons';
+import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import './FileExplorer.css';
 
@@ -31,6 +31,11 @@ export interface FileExplorerProps {
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
+  /** The open project, if any: drawn above the folders, and opens the project page. */
+  project?: { name: string; fileName: string; unsaved: boolean };
+  /** The project page is showing: the project row looks pressed. */
+  projectOpen?: boolean;
+  onToggleProject?: () => void;
 }
 
 interface TopDotButtonProps {
@@ -89,6 +94,9 @@ export function FileExplorer({
   onFilesDropped,
   onSetTopFile,
   topLocked = false,
+  project,
+  projectOpen = false,
+  onToggleProject,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -189,7 +197,7 @@ export function FileExplorer({
           type="button"
           className="wb-files__upload"
           onClick={onUpload}
-          title="Upload File: add source files, or a .zip such as one Download All saved"
+          title="Upload File: add source files, or a .zip such as one Download All saved. Choose a project .json (with its files) to open a project."
         >
           <UploadIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
@@ -209,6 +217,23 @@ export function FileExplorer({
           <span className="wb-files__label-text">Download All</span>
         </button>
       </div>
+
+      {project && (
+        <button
+          type="button"
+          className={cx('wb-files__project', projectOpen && 'is-open')}
+          onClick={onToggleProject}
+          aria-pressed={projectOpen}
+          title={`${project.fileName}: show the project page${project.unsaved ? ' (unsaved changes)' : ''}`}
+        >
+          <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
+          <span className="wb-files__project-text">
+            <span className="wb-files__project-name">{project.name || 'Untitled project'}</span>
+            <span className="wb-files__project-file">{project.fileName}</span>
+          </span>
+          {project.unsaved && <span className="wb-files__project-dot" aria-label="Unsaved changes" />}
+        </button>
+      )}
 
       {/* Only the tree scrolls: the header and buttons above stay put. */}
       <ScrollArea className="wb-files__scroll">

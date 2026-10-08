@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "name": "4-bit Adder and Hex Counter",
+  "board": "DE1-SoC",
+  "description": "Two small DE1-SoC exercises.\nadder4 adds two 4-bit numbers into a 5-bit sum (bit 4 is the carry out); its self-checking testbench runs without the board.\ncounterHex is a board design: KEY0 counts up, KEY1 resets, and the 8-bit count is shown on LEDR[7:0] and in hex on HEX1-HEX0.",
+  "files": [
+    {
+      "name": "adder4.vhd",
+      "url": "https://gist.github.com/rlangoy/6e0330c53fc020b65b27ac107386886f",
+      "description": "Design: 4-bit unsigned adder, sum = a + b as 5 bits (bit 4 is the carry out). No board ports."
+    },
+    {
+      "name": "adder4_tb.vhdl",
+      "url": "https://gist.github.com/rlangoy/68cc384fea49289eaafae84b15715a78",
+      "description": "Self-checking testbench for adder4: tries all 256 input pairs, reports wrong sums and prints PASS or FAIL. Runs without the board."
+    },
+    {
+      "name": "counterHex.vhdl",
+      "url": "https://gist.github.com/rlangoy/886af5420015c2bfbb7637006882aa0b",
+      "description": "Board design: 8-bit counter, KEY0 counts up and KEY1 resets; the count is shown on LEDR[7:0] and in hex on HEX1-HEX0 (HEX2-HEX5 off)."
+    }
+  ]
+}

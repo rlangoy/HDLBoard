@@ -499,3 +499,68 @@
   height: 16px;
   flex: none;
 }
+
+/* The open project, above the folders: opens the project page. */
+.wb-files__project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  text-align: left;
+  color: var(--wb-text);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-files__project:hover {
+  border-color: var(--wb-accent);
+}
+
+.wb-files__project.is-open {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+}
+
+.wb-files__project-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--wb-accent);
+}
+
+.wb-files__project-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.wb-files__project-name,
+.wb-files__project-file {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wb-files__project-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wb-files__project-file {
+  font-size: 12px;
+  color: var(--wb-text-muted);
+}
+
+.wb-files__project-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #f59e0b;
+}

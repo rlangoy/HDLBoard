@@ -269,3 +269,90 @@ export function CheckIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** A 24px outline icon drawn in the text colour: the project page's own icons below. */
+function OutlineIcon({ paths, ...props }: SVGProps<SVGSVGElement> & { paths: readonly string[] }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
+
+/** Curly braces: a project file (.hdlboard.json). */
+export function ProjectIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={[
+        'M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1',
+        'M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1',
+      ]}
+      {...props}
+    />
+  );
+}
+
+/** A chain link: a file stored at a URL. */
+export function LinkIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={[
+        'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71',
+        'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+      ]}
+      {...props}
+    />
+  );
+}
+
+/** A warning triangle. */
+export function AlertIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3', 'M12 9v4', 'M12 17h.01']} {...props} />;
+}
+
+/** Two arrows in a circle: download a file again from its URL. */
+export function RefreshIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={[
+        'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8',
+        'M21 3v5h-5',
+        'M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16',
+        'M8 16H3v5',
+      ]}
+      {...props}
+    />
+  );
+}
+
+/** A floppy disk: save the project file. */
+export function SaveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={[
+        'M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z',
+        'M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7',
+        'M7 3v4a1 1 0 0 0 1 1h7',
+      ]}
+      {...props}
+    />
+  );
+}
+
+/** A box with an arrow out of it: show a file in the editor. */
+export function OpenInIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6']} {...props} />;
+}

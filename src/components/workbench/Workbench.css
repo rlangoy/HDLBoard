@@ -138,6 +138,11 @@
   display: flex;
 }
 
+/* Only there to make the editor inert under an overlay; lays out as if it were not. */
+.wb-center__editor {
+  display: contents;
+}
+
 /*
  * Pane dividers. The two vertical ones sit either side of the editor — one
  * resizes .wb-sidebar, the other .wb-right (usePaneLayout.ts's

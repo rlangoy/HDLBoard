@@ -10,6 +10,7 @@
 
 import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
+import { parseStoredProject, type OpenProject } from './projectFile';
 import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
 export interface HdlBoardBridge {
@@ -42,6 +43,8 @@ export interface Workspace {
   topUnit?: string | null;
   /** Role and pair overrides (docs/impl_split_screen.md § 6.7); missing reads as none. */
   testbench?: TestbenchOverrides;
+  /** The open project file (projectFile.ts); missing or null reads as none. */
+  project?: OpenProject | null;
 }
 
 const WORKSPACE_VERSION = 1;
@@ -94,6 +97,7 @@ export function parseWorkspace(json: string | null | undefined): Workspace | und
     topFileId,
     topUnit,
     testbench: parseOverrides(r.testbench, known),
+    project: parseStoredProject(r.project),
   };
 }
 

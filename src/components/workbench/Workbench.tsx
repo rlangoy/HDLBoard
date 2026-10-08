@@ -58,8 +58,32 @@ import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
-import { downloadProjectZip, downloadSourceFile } from './download';
+import { downloadBlob, downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
+import { ProjectPage } from './ProjectPage';
+import {
+  MISSING_LOCAL_FILE,
+  hasUnsavedChanges,
+  isProjectUpload,
+  newProject,
+  openProject,
+  pickProjectUpload,
+  projectEntries,
+  projectFileText,
+  withDetails,
+  withEntriesLoaded,
+  withEntryEdited,
+  withEntryRemoved,
+  withEntryRenamed,
+  withEntryUnloaded,
+  withSaved,
+  type OpenedProject,
+  type OpenProject,
+  type ProjectSourceFile,
+} from './projectFile';
+import { fetchText } from '../../project/fetchText';
+import { resolveProjectUrl } from '../../project/gistUrl';
+import { sameFileName } from '../../project/fileName';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
 
@@ -88,6 +112,16 @@ function timestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * The file a newly opened project runs: its first design that does not look like a
+ * testbench, in project order (a project usually lists the design first), else its
+ * first design file at all.
+ */
+function projectTopFile(files: readonly VhdlFile[]): VhdlFile | undefined {
+  const designs = files.filter((f) => f.folder === 'vhdl' || f.folder === 'verilog');
+  return designs.find((f) => !/(^tb_|_tb\.|_tb_|testbench)/i.test(f.name)) ?? designs[0];
 }
 
 let nextFileSeq = 1;
@@ -170,6 +204,7 @@ export function Workbench() {
         setTopFileId(ws.topFileId);
         setTopUnit(ws.topUnit ?? null);
         restoreOverridesRef.current(ws.testbench ?? EMPTY_OVERRIDES);
+        setProject(ws.project ?? null);
       })
       .catch((err: unknown) => console.error('Could not load the saved workspace:', err))
       .finally(() => {
@@ -186,8 +221,12 @@ export function Workbench() {
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
-  // The Examples pane, shown over the editor (which stays mounted underneath).
-  const [examplesOpen, setExamplesOpen] = useState(false);
+  // What is shown over the editor (which stays mounted underneath): the Examples pane or the project page.
+  const [overlay, setOverlay] = useState<'examples' | 'project' | null>(null);
+  // The open project file (projectFile.ts): Files holds its files.
+  const [project, setProject] = useState<OpenProject | null>(null);
+  // What the project is busy with, e.g. downloading a file; shown on the project page.
+  const [projectBusy, setProjectBusy] = useState<string | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
   const [preferredLanguages, setPreferredLanguages] = useState(loadPreferredLanguages);
   const handlePreferredLanguagesChange = (languages: PreferredLanguages) => {
@@ -276,8 +315,10 @@ export function Workbench() {
   const quietEnd = useRef(false);
 
   const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
+    // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
     logSeq.current += 1;
-    setLogLines((prev) => appendCapped(prev, { id: logSeq.current, time: timestamp(), text, tone }));
+    const id = logSeq.current;
+    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone }));
   }, []);
 
   const stopElapsedTimer = () => {
@@ -315,7 +356,7 @@ export function Workbench() {
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
-    setExamplesOpen(false);
+    setOverlay(null);
     setActiveFileId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
   }, []);
@@ -406,7 +447,7 @@ export function Workbench() {
 
   // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
   const handleOpenFile = (id: string) => {
-    setExamplesOpen(false);
+    setOverlay(null);
     tb.showFile(id, 'open');
   };
 
@@ -426,10 +467,15 @@ export function Workbench() {
       return;
     }
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name, folder: folderAfterRename(f.folder, name) } : f)));
+    // The project keeps the file's description and URL under its new name.
+    setProject((p) => p && withEntryRenamed(p, current.name, name));
   };
 
   const handleDeleteFile = (id: string) => {
+    const deleted = files.find((f) => f.id === id);
     setFiles((prev) => prev.filter((f) => f.id !== id));
+    // A deleted file leaves the project too.
+    if (deleted) setProject((p) => p && withEntryRemoved(p, deleted.name));
     dismissDiagnostics(id);
     tb.onFileDeleted(id);
     // The shown file gone, its neighbour in the Files list is shown (D7); a file shown
@@ -470,8 +516,16 @@ export function Workbench() {
     if (file) downloadSourceFile(file);
   };
 
+  const fileNames = files.map((f) => f.name);
+
+  // With a project open, its file goes in the .zip too, so uploading the .zip opens it again.
   const handleDownloadAll = () => {
-    if (files.length > 0) downloadProjectZip(files);
+    if (!project) {
+      if (files.length > 0) downloadProjectZip(files);
+      return;
+    }
+    downloadProjectZip(files, { name: project.fileName, text: projectFileText(project, fileNames) });
+    setProject(withSaved(project, fileNames));
   };
 
   // Ctrl+S / Cmd+S saves the shown file to disk instead of the browser's
@@ -501,7 +555,7 @@ export function Workbench() {
   // A file just added to `files` is shown.
   const showNewFile = (id: string) => {
     setActiveFileId(id);
-    setExamplesOpen(false);
+    setOverlay(null);
   };
 
   // An example is copied into the project (a file it already has by that name is
@@ -568,6 +622,13 @@ export function Workbench() {
         }
       }
     }
+    // A project file among them opens the project, with the others as its folder.
+    const projectUpload = pickProjectUpload(chosen);
+    if (projectUpload) {
+      await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
+      for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
+      return;
+    }
     const reasons = incomingFileRefusals(
       chosen.map((file) => file.name),
       filesRef.current.map((file) => file.name),
@@ -586,6 +647,171 @@ export function Workbench() {
     const reader = new FileReader();
     reader.onload = () => addFile(file.name, String(reader.result ?? ''), folderForUpload(file.name) ?? 'vhdl');
     reader.readAsText(file);
+  };
+
+  /**
+   * Opens a project file chosen or dropped with Upload File; the files chosen with it are
+   * its folder. Whatever Files held before is closed: the project's files replace it.
+   */
+  const openProjectUpload = async (projectFile: File, others: readonly File[]) => {
+    const localFiles: ProjectSourceFile[] = await Promise.all(
+      others.filter((file) => !isProjectUpload(file.name)).map(async (file) => ({ name: file.name, content: await file.text() })),
+    );
+    for (const extra of others.filter((file) => isProjectUpload(file.name))) {
+      appendLog(`Ignored ${extra.name}: only one project file is opened at a time (${projectFile.name}).`, 'error');
+    }
+    await openProjectText(await projectFile.text(), projectFile.name, localFiles);
+  };
+
+  /** Opens a project file's text: its files replace what Files holds, and the project page shows. */
+  const openProjectText = async (text: string, location: string, localFiles: readonly ProjectSourceFile[] = []) => {
+    setProjectBusy(`Opening ${location}…`);
+    let opened: OpenedProject;
+    try {
+      opened = await openProject({ text, location, localFiles });
+    } catch (err) {
+      const reason = (err as Error).message;
+      appendLog(`Project not opened: ${location}: ${reason}`, 'error');
+      setRefusal({ title: 'Project not opened', refused: [{ name: location, reason }] });
+      return;
+    } finally {
+      setProjectBusy(null);
+    }
+    applyOpenedProject(opened, localFiles);
+  };
+
+  const applyOpenedProject = ({ project: opened, files: projectFiles }: OpenedProject, localFiles: readonly ProjectSourceFile[]) => {
+    endRunQuietly();
+    setLogLines([]);
+    const closed = filesRef.current;
+    for (const f of closed) dismissDiagnostics(f.id);
+    const added: VhdlFile[] = projectFiles.map((f) => ({
+      id: nextFileId(),
+      name: f.name,
+      folder: folderForUpload(f.name) ?? 'vhdl',
+      content: f.content,
+    }));
+    setFiles(added);
+    tb.restoreOverrides(EMPTY_OVERRIDES);
+    const top = projectTopFile(added);
+    setTopFileId(top?.id ?? null);
+    setTopUnit(null);
+    setActiveFileId(top?.id ?? added[0]?.id ?? null);
+    setProject(opened);
+    setOverlay('project');
+
+    appendLog(`Opened project ${opened.name} (${opened.fileName}): ${added.length} of ${opened.entries.length} files.`, 'success');
+    if (closed.length > 0) appendLog(`Closed the ${closed.length} file(s) Files held before; the project's files replace them.`);
+    for (const entry of opened.entries) {
+      const why = opened.unloaded[entry.name.toLowerCase()];
+      if (why) appendLog(`${entry.name} not loaded: ${why}`, 'error');
+    }
+    const listed = (name: string) => opened.entries.some((entry) => sameFileName(entry.name, name));
+    for (const f of localFiles.filter((file) => !listed(file.name))) appendLog(`Ignored ${f.name}: the project does not list it.`);
+  };
+
+  // ?project=<url>: open a project published at a URL, e.g. a GitHub gist (spec § 6.1). Once, on the first load.
+  useEffect(() => {
+    const url = new URLSearchParams(window.location.search).get('project');
+    if (!url) return;
+    void (async () => {
+      try {
+        const location = await resolveProjectUrl(url);
+        await openProjectText(await fetchText(location), location);
+      } catch (err) {
+        appendLog(`Project not opened: ${url}: ${(err as Error).message}`, 'error');
+      }
+    })();
+  }, []);
+
+  /** Project page: the files of the folder the student chose, for the entries that were not found. */
+  const handleProjectFolderChosen = async (chosen: File[]) => {
+    if (!project) return;
+    const missing = projectEntries(project, filesRef.current.map((f) => f.name)).filter(
+      (row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE,
+    );
+    // The folder's own files first, then those in its subfolders.
+    const depth = (file: File) => (file.webkitRelativePath || file.name).split('/').length;
+    const sorted = [...chosen].sort((a, b) => depth(a) - depth(b));
+    const found: VhdlFile[] = [];
+    for (const row of missing) {
+      const file = sorted.find((f) => sameFileName(f.name, row.name));
+      if (!file) continue;
+      found.push({ id: nextFileId(), name: row.name, folder: folderForUpload(row.name) ?? 'vhdl', content: await file.text() });
+    }
+    if (found.length === 0) {
+      appendLog(`None of the missing files (${missing.map((row) => row.name).join(', ')}) are in that folder.`, 'error');
+      return;
+    }
+    setFiles((prev) => [...prev, ...found]);
+    setProject((p) => p && withEntriesLoaded(p, found.map((f) => f.name)));
+    if (topFileId === null) {
+      const top = projectTopFile(found);
+      if (top) makeTop(top.id);
+    }
+    for (const f of found) appendLog(`Opened ${f.name} from the project folder.`, 'success');
+  };
+
+  /** Project page: download a file again from its URL, into Files. */
+  const handleReloadFromUrl = async (name: string) => {
+    const row = project && projectEntries(project, fileNames).find((r) => sameFileName(r.name, name));
+    if (!row || row.url === '') return;
+    setProjectBusy(`Downloading ${name}…`);
+    let content: string;
+    try {
+      content = await fetchText(row.url);
+    } catch (err) {
+      const reason = (err as Error).message;
+      appendLog(`${name}: ${reason}`, 'error');
+      if (row.status === 'unloaded') setProject((p) => p && withEntryUnloaded(p, name, reason));
+      return;
+    } finally {
+      setProjectBusy(null);
+    }
+    const existing = filesRef.current.find((f) => sameFileName(f.name, name));
+    if (existing) {
+      if (existing.content === content) {
+        appendLog(`${name} is the same as at its URL.`);
+        return;
+      }
+      if (!window.confirm(`Replace ${name} in Files with the version at its URL? Your changes to it are lost.`)) return;
+      handleContentChange(existing.id, content);
+      appendLog(`Downloaded ${name} again from its URL.`, 'success');
+      return;
+    }
+    const folder = folderForUpload(name);
+    if (!folder) return;
+    setFiles((prev) => [...prev, { id: nextFileId(), name, folder, content }]);
+    setProject((p) => p && withEntriesLoaded(p, [name]));
+    appendLog(`Downloaded ${name} from its URL.`, 'success');
+  };
+
+  const handleSaveProject = () => {
+    if (!project) return;
+    const text = projectFileText(project, fileNames);
+    downloadBlob(new Blob([text], { type: 'application/json;charset=utf-8' }), project.fileName);
+    setProject(withSaved(project, fileNames));
+    appendLog(`Saved ${project.fileName}.`, 'success');
+  };
+
+  const handleCloseProject = () => {
+    if (project) appendLog(`Closed project ${project.name}; Files keeps its files.`);
+    setProject(null);
+    setOverlay(null);
+  };
+
+  const handleOpenProjectFile = (name: string) => {
+    const file = files.find((f) => sameFileName(f.name, name));
+    if (file) handleOpenFile(file.id);
+  };
+
+  // New File > Project: a project listing every file now in Files, shown on the project page.
+  const handleCreateProject = (name: string) => {
+    setDialog(null);
+    const created = newProject(name, fileNames);
+    setProject(created);
+    setOverlay('project');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project page.`, 'success');
   };
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
@@ -718,7 +944,7 @@ export function Workbench() {
   useEffect(() => {
     const save = desktopBridge()?.saveWorkspace;
     if (!hydrated || !save) return;
-    const json = serializeWorkspace({ files, activeFileId, topFileId, topUnit, testbench: tb.overrides });
+    const json = serializeWorkspace({ files, activeFileId, topFileId, topUnit, testbench: tb.overrides, project });
     const flush = () => {
       save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
     };
@@ -736,7 +962,7 @@ export function Workbench() {
       window.clearTimeout(timer);
       window.removeEventListener('pagehide', onHide);
     };
-  }, [hydrated, files, activeFileId, topFileId, topUnit, tb.overrides]);
+  }, [hydrated, files, activeFileId, topFileId, topUnit, tb.overrides, project]);
 
   // The files as the Files panel draws them (docs/cleanup_file_tabs.md § 5.5).
   const rows = fileRows(files, {
@@ -746,6 +972,8 @@ export function Workbench() {
     problemsOf: (id) => countSeverities(diagnostics.byFile[id] ?? NO_LINES),
   });
   const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
+
+  const projectUnsaved = project !== null && hasUnsavedChanges(project, fileNames);
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
@@ -784,6 +1012,9 @@ export function Workbench() {
           kind={testbenchDesign ? 'testbench' : 'design'}
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
+          onCreateProject={testbenchDesign ? undefined : handleCreateProject}
+          projectFileCount={files.length}
+          openProjectName={project?.name}
           onClose={() => {
             setDialog(null);
             setNewTestbenchFor(null);
@@ -851,11 +1082,14 @@ export function Workbench() {
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
               onDownloadAll={handleDownloadAll}
-              onToggleExamples={() => setExamplesOpen((open) => !open)}
-              examplesOpen={examplesOpen}
+              onToggleExamples={() => setOverlay((shown) => (shown === 'examples' ? null : 'examples'))}
+              examplesOpen={overlay === 'examples'}
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
               topLocked={isSimulating}
+              project={project ? { name: project.name, fileName: project.fileName, unsaved: projectUnsaved } : undefined}
+              projectOpen={overlay === 'project'}
+              onToggleProject={() => setOverlay((shown) => (shown === 'project' ? null : 'project'))}
             />
           </SidePanel>
 
@@ -869,6 +1103,8 @@ export function Workbench() {
           />
 
           <div className="wb-center">
+            {/* Under the Examples pane or the project page the editor is inert: no caret, no typing into a hidden file. */}
+            <div className="wb-center__editor" {...(overlay !== null ? { inert: '' } : {})}>
             <CodeEditor
               onChange={handleContentChange}
               onFilesDropped={handleFilesDropped}
@@ -877,12 +1113,31 @@ export function Workbench() {
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (
-                  <EmptyProject onExamples={() => setExamplesOpen(true)} onNewFile={handleNewFile} onUpload={handleUploadClick} />
+                  <EmptyProject onExamples={() => setOverlay('examples')} onNewFile={handleNewFile} onUpload={handleUploadClick} />
                 )
               }
             />
-            {examplesOpen && (
-            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />
+            </div>
+            {overlay === 'project' && project && (
+              <ProjectPage
+                project={project}
+                rows={projectEntries(project, fileNames)}
+                unsaved={projectUnsaved}
+                busy={projectBusy}
+                onDetailsChange={(details) => setProject((p) => p && withDetails(p, details))}
+                onEntryChange={(name, patch) => setProject((p) => p && withEntryEdited(p, name, patch))}
+                onOpenFile={handleOpenProjectFile}
+                onRemoveEntry={(name) => setProject((p) => p && withEntryRemoved(p, name))}
+                onReloadFromUrl={(name) => void handleReloadFromUrl(name)}
+                onFolderChosen={(chosen) => void handleProjectFolderChosen(chosen)}
+                onSave={handleSaveProject}
+                onDownloadAll={handleDownloadAll}
+                onCloseProject={handleCloseProject}
+                onClose={() => setOverlay(null)}
+              />
+            )}
+            {overlay === 'examples' && (
+            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
           )}
           </div>
 

@@ -57,9 +57,18 @@ export function projectZipName(now: Date = new Date()): string {
   return `HDLBoard-project-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.zip`;
 }
 
-/** Downloads every file in the project as one ZIP. */
-export function downloadProjectZip(files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[]): void {
+/**
+ * Downloads every file in the project as one ZIP. An open project's file goes in at the
+ * top, and names the archive, so uploading the .zip opens the project again.
+ */
+export function downloadProjectZip(
+  files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[],
+  projectFile?: { name: string; text: string },
+): void {
   const now = new Date();
-  const zip = createZip(projectZipEntries(files), now);
-  downloadBlob(new Blob([zip], { type: 'application/zip' }), projectZipName(now));
+  const entries = projectZipEntries(files);
+  if (projectFile) entries.unshift({ path: projectFile.name, data: projectFile.text });
+  const zip = createZip(entries, now);
+  const name = projectFile ? `${projectFile.name.replace(/\.hdlboard\.json$/i, '')}.zip` : projectZipName(now);
+  downloadBlob(new Blob([zip], { type: 'application/zip' }), name);
 }
