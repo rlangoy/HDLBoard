@@ -116,8 +116,22 @@ export function projectNameError(name: string): string | undefined {
   return undefined;
 }
 
+/** The part of a project file name the student edits: `counter.hdlboard.json` → `counter`. */
+export function projectFileBase(fileName: string): string {
+  return fileName.replace(/\.hdlboard\.json$/i, '');
+}
+
+/**
+ * The project file name for a typed base name. The extension is fixed, so one typed or
+ * pasted anyway (`counter.hdlboard.json`, `counter.json`) is not added twice.
+ */
+export function projectFileNameFromBase(base: string): string {
+  return `${base.trim().replace(/\.hdlboard\.json$|\.json$/i, '')}${PROJECT_FILE_EXTENSION}`;
+}
+
 /** Why the project file cannot be called `fileName`, or undefined if it can (§ 5.1). */
 export function projectFileNameError(fileName: string): string | undefined {
+  if (projectFileBase(fileName).trim() === '') return 'Enter a name for the project file.';
   const problem = fileNameProblem(fileName);
   if (problem) return `The ${problem}.`;
   if (!isProjectFileName(fileName)) return `The name must end in ${PROJECT_FILE_EXTENSION}.`;

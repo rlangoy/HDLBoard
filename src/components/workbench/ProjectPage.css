@@ -649,3 +649,45 @@ button.wb-project__file:hover {
     text-align: left;
   }
 }
+
+/*
+ * A field with a fixed ending (the project file's .hdlboard.json): the input and the
+ * ending share one border and read as one field, while only the name can be typed.
+ */
+.wb-project__field-wrap.has-suffix {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--wb-border);
+  border-radius: 7px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.wb-project__field-wrap.has-suffix:focus-within {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 2px var(--wb-accent-soft);
+}
+
+.wb-project__field-wrap.has-suffix.is-invalid {
+  border-color: var(--wb-danger);
+}
+
+.wb-project__field-wrap.has-suffix .wb-project__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wb-project__field-suffix {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 10px;
+  border-left: 1px solid var(--wb-border);
+  background: var(--wb-sidebar-bg);
+  color: var(--wb-text-muted);
+  cursor: text;
+  user-select: none;
+}

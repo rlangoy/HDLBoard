@@ -3,6 +3,7 @@
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../board';
+import { PROJECT_FILE_EXTENSION } from '../../project/types';
 import {
   AlertIcon,
   CloseIcon,
@@ -20,7 +21,9 @@ import {
   KNOWN_BOARDS,
   MISSING_LOCAL_FILE,
   entryUrlError,
+  projectFileBase,
   projectFileNameError,
+  projectFileNameFromBase,
   type OpenProject,
   type ProjectDetails,
   type ProjectEntryRow,
@@ -155,6 +158,9 @@ export function ProjectPage(props: ProjectPageProps) {
                     validate={projectFileNameError}
                     onCommit={(fileName) => onDetailsChange({ fileName })}
                     className="wb-project__mono"
+                    suffix={PROJECT_FILE_EXTENSION}
+                    toDraft={projectFileBase}
+                    fromDraft={projectFileNameFromBase}
                   />
                 </dd>
               </div>
@@ -388,49 +394,96 @@ interface CommitFieldProps {
   ariaLabel?: string;
   icon?: ReactNode;
   className?: string;
+  /**
+   * A fixed ending drawn after the field, outside what can be typed, e.g. `.hdlboard.json`
+   * (the input-group pattern): it cannot be deleted, and screen readers hear it with the field.
+   */
+  suffix?: string;
+  /** With `suffix`: the value as it is edited (without the suffix), and back. */
+  toDraft?: (value: string) => string;
+  fromDraft?: (draft: string) => string;
 }
+
+const same = (text: string) => text;
 
 /**
  * A text field that takes effect when left or on Enter, and only with a valid value —
  * a project file name or URL half typed is never saved. Escape goes back to the value.
  */
-function CommitField({ value, validate, onCommit, id, placeholder, ariaLabel, icon, className }: CommitFieldProps) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const error = draft === value ? undefined : validate(draft);
+function CommitField({
+  value,
+  validate,
+  onCommit,
+  id,
+  placeholder,
+  ariaLabel,
+  icon,
+  className,
+  suffix,
+  toDraft = same,
+  fromDraft = same,
+}: CommitFieldProps) {
+  const [draft, setDraft] = useState(() => toDraft(value));
+  useEffect(() => setDraft(toDraft(value)), [value, toDraft]);
+  const next = fromDraft(draft);
+  const error = next === value ? undefined : validate(next);
   const errorId = useId();
+  const suffixId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const commit = () => {
-    if (draft !== value && validate(draft) === undefined) onCommit(draft);
+    if (next !== value && validate(next) === undefined) onCommit(next);
+    // An extension typed into the name is shown dropped once the field is left.
+    else if (next === value) setDraft(toDraft(value));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       commit();
-    } else if (e.key === 'Escape' && draft !== value) {
+    } else if (e.key === 'Escape' && draft !== toDraft(value)) {
       e.preventDefault();
-      setDraft(value);
+      setDraft(toDraft(value));
     }
   };
 
+  const describedBy = [suffix ? suffixId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={cx('wb-project__commit', className)}>
-      <span className="wb-project__field-wrap">
+      <span className={cx('wb-project__field-wrap', suffix && 'has-suffix', error !== undefined && 'is-invalid')}>
         {icon && <span className="wb-project__field-icon">{icon}</span>}
         <input
+          ref={inputRef}
           id={id}
           className={cx('wb-project__field', icon !== undefined && 'has-icon')}
           value={draft}
           placeholder={placeholder}
           aria-label={ariaLabel}
           aria-invalid={error !== undefined}
-          aria-describedby={error ? errorId : undefined}
+          aria-describedby={describedBy}
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={handleKeyDown}
         />
+        {suffix && (
+          // Part of the field to the eye and the pointer, never part of what is typed.
+          <span
+            id={suffixId}
+            className="wb-project__field-suffix"
+            title={`The project file always ends in ${suffix}`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const input = inputRef.current;
+              input?.focus();
+              input?.setSelectionRange(input.value.length, input.value.length);
+            }}
+          >
+            <span className="wb-project__sr">ends in </span>
+            {suffix}
+          </span>
+        )}
       </span>
       {error && (
         <span id={errorId} className="wb-project__field-error" role="alert">

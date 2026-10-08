@@ -11,6 +11,8 @@ import {
   openProject,
   pickProjectUpload,
   projectEntries,
+  projectFileBase,
+  projectFileNameFromBase,
   projectFileNameError,
   projectFileNameFor,
   projectFileText,
@@ -144,6 +146,15 @@ describe('names', () => {
     expect(projectFileNameError('a.hdlboard.json')).toBeUndefined();
     expect(projectFileNameError('a.json')).toMatch(/end in/);
     expect(projectFileNameError('a/b.hdlboard.json')).toMatch(/forbidden/);
+  });
+
+  it('edits only the part before the fixed .hdlboard.json', () => {
+    expect(projectFileBase('Lab-1.HDLBoard.json')).toBe('Lab-1');
+    expect(projectFileNameFromBase(' lab2 ')).toBe('lab2.hdlboard.json');
+    // A typed or pasted extension is not added twice.
+    expect(projectFileNameFromBase('lab2.hdlboard.json')).toBe('lab2.hdlboard.json');
+    expect(projectFileNameFromBase('lab2.json')).toBe('lab2.hdlboard.json');
+    expect(projectFileNameError(projectFileNameFromBase('  '))).toMatch(/Enter a name/);
   });
 
   it('prefers a .hdlboard.json among uploads', () => {
