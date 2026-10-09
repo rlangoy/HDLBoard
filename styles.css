@@ -537,7 +537,7 @@ p { margin: 0; }
   .cloud .split-grid { gap: 24px; }
   .cloud .split-text { display: contents; }
   .cloud .split-media { order: 1; margin: 24px 0; }
-  .cloud .split-note, .cloud .checks { order: 2; }
+  .cloud .checks { order: 2; }
   .band-grid { gap: 40px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 48px; }
   .paths { grid-template-columns: repeat(2, minmax(0, 1fr)); }
