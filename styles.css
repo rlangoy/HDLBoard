@@ -272,6 +272,10 @@ p { margin: 0; }
 .split-text .split-note { font-size: 1.0625rem; }
 .split-text .text-link { font-size: 1.0625rem; }
 
+/* ---------- Cloud: GitHub storage, text left, dialog right ---------- */
+.cloud { background: var(--surface); }  /* sets it apart from the testbench section above */
+.cloud .split-media { background: var(--bg); }
+
 /* ---------- Testbench: split view, one wide screenshot ---------- */
 .testbench-intro { gap: 24px; }
 .testbench-intro h2 span { display: inline-block; }  /* wrap between the sentences, not inside one */
