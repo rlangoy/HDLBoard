@@ -313,7 +313,7 @@ export function Workbench() {
   // The pane geometry: side pane widths, which panes are shut, the console's
   // height, and the dividers and shortcuts that change them.
   const layout = usePaneLayout();
-  const { collapsed, togglePane } = layout;
+  const { collapsed, togglePane, showPane } = layout;
 
   // The board keeps one fixed 2x2 arrangement at one fixed internal size and
   // is scaled to whatever the pane currently gives it, so the parts never
@@ -1149,6 +1149,11 @@ export function Workbench() {
     reveal,
     paneRun,
     onCreateTestbench: handleCreateTestbench,
+    // A testbench beside its design needs the room, and does not drive the board; a design on its own does.
+    onViewChosen: (view) => {
+      if (view === 'both') showPane('board', false);
+      else if (view === 'rtl') showPane('board', true);
+    },
   });
   restoreOverridesRef.current = tb.restoreOverrides;
 
