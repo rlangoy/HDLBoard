@@ -198,3 +198,31 @@
   line-height: 1.5;
   color: var(--wb-text-muted);
 }
+
+/* ProjectFolderDialog: the files a project opened without. */
+.wb-openproject__lead {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wb-text);
+}
+
+.wb-openproject__missing {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--wb-text);
+}
+
+.wb-openproject__choose {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-openproject__choose svg {
+  width: 18px;
+  height: 18px;
+}

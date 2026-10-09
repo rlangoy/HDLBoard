@@ -62,6 +62,7 @@ import { downloadProjectZip, downloadSourceFile } from './download';
 import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
+import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
 import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToFolder, type PickedFolder } from './projectSave';
 import {
@@ -100,7 +101,8 @@ import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
 import { useGitHub } from './useGitHub';
 import { useGitHubProjects } from './useGitHubProjects';
-import { isProjectFileName, sameFileName } from '../../project/fileName';
+import { sameFileName } from '../../project/fileName';
+import { filesDirectlyInFolder, projectFileInFolder } from './chosenFolder';
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
@@ -251,6 +253,8 @@ export function Workbench() {
   const [project, setProject] = useState<OpenProject | null>(null);
   // What the project is busy with, e.g. downloading a file; shown on the project page.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
+  // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
+  const [folderNeeded, setFolderNeeded] = useState<readonly string[] | null>(null);
   // Open Project: why the last try failed, shown in the dialog.
   const [openProjectError, setOpenProjectError] = useState<string | null>(null);
   // The folder Save project wrote to last (browser folder picker), so saving again asks no more.
@@ -777,15 +781,14 @@ export function Workbench() {
    * its project file opened with the others as the files next to it (§ 6.4).
    */
   const handleProjectFolderOpened = async (chosen: File[]) => {
-    const inFolder = chosen.filter((file) => (file.webkitRelativePath || file.name).split('/').length <= 2);
-    const projectFiles = inFolder.filter((file) => isProjectFileName(file.name)).sort((a, b) => a.name.localeCompare(b.name));
-    if (projectFiles.length === 0) {
+    const projectFile = projectFileInFolder(chosen);
+    if (!projectFile) {
       setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
       return;
     }
     setOpenProjectError(null);
     setDialog(null);
-    await openProjectUpload(projectFiles[0], inFolder.filter((file) => file !== projectFiles[0]));
+    await openProjectUpload(projectFile, filesDirectlyInFolder(chosen).filter((file) => file !== projectFile));
   };
 
   const handleOpenProjectFrom = async (input: string) => {
@@ -815,6 +818,9 @@ export function Workbench() {
     setActiveFileId(top?.id ?? added[0]?.id ?? null);
     setProject(opened);
     setOverlay('project');
+    // A browser read only the files chosen with the project file: ask for its folder at once.
+    const notChosen = opened.entries.filter((entry) => opened.unloaded[entry.name.toLowerCase()] === MISSING_LOCAL_FILE);
+    setFolderNeeded(notChosen.length > 0 ? notChosen.map((entry) => entry.name) : null);
 
     appendLog(`Opened project ${opened.name} (${opened.fileName}): ${added.length} of ${opened.entries.length} files.`, 'success');
     if (closed.length > 0) appendLog(`Closed the ${closed.length} file(s) Files held before; the project's files replace them.`);
@@ -1198,6 +1204,17 @@ export function Workbench() {
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {folderNeeded && project && (
+        <ProjectFolderDialog
+          projectName={project.name}
+          missing={folderNeeded}
+          onFolderChosen={(chosen) => {
+            setFolderNeeded(null);
+            void handleProjectFolderChosen(chosen);
+          }}
+          onClose={() => setFolderNeeded(null)}
         />
       )}
       {dialog === 'github' && (
