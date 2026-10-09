@@ -715,10 +715,15 @@ export function Workbench() {
 
   /**
    * Opens a project file's text: its files replace what Files holds, and the project page
-   * shows. `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could
-   * not be opened, or null.
+   * shows — with `pageOnProblems`, only when a file could not be loaded or loading warned.
+   * `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could not be
+   * opened, or null.
    */
-  const openProjectText = async (source: Omit<ProjectSource, 'fetch'>, gist?: GistLink): Promise<string | null> => {
+  const openProjectText = async (
+    source: Omit<ProjectSource, 'fetch'>,
+    gist?: GistLink,
+    pageOnProblems = false,
+  ): Promise<string | null> => {
     setProjectBusy(`Opening ${source.location}…`);
     let opened: OpenedProject;
     try {
@@ -731,14 +736,18 @@ export function Workbench() {
       setProjectBusy(null);
     }
     if (gist) opened = { ...opened, project: withGistLink(opened.project, gist, opened.files) };
-    applyOpenedProject(opened, source.localFiles ?? []);
+    applyOpenedProject(opened, source.localFiles ?? [], pageOnProblems);
     return null;
   };
 
-  /** A project read from its gist through the GitHub API (the GitHub dialog, Get the GitHub version). */
+  /**
+   * A project read from its gist through the GitHub API (the GitHub dialog, Get the GitHub
+   * version). Opened cleanly, it goes straight to the editor; the project page shows only
+   * when something needs a look.
+   */
   const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
     const localFiles = gistFiles.filter((file) => file.name !== link.projectFileName);
-    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link);
+    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link, true);
     if (error === null) setDialog((shown) => (shown === 'github' ? null : shown));
     return error;
   };
@@ -811,7 +820,11 @@ export function Workbench() {
     else setOpenProjectError(error);
   };
 
-  const applyOpenedProject = ({ project: opened, files: projectFiles }: OpenedProject, localFiles: readonly ProjectSourceFile[]) => {
+  const applyOpenedProject = (
+    { project: opened, files: projectFiles }: OpenedProject,
+    localFiles: readonly ProjectSourceFile[],
+    pageOnProblems = false,
+  ) => {
     endRunQuietly();
     setLogLines([]);
     const closed = filesRef.current;
@@ -830,7 +843,8 @@ export function Workbench() {
     setTopUnit(null);
     setActiveFileId(top?.id ?? added[0]?.id ?? null);
     setProject(opened);
-    setOverlay('project');
+    const clean = Object.keys(opened.unloaded).length === 0 && opened.warnings.length === 0;
+    setOverlay(pageOnProblems && clean ? null : 'project');
     // A browser read only the files chosen with the project file: ask for its folder at once.
     const notChosen = opened.entries.filter((entry) => opened.unloaded[entry.name.toLowerCase()] === MISSING_LOCAL_FILE);
     setFolderNeeded(notChosen.length > 0 ? notChosen.map((entry) => entry.name) : null);
@@ -875,7 +889,7 @@ export function Workbench() {
       return;
     }
     setFiles((prev) => [...prev, ...found]);
-    setProject((p) => p && withEntriesLoaded(p, found.map((f) => f.name)));
+    setProject((p) => p && withEntriesLoaded(p, found));
     if (topFileId === null) {
       const top = projectTopFile(found);
       if (top) makeTop(top.id);
@@ -913,7 +927,7 @@ export function Workbench() {
     const folder = folderForUpload(name);
     if (!folder) return;
     setFiles((prev) => [...prev, { id: nextFileId(), name, folder, content }]);
-    setProject((p) => p && withEntriesLoaded(p, [name]));
+    setProject((p) => p && withEntriesLoaded(p, [{ name, content }]));
     appendLog(`Downloaded ${name} from its URL.`, 'success');
   };
 

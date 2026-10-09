@@ -37,7 +37,7 @@ Open or make a project (**New File → Project**), then on the project page, in 
 
 ### Open a project from GitHub
 
-Click **GitHub** at the top right: the dialog lists your projects, newest first. Click **Open**. The icon beside it shows the gist on github.com, and the bin deletes the project from GitHub (after a question; the files open in HDLBoard are kept).
+Click **GitHub** at the top right: the dialog lists your projects, newest first. Click **Open**: the project's files open in the editor (the project page shows only when a file could not be loaded). The icon beside it shows the gist on github.com, and the bin deletes the project from GitHub (after a question; the files open in HDLBoard are kept).
 
 Open Project (the link icon in Files) with a gist address also works. Signed in, it reads the gist through GitHub, so the project is linked for **Save to GitHub**.
 
