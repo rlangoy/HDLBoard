@@ -63,6 +63,7 @@ import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } f
 import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
+import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, type FileHandles } from './fileSystemAccess';
 import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
 import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToFolder, type PickedFolder } from './projectSave';
 import {
@@ -255,6 +256,8 @@ export function Workbench() {
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
   // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
   const [folderNeeded, setFolderNeeded] = useState<readonly string[] | null>(null);
+  // The opened project file's handle (Chrome, Edge): the folder picker then opens in its folder.
+  const projectFileHandleRef = useRef<FileSystemFileHandle | null>(null);
   // Open Project: why the last try failed, shown in the dialog.
   const [openProjectError, setOpenProjectError] = useState<string | null>(null);
   // The folder Save project wrote to last (browser folder picker), so saving again asks no more.
@@ -635,7 +638,16 @@ export function Workbench() {
   };
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
-  const handleUploadClick = () => uploadInputRef.current?.click();
+  // Chrome and Edge's own picker keeps handles to the chosen files (fileSystemAccess.ts); elsewhere the file input.
+  const handleUploadClick = () => {
+    if (!canPickWithHandles()) {
+      uploadInputRef.current?.click();
+      return;
+    }
+    pickFilesWithHandles(UPLOAD_ACCEPT.split(','))
+      .then((picked) => picked && readAndAddFiles(picked.files, picked.handles))
+      .catch((err: unknown) => appendLog(`Upload File: ${errorText(err)}`, 'error'));
+  };
 
   // Shared by the hidden <input type="file"> (a real picker, filtered to
   // the source extensions by its own `accept`) and drag-and-drop onto the
@@ -645,7 +657,7 @@ export function Workbench() {
   // A file whose name is taken or reserved, or that is no source file, is not added;
   // the dialog says which and why (fileNameRules.ts), and the console keeps a line each.
   // A .zip among them is opened first and stands for the files inside it (zipUpload.ts).
-  const readAndAddFiles = async (incoming: Iterable<File>) => {
+  const readAndAddFiles = async (incoming: Iterable<File>, handles: FileHandles = new Map()) => {
     const chosen: File[] = [];
     const unreadable: RefusedFile[] = [];
     for (const file of incoming) {
@@ -661,6 +673,7 @@ export function Workbench() {
     // A project file among them opens the project, with the others as its folder.
     const projectUpload = pickProjectUpload(chosen);
     if (projectUpload) {
+      projectFileHandleRef.current = handles.get(projectUpload.name) ?? null;
       await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
       for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
       return;
@@ -826,7 +839,8 @@ export function Workbench() {
     if (closed.length > 0) appendLog(`Closed the ${closed.length} file(s) Files held before; the project's files replace them.`);
     for (const entry of opened.entries) {
       const why = opened.unloaded[entry.name.toLowerCase()];
-      if (why) appendLog(`${entry.name} not loaded: ${why}`, 'error');
+      if (why === MISSING_LOCAL_FILE) appendLog(`${entry.name} is stored next to the project file: choose the project folder to load it.`);
+      else if (why) appendLog(`${entry.name} not loaded: ${why}`, 'error');
     }
     const listed = (name: string) => opened.entries.some((entry) => sameFileName(entry.name, name));
     for (const f of localFiles.filter((file) => !listed(file.name))) appendLog(`Ignored ${f.name}: the project does not list it.`);
@@ -991,7 +1005,18 @@ export function Workbench() {
     e.target.value = '';
   };
 
-  const handleFilesDropped = (list: FileList) => void readAndAddFiles([...list]);
+  const handleFilesDropped = (list: FileList, handles: Promise<FileHandles>) => {
+    const files = [...list];
+    void handles.then((known) => readAndAddFiles(files, known));
+  };
+
+  /** The folder dialog's button: in Chrome and Edge the picker opens in the project file's folder. */
+  const chooseProjectFolderNextTo = (handle: FileSystemFileHandle) => {
+    setFolderNeeded(null);
+    pickFolderOf(handle)
+      .then((files) => files && handleProjectFolderChosen(files))
+      .catch((err: unknown) => appendLog(`Choose project folder: ${errorText(err)}`, 'error'));
+  };
 
   const handleContentChange = (id: string, content: string) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));
@@ -1210,6 +1235,7 @@ export function Workbench() {
         <ProjectFolderDialog
           projectName={project.name}
           missing={folderNeeded}
+          onChooseInFolder={projectFileHandleRef.current ? () => chooseProjectFolderNextTo(projectFileHandleRef.current!) : undefined}
           onFolderChosen={(chosen) => {
             setFolderNeeded(null);
             void handleProjectFolderChosen(chosen);

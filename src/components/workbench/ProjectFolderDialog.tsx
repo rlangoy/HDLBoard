@@ -12,6 +12,11 @@ export interface ProjectFolderDialogProps {
   missing: readonly string[];
   /** Every file of the folder the student chose. */
   onFolderChosen: (files: File[]) => void;
+  /**
+   * Chrome and Edge, when the project file's handle is known: opens the folder picker in
+   * the project file's folder, so the student only confirms it. Else the folder input.
+   */
+  onChooseInFolder?: () => void;
   onClose: () => void;
 }
 
@@ -20,7 +25,7 @@ export interface ProjectFolderDialogProps {
  * browser can read only the files the student chooses, never the rest of the folder a
  * project file came from. One click picks that folder, and the files load.
  */
-export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onClose }: ProjectFolderDialogProps) {
+export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onChooseInFolder, onClose }: ProjectFolderDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   // `webkitdirectory` is not in React's typings; every current browser supports it.
   useEffect(() => {
@@ -45,7 +50,7 @@ export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onCl
           <button type="button" className="wb-newfile__cancel" onClick={onClose}>
             Not now
           </button>
-          <button type="button" className="wb-dialog__close wb-openproject__choose" onClick={() => inputRef.current?.click()} autoFocus>
+          <button type="button" className="wb-dialog__close wb-openproject__choose" onClick={onChooseInFolder ?? (() => inputRef.current?.click())} autoFocus>
             <FolderOpenIcon aria-hidden="true" />
             Choose project folder…
           </button>
@@ -61,8 +66,11 @@ export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onCl
         ))}
       </ul>
       <p className="wb-openproject__note">
-        A browser can only read the files you choose. Choose the folder the project file is in, and HDLBoard loads{' '}
-        {one ? 'it' : 'them'}. Next time, open the project with Open Project › Choose project folder.
+        A browser can only read the files you choose, never the rest of a folder.{' '}
+        {onChooseInFolder
+          ? `Click Choose project folder: it opens in the project file's folder, so just click Select Folder, and HDLBoard loads ${one ? 'it' : 'them'}.`
+          : `Choose the folder the project file is in, and HDLBoard loads ${one ? 'it' : 'them'}.`}{' '}
+        Next time, select the project file together with its files (Ctrl+A) in Upload File, or use Open Project › Choose project folder.
       </p>
       <input ref={inputRef} type="file" multiple hidden onChange={handleChange} tabIndex={-1} />
     </Dialog>

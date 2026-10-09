@@ -63,6 +63,8 @@ In **Open Project**, click **Choose project folder…** and pick the folder that
 
 ### Upload File: from this computer, in a browser
 
+If you choose only the project file, HDLBoard asks for its folder at once, because a browser can read only the files you choose. In Chrome and Edge the folder picker opens in the project file's folder, so you just click **Select Folder**. Select the project file together with its files (Ctrl+A) and no question is asked.
+
 A browser cannot read a folder by its path, so select the files instead. Click **Upload File** and select the project file **together with its files** (Ctrl+A in the project folder selects them all). A `.zip` that **Download All** saved works too: it holds the project file and all its files.
 
 If a file is missing, the project page says which, and **Choose project folder…** reads it from the folder.

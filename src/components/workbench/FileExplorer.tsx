@@ -8,6 +8,7 @@ import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
 import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, LinkIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
+import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -29,7 +30,7 @@ export interface FileExplorerProps {
   /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
-  onFilesDropped: (files: FileList) => void;
+  onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void;
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
@@ -135,7 +136,7 @@ export function FileExplorer({
   const handleDrop = (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragDepth(0);
-    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files, droppedFileHandles(e.dataTransfer));
   };
 
   const toggleFolder = (folder: string) => {
