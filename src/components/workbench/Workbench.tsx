@@ -1330,7 +1330,7 @@ export function Workbench() {
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
               topLocked={isSimulating}
-              project={project ? { name: project.name, fileName: project.fileName, unsaved: projectUnsaved } : undefined}
+              project={project ? { name: project.name, fileName: project.fileName, description: project.description, unsaved: projectUnsaved } : undefined}
               projectOpen={overlay === 'project'}
               onToggleProject={() => setOverlay((shown) => (shown === 'project' ? null : 'project'))}
               onCreateProject={handleStartProject}

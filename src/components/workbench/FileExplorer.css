@@ -544,7 +544,7 @@
 }
 
 .wb-files__project-name,
-.wb-files__project-file {
+.wb-files__project-description {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -555,9 +555,14 @@
   font-weight: 700;
 }
 
-.wb-files__project-file {
+/* The description's first words, on one line; the project file's name is in the tooltip. */
+.wb-files__project-description {
   font-size: 12px;
   color: var(--wb-text-muted);
+}
+
+.wb-files__project-description.is-empty {
+  font-style: italic;
 }
 
 .wb-files__project-dot {

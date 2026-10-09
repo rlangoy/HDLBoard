@@ -35,7 +35,7 @@ export interface FileExplorerProps {
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
   /** The open project, if any: drawn above the folders, and opens the project page. */
-  project?: { name: string; fileName: string; unsaved: boolean };
+  project?: { name: string; fileName: string; description: string; unsaved: boolean };
   /** The project page is showing: the project row looks pressed. */
   projectOpen?: boolean;
   onToggleProject?: () => void;
@@ -245,7 +245,9 @@ export function FileExplorer({
           <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
           <span className="wb-files__project-text">
             <span className="wb-files__project-name">{project.name || 'Untitled project'}</span>
-            <span className="wb-files__project-file">{project.fileName}</span>
+            <span className={cx('wb-files__project-description', project.description.trim() === '' && 'is-empty')}>
+              {project.description.trim() || 'No description yet'}
+            </span>
           </span>
           {project.unsaved && <span className="wb-files__project-dot" aria-label="Unsaved changes" />}
         </button>
