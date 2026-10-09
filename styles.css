@@ -289,8 +289,8 @@ p { margin: 0; }
   background: radial-gradient(closest-side, var(--accent-soft), transparent);
 }
 .cloud .h2-soft { display: block; font-weight: 600; color: var(--ink-2); }
-.cloud h2 { margin-bottom: 12px; }  /* extra air before the body text */
-.cloud .checks { gap: 22px; }
+.cloud h2 { margin-bottom: 24px; }  /* extra air before the body text */
+.cloud .checks { gap: 28px; }
 .cloud .checks li::before {
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 12 10 17 19 7'/%3E%3C/svg%3E");
