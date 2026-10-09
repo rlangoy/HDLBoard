@@ -30,6 +30,12 @@ export function parseGistPageUrl(url: string): GistRef | null {
   return match ? { owner: match[1], gistId: match[2] } : null;
 }
 
+/** Parses a gist page or raw address (`https://gist.githubusercontent.com/<owner>/<id>/raw/…`); null for any other URL. */
+export function parseGistRef(url: string): GistRef | null {
+  const match = GIST_RAW_URL.exec(url.trim());
+  return match ? { owner: match[1], gistId: match[2] } : parseGistPageUrl(url);
+}
+
 export function isGistUrl(url: string): boolean {
   return parseGistPageUrl(url) !== null || GIST_RAW_URL.test(url.trim());
 }

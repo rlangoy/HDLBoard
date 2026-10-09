@@ -57,6 +57,8 @@ export interface ProjectPageProps {
   onCloseProject: () => void;
   /** Back to the code. */
   onClose: () => void;
+  /** The GitHub card (ProjectGitHubCard), shown under the project's details. */
+  github?: ReactNode;
 }
 
 /**
@@ -185,6 +187,8 @@ export function ProjectPage(props: ProjectPageProps) {
               </p>
             )}
           </section>
+
+          {props.github}
 
           {busy !== null && (
             <p className="wb-project__busy" role="status">

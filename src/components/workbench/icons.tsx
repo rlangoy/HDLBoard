@@ -356,3 +356,27 @@ export function SaveIcon(props: SVGProps<SVGSVGElement>) {
 export function OpenInIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M15 3h6v6', 'M10 14 21 3', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6']} {...props} />;
 }
+
+/** GitHub's mark (Octicons "mark-github"): the GitHub button and dialog. */
+export function GitHubIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16" fill="currentColor" {...props}>
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+/** A cloud with an arrow up: save to GitHub. */
+export function CloudUploadIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 13v8', 'm8 17 4-4 4 4', 'M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242']} {...props} />;
+}
+
+/** A cloud with an arrow down: get the version on GitHub. */
+export function CloudDownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 13v8l-4-4', 'm12 21 4-4', 'M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284']} {...props} />;
+}
+
+/** A door with an arrow out: sign out. */
+export function SignOutIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9']} {...props} />;
+}

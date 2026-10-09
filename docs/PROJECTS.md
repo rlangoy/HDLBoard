@@ -98,6 +98,12 @@ Files that have a URL are saved as local copies too; the project file keeps thei
 
 ---
 
+## Save projects on GitHub
+
+Sign in with **GitHub** (top right), and the project page's **Save to GitHub** keeps the project in a secret gist on your own account; the GitHub dialog lists your projects and opens them on any computer. See [GITHUB.md](GITHUB.md).
+
+---
+
 ## Publish projects
 
 ### On a GitHub gist

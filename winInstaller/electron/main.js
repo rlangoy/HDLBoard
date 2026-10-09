@@ -15,7 +15,7 @@
  * `ws://…:9010/hdlsim` URL comes out malformed.
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -251,8 +251,60 @@ function registerLocalFileIpc() {
   });
 }
 
+/**
+ * The GitHub sign-in (docs/GITHUB.md), kept so the student is not asked to sign in
+ * at every start. Encrypted with safeStorage — on Windows that is DPAPI, so only
+ * this Windows user on this computer can read it back — and never written in
+ * plain text: without encryption the token is simply not kept.
+ */
+const GITHUB_TOKEN_FILE = 'github-token.bin';
+// A GitHub token is well under 1 KB; anything larger is not one.
+const MAX_GITHUB_TOKEN_LENGTH = 1024;
+
+function githubTokenPath() {
+  return path.join(app.getPath('userData'), GITHUB_TOKEN_FILE);
+}
+
+function loadGitHubToken() {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return safeStorage.decryptString(fs.readFileSync(githubTokenPath()));
+  } catch {
+    return null; // none stored, or stored by another Windows user: sign in again
+  }
+}
+
+function saveGitHubToken(token) {
+  if (typeof token !== 'string' || token === '' || token.length > MAX_GITHUB_TOKEN_LENGTH) throw new Error('not a GitHub token');
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  fs.mkdirSync(path.dirname(githubTokenPath()), { recursive: true });
+  fs.writeFileSync(githubTokenPath(), safeStorage.encryptString(token));
+  return true;
+}
+
+function forgetGitHubToken() {
+  fs.rmSync(githubTokenPath(), { force: true });
+  return true;
+}
+
+function registerGitHubTokenIpc() {
+  ipcMain.handle('hdlboard:load-github-token', (event) => {
+    fromApp(event);
+    return loadGitHubToken();
+  });
+  ipcMain.handle('hdlboard:save-github-token', (event, token) => {
+    fromApp(event);
+    return saveGitHubToken(token);
+  });
+  ipcMain.handle('hdlboard:forget-github-token', (event) => {
+    fromApp(event);
+    return forgetGitHubToken();
+  });
+}
+
 function registerIpc(persistProjects) {
   registerLocalFileIpc();
+  registerGitHubTokenIpc();
 
   ipcMain.handle('hdlboard:set-enabled', (event, value) => {
     fromApp(event);

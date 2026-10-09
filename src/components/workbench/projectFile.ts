@@ -18,6 +18,7 @@ import { fileNameProblem, isProjectFileName, nameKey, sameFileName } from '../..
 import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../project/parseProject';
 import { PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
 import { isHttpUrl, urlProblem } from '../../project/url';
+import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
 import { RESERVED_PREFIX_REASON, RESERVED_PREFIX } from './fileNameRules';
 
@@ -40,6 +41,8 @@ export interface OpenProject {
   warnings: string[];
   /** The project file text as last opened or saved, so the page can tell it has unsaved changes. */
   savedText: string;
+  /** The GitHub gist the project is stored in (projectGitHub.ts), if it is. */
+  gist?: ProjectGistLink;
 }
 
 /** One row of the project page's file table. */
@@ -232,6 +235,8 @@ export interface ProjectSource {
   /** Reads a file next to the project file (the Windows app, for a project opened by its path). */
   readLocal?: (name: string) => Promise<string>;
   fetch?: FetchFn;
+  /** The gist the project was opened from, through the GitHub API. */
+  gist?: ProjectGistLink;
 }
 
 export interface OpenedProject {
@@ -254,6 +259,9 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     project.files.map(async (entry): Promise<{ entry: ProjectFileEntry; content?: string; problem?: string }> => {
       const refusal = entryFileRefusal(entry.name);
       if (refusal) return { entry, problem: refusal };
+      // A file handed over with the project (chosen beside it, or read from its gist) is used as it is.
+      const given = entry.url === '' ? local.get(nameKey(entry.name)) : undefined;
+      if (given !== undefined) return { entry, content: given };
       if (entry.url === '' && isHttpUrl(source.location)) {
         // A project opened from a URL: its folder is the URL's folder (§ 5).
         try {
@@ -263,8 +271,6 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
         }
       }
       if (entry.url === '') {
-        const content = local.get(nameKey(entry.name));
-        if (content !== undefined) return { entry, content };
         if (!source.readLocal) return { entry, problem: MISSING_LOCAL_FILE };
         try {
           return { entry, content: await source.readLocal(entry.name) };
@@ -304,6 +310,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
       ...skipped.map((s) => `${s.name} was skipped: ${s.reason}.`),
     ],
     savedText: '',
+    ...(source.gist ? { gist: source.gist } : {}),
   };
   // Saved state is the project as it reads opened, so an untouched project shows no changes.
   return { project: withSaved(opened, files.map((f) => f.name)), files };
@@ -343,6 +350,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
       ? Object.fromEntries(Object.entries(r.unloaded).filter(([, why]) => typeof why === 'string'))
       : {};
   const warnings = Array.isArray(r.warnings) ? r.warnings.filter((w): w is string => typeof w === 'string') : [];
+  const gist = parseStoredGistLink(r.gist);
   return {
     version: r.version,
     name: r.name as string,
@@ -354,6 +362,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     unloaded: unloaded as Record<string, string>,
     warnings,
     savedText: r.savedText as string,
+    ...(gist ? { gist } : {}),
   };
 }
 

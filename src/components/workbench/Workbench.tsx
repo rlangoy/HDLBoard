@@ -43,7 +43,7 @@ import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } fro
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName } from './zipUpload';
 import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
+import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
@@ -59,7 +59,7 @@ import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectZip, downloadSourceFile } from './download';
-import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
+import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
@@ -82,10 +82,19 @@ import {
   withSaved,
   type OpenedProject,
   type OpenProject,
+  type ProjectSource,
   type ProjectSourceFile,
 } from './projectFile';
 import { fetchText } from '../../project/fetchText';
-import { resolveProjectUrl } from '../../project/gistUrl';
+import { parseGistRef, resolveProjectUrl } from '../../project/gistUrl';
+import { GITHUB_AUTH_PATH } from '../../github/config';
+import type { GistLink, OpenedGistProject } from '../../github/projectGists';
+import { GitHubDialog } from './GitHubDialog';
+import { GitHubConflictDialog } from './GitHubConflictDialog';
+import { ProjectGitHubCard } from './ProjectGitHubCard';
+import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
+import { useGitHub } from './useGitHub';
+import { useGitHubProjects } from './useGitHubProjects';
 import { sameFileName } from '../../project/fileName';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
@@ -227,7 +236,7 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | null>(null);
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'github' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane or the project page.
@@ -333,6 +342,10 @@ export function Workbench() {
     const id = logSeq.current;
     setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone }));
   }, []);
+
+  // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
+  const [tokenStore] = useState(gitHubTokenStore);
+  const gitHub = useGitHub(hdlBackendHttpUrl(HDL_WS_PORT, GITHUB_AUTH_PATH), tokenStore, desktopBridge() !== undefined);
 
   const stopElapsedTimer = () => {
     if (elapsedTimer.current !== null) {
@@ -673,33 +686,38 @@ export function Workbench() {
     for (const extra of others.filter((file) => isProjectUpload(file.name))) {
       appendLog(`Ignored ${extra.name}: only one project file is opened at a time (${projectFile.name}).`, 'error');
     }
-    const error = await openProjectText(await projectFile.text(), projectFile.name, localFiles);
+    const error = await openProjectText({ text: await projectFile.text(), location: projectFile.name, localFiles });
     if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
   };
 
   /**
    * Opens a project file's text: its files replace what Files holds, and the project page
-   * shows. Returns why it could not be opened, or null.
+   * shows. `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could
+   * not be opened, or null.
    */
-  const openProjectText = async (
-    text: string,
-    location: string,
-    localFiles: readonly ProjectSourceFile[] = [],
-    readLocal?: (name: string) => Promise<string>,
-  ): Promise<string | null> => {
-    setProjectBusy(`Opening ${location}…`);
+  const openProjectText = async (source: Omit<ProjectSource, 'fetch'>, gist?: GistLink): Promise<string | null> => {
+    setProjectBusy(`Opening ${source.location}…`);
     let opened: OpenedProject;
     try {
-      opened = await openProject({ text, location, localFiles, readLocal });
+      opened = await openProject(source);
     } catch (err) {
       const reason = errorText(err);
-      appendLog(`Project not opened: ${location}: ${reason}`, 'error');
+      appendLog(`Project not opened: ${source.location}: ${reason}`, 'error');
       return reason;
     } finally {
       setProjectBusy(null);
     }
-    applyOpenedProject(opened, localFiles);
+    if (gist) opened = { ...opened, project: withGistLink(opened.project, gist, opened.files) };
+    applyOpenedProject(opened, source.localFiles ?? []);
     return null;
+  };
+
+  /** A project read from its gist through the GitHub API (the GitHub dialog, Get the GitHub version). */
+  const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
+    const localFiles = gistFiles.filter((file) => file.name !== link.projectFileName);
+    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link);
+    if (error === null) setDialog((shown) => (shown === 'github' ? null : shown));
+    return error;
   };
 
   /**
@@ -719,7 +737,13 @@ export function Workbench() {
         return `Could not read ${location.path}: ${errorText(err)}`;
       }
       const folder = folderOfPath(location.path);
-      return openProjectText(text, location.path, [], (name) => read(pathInFolder(folder, name)));
+      return openProjectText({ text, location: location.path, readLocal: (name) => read(pathInFolder(folder, name)) });
+    }
+    // Signed in, a gist is read through the GitHub API: current at once, and linked for Save to GitHub.
+    const gist = parseGistRef(location.url);
+    if (gist && gitHub.session) {
+      const opened = await gitHub.session.projects.open(gist.gistId).catch(() => null);
+      if (opened) return openGistProject(opened);
     }
     let text: string;
     let url: string;
@@ -729,8 +753,18 @@ export function Workbench() {
     } catch (err) {
       return errorText(err);
     }
-    return openProjectText(text, url);
+    return openProjectText({ text, location: url }, gistLinkFromUrl(url));
   };
+
+  const gitHubProjects = useGitHubProjects({
+    github: gitHub,
+    project,
+    files,
+    setProject,
+    openGistProject,
+    showSignIn: () => setDialog('github'),
+    log: appendLog,
+  });
 
   const handleOpenProjectFrom = async (input: string) => {
     setOpenProjectError(null);
@@ -1075,6 +1109,7 @@ export function Workbench() {
   const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
 
   const projectUnsaved = project !== null && hasUnsavedChanges(project, fileNames);
+  const gitHubSync = project === null ? 'not-on-github' : gitHubSyncState(project, files);
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
@@ -1091,6 +1126,8 @@ export function Workbench() {
         onSettings={() => setDialog('settings')}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
+        onGitHub={() => setDialog('github')}
+        gitHubUser={gitHub.session?.user ?? null}
       />
       <SettingsDialog
         open={dialog === 'settings'}
@@ -1129,6 +1166,23 @@ export function Workbench() {
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'github' && (
+        <GitHubDialog
+          connection={gitHub}
+          projects={gitHubProjects}
+          openProject={project && { name: project.name, gistId: project.gist?.gistId, syncState: gitHubSync }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {gitHubProjects.conflict && project && (
+        <GitHubConflictDialog
+          conflict={gitHubProjects.conflict}
+          projectName={project.name}
+          onReplaceGitHubVersion={gitHubProjects.replaceGitHubVersion}
+          onGetGitHubVersion={gitHubProjects.getGitHubVersion}
+          onCancel={gitHubProjects.dismissConflict}
         />
       )}
       {runChoice && (
@@ -1248,6 +1302,14 @@ export function Workbench() {
                 saveHint={saveHint}
                 onCloseProject={handleCloseProject}
                 onClose={() => setOverlay(null)}
+                github={
+                  <ProjectGitHubCard
+                    link={project.gist}
+                    syncState={gitHubSync}
+                    userLogin={gitHub.session?.user.login ?? null}
+                    projects={gitHubProjects}
+                  />
+                }
               />
             )}
             {overlay === 'examples' && (

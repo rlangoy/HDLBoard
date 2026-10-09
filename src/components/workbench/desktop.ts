@@ -8,6 +8,7 @@
  * process; the renderer only feature-detects it and hands over JSON.
  * ------------------------------------------------------------------ */
 
+import { browserTokenStore, desktopTokenStore, type TokenStore } from '../../github/tokenStore';
 import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
 import { parseStoredProject, type OpenProject } from './projectFile';
@@ -25,6 +26,10 @@ export interface HdlBoardBridge {
   readLocalFile?(path: string): Promise<string>;
   /** Writes one, by its full path (Save project into the folder a project was opened from). */
   writeLocalFile?(path: string, text: string): Promise<boolean>;
+  /** The GitHub sign-in, kept encrypted for this Windows user (src/github/tokenStore.ts). */
+  loadGitHubToken?(): Promise<string | null>;
+  saveGitHubToken?(accessToken: string): Promise<boolean>;
+  forgetGitHubToken?(): Promise<boolean>;
 }
 
 declare global {
@@ -35,6 +40,14 @@ declare global {
 
 export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
+}
+
+/** Where the GitHub sign-in is kept: encrypted by the Windows app, else for this browser tab only. */
+export function gitHubTokenStore(): TokenStore {
+  const bridge = desktopBridge();
+  const { loadGitHubToken, saveGitHubToken, forgetGitHubToken } = bridge ?? {};
+  if (!loadGitHubToken || !saveGitHubToken || !forgetGitHubToken) return browserTokenStore();
+  return desktopTokenStore({ loadGitHubToken, saveGitHubToken, forgetGitHubToken });
 }
 
 /** What is stored: the project's files and which one is shown, nothing else. */

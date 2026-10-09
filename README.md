@@ -10,6 +10,7 @@ Write VHDL or Verilog and watch it run on a virtual board — flip switches, lig
 - **A small IDE** — one file list with upload and drag-and-drop, an editor with no tabs to tidy (click a file, or its name above the code, to switch; VHDL and Verilog syntax highlighting), resizable panes.
 - **Testbenc support** — in VHDL or Verilog prints its messages live in the console. Open a design or a testbench and the editor splits: testbench on the left, the design it drives on the right, each at its own code; Play in a pane runs that pane's unit.
 - **Projects** — a `.hdlboard.json` project file names the project, its board and its files, each with a description. Open it by URL (a GitHub gist, any web address, a project on the HDLBoard site), by file path in the Windows app, with a `?project=` link, or with Upload File; Save project writes it and all its files into one folder. How: [**PROJECTS.md**](docs/PROJECTS.md).
+- **GitHub** — sign in once (the Windows app remembers it), and Save to GitHub keeps a project in a secret gist on your own account: list, open, update and delete your projects from any computer, with a check before overwriting changes made elsewhere. How: [**GITHUB.md**](docs/GITHUB.md).
 - **Real-time pacing** — simulated time tracks real time, so a design's timing here predicts its timing on the board.
 
 ## Installing
@@ -35,6 +36,7 @@ installer are covered in [**BUILDING.md**](docs/BUILDING.md).
 - [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
 - [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built
 - [`PROJECTS.md`](docs/PROJECTS.md) — open, make, edit, save and publish projects (browser and Windows app)
+- [`GITHUB.md`](docs/GITHUB.md) — sign in to GitHub and save, open and sync projects as gists; hosting and OAuth App settings
 - [`Impl_project_file_and_online_storage.md`](docs/Impl_project_file_and_online_storage.md) — the project file format (`.hdlboard.json`); this build implements opening, editing and saving it (§ 4–8), not the online storage
 - [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
 

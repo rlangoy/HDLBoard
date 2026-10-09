@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<!-- GitHub returns here after "Authorize" (one-click sign-in, docs/GITHUB.md). Hands code and state to HDLBoard, then closes. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signed in to GitHub</title>
+    <style>
+      body { font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh; color: #1d2330; background: #f6f7f9; }
+    </style>
+  </head>
+  <body>
+    <p>Signed in. You can close this window.</p>
+    <script>
+      // The channel name matches SIGN_IN_CHANNEL in src/github/config.ts.
+      const query = new URLSearchParams(window.location.search);
+      const channel = new BroadcastChannel('hdlboard-github-sign-in');
+      channel.postMessage({ code: query.get('code'), state: query.get('state'), error: query.get('error') });
+      channel.close();
+      window.close();
+    </script>
+  </body>
+</html>

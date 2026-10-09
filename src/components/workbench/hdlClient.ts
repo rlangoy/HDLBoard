@@ -35,6 +35,11 @@ export function hdlBackendUrl(port: number): string {
   return `ws://${window.location.hostname}:${port}/hdlsim`;
 }
 
+/** An HTTP route on the same backend, e.g. its GitHub sign-in routes (server/src/githubAuth.ts). */
+export function hdlBackendHttpUrl(port: number, path: string): string {
+  return `${window.location.protocol}//${window.location.hostname}:${port}${path}`;
+}
+
 /**
  * `STATE`'s 52-bit payload → the board's own value shapes. `HEX0` is
  * slice 0 (§ 6.4). Any bit that isn't `'0'`/`'1'` (`'X'`, GHDL's
