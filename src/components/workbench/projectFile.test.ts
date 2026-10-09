@@ -127,7 +127,7 @@ describe('the project follows Files', () => {
 
   it('removes an unloaded entry, and marks entries loaded', () => {
     expect(projectEntries(withEntryRemoved(base, 'gone.vhd'), ['a.vhd']).map((r) => r.name)).toEqual(['a.vhd']);
-    expect(withEntriesLoaded(base, ['GONE.vhd']).unloaded).toEqual({});
+    expect(withEntriesLoaded(base, [file('GONE.vhd')]).unloaded).toEqual({});
   });
 
   it('saves in the § 4 format', () => {
@@ -210,12 +210,19 @@ describe('unsaved changes', () => {
     expect(hasUnsavedChanges(left, [file('a.vhd'), file('notes.vhd', 'edited')])).toBe(false);
   });
 
+  it('counts a file loaded later (from the project folder) as saved', () => {
+    const opened = withSaved({ ...newProject('Counter', ['a.vhd', 'b.v']), unloaded: { 'b.v': 'missing' } }, [file('a.vhd')]);
+    const loaded = withEntriesLoaded(opened, [file('b.v')]);
+    expect(hasUnsavedChanges(loaded, files)).toBe(false);
+    expect(hasUnsavedChanges(loaded, [file('a.vhd'), file('b.v', 'edited')])).toBe(true);
+  });
+
   it('compares only the project file for a workspace stored before file checksums existed', () => {
     const { savedFiles: _unknown, ...older } = saved;
     expect(hasUnsavedChanges(older, [file('a.vhd', 'edited'), file('b.v')])).toBe(false);
   });
 
   it('keeps the checksum in the desktop workspace', () => {
-    expect(parseStoredProject(JSON.parse(JSON.stringify(saved)))?.savedFiles).toBe(saved.savedFiles);
+    expect(parseStoredProject(JSON.parse(JSON.stringify(saved)))?.savedFiles).toEqual(saved.savedFiles);
   });
 });

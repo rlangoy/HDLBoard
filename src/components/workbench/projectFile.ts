@@ -43,11 +43,12 @@ export interface OpenProject {
   /** The project file text as last opened or saved, so the page can tell it has unsaved changes. */
   savedText: string;
   /**
-   * fingerprintOf the project's files as last opened or saved, so an edit to a VHDL or
-   * Verilog file counts as an unsaved change too. Missing (a workspace stored before
-   * this existed) reads as "unknown" and only the project file text is compared.
+   * fingerprintOf each of the project's files as last opened, loaded or saved, by
+   * nameKey, so an edit to a VHDL or Verilog file counts as an unsaved change too.
+   * Missing (a workspace stored before this existed) reads as "unknown" and only the
+   * project file text is compared.
    */
-  savedFiles?: string;
+  savedFiles?: Record<string, string>;
   /** The GitHub gist the project is stored in (projectGitHub.ts), if it is. */
   gist?: ProjectGistLink;
   /**
@@ -130,7 +131,9 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
 export function hasUnsavedChanges(project: OpenProject, files: readonly ProjectSourceFile[]): boolean {
   const fileNames = files.map((file) => file.name);
   if (projectFileText(project, fileNames) !== project.savedText) return true;
-  return project.savedFiles !== undefined && projectFilesFingerprint(project, files) !== project.savedFiles;
+  const saved = project.savedFiles;
+  if (saved === undefined) return false;
+  return filesInProject(project, files).some((file) => saved[nameKey(file.name)] !== fingerprintOf([file]));
 }
 
 /** Records a save (or an open): the project file and its files as they are now become the saved state. */
@@ -138,12 +141,12 @@ export function withSaved(project: OpenProject, files: readonly ProjectSourceFil
   return {
     ...project,
     savedText: projectFileText(project, files.map((file) => file.name)),
-    savedFiles: projectFilesFingerprint(project, files),
+    savedFiles: fileFingerprints(filesInProject(project, files)),
   };
 }
 
-function projectFilesFingerprint(project: OpenProject, files: readonly ProjectSourceFile[]): string {
-  return fingerprintOf(filesInProject(project, files).map(({ name, content }) => ({ name, content })));
+function fileFingerprints(files: readonly ProjectSourceFile[]): Record<string, string> {
+  return Object.fromEntries(files.map((file) => [nameKey(file.name), fingerprintOf([file])]));
 }
 
 /** `4-bit Counter` → `4-bit-counter.hdlboard.json`; never empty. */
@@ -269,11 +272,15 @@ export function withEntryRemoved(project: OpenProject, name: string): OpenProjec
   return { ...project, entries, unloaded, ...(excluded ? { excluded } : {}) };
 }
 
-/** Files that were added to Files after all (from the project folder, or downloaded again) are no longer unloaded. */
-export function withEntriesLoaded(project: OpenProject, names: readonly string[]): OpenProject {
+/**
+ * Files that were added to Files after all (from the project folder, or downloaded again)
+ * are no longer unloaded. They read as stored, so they count as saved.
+ */
+export function withEntriesLoaded(project: OpenProject, loaded: readonly ProjectSourceFile[]): OpenProject {
   const unloaded = { ...project.unloaded };
-  for (const name of names) delete unloaded[nameKey(name)];
-  return { ...project, unloaded };
+  for (const file of loaded) delete unloaded[nameKey(file.name)];
+  const savedFiles = project.savedFiles && { ...project.savedFiles, ...fileFingerprints(loaded) };
+  return { ...project, unloaded, ...(savedFiles ? { savedFiles } : {}) };
 }
 
 /** An entry that could not be loaded (again), and why. */
@@ -420,6 +427,11 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
   const warnings = Array.isArray(r.warnings) ? r.warnings.filter((w): w is string => typeof w === 'string') : [];
   const gist = parseStoredGistLink(r.gist);
   const excluded = Array.isArray(r.excluded) ? r.excluded.filter((key): key is string => typeof key === 'string') : [];
+  // An older workspace stored one checksum for all files: read as unknown.
+  const savedFiles =
+    r.savedFiles && typeof r.savedFiles === 'object' && Object.values(r.savedFiles).every((value) => typeof value === 'string')
+      ? (r.savedFiles as Record<string, string>)
+      : undefined;
   return {
     version: r.version,
     name: r.name as string,
@@ -433,7 +445,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     savedText: r.savedText as string,
     ...(gist ? { gist } : {}),
     ...(excluded.length > 0 ? { excluded } : {}),
-    ...(typeof r.savedFiles === 'string' ? { savedFiles: r.savedFiles } : {}),
+    ...(savedFiles ? { savedFiles } : {}),
   };
 }
 
