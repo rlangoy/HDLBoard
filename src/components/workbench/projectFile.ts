@@ -18,6 +18,7 @@ import { fileNameProblem, isProjectFileName, nameKey, sameFileName } from '../..
 import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../project/parseProject';
 import { PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
 import { isHttpUrl, urlProblem } from '../../project/url';
+import { fingerprintOf } from '../../project/fingerprint';
 import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
 import { RESERVED_PREFIX_REASON, RESERVED_PREFIX } from './fileNameRules';
@@ -41,6 +42,12 @@ export interface OpenProject {
   warnings: string[];
   /** The project file text as last opened or saved, so the page can tell it has unsaved changes. */
   savedText: string;
+  /**
+   * fingerprintOf the project's files as last opened or saved, so an edit to a VHDL or
+   * Verilog file counts as an unsaved change too. Missing (a workspace stored before
+   * this existed) reads as "unknown" and only the project file text is compared.
+   */
+  savedFiles?: string;
   /** The GitHub gist the project is stored in (projectGitHub.ts), if it is. */
   gist?: ProjectGistLink;
   /**
@@ -116,14 +123,27 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
   });
 }
 
-/** Whether the project differs from its file as last opened or saved. */
-export function hasUnsavedChanges(project: OpenProject, fileNames: readonly string[]): boolean {
-  return projectFileText(project, fileNames) !== project.savedText;
+/**
+ * Whether the project differs from what was last opened or saved: its project file
+ * (details, descriptions, which files it lists), or the text of any of its files.
+ */
+export function hasUnsavedChanges(project: OpenProject, files: readonly ProjectSourceFile[]): boolean {
+  const fileNames = files.map((file) => file.name);
+  if (projectFileText(project, fileNames) !== project.savedText) return true;
+  return project.savedFiles !== undefined && projectFilesFingerprint(project, files) !== project.savedFiles;
 }
 
-/** Records a save: the text written becomes the project's saved state. */
-export function withSaved(project: OpenProject, fileNames: readonly string[]): OpenProject {
-  return { ...project, savedText: projectFileText(project, fileNames) };
+/** Records a save (or an open): the project file and its files as they are now become the saved state. */
+export function withSaved(project: OpenProject, files: readonly ProjectSourceFile[]): OpenProject {
+  return {
+    ...project,
+    savedText: projectFileText(project, files.map((file) => file.name)),
+    savedFiles: projectFilesFingerprint(project, files),
+  };
+}
+
+function projectFilesFingerprint(project: OpenProject, files: readonly ProjectSourceFile[]): string {
+  return fingerprintOf(filesInProject(project, files).map(({ name, content }) => ({ name, content })));
 }
 
 /** `4-bit Counter` → `4-bit-counter.hdlboard.json`; never empty. */
@@ -361,7 +381,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     ...(source.gist ? { gist: source.gist } : {}),
   };
   // Saved state is the project as it reads opened, so an untouched project shows no changes.
-  return { project: withSaved(opened, files.map((f) => f.name)), files };
+  return { project: withSaved(opened, files), files };
 }
 
 /** The last segment of the location when it is a project file name, else one made from the project name. */
@@ -413,6 +433,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     savedText: r.savedText as string,
     ...(gist ? { gist } : {}),
     ...(excluded.length > 0 ? { excluded } : {}),
+    ...(typeof r.savedFiles === 'string' ? { savedFiles: r.savedFiles } : {}),
   };
 }
 

@@ -564,7 +564,7 @@ export function Workbench() {
       return;
     }
     downloadProjectZip(files, { name: project.fileName, text: projectFileText(project, fileNames) });
-    setProject(withSaved(project, fileNames));
+    setProject(withSaved(project, files));
   };
 
   // Ctrl+S / Cmd+S saves the shown file to disk instead of the browser's
@@ -924,14 +924,14 @@ export function Workbench() {
    */
   const handleSaveProject = async () => {
     if (!project) return;
-    const names = filesRef.current.map((f) => f.name);
+    const current = filesRef.current;
     const toSave = projectSaveFiles(
       project.fileName,
-      projectFileText(project, names),
-      filesInProject(project, filesRef.current).map((f) => ({ name: f.name, text: f.content })),
+      projectFileText(project, current.map((f) => f.name)),
+      filesInProject(project, current).map((f) => ({ name: f.name, text: f.content })),
     );
     const saved = (location: string, message: string) => {
-      setProject((p) => p && withSaved({ ...p, location }, names));
+      setProject((p) => p && withSaved({ ...p, location }, current));
       appendLog(message, 'success');
     };
     const write = desktopBridge()?.writeLocalFile;
@@ -1170,7 +1170,7 @@ export function Workbench() {
   });
   const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
 
-  const projectUnsaved = project !== null && hasUnsavedChanges(project, fileNames);
+  const projectUnsaved = project !== null && hasUnsavedChanges(project, files);
   const gitHubSync = project === null ? 'not-on-github' : gitHubSyncState(project, files);
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;

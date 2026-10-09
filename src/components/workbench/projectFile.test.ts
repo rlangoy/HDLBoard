@@ -20,7 +20,9 @@ import {
   withEntryEdited,
   withEntryRemoved,
   withEntryRenamed,
+  withFileLeft,
   withSaved,
+  parseStoredProject,
 } from './projectFile';
 
 const entry = (name: string, url = '', description = `about ${name}`) => ({ name, url, description });
@@ -41,7 +43,7 @@ describe('openProject', () => {
     ]);
     expect(project.fileName).toBe('counter.hdlboard.json');
     expect(project.unloaded).toEqual({});
-    expect(hasUnsavedChanges(project, ['counter.vhd', 'counter_tb.vhd'])).toBe(false);
+    expect(hasUnsavedChanges(project, files)).toBe(false);
   });
 
   it('downloads entries with a URL, and keeps going when one fails', async () => {
@@ -84,6 +86,9 @@ describe('openProject', () => {
   });
 });
 
+/** A file in Files, its text standing in for its content. */
+const file = (name: string, content = `text of ${name}`) => ({ name, content });
+
 describe('the project follows Files', () => {
   const base = withSaved(
     {
@@ -91,7 +96,7 @@ describe('the project follows Files', () => {
       entries: [entry('a.vhd'), entry('b.vhd'), entry('gone.vhd')],
       unloaded: { 'gone.vhd': 'missing' },
     },
-    ['a.vhd', 'b.vhd'],
+    [file('a.vhd'), file('b.vhd')],
   );
 
   it('lists files added to Files after the project entries', () => {
@@ -101,7 +106,7 @@ describe('the project follows Files', () => {
       ['gone.vhd', 'unloaded', 'about gone.vhd'],
       ['new.v', 'loaded', ''],
     ]);
-    expect(hasUnsavedChanges(base, ['a.vhd', 'b.vhd', 'new.v'])).toBe(true);
+    expect(hasUnsavedChanges(base, [file('a.vhd'), file('b.vhd'), file('new.v')])).toBe(true);
   });
 
   it('drops a file deleted from Files', () => {
@@ -176,5 +181,41 @@ describe('a project opened by its path (Windows app)', () => {
     });
     expect(files).toEqual([{ name: 'a.vhd', content: 'A' }]);
     expect(project.unloaded['b.vhd']).toMatch(/ENOENT/);
+  });
+});
+
+describe('unsaved changes', () => {
+  const files = [file('a.vhd'), file('b.v')];
+  const saved = withSaved(newProject('Counter', ['a.vhd', 'b.v']), files);
+
+  it('has none right after a save', () => {
+    expect(hasUnsavedChanges(saved, files)).toBe(false);
+  });
+
+  it('counts an edit to a VHDL or Verilog file of the project', () => {
+    expect(hasUnsavedChanges(saved, [file('a.vhd', 'edited'), file('b.v')])).toBe(true);
+  });
+
+  it('has none again once the file reads as it was saved', () => {
+    expect(hasUnsavedChanges(saved, [file('a.vhd'), file('b.v')])).toBe(false);
+  });
+
+  it('ignores a difference in line endings only', () => {
+    const crlf = withSaved(newProject('Counter', ['a.vhd']), [file('a.vhd', 'x\r\ny')]);
+    expect(hasUnsavedChanges(crlf, [file('a.vhd', 'x\ny')])).toBe(false);
+  });
+
+  it('ignores an edit to a file that is not in the project', () => {
+    const left = withSaved(withFileLeft(newProject('Counter', ['a.vhd', 'notes.vhd']), 'notes.vhd'), [file('a.vhd'), file('notes.vhd')]);
+    expect(hasUnsavedChanges(left, [file('a.vhd'), file('notes.vhd', 'edited')])).toBe(false);
+  });
+
+  it('compares only the project file for a workspace stored before file checksums existed', () => {
+    const { savedFiles: _unknown, ...older } = saved;
+    expect(hasUnsavedChanges(older, [file('a.vhd', 'edited'), file('b.v')])).toBe(false);
+  });
+
+  it('keeps the checksum in the desktop workspace', () => {
+    expect(parseStoredProject(JSON.parse(JSON.stringify(saved)))?.savedFiles).toBe(saved.savedFiles);
   });
 });

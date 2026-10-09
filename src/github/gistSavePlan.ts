@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { fingerprintOf, normalizeLineEndings } from '../project/fingerprint';
 import type { GistFileChanges, TextFile } from './gistClient';
+
+export { fingerprintOf };
 
 /**
  * Which gist files must change so the gist holds the project as it is in HDLBoard.
@@ -58,35 +61,7 @@ export function toGistFileChanges(plan: GistSavePlan, files: readonly TextFile[]
   return changes;
 }
 
-/**
- * A short code that changes when any file's name or text changes, so the page can
- * tell whether the project still matches what was last saved to (or opened from)
- * GitHub without keeping a second copy of every file. Line endings are ignored.
- */
-export function fingerprintOf(files: readonly TextFile[]): string {
-  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name));
-  return fnv1a(sorted.map((file) => `${file.name}\u0000${normalizeLineEndings(file.content)}`).join('\u0000'));
-}
-
 /** Windows editors write CRLF; a gist may hand the same text back with LF. */
 function isSameText(a: string, b: string): boolean {
   return normalizeLineEndings(a) === normalizeLineEndings(b);
-}
-
-function normalizeLineEndings(text: string): string {
-  return text.replace(/\r\n/g, '\n');
-}
-
-const FNV_OFFSET_BASIS = 0x811c9dc5;
-const FNV_PRIME = 0x01000193;
-const HEX = 16;
-
-/** FNV-1a, 32 bits: a fast checksum, not a security measure. */
-function fnv1a(text: string): string {
-  let hash = FNV_OFFSET_BASIS;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-  }
-  return hash.toString(HEX).padStart(8, '0');
 }
