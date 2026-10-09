@@ -36,9 +36,17 @@ describe('projectSnapshot', () => {
     expect(projectSnapshot(adder(), FILES).files.map((file) => file.name)).toEqual(['adder.hdlboard.json', 'adder.vhd', 'adder_tb.vhd']);
   });
 
-  it('leaves out a file stored at its own URL', () => {
+  it('stores a file that came from its own URL too, listed as stored next to the project file', () => {
     const project = withEntryEdited(adder(), 'adder_tb.vhd', { url: 'https://example.com/adder_tb.vhd' });
-    expect(projectSnapshot(project, FILES).files.map((file) => file.name)).toEqual(['adder.hdlboard.json', 'adder.vhd']);
+    const snapshot = projectSnapshot(project, FILES);
+    expect(snapshot.files.map((file) => file.name)).toEqual(['adder.hdlboard.json', 'adder.vhd', 'adder_tb.vhd']);
+    expect(JSON.parse(snapshot.files[0].content).files[1]).toEqual({ name: 'adder_tb.vhd', url: '', description: '' });
+  });
+
+  it('keeps the URL of a file that could not be loaded', () => {
+    const project = withEntryUnloaded(withEntryEdited(adder(), 'lost.vhd', { url: 'https://example.com/lost.vhd' }), 'lost.vhd', 'Not found');
+    const entries = JSON.parse(projectSnapshot(project, FILES).files[0].content).files;
+    expect(entries.find((entry: { name: string }) => entry.name === 'lost.vhd').url).toBe('https://example.com/lost.vhd');
   });
 
   it('lists a file that could not be loaded, so saving does not delete it on GitHub', () => {
@@ -59,6 +67,18 @@ describe('gitHubSyncState', () => {
   it('is changed when a file is edited', () => {
     const edited = [{ ...FILES[0], content: 'entity adder2' }, FILES[1]];
     expect(gitHubSyncState(withGistLink(adder(), LINK, FILES), edited)).toBe('changed');
+  });
+
+  it('is changed when a file that came from its own URL is edited', () => {
+    const project = withEntryEdited(adder(), 'adder_tb.vhd', { url: 'https://gist.github.com/teacher/abc' });
+    const edited = [FILES[0], { ...FILES[1], content: 'entity adder_tb -- edited' }];
+    expect(gitHubSyncState(withGistLink(project, LINK, FILES), edited)).toBe('changed');
+  });
+
+  it('shows the saved files as stored next to the project file after saving', () => {
+    const project = withEntryEdited(adder(), 'adder_tb.vhd', { url: 'https://gist.github.com/teacher/abc' });
+    const saved = withSavedGistLink(project, LINK, projectSnapshot(project, FILES));
+    expect([saved.entries[1].url, gitHubSyncState(saved, FILES)]).toEqual(['', 'saved']);
   });
 
   it('is changed when the description is edited', () => {

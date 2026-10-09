@@ -23,21 +23,29 @@ export type GitHubSyncState = 'not-on-github' | 'saved' | 'changed';
 
 /**
  * The project as Save to GitHub stores it: the project file, and every file of the
- * project that is stored next to it. A file with its own URL stays at that URL.
+ * project that is in Files. A file that came from its own URL is stored too, as the
+ * student's copy, and the saved project file lists it as stored next to it — so the
+ * gist opens to exactly what was saved, however it is opened. Only a file that could
+ * not be loaded keeps its URL.
  */
 export function projectSnapshot(project: OpenProject, files: readonly SourceFile[]): ProjectSnapshot {
   const fileNames = files.map((file) => file.name);
-  const rows = projectEntries(project, fileNames);
-  const storedHere = new Set(rows.filter((row) => row.url === '' && row.status === 'loaded').map((row) => nameKey(row.name)));
+  const stored = storedInGist(project, fileNames);
   return {
-    name: project.name,
-    description: project.description,
-    projectFileName: project.fileName,
-    files: [
-      { name: project.fileName, content: projectFileText(project, fileNames) },
-      ...files.filter((file) => storedHere.has(nameKey(file.name))).map(({ name, content }) => ({ name, content })),
-    ],
-    listedNames: rows.map((row) => row.name),
+    name: stored.name,
+    description: stored.description,
+    projectFileName: stored.fileName,
+    files: [{ name: stored.fileName, content: projectFileText(stored, fileNames) }, ...files.map(({ name, content }) => ({ name, content }))],
+    listedNames: projectEntries(stored, fileNames).map((row) => row.name),
+  };
+}
+
+/** The project with every file in Files stored next to the project file (its URL cleared), as it is in its gist. */
+function storedInGist(project: OpenProject, fileNames: readonly string[]): OpenProject {
+  const loaded = new Set(fileNames.map(nameKey));
+  return {
+    ...project,
+    entries: project.entries.map((entry) => (loaded.has(nameKey(entry.name)) ? { ...entry, url: '' } : entry)),
   };
 }
 
@@ -51,9 +59,13 @@ export function withGistLink(project: OpenProject, link: GistLink, files: readon
   return { ...project, gist: { ...link, fingerprint: fingerprintOf(projectSnapshot(project, files).files) } };
 }
 
-/** The project just saved to `link`: GitHub holds exactly `saved`, whatever was edited while it was sent. */
+/**
+ * The project just saved to `link`: GitHub holds exactly `saved`, whatever was edited
+ * while it was sent. Its files are now stored in the gist, so their URLs are cleared here too.
+ */
 export function withSavedGistLink(project: OpenProject, link: GistLink, saved: ProjectSnapshot): OpenProject {
-  return { ...project, gist: { ...link, fingerprint: fingerprintOf(saved.files) } };
+  const savedNames = saved.files.map((file) => file.name).filter((name) => name !== saved.projectFileName);
+  return { ...storedInGist(project, savedNames), gist: { ...link, fingerprint: fingerprintOf(saved.files) } };
 }
 
 /** The project is no longer stored on GitHub (its gist was deleted). */

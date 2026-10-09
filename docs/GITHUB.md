@@ -30,7 +30,7 @@ HDLBoard asks GitHub for the **`gist` permission only**: it can list, read, save
 
 Open or make a project (**New File → Project**), then on the project page, in the **GitHub** card, click **Save to GitHub**. If you are not signed in yet, the sign-in comes first and the project is saved right after.
 
-- The first save makes a new secret gist holding the project file and every file stored next to it. Files with their own URL stay at that URL.
+- The first save makes a new secret gist holding the project file and **every file of the project**. A file that came from its own URL (a teacher's gist, say) is saved as your copy, and the saved project file lists it as stored in the gist, so your edits to it are kept and the gist opens to exactly what you saved. Only a file that could not be loaded keeps its URL.
 - Later saves change only what changed: edited files are updated, new files are added, and files taken out of the project are deleted from the gist. Files on the gist that never belonged to the project (a README added on github.com) are left alone.
 - The status chip shows **Saved on GitHub**, **Changes not saved to GitHub**, or **Not on GitHub yet**.
 - **Copy share link** copies a `?project=` link that opens the project in HDLBoard for anyone who has it.
