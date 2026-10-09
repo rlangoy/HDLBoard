@@ -274,7 +274,26 @@ p { margin: 0; }
 
 /* ---------- Cloud: GitHub storage, text left, dialog right ---------- */
 .cloud { background: var(--surface); }  /* sets it apart from the testbench section above */
-.cloud .split-media { background: var(--bg); }
+.cloud .split-media {
+  background: var(--bg);
+  position: relative;
+  z-index: 0;
+  box-shadow: 0 40px 90px -30px rgba(47, 111, 237, 0.35), 0 12px 30px -18px rgba(15, 23, 42, 0.3);
+}
+.cloud .split-media::before {  /* soft blue glow ties the dialog to the text beside it */
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  border-radius: 40px;
+  background: radial-gradient(closest-side, var(--accent-soft), transparent);
+}
+.cloud .h2-soft { display: block; font-weight: 600; color: var(--muted); }
+.cloud .checks { gap: 16px; }
+.cloud .checks li::before {
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 12 10 17 19 7'/%3E%3C/svg%3E");
+}
 
 /* ---------- Testbench: split view, one wide screenshot ---------- */
 .testbench-intro { gap: 24px; }
