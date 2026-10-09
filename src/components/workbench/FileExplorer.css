@@ -561,16 +561,15 @@
   color: var(--wb-text-muted);
 }
 
-.wb-files__project-description.is-empty {
-  font-style: italic;
-}
-
+/* Drawn 8 px, but hovered over 16 px (the padding), so its tooltip is easy to reach. */
 .wb-files__project-dot {
   width: 8px;
   height: 8px;
   flex: none;
+  padding: 4px;
   border-radius: 50%;
   background: #f59e0b;
+  background-clip: content-box;
 }
 
 /* No project yet: Create Project in the project row's place. */

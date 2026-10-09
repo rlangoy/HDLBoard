@@ -240,16 +240,15 @@ export function FileExplorer({
           className={cx('wb-files__project', projectOpen && 'is-open')}
           onClick={onToggleProject}
           aria-pressed={projectOpen}
-          title={`${project.fileName}: show the project page${project.unsaved ? ' (unsaved changes)' : ''}`}
+          title="Open Project Page"
         >
           <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
           <span className="wb-files__project-text">
             <span className="wb-files__project-name">{project.name || 'Untitled project'}</span>
-            <span className={cx('wb-files__project-description', project.description.trim() === '' && 'is-empty')}>
-              {project.description.trim() || 'No description yet'}
-            </span>
+            {project.description.trim() !== '' && <span className="wb-files__project-description">{project.description.trim()}</span>}
           </span>
-          {project.unsaved && <span className="wb-files__project-dot" aria-label="Unsaved changes" />}
+          {/* Its own tooltip: hovering the dot says what it means. */}
+          {project.unsaved && <span className="wb-files__project-dot" role="img" aria-label="Unsaved changes" title="Unsaved changes" />}
         </button>
       )}
 
