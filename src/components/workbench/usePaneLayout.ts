@@ -93,6 +93,8 @@ export interface PaneLayoutState {
   collapsed: SidePaneFlags;
   /** Opens a shut pane or shuts an open one, with a slide. */
   togglePane: (pane: SidePane) => void;
+  /** Opens or shuts a pane, with a slide; nothing when it already is. */
+  showPane: (pane: SidePane, open: boolean) => void;
   onSidebarDividerPointerDown: DividerPointerDown;
   onBoardDividerPointerDown: DividerPointerDown;
   onConsoleDividerPointerDown: DividerPointerDown;
@@ -352,6 +354,10 @@ export function usePaneLayout(): PaneLayoutState {
     storeLayout();
   };
 
+  const showPane = (pane: SidePane, open: boolean) => {
+    if (collapsedRef.current[pane] === open) togglePane(pane);
+  };
+
   useEffect(
     () => () => {
       if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
@@ -385,6 +391,7 @@ export function usePaneLayout(): PaneLayoutState {
     consoleHeight,
     collapsed,
     togglePane,
+    showPane,
     onSidebarDividerPointerDown: (e) => resizePane(e, 'sidebar'),
     onBoardDividerPointerDown: (e) => resizePane(e, 'board'),
     onConsoleDividerPointerDown: resizeConsole,

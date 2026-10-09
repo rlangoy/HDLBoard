@@ -99,6 +99,19 @@
   font-weight: 700;
 }
 
+/* The GitHub button: the signed-in user's avatar, or GitHub's mark. */
+
+.wb-header__github-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.wb-header__github-icon {
+  width: 17px;
+  height: 17px;
+}
+
 @media (max-width: 900px) {
   .wb-header__tagline {
     display: none;

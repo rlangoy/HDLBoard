@@ -5,6 +5,7 @@ import { useState, type DragEvent, type ReactNode } from 'react';
 import { cx } from '../board';
 import { NO_DIAGNOSTICS, type DiagnosticsByFile } from './diagnosticStore';
 import type { EditorTab } from './EditorSurface';
+import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
 import { ACCEPTED_FILES_TEXT } from './fileKinds';
 import { SplitEditor, type SplitEditorProps } from './SplitEditor';
 import './CodeEditor.css';
@@ -14,7 +15,7 @@ export type { EditorTab };
 export interface CodeEditorProps {
   onChange: (id: string, content: string) => void;
   /** Files dropped anywhere on the editor pane — imported the same way a drop on the Files panel is. */
-  onFilesDropped: (files: FileList) => void;
+  onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void;
   /** Compiler problems to mark, per file id (see diagnosticStore.ts). */
   diagnostics?: DiagnosticsByFile;
   /** The student clicked in, or edited, this file's code pane: its markers should go. */
@@ -35,7 +36,7 @@ export interface CodeEditorProps {
  * underneath the pointer). Dropped files are imported exactly like a drop on the
  * Files panel — never inserted at the caret, which a plain <textarea> would do.
  */
-export function useFileDrop(onFilesDropped: (files: FileList) => void) {
+export function useFileDrop(onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void) {
   const [dragDepth, setDragDepth] = useState(0);
   const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes('Files');
   return {
@@ -59,7 +60,7 @@ export function useFileDrop(onFilesDropped: (files: FileList) => void) {
       onDrop: (e: DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         setDragDepth(0);
-        if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+        if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files, droppedFileHandles(e.dataTransfer));
       },
     },
   };

@@ -40,7 +40,7 @@ describe('the desktop-mode static server', () => {
   before(async () => {
     serveDir = mkdtempSync(join(tmpdir(), 'hdl-board-serve-'));
     writeFileSync(join(serveDir, 'index.html'), '<p>ok</p>');
-    backend = startBackend({ port: await freePort(), serveDir });
+    backend = startBackend({ port: await freePort(), serveDir, githubOAuthApp: { clientId: 'test-app', clientSecret: '' } });
     await backend.ready;
     base = `http://${LOOPBACK}:${backend.port}`;
   });
@@ -53,6 +53,11 @@ describe('the desktop-mode static server', () => {
   test('answers a malformed percent-escape with 400 instead of failing the request', async () => {
     const response = await fetch(`${base}/%E0%A4%A`);
     assert.equal(response.status, 400);
+  });
+
+  test('answers the GitHub sign-in routes ahead of the page files (the Windows app)', async () => {
+    const response = await fetch(`${base}/github-auth/config`);
+    assert.deepEqual(await response.json(), { clientId: 'test-app', webFlow: false });
   });
 
   test('keeps serving after a malformed request', async () => {
@@ -85,6 +90,11 @@ describe('the WebSocket endpoint path', () => {
   });
 
   after(() => stopped(backend));
+
+  test('answers the GitHub sign-in routes in server mode too', async () => {
+    const response = await fetch(`http://${LOOPBACK}:${backend.port}/github-auth/config`);
+    assert.equal(response.status, 200);
+  });
 
   /**
    * Whether a WebSocket upgrade on `path` opens (true) or is refused (false). The `ws`

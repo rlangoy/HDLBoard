@@ -36,6 +36,13 @@ import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
 import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
+import {
+  GitHubAuthForwarder,
+  credentialsFromEnv,
+  handleGitHubAuthRequest,
+  isGitHubAuthPath,
+  type OAuthAppCredentials,
+} from './githubAuth.js';
 
 const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
@@ -72,6 +79,11 @@ export interface BackendOptions {
    * `HDL_MAX_SESSIONS` (or the legacy `GHDL_MAX_SESSIONS`), then 32.
    */
   maxSessions?: number;
+  /**
+   * The GitHub OAuth App the sign-in routes forward for (githubAuth.ts). Defaults to
+   * `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, then HDLBoard's own app without a secret.
+   */
+  githubOAuthApp?: OAuthAppCredentials;
 }
 
 export interface BackendHandle {
@@ -196,8 +208,14 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   // spawner to the LAN there would be a gratuitous attack surface.
   const host = serveDir ? '127.0.0.1' : '0.0.0.0';
 
+  const githubAuth = new GitHubAuthForwarder(opts.githubOAuthApp ?? credentialsFromEnv(process.env));
+
   const httpServer: Server = createServer((req, res) => {
-    if (serveDir) {
+    // GitHub sign-in for the page, in both modes: the page reaches it where it reaches the socket.
+    if (isGitHubAuthPath(decodedPath(req) ?? '')) {
+      // Unhandled, a rejection here (a client gone mid-answer) would end the process.
+      handleGitHubAuthRequest(githubAuth, req, res).catch(() => res.destroy());
+    } else if (serveDir) {
       void serveStatic(serveDir, req, res);
     } else {
       // Matches what `new WebSocketServer({ port })` used to answer to a

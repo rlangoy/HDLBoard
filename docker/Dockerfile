@@ -44,6 +44,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
+# Projects published with the page (docs/PROJECTS.md): copied into dist/ by the build.
+COPY public/ public/
 # The port the browser opens ws://<host>:<port>/hdlsim on. With nginx proxying
 # /hdlsim, that is the public page port — compose passes HDLBOARD_PAGE_PORT.
 # Declared after npm ci so changing it only redoes the build step.

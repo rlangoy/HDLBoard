@@ -6,8 +6,9 @@ import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, UploadIcon } from './icons';
+import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, LinkIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
+import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -16,6 +17,8 @@ export interface FileExplorerProps {
   onSelect: (id: string) => void;
   onUpload: () => void;
   onNewFile: () => void;
+  /** Open a project file by its URL or, in the Windows app, its path. */
+  onOpenProject: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   /** Save one file to the user's disk, as it currently reads in the editor. */
@@ -27,10 +30,17 @@ export interface FileExplorerProps {
   /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
-  onFilesDropped: (files: FileList) => void;
+  onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void;
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
+  /** The open project, if any: drawn above the folders, and opens the project page. */
+  project?: { name: string; fileName: string; description: string; unsaved: boolean };
+  /** The project page is showing: the project row looks pressed. */
+  projectOpen?: boolean;
+  onToggleProject?: () => void;
+  /** No project is open: Create Project starts one on the project page. */
+  onCreateProject?: () => void;
 }
 
 interface TopDotButtonProps {
@@ -80,6 +90,7 @@ export function FileExplorer({
   onSelect,
   onUpload,
   onNewFile,
+  onOpenProject,
   onRename,
   onDelete,
   onDownload,
@@ -89,6 +100,10 @@ export function FileExplorer({
   onFilesDropped,
   onSetTopFile,
   topLocked = false,
+  project,
+  projectOpen = false,
+  onToggleProject,
+  onCreateProject,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -121,7 +136,7 @@ export function FileExplorer({
   const handleDrop = (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragDepth(0);
-    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files);
+    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files, droppedFileHandles(e.dataTransfer));
   };
 
   const toggleFolder = (folder: string) => {
@@ -189,7 +204,7 @@ export function FileExplorer({
           type="button"
           className="wb-files__upload"
           onClick={onUpload}
-          title="Upload File: add source files, or a .zip such as one Download All saved"
+          title="Upload File: add source files, or a .zip such as one Download All saved. Choose a project .json (with its files) to open a project."
         >
           <UploadIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
@@ -197,6 +212,15 @@ export function FileExplorer({
         <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
           <span className="wb-files__label-text">New File</span>
+        </button>
+        <button
+          type="button"
+          className="wb-files__open-project"
+          onClick={onOpenProject}
+          title="Open Project: open a project file by its URL (e.g. a GitHub gist) or, in the Windows app, its path"
+        >
+          <LinkIcon className="wb-files__action-icon" aria-hidden="true" />
+          <span className="wb-files__label-text">Open Project</span>
         </button>
         <button
           type="button"
@@ -209,6 +233,36 @@ export function FileExplorer({
           <span className="wb-files__label-text">Download All</span>
         </button>
       </div>
+
+      {project && (
+        <button
+          type="button"
+          className={cx('wb-files__project', projectOpen && 'is-open')}
+          onClick={onToggleProject}
+          aria-pressed={projectOpen}
+          title="Open Project Page"
+        >
+          <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
+          <span className="wb-files__project-text">
+            <span className="wb-files__project-name">{project.name || 'Untitled project'}</span>
+            {project.description.trim() !== '' && <span className="wb-files__project-description">{project.description.trim()}</span>}
+          </span>
+          {/* Its own tooltip: hovering the dot says what it means. */}
+          {project.unsaved && <span className="wb-files__project-dot" role="img" aria-label="Unsaved changes" title="Unsaved changes" />}
+        </button>
+      )}
+
+      {!project && onCreateProject && (
+        <button
+          type="button"
+          className="wb-files__project wb-files__project--create"
+          onClick={onCreateProject}
+          title="Create Project: name a project and choose which files belong to it"
+        >
+          <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
+          <span className="wb-files__project-text">Create Project</span>
+        </button>
+      )}
 
       {/* Only the tree scrolls: the header and buttons above stay put. */}
       <ScrollArea className="wb-files__scroll">
