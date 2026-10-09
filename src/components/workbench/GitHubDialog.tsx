@@ -9,7 +9,7 @@ import type { GitHubUser } from '../../github/githubUser';
 import { copyText } from './clipboard';
 import { Dialog } from './Dialog';
 import { Activity, GitHubStatus } from './GitHubStatus';
-import { CloudUploadIcon, CopyIcon, DeleteIcon, GitHubIcon, OpenInIcon, RefreshIcon, SignOutIcon } from './icons';
+import { CloudUploadIcon, CopyIcon, DeleteIcon, GitHubIcon, OpenInIcon, ProjectIcon, RefreshIcon, SignOutIcon } from './icons';
 import type { GitHubSyncState } from './projectGitHub';
 import type { GitHubConnection, SignInStep } from './useGitHub';
 import type { GitHubProjects } from './useGitHubProjects';
@@ -238,13 +238,7 @@ function Account({ user, remembersSignIn, onSignOut }: { user: GitHubUser; remem
 }
 
 function CurrentProject({ openProject, busy, onSave }: { openProject: OpenProjectSummary | null; busy: boolean; onSave: () => void }) {
-  if (openProject === null) {
-    return (
-      <p className="wb-github__tip">
-        To save your files on GitHub, make them a project first: click <strong>Create Project</strong> in Files.
-      </p>
-    );
-  }
+  if (openProject === null) return null;
   return (
     <div className="wb-github__current">
       <span className="wb-github__current-text">
@@ -283,7 +277,7 @@ function ProjectList({ projects, openGistId }: { projects: GitHubProjects; openG
         </button>
       </div>
       {entries !== null && entries.length === 0 && (
-        <p className="wb-github__empty">No projects on GitHub yet. Open or make a project, then click Save to GitHub.</p>
+        <p className="wb-github__empty">No projects on GitHub yet. Click Create Project in Files, then Save to GitHub.</p>
       )}
       {entries !== null && entries.length > 0 && (
         <ul className="wb-github__list">
@@ -299,14 +293,17 @@ function ProjectList({ projects, openGistId }: { projects: GitHubProjects; openG
 function ProjectRow({ entry, isOpen, projects }: { entry: IndexEntry; isOpen: boolean; projects: GitHubProjects }) {
   const busy = projects.busy !== null;
   return (
-    <li className="wb-github__row">
+    <li className={`wb-github__row${isOpen ? ' is-open' : ''}`}>
+      <span className="wb-github__row-icon" aria-hidden="true">
+        <ProjectIcon />
+      </span>
       <div className="wb-github__row-text">
         <span className="wb-github__row-name">
           {entry.name || 'Untitled project'}
           {isOpen && <span className="wb-github__chip">Open now</span>}
         </span>
         {entry.description !== '' && <span className="wb-github__row-description">{entry.description}</span>}
-        <span className="wb-github__small">{savedWhen(entry)}</span>
+        <span className="wb-github__row-meta">{savedWhen(entry)}</span>
       </div>
       <div className="wb-github__row-actions">
         <button type="button" className="wb-github__btn" onClick={() => projects.open(entry)} disabled={busy}>
