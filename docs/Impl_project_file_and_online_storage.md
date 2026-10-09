@@ -20,7 +20,7 @@ The project file can be stored **locally** or at an **HTTP(S) URL**, so a teache
 
 - Board definitions or board files (the project only names its board), simulator settings or build options.
 - Subdirectories inside the project.
-- Writing back to arbitrary remote (HTTP) locations. The only supported remote store is GitHub Gists (Section 11).
+- Writing back to arbitrary remote (HTTP) locations. The only supported remote store is GitHub Gists (Section 11 for the Stage 1 test app, Section 14 for HDLBoard).
 - Dependency resolution between files.
 
 ## 4. File Format
@@ -228,7 +228,7 @@ Stage 1 builds an **independent React/TypeScript page** to test local and HTTP s
 
 - Stage 1 includes the GitHub Gist upload/download in Section 11 and the local/gist sync in Section 12.
 - Stage 1 must be **approved and tested** before any integration is attempted.
-- Integration into HDLBoard (Stage 2) is covered by a **separate implementation plan**, written after Stage 1 is approved. It is not part of this document.
+- Integration into HDLBoard (Stage 2) was first planned as a separate document. It is now built and described in **Section 14**, which takes precedence over Sections 11 and 12 wherever they differ.
 
 ### 10.2 Scope
 
@@ -335,6 +335,8 @@ Test servers:
 "Store" to an HTTP location is done through the GitHub Gist API, specified in Section 11. Other HTTP stores (for example a generic `PUT`) are not part of Stage 1.
 
 ## 11. GitHub Gist Upload/Download (part of Stage 1)
+
+> **Status:** this section specifies the Stage 1 test app. HDLBoard implements GitHub storage as described in **Section 14**, which changes three rules here: every loaded file is stored in the gist, not only files with an empty `url` (11.3); the user signs in with GitHub's OAuth sign-in instead of only pasting a token, and the Windows app keeps the sign-in encrypted (11.6); and gists are always secret (11.3).
 
 ### 11.1 Purpose
 
@@ -468,6 +470,8 @@ Manual tests against real GitHub (use a throwaway token and test gists):
 10. The user has approved the Gist tests **before** the HDLBoard integration plan is started.
 
 ## 12. Syncing Local Storage and a GitHub Gist
+
+> **Status:** this three-way folder sync is specified for the Stage 1 test app and is **not** part of HDLBoard. In HDLBoard the project lives in the editor rather than in a folder, so sync is **Save to GitHub** plus **Get the GitHub version**, guarded by a changed-on-GitHub check (Section 14.6). A full three-way sync with per-file conflicts remains a future extension (Section 13).
 
 ### 12.1 Purpose
 
@@ -663,3 +667,155 @@ Manual tests (real GitHub, throwaway token and test gists, two separate local fo
 - Zip-packaged projects.
 - Automatic merge of non-overlapping text changes during sync.
 - Automatic or periodic sync.
+- Three-way sync with per-file conflict choices (Section 12) in HDLBoard, instead of whole-project "keep mine / use GitHub's" (Section 14.6).
+- Revoking HDLBoard's GitHub access on Sign out (`DELETE /applications/{client_id}/token`, needs the client secret on the backend).
+- Choosing public instead of secret gists for projects meant to be shared openly.
+
+## 14. Stage 2: GitHub in HDLBoard (as built)
+
+### 14.1 Purpose and status
+
+Students sign in to GitHub once and keep their projects on their own account: one **secret gist per project**, listed in a project index. They can list, open, save, sync and delete projects from any computer, in a browser or in the Windows app. User and hosting documentation: [`GITHUB.md`](GITHUB.md).
+
+The GitHub code is ported from the Stage 1 test app (RemoteGitRepoApp), whose data formats follow its `docs/hdlboard-repo-demo-spec.md` § 5. It was reviewed against Clean Code during the port.
+
+| | Status |
+|---|---|
+| Unit tests (gist use cases against an in-memory GitHub, backend routes over HTTP) | Pass |
+| UI flow in Chrome against an in-page fake of `api.github.com` | Done: sign in, save, status, conflict, get GitHub version, delete file, open from list, delete project, sign out, save while signed out, edited URL file |
+| Real GitHub (device flow, real gists) | Not run yet; needs the owner to authorize the OAuth App |
+| Windows app token storage | Not run yet in a built installer |
+
+### 14.2 Scope
+
+In scope:
+
+- Sign in with GitHub (OAuth device flow), one-click sign-in (web flow + PKCE) when the server holds the client secret, or a pasted personal access token.
+- List the user's projects, open one, delete one (gist and index entry).
+- Save the open project to GitHub: a new gist the first time, then that gist. Get the GitHub version back.
+- Detect that the gist changed on GitHub since it was opened, and ask before overwriting.
+- Keep the sign-in: per browser tab, or encrypted in the Windows app until Sign out.
+
+Out of scope: public gists, three-way per-file sync, sharing a project for editing by several users, revoking the token on Sign out (Section 13).
+
+### 14.3 Authentication
+
+- **Scope `gist` only**: list, read, create, update and delete the user's gists, and no repository access. `GET /user` checks the token: a token whose `X-OAuth-Scopes` header lacks `gist` is refused at once. Fine-grained tokens name no scopes and are accepted.
+- **Device flow (default):** HDLBoard shows a code (also copied to the clipboard) and opens `github.com/login/device`. The user pastes the code, clicks Continue and Authorize, and HDLBoard polls until GitHub issues the token. This needs only the client ID.
+- **Web flow (optional):** when the backend has `GITHUB_CLIENT_SECRET`, a browser opens GitHub's Authorize page in a popup with a PKCE challenge (S256) and a random `state`. GitHub returns to `github-callback.html` next to the page, which hands `code` and `state` back over a `BroadcastChannel`, and the backend exchanges the code, adding the secret. The OAuth App's callback URL must be the page's address. The Windows app always uses the device flow.
+- **Backend routes** (`server/src/githubAuth.ts`), because github.com sends no CORS headers on its OAuth endpoints:
+
+  | Route | Forwards to |
+  |---|---|
+  | `GET /github-auth/config` | none; answers `{ clientId, webFlow }` |
+  | `POST /github-auth/device/code` | `https://github.com/login/device/code` |
+  | `POST /github-auth/device/token` | `https://github.com/login/oauth/access_token` (device grant only) |
+  | `POST /github-auth/web/token` | `https://github.com/login/oauth/access_token` (adds the secret; 501 without one) |
+
+  The routes are served on the simulator backend's port, in both server mode and desktop mode, and Docker's nginx proxies `/github-auth/`. Only the configured client ID is forwarded and only each route's own parameters, nothing is stored or logged, and CORS is allowed only for pages on the backend's own host name. `GITHUB_CLIENT_ID` (default `Ov23liDFfwtpvKX3SMvz`) and `GITHUB_CLIENT_SECRET` come from the backend's environment, and the page learns the client ID from `/config`.
+- **Token storage** (replaces 11.6 "in memory only"):
+
+  | Where | Kept | How |
+  |---|---|---|
+  | Browser | Until the tab closes | `sessionStorage` |
+  | Windows app | Until Sign out | `<userData>/github-token.bin`, encrypted with Electron `safeStorage` (Windows DPAPI: only this Windows user on this computer can read it); not kept at all when encryption is unavailable |
+
+  The token is sent only to `api.github.com`, never in a URL, a project file, a gist or the console. Sign out forgets it locally, and the dialog links to GitHub's *Authorized OAuth Apps* page to revoke it there.
+
+### 14.4 Data model
+
+- **Project gist:** secret, with the description `HDLBoard project: <name>`. It holds the project file (Section 4) and the project's files.
+- **Index gist:** secret, with the description `HDLBoard project index`, holding `Repo.HDLBoard.json`:
+
+  ```json
+  { "version": 1, "projects": [ { "name": "…", "description": "…", "url": "<gist html_url>", "gistId": "…", "createdAt": "<ISO 8601>", "updatedAt": "<ISO 8601>" } ] }
+  ```
+
+  `updatedAt` (the last save from HDLBoard) is an addition to the test app's format. It is optional when reading, so older indexes still load. The index is found by listing the user's gists, created with the first project, and always read again right before it is written.
+- **Link from an open project to its gist**, kept with the project (and in the Windows app's saved workspace): `gistId`, `htmlUrl`, `ownerLogin`, `projectFileName`, `updatedAt` (the gist's `updated_at` when last opened or saved, or empty when unknown), and `fingerprint` (a checksum of the project as last opened or saved, used for the status).
+
+### 14.5 What Save to GitHub stores (replaces 11.3)
+
+| Project item | Stored in the gist |
+|---|---|
+| Project file | Yes |
+| Files in Files with an empty `url` | Yes |
+| Files in Files that came from their own `url` | **Yes**, as the student's copy. The saved project file lists them with `url: ""` (stored next to it), and the open project is updated to match |
+| Entries that could not be loaded | No; the entry, with its `url`, stays in the project file |
+
+The reason: a student's edits to any file must reach GitHub, and the gist must open to exactly what was saved, whether it is opened through the API, by its raw address, or by a `?project=` link. With the Stage 1 rule an edited URL file was never saved, and the Save button stayed disabled.
+
+### 14.6 Saving, getting, and the changed-on-GitHub check (replaces 12)
+
+- **Status** shown on the project page and in the dialog: *Not on GitHub yet*, *Saved on GitHub*, or *Changes not saved to GitHub*, from the snapshot's fingerprint compared with the link's. Save to GitHub is disabled while the project is saved.
+- **Save to GitHub**, first time: `POST /gists` (secret), then register the project in the index.
+- **Save to GitHub**, later:
+  1. Read the gist. If the signed-in user does not own it (a teacher's gist), save a **copy** to a new gist instead.
+  2. If the gist's `updated_at` differs from the link's, or the link's is unknown (a project opened by URL while signed out), stop and ask (below).
+  3. Plan the changes: add new files, update changed ones (CRLF and LF count as equal), and delete only gist files that left the project. These are the old project file name and the files the gist's own project file listed, minus what the project still lists. Other gist files, such as a README added on github.com, are never deleted.
+  4. Send one `PATCH /gists/{id}` (files and description) when anything changed, then update the index entry.
+  5. Report "Saved …: 1 file changed, 2 new files, 1 file deleted".
+- **Asking before overwriting:** a dialog offers **Use the GitHub version** (open the project as it is on GitHub; local changes are lost), **Keep mine, replace GitHub's** (save over it), or **Cancel**. Nothing is written before a choice.
+- **Get the GitHub version:** open the project from its gist through the API, replacing Files. HDLBoard asks first if there are changes not saved to GitHub.
+- **Open** from the list, or Open Project with a gist address while signed in, reads the gist through the API (`truncated` files from their raw URL) and links the project. Signed out, a gist address opens through its raw URL as in Section 6, linked with an unknown `updatedAt`.
+- **Delete** from the list: confirm, `DELETE /gists/{id}` (a gist already gone is not an error), remove the index entry, and unlink the open project if it was that one. The files open in HDLBoard are kept.
+- **Save while signed out:** the GitHub dialog opens for sign-in, and the save runs as soon as the user has signed in.
+- The Gist API has no conditional write, so a change between the check and the `PATCH` is not detected. The window is short, and the index is handled the same way.
+
+### 14.7 Errors
+
+| Situation | Message to the user |
+|---|---|
+| 401 | GitHub did not accept the sign-in: the token is wrong, expired or was revoked |
+| Token without the `gist` scope | This token cannot read or save gists; create one with the "gist" scope |
+| 403 with rate limit 0, or 429 | GitHub asks HDLBoard to wait; try again after the reset time |
+| 403 otherwise | GitHub refused access; sign in again and allow access to gists |
+| 404 | Not found on GitHub: it may have been deleted |
+| 422 | GitHub did not accept the change, with GitHub's message |
+| Empty file | GitHub cannot store empty files, with the names (nothing is sent) |
+| Gist with no `.hdlboard.json` / several | Says so; for several, use Open Project with the file's address |
+| Backend unreachable for sign-in | Sign-in needs the HDLBoard server; a personal access token still works |
+| Popup blocked (web flow) | Allow pop-ups for this page and try again |
+| Device flow disabled, wrong secret, callback mismatch | GitHub did not accept HDLBoard's sign-in settings, with GitHub's error code |
+| Sign-in cancelled | Nothing is shown |
+
+### 14.8 UI
+
+- **Header:** a **GitHub** button, showing the user's avatar and name once signed in.
+- **GitHub dialog:**
+  - *Signed out:* what is stored and where (secret gists, gists only), **Sign in with GitHub**, a link to create an account, and *Sign in with a personal access token instead* (with a link that pre-ticks the `gist` scope).
+  - *Device code:* three numbered steps and the code with a Copy button.
+  - *Signed in:* the account (with Sign out and Manage access on GitHub), the open project with its status and **Save to GitHub**, and *Your projects on GitHub*, newest first, each with Open, show on github.com, and Delete.
+- **Project page, GitHub card:** status, an explanation, the gist address, **Copy share link** (`?project=<gist>`), **Save to GitHub** (or **Save a copy to my GitHub**), **Get the GitHub version**, and the last result.
+- **Changed on GitHub dialog** (14.6).
+
+### 14.9 Code
+
+```text
+server/src/githubAuth.ts          backend sign-in routes (forwarder + HTTP handler)
+src/github/                       plain TypeScript, no React
+  githubHttp, githubUser, gistClient, projectIndex, gistProjectIndex,
+  gistSavePlan, projectGists, authProxy, deviceFlow, webFlow, pkce,
+  signInError, session, tokenStore, config, jsonDocument
+  testSupport/fakeGitHub.ts       in-memory api.github.com for the tests
+src/components/workbench/
+  gistLink.ts, projectGitHub.ts   an open project and its gist (pure)
+  useGitHub.ts, useGitHubProjects.ts
+  GitHubDialog.tsx, ProjectGitHubCard.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, gitHubWindow.ts
+public/github-callback.html       web flow callback
+winInstaller/electron/            encrypted token file (main.js, preload.js)
+docker/nginx.conf, docker-compose.yml   /github-auth/ proxy, GITHUB_CLIENT_* passthrough
+```
+
+### 14.10 Acceptance criteria
+
+1. A student can sign in with the device flow on every deployment that has the backend, and with a personal access token everywhere; only the `gist` scope is requested.
+2. The Windows app keeps the sign-in encrypted until Sign out; a browser keeps it for the tab only.
+3. The dialog lists the user's projects from the index, newest first, and opens and deletes them.
+4. Save to GitHub stores the project file and every loaded file, and a later save sends only what changed and deletes only files that left the project.
+5. Editing any project file, or the project's details, shows *Changes not saved to GitHub* and enables Save to GitHub.
+6. A change made on GitHub since opening is never overwritten without the user choosing "Keep mine".
+7. A project from someone else's gist is saved as a copy in the user's own gist.
+8. The gist opens to exactly what was saved, through the API or by its raw address.
+9. The token is sent only to `api.github.com`, and the client secret never reaches the page.
+10. All unit tests pass, and the manual tests against real GitHub (14.1) are run and approved.
