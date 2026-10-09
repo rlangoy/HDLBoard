@@ -8,8 +8,10 @@
  * process; the renderer only feature-detects it and hands over JSON.
  * ------------------------------------------------------------------ */
 
+import { browserTokenStore, desktopTokenStore, type TokenStore } from '../../github/tokenStore';
 import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
+import { parseStoredProject, type OpenProject } from './projectFile';
 import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
 export interface HdlBoardBridge {
@@ -20,6 +22,14 @@ export interface HdlBoardBridge {
   /** Present only while storage is enabled — feature-detect on these. */
   saveWorkspace?(json: string): Promise<boolean>;
   loadWorkspace?(): Promise<string | null>;
+  /** Reads a project file, or a source file next to it, by its full path (Open Project, docs/PROJECTS.md). */
+  readLocalFile?(path: string): Promise<string>;
+  /** Writes one, by its full path (Save project into the folder a project was opened from). */
+  writeLocalFile?(path: string, text: string): Promise<boolean>;
+  /** The GitHub sign-in, kept encrypted for this Windows user (src/github/tokenStore.ts). */
+  loadGitHubToken?(): Promise<string | null>;
+  saveGitHubToken?(accessToken: string): Promise<boolean>;
+  forgetGitHubToken?(): Promise<boolean>;
 }
 
 declare global {
@@ -32,6 +42,14 @@ export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
 }
 
+/** Where the GitHub sign-in is kept: encrypted by the Windows app, else for this browser tab only. */
+export function gitHubTokenStore(): TokenStore {
+  const bridge = desktopBridge();
+  const { loadGitHubToken, saveGitHubToken, forgetGitHubToken } = bridge ?? {};
+  if (!loadGitHubToken || !saveGitHubToken || !forgetGitHubToken) return browserTokenStore();
+  return desktopTokenStore({ loadGitHubToken, saveGitHubToken, forgetGitHubToken });
+}
+
 /** What is stored: the project's files and which one is shown, nothing else. */
 export interface Workspace {
   files: VhdlFile[];
@@ -42,6 +60,8 @@ export interface Workspace {
   topUnit?: string | null;
   /** Role and pair overrides (docs/impl_split_screen.md § 6.7); missing reads as none. */
   testbench?: TestbenchOverrides;
+  /** The open project file (projectFile.ts); missing or null reads as none. */
+  project?: OpenProject | null;
 }
 
 const WORKSPACE_VERSION = 1;
@@ -94,6 +114,7 @@ export function parseWorkspace(json: string | null | undefined): Workspace | und
     topFileId,
     topUnit,
     testbench: parseOverrides(r.testbench, known),
+    project: parseStoredProject(r.project),
   };
 }
 

@@ -125,3 +125,104 @@
 .wb-newfile__buttons .wb-dialog__close:disabled:hover {
   background: var(--wb-accent);
 }
+
+/* Open Project: the kinds of address it takes. */
+.wb-openproject__examples {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.wb-openproject__examples code,
+.wb-openproject__example {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.wb-openproject__example {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-accent-dark);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-openproject__example:hover {
+  text-decoration: underline;
+}
+
+/* Open Project: Choose project folder, above the URL field. */
+.wb-openproject__folder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-openproject__folder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--wb-accent);
+  border-radius: 8px;
+  background: var(--wb-accent-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-accent-dark);
+  cursor: pointer;
+}
+
+.wb-openproject__folder-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-openproject__folder-btn:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.wb-openproject__folder-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wb-openproject__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+/* ProjectFolderDialog: the files a project opened without. */
+.wb-openproject__lead {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wb-text);
+}
+
+.wb-openproject__missing {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--wb-text);
+}
+
+.wb-openproject__choose {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-openproject__choose svg {
+  width: 18px;
+  height: 18px;
+}

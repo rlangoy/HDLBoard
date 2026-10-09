@@ -27,11 +27,11 @@ export function filesInFolderOrder<T extends Pick<VhdlFile, 'folder'>>(files: re
 
 /**
  * The `accept` of the upload picker; a drop is not filtered by it, so `folderForUpload` decides too.
- * A .zip is opened and its files are added one by one (zipUpload.ts).
+ * A .zip is opened and its files are added one by one (zipUpload.ts); a .json is a project file (projectFile.ts).
  */
-export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh,.zip';
+export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh,.zip,.json';
 /** What the drop hint and the rejection line call the accepted files. */
-export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh / .zip';
+export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh / .zip / .json';
 
 // Keep in step with server/src/engines/language.ts, which applies the same extension rules
 // on the backend (the two packages share no code).

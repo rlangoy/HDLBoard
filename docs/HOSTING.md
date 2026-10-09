@@ -820,6 +820,10 @@ first. A page that loads blank is covered in [§ 12](#12-troubleshooting).
 
 ---
 
+### 7.6 Publish projects with your server
+
+Project folders in `dist/projects/` (or `public/projects/` before building) open in HDLBoard as `projects/<name>/<name>.hdlboard.json`, from Open Project or with a `?project=` link. See [PROJECTS.md](PROJECTS.md#publish-projects).
+
 ## 8. One port, with a reverse proxy
 
 Two open ports is the default because the page and the backend are separate

@@ -46,6 +46,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
+# Projects published with the page (docs/PROJECTS.md): copied into dist/ by the build.
+COPY public/ public/
 # The port the browser opens /hdlsim on. Empty = the page's own origin (and
 # scheme: wss:// on https://), which is where nginx proxies /hdlsim — so the
 # page works on any public port, behind TLS too. Declared after npm ci so

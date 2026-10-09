@@ -43,7 +43,7 @@ import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } fro
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName } from './zipUpload';
 import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { HdlClient, filesForRun, hdlBackendUrl } from './hdlClient';
+import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
@@ -59,7 +59,52 @@ import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectZip, downloadSourceFile } from './download';
-import { desktopBridge, parseWorkspace, serializeWorkspace } from './desktop';
+import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
+import { ProjectPage } from './ProjectPage';
+import { OpenProjectDialog } from './OpenProjectDialog';
+import { ProjectFolderDialog } from './ProjectFolderDialog';
+import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, type FileHandles } from './fileSystemAccess';
+import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
+import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToFolder, type PickedFolder } from './projectSave';
+import {
+  MISSING_LOCAL_FILE,
+  hasUnsavedChanges,
+  availableFiles,
+  filesInProject,
+  isProjectUpload,
+  newProject,
+  startProject,
+  withFileLeft,
+  withFilesAdded,
+  openProject,
+  pickProjectUpload,
+  projectEntries,
+  projectFileText,
+  withDetails,
+  withEntriesLoaded,
+  withEntryEdited,
+  withEntryRemoved,
+  withEntryRenamed,
+  withEntryUnloaded,
+  withSaved,
+  type OpenedProject,
+  type OpenProject,
+  type ProjectSource,
+  type ProjectSourceFile,
+} from './projectFile';
+import { fetchText } from '../../project/fetchText';
+import { parseGistRef, resolveProjectUrl } from '../../project/gistUrl';
+import { GITHUB_AUTH_PATH } from '../../github/config';
+import type { GistLink, OpenedGistProject } from '../../github/projectGists';
+import { GitHubDialog } from './GitHubDialog';
+import { GitHubConflictDialog } from './GitHubConflictDialog';
+import { ProjectGitHubCard } from './ProjectGitHubCard';
+import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
+import { useGitHub } from './useGitHub';
+import { useGitHubProjects } from './useGitHubProjects';
+import { sameFileName } from '../../project/fileName';
+import { filesDirectlyInFolder, projectFileInFolder } from './chosenFolder';
+import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
 
@@ -89,6 +134,22 @@ function timestamp(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * The file a newly opened project runs: its first design that does not look like a
+ * testbench, in project order (a project usually lists the design first), else its
+ * first design file at all.
+ */
+function projectTopFile(files: readonly VhdlFile[]): VhdlFile | undefined {
+  const designs = files.filter((f) => f.folder === 'vhdl' || f.folder === 'verilog');
+  return designs.find((f) => !/(^tb_|_tb\.|_tb_|testbench)/i.test(f.name)) ?? designs[0];
+}
+
+/** An error's message, without Electron's "Error invoking remote method …: Error:" wrapping. */
+function errorText(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
 }
 
 let nextFileSeq = 1;
@@ -171,6 +232,7 @@ export function Workbench() {
         setTopFileId(ws.topFileId);
         setTopUnit(ws.topUnit ?? null);
         restoreOverridesRef.current(ws.testbench ?? EMPTY_OVERRIDES);
+        setProject(ws.project ?? null);
       })
       .catch((err: unknown) => console.error('Could not load the saved workspace:', err))
       .finally(() => {
@@ -184,11 +246,23 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | null>(null);
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'github' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
-  // The Examples pane, shown over the editor (which stays mounted underneath).
-  const [examplesOpen, setExamplesOpen] = useState(false);
+  // What is shown over the editor (which stays mounted underneath): the Examples pane or the project page.
+  const [overlay, setOverlay] = useState<'examples' | 'project' | null>(null);
+  // The open project file (projectFile.ts): Files holds its files.
+  const [project, setProject] = useState<OpenProject | null>(null);
+  // What the project is busy with, e.g. downloading a file; shown on the project page.
+  const [projectBusy, setProjectBusy] = useState<string | null>(null);
+  // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
+  const [folderNeeded, setFolderNeeded] = useState<readonly string[] | null>(null);
+  // The opened project file's handle (Chrome, Edge): the folder picker then opens in its folder.
+  const projectFileHandleRef = useRef<FileSystemFileHandle | null>(null);
+  // Open Project: why the last try failed, shown in the dialog.
+  const [openProjectError, setOpenProjectError] = useState<string | null>(null);
+  // The folder Save project wrote to last (browser folder picker), so saving again asks no more.
+  const saveFolderRef = useRef<PickedFolder | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
   const [preferredLanguages, setPreferredLanguages] = useState(loadPreferredLanguages);
   const handlePreferredLanguagesChange = (languages: PreferredLanguages) => {
@@ -240,7 +314,7 @@ export function Workbench() {
   // The pane geometry: side pane widths, which panes are shut, the console's
   // height, and the dividers and shortcuts that change them.
   const layout = usePaneLayout();
-  const { collapsed, togglePane } = layout;
+  const { collapsed, togglePane, showPane } = layout;
 
   // The board keeps one fixed 2x2 arrangement at one fixed internal size and
   // is scaled to whatever the pane currently gives it, so the parts never
@@ -277,9 +351,15 @@ export function Workbench() {
   const quietEnd = useRef(false);
 
   const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
+    // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
     logSeq.current += 1;
-    setLogLines((prev) => appendCapped(prev, { id: logSeq.current, time: timestamp(), text, tone }));
+    const id = logSeq.current;
+    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone }));
   }, []);
+
+  // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
+  const [tokenStore] = useState(gitHubTokenStore);
+  const gitHub = useGitHub(hdlBackendHttpUrl(HDL_WS_PORT, GITHUB_AUTH_PATH), tokenStore, desktopBridge() !== undefined);
 
   const stopElapsedTimer = () => {
     if (elapsedTimer.current !== null) {
@@ -316,7 +396,7 @@ export function Workbench() {
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
-    setExamplesOpen(false);
+    setOverlay(null);
     setActiveFileId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
   }, []);
@@ -407,7 +487,7 @@ export function Workbench() {
 
   // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
   const handleOpenFile = (id: string) => {
-    setExamplesOpen(false);
+    setOverlay(null);
     tb.showFile(id, 'open');
   };
 
@@ -427,10 +507,15 @@ export function Workbench() {
       return;
     }
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, name, folder: folderAfterRename(f.folder, name) } : f)));
+    // The project keeps the file's description and URL under its new name.
+    setProject((p) => p && withEntryRenamed(p, current.name, name));
   };
 
   const handleDeleteFile = (id: string) => {
+    const deleted = files.find((f) => f.id === id);
     setFiles((prev) => prev.filter((f) => f.id !== id));
+    // A deleted file leaves the project too.
+    if (deleted) setProject((p) => p && withEntryRemoved(p, deleted.name));
     dismissDiagnostics(id);
     tb.onFileDeleted(id);
     // The shown file gone, its neighbour in the Files list is shown (D7); a file shown
@@ -471,8 +556,16 @@ export function Workbench() {
     if (file) downloadSourceFile(file);
   };
 
+  const fileNames = files.map((f) => f.name);
+
+  // With a project open, its file goes in the .zip too, so uploading the .zip opens it again.
   const handleDownloadAll = () => {
-    if (files.length > 0) downloadProjectZip(files);
+    if (!project) {
+      if (files.length > 0) downloadProjectZip(files);
+      return;
+    }
+    downloadProjectZip(files, { name: project.fileName, text: projectFileText(project, fileNames) });
+    setProject(withSaved(project, files));
   };
 
   // Ctrl+S / Cmd+S saves the shown file to disk instead of the browser's
@@ -502,7 +595,7 @@ export function Workbench() {
   // A file just added to `files` is shown.
   const showNewFile = (id: string) => {
     setActiveFileId(id);
-    setExamplesOpen(false);
+    setOverlay(null);
   };
 
   // An example is copied into the project (a file it already has by that name is
@@ -546,7 +639,16 @@ export function Workbench() {
   };
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
-  const handleUploadClick = () => uploadInputRef.current?.click();
+  // Chrome and Edge's own picker keeps handles to the chosen files (fileSystemAccess.ts); elsewhere the file input.
+  const handleUploadClick = () => {
+    if (!canPickWithHandles()) {
+      uploadInputRef.current?.click();
+      return;
+    }
+    pickFilesWithHandles(UPLOAD_ACCEPT.split(','))
+      .then((picked) => picked && readAndAddFiles(picked.files, picked.handles))
+      .catch((err: unknown) => appendLog(`Upload File: ${errorText(err)}`, 'error'));
+  };
 
   // Shared by the hidden <input type="file"> (a real picker, filtered to
   // the source extensions by its own `accept`) and drag-and-drop onto the
@@ -556,7 +658,7 @@ export function Workbench() {
   // A file whose name is taken or reserved, or that is no source file, is not added;
   // the dialog says which and why (fileNameRules.ts), and the console keeps a line each.
   // A .zip among them is opened first and stands for the files inside it (zipUpload.ts).
-  const readAndAddFiles = async (incoming: Iterable<File>) => {
+  const readAndAddFiles = async (incoming: Iterable<File>, handles: FileHandles = new Map()) => {
     const chosen: File[] = [];
     const unreadable: RefusedFile[] = [];
     for (const file of incoming) {
@@ -568,6 +670,14 @@ export function Workbench() {
           unreadable.push({ name: file.name, reason: UNREADABLE_ZIP_REASON });
         }
       }
+    }
+    // A project file among them opens the project, with the others as its folder.
+    const projectUpload = pickProjectUpload(chosen);
+    if (projectUpload) {
+      projectFileHandleRef.current = handles.get(projectUpload.name) ?? null;
+      await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
+      for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
+      return;
     }
     const reasons = incomingFileRefusals(
       chosen.map((file) => file.name),
@@ -589,12 +699,339 @@ export function Workbench() {
     reader.readAsText(file);
   };
 
+  /**
+   * Opens a project file chosen or dropped with Upload File; the files chosen with it are
+   * its folder. Whatever Files held before is closed: the project's files replace it.
+   */
+  const openProjectUpload = async (projectFile: File, others: readonly File[]) => {
+    const localFiles: ProjectSourceFile[] = await Promise.all(
+      others.filter((file) => !isProjectUpload(file.name)).map(async (file) => ({ name: file.name, content: await file.text() })),
+    );
+    for (const extra of others.filter((file) => isProjectUpload(file.name))) {
+      appendLog(`Ignored ${extra.name}: only one project file is opened at a time (${projectFile.name}).`, 'error');
+    }
+    const error = await openProjectText({ text: await projectFile.text(), location: projectFile.name, localFiles });
+    if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
+  };
+
+  /**
+   * Opens a project file's text: its files replace what Files holds, and the project page
+   * shows — with `pageOnProblems`, only when a file could not be loaded or loading warned.
+   * `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could not be
+   * opened, or null.
+   */
+  const openProjectText = async (
+    source: Omit<ProjectSource, 'fetch'>,
+    gist?: GistLink,
+    pageOnProblems = false,
+  ): Promise<string | null> => {
+    setProjectBusy(`Opening ${source.location}…`);
+    let opened: OpenedProject;
+    try {
+      opened = await openProject(source);
+    } catch (err) {
+      const reason = errorText(err);
+      appendLog(`Project not opened: ${source.location}: ${reason}`, 'error');
+      return reason;
+    } finally {
+      setProjectBusy(null);
+    }
+    if (gist) opened = { ...opened, project: withGistLink(opened.project, gist, opened.files) };
+    applyOpenedProject(opened, source.localFiles ?? [], pageOnProblems);
+    return null;
+  };
+
+  /**
+   * A project read from its gist through the GitHub API (the GitHub dialog, Get the GitHub
+   * version). Opened cleanly, it goes straight to the editor; the project page shows only
+   * when something needs a look.
+   */
+  const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
+    const localFiles = gistFiles.filter((file) => file.name !== link.projectFileName);
+    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link, true);
+    if (error === null) setDialog((shown) => (shown === 'github' ? null : shown));
+    return error;
+  };
+
+  /**
+   * Open Project and ?project=: a project file by its URL — absolute, a GitHub gist, or
+   * relative to this page — or, in the Windows app, by its path. Returns why not, or null.
+   */
+  const openProjectFrom = async (input: string): Promise<string | null> => {
+    const location = parseProjectLocation(input, window.location.href);
+    if (typeof location === 'string') return location;
+    if (location.kind === 'path') {
+      const read = desktopBridge()?.readLocalFile;
+      if (!read) return PATH_NEEDS_DESKTOP;
+      let text: string;
+      try {
+        text = await read(location.path);
+      } catch (err) {
+        return `Could not read ${location.path}: ${errorText(err)}`;
+      }
+      const folder = folderOfPath(location.path);
+      return openProjectText({ text, location: location.path, readLocal: (name) => read(pathInFolder(folder, name)) });
+    }
+    // Signed in, a gist is read through the GitHub API: current at once, and linked for Save to GitHub.
+    const gist = parseGistRef(location.url);
+    if (gist && gitHub.session) {
+      const opened = await gitHub.session.projects.open(gist.gistId).catch(() => null);
+      if (opened) return openGistProject(opened);
+    }
+    let text: string;
+    let url: string;
+    try {
+      url = await resolveProjectUrl(location.url);
+      text = await fetchText(url);
+    } catch (err) {
+      return errorText(err);
+    }
+    return openProjectText({ text, location: url }, gistLinkFromUrl(url));
+  };
+
+  const gitHubProjects = useGitHubProjects({
+    github: gitHub,
+    project,
+    files,
+    setProject,
+    openGistProject,
+    showSignIn: () => setDialog('github'),
+    log: appendLog,
+  });
+
+  /**
+   * Open Project › Choose project folder: the folder's own files (not its subfolders'),
+   * its project file opened with the others as the files next to it (§ 6.4).
+   */
+  const handleProjectFolderOpened = async (chosen: File[]) => {
+    const projectFile = projectFileInFolder(chosen);
+    if (!projectFile) {
+      setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
+      return;
+    }
+    setOpenProjectError(null);
+    setDialog(null);
+    await openProjectUpload(projectFile, filesDirectlyInFolder(chosen).filter((file) => file !== projectFile));
+  };
+
+  const handleOpenProjectFrom = async (input: string) => {
+    setOpenProjectError(null);
+    const error = await openProjectFrom(input);
+    if (error === null) setDialog(null);
+    else setOpenProjectError(error);
+  };
+
+  const applyOpenedProject = (
+    { project: opened, files: projectFiles }: OpenedProject,
+    localFiles: readonly ProjectSourceFile[],
+    pageOnProblems = false,
+  ) => {
+    endRunQuietly();
+    setLogLines([]);
+    const closed = filesRef.current;
+    for (const f of closed) dismissDiagnostics(f.id);
+    const added: VhdlFile[] = projectFiles.map((f) => ({
+      id: nextFileId(),
+      name: f.name,
+      folder: folderForUpload(f.name) ?? 'vhdl',
+      content: f.content,
+    }));
+    setFiles(added);
+    tb.restoreOverrides(EMPTY_OVERRIDES);
+    saveFolderRef.current = null;
+    const top = projectTopFile(added);
+    setTopFileId(top?.id ?? null);
+    setTopUnit(null);
+    setActiveFileId(top?.id ?? added[0]?.id ?? null);
+    setProject(opened);
+    const clean = Object.keys(opened.unloaded).length === 0 && opened.warnings.length === 0;
+    setOverlay(pageOnProblems && clean ? null : 'project');
+    // A browser read only the files chosen with the project file: ask for its folder at once.
+    const notChosen = opened.entries.filter((entry) => opened.unloaded[entry.name.toLowerCase()] === MISSING_LOCAL_FILE);
+    setFolderNeeded(notChosen.length > 0 ? notChosen.map((entry) => entry.name) : null);
+
+    appendLog(`Opened project ${opened.name} (${opened.fileName}): ${added.length} of ${opened.entries.length} files.`, 'success');
+    if (closed.length > 0) appendLog(`Closed the ${closed.length} file(s) Files held before; the project's files replace them.`);
+    for (const entry of opened.entries) {
+      const why = opened.unloaded[entry.name.toLowerCase()];
+      if (why === MISSING_LOCAL_FILE) appendLog(`${entry.name} is stored next to the project file: choose the project folder to load it.`);
+      else if (why) appendLog(`${entry.name} not loaded: ${why}`, 'error');
+    }
+    const listed = (name: string) => opened.entries.some((entry) => sameFileName(entry.name, name));
+    for (const f of localFiles.filter((file) => !listed(file.name))) appendLog(`Ignored ${f.name}: the project does not list it.`);
+  };
+
+  // ?project=<url>: open a project published at a URL, e.g. a GitHub gist (spec § 6.1). Once, on the first load.
+  useEffect(() => {
+    const url = new URLSearchParams(window.location.search).get('project');
+    if (!url) return;
+    void openProjectFrom(url).then((error) => {
+      if (error !== null) appendLog(`Project not opened: ${url}: ${error}`, 'error');
+    });
+  }, []);
+
+  /** Project page: the files of the folder the student chose, for the entries that were not found. */
+  const handleProjectFolderChosen = async (chosen: File[]) => {
+    if (!project) return;
+    const missing = projectEntries(project, filesRef.current.map((f) => f.name)).filter(
+      (row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE,
+    );
+    // The folder's own files first, then those in its subfolders.
+    const depth = (file: File) => (file.webkitRelativePath || file.name).split('/').length;
+    const sorted = [...chosen].sort((a, b) => depth(a) - depth(b));
+    const found: VhdlFile[] = [];
+    for (const row of missing) {
+      const file = sorted.find((f) => sameFileName(f.name, row.name));
+      if (!file) continue;
+      found.push({ id: nextFileId(), name: row.name, folder: folderForUpload(row.name) ?? 'vhdl', content: await file.text() });
+    }
+    if (found.length === 0) {
+      appendLog(`None of the missing files (${missing.map((row) => row.name).join(', ')}) are in that folder.`, 'error');
+      return;
+    }
+    setFiles((prev) => [...prev, ...found]);
+    setProject((p) => p && withEntriesLoaded(p, found));
+    if (topFileId === null) {
+      const top = projectTopFile(found);
+      if (top) makeTop(top.id);
+    }
+    for (const f of found) appendLog(`Opened ${f.name} from the project folder.`, 'success');
+  };
+
+  /** Project page: download a file again from its URL, into Files. */
+  const handleReloadFromUrl = async (name: string) => {
+    const row = project && projectEntries(project, fileNames).find((r) => sameFileName(r.name, name));
+    if (!row || row.url === '') return;
+    setProjectBusy(`Downloading ${name}…`);
+    let content: string;
+    try {
+      content = await fetchText(row.url);
+    } catch (err) {
+      const reason = (err as Error).message;
+      appendLog(`${name}: ${reason}`, 'error');
+      if (row.status === 'unloaded') setProject((p) => p && withEntryUnloaded(p, name, reason));
+      return;
+    } finally {
+      setProjectBusy(null);
+    }
+    const existing = filesRef.current.find((f) => sameFileName(f.name, name));
+    if (existing) {
+      if (existing.content === content) {
+        appendLog(`${name} is the same as at its URL.`);
+        return;
+      }
+      if (!window.confirm(`Replace ${name} in Files with the version at its URL? Your changes to it are lost.`)) return;
+      handleContentChange(existing.id, content);
+      appendLog(`Downloaded ${name} again from its URL.`, 'success');
+      return;
+    }
+    const folder = folderForUpload(name);
+    if (!folder) return;
+    setFiles((prev) => [...prev, { id: nextFileId(), name, folder, content }]);
+    setProject((p) => p && withEntriesLoaded(p, [{ name, content }]));
+    appendLog(`Downloaded ${name} from its URL.`, 'success');
+  };
+
+  /**
+   * Save project (projectSave.ts): the project file and every file, side by side — back
+   * into the folder the Windows app opened it from, else into a folder the student picks
+   * (asked once), else as one download per file.
+   */
+  const handleSaveProject = async () => {
+    if (!project) return;
+    const current = filesRef.current;
+    const toSave = projectSaveFiles(
+      project.fileName,
+      projectFileText(project, current.map((f) => f.name)),
+      filesInProject(project, current).map((f) => ({ name: f.name, text: f.content })),
+    );
+    const saved = (location: string, message: string) => {
+      setProject((p) => p && withSaved({ ...p, location }, current));
+      appendLog(message, 'success');
+    };
+    const write = desktopBridge()?.writeLocalFile;
+    setProjectBusy('Saving the project…');
+    try {
+      if (write && isFilePath(project.location)) {
+        const folder = folderOfPath(project.location);
+        for (const file of toSave) await write(pathInFolder(folder, file.name), file.text);
+        saved(pathInFolder(folder, project.fileName), `Saved ${project.fileName} and ${toSave.length - 1} file(s) in ${folder}.`);
+      } else if (canPickFolder()) {
+        const folder = saveFolderRef.current ?? (await pickSaveFolder());
+        if (!folder) return;
+        await writeToFolder(folder, toSave);
+        saveFolderRef.current = folder;
+        saved(`${folder.name}/${project.fileName}`, `Saved ${project.fileName} and ${toSave.length - 1} file(s) in the folder ${folder.name}.`);
+      } else {
+        downloadEach(toSave);
+        saved(project.location, `Downloaded ${project.fileName} and ${toSave.length - 1} file(s); keep them in one folder.`);
+      }
+    } catch (err) {
+      appendLog(`Project not saved: ${errorText(err)}`, 'error');
+    } finally {
+      setProjectBusy(null);
+    }
+  };
+
+  // What Save project will do, for its tooltip.
+  const saveHint = !project
+    ? ''
+    : desktopBridge()?.writeLocalFile && isFilePath(project.location)
+      ? `Save the project file and all its files in ${folderOfPath(project.location)}`
+      : canPickFolder()
+        ? saveFolderRef.current
+          ? `Save the project file and all its files in the folder ${saveFolderRef.current.name}`
+          : 'Choose a folder, and save the project file and all its files in it'
+        : 'Download the project file and each of its files';
+
+  const handleCloseProject = () => {
+    if (project) appendLog(`Closed project ${project.name}; Files keeps its files.`);
+    setProject(null);
+    setOverlay(null);
+    saveFolderRef.current = null;
+  };
+
+  const handleOpenProjectFile = (name: string) => {
+    const file = files.find((f) => sameFileName(f.name, name));
+    if (file) handleOpenFile(file.id);
+  };
+
+  // New File > Project: a project listing every file now in Files, shown on the project page.
+  const handleCreateProject = (name: string) => {
+    setDialog(null);
+    const created = newProject(name, fileNames);
+    saveFolderRef.current = null;
+    setProject(created);
+    setOverlay('project');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project page.`, 'success');
+  };
+
+  // Create Project (Files panel): a new, empty project; the project page offers the files now in Files.
+  const handleStartProject = () => {
+    const started = startProject(fileNames);
+    saveFolderRef.current = null;
+    setProject(started);
+    setOverlay('project');
+    appendLog('New project: give it a name, and add the files that belong to it.', 'success');
+  };
+
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) void readAndAddFiles([...e.target.files]);
     e.target.value = '';
   };
 
-  const handleFilesDropped = (list: FileList) => void readAndAddFiles([...list]);
+  const handleFilesDropped = (list: FileList, handles: Promise<FileHandles>) => {
+    const files = [...list];
+    void handles.then((known) => readAndAddFiles(files, known));
+  };
+
+  /** The folder dialog's button: in Chrome and Edge the picker opens in the project file's folder. */
+  const chooseProjectFolderNextTo = (handle: FileSystemFileHandle) => {
+    setFolderNeeded(null);
+    pickFolderOf(handle)
+      .then((files) => files && handleProjectFolderChosen(files))
+      .catch((err: unknown) => appendLog(`Choose project folder: ${errorText(err)}`, 'error'));
+  };
 
   const handleContentChange = (id: string, content: string) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, content } : f)));
@@ -713,13 +1150,18 @@ export function Workbench() {
     reveal,
     paneRun,
     onCreateTestbench: handleCreateTestbench,
+    // A testbench beside its design needs the room, and does not drive the board; a design on its own does.
+    onViewChosen: (view) => {
+      if (view === 'both') showPane('board', false);
+      else if (view === 'rtl') showPane('board', true);
+    },
   });
   restoreOverridesRef.current = tb.restoreOverrides;
 
   useEffect(() => {
     const save = desktopBridge()?.saveWorkspace;
     if (!hydrated || !save) return;
-    const json = serializeWorkspace({ files, activeFileId, topFileId, topUnit, testbench: tb.overrides });
+    const json = serializeWorkspace({ files, activeFileId, topFileId, topUnit, testbench: tb.overrides, project });
     const flush = () => {
       save(json).catch((err: unknown) => console.error('Could not save the workspace:', err));
     };
@@ -737,7 +1179,7 @@ export function Workbench() {
       window.clearTimeout(timer);
       window.removeEventListener('pagehide', onHide);
     };
-  }, [hydrated, files, activeFileId, topFileId, topUnit, tb.overrides]);
+  }, [hydrated, files, activeFileId, topFileId, topUnit, tb.overrides, project]);
 
   // The files as the Files panel draws them (docs/cleanup_file_tabs.md § 5.5).
   const rows = fileRows(files, {
@@ -747,6 +1189,9 @@ export function Workbench() {
     problemsOf: (id) => countSeverities(diagnostics.byFile[id] ?? NO_LINES),
   });
   const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
+
+  const projectUnsaved = project !== null && hasUnsavedChanges(project, files);
+  const gitHubSync = project === null ? 'not-on-github' : gitHubSyncState(project, files);
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
@@ -763,6 +1208,8 @@ export function Workbench() {
         onSettings={() => setDialog('settings')}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
+        onGitHub={() => setDialog('github')}
+        gitHubUser={gitHub.session?.user ?? null}
       />
       <SettingsDialog
         open={dialog === 'settings'}
@@ -785,10 +1232,52 @@ export function Workbench() {
           kind={testbenchDesign ? 'testbench' : 'design'}
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
+          onCreateProject={testbenchDesign ? undefined : handleCreateProject}
+          projectFileCount={files.length}
+          openProjectName={project?.name}
           onClose={() => {
             setDialog(null);
             setNewTestbenchFor(null);
           }}
+        />
+      )}
+      {dialog === 'openProject' && (
+        <OpenProjectDialog
+          canOpenPaths={desktopBridge()?.readLocalFile !== undefined}
+          busy={projectBusy !== null}
+          error={openProjectError}
+          onOpen={(location) => void handleOpenProjectFrom(location)}
+          onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {folderNeeded && project && (
+        <ProjectFolderDialog
+          projectName={project.name}
+          missing={folderNeeded}
+          onChooseInFolder={projectFileHandleRef.current ? () => chooseProjectFolderNextTo(projectFileHandleRef.current!) : undefined}
+          onFolderChosen={(chosen) => {
+            setFolderNeeded(null);
+            void handleProjectFolderChosen(chosen);
+          }}
+          onClose={() => setFolderNeeded(null)}
+        />
+      )}
+      {dialog === 'github' && (
+        <GitHubDialog
+          connection={gitHub}
+          projects={gitHubProjects}
+          openProject={project && { name: project.name, gistId: project.gist?.gistId, syncState: gitHubSync }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {gitHubProjects.conflict && project && (
+        <GitHubConflictDialog
+          conflict={gitHubProjects.conflict}
+          projectName={project.name}
+          onReplaceGitHubVersion={gitHubProjects.replaceGitHubVersion}
+          onGetGitHubVersion={gitHubProjects.getGitHubVersion}
+          onCancel={gitHubProjects.dismissConflict}
         />
       )}
       {runChoice && (
@@ -848,15 +1337,23 @@ export function Workbench() {
               onSelect={handleOpenFile}
               onUpload={handleUploadClick}
               onNewFile={handleNewFile}
+              onOpenProject={() => {
+                setOpenProjectError(null);
+                setDialog('openProject');
+              }}
               onRename={handleRenameFile}
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
               onDownloadAll={handleDownloadAll}
-              onToggleExamples={() => setExamplesOpen((open) => !open)}
-              examplesOpen={examplesOpen}
+              onToggleExamples={() => setOverlay((shown) => (shown === 'examples' ? null : 'examples'))}
+              examplesOpen={overlay === 'examples'}
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
               topLocked={isSimulating}
+              project={project ? { name: project.name, fileName: project.fileName, description: project.description, unsaved: projectUnsaved } : undefined}
+              projectOpen={overlay === 'project'}
+              onToggleProject={() => setOverlay((shown) => (shown === 'project' ? null : 'project'))}
+              onCreateProject={handleStartProject}
             />
           </SidePanel>
 
@@ -870,6 +1367,8 @@ export function Workbench() {
           />
 
           <div className="wb-center">
+            {/* Under the Examples pane or the project page the editor is inert: no caret, no typing into a hidden file. */}
+            <div className="wb-center__editor" {...(overlay !== null ? { inert: '' } : {})}>
             <CodeEditor
               onChange={handleContentChange}
               onFilesDropped={handleFilesDropped}
@@ -878,12 +1377,42 @@ export function Workbench() {
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (
-                  <EmptyProject onExamples={() => setExamplesOpen(true)} onNewFile={handleNewFile} onUpload={handleUploadClick} />
+                  <EmptyProject onExamples={() => setOverlay('examples')} onNewFile={handleNewFile} onUpload={handleUploadClick} />
                 )
               }
             />
-            {examplesOpen && (
-            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setExamplesOpen(false)} />
+            </div>
+            {overlay === 'project' && project && (
+              <ProjectPage
+                project={project}
+                rows={projectEntries(project, fileNames)}
+                unsaved={projectUnsaved}
+                busy={projectBusy}
+                onDetailsChange={(details) => setProject((p) => p && withDetails(p, details))}
+                onEntryChange={(name, patch) => setProject((p) => p && withEntryEdited(p, name, patch))}
+                onOpenFile={handleOpenProjectFile}
+                onRemoveEntry={(name) => setProject((p) => p && withEntryRemoved(p, name))}
+                onReloadFromUrl={(name) => void handleReloadFromUrl(name)}
+                onFolderChosen={(chosen) => void handleProjectFolderChosen(chosen)}
+                onSave={() => void handleSaveProject()}
+                saveHint={saveHint}
+                available={availableFiles(project, fileNames)}
+                onAddFiles={(names) => setProject((p) => p && withFilesAdded(p, names))}
+                onLeaveProject={(name) => setProject((p) => p && withFileLeft(p, name))}
+                onCloseProject={handleCloseProject}
+                onClose={() => setOverlay(null)}
+                github={
+                  <ProjectGitHubCard
+                    link={project.gist}
+                    syncState={gitHubSync}
+                    userLogin={gitHub.session?.user.login ?? null}
+                    projects={gitHubProjects}
+                  />
+                }
+              />
+            )}
+            {overlay === 'examples' && (
+            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
           )}
           </div>
 

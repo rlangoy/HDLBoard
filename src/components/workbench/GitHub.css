@@ -1,0 +1,614 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* GitHub: the dialog (GitHubDialog.tsx), the project page's card (ProjectGitHubCard.tsx),
+   the conflict dialog and the status chip. The dialog shell is in Dialog.css. */
+
+/* ---- Buttons ---- */
+
+.wb-github__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-github__btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.wb-github__btn:hover:not(:disabled) {
+  background: var(--wb-hover);
+}
+
+.wb-github__btn:focus-visible,
+.wb-github__icon-btn:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-github__btn:disabled,
+.wb-github__icon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wb-github__btn--primary {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-github__btn--primary:hover:not(:disabled) {
+  background: var(--wb-accent-dark);
+}
+
+.wb-github__btn--danger {
+  border-color: var(--wb-danger);
+  background: var(--wb-danger);
+  color: #ffffff;
+}
+
+.wb-github__btn--danger:hover:not(:disabled) {
+  background: var(--wb-danger-dark);
+}
+
+.wb-github__btn--big {
+  align-self: flex-start;
+  padding: 11px 20px;
+  font-size: 15px;
+}
+
+.wb-github__btn--small {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.wb-github__btn--small svg {
+  width: 15px;
+  height: 15px;
+}
+
+.wb-github__icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+/* `.wb-dialog a` (Dialog.css) makes every link blue; the github.com link is an icon button. */
+.wb-dialog a.wb-github__icon-btn {
+  color: var(--wb-text-muted);
+}
+
+.wb-github__icon-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.wb-github__icon-btn:hover:not(:disabled),
+.wb-dialog a.wb-github__icon-btn:hover {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+
+.wb-github__icon-btn--danger:hover:not(:disabled) {
+  color: var(--wb-danger-dark);
+}
+
+/* ---- Text ---- */
+
+.wb-github__lead {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wb-text);
+}
+
+.wb-github__facts {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__facts strong,
+.wb-github__steps strong {
+  color: var(--wb-text);
+}
+
+.wb-github__small {
+  font-size: 12.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__small a,
+.wb-github__signin a,
+.wb-github__device a,
+.wb-github__address a {
+  color: var(--wb-accent-dark);
+}
+
+.wb-github__message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.wb-github__message.is-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--wb-danger-dark);
+}
+
+.wb-github__message.is-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: var(--wb-success-dark);
+}
+
+.wb-github__waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--wb-accent-soft);
+  border-top-color: var(--wb-accent);
+  border-radius: 50%;
+  animation: wb-github-spin 0.8s linear infinite;
+}
+
+@keyframes wb-github-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-github__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ---- Signed out ---- */
+
+.wb-github__signin,
+.wb-github__device,
+.wb-github__signed-in {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.wb-github__token {
+  border-top: 1px solid var(--wb-border);
+  padding-top: 12px;
+  font-size: 14px;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__token summary {
+  cursor: pointer;
+  color: var(--wb-text);
+}
+
+.wb-github__token-form p {
+  margin: 10px 0;
+  line-height: 1.5;
+}
+
+.wb-github__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-github__token-row {
+  display: flex;
+  gap: 8px;
+}
+
+.wb-github__input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--wb-text);
+  background: #ffffff;
+}
+
+.wb-github__input:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+  border-color: var(--wb-accent);
+}
+
+/* ---- Device code ---- */
+
+.wb-github__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wb-text);
+}
+
+.wb-github__code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.wb-github__code {
+  padding: 6px 14px;
+  border: 1px dashed var(--wb-accent);
+  border-radius: 8px;
+  background: var(--wb-accent-soft);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--wb-text);
+  user-select: all;
+}
+
+/* ---- Signed in ---- */
+
+.wb-github__signed-in {
+  gap: 14px;
+}
+
+.wb-github__account,
+.wb-github__current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.wb-github__account {
+  background: #f8fafc;
+}
+
+.wb-github__current {
+  background: var(--wb-accent-soft);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.wb-github__avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px var(--wb-border);
+}
+
+.wb-github__account-text,
+.wb-github__current-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14.5px;
+  color: var(--wb-text);
+}
+
+.wb-github__current-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-github__empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__empty {
+  padding: 18px 16px;
+  border: 1px dashed var(--wb-border);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.wb-github__list-section {
+  margin-top: 6px;
+}
+
+.wb-github__list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.wb-github__heading {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--wb-text);
+}
+
+.wb-github__list-head .wb-github__icon-btn {
+  border: 1px solid var(--wb-border);
+  border-radius: 50%;
+}
+
+.wb-github__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-github__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.wb-github__row:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+.wb-github__row.is-open {
+  border-color: var(--wb-accent);
+}
+
+.wb-github__row-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
+}
+
+.wb-github__row-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.wb-github__row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wb-github__row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wb-text);
+  overflow-wrap: anywhere;
+}
+
+.wb-github__row-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.45;
+  white-space: pre-line;
+  color: #475569;
+}
+
+.wb-github__row-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-github__row-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.wb-github__row-actions .wb-github__btn {
+  margin-right: 4px;
+}
+
+.wb-github__chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--wb-accent-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wb-accent-dark);
+}
+
+@media (max-width: 520px) {
+  .wb-github__row {
+    flex-wrap: wrap;
+  }
+
+  .wb-github__row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ---- Status chip ---- */
+
+.wb-github__status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wb-github__status svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-github__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wb-github__status.is-not-on-github {
+  background: #f1f5f9;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__status.is-saved {
+  background: #f0fdf4;
+  color: var(--wb-success-dark);
+}
+
+.wb-github__status.is-changed {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+/* ---- Project page card ---- */
+
+.wb-github__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-github__card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wb-github__card-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.wb-github__card-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.wb-github__address a {
+  overflow-wrap: anywhere;
+}
+
+.wb-github__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---- Conflict dialog ---- */
+
+.wb-github__conflict p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--wb-text);
+}
+
+.wb-github__conflict ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+.wb-github__conflict-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}

@@ -5,6 +5,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { Dialog } from './Dialog';
 import { FilesIcon } from './icons';
 import { newFileName, newFileNameError, type NewFileLanguage } from './newFile';
+import { projectFileNameFor, projectNameError } from './projectFile';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
@@ -20,7 +21,18 @@ export interface NewFileDialogProps {
   subtitle?: string;
   /** What the new file starts as: a board design (default) or an empty testbench. */
   kind?: 'design' | 'testbench';
+  /**
+   * Offers a third choice, Project: a project file listing the files now in Files,
+   * opened on the project page. Not offered when this is not given.
+   */
+  onCreateProject?: (projectName: string) => void;
+  /** How many files a new project would list. */
+  projectFileCount?: number;
+  /** The name of the project that is open now, which a new project replaces. */
+  openProjectName?: string;
 }
+
+type Choice = NewFileLanguage | 'project';
 
 /**
  * Asked by New File (the Files panel button and the editor's + tab): a name, and
@@ -31,13 +43,26 @@ export interface NewFileDialogProps {
  * Mounted only while it is open, so every opening starts over with the suggested
  * name and VHDL.
  */
-export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose, initialLanguage = 'vhdl', subtitle, kind = 'design' }: NewFileDialogProps) {
+export function NewFileDialog({
+  suggestedName,
+  existingNames,
+  onCreate,
+  onClose,
+  initialLanguage = 'vhdl',
+  subtitle,
+  kind = 'design',
+  onCreateProject,
+  projectFileCount = 0,
+  openProjectName,
+}: NewFileDialogProps) {
   const [name, setName] = useState(suggestedName);
-  const [language, setLanguage] = useState<NewFileLanguage>(initialLanguage);
+  const [choice, setChoice] = useState<Choice>(initialLanguage);
   const formId = useId();
   const errorId = `${formId}-error`;
+  const isProject = choice === 'project';
+  const language: NewFileLanguage = choice === 'project' ? 'vhdl' : choice;
 
-  const error = newFileNameError(name, language, existingNames);
+  const error = isProject ? projectNameError(name) : newFileNameError(name, language, existingNames);
   // An empty field is not worth a red line; the disabled Create says enough.
   const empty = name.trim() === '';
   const showError = error !== undefined && !empty;
@@ -45,15 +70,16 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (error !== undefined) return;
-    onCreate(newFileName(name, language), language);
+    if (isProject) onCreateProject?.(name.trim());
+    else onCreate(newFileName(name, language), language);
   };
 
   return (
     <Dialog
       open
       onClose={onClose}
-      title="New File"
-      subtitle={subtitle ?? 'Choose a name and a language'}
+      title={isProject ? 'New Project' : 'New File'}
+      subtitle={subtitle ?? (onCreateProject ? 'Choose a name, and a language or a project' : 'Choose a name and a language')}
       icon={<FilesIcon />}
       footer={
         <div className="wb-newfile__buttons">
@@ -68,7 +94,7 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
     >
       <form id={formId} className="wb-newfile" onSubmit={handleSubmit}>
         <label className="wb-newfile__label" htmlFor={`${formId}-name`}>
-          File name
+          {isProject ? 'Project name' : 'File name'}
         </label>
         <input
           id={`${formId}-name`}
@@ -85,7 +111,9 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
         />
         <p id={errorId} className="wb-newfile__hint" role={showError ? 'alert' : undefined}>
           {empty ? (
-            'Enter a name for the new file.'
+            isProject ? 'Enter a name for the new project.' : 'Enter a name for the new file.'
+          ) : isProject ? (
+            <ProjectHint name={name} fileCount={projectFileCount} openProjectName={openProjectName} />
           ) : showError ? (
             <span className="wb-newfile__error">{error}</span>
           ) : (
@@ -98,14 +126,14 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
         </p>
 
         <fieldset className="wb-newfile__languages">
-          <legend className="wb-newfile__label">Language</legend>
+          <legend className="wb-newfile__label">{onCreateProject ? 'Create' : 'Language'}</legend>
           <label className="wb-newfile__radio">
             <input
               type="radio"
               name={`${formId}-language`}
               value="vhdl"
-              checked={language === 'vhdl'}
-              onChange={() => setLanguage('vhdl')}
+              checked={choice === 'vhdl'}
+              onChange={() => setChoice('vhdl')}
             />
             VHDL <span className="wb-newfile__ext">.vhd</span>
           </label>
@@ -114,14 +142,43 @@ export function NewFileDialog({ suggestedName, existingNames, onCreate, onClose,
               type="radio"
               name={`${formId}-language`}
               value="verilog"
-              checked={language === 'verilog'}
-              onChange={() => setLanguage('verilog')}
+              checked={choice === 'verilog'}
+              onChange={() => setChoice('verilog')}
             />
             Verilog <span className="wb-newfile__ext">.v</span>
           </label>
+          {onCreateProject && (
+            <label className="wb-newfile__radio">
+              <input
+                type="radio"
+                name={`${formId}-language`}
+                value="project"
+                checked={isProject}
+                onChange={() => setChoice('project')}
+              />
+              Project <span className="wb-newfile__ext">.hdlboard.json</span>
+            </label>
+          )}
         </fieldset>
       </form>
     </Dialog>
+  );
+}
+
+interface ProjectHintProps {
+  name: string;
+  fileCount: number;
+  openProjectName?: string;
+}
+
+/** What Create does with Project chosen: which file it makes, and what it lists. */
+function ProjectHint({ name, fileCount, openProjectName }: ProjectHintProps) {
+  const files = fileCount === 0 ? 'no files yet' : fileCount === 1 ? 'the file in Files' : `the ${fileCount} files in Files`;
+  return (
+    <>
+      Creates <strong>{projectFileNameFor(name)}</strong> listing {files}, and opens the project page.
+      {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
+    </>
   );
 }
 

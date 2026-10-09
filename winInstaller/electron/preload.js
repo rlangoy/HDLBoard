@@ -23,6 +23,16 @@ const api = {
   setEnabled: (value) => ipcRenderer.invoke('hdlboard:set-enabled', value === true),
 };
 
+// Open Project by a file path, and Save project back into its folder (docs/PROJECTS.md).
+// Always there: they do not depend on workspace storage being on.
+api.readLocalFile = (filePath) => ipcRenderer.invoke('hdlboard:read-local-file', String(filePath));
+api.writeLocalFile = (filePath, text) => ipcRenderer.invoke('hdlboard:write-local-file', String(filePath), String(text));
+
+// GitHub sign-in, kept encrypted for this Windows user until Sign out (docs/GITHUB.md).
+api.loadGitHubToken = () => ipcRenderer.invoke('hdlboard:load-github-token');
+api.saveGitHubToken = (token) => ipcRenderer.invoke('hdlboard:save-github-token', String(token));
+api.forgetGitHubToken = () => ipcRenderer.invoke('hdlboard:forget-github-token');
+
 if (enabled) {
   api.saveWorkspace = (json) => ipcRenderer.invoke('hdlboard:save-workspace', String(json));
   api.loadWorkspace = () => ipcRenderer.invoke('hdlboard:load-workspace');

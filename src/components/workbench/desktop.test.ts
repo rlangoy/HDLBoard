@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parseWorkspace, serializeWorkspace, type Workspace } from './desktop';
+import { newProject, withEntryEdited } from './projectFile';
 
 const ws: Workspace = {
   files: [
@@ -70,5 +71,15 @@ describe('workspace storage format', () => {
   it('shows nothing in a workspace with no files', () => {
     const stored = JSON.stringify({ version: 1, ...ws, files: [] });
     expect(parseWorkspace(stored)?.activeFileId).toBeNull();
+  });
+
+  it('keeps the open project', () => {
+    const project = withEntryEdited(newProject('Counter', ['a.vhd']), 'a.vhd', { description: 'the design' });
+    expect(parseWorkspace(serializeWorkspace({ ...ws, project }))?.project).toEqual(project);
+  });
+
+  it('reads a project that does not look like one we wrote as none', () => {
+    const stored = JSON.stringify({ version: 1, ...ws, project: { name: 'x' } });
+    expect(parseWorkspace(stored)?.project).toBeUndefined();
   });
 });

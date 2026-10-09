@@ -23,6 +23,9 @@ services:
     environment:
       # GHDL_MAX_SESSIONS is the setting's older name, still read from .env.
       HDL_MAX_SESSIONS: ${HDL_MAX_SESSIONS:-${GHDL_MAX_SESSIONS:-32}}
+      # GitHub sign-in (docs/GITHUB.md). Empty: HDLBoard's own OAuth App, code sign-in only.
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
     expose:
       - "9010"                     # compose network only — not published
     # Sessions write only under os.tmpdir() (work libraries, FIFOs, output),

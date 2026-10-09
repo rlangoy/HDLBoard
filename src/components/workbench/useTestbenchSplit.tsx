@@ -27,6 +27,8 @@ export interface TestbenchSplitOptions {
   paneRun: (pane: PaneRole, target: PaneTarget) => PaneRun | null;
   /** "Create testbench" in the TB pane's empty state, for this design file. */
   onCreateTestbench: (designFileId: string) => void;
+  /** The layout was decided: a file shown, or a view picked with the view switch. */
+  onViewChosen?: (view: EditorView) => void;
 }
 
 export interface ShowOptions {
@@ -67,6 +69,8 @@ export interface TestbenchSplit {
  */
 export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSplit {
   const { files, activeFileId, setActiveFileId } = options;
+  const onViewChosen = useRef(options.onViewChosen);
+  onViewChosen.current = options.onViewChosen;
   const analysis = useTestbenchAnalysis(files);
   const overrides = useOverrides();
   usePruneContradictedPairs(analysis.current, overrides);
@@ -88,6 +92,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       const next = { pair, view, focusedPane, regionIndex: 0, reveals: initialReveals(pair, view, focusedPane) };
       setActiveFileId(paneFile(next, focusedPane) ?? fileId);
       setDisplay(next);
+      onViewChosen.current?.(view);
     },
     [analysis, overrides.ref, setActiveFileId],
   );
@@ -103,6 +108,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     setDisplay(next);
     const file = paneFile(next, focusedPane);
     if (file) setActiveFileId(file);
+    onViewChosen.current?.(view);
   }
 
   const focusPane = (pane: PaneRole) => {
