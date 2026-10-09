@@ -100,7 +100,8 @@ import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
 import { useGitHub } from './useGitHub';
 import { useGitHubProjects } from './useGitHubProjects';
-import { sameFileName } from '../../project/fileName';
+import { isProjectFileName, sameFileName } from '../../project/fileName';
+import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
 
@@ -771,6 +772,22 @@ export function Workbench() {
     log: appendLog,
   });
 
+  /**
+   * Open Project › Choose project folder: the folder's own files (not its subfolders'),
+   * its project file opened with the others as the files next to it (§ 6.4).
+   */
+  const handleProjectFolderOpened = async (chosen: File[]) => {
+    const inFolder = chosen.filter((file) => (file.webkitRelativePath || file.name).split('/').length <= 2);
+    const projectFiles = inFolder.filter((file) => isProjectFileName(file.name)).sort((a, b) => a.name.localeCompare(b.name));
+    if (projectFiles.length === 0) {
+      setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
+      return;
+    }
+    setOpenProjectError(null);
+    setDialog(null);
+    await openProjectUpload(projectFiles[0], inFolder.filter((file) => file !== projectFiles[0]));
+  };
+
   const handleOpenProjectFrom = async (input: string) => {
     setOpenProjectError(null);
     const error = await openProjectFrom(input);
@@ -1179,6 +1196,7 @@ export function Workbench() {
           busy={projectBusy !== null}
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
+          onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
           onClose={() => setDialog(null)}
         />
       )}

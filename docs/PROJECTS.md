@@ -57,7 +57,11 @@ http://my-server:5173/?project=projects/lab1/lab1.hdlboard.json
 
 This is the easiest way to hand out an exercise: put the link on the course page.
 
-### 3. Upload File: from this computer, in a browser
+### 3. Choose project folder: from this computer
+
+In **Open Project**, click **Choose project folder…** and pick the folder that holds the `.hdlboard.json` file. The project opens with all its files. This works in every browser and in the Windows app. (A browser cannot read the files next to one chosen file, so choosing only the project file leaves its files "Not found"; choosing the folder avoids that.)
+
+### Upload File: from this computer, in a browser
 
 A browser cannot read a folder by its path, so select the files instead. Click **Upload File** and select the project file **together with its files** (Ctrl+A in the project folder selects them all). A `.zip` that **Download All** saved works too: it holds the project file and all its files.
 

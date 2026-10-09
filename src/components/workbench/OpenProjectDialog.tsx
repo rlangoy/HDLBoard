@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Dialog } from './Dialog';
-import { ProjectIcon } from './icons';
+import { FolderOpenIcon, ProjectIcon } from './icons';
 import './NewFileDialog.css';
 
 /** The example project shipped with HDLBoard (public/projects/), by its address relative to the page. */
@@ -17,6 +17,8 @@ export interface OpenProjectDialogProps {
   /** Why the last try failed, if it did. */
   error: string | null;
   onOpen: (location: string) => void;
+  /** Every file of a folder the student chose: the project file and its files. */
+  onFolderChosen: (files: File[]) => void;
   onClose: () => void;
 }
 
@@ -25,7 +27,7 @@ export interface OpenProjectDialogProps {
  * GitHub gist, a path on the HDLBoard site, or, in the Windows app, a file path.
  * The project's files are read from next to it, or from their own URLs.
  */
-export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onClose }: OpenProjectDialogProps) {
+export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderChosen, onClose }: OpenProjectDialogProps) {
   const [location, setLocation] = useState('');
   const formId = useId();
   const empty = location.trim() === '';
@@ -53,6 +55,7 @@ export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onClose }
         </div>
       }
     >
+      <ProjectFolderPicker busy={busy} onFolderChosen={onFolderChosen} />
       <form id={formId} className="wb-newfile" onSubmit={handleSubmit}>
         <label className="wb-newfile__label" htmlFor={`${formId}-location`}>
           {canOpenPaths ? 'Project file URL or path' : 'Project file URL'}
@@ -99,10 +102,40 @@ export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onClose }
         </div>
         <p className="wb-openproject__note">
           The files listed without a URL are read from the folder the project file is in.
-          {!canOpenPaths && ' To open a project from this computer, use Upload File and select the project file together with its files.'}
+          {!canOpenPaths && ' To open a project from this computer, use Choose project folder above.'}
         </p>
       </form>
     </Dialog>
+  );
+}
+
+/**
+ * From this computer: the student chooses the project's folder, and its project file
+ * opens with its files. A browser cannot read the files next to a single chosen file,
+ * but it can read a whole folder the student chooses (every current browser).
+ */
+function ProjectFolderPicker({ busy, onFolderChosen }: { busy: boolean; onFolderChosen: (files: File[]) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  // `webkitdirectory` is not in React's typings.
+  useEffect(() => {
+    inputRef.current?.setAttribute('webkitdirectory', '');
+  }, []);
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) onFolderChosen([...e.target.files]);
+    e.target.value = '';
+  };
+
+  return (
+    <div className="wb-openproject__folder">
+      <span className="wb-newfile__label">From this computer</span>
+      <button type="button" className="wb-openproject__folder-btn" disabled={busy} onClick={() => inputRef.current?.click()}>
+        <FolderOpenIcon aria-hidden="true" />
+        Choose project folder…
+      </button>
+      <span className="wb-openproject__note">The folder that holds the .hdlboard.json file and its files.</span>
+      <input ref={inputRef} type="file" multiple hidden onChange={handleChange} tabIndex={-1} />
+    </div>
   );
 }
 
