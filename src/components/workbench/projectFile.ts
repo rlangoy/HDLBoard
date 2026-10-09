@@ -43,6 +43,12 @@ export interface OpenProject {
   savedText: string;
   /** The GitHub gist the project is stored in (projectGitHub.ts), if it is. */
   gist?: ProjectGistLink;
+  /**
+   * Files in Files that the project leaves out, by nameKey: those Files held when the
+   * project was created with Create Project, until they are added, and files taken out
+   * with "Leave the project". Missing reads as none.
+   */
+  excluded?: string[];
 }
 
 /** One row of the project page's file table. */
@@ -64,12 +70,13 @@ const NEW_PROJECT_DESCRIPTION = '';
 /**
  * The project's file list as it reads now: every entry whose file is in Files or that
  * could not be loaded, in project order, then the files Files has that the project
- * does not list yet (added since it was opened), with an empty description.
+ * does not list yet (added since it was opened), with an empty description. Files the
+ * project leaves out (`excluded`) are not listed.
  */
 export function projectEntries(project: OpenProject, fileNames: readonly string[]): ProjectEntryRow[] {
   const inFiles = new Set(fileNames.map(nameKey));
   const rows: ProjectEntryRow[] = [];
-  const listed = new Set<string>();
+  const listed = new Set<string>(project.excluded ?? []);
   for (const entry of project.entries) {
     const key = nameKey(entry.name);
     if (listed.has(key)) continue;
@@ -84,6 +91,18 @@ export function projectEntries(project: OpenProject, fileNames: readonly string[
     listed.add(nameKey(name));
   }
   return rows;
+}
+
+/** Files in Files that the project leaves out, in Files order: what the project page offers to add. */
+export function availableFiles(project: OpenProject, fileNames: readonly string[]): string[] {
+  const excluded = new Set(project.excluded ?? []);
+  return fileNames.filter((name) => excluded.has(nameKey(name)));
+}
+
+/** The project's own files among `files`: what Save project and Save to GitHub write. */
+export function filesInProject<T extends { name: string }>(project: OpenProject, files: readonly T[]): T[] {
+  const excluded = new Set(project.excluded ?? []);
+  return files.filter((file) => !excluded.has(nameKey(file.name)));
 }
 
 /** The project file as it is saved: the format of § 4, listing the files as they are now. */
@@ -164,10 +183,36 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
   return project;
 }
 
+/**
+ * Create Project: a new, empty project. The files now in Files are offered on the
+ * project page to be added (availableFiles); files made or uploaded later join at once.
+ */
+export function startProject(fileNames: readonly string[]): OpenProject {
+  return { ...newProject('', []), excluded: fileNames.map(nameKey) };
+}
+
 export type ProjectDetails = Partial<Pick<OpenProject, 'name' | 'board' | 'description' | 'fileName'>>;
 
+/**
+ * Edits the project's details. While a new project has never been saved and its file
+ * name is still the one made from its name, the file name follows the name.
+ */
 export function withDetails(project: OpenProject, details: ProjectDetails): OpenProject {
-  return { ...project, ...details };
+  const followsName =
+    details.name !== undefined && details.fileName === undefined && project.location === '' && project.fileName === projectFileNameFor(project.name);
+  return { ...project, ...details, ...(followsName ? { fileName: projectFileNameFor(details.name ?? '') } : {}) };
+}
+
+/** Files offered on the project page join the project. */
+export function withFilesAdded(project: OpenProject, names: readonly string[]): OpenProject {
+  const added = new Set(names.map(nameKey));
+  return { ...project, excluded: (project.excluded ?? []).filter((key) => !added.has(key)) };
+}
+
+/** A file leaves the project but stays in Files; its description is kept in case it is added again. */
+export function withFileLeft(project: OpenProject, name: string): OpenProject {
+  const key = nameKey(name);
+  return { ...withEntryEdited(project, name, {}), excluded: [...(project.excluded ?? []).filter((other) => other !== key), key] };
 }
 
 /**
@@ -191,6 +236,7 @@ export function withEntryRenamed(project: OpenProject, oldName: string, newName:
   return {
     ...project,
     entries: project.entries.map((entry) => (sameFileName(entry.name, oldName) ? { ...entry, name: newName } : entry)),
+    ...(project.excluded ? { excluded: project.excluded.map((key) => (key === nameKey(oldName) ? nameKey(newName) : key)) } : {}),
   };
 }
 
@@ -198,7 +244,9 @@ export function withEntryRenamed(project: OpenProject, oldName: string, newName:
 export function withEntryRemoved(project: OpenProject, name: string): OpenProject {
   const unloaded = { ...project.unloaded };
   delete unloaded[nameKey(name)];
-  return { ...project, entries: project.entries.filter((entry) => !sameFileName(entry.name, name)), unloaded };
+  const entries = project.entries.filter((entry) => !sameFileName(entry.name, name));
+  const excluded = project.excluded?.filter((key) => key !== nameKey(name));
+  return { ...project, entries, unloaded, ...(excluded ? { excluded } : {}) };
 }
 
 /** Files that were added to Files after all (from the project folder, or downloaded again) are no longer unloaded. */
@@ -351,6 +399,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
       : {};
   const warnings = Array.isArray(r.warnings) ? r.warnings.filter((w): w is string => typeof w === 'string') : [];
   const gist = parseStoredGistLink(r.gist);
+  const excluded = Array.isArray(r.excluded) ? r.excluded.filter((key): key is string => typeof key === 'string') : [];
   return {
     version: r.version,
     name: r.name as string,
@@ -363,6 +412,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     warnings,
     savedText: r.savedText as string,
     ...(gist ? { gist } : {}),
+    ...(excluded.length > 0 ? { excluded } : {}),
   };
 }
 

@@ -38,6 +38,8 @@ export interface FileExplorerProps {
   /** The project page is showing: the project row looks pressed. */
   projectOpen?: boolean;
   onToggleProject?: () => void;
+  /** No project is open: Create Project starts one on the project page. */
+  onCreateProject?: () => void;
 }
 
 interface TopDotButtonProps {
@@ -100,6 +102,7 @@ export function FileExplorer({
   project,
   projectOpen = false,
   onToggleProject,
+  onCreateProject,
 }: FileExplorerProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -244,6 +247,18 @@ export function FileExplorer({
             <span className="wb-files__project-file">{project.fileName}</span>
           </span>
           {project.unsaved && <span className="wb-files__project-dot" aria-label="Unsaved changes" />}
+        </button>
+      )}
+
+      {!project && onCreateProject && (
+        <button
+          type="button"
+          className="wb-files__project wb-files__project--create"
+          onClick={onCreateProject}
+          title="Create Project: name a project and choose which files belong to it"
+        >
+          <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
+          <span className="wb-files__project-text">Create Project</span>
         </button>
       )}
 

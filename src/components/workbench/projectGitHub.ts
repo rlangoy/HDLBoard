@@ -11,7 +11,7 @@ import { fingerprintOf, type GistSavePlan } from '../../github/gistSavePlan';
 import type { GistLink, ProjectSnapshot } from '../../github/projectGists';
 import { baseName, isProjectFileName, nameKey } from '../../project/fileName';
 import { parseGistRef } from '../../project/gistUrl';
-import { projectEntries, projectFileText, type OpenProject } from './projectFile';
+import { filesInProject, projectEntries, projectFileText, type OpenProject } from './projectFile';
 
 export interface SourceFile {
   name: string;
@@ -35,7 +35,10 @@ export function projectSnapshot(project: OpenProject, files: readonly SourceFile
     name: stored.name,
     description: stored.description,
     projectFileName: stored.fileName,
-    files: [{ name: stored.fileName, content: projectFileText(stored, fileNames) }, ...files.map(({ name, content }) => ({ name, content }))],
+    files: [
+      { name: stored.fileName, content: projectFileText(stored, fileNames) },
+      ...filesInProject(stored, files).map(({ name, content }) => ({ name, content })),
+    ],
     listedNames: projectEntries(stored, fileNames).map((row) => row.name),
   };
 }

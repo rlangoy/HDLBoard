@@ -71,7 +71,11 @@ Drop the project file with its files (or the `.zip`) onto the Files panel or the
 
 ## Make a project
 
-Click **+** (New File), choose **Project**, and give it a name. The new project lists every file now in Files, and the project page opens. Files you add, rename or delete later join, keep their description, or leave the project.
+With no project open, Files shows **Create Project**. Click it: the project page opens with an empty project. Type its name (the project file is named after it), and under **Files you can add** click **Add to project** for each file that belongs to it, or **Add all**. Files you make or upload afterwards join the project at once. The **−** button on a file in Project Files takes it out of the project again; the file stays in Files.
+
+**+** (New File) → **Project** still works too: it makes a project with every file now in Files.
+
+Files you rename or delete keep their description, or leave the project.
 
 ## Edit a project
 
@@ -84,7 +88,7 @@ Click a file name to show it in the editor. **Unsaved changes** shows until the 
 
 ## Save a project
 
-**Save project** writes the project file **and all its files** into one folder, so that folder opens again as the same project:
+**Save project** writes the project file **and all its files** (only the project's, not other files in Files) into one folder, so that folder opens again as the same project:
 
 | How the project was opened | Where Save project writes |
 |---|---|

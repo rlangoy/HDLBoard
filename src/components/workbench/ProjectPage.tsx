@@ -12,7 +12,9 @@ import {
   FolderOpenIcon,
   InfoIcon,
   LinkIcon,
+  MinusIcon,
   OpenInIcon,
+  PlusIcon,
   ProjectIcon,
   RefreshIcon,
   SaveIcon,
@@ -59,6 +61,11 @@ export interface ProjectPageProps {
   onClose: () => void;
   /** The GitHub card (ProjectGitHubCard), shown under the project's details. */
   github?: ReactNode;
+  /** Files in Files that are not in the project (availableFiles): offered to be added. */
+  available: readonly string[];
+  onAddFiles: (names: readonly string[]) => void;
+  /** Take a file out of the project; it stays in Files. */
+  onLeaveProject: (name: string) => void;
 }
 
 /**
@@ -74,7 +81,11 @@ export function ProjectPage(props: ProjectPageProps) {
   const ids = useId();
   // Keyboard focus starts on the page, so Escape closes it and Tab walks its fields.
   const sectionRef = useRef<HTMLElement>(null);
-  useEffect(() => sectionRef.current?.focus({ preventScroll: true }), []);
+  // A new project without a name starts in its name field instead (AutoTextArea autoFocus).
+  const startsUnnamed = useRef(project.name === '');
+  useEffect(() => {
+    if (!startsUnnamed.current) sectionRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const closeOnEscape = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -103,6 +114,7 @@ export function ProjectPage(props: ProjectPageProps) {
                     onChange={(name) => onDetailsChange({ name: name.replace(/\s*\n\s*/g, ' ') })}
                     placeholder="Project name"
                     ariaLabel="Project name"
+                    autoFocus={startsUnnamed.current}
                     minRows={1}
                     singleLine
                   />
@@ -188,6 +200,10 @@ export function ProjectPage(props: ProjectPageProps) {
             )}
           </section>
 
+          {props.available.length > 0 && (
+            <AvailableFilesCard names={props.available} onAdd={props.onAddFiles} hasFiles={rows.length > 0} />
+          )}
+
           {props.github}
 
           {busy !== null && (
@@ -227,7 +243,11 @@ export function ProjectPage(props: ProjectPageProps) {
               )}
             </div>
             {rows.length === 0 ? (
-              <p className="wb-project__empty">No files yet. Add files with New File or Upload File, and they join the project.</p>
+              <p className="wb-project__empty">
+                No files in the project yet.{' '}
+                {props.available.length > 0 ? 'Add files from the list above, or make new ones' : 'Make files'} with New File or
+                Upload File, and they join the project.
+              </p>
             ) : (
               <table className="wb-project__table">
                 <thead>
@@ -276,7 +296,7 @@ interface EntryRowProps extends Omit<ProjectPageProps, 'busy'> {
 }
 
 /** One file of the project: its name, URL and description, and what can be done with it. */
-function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry, onReloadFromUrl }: EntryRowProps) {
+function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry, onReloadFromUrl, onLeaveProject }: EntryRowProps) {
   const loaded = row.status === 'loaded';
   return (
     <tr className={cx('wb-project__row', !loaded && 'is-unloaded')}>
@@ -332,6 +352,17 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
             <RefreshIcon aria-hidden="true" />
           </button>
         )}
+        {loaded && (
+          <button
+            type="button"
+            className="wb-project__icon-btn"
+            onClick={() => onLeaveProject(row.name)}
+            aria-label={`Take ${row.name} out of the project`}
+            title="Take out of the project (the file stays in Files)"
+          >
+            <MinusIcon aria-hidden="true" />
+          </button>
+        )}
         {!loaded && (
           <button
             type="button"
@@ -345,6 +376,45 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
         )}
       </td>
     </tr>
+  );
+}
+
+interface AvailableFilesCardProps {
+  names: readonly string[];
+  /** The project has files already: the card then reads as "more files". */
+  hasFiles: boolean;
+  onAdd: (names: readonly string[]) => void;
+}
+
+/** Files in Files that are not in the project yet, each with Add, and Add all. */
+function AvailableFilesCard({ names, hasFiles, onAdd }: AvailableFilesCardProps) {
+  return (
+    <section className="wb-project__card wb-project__available" aria-label="Files you can add">
+      <div className="wb-project__files-head">
+        <h3 className="wb-project__card-title">
+          {hasFiles ? 'More files you can add' : 'Files you can add'} ({names.length})
+        </h3>
+        {names.length > 1 && (
+          <button type="button" className="wb-project__btn" onClick={() => onAdd(names)}>
+            <PlusIcon aria-hidden="true" />
+            Add all
+          </button>
+        )}
+      </div>
+      <p className="wb-project__available-text">These files are in Files but not in the project. Add the ones that belong to it.</p>
+      <ul className="wb-project__available-list">
+        {names.map((name) => (
+          <li key={name} className="wb-project__available-row">
+            <FileIcon className="wb-project__file-icon" aria-hidden="true" />
+            <span className="wb-project__available-name">{name}</span>
+            <button type="button" className="wb-project__btn wb-project__btn--small" onClick={() => onAdd([name])} aria-label={`Add ${name} to the project`}>
+              <PlusIcon aria-hidden="true" />
+              Add to project
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -509,10 +579,11 @@ interface AutoTextAreaProps {
   id?: string;
   placeholder?: string;
   ariaLabel?: string;
+  autoFocus?: boolean;
 }
 
 /** A textarea as tall as its text, so a description is read without scrolling inside it. */
-function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, className, singleLine }: AutoTextAreaProps) {
+function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, className, singleLine, autoFocus }: AutoTextAreaProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => fitHeight(ref.current), [value]);
   // A change of width rewraps the text: the column narrowing, or the page first laid out.
@@ -540,6 +611,7 @@ function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, cl
       rows={minRows}
       placeholder={placeholder}
       aria-label={ariaLabel}
+      autoFocus={autoFocus}
       onChange={(e) => onChange(e.target.value)}
     />
   );

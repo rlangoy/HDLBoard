@@ -788,6 +788,7 @@ The reason: a student's edits to any file must reach GitHub, and the gist must o
   - *Signed in:* the account (with Sign out and Manage access on GitHub), the open project with its status and **Save to GitHub**, and *Your projects on GitHub*, newest first, each with Open, show on github.com, and Delete.
 - **Project page, GitHub card:** status, an explanation, the gist address, **Copy share link** (`?project=<gist>`), **Save to GitHub** (or **Save a copy to my GitHub**), **Get the GitHub version**, and the last result.
 - **Changed on GitHub dialog** (14.6).
+- **Create Project** (Files panel, shown while no project is open): opens the project page with an empty, unnamed project. The name field has focus, and the project file name follows the name until it is edited or saved. A *Files you can add* card lists the files in Files, with Add to project and Add all. Files made or uploaded later join at once, and a file can be taken out again (it stays in Files). The open project keeps the files it leaves out as `excluded` (by lower-case name). Save project and Save to GitHub write only the project's files.
 
 ### 14.9 Code
 

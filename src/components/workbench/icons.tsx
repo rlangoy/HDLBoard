@@ -380,3 +380,13 @@ export function CloudDownloadIcon(props: SVGProps<SVGSVGElement>) {
 export function SignOutIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'm16 17 5-5-5-5', 'M21 12H9']} {...props} />;
 }
+
+/** A plus: add a file to the project. */
+export function PlusIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M5 12h14', 'M12 5v14']} {...props} />;
+}
+
+/** A minus: take a file out of the project. */
+export function MinusIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M5 12h14']} {...props} />;
+}

@@ -241,8 +241,7 @@ function CurrentProject({ openProject, busy, onSave }: { openProject: OpenProjec
   if (openProject === null) {
     return (
       <p className="wb-github__tip">
-        To save your files on GitHub, make them a project first: click <strong>New File</strong> in Files and choose{' '}
-        <strong>Project</strong>.
+        To save your files on GitHub, make them a project first: click <strong>Create Project</strong> in Files.
       </p>
     );
   }

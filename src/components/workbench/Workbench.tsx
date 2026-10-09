@@ -67,8 +67,13 @@ import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToF
 import {
   MISSING_LOCAL_FILE,
   hasUnsavedChanges,
+  availableFiles,
+  filesInProject,
   isProjectUpload,
   newProject,
+  startProject,
+  withFileLeft,
+  withFilesAdded,
   openProject,
   pickProjectUpload,
   projectEntries,
@@ -886,7 +891,7 @@ export function Workbench() {
     const toSave = projectSaveFiles(
       project.fileName,
       projectFileText(project, names),
-      filesRef.current.map((f) => ({ name: f.name, text: f.content })),
+      filesInProject(project, filesRef.current).map((f) => ({ name: f.name, text: f.content })),
     );
     const saved = (location: string, message: string) => {
       setProject((p) => p && withSaved({ ...p, location }, names));
@@ -947,6 +952,15 @@ export function Workbench() {
     setProject(created);
     setOverlay('project');
     appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project page.`, 'success');
+  };
+
+  // Create Project (Files panel): a new, empty project; the project page offers the files now in Files.
+  const handleStartProject = () => {
+    const started = startProject(fileNames);
+    saveFolderRef.current = null;
+    setProject(started);
+    setOverlay('project');
+    appendLog('New project: give it a name, and add the files that belong to it.', 'success');
   };
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1258,6 +1272,7 @@ export function Workbench() {
               project={project ? { name: project.name, fileName: project.fileName, unsaved: projectUnsaved } : undefined}
               projectOpen={overlay === 'project'}
               onToggleProject={() => setOverlay((shown) => (shown === 'project' ? null : 'project'))}
+              onCreateProject={handleStartProject}
             />
           </SidePanel>
 
@@ -1300,6 +1315,9 @@ export function Workbench() {
                 onFolderChosen={(chosen) => void handleProjectFolderChosen(chosen)}
                 onSave={() => void handleSaveProject()}
                 saveHint={saveHint}
+                available={availableFiles(project, fileNames)}
+                onAddFiles={(names) => setProject((p) => p && withFilesAdded(p, names))}
+                onLeaveProject={(name) => setProject((p) => p && withFileLeft(p, name))}
                 onCloseProject={handleCloseProject}
                 onClose={() => setOverlay(null)}
                 github={
