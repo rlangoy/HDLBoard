@@ -23,8 +23,8 @@
 When the mouse rests (≈100 ms) on an identifier in the editor:
 
 - The identifier is resolved to **its declaration by scope**, not by text matching. An inner declaration shadows an outer one with the same name.
-- Every occurrence gets a soft, semi-transparent light-blue background (`rgba(180, 210, 255, 0.45)`); the text keeps the normal identifier colour.
-- The **declaration** also gets a faint 1px edge (`rgba(59, 130, 246, 0.5)`); **references** get the background only. No border, so nothing moves.
+- Every occurrence, declaration and references alike, gets a see-through blue background (`rgba(100, 160, 255, 0.32)`) and a 2px `#4A90E2` underline; the text keeps the normal identifier colour.
+- The underline is an inset box-shadow, not a border or text-decoration, so nothing moves and a diagnostic's wavy underline still shows with it.
 - The highlight disappears when the pointer leaves the editor, moves to something that is not a resolvable name (keyword, comment, string, whitespace, unknown name), or moves to another symbol.
 - After an edit, the highlight is recomputed from the new text automatically.
 - Hovering never re-parses: the file is analysed once per edit, and a hover is one lookup.
@@ -1738,8 +1738,8 @@ Replace with:
 ```css
   --wb-code-pad-x: 16px;
   /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
-  --wb-occ-bg: rgba(180, 210, 255, 0.45);
-  --wb-occ-decl-edge: rgba(59, 130, 246, 0.5);
+  --wb-occ-bg: rgba(100, 160, 255, 0.32);
+  --wb-occ-underline: #4a90e2;
 }
 ```
 
@@ -1752,16 +1752,16 @@ Replace with:
 Insert this block **directly before** it:
 
 ```css
-/* The hovered symbol's declaration and references. Background and an inset
-   box-shadow only: no border, padding or margin, so the glyphs do not move and
-   the transparent textarea stays aligned with this layer. */
+/* The hovered symbol's declaration and references: a see-through blue behind
+   the name and a 2px blue underline, with the text in the identifier colour.
+   The underline is an inset box-shadow, not a border or text-decoration: the
+   glyphs do not move, the transparent textarea stays aligned with this layer,
+   and a diagnostic's wavy underline (text-decoration) still shows with it. */
 .wb-editor__occ-ref,
 .wb-editor__occ-decl {
   background: var(--wb-occ-bg);
-  border-radius: 2px;
-}
-.wb-editor__occ-decl {
-  box-shadow: inset 0 0 0 1px var(--wb-occ-decl-edge);
+  box-shadow: inset 0 -2px 0 var(--wb-occ-underline);
+  color: inherit;
 }
 
 ```
