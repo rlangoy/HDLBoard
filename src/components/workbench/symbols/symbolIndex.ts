@@ -5,12 +5,15 @@
  * Scope-aware name resolution for one file (docs/symbol_occurrence_highlighting.md).
  * A language analyser reports scopes and declarations; this module links every
  * other identifier to the declaration it means, walking from the identifier's
- * own scope outwards so an inner declaration shadows an outer one. Pure.
+ * own scope outwards so an inner declaration shadows an outer one. A port-map
+ * formal (`a =>`, `.a(`) names a port of another file's unit; all formals of one
+ * unit's port are one symbol here, so selecting one shows them all. Pure.
  */
 
 import type { Language } from '../fileKinds';
 import type { Token } from '../vhdlHighlight';
 import { isIdentifier, type Analysis } from './analysis';
+import { instanceConnections, type InstanceConnection } from './instances';
 import { groupByLine } from './occurrences';
 import { sourceTokens, type SourceToken } from './sourceTokens';
 import type { HdlSymbol, SourceSpan, SymbolIndex } from './types';
@@ -32,14 +35,16 @@ interface NameOnLine extends SourceSpan {
  */
 export function buildSymbolIndex(language: Language | undefined, tokenLines: readonly (readonly Token[])[]): SymbolIndex {
   const tokens = sourceTokens(tokenLines);
-  if (language === 'verilog') return indexFromAnalysis(tokens, analyzeVerilog(tokens), (name) => name);
+  const connections = instanceConnections(language, tokens);
+  if (language === 'verilog') return indexFromAnalysis(tokens, analyzeVerilog(tokens), connections, (name) => name);
   // Like the editor's colouring, a file of no known language is read as VHDL.
-  return indexFromAnalysis(tokens, analyzeVhdl(tokens), (name) => name.toLowerCase());
+  return indexFromAnalysis(tokens, analyzeVhdl(tokens), connections, (name) => name.toLowerCase());
 }
 
 function indexFromAnalysis(
   tokens: readonly SourceToken[],
   analysis: Analysis,
+  connections: readonly InstanceConnection[],
   keyOf: (name: string) => string,
 ): SymbolIndex {
   const tables = analysis.scopeParents.map(() => new Map<string, MutableSymbol>());
@@ -79,9 +84,21 @@ function indexFromAnalysis(
     names.push({ ...spanOf(token), symbol });
   }
 
-  // 2. References: every other identifier that resolves.
+  // 2. Formals: one symbol per port of an instantiated unit, its first formal standing in for the declaration.
+  const formals = new Map<string, MutableSymbol>();
+  const formalIndices = new Set(connections.map((c) => c.formal));
+  for (const { unit, formal } of connections) {
+    const token = tokens[formal];
+    const key = `${unit} ${keyOf(token.text)}`;
+    const symbol = formals.get(key);
+    if (symbol) symbol.references.push(spanOf(token));
+    else formals.set(key, { id: `${token.line}:${token.start}`, name: token.text, kind: 'formal', declaration: spanOf(token), references: [] });
+    names.push({ ...spanOf(token), symbol: formals.get(key)! });
+  }
+
+  // 3. References: every other identifier that resolves.
   tokens.forEach((token, i) => {
-    if (!isReferenceCandidate(tokens, analysis, i)) return;
+    if (formalIndices.has(i) || !isReferenceCandidate(tokens, analysis, i)) return;
     const symbol = resolve(keyOf(token.text), analysis.tokenScopes[i]);
     if (!symbol) return;
     symbol.references.push(spanOf(token));

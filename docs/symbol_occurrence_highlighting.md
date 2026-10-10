@@ -32,7 +32,9 @@ When the mouse rests (≈100 ms) on an identifier in the editor:
 
 **Testbench and design side by side** (`symbols/portLinks.ts`, `symbols/useLinkedHighlight.ts`): with both panes showing, a symbol highlighted in one pane also lights, in the other pane, the names wired to it through named port and generic maps (`a => in_a`, `.a(in_a)`, `generic map (W => 1)`, `#(.W(1))`):
 - a design **port or generic** lights the formals that name it in the testbench's instances, and every occurrence of the signal connected to each;
-- a testbench **signal** lights every occurrence of the design port it is wired to.
+- a testbench **signal**, or a port-map **formal** (`a =>`, `.a(`), lights every occurrence of the design port it is wired to.
+
+A formal names a port of a unit declared in another file (`symbols/instances.ts`). In its own file, all formals of one port of one unit are a single symbol: selecting `.a` in `and_gate uut (.a(a))` highlights every `.a` of `and_gate` instances, and never the signal `a` on the other side.
 
 So `a => a` stops being confusing: hovering the design's `a` lights both sides of the arrow in the testbench, and hovering the testbench's `a` lights the design's port. The pane that highlighted last is the source; the other pane shows the linked names in place of its own highlight and gets its own back when the source's highlight ends. Each pane on its own, and the one-pane views, behave exactly as before. Positional association is not linked.
 

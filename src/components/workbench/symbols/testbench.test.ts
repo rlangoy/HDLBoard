@@ -34,8 +34,8 @@ describe('and_gate_truthtable_tb.vhd', () => {
     expect(linesLitBy(27, 'pattern')).toEqual([27, 40, 42, 43]);
   });
 
-  it('does not take a port-map formal or the attribute name for a use', () => {
-    expect(linesLitBy(20, 'a', 0)).toEqual([]);
+  it('keeps the port-map formal apart from the signal, and the attribute name is no use', () => {
+    expect(linesLitBy(20, 'a', 0)).toEqual([20]); // the formal: and_gate's port a
     expect(linesLitBy(53, 'image')).toEqual([]);
   });
 

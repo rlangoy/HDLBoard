@@ -28,7 +28,9 @@ export type SymbolKind =
   | 'localparam'
   | 'genvar'
   | 'function'
-  | 'task';
+  | 'task'
+  // Both: a port-map formal, naming a port of a unit declared in another file
+  | 'formal';
 
 export type OccurrenceKind = 'declaration' | 'reference';
 

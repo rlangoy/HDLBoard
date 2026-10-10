@@ -204,7 +204,7 @@ describe('VHDL', () => {
     expect(vhdl(source, 3, 'b')).toEqual(['1:declaration', '3:reference']);
   });
 
-  it('does not treat a port-map formal as a use of the actual', () => {
+  it('keeps a port-map formal apart from the actual; selecting the formal shows the formal', () => {
     const tb = [
       'architecture sim of tb is', //                                         0
       '  signal clk : std_logic;', //                                         1
@@ -213,7 +213,7 @@ describe('VHDL', () => {
       'end architecture;', //                                                 4
     ].join('\n');
     expect(vhdl(tb, 3, 'clk', 1)).toEqual(['1:declaration', '3:reference']);
-    expect(vhdl(tb, 3, 'clk', 0)).toEqual([]);
+    expect(vhdl(tb, 3, 'clk', 0)).toEqual(['3:declaration']);
     expect(vhdl(tb, 3, 'counter')).toEqual([]);
   });
 
@@ -368,7 +368,7 @@ describe('Verilog', () => {
     expect(verilog(source, 0, 'q')).toEqual(['0:reference', '2:declaration', '3:reference']);
   });
 
-  it('does not treat a named port connection as a use', () => {
+  it('keeps a named port connection apart from the actual; selecting .clk shows the formal', () => {
     const tb = [
       'module tb;', //                            0
       '  reg clk;', //                            1
@@ -376,7 +376,20 @@ describe('Verilog', () => {
       'endmodule', //                             3
     ].join('\n');
     expect(verilog(tb, 2, 'clk', 1)).toEqual(['1:declaration', '2:reference']);
-    expect(verilog(tb, 2, 'clk', 0)).toEqual([]);
+    expect(verilog(tb, 2, 'clk', 0)).toEqual(['2:declaration']);
+  });
+
+  it('makes all formals of one port of one module a single symbol', () => {
+    const tb = [
+      'module tb;', //                                  0
+      '  reg a, b;', //                                 1
+      '  and_gate u0 (.a(a), .b(b));', //               2
+      '  and_gate u1 (.a(b), .b(a));', //               3
+      '  or_gate  u2 (.a(a));', //                      4
+      'endmodule', //                                   5
+    ].join('\n');
+    expect(verilog(tb, 2, 'a(')).toEqual(['2:declaration', '3:reference']); // not or_gate's .a
+    expect(verilog(tb, 4, 'a(')).toEqual(['4:declaration']);
   });
 
   it('declares every name of a list and accepts SystemVerilog logic', () => {

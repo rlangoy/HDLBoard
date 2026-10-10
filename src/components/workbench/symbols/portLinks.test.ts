@@ -55,6 +55,11 @@ describe('VHDL: testbench and design side by side', () => {
     expect(linked(BENCH, 6, 'a', DESIGN)).toEqual(['2:declaration', '6:reference']);
   });
 
+  it('a port-map formal in the testbench lights the design port it names', () => {
+    expect(linked(BENCH, 5, 'b', DESIGN)).toEqual(['2:declaration', '6:reference']); // the b left of =>
+    expect(linked(BENCH, 5, 'a', DESIGN, 0)).toEqual(['2:declaration', '6:reference']);
+  });
+
   it('lights nothing for a name that is not wired', () => {
     const unwired = analyzeFile('x_tb.vhd', 'architecture s of x is signal z : bit; begin z <= z; end;');
     expect(linked(unwired, 0, 'z', DESIGN)).toEqual([]);
@@ -86,5 +91,9 @@ describe('Verilog: testbench and design side by side', () => {
 
   it('a testbench signal lights the design port it drives', () => {
     expect(linked(BENCH, 1, 'in_b', DESIGN)).toEqual(['0:declaration', '1:reference']);
+  });
+
+  it('the .a of a named connection lights the design port a', () => {
+    expect(linked(BENCH, 3, 'a', DESIGN, 0)).toEqual(['0:declaration', '1:reference']); // .a(a): the first a
   });
 });
