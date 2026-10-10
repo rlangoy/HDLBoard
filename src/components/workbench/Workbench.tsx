@@ -702,7 +702,7 @@ export function Workbench() {
    * Opens a project file chosen or dropped with Upload File; the files chosen with it are
    * its folder. Whatever Files held before is closed: the project's files replace it.
    * In the Windows app the project file's own folder is read too, so no folder is asked for,
-   * and Save project writes back there.
+   * and Save project writes back there. Opened cleanly, it goes straight to the editor.
    */
   const openProjectUpload = async (projectFile: File, others: readonly File[]) => {
     const bridge = desktopBridge();
@@ -719,6 +719,8 @@ export function Workbench() {
       path && read
         ? { text, location: path, localFiles, readLocal: (name) => read(pathInFolder(folderOfPath(path), name)) }
         : { text, location: projectFile.name, localFiles },
+      undefined,
+      true, // straight to the code; the project page only when a file could not be loaded
     );
     if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
   };
