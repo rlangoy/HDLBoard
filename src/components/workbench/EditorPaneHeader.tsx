@@ -128,15 +128,16 @@ export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewCont
   );
 }
 
-/** A pane with no file to show (impl_split_screen.md § 4.6): its role, and the view switch when rightmost, on the header line. */
-export function EmptyPaneHeader({ pane, end }: { pane: PaneRole; end?: ReactNode }) {
-  const Icon = pane === 'tb' ? FlaskIcon : ChipIcon;
+/**
+ * A pane with no file to show (impl_split_screen.md § 4.6): its role badge, whose menu
+ * closes the pane (the other file is then shown alone), and the chip when rightmost.
+ */
+export function EmptyPaneHeader({ pane, onClose, end }: { pane: PaneRole; onClose: () => void; end?: ReactNode }) {
   return (
     <div className={`wb-panehead is-${pane}`}>
-      <span className={`wb-rolebadge is-${pane} is-static`}>
-        <Icon aria-hidden="true" />
-        <span className="wb-rolebadge__label">{pane === 'tb' ? TEXT.tbLabel : TEXT.rtlLabel}</span>
-      </span>
+      <BadgeMenu pane={pane}>
+        {(choose) => <MenuItem onClick={() => choose(onClose)} label={pane === 'tb' ? TEXT.closeTestbenchPane : TEXT.closeDesignPane} />}
+      </BadgeMenu>
       <span className="wb-panehead__spacer" />
       {end}
     </div>

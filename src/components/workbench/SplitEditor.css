@@ -191,15 +191,6 @@
   background: var(--wb-hover);
 }
 
-/* An empty pane's badge only names its role. */
-.wb-rolebadge.is-static {
-  cursor: default;
-}
-
-.wb-rolebadge.is-static:hover {
-  background: #ffffff;
-}
-
 .wb-panehead__btn {
   min-width: 22px;
   height: 22px;

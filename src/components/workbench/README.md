@@ -382,7 +382,7 @@ as one line:
 - **`RolePaneHeader`** — a testbench or design pane of the split
   (docs/impl_split_screen.md § 4.4): role tint and accent, Play, the role badge
   (a menu), the name, the region navigator.
-- **`EmptyPaneHeader`** — a pane with nothing to show: its role only.
+- **`EmptyPaneHeader`** — a pane with nothing to show: its role badge, whose menu closes the pane.
 
 Every header with a file has Copy and then, after a divider, its **Search**
 button (`find/SearchToggle.tsx`), which opens that pane's own Find bar

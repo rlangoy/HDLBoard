@@ -13,7 +13,7 @@
  * plumbing.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const enabled = process.argv.includes('--hdlboard-persist');
 
@@ -27,6 +27,16 @@ const api = {
 // Always there: they do not depend on workspace storage being on.
 api.readLocalFile = (filePath) => ipcRenderer.invoke('hdlboard:read-local-file', String(filePath));
 api.writeLocalFile = (filePath, text) => ipcRenderer.invoke('hdlboard:write-local-file', String(filePath), String(text));
+// Where a chosen or dropped file is on disk, so a project file opened with Upload File
+// reads its files from its own folder without asking for it. '' for a file with no path
+// (one taken out of a .zip).
+api.pathForFile = (file) => {
+  try {
+    return webUtils.getPathForFile(file);
+  } catch {
+    return '';
+  }
+};
 
 // GitHub sign-in, kept encrypted for this Windows user until Sign out (docs/GITHUB.md).
 api.loadGitHubToken = () => ipcRenderer.invoke('hdlboard:load-github-token');

@@ -80,7 +80,10 @@ export function editorPropsFor(ctx: ModelContext, split: EditorSplit, chip: Reac
 function paneModel(ctx: ModelContext, d: EditorDisplay, pane: PaneRole, end: ReactNode, viewControl: PaneViewControl): SplitPaneModel {
   const shownTarget = d.pair[pane];
   const file = shownTarget && ctx.files.find((f) => f.id === shownTarget.fileId);
-  if (!shownTarget || !file) return { kind: 'empty', header: <EmptyPaneHeader pane={pane} end={end} />, empty: emptyModel(ctx, d, pane) };
+  if (!shownTarget || !file) {
+    const close = () => ctx.onPin(otherPane(pane));
+    return { kind: 'empty', header: <EmptyPaneHeader pane={pane} onClose={close} end={end} />, empty: emptyModel(ctx, d, pane) };
+  }
   // The badge, Play / Stop and a run follow a unit renamed since the pair was shown.
   const target = withCurrentUnit(shownTarget, effectiveFile(ctx.project, ctx.overrides, file.id), pane);
   const showsFileTwice = paneFile(d, otherPane(pane)) === file.id;
