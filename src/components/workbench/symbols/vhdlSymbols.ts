@@ -5,8 +5,9 @@
  * VHDL scopes and declarations, found by walking tokens rather than by parsing.
  * Only language facts live here; resolving names is symbolIndex.ts's job.
  *
- * Scopes: entity, architecture (inside its entity, so ports are visible), package,
- * process, block, generate, component, configuration, function and procedure.
+ * Scopes: entity, architecture (inside its entity, so ports are visible), package
+ * (a package body inside its package), process, block, generate (one for all its
+ * `elsif`/`else` branches), component, configuration, function and procedure.
  * Each closes at an `end` that is not `end if` / `end case` / `end loop` / … .
  *
  * Declarations: signal, variable, constant, alias, type, subtype, enumeration
@@ -33,6 +34,8 @@ const SUBPROGRAMS: ReadonlySet<string> = new Set(['function', 'procedure']);
 const NON_SCOPE_ENDS: ReadonlySet<string> = new Set(['if', 'case', 'loop', 'record', 'units', 'protected', 'for']);
 /** `u0 : entity work.counter`, `u1 : component counter`: an instance, not a declaration. */
 const INSTANTIABLE: ReadonlySet<string> = new Set(['entity', 'component', 'configuration']);
+/** The word before an instantiable keyword that names a unit instead of opening one: `u0 : entity …`, `for all : c use entity …`. */
+const NAMES_A_UNIT: ReadonlySet<string> = new Set([':', 'use']);
 /** `signal a, b : …` */
 const OBJECT_DECLARATIONS: ReadonlyMap<string, SymbolKind> = new Map([
   ['signal', 'signal'],
@@ -52,11 +55,12 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
   const declarations = new DeclarationMap();
   const ignored = new Set<number>();
   const tokenScopes: number[] = [];
-  const entityScopes = new Map<string, number>();
+  const unitScopes = new Map<string, number>();
   /** Subprogram scopes whose `is` has not been seen yet, with the bracket depth they opened at. */
   const pendingSubprograms = new Map<number, number>();
   let depth = 0;
   let inEndStatement = false;
+  let inElsifCondition = false;
 
   for (let i = 0; i < tokens.length; i++) {
     tokenScopes[i] = scopes.current;
@@ -87,8 +91,14 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
       continue;
     }
 
-    const isInstance = tokens[i - 1]?.text === ':' && INSTANTIABLE.has(word);
-    if (SCOPE_OPENERS.has(word) && !isInstance) openScope(tokens, i, word, scopes, entityScopes);
+    // `elsif c generate` and `else generate` (VHDL-2008) continue the generate that is already open.
+    if (word === 'elsif') inElsifCondition = true;
+    else if (word === 'then') inElsifCondition = false;
+    const continuesGenerate = word === 'generate' && (inElsifCondition || tokens[i - 1]?.text.toLowerCase() === 'else');
+    if (continuesGenerate) inElsifCondition = false;
+
+    const namesUnit = INSTANTIABLE.has(word) && NAMES_A_UNIT.has(tokens[i - 1]?.text.toLowerCase() ?? '');
+    if (SCOPE_OPENERS.has(word) && !namesUnit && !continuesGenerate) openScope(tokens, i, word, scopes, unitScopes);
 
     if (SUBPROGRAMS.has(word)) {
       pendingSubprograms.set(scopes.open(), depth);
@@ -120,21 +130,41 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
   };
 }
 
-/** Opens the scope a keyword starts. An architecture sits inside its entity so it sees the ports. */
+/**
+ * Opens the scope a keyword starts. An architecture sits inside its entity so it
+ * sees the ports; a package body sits inside its package so it sees the constants.
+ *
+ * @param unitScopes Scopes of the entities and packages seen so far, by `unitKey`.
+ */
 function openScope(
   tokens: readonly SourceToken[],
   i: number,
   word: string,
   scopes: ScopeTracker,
-  entityScopes: Map<string, number>,
+  unitScopes: Map<string, number>,
 ): void {
-  if (word === 'architecture') {
-    const entityName = tokens[i + 2]?.text.toLowerCase() === 'of' ? tokens[i + 3]?.text.toLowerCase() : undefined;
-    scopes.open(entityScopes.get(entityName ?? '') ?? scopes.current);
-    return;
-  }
-  const scope = scopes.open();
-  if (word === 'entity' && isIdentifier(tokens[i + 1])) entityScopes.set(tokens[i + 1].text.toLowerCase(), scope);
+  const enclosing = enclosingUnitKey(tokens, i, word);
+  const parent = enclosing ? unitScopes.get(enclosing) : undefined;
+  const scope = scopes.open(parent ?? scopes.current);
+  const declared = declaredUnitKey(tokens, i, word);
+  if (declared) unitScopes.set(declared, scope);
+}
+
+const lowerTextAt = (tokens: readonly SourceToken[], i: number) => tokens[i]?.text.toLowerCase();
+const unitKey = (kind: 'entity' | 'package', name: string | undefined) => `${kind} ${name}`;
+
+/** `architecture rtl of counter` → entity counter; `package body p` → package p. */
+function enclosingUnitKey(tokens: readonly SourceToken[], i: number, word: string): string | undefined {
+  if (word === 'architecture' && lowerTextAt(tokens, i + 2) === 'of') return unitKey('entity', lowerTextAt(tokens, i + 3));
+  if (word === 'package' && lowerTextAt(tokens, i + 1) === 'body') return unitKey('package', lowerTextAt(tokens, i + 2));
+  return undefined;
+}
+
+/** `entity counter is` → entity counter; `package p is` → package p. */
+function declaredUnitKey(tokens: readonly SourceToken[], i: number, word: string): string | undefined {
+  if (word !== 'entity' && word !== 'package') return undefined;
+  if (!isIdentifier(tokens[i + 1]) || lowerTextAt(tokens, i + 1) === 'body') return undefined;
+  return unitKey(word, lowerTextAt(tokens, i + 1));
 }
 
 function declareAll(declarations: DeclarationMap, indices: readonly number[], kind: SymbolKind): void {

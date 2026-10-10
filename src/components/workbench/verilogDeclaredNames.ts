@@ -13,7 +13,7 @@
  */
 
 import { tokenizeVerilog, VERILOG_TYPES } from './verilogHighlight';
-import type { Token } from './vhdlHighlight';
+import type { Token, TokenType } from './vhdlHighlight';
 import { isVerilogReservedWord } from './verilogWords';
 
 /**
@@ -34,6 +34,12 @@ const LABELLED_BLOCKS: ReadonlySet<string> = new Set(['begin', 'fork']);
 
 const OPENING = new Set(['(', '[', '{']);
 const CLOSING = new Set([')', ']', '}']);
+
+/** The least a token needs for the name-list rules; symbols/verilogSymbols.ts shares them. */
+export interface WordToken {
+  readonly text: string;
+  readonly type: TokenType;
+}
 
 interface Significant extends Pick<Token, 'text' | 'type'> {
   /** 0-based line of the file. */
@@ -60,7 +66,7 @@ function significantTokens(source: string): Significant[] {
 }
 
 /** A name the student chose: an identifier that is not a reserved word. */
-function isName(token: Significant | undefined): token is Significant {
+function isName<T extends WordToken>(token: T | undefined): token is T {
   return token?.type === 'identifier' && !isVerilogReservedWord(token.text);
 }
 
@@ -77,7 +83,7 @@ function endsDeclaration(text: string): boolean {
 const AFTER_A_NAME: ReadonlySet<string> = new Set([',', ';', ')', '=', '(', '#']);
 
 /** Skips any `[ … ]` groups starting at `j`; returns the index after them. */
-function afterDimensions(tokens: readonly Significant[], j: number): number {
+function afterDimensions(tokens: readonly WordToken[], j: number): number {
   let next = j;
   while (tokens[next]?.text === '[') {
     let depth = 0;
@@ -95,19 +101,23 @@ function afterDimensions(tokens: readonly Significant[], j: number): number {
  * out: in `input wire CLOCK, inptu wire [9:0] SW` the typo sits where a second
  * name of the list could, but a name is never followed by another word.
  */
-function isDeclaredName(tokens: readonly Significant[], j: number): boolean {
+function isDeclaredName(tokens: readonly WordToken[], j: number): boolean {
   const next = tokens[afterDimensions(tokens, j + 1)];
   return isName(tokens[j]) && (next === undefined || AFTER_A_NAME.has(next.text));
 }
 
-/**
- * The comma-separated names after a declaring word, up to the `;` that ends the
- * declaration, the `)` that ends a port list, or the next keyword. Ranges,
- * parentheses and initial values (`= 4'b0`) are skipped.
- */
 function declaredAfterKeyword(tokens: readonly Significant[], i: number): string[] {
   if (!isDeclaringWord(tokens[i].text)) return [];
-  const names: string[] = [];
+  return declaredNameIndices(tokens, i).map((j) => tokens[j].text);
+}
+
+/**
+ * The comma-separated names after the declaring word at `i`, as token indices, up
+ * to the `;` that ends the declaration, the `)` that ends a port list, or the next
+ * keyword. Ranges, parentheses and initial values (`= 4'b0`) are skipped.
+ */
+export function declaredNameIndices(tokens: readonly WordToken[], i: number): number[] {
+  const names: number[] = [];
   let depth = 0;
   let expectingName = true;
   for (let j = i + 1; j < tokens.length; j++) {
@@ -122,7 +132,7 @@ function declaredAfterKeyword(tokens: readonly Significant[], i: number): string
     else if (text === '=') expectingName = false;
     else if (endsDeclaration(text)) break;
     else if (expectingName && isDeclaredName(tokens, j)) {
-      names.push(text);
+      names.push(j);
       expectingName = false;
     }
   }

@@ -7,6 +7,14 @@ import { markRanges, tokenizeVhdlLine } from './vhdlHighlight';
 const LINE = '    signal counter : integer rttange 0 to 9 := 0;';
 const TYPO = { start: LINE.indexOf('rttange'), end: LINE.indexOf('rttange') + 'rttange'.length };
 
+describe('tokenizeVhdlLine', () => {
+  test("an attribute tick is not a character literal: clk'event and clk = '1'", () => {
+    const tokens = tokenizeVhdlLine("if clk'event and clk = '1' then");
+    expect(tokens.filter((t) => t.type === 'identifier').map((t) => t.text)).toEqual(['clk', 'event', 'clk']);
+    expect(tokens.filter((t) => t.type === 'string').map((t) => t.text)).toEqual(["'1'"]);
+  });
+});
+
 describe('markRanges', () => {
   test('marks exactly the characters of the range', () => {
     const marked = markRanges(tokenizeVhdlLine(LINE), [TYPO]).filter((piece) => piece.marked);

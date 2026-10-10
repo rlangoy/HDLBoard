@@ -19,22 +19,29 @@ export interface HoveredSymbol {
   /** The symbol under the resting pointer, or undefined. */
   symbol: HdlSymbol | undefined;
   handlers: HoverHandlers;
+  /** Drops the highlight; call it when the text scrolls under a still pointer. */
+  clear: () => void;
+}
+
+let measuringContext: CanvasRenderingContext2D | null | undefined;
+
+/** Width of one character in the textarea's font, letter-spacing included; 0 if it cannot be measured. */
+function characterWidth(style: CSSStyleDeclaration): number {
+  measuringContext ??= document.createElement('canvas').getContext('2d');
+  if (!measuringContext) return 0;
+  measuringContext.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  const glyphWidth = measuringContext.measureText('0'.repeat(100)).width / 100;
+  return glyphWidth + (parseFloat(style.letterSpacing) || 0);
 }
 
 /** Reads the text box's layout from the textarea's computed style. */
 function measureText(textarea: HTMLTextAreaElement): TextMetrics {
   const style = getComputedStyle(textarea);
-  const context = document.createElement('canvas').getContext('2d');
-  let charWidth = 0;
-  if (context) {
-    context.font = `${style.fontSize} ${style.fontFamily}`;
-    charWidth = context.measureText('0'.repeat(100)).width / 100;
-  }
   return {
     paddingTop: parseFloat(style.paddingTop) || 0,
     paddingLeft: parseFloat(style.paddingLeft) || 0,
     lineHeight: parseFloat(style.lineHeight) || 0,
-    charWidth,
+    charWidth: characterWidth(style),
     tabSize: parseInt(style.tabSize, 10) || 4,
   };
 }
@@ -81,12 +88,12 @@ export function useHoveredSymbol(lines: readonly string[], index: SymbolIndex): 
     }, HOVER_DELAY_MS);
   }, []);
 
-  const onPointerLeave = useCallback(() => {
+  const clear = useCallback(() => {
     window.clearTimeout(timer.current);
     setCell(undefined);
   }, []);
 
   const symbol = useMemo(() => (cell ? index.symbolAt(cell.line, cell.offset) : undefined), [cell, index]);
-  const handlers = useMemo(() => ({ onPointerEnter, onPointerMove, onPointerLeave }), [onPointerEnter, onPointerMove, onPointerLeave]);
-  return { symbol, handlers };
+  const handlers = useMemo(() => ({ onPointerEnter, onPointerMove, onPointerLeave: clear }), [onPointerEnter, onPointerMove, clear]);
+  return { symbol, handlers, clear };
 }

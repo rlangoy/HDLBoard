@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { markRanges, type CharRange, type MarkedToken, type Token } from '../vhdlHighlight';
+import { isInside, markRanges, type CharRange, type MarkedToken, type Token } from '../vhdlHighlight';
 import type { Occurrence, OccurrenceKind } from './types';
 
 /** A piece of a highlighted line: its token colour, the diagnostic underline, and any occurrence highlight. */
 export interface DecoratedPiece extends MarkedToken {
   readonly occurrence?: OccurrenceKind;
-}
-
-function covers(ranges: readonly CharRange[], offset: number): boolean {
-  return ranges.some((range) => range.start <= offset && offset < range.end);
 }
 
 /**
@@ -30,6 +26,6 @@ export function decorateLine(
     const at = offset;
     offset += piece.text.length;
     const occurrence = occurrences.find((o) => o.start <= at && at < o.end)?.kind;
-    return { ...piece, marked: covers(diagnosticRanges, at), occurrence };
+    return { ...piece, marked: isInside(at, diagnosticRanges), occurrence };
   });
 }

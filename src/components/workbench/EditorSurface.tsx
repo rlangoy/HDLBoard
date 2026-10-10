@@ -173,6 +173,7 @@ export function EditorSurface({
   useRevealLine(textareaRef, file, reveal);
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
+    hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
     const { scrollTop, scrollLeft } = e.currentTarget;
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop;

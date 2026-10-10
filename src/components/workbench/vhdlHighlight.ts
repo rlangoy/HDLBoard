@@ -43,9 +43,11 @@ const TYPES = new Set([
 ]);
 
 // One alternation, longest-first within each group, so e.g. a number is
-// matched whole rather than digit by digit.
+// matched whole rather than digit by digit. A character literal is exactly one
+// character ('1'), so the attribute tick in `clk'event and clk = '1'` is not
+// taken for the start of a literal that runs to the next quote.
 const TOKEN_RE =
-  /(--[^\n]*)|("(?:[^"]|"")*"|'(?:[^']|'')*')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_]+)/g;
+  /(--[^\n]*)|("(?:[^"]|"")*"|'[^\n]')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_]+)/g;
 
 export function tokenizeVhdlLine(line: string): Token[] {
   const tokens: Token[] = [];
@@ -85,7 +87,7 @@ export interface MarkedToken extends Token {
   readonly marked: boolean;
 }
 
-function isInside(offset: number, ranges: readonly CharRange[]): boolean {
+export function isInside(offset: number, ranges: readonly CharRange[]): boolean {
   return ranges.some((range) => range.start <= offset && offset < range.end);
 }
 

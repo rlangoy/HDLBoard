@@ -12,11 +12,16 @@ export function occurrencesByLine(symbol: HdlSymbol | undefined): ReadonlyMap<nu
     { ...symbol.declaration, kind: 'declaration' },
     ...symbol.references.map((span): Occurrence => ({ ...span, kind: 'reference' })),
   ];
-  const byLine = new Map<number, Occurrence[]>();
-  for (const occurrence of all) {
-    const list = byLine.get(occurrence.line);
-    if (list) list.push(occurrence);
-    else byLine.set(occurrence.line, [occurrence]);
+  return groupByLine(all);
+}
+
+/** Groups spans by their 0-based line, keeping their order. Pure. */
+export function groupByLine<T extends { readonly line: number }>(items: readonly T[]): Map<number, T[]> {
+  const byLine = new Map<number, T[]>();
+  for (const item of items) {
+    const list = byLine.get(item.line);
+    if (list) list.push(item);
+    else byLine.set(item.line, [item]);
   }
   return byLine;
 }

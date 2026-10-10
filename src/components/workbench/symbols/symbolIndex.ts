@@ -11,6 +11,7 @@
 import type { Language } from '../fileKinds';
 import type { Token } from '../vhdlHighlight';
 import { isIdentifier, type Analysis } from './analysis';
+import { groupByLine } from './occurrences';
 import { sourceTokens, type SourceToken } from './sourceTokens';
 import type { HdlSymbol, SourceSpan, SymbolIndex } from './types';
 import { analyzeVerilog } from './verilogSymbols';
@@ -104,12 +105,7 @@ function spanOf(token: SourceToken): SourceSpan {
 
 /** Groups the names by line so a hover looks at one short list. */
 function lineLookup(names: readonly NameOnLine[]): SymbolIndex {
-  const byLine = new Map<number, NameOnLine[]>();
-  for (const name of names) {
-    const list = byLine.get(name.line);
-    if (list) list.push(name);
-    else byLine.set(name.line, [name]);
-  }
+  const byLine = groupByLine(names);
   return {
     symbolAt(line, offset) {
       return byLine.get(line)?.find((name) => name.start <= offset && offset < name.end)?.symbol;

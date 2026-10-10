@@ -98,6 +98,52 @@ describe('VHDL', () => {
     expect(vhdl(COUNTER, 8, 'cnt')).toEqual(['8:declaration', '12:reference', '12:reference', '14:reference']);
   });
 
+  it("finds both uses in clk'event and clk = '1'", () => {
+    const source = "entity e is port (clk : in bit); end;\narchitecture a of e is begin\nprocess begin if clk'event and clk = '1' then end if; end process;\nend;";
+    expect(vhdl(source, 0, 'clk')).toEqual(['0:declaration', '2:reference', '2:reference']);
+  });
+
+  // Each of these used to leave a scope open, so a second architecture saw the first one's signals.
+  const SECOND_ARCHITECTURE = 'architecture b of e is begin y <= s; end;';
+
+  it('a configuration specification names an entity without opening a scope', () => {
+    const source = [
+      'architecture a of e is', //                                0
+      '  signal s : bit;', //                                     1
+      '  for all : c use entity work.c;', //                      2
+      'begin end;', //                                            3
+      SECOND_ARCHITECTURE, //                                     4
+    ].join('\n');
+    expect(vhdl(source, 1, 's ')).toEqual(['1:declaration']);
+  });
+
+  it('elsif and else generate branches share one generate scope', () => {
+    const source = [
+      'architecture a of e is', //                                0
+      '  signal s : bit;', //                                     1
+      'begin', //                                                 2
+      '  g: if c1 generate y <= s;', //                           3
+      '  elsif c2 generate y <= s;', //                           4
+      '  else generate y <= s;', //                               5
+      '  end generate;', //                                       6
+      'end;', //                                                  7
+      SECOND_ARCHITECTURE, //                                     8
+    ].join('\n');
+    expect(vhdl(source, 1, 's ')).toEqual(['1:declaration', '3:reference', '4:reference', '5:reference']);
+  });
+
+  it('a package body sees its package', () => {
+    const source = [
+      'package p is', //                                          0
+      '  constant N : integer := 8;', //                          1
+      'end package;', //                                          2
+      'package body p is', //                                     3
+      '  function f return integer is begin return N; end;', //   4
+      'end package body;', //                                     5
+    ].join('\n');
+    expect(vhdl(source, 1, 'N')).toEqual(['1:declaration', '4:reference']);
+  });
+
   it('ignores comments, keywords, labels and unknown names', () => {
     expect(vhdl(COUNTER, 8, 'clk')).toEqual([]); // in the comment
     expect(vhdl(COUNTER, 12, 'then')).toEqual([]);
