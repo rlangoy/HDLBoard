@@ -1,0 +1,231 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* ---- a pane's Find bar (docs/impl_search.md § 5.2–§ 5.5) -----------------
+ * A row under the pane header, as wide as its pane. Replace ⌄ / Replace All
+ * show only while there are matches (D9a). */
+
+.wb-findbar {
+  flex: none;
+  container: findbar / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-sidebar-bg);
+  font-size: 12px;
+  color: var(--wb-text);
+}
+
+.wb-findbar__row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wb-findbar__field {
+  flex: 0 1 280px;
+  min-width: 90px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.wb-findbar__row--replace .wb-findbar__field {
+  padding-left: 8px;
+}
+
+.wb-findbar__field:focus-within {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 1px var(--wb-accent);
+}
+
+.wb-findbar__field.is-invalid {
+  border-color: var(--wb-danger-dark);
+}
+
+.wb-findbar__field.is-invalid:focus-within {
+  box-shadow: 0 0 0 1px var(--wb-danger-dark);
+}
+
+.wb-findbar__glass {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--wb-text-muted);
+}
+
+.wb-findbar__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--wb-code-font);
+  color: inherit;
+}
+
+.wb-findbar__clear,
+.wb-findbar__close,
+.wb-findbar__step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-findbar__clear {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.wb-findbar__clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-findbar__close {
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border-radius: 6px;
+}
+
+.wb-findbar__close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-findbar__clear:hover,
+.wb-findbar__close:hover,
+.wb-findbar__step:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--wb-text);
+}
+
+/* ∧ ∨ as one segmented control. */
+.wb-findbar__steps {
+  flex: none;
+  display: inline-flex;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.wb-findbar__step {
+  width: 28px;
+  height: 26px;
+  border: 0;
+  border-radius: 0;
+}
+
+.wb-findbar__step + .wb-findbar__step {
+  border-left: 1px solid var(--wb-border);
+}
+
+.wb-findbar__step svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-findbar__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wb-findbar__count {
+  flex: none;
+  min-width: 7ch;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--wb-text-muted);
+}
+
+.wb-findbar__actions {
+  flex: none;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.wb-findbar__btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--wb-accent);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--wb-accent-dark);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-findbar__btn:hover {
+  background: var(--wb-accent-soft);
+}
+
+.wb-findbar__btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+
+.wb-findbar__toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.wb-findbar__btn--primary {
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-findbar__btn--primary:hover {
+  background: var(--wb-accent-dark);
+}
+
+.wb-findbar button:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+}
+
+/* FINDBAR_WRAP_PX (FindBar.tsx): below it the Replace buttons move to a line of their own. */
+@container findbar (max-width: 420px) {
+  .wb-findbar__row {
+    flex-wrap: wrap;
+  }
+
+  .wb-findbar__field {
+    flex: 1 1 120px;
+  }
+
+  .wb-findbar__close {
+    order: 1;
+  }
+
+  .wb-findbar__actions {
+    order: 2;
+    flex-basis: 100%;
+  }
+}

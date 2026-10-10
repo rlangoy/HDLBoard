@@ -102,6 +102,38 @@ describe('findPair', () => {
   });
 });
 
+/**
+ * A file reclassified while its pair is shown: two designs or two testbenches.
+ * The roles the student set beat a stored pairing (B6), and no pane ever shows a
+ * file in the other role.
+ */
+describe('findPair after a role change', () => {
+  const COUNTER = [fixtureFile('vhdl/counter.vhd'), fixtureFile('vhdl/counter_tb.vhd')];
+  const PAIRED = { 'vhdl/counter.vhd': 'vhdl/counter_tb.vhd' };
+
+  test('a paired testbench marked as a design leaves the TB pane: two designs', () => {
+    const pair = pairOf(COUNTER, 'vhdl/counter_tb.vhd', { roles: { 'vhdl/counter_tb.vhd': 'rtl' }, pairs: PAIRED });
+    expect(pair).toMatchObject({ tb: null, rtl: { fileId: 'vhdl/counter_tb.vhd' } });
+  });
+
+  test('a paired design marked as a testbench leaves the RTL pane: two testbenches', () => {
+    const pair = pairOf(COUNTER, 'vhdl/counter.vhd', { roles: { 'vhdl/counter.vhd': 'tb' }, pairs: PAIRED });
+    expect(pair).toMatchObject({ tb: { fileId: 'vhdl/counter.vhd' }, rtl: null });
+  });
+
+  test('a testbench never gets a testbench as its design, even when it instantiates it', () => {
+    const pair = pairOf(COUNTER, 'vhdl/counter_tb.vhd', { roles: { 'vhdl/counter.vhd': 'tb' }, pairs: {} });
+    expect(pair).toMatchObject({ tb: { fileId: 'vhdl/counter_tb.vhd' }, rtl: null, missingDut: null });
+  });
+
+  test('without the role change the stored pair still holds', () => {
+    expect(pairOf(COUNTER, 'vhdl/counter.vhd', { roles: {}, pairs: PAIRED })).toMatchObject({
+      tb: { fileId: 'vhdl/counter_tb.vhd' },
+      rtl: { fileId: 'vhdl/counter.vhd' },
+    });
+  });
+});
+
 describe('a stored pairing the code rules out', () => {
   test('is ignored: the testbench shows the design it instantiates, from either side', () => {
     expect(pairOf(STALE, 'vhdl/adder4_tb.vhd', STALE_PAIR).rtl?.fileId).toBe('vhdl/adder4.vhd');

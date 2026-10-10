@@ -13,11 +13,8 @@ import type { RuleId } from './tbDetect/types';
 export const TEXT = {
   tbLabel: 'TB',
   rtlLabel: 'RTL',
-  bothLabel: 'Both',
   tbTooltip: 'Testbench — simulation-only code',
   rtlTooltip: 'Design (RTL) — synthesizable code',
-  bothTooltip: 'Testbench and design side by side',
-  editorView: 'Editor view',
   tooNarrow: 'Too narrow for side by side — hide the Explorer (Ctrl+B) or the board (Ctrl+Alt+B)',
   resizeTestbenchEditor: 'Resize testbench editor',
   fileRoleTb: 'Testbench',
@@ -50,7 +47,15 @@ export const TEXT = {
   settingAlways: 'Always',
   settingAlwaysHint: 'Show testbench and design side by side whenever a file has a testbench.',
   settingNever: 'Never',
-  settingNeverHint: 'Never open the split on its own; the view switch still works.',
+  settingNeverHint: 'Never open the split on its own; you can still show a testbench beside its design from the TB/RTL badge.',
+  viewGroup: 'View',
+  showOnlyThisFile: 'Show only this file',
+  showTestbenchBeside: 'Show testbench beside',
+  showDesignBeside: 'Show design beside',
+  useSplitSetting: 'Use the setting (Automatic / Always / Never)',
+  twoDesignsTitle: 'Two designs side by side?',
+  twoTestbenchesTitle: 'Two testbenches side by side?',
+  roleConflictQuestion: 'Which file should stay on screen?',
 } as const;
 
 export const detectedAs = (role: 'tb' | 'rtl', confidence: string): string =>
@@ -63,6 +68,9 @@ export const rtlPaneLabel = (name: string): string => `Design (RTL) editor, ${na
 export const noBoardPorts = (name: string): string => `${name} has no board ports, so the board can't drive it.`;
 export const runAnyway = (name: string): string => `Run ${name} anyway`;
 export const regionCount = (n: number, m: number): string => `${n}/${m}`;
+export const roleConflictText = (name: string, other: string, role: 'tb' | 'rtl'): string =>
+  `The split shows one testbench beside one design. As a ${role === 'tb' ? 'testbench' : 'design'}, ${name} would sit beside ${other}, which is one too.`;
+export const keepFile = (name: string): string => `Keep ${name}`;
 
 export interface RuleText {
   /** The construct, as the student would write it. */

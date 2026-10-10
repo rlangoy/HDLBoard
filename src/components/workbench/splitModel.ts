@@ -8,10 +8,10 @@
  * Pure — the React side asks, and renders the answers.
  */
 
-import type { PaneRole } from './editorView';
+import type { EditorView, PaneRole } from './editorView';
 import { contradictsCode, effectiveFile, findUnit, testbenchCandidates, unitKey } from './tbDetect';
 import type {
-  AnalyzedUnit, FileAnalysis, FileRole, PaneTarget, ProjectAnalysis, TestbenchOverrides, UnitRole,
+  AnalyzedUnit, EditorPair, FileAnalysis, FileRole, PaneTarget, ProjectAnalysis, TestbenchOverrides, UnitRole,
 } from './tbDetect/types';
 
 export interface FileChoice {
@@ -110,4 +110,35 @@ export function withoutFile(overrides: TestbenchOverrides, fileId: string): Test
   delete roles[fileId];
   const pairs = Object.fromEntries(Object.entries(overrides.pairs).filter(([d, t]) => d !== fileId && t !== fileId));
   return { roles, pairs };
+}
+
+/** A role change that would leave the split with two designs or two testbenches side by side. */
+export interface RoleConflict {
+  /** The file shown in the other pane. */
+  readonly otherFileId: string;
+  /** The role both files would have. */
+  readonly role: UnitRole;
+}
+
+/**
+ * Whether giving `fileId` the overrides `next` would put two files of the same role
+ * side by side (docs/impl_split_screen.md B1: a split is one testbench beside one
+ * design). Only for two different files, both shown; a file with both a testbench
+ * and a design in it never conflicts. Pure.
+ */
+export function roleConflict(
+  project: ProjectAnalysis,
+  next: TestbenchOverrides,
+  pair: EditorPair,
+  shown: EditorView,
+  fileId: string,
+): RoleConflict | null {
+  const tbId = pair.tb?.fileId;
+  const rtlId = pair.rtl?.fileId;
+  if (shown !== 'both' || !tbId || !rtlId || tbId === rtlId) return null;
+  if (fileId !== tbId && fileId !== rtlId) return null;
+  const otherFileId = fileId === tbId ? rtlId : tbId;
+  const role = effectiveFile(project, next, fileId)?.role;
+  if (role === undefined || role === 'mixed' || effectiveFile(project, next, otherFileId)?.role !== role) return null;
+  return { otherFileId, role };
 }

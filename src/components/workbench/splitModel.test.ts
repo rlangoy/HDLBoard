@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { pairOptions, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile } from './splitModel';
+import { pairOptions, roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile } from './splitModel';
 import { analyzeProject } from './tbDetect/analyzeProject';
 import { fixtureFile, sourceFile } from './tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES } from './tbDetect/types';
@@ -92,5 +92,37 @@ describe('withoutContradictedPairs', () => {
 
   test('the RTL pane of a design is not offered a testbench that tests another design', () => {
     expect(pairOptions(files, EMPTY_OVERRIDES, 'vhdl/other.vhd', 'rtl')).toEqual([]);
+  });
+});
+
+describe('roleConflict', () => {
+  const pair = {
+    anchorId: 'vhdl/counter.vhd',
+    tb: { fileId: 'vhdl/counter_tb.vhd', line: 1, unitName: 'counter_tb' },
+    rtl: { fileId: 'vhdl/counter.vhd', line: 1, unitName: 'counter' },
+    tbConfidence: 'high' as const,
+    missingDut: null,
+  };
+
+  test('a testbench beside a design marked as a design: two designs', () => {
+    const next = withRole(EMPTY_OVERRIDES, 'vhdl/counter_tb.vhd', 'rtl');
+    expect(roleConflict(project, next, pair, 'both', 'vhdl/counter_tb.vhd')).toEqual({ otherFileId: 'vhdl/counter.vhd', role: 'rtl' });
+  });
+
+  test('a design beside a testbench marked as a testbench: two testbenches', () => {
+    const next = withRole(EMPTY_OVERRIDES, 'vhdl/counter.vhd', 'tb');
+    expect(roleConflict(project, next, pair, 'both', 'vhdl/counter.vhd')).toEqual({ otherFileId: 'vhdl/counter_tb.vhd', role: 'tb' });
+  });
+
+  test('no conflict with one pane shown, or when the role still differs', () => {
+    const next = withRole(EMPTY_OVERRIDES, 'vhdl/counter_tb.vhd', 'rtl');
+    expect(roleConflict(project, next, pair, 'tb', 'vhdl/counter_tb.vhd')).toBeNull();
+    expect(roleConflict(project, withRole(EMPTY_OVERRIDES, 'vhdl/counter_tb.vhd', 'tb'), pair, 'both', 'vhdl/counter_tb.vhd')).toBeNull();
+  });
+
+  test('no conflict for a file shown in both panes, or beside an empty pane', () => {
+    const same = { ...pair, tb: { ...pair.tb, fileId: 'vhdl/counter.vhd' } };
+    expect(roleConflict(project, withRole(EMPTY_OVERRIDES, 'vhdl/counter.vhd', 'tb'), same, 'both', 'vhdl/counter.vhd')).toBeNull();
+    expect(roleConflict(project, withRole(EMPTY_OVERRIDES, 'vhdl/counter_tb.vhd', 'rtl'), { ...pair, rtl: null }, 'both', 'vhdl/counter_tb.vhd')).toBeNull();
   });
 });

@@ -83,6 +83,9 @@
   /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
   --wb-occ-bg: rgba(100, 160, 255, 0.32);
   --wb-occ-underline: #4a90e2;
+  /* Search matches (docs/impl_search.md § 5.4). */
+  --wb-find-current-bg: #ffd54a;
+  --wb-find-current-outline: #c99a00;
 }
 
 .wb-editor__body {
@@ -188,6 +191,34 @@
   background: var(--wb-occ-bg);
   box-shadow: inset 0 -2px 0 var(--wb-occ-underline);
   color: inherit;
+}
+
+/* A search match is marked like a hovered symbol's occurrence: the see-through
+   blue and the 2px inset underline. It wraps every other piece, so a hovered
+   occurrence inside it drops its own background rather than doubling the blue
+   (D16). Background and box-shadow only: the glyphs keep their exact metrics (S3). */
+.wb-editor__find-match {
+  background: var(--wb-occ-bg);
+  box-shadow: inset 0 -2px 0 var(--wb-occ-underline);
+}
+
+.wb-editor__find-match .wb-editor__occ-ref,
+.wb-editor__find-match .wb-editor__occ-decl {
+  background: transparent;
+}
+
+/* The active match keeps its own gold marking, which wins over the blue. */
+.wb-editor__find-match.wb-editor__find-current {
+  background: var(--wb-find-current-bg);
+  box-shadow: none;
+  outline: 1px solid var(--wb-find-current-outline);
+  outline-offset: -1px;
+  border-radius: 2px;
+}
+
+.wb-editor__find-current .wb-editor__occ-ref,
+.wb-editor__find-current .wb-editor__occ-decl {
+  box-shadow: none;
 }
 
 /* The word GHDL points at. text-decoration only: the glyphs keep their exact

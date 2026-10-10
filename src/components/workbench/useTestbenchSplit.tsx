@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { PaneRun } from './EditorPaneHeader';
 import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
-import { testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
+import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
+import { RoleConflictDialog } from './RoleConflictDialog';
 import type { FileMenuProps } from './FileMenu';
 import type { SplitEditorProps } from './SplitEditor';
 import { editorPropsFor, otherPane, paneFile, type EditorDisplay } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
-import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
+import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides, type UnitRole } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
 import { useEditorSplit, type EditorSplit } from './useEditorSplit';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
@@ -27,7 +28,7 @@ export interface TestbenchSplitOptions {
   paneRun: (pane: PaneRole, target: PaneTarget) => PaneRun | null;
   /** "Create testbench" in the TB pane's empty state, for this design file. */
   onCreateTestbench: (designFileId: string) => void;
-  /** The layout was decided: a file shown, or a view picked with the view switch. */
+  /** The layout was decided: a file shown, or a view picked from a role badge. */
   onViewChosen?: (view: EditorView) => void;
 }
 
@@ -57,8 +58,18 @@ export interface TestbenchSplit {
   readonly showFile: (fileId: string, event: PairEvent, options?: ShowOptions) => void;
   readonly focusPane: (pane: PaneRole) => void;
   readonly onFileDeleted: (id: string) => void;
-  /** CodeEditor's panes, with their headers, the chip and the view switch; none while nothing is shown. */
+  /** CodeEditor's panes, with their headers and the chip; none while nothing is shown. */
   readonly editorSplit: (fileMenu: FileMenuProps) => SplitEditorProps | undefined;
+  /** The question asked when a role change would put two designs or two testbenches side by side; null otherwise. */
+  readonly roleConflictDialog: ReactNode;
+}
+
+/** A role change waiting on RoleConflictDialog. */
+interface PendingRoleChange {
+  readonly fileId: string;
+  readonly otherFileId: string;
+  readonly role: UnitRole;
+  readonly next: TestbenchOverrides;
 }
 
 /**
@@ -75,11 +86,12 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const overrides = useOverrides();
   usePruneContradictedPairs(analysis.current, overrides);
   const [display, setDisplay] = useState<EditorDisplay | null>(null);
+  const [pendingRole, setPendingRole] = useState<PendingRoleChange | null>(null);
   const displayRef = useRef(display);
   displayRef.current = display;
   const pins = useRef(new Map<string, EditorView>());
   const recentFileIds = useRef<string[]>([]);
-  const split = useEditorSplit({ onCollapse: (pane) => pinView(otherPane(pane)), onCollapseByKeyboard: focusViewSwitch });
+  const split = useEditorSplit({ onCollapse: (pane) => pinView(otherPane(pane)), onCollapseByKeyboard: focusRoleBadge });
   const preferenceRef = useRef(split.prefs.preference);
   preferenceRef.current = split.prefs.preference;
 
@@ -111,6 +123,14 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     onViewChosen.current?.(view);
   }
 
+  /** The badge's *Use the setting*: forget the pair's pin and lay it out again (docs/impl_search.md D19). */
+  function followSetting() {
+    const d = displayRef.current;
+    if (!d) return;
+    pins.current.delete(pairKey(d.pair));
+    showFile(d.pair.anchorId, 'open', { pane: d.focusedPane });
+  }
+
   const focusPane = (pane: PaneRole) => {
     const d = displayRef.current;
     if (!d) return;
@@ -119,10 +139,24 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     if (file && file !== activeFileId) setActiveFileId(file);
   };
 
-  const changeOverrides = (next: TestbenchOverrides) => {
+  /** New overrides, laid out again around `anchorId` (default: the shown pair's anchor). */
+  const changeOverrides = (next: TestbenchOverrides, anchorId?: string) => {
     overrides.set(next);
-    const anchor = displayRef.current?.pair.anchorId ?? activeFileId;
+    const anchor = anchorId ?? displayRef.current?.pair.anchorId ?? activeFileId;
     if (anchor) showFile(anchor, 'open');
+  };
+
+  /**
+   * A badge menu's role change. Two designs or two testbenches never sit side by
+   * side: if the change would do that, ask which file stays (RoleConflictDialog).
+   * Otherwise the layout follows the reclassified file, in the pane of its new role.
+   */
+  const setRole = (fileId: string, role: UnitRole | undefined) => {
+    const next = withRole(overrides.ref.current, fileId, role);
+    const d = displayRef.current;
+    const conflict = d && roleConflict(analysis.flush(), next, d.pair, narrowView(d.view, d.focusedPane, split.canSplit), fileId);
+    if (conflict) setPendingRole({ fileId, ...conflict, next });
+    else changeOverrides(next, fileId);
   };
 
   const stepRegion = (step: 1 | -1) => {
@@ -135,6 +169,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     setDisplay({ ...d, regionIndex: index, focusedPane: 'tb', reveals: { ...d.reveals, tb: reveal } });
   };
   useRegionKeys(display, stepRegion);
+  useSplitToggleKey(display, split.canSplit, pinView);
 
   const chip = useSuggestionChip(display, analysis.current, overrides.value, split, pins.current, recentFileIds.current, files, (pair) => {
     pins.current.set(pairKey(pair), 'both');
@@ -149,10 +184,12 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       display,
       reveal: options.reveal,
       paneRun: options.paneRun,
-      onSetRole: (fileId, role) => changeOverrides(withRole(overrides.ref.current, fileId, role)),
+      onSetRole: setRole,
       onPair: (designId, tbId) => changeOverrides(withPair(overrides.ref.current, designId, tbId)),
       onStepRegion: stepRegion,
       onPin: pinView,
+      pinned: display ? pins.current.get(pairKey(display.pair)) : undefined,
+      onUseSetting: followSetting,
       onFocusPane: focusPane,
       onCreateTestbench: options.onCreateTestbench,
       fileMenu,
@@ -175,6 +212,18 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     focusPane,
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
     editorSplit,
+    roleConflictDialog: pendingRole && (
+      <RoleConflictDialog
+        fileName={files.find((f) => f.id === pendingRole.fileId)?.name ?? ''}
+        otherName={files.find((f) => f.id === pendingRole.otherFileId)?.name ?? ''}
+        role={pendingRole.role}
+        onKeep={(which) => {
+          setPendingRole(null);
+          changeOverrides(pendingRole.next, which === 'file' ? pendingRole.fileId : pendingRole.otherFileId);
+        }}
+        onCancel={() => setPendingRole(null)}
+      />
+    ),
   };
 }
 
@@ -213,9 +262,9 @@ function paneShowing(d: EditorDisplay, fileId: string): PaneRole {
   return otherPane(d.focusedPane);
 }
 
-/** The divider is gone: focus the view switch's checked radio, as usePaneLayout's handOffFocus does (§ 4.8). */
-function focusViewSwitch() {
-  window.setTimeout(() => document.querySelector<HTMLElement>('.wb-viewswitch [aria-checked="true"]')?.focus());
+/** The divider is gone: focus the remaining pane's role badge, as usePaneLayout's handOffFocus does (docs/impl_search.md D21). */
+function focusRoleBadge() {
+  window.setTimeout(() => document.querySelector<HTMLElement>('.wb-split__pane:not(.is-drag-hidden) .wb-rolebadge')?.focus());
 }
 
 /**
@@ -276,6 +325,30 @@ function useRegionKeys(display: EditorDisplay | null, step: (s: 1 | -1) => void)
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [active]);
+}
+
+/**
+ * Alt+Shift+B (docs/impl_search.md D21): the pane with the text cursor alone, or
+ * the other side beside it. Takes the view switch's keyboard access.
+ */
+function useSplitToggleKey(display: EditorDisplay | null, canSplit: boolean, pin: (view: EditorView) => void) {
+  const latest = useRef({ display, canSplit, pin });
+  latest.current = { display, canSplit, pin };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.code !== 'KeyB') return;
+      // Never behind a dialog: the role-conflict question was asked about the layout on screen.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const { display: d, canSplit: splittable, pin: pinTo } = latest.current;
+      if (!d) return;
+      e.preventDefault();
+      const shown = narrowView(d.view, d.focusedPane, splittable);
+      if (shown === 'both') pinTo(d.focusedPane);
+      else if (splittable) pinTo('both');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 }
 
 /**

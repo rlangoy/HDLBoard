@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cx } from '../board';
 import type { DiagnosticsByFile, LineDiagnostic } from './diagnosticStore';
 import { EditorSurface, type EditorTab } from './EditorSurface';
 import { narrowView, type EditorView, type PaneRole } from './editorView';
 import { clampFraction } from './editorSplit';
+import { FindBar } from './find/FindBar';
+import { FindContext } from './find/FindContext';
+import { useFind, type FindController } from './find/useFind';
 import { TestbenchEmptyState, type TestbenchEmptyStateProps } from './TestbenchEmptyState';
 import { TEXT, rtlPaneLabel, tbPaneLabel } from './testbenchText';
 import type { FileSymbols } from './symbols/fileSymbols';
@@ -56,6 +59,8 @@ interface SharedProps {
  * `data-editor-view` / `data-focused-pane` for CSS and the e2e scripts.
  * With both panes showing, a symbol highlighted in one also lights the names
  * wired to it in the other (symbols/useLinkedHighlight.ts).
+ * Each pane has its own search (docs/impl_search.md S1, D4), kept here so a pane
+ * hidden for a while keeps its query.
  */
 export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ...shared }: SplitEditorProps & SharedProps) {
   const shown = narrowView(view, focusedPane, split.canSplit);
@@ -65,6 +70,11 @@ export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ..
     rtl: useFileSymbols(rtl.kind === 'file' ? rtl.file : undefined),
   };
   const link = useLinkedHighlight(both, symbols);
+  const find = {
+    tb: useFind(tb.kind === 'file' ? tb.file : undefined, shown !== 'rtl'),
+    rtl: useFind(rtl.kind === 'file' ? rtl.file : undefined, shown !== 'tb'),
+  };
+  useFindShortcuts(find, shown, focusedPane, { tb: tb.kind === 'file', rtl: rtl.kind === 'file' });
   // A fraction stored for a wider column (or older, smaller minimums) still keeps each pane at its minimum.
   const fraction = clampFraction(split.prefs.tbFraction, split.bounds);
   const tracks =
@@ -85,6 +95,7 @@ export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ..
       linkedOccurrences={link.linked[role]}
       onHighlightChange={link.onHighlightChange[role]}
       highlightsCursor={!both || focusedPane === role}
+      find={find[role]}
       {...shared}
     />
   );
@@ -130,6 +141,8 @@ interface PaneProps {
   onHighlightChange: (symbol: HdlSymbol | undefined) => void;
   /** With both panes showing, only the focused one highlights the symbol at its cursor. */
   highlightsCursor: boolean;
+  /** This pane's own search (docs/impl_search.md S1). */
+  find: FindController;
 }
 
 function SplitPane({
@@ -145,6 +158,7 @@ function SplitPane({
   linkedOccurrences,
   onHighlightChange,
   highlightsCursor,
+  find,
 }: PaneProps & SharedProps) {
   const label = model.kind === 'file' ? (role === 'tb' ? tbPaneLabel : rtlPaneLabel)(model.file.name) : role === 'tb' ? TEXT.tbTooltip : TEXT.rtlTooltip;
   return (
@@ -152,13 +166,18 @@ function SplitPane({
       id={role === 'tb' ? TB_PANE_ID : RTL_PANE_ID}
       className={cx('wb-split__pane', `is-${role}`, focused && 'is-focused', hidden && 'is-drag-hidden')}
       aria-label={label}
+      data-find-pane={role}
     >
+      <FindContext.Provider value={model.kind === 'file' ? find : null}>
       {model.header}
       {model.kind === 'empty' ? (
         <TestbenchEmptyState pane={role} {...model.empty} />
       ) : (
         symbols && (
           <>
+            <div className="wb-split__findslot" onFocus={onFocus}>
+              <FindBar fileName={model.file.name} />
+            </div>
             {model.note}
             <EditorSurface
               file={model.file}
@@ -173,10 +192,70 @@ function SplitPane({
               linkedOccurrences={linkedOccurrences}
               onHighlightChange={onHighlightChange}
               highlightsCursor={highlightsCursor}
+              findDecor={find.decor}
+              findAttach={find.attach}
+              onFindEscape={() => {
+                if (!find.open) return false;
+                find.close();
+                return true;
+              }}
+              onFindDismiss={find.dismiss}
             />
           </>
         )
       )}
+      </FindContext.Provider>
     </section>
   );
+}
+
+/**
+ * Ctrl/Cmd+F and Ctrl/Cmd+H (docs/impl_search.md D10, D11): open the Find bar of
+ * the pane with the text cursor, taking its one-line selection as the query.
+ * Pressed inside a pane's Find bar, they act on that pane and keep the typed
+ * query. Not while a modal dialog is open, nor while typing in a text field
+ * outside the editor (the Examples search, a file name), which keeps the key.
+ */
+function useFindShortcuts(
+  find: Readonly<Record<PaneRole, FindController>>,
+  shown: EditorView,
+  focusedPane: PaneRole,
+  hasFile: Readonly<Record<PaneRole, boolean>>,
+) {
+  const latest = useRef({ find, shown, focusedPane, hasFile });
+  latest.current = { find, shown, focusedPane, hasFile };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (key !== 'f' && key !== 'h')) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (isOtherTextField(e.target)) return;
+      const pane = shortcutPane(latest.current, e.target);
+      if (!pane) return;
+      e.preventDefault();
+      const fromFindBar = e.target instanceof Element && e.target.closest('.wb-findbar') !== null;
+      latest.current.find[pane].openBar({ seedFromSelection: !fromFindBar, replace: key === 'h' });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+}
+
+/** A text field that is not part of an editor pane (its code or its Find bar). */
+function isOtherTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable;
+  return typing && target.closest('[data-find-pane]') === null;
+}
+
+function shortcutPane(
+  { shown, focusedPane, hasFile }: { shown: EditorView; focusedPane: PaneRole; hasFile: Readonly<Record<PaneRole, boolean>> },
+  target: EventTarget | null,
+): PaneRole | null {
+  const inPane = target instanceof Element ? target.closest('[data-find-pane]')?.getAttribute('data-find-pane') : null;
+  const visible = (pane: PaneRole) => (shown === 'both' || shown === pane) && hasFile[pane];
+  if ((inPane === 'tb' || inPane === 'rtl') && visible(inPane)) return inPane;
+  if (visible(focusedPane)) return focusedPane;
+  const other: PaneRole = focusedPane === 'tb' ? 'rtl' : 'tb';
+  return visible(other) ? other : null;
 }
