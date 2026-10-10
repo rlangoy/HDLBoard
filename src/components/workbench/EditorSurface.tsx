@@ -9,6 +9,7 @@ import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrol
 import { isOverflowing } from './scrollThumb';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import type { CharRange, Token } from './vhdlHighlight';
+import type { FindDecor } from './find/useFind';
 import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
 import { occurrencesByLine } from './symbols/occurrences';
 import type { FileSymbols } from './symbols/fileSymbols';
@@ -58,7 +59,10 @@ function TokenPiece({ piece }: { piece: DecoratedPiece }) {
   const className = TOKEN_CLASS[piece.type];
   const text = className ? <span className={className}>{piece.text}</span> : piece.text;
   const underlined = piece.marked ? <span className="wb-editor__diag-span">{text}</span> : text;
-  return piece.occurrence ? <span className={OCCURRENCE_CLASS[piece.occurrence]}>{underlined}</span> : <>{underlined}</>;
+  const occurrence = piece.occurrence ? <span className={OCCURRENCE_CLASS[piece.occurrence]}>{underlined}</span> : underlined;
+  // A search match wraps everything else, so its background wins (docs/impl_search.md D16).
+  if (!piece.find) return <>{occurrence}</>;
+  return <span className={cx('wb-editor__find-match', piece.find === 'current' && 'wb-editor__find-current')}>{occurrence}</span>;
 }
 
 const HighlightedLine = memo(function HighlightedLine({
@@ -67,6 +71,8 @@ const HighlightedLine = memo(function HighlightedLine({
   diagnostic,
   hintFrom,
   occurrences,
+  findRanges,
+  currentFind,
 }: {
   line: string;
   /** The line's tokens (`tokenizeSource`); together they are `line`. */
@@ -76,8 +82,11 @@ const HighlightedLine = memo(function HighlightedLine({
   hintFrom?: LineDiagnostic;
   /** The hovered symbol's declaration and references on this line. */
   occurrences: readonly Occurrence[];
+  /** Search matches on this line (docs/impl_search.md § 5.4), and the current one if it is here. */
+  findRanges: readonly CharRange[];
+  currentFind?: CharRange;
 }) {
-  const pieces = decorateLine(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES, occurrences);
+  const pieces = decorateLine(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES, occurrences, findRanges, currentFind);
   const inline = diagnostic ? inlineText(diagnostic) : '';
   return (
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
@@ -149,6 +158,14 @@ export interface EditorSurfaceProps {
    * just as a click elsewhere in the same pane does. Hovering works in both.
    */
   highlightsCursor?: boolean;
+  /** The pane's search highlights (docs/impl_search.md D5); null while its Find bar is closed. */
+  findDecor?: FindDecor | null;
+  /** The pane's search takes the textarea (a callback ref) to read the caret and to replace. */
+  findAttach?: (textarea: HTMLTextAreaElement | null) => void;
+  /** Esc in the code: closes the pane's Find bar; true when it did (D12). */
+  onFindEscape?: () => boolean;
+  /** A click in the code: hides the pane's Find bar and its marks; the query is kept for the next open. */
+  onFindDismiss?: () => void;
 }
 
 /**
@@ -170,6 +187,10 @@ export function EditorSurface({
   linkedOccurrences,
   onHighlightChange,
   highlightsCursor = true,
+  findDecor,
+  findAttach,
+  onFindEscape,
+  onFindDismiss,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -196,6 +217,10 @@ export function EditorSurface({
   const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
   const statusId = useId();
   useRevealLine(textareaRef, file, reveal);
+  useLayoutEffect(() => {
+    findAttach?.(textareaRef.current);
+    return () => findAttach?.(null);
+  }, [findAttach]);
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
@@ -234,6 +259,8 @@ export function EditorSurface({
               diagnostic={linesByNumber.get(i + 1)}
               hintFrom={hints.get(i + 1)}
               occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
+              findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
+              currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}
             />
           ))}
         </pre>
@@ -247,6 +274,10 @@ export function EditorSurface({
           onChange={(e) => onChange(file.id, e.target.value)}
           {...hovered.handlers}
           onSelect={atCaret.onSelect}
+          onPointerDown={onFindDismiss}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && onFindEscape?.()) e.preventDefault();
+          }}
           aria-label={label ?? `${file.name} source`}
           aria-describedby={statusId}
         />

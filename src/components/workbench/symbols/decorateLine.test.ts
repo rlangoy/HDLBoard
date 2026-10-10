@@ -31,4 +31,27 @@ describe('decorateLine', () => {
     const cnt = pieces.find((p) => p.text === 'cnt');
     expect(cnt).toMatchObject({ marked: true, occurrence: 'reference' });
   });
+
+  it('is markRanges with no search matches either (docs/impl_search.md § 6.5)', () => {
+    expect(decorateLine(TOKENS, [], [], [])).toEqual(markRanges(TOKENS, []));
+  });
+
+  it('labels search matches and the current one, keeping the line intact', () => {
+    const pieces = decorateLine(TOKENS, [], [], [{ start: 5, end: 8 }, { start: 11, end: 14 }], { start: 11, end: 14 });
+    expect(pieces.map((p) => p.text).join('')).toBe(LINE);
+    expect(pieces.filter((p) => p.find).map((p) => [p.text, p.find])).toEqual([
+      ['cnt', 'match'],
+      ['cnt', 'current'],
+    ]);
+  });
+
+  it('cuts a search match inside a token', () => {
+    const pieces = decorateLine(TOKENS, [], [], [{ start: 6, end: 7 }]);
+    expect(pieces.filter((p) => p.find).map((p) => p.text)).toEqual(['n']);
+  });
+
+  it('labels a search match that is also an occurrence with both (D16)', () => {
+    const pieces = decorateLine(TOKENS, [], [{ line: 0, start: 5, end: 8, kind: 'reference' }], [{ start: 5, end: 8 }]);
+    expect(pieces.find((p) => p.text === 'cnt')).toMatchObject({ occurrence: 'reference', find: 'match' });
+  });
 });

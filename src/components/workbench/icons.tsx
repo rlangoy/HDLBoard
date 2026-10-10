@@ -252,6 +252,15 @@ export function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** A small upward chevron — the Find bar's previous match. */
+export function ChevronUpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} strokeWidth={1.6} {...props}>
+      <path d="M4 10l4-4 4 4" />
+    </svg>
+  );
+}
+
 /** Two overlapping pages (Material Symbols "content_copy") — a pane header's Copy the code. */
 export function CopyIcon(props: SVGProps<SVGSVGElement>) {
   return (

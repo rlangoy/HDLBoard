@@ -116,6 +116,18 @@
   color: var(--wb-danger-dark);
 }
 
+/* The pane's Search button (docs/impl_search.md § 5.1): Copy's look, a light-blue tile while its Find bar is open. */
+.wb-searchtoggle.is-pressed,
+.wb-searchtoggle.is-pressed:hover {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent);
+}
+
+/* The Find bar's slot under the header: no box of its own; focus in it marks the pane as the one with the cursor. */
+.wb-split__findslot {
+  display: contents;
+}
+
 /* Designs are the usual case: a quiet chip before the name (D6). */
 .wb-panehead.is-plain .wb-roleicon.is-rtl {
   color: var(--wb-role-quiet-ink);
@@ -167,6 +179,16 @@
 
 .wb-rolebadge:hover {
   background: var(--wb-role-tint);
+}
+
+/* A design with no testbench: the RTL badge without the role colour (docs/impl_search.md D18). */
+.wb-rolebadge.is-plain {
+  border-color: var(--wb-border);
+  color: var(--wb-role-quiet-ink);
+}
+
+.wb-rolebadge.is-plain:hover {
+  background: var(--wb-hover);
 }
 
 /* An empty pane's badge only names its role. */
@@ -279,6 +301,22 @@
   width: 12px;
 }
 
+.wb-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-menu__item:disabled:hover {
+  background: transparent;
+}
+
+/* The role badge menu's View group (docs/impl_search.md D19), set apart from the role items below. */
+.wb-menu__group {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--wb-border);
+}
+
 .wb-menu__list {
   max-height: 220px;
   overflow: auto;
@@ -350,74 +388,7 @@
   color: #ffffff;
 }
 
-/* ---- view switch and suggestion chip (§ 4.2, § 4.7) ---------------- */
-
-.wb-viewswitch {
-  display: inline-flex;
-  flex: none; /* never clipped: the file name gives way instead */
-  border: 1px solid var(--wb-border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.wb-viewswitch__option {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-right: 1px solid var(--wb-border);
-  background: transparent;
-  color: var(--wb-text-muted);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.wb-viewswitch__option:last-child {
-  border-right: 0;
-}
-
-.wb-viewswitch__option.is-checked {
-  background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
-  font-weight: 600;
-}
-
-.wb-viewswitch__option.is-tb {
-  --wb-role-ink: var(--wb-role-tb-ink);
-}
-
-.wb-viewswitch__option.is-rtl {
-  --wb-role-ink: var(--wb-role-rtl-ink);
-}
-
-.wb-viewswitch__option.is-tb svg,
-.wb-viewswitch__option.is-rtl svg {
-  color: var(--wb-role-ink);
-}
-
-.wb-viewswitch__option[aria-disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Beside the split's TB and RTL badges the icons speak for themselves; the words
-   stay for screen readers and in the tooltips (docs/cleanup_file_tabs.md § 5.3). */
-.wb-split.is-both .wb-viewswitch__label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.wb-split.is-both .wb-viewswitch__option {
-  padding: 0 6px;
-}
+/* ---- suggestion chip (§ 4.7) ----------------------------------------- */
 
 .wb-tbchip {
   display: inline-flex;
@@ -462,7 +433,7 @@
 }
 
 /* ---- narrow panes (docs/cleanup_file_tabs.md § 5.3) ---------------
- * Below 280 px the badge, the region navigator and the view switch lose their
+ * Below 280 px the badge and the region navigator lose their
  * words and the header tightens, so the file name keeps what room there is.
  * Only the name ever shrinks; its full text is in its tooltip and the file menu.
  * Last in the file, and scoped to the header, so it wins over the rules above
@@ -482,7 +453,6 @@
     padding: 0 4px;
   }
 
-  .wb-panehead .wb-viewswitch__label,
   .wb-panehead .wb-rolebadge__label {
     position: absolute;
     width: 1px;
@@ -492,8 +462,7 @@
     white-space: nowrap;
   }
 
-  .wb-panehead .wb-rolebadge,
-  .wb-panehead .wb-viewswitch__option {
+  .wb-panehead .wb-rolebadge {
     padding: 0 5px;
   }
 

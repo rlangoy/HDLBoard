@@ -158,6 +158,8 @@ After, one design file (the usual case):
 
 ### 5.3 Headers in the split
 
+> **Superseded in part by [impl_search.md](impl_search.md) § 4.1:** the view switch at the right end of the rightmost header is gone; the role badge menu holds the view choices, and each header has a Search button after Copy.
+
 The split's pane headers keep their role tint, accent line, Play and role badge
 (impl_split_screen.md § 4.4). Changes:
 

@@ -1280,6 +1280,7 @@ export function Workbench() {
           onCancel={gitHubProjects.dismissConflict}
         />
       )}
+      {tb.roleConflictDialog}
       {runChoice && (
         <RunTestbenchDialog
           designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
