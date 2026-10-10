@@ -116,7 +116,8 @@ function plainHeader(ctx: ModelContext, { pane, target, file, end, viewControl }
       run={ctx.paneRun(pane, target)}
       end={end}
       viewControl={viewControl}
-      onTreatAsTestbench={() => ctx.onSetRole(file.id, 'tb')}
+      roleOverride={ctx.overrides.roles[file.id]}
+      onSetRole={(role) => ctx.onSetRole(file.id, role)}
     />
   );
 }

@@ -97,8 +97,10 @@ export function RolePaneHeader(props: RolePaneHeaderProps) {
 }
 
 export interface PlainPaneHeaderProps extends FilePaneHeaderProps {
-  /** *Treat as testbench* in the badge menu. */
-  onTreatAsTestbench: () => void;
+  /** The file's role override, if the student set one: the menu then offers *Use detection*. */
+  roleOverride: UnitRole | undefined;
+  /** *Treat as testbench* / *Use detection* in the badge menu. */
+  onSetRole: (role: UnitRole | undefined) => void;
 }
 
 /**
@@ -106,7 +108,7 @@ export interface PlainPaneHeaderProps extends FilePaneHeaderProps {
  * no tint; an untinted RTL badge whose menu can show a testbench beside it
  * (docs/impl_search.md D18, D19); a divider sets Play apart from the name.
  */
-export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewControl, onTreatAsTestbench }: PlainPaneHeaderProps) {
+export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewControl, roleOverride, onSetRole }: PlainPaneHeaderProps) {
   return (
     <div className="wb-panehead is-plain">
       {run && (
@@ -115,7 +117,7 @@ export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewCont
           <span className="wb-panehead__divider" aria-hidden="true" />
         </>
       )}
-      <PlainRoleBadge viewControl={viewControl} onTreatAsTestbench={onTreatAsTestbench} />
+      <PlainRoleBadge viewControl={viewControl} roleOverride={roleOverride} onSetRole={onSetRole} />
       {nameButton}
       <CopyCodeButton fileName={fileName} code={code} />
       <span className="wb-panehead__divider" aria-hidden="true" />
@@ -236,7 +238,15 @@ function ViewGroup({ pane, control, onChoose }: { pane: PaneRole; control: PaneV
 }
 
 /** A design with no testbench: an untinted RTL badge; its menu can open the testbench pane (D18, D19). */
-function PlainRoleBadge({ viewControl, onTreatAsTestbench }: { viewControl: PaneViewControl; onTreatAsTestbench: () => void }) {
+function PlainRoleBadge({
+  viewControl,
+  roleOverride,
+  onSetRole,
+}: {
+  viewControl: PaneViewControl;
+  roleOverride: UnitRole | undefined;
+  onSetRole: (role: UnitRole | undefined) => void;
+}) {
   const menu = usePopover<HTMLSpanElement>();
   const menuId = useId();
   const choose = (action: () => void) => {
@@ -269,9 +279,14 @@ function PlainRoleBadge({ viewControl, onTreatAsTestbench }: { viewControl: Pane
           >
             {TEXT.showTestbenchBeside}
           </button>
-          <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(onTreatAsTestbench)}>
+          <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(() => onSetRole('tb'))}>
             {TEXT.treatAsTestbench}
           </button>
+          {roleOverride && (
+            <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(() => onSetRole(undefined))}>
+              {TEXT.useDetection}
+            </button>
+          )}
         </div>
       )}
     </span>

@@ -53,6 +53,9 @@ export const TEXT = {
   showTestbenchBeside: 'Show testbench beside',
   showDesignBeside: 'Show design beside',
   useSplitSetting: 'Use the setting (Automatic / Always / Never)',
+  twoDesignsTitle: 'Two designs side by side?',
+  twoTestbenchesTitle: 'Two testbenches side by side?',
+  roleConflictQuestion: 'Which file should stay on screen?',
 } as const;
 
 export const detectedAs = (role: 'tb' | 'rtl', confidence: string): string =>
@@ -65,6 +68,9 @@ export const rtlPaneLabel = (name: string): string => `Design (RTL) editor, ${na
 export const noBoardPorts = (name: string): string => `${name} has no board ports, so the board can't drive it.`;
 export const runAnyway = (name: string): string => `Run ${name} anyway`;
 export const regionCount = (n: number, m: number): string => `${n}/${m}`;
+export const roleConflictText = (name: string, other: string, role: 'tb' | 'rtl'): string =>
+  `The split shows one testbench beside one design. As a ${role === 'tb' ? 'testbench' : 'design'}, ${name} would sit beside ${other}, which is one too.`;
+export const keepFile = (name: string): string => `Keep ${name}`;
 
 export interface RuleText {
   /** The construct, as the student would write it. */

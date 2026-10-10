@@ -58,6 +58,8 @@ function pairFromOverride(anchor: FileAnalysis, analysis: ProjectAnalysis, overr
       ? [anchor, effectiveFile(analysis, overrides, tbId)]
       : [designId === undefined ? undefined : effectiveFile(analysis, overrides, designId), anchor];
   if (!tb || !design || contradictsCode(analysis, overrides, design.fileId, tb.fileId)) return undefined;
+  // A role set since the pairing beats it (B6): no pane shows a file in the other role.
+  if (tbUnits(tb).length === 0 || rtlUnits(design).length === 0) return undefined;
   return { anchorId: anchor.fileId, tb: tbTarget(tb), rtl: rtlTarget(design), tbConfidence: 'high', missingDut: null };
 }
 
@@ -95,9 +97,15 @@ function pairForTestbench(anchor: FileAnalysis, analysis: ProjectAnalysis, overr
   const base = { anchorId: anchor.fileId, tb: tbTarget(anchor, unit), tbConfidence: tbConfidenceOf(anchor) };
   const names = unit.instances.map((i) => i.name);
   const stem = testbenchStem(unit.name);
+  // A unit counts as the DUT only where its file is a design: never a file the student marked as a testbench.
+  const isDesignIn = (n: string) => {
+    const file = effectiveFile(analysis, overrides, definingFile(analysis, anchor, n) ?? '');
+    return file !== undefined && rtlUnits(file).length > 0;
+  };
   const defined = names.filter((n) => definingFile(analysis, anchor, n) !== undefined);
-  const dut = defined.find((n) => unitKey(anchor.language, n) === unitKey(anchor.language, stem)) ?? defined[0];
-  if (dut === undefined) return { ...base, rtl: null, missingDut: names[0] ?? null };
+  const designs = defined.filter(isDesignIn);
+  const dut = designs.find((n) => unitKey(anchor.language, n) === unitKey(anchor.language, stem)) ?? designs[0];
+  if (dut === undefined) return { ...base, rtl: null, missingDut: defined.length > 0 ? null : names[0] ?? null };
   const design = effectiveFile(analysis, overrides, definingFile(analysis, anchor, dut) ?? '');
   return { ...base, rtl: design ? rtlTarget(design, findUnit(design, dut)) : null, missingDut: null };
 }

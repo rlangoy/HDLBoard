@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { PaneRun } from './EditorPaneHeader';
 import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
-import { testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
+import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
+import { RoleConflictDialog } from './RoleConflictDialog';
 import type { FileMenuProps } from './FileMenu';
 import type { SplitEditorProps } from './SplitEditor';
 import { editorPropsFor, otherPane, paneFile, type EditorDisplay } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
-import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides } from './tbDetect/types';
+import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides, type UnitRole } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
 import { useEditorSplit, type EditorSplit } from './useEditorSplit';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
@@ -59,6 +60,16 @@ export interface TestbenchSplit {
   readonly onFileDeleted: (id: string) => void;
   /** CodeEditor's panes, with their headers and the chip; none while nothing is shown. */
   readonly editorSplit: (fileMenu: FileMenuProps) => SplitEditorProps | undefined;
+  /** The question asked when a role change would put two designs or two testbenches side by side; null otherwise. */
+  readonly roleConflictDialog: ReactNode;
+}
+
+/** A role change waiting on RoleConflictDialog. */
+interface PendingRoleChange {
+  readonly fileId: string;
+  readonly otherFileId: string;
+  readonly role: UnitRole;
+  readonly next: TestbenchOverrides;
 }
 
 /**
@@ -75,6 +86,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const overrides = useOverrides();
   usePruneContradictedPairs(analysis.current, overrides);
   const [display, setDisplay] = useState<EditorDisplay | null>(null);
+  const [pendingRole, setPendingRole] = useState<PendingRoleChange | null>(null);
   const displayRef = useRef(display);
   displayRef.current = display;
   const pins = useRef(new Map<string, EditorView>());
@@ -127,10 +139,24 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     if (file && file !== activeFileId) setActiveFileId(file);
   };
 
-  const changeOverrides = (next: TestbenchOverrides) => {
+  /** New overrides, laid out again around `anchorId` (default: the shown pair's anchor). */
+  const changeOverrides = (next: TestbenchOverrides, anchorId?: string) => {
     overrides.set(next);
-    const anchor = displayRef.current?.pair.anchorId ?? activeFileId;
+    const anchor = anchorId ?? displayRef.current?.pair.anchorId ?? activeFileId;
     if (anchor) showFile(anchor, 'open');
+  };
+
+  /**
+   * A badge menu's role change. Two designs or two testbenches never sit side by
+   * side: if the change would do that, ask which file stays (RoleConflictDialog).
+   * Otherwise the layout follows the reclassified file, in the pane of its new role.
+   */
+  const setRole = (fileId: string, role: UnitRole | undefined) => {
+    const next = withRole(overrides.ref.current, fileId, role);
+    const d = displayRef.current;
+    const conflict = d && roleConflict(analysis.flush(), next, d.pair, narrowView(d.view, d.focusedPane, split.canSplit), fileId);
+    if (conflict) setPendingRole({ fileId, ...conflict, next });
+    else changeOverrides(next, fileId);
   };
 
   const stepRegion = (step: 1 | -1) => {
@@ -158,7 +184,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       display,
       reveal: options.reveal,
       paneRun: options.paneRun,
-      onSetRole: (fileId, role) => changeOverrides(withRole(overrides.ref.current, fileId, role)),
+      onSetRole: setRole,
       onPair: (designId, tbId) => changeOverrides(withPair(overrides.ref.current, designId, tbId)),
       onStepRegion: stepRegion,
       onPin: pinView,
@@ -186,6 +212,18 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     focusPane,
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
     editorSplit,
+    roleConflictDialog: pendingRole && (
+      <RoleConflictDialog
+        fileName={files.find((f) => f.id === pendingRole.fileId)?.name ?? ''}
+        otherName={files.find((f) => f.id === pendingRole.otherFileId)?.name ?? ''}
+        role={pendingRole.role}
+        onKeep={(which) => {
+          setPendingRole(null);
+          changeOverrides(pendingRole.next, which === 'file' ? pendingRole.fileId : pendingRole.otherFileId);
+        }}
+        onCancel={() => setPendingRole(null)}
+      />
+    ),
   };
 }
 
