@@ -164,6 +164,8 @@ their existing dividers and behaviour.
 
 ### 4.2 View modes
 
+> **Superseded in part by [impl_search.md](impl_search.md) § 4.1:** the `[TB | Both | RTL]` view switch is gone. Its choices live in each pane's role badge menu (View group), and Alt+Shift+B toggles the split. The *setting* below is unchanged.
+
 **Setting** — *Settings → Editor → Testbench split view* (radio group, stored in
 `localStorage`, § 6.7):
 

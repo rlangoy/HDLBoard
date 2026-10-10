@@ -27,7 +27,7 @@ export interface TestbenchSplitOptions {
   paneRun: (pane: PaneRole, target: PaneTarget) => PaneRun | null;
   /** "Create testbench" in the TB pane's empty state, for this design file. */
   onCreateTestbench: (designFileId: string) => void;
-  /** The layout was decided: a file shown, or a view picked with the view switch. */
+  /** The layout was decided: a file shown, or a view picked from a role badge. */
   onViewChosen?: (view: EditorView) => void;
 }
 
@@ -57,7 +57,7 @@ export interface TestbenchSplit {
   readonly showFile: (fileId: string, event: PairEvent, options?: ShowOptions) => void;
   readonly focusPane: (pane: PaneRole) => void;
   readonly onFileDeleted: (id: string) => void;
-  /** CodeEditor's panes, with their headers, the chip and the view switch; none while nothing is shown. */
+  /** CodeEditor's panes, with their headers and the chip; none while nothing is shown. */
   readonly editorSplit: (fileMenu: FileMenuProps) => SplitEditorProps | undefined;
 }
 
@@ -79,7 +79,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   displayRef.current = display;
   const pins = useRef(new Map<string, EditorView>());
   const recentFileIds = useRef<string[]>([]);
-  const split = useEditorSplit({ onCollapse: (pane) => pinView(otherPane(pane)), onCollapseByKeyboard: focusViewSwitch });
+  const split = useEditorSplit({ onCollapse: (pane) => pinView(otherPane(pane)), onCollapseByKeyboard: focusRoleBadge });
   const preferenceRef = useRef(split.prefs.preference);
   preferenceRef.current = split.prefs.preference;
 
@@ -111,6 +111,14 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     onViewChosen.current?.(view);
   }
 
+  /** The badge's *Use the setting*: forget the pair's pin and lay it out again (docs/impl_search.md D19). */
+  function followSetting() {
+    const d = displayRef.current;
+    if (!d) return;
+    pins.current.delete(pairKey(d.pair));
+    showFile(d.pair.anchorId, 'open', { pane: d.focusedPane });
+  }
+
   const focusPane = (pane: PaneRole) => {
     const d = displayRef.current;
     if (!d) return;
@@ -135,6 +143,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     setDisplay({ ...d, regionIndex: index, focusedPane: 'tb', reveals: { ...d.reveals, tb: reveal } });
   };
   useRegionKeys(display, stepRegion);
+  useSplitToggleKey(display, split.canSplit, pinView);
 
   const chip = useSuggestionChip(display, analysis.current, overrides.value, split, pins.current, recentFileIds.current, files, (pair) => {
     pins.current.set(pairKey(pair), 'both');
@@ -153,6 +162,8 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       onPair: (designId, tbId) => changeOverrides(withPair(overrides.ref.current, designId, tbId)),
       onStepRegion: stepRegion,
       onPin: pinView,
+      pinned: display ? pins.current.get(pairKey(display.pair)) : undefined,
+      onUseSetting: followSetting,
       onFocusPane: focusPane,
       onCreateTestbench: options.onCreateTestbench,
       fileMenu,
@@ -213,9 +224,9 @@ function paneShowing(d: EditorDisplay, fileId: string): PaneRole {
   return otherPane(d.focusedPane);
 }
 
-/** The divider is gone: focus the view switch's checked radio, as usePaneLayout's handOffFocus does (§ 4.8). */
-function focusViewSwitch() {
-  window.setTimeout(() => document.querySelector<HTMLElement>('.wb-viewswitch [aria-checked="true"]')?.focus());
+/** The divider is gone: focus the remaining pane's role badge, as usePaneLayout's handOffFocus does (docs/impl_search.md D21). */
+function focusRoleBadge() {
+  window.setTimeout(() => document.querySelector<HTMLElement>('.wb-split__pane:not(.is-drag-hidden) .wb-rolebadge')?.focus());
 }
 
 /**
@@ -276,6 +287,28 @@ function useRegionKeys(display: EditorDisplay | null, step: (s: 1 | -1) => void)
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [active]);
+}
+
+/**
+ * Alt+Shift+B (docs/impl_search.md D21): the pane with the text cursor alone, or
+ * the other side beside it. Takes the view switch's keyboard access.
+ */
+function useSplitToggleKey(display: EditorDisplay | null, canSplit: boolean, pin: (view: EditorView) => void) {
+  const latest = useRef({ display, canSplit, pin });
+  latest.current = { display, canSplit, pin };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.code !== 'KeyB') return;
+      const { display: d, canSplit: splittable, pin: pinTo } = latest.current;
+      if (!d) return;
+      e.preventDefault();
+      const shown = narrowView(d.view, d.focusedPane, splittable);
+      if (shown === 'both') pinTo(d.focusedPane);
+      else if (splittable) pinTo('both');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 }
 
 /**

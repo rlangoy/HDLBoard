@@ -3,7 +3,8 @@
 
 import { useId, type ReactNode } from 'react';
 import { CopyCodeButton } from './CopyCodeButton';
-import type { PaneRole } from './editorView';
+import type { EditorView, PaneRole } from './editorView';
+import { SearchToggle } from './find/SearchToggle';
 import { ChipIcon, FlaskIcon } from './icons';
 import { RoleIcon, usePopover } from './RoleIcon';
 import { SimToggle } from './SimToggle';
@@ -32,6 +33,20 @@ export interface RegionNav {
   readonly onStep: (step: 1 | -1) => void;
 }
 
+/**
+ * What the role badge's View group shows and does (docs/impl_search.md § 4.1, D19):
+ * it replaced the [TB | Both | RTL] switch.
+ */
+export interface PaneViewControl {
+  /** The pair's pin, if the student chose a view for it; undefined when the setting decides. */
+  readonly pinned: EditorView | undefined;
+  /** False when the column is too narrow for two panes. */
+  readonly canSplit: boolean;
+  readonly onPin: (view: EditorView) => void;
+  /** Drops the pair's pin: the split setting decides again. */
+  readonly onUseSetting: () => void;
+}
+
 /** What every pane header with a file has (docs/cleanup_file_tabs.md § 5.2, § 5.3). */
 interface FilePaneHeaderProps {
   fileName: string;
@@ -40,8 +55,10 @@ interface FilePaneHeaderProps {
   /** The file's text, for the Copy button beside its name. */
   code: string;
   run: PaneRun | null;
-  /** At the right end, in the rightmost pane only: the suggestion chip and the view switch. */
+  /** At the right end, in the rightmost pane only: the suggestion chip. */
   end?: ReactNode;
+  /** The role badge's View group. */
+  viewControl: PaneViewControl;
 }
 
 export interface RolePaneHeaderProps extends FilePaneHeaderProps {
@@ -70,6 +87,8 @@ export function RolePaneHeader(props: RolePaneHeaderProps) {
       <RoleBadge {...props} />
       {nameButton}
       <CopyCodeButton fileName={fileName} code={code} />
+      <span className="wb-panehead__divider" aria-hidden="true" />
+      <SearchToggle fileName={fileName} />
       <span className="wb-panehead__spacer" />
       {regions && regions.count > 1 && <RegionNavigator regions={regions} />}
       {end}
@@ -77,11 +96,17 @@ export function RolePaneHeader(props: RolePaneHeaderProps) {
   );
 }
 
+export interface PlainPaneHeaderProps extends FilePaneHeaderProps {
+  /** *Treat as testbench* in the badge menu. */
+  onTreatAsTestbench: () => void;
+}
+
 /**
  * The header of one design file with no testbench (docs/cleanup_file_tabs.md § 5.2):
- * no tint and no badge; a divider sets Play apart from the name, the main element.
+ * no tint; an untinted RTL badge whose menu can show a testbench beside it
+ * (docs/impl_search.md D18, D19); a divider sets Play apart from the name.
  */
-export function PlainPaneHeader({ fileName, nameButton, code, run, end }: FilePaneHeaderProps) {
+export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewControl, onTreatAsTestbench }: PlainPaneHeaderProps) {
   return (
     <div className="wb-panehead is-plain">
       {run && (
@@ -90,8 +115,11 @@ export function PlainPaneHeader({ fileName, nameButton, code, run, end }: FilePa
           <span className="wb-panehead__divider" aria-hidden="true" />
         </>
       )}
+      <PlainRoleBadge viewControl={viewControl} onTreatAsTestbench={onTreatAsTestbench} />
       {nameButton}
       <CopyCodeButton fileName={fileName} code={code} />
+      <span className="wb-panehead__divider" aria-hidden="true" />
+      <SearchToggle fileName={fileName} />
       <span className="wb-panehead__spacer" />
       {end}
     </div>
@@ -141,8 +169,8 @@ function RegionNavigator({ regions }: { regions: RegionNav }) {
   );
 }
 
-/** The role badge, a menu button: detection, role override, pairing. */
-function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith }: RolePaneHeaderProps) {
+/** The role badge, a menu button: the view (D19), detection, role override, pairing. */
+function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith, viewControl }: RolePaneHeaderProps) {
   const menu = usePopover<HTMLSpanElement>();
   const pairList = usePopover<HTMLDivElement>();
   const menuId = useId();
@@ -167,6 +195,7 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
       </button>
       {menu.open && (
         <div className="wb-menu" role="menu" id={menuId}>
+          <ViewGroup pane={pane} control={viewControl} onChoose={choose} />
           <p className="wb-menu__info" role="presentation">
             {roleOverride ? TEXT.roleFromOverride : unit ? detectedAs(unit.role, unit.confidence) : TEXT.noEvidence}
           </p>
@@ -185,9 +214,85 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
   );
 }
 
-function MenuItem({ label, checked, onClick }: { label: string; checked: boolean; onClick: () => void }) {
+/**
+ * The role badge menu's View group (docs/impl_search.md D19): only this file, the
+ * other side beside it, or the split setting. Checked by the pair's pin.
+ */
+function ViewGroup({ pane, control, onChoose }: { pane: PaneRole; control: PaneViewControl; onChoose: (action: () => void) => void }) {
+  const { pinned, canSplit, onPin, onUseSetting } = control;
   return (
-    <button type="button" role="menuitemradio" aria-checked={checked} className="wb-menu__item" onClick={onClick}>
+    <div role="group" aria-label={TEXT.viewGroup} className="wb-menu__group">
+      <MenuItem checked={pinned === pane} onClick={() => onChoose(() => onPin(pane))} label={TEXT.showOnlyThisFile} />
+      <MenuItem
+        checked={pinned === 'both'}
+        disabled={!canSplit}
+        title={canSplit ? undefined : TEXT.tooNarrow}
+        onClick={() => onChoose(() => onPin('both'))}
+        label={pane === 'tb' ? TEXT.showDesignBeside : TEXT.showTestbenchBeside}
+      />
+      <MenuItem checked={pinned === undefined} onClick={() => onChoose(() => onUseSetting())} label={TEXT.useSplitSetting} />
+    </div>
+  );
+}
+
+/** A design with no testbench: an untinted RTL badge; its menu can open the testbench pane (D18, D19). */
+function PlainRoleBadge({ viewControl, onTreatAsTestbench }: { viewControl: PaneViewControl; onTreatAsTestbench: () => void }) {
+  const menu = usePopover<HTMLSpanElement>();
+  const menuId = useId();
+  const choose = (action: () => void) => {
+    action();
+    menu.setOpen(false);
+  };
+  return (
+    <span className="wb-panehead__badge-wrap" ref={menu.rootRef}>
+      <button
+        type="button"
+        className="wb-rolebadge is-rtl is-plain"
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
+        aria-controls={menu.open ? menuId : undefined}
+        title={TEXT.rtlTooltip}
+        onClick={() => menu.setOpen(!menu.open)}
+      >
+        <ChipIcon aria-hidden="true" />
+        <span className="wb-rolebadge__label">{TEXT.rtlLabel}</span>
+      </button>
+      {menu.open && (
+        <div className="wb-menu" role="menu" id={menuId}>
+          <button
+            type="button"
+            role="menuitem"
+            className="wb-menu__item"
+            disabled={!viewControl.canSplit}
+            title={viewControl.canSplit ? undefined : TEXT.tooNarrow}
+            onClick={() => choose(() => viewControl.onPin('both'))}
+          >
+            {TEXT.showTestbenchBeside}
+          </button>
+          <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(onTreatAsTestbench)}>
+            {TEXT.treatAsTestbench}
+          </button>
+        </div>
+      )}
+    </span>
+  );
+}
+
+function MenuItem({
+  label,
+  checked,
+  onClick,
+  disabled,
+  title,
+}: {
+  label: string;
+  checked: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button type="button" role="menuitemradio" aria-checked={checked} className="wb-menu__item" disabled={disabled} title={title} onClick={onClick}>
       <span className="wb-menu__check" aria-hidden="true">
         {checked ? '✓' : ''}
       </span>

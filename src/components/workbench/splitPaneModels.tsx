@@ -2,11 +2,10 @@
 // Copyright (C) 2026 Rune Langøy
 
 import type { ReactNode } from 'react';
-import { EmptyPaneHeader, PlainPaneHeader, RolePaneHeader, type PaneRun } from './EditorPaneHeader';
+import { EmptyPaneHeader, PlainPaneHeader, RolePaneHeader, type PaneRun, type PaneViewControl } from './EditorPaneHeader';
 import { narrowView, withCurrentUnit, type EditorView, type PaneRole } from './editorView';
 import { FileNameButton, type FileMenuProps } from './FileMenu';
 import type { VhdlFile } from './files';
-import { RoleIcon } from './RoleIcon';
 import { pairOptions, unitOf } from './splitModel';
 import type { SplitEditorProps, SplitPaneModel } from './SplitEditor';
 import { effectiveFile } from './tbDetect';
@@ -14,13 +13,13 @@ import type { EditorPair, PaneTarget, ProjectAnalysis, TestbenchOverrides, UnitR
 import { TEXT, noTestbenchFor, notInProject } from './testbenchText';
 import type { EditorSplit } from './useEditorSplit';
 import type { RevealRequest } from './useRevealLine';
-import { ViewSwitch } from './ViewSwitch';
 
 /**
  * What CodeEditor is given to show its panes (docs/impl_split_screen.md § 4.1–4.6;
  * docs/cleanup_file_tabs.md § 5.2, § 5.3): each pane's header and content, and the
- * view switch at the right end of the rightmost header. Turns the split's state
- * into props; holds none itself.
+ * suggestion chip at the right end of the rightmost header. The view is chosen from
+ * each pane's role badge (docs/impl_search.md § 4.1). Turns the split's state into
+ * props; holds none itself.
  */
 
 /** What the editor column shows: one pair, how, and which pane has focus (§ 6.6). */
@@ -46,6 +45,10 @@ export interface ModelContext {
   readonly onPair: (designId: string, tbId: string) => void;
   readonly onStepRegion: (step: 1 | -1) => void;
   readonly onPin: (view: EditorView) => void;
+  /** The shown pair's pin, if any. */
+  readonly pinned: EditorView | undefined;
+  /** Drops the shown pair's pin. */
+  readonly onUseSetting: () => void;
   readonly onFocusPane: (pane: PaneRole) => void;
   readonly onCreateTestbench: (designFileId: string) => void;
   /** The project's files for the header's file menu. */
@@ -60,26 +63,21 @@ export function editorPropsFor(ctx: ModelContext, split: EditorSplit, chip: Reac
   const d = ctx.display;
   if (!d) return undefined;
   const shown = narrowView(d.view, d.focusedPane, split.canSplit);
-  const end = (
-    <>
-      {chip}
-      <ViewSwitch view={shown} bothDisabled={!split.canSplit} onChange={ctx.onPin} />
-    </>
-  );
   const rightmost: PaneRole = shown === 'tb' ? 'tb' : 'rtl';
-  const endOf = (pane: PaneRole) => (pane === rightmost ? end : null);
+  const endOf = (pane: PaneRole) => (pane === rightmost ? chip : null);
+  const viewControl: PaneViewControl = { pinned: ctx.pinned, canSplit: split.canSplit, onPin: ctx.onPin, onUseSetting: ctx.onUseSetting };
   return {
     view: d.view,
     focusedPane: d.focusedPane,
     onFocusPane: ctx.onFocusPane,
-    tb: paneModel(ctx, d, 'tb', endOf('tb')),
-    rtl: paneModel(ctx, d, 'rtl', endOf('rtl')),
+    tb: paneModel(ctx, d, 'tb', endOf('tb'), viewControl),
+    rtl: paneModel(ctx, d, 'rtl', endOf('rtl'), viewControl),
     split,
   };
 }
 
 /** One pane's header and content: its file, or its empty state (§ 4.6). */
-function paneModel(ctx: ModelContext, d: EditorDisplay, pane: PaneRole, end: ReactNode): SplitPaneModel {
+function paneModel(ctx: ModelContext, d: EditorDisplay, pane: PaneRole, end: ReactNode, viewControl: PaneViewControl): SplitPaneModel {
   const shownTarget = d.pair[pane];
   const file = shownTarget && ctx.files.find((f) => f.id === shownTarget.fileId);
   if (!shownTarget || !file) return { kind: 'empty', header: <EmptyPaneHeader pane={pane} end={end} />, empty: emptyModel(ctx, d, pane) };
@@ -92,7 +90,7 @@ function paneModel(ctx: ModelContext, d: EditorDisplay, pane: PaneRole, end: Rea
     file: { id: file.id, name: file.name, content: file.content },
     reveal: latestReveal(d.reveals[pane], takesDiagnosticReveal ? ctx.reveal : null, file.id),
     note: noTestbenchLeft(ctx, d, pane, file.id),
-    header: isPlainDesign(d) ? plainHeader(ctx, { pane, target, file, end }) : roleHeader(ctx, d, { pane, target, file, end }),
+    header: isPlainDesign(d) ? plainHeader(ctx, { pane, target, file, end, viewControl }) : roleHeader(ctx, d, { pane, target, file, end, viewControl }),
   };
 }
 
@@ -101,23 +99,33 @@ interface ShownFile {
   readonly pane: PaneRole;
   readonly target: PaneTarget;
   readonly file: VhdlFile;
-  /** The chip and view switch, in the rightmost pane only. */
+  /** The suggestion chip, in the rightmost pane only. */
   readonly end: ReactNode;
+  readonly viewControl: PaneViewControl;
 }
 
 /** A design with no testbench, shown alone: the plain header (cleanup_file_tabs.md § 5.2). */
 const isPlainDesign = (d: EditorDisplay): boolean => d.view === 'rtl' && !d.pair.tb && d.pair.rtl !== null;
 
-function plainHeader(ctx: ModelContext, { pane, target, file, end }: ShownFile): ReactNode {
-  const role = effectiveFile(ctx.project, ctx.overrides, file.id)?.role;
-  const nameButton = fileNameButton(ctx, file, <RoleIcon role={role} />);
-  return <PlainPaneHeader fileName={file.name} nameButton={nameButton} code={file.content} run={ctx.paneRun(pane, target)} end={end} />;
+function plainHeader(ctx: ModelContext, { pane, target, file, end, viewControl }: ShownFile): ReactNode {
+  return (
+    <PlainPaneHeader
+      fileName={file.name}
+      nameButton={fileNameButton(ctx, file)}
+      code={file.content}
+      run={ctx.paneRun(pane, target)}
+      end={end}
+      viewControl={viewControl}
+      onTreatAsTestbench={() => ctx.onSetRole(file.id, 'tb')}
+    />
+  );
 }
 
-function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, end }: ShownFile): ReactNode {
+function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, end, viewControl }: ShownFile): ReactNode {
   return (
     <RolePaneHeader
       pane={pane}
+      viewControl={viewControl}
       fileName={file.name}
       nameButton={fileNameButton(ctx, file)}
       code={file.content}
@@ -134,10 +142,10 @@ function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, e
 }
 
 /** The file's name as the button that opens the file menu; plain text if its row is missing. */
-function fileNameButton(ctx: ModelContext, file: VhdlFile, icon?: ReactNode): ReactNode {
+function fileNameButton(ctx: ModelContext, file: VhdlFile): ReactNode {
   const row = ctx.fileMenu.rows.find((r) => r.id === file.id);
   if (!row) return <span className="wb-filename__text">{file.name}</span>;
-  return <FileNameButton row={row} icon={icon} menu={ctx.fileMenu} />;
+  return <FileNameButton row={row} menu={ctx.fileMenu} />;
 }
 
 function regionNav(ctx: ModelContext, d: EditorDisplay, fileId: string) {

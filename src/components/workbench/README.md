@@ -378,14 +378,21 @@ one header row, 39 px like the side panes' title strips, so the three run on
 as one line:
 
 - **`PlainPaneHeader`** — one design file with no testbench: white, Play, a
-  divider, then the file name, the header's main element.
+  divider, an untinted RTL badge, then the file name, the header's main element.
 - **`RolePaneHeader`** — a testbench or design pane of the split
   (docs/impl_split_screen.md § 4.4): role tint and accent, Play, the role badge
   (a menu), the name, the region navigator.
 - **`EmptyPaneHeader`** — a pane with nothing to show: its role only.
 
-The rightmost header ends with the suggestion chip and the view switch (icons
-only beside the split's badges). The name is a `FileNameButton`
+Every header with a file has Copy and then, after a divider, its **Search**
+button (`find/SearchToggle.tsx`), which opens that pane's own Find bar
+(`find/FindBar.tsx`) under the header — each pane searches only its own file,
+case-insensitively, with Replace / Replace All once there are matches
+(docs/impl_search.md). Ctrl+F / Ctrl+H open the bar of the pane with the text
+cursor. The rightmost header ends with the suggestion chip. There is no view
+switch: the role badge's menu starts with a View group (*Show only this file*,
+*Show testbench / design beside*, *Use the setting*), and Alt+Shift+B toggles
+the split for the pane with the cursor. The name is a `FileNameButton`
 (`FileMenu.tsx`): it drops down every file, grouped by folder as in Files, the
 shown file ticked, *New file…* at the bottom — the role badge's menu pattern
 (`usePopover`, arrows, Home/End; Esc and Tab hand focus back to the name). A

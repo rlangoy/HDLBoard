@@ -83,6 +83,10 @@
   /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
   --wb-occ-bg: rgba(100, 160, 255, 0.32);
   --wb-occ-underline: #4a90e2;
+  /* Search matches (docs/impl_search.md § 5.4). */
+  --wb-find-bg: #fff3a3;
+  --wb-find-current-bg: #ffd54a;
+  --wb-find-current-outline: #c99a00;
 }
 
 .wb-editor__body {
@@ -188,6 +192,25 @@
   background: var(--wb-occ-bg);
   box-shadow: inset 0 -2px 0 var(--wb-occ-underline);
   color: inherit;
+}
+
+/* A search match wraps every other piece, so its background wins over an
+   occurrence's, whose inset underline still shows through (D16). Outline and
+   background only: the glyphs keep their exact metrics (S3). */
+.wb-editor__find-match {
+  background: var(--wb-find-bg);
+  border-radius: 2px;
+}
+
+.wb-editor__find-match .wb-editor__occ-ref,
+.wb-editor__find-match .wb-editor__occ-decl {
+  background: transparent;
+}
+
+.wb-editor__find-match.wb-editor__find-current {
+  background: var(--wb-find-current-bg);
+  outline: 1px solid var(--wb-find-current-outline);
+  outline-offset: -1px;
 }
 
 /* The word GHDL points at. text-decoration only: the glyphs keep their exact
