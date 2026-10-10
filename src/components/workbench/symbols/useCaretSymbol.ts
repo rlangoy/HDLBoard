@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useMemo, useState, type SyntheticEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import { caretOfSelection, symbolAtCaret } from './caretPosition';
+import { keepIfSameSymbol } from './keepIfSameSymbol';
 import type { HdlSymbol, SymbolIndex } from './types';
 
 export interface CaretSymbol {
@@ -10,6 +11,12 @@ export interface CaretSymbol {
   symbol: HdlSymbol | undefined;
   /** Spread on the editor's `<textarea>`: React fires it whenever the cursor or selection moves. */
   onSelect: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
+}
+
+/** One version of the file: its text and the symbol index built from it. */
+interface FileSnapshot {
+  readonly text: string;
+  readonly index: SymbolIndex;
 }
 
 /**
@@ -21,10 +28,14 @@ export interface CaretSymbol {
  */
 export function useCaretSymbol(text: string, index: SymbolIndex): CaretSymbol {
   const [caret, setCaret] = useState<number | undefined>(undefined);
+  const latest = useRef<FileSnapshot>({ text, index }); // read by onSelect, which never changes
+  latest.current = { text, index };
 
   const onSelect = useCallback((event: SyntheticEvent<HTMLTextAreaElement>) => {
     const { value, selectionStart, selectionEnd } = event.currentTarget;
-    setCaret(caretOfSelection(value, selectionStart, selectionEnd));
+    const next = caretOfSelection(value, selectionStart, selectionEnd);
+    const { text, index } = latest.current;
+    setCaret((previous) => keepIfSameSymbol(previous, next, (caret) => symbolAtCaret(index, text, caret)));
   }, []);
 
   const symbol = useMemo(() => (caret === undefined ? undefined : symbolAtCaret(index, text, caret)), [caret, index, text]);

@@ -91,14 +91,17 @@ const HighlightedLine = memo(function HighlightedLine({
   );
 });
 
-/** Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue). */
-function EditorGutter({
+/**
+ * Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue).
+ * Memoised: a symbol highlight changes nothing here, so hovering skips every line number.
+ */
+const EditorGutter = memo(function EditorGutter({
   lines,
   linesByNumber,
   hints,
   gutterRef,
 }: {
-  lines: string[];
+  lines: readonly string[];
   linesByNumber: ReadonlyMap<number, LineDiagnostic>;
   hints: ReadonlyMap<number, LineDiagnostic>;
   gutterRef: RefObject<HTMLDivElement>;
@@ -117,7 +120,7 @@ function EditorGutter({
       })}
     </div>
   );
-}
+});
 
 export interface EditorSurfaceProps {
   file: EditorTab;

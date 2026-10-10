@@ -57,7 +57,3 @@ export function offsetAtColumn(text: string, column: number, tabSize: number): n
   }
   return undefined;
 }
-
-export function sameCell(a: TextCell | undefined, b: TextCell | undefined): boolean {
-  return a?.line === b?.line && a?.offset === b?.offset;
-}

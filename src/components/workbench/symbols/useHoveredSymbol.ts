@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { cellAtPointer, sameCell, type TextCell, type TextMetrics } from './pointerPosition';
+import { keepIfSameSymbol } from './keepIfSameSymbol';
+import { cellAtPointer, type TextCell, type TextMetrics } from './pointerPosition';
 import type { HdlSymbol, SymbolIndex } from './types';
 
 /** How long the pointer must rest before the highlight follows it (spec: 75–150 ms). */
@@ -60,6 +61,8 @@ export function useHoveredSymbol(lines: readonly string[], index: SymbolIndex): 
   const metrics = useRef<TextMetrics | undefined>(undefined);
   const linesRef = useRef(lines);
   linesRef.current = lines;
+  const indexRef = useRef(index);
+  indexRef.current = index;
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
@@ -84,7 +87,7 @@ export function useHoveredSymbol(lines: readonly string[], index: SymbolIndex): 
     );
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      setCell((previous) => (sameCell(previous, next) ? previous : next));
+      setCell((previous) => keepIfSameSymbol(previous, next, (cell) => indexRef.current.symbolAt(cell.line, cell.offset)));
     }, HOVER_DELAY_MS);
   }, []);
 
