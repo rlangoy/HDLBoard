@@ -143,6 +143,12 @@ export interface EditorSurfaceProps {
   linkedOccurrences?: ReadonlyMap<number, readonly Occurrence[]>;
   /** The symbol this pane highlights changed (or there is none any more). */
   onHighlightChange?: (symbol: HdlSymbol | undefined) => void;
+  /**
+   * Whether the symbol at the text cursor is highlighted. Of two panes side by side
+   * only the focused one does, so a click in the other pane drops the highlight
+   * just as a click elsewhere in the same pane does. Hovering works in both.
+   */
+  highlightsCursor?: boolean;
 }
 
 /**
@@ -163,6 +169,7 @@ export function EditorSurface({
   symbols,
   linkedOccurrences,
   onHighlightChange,
+  highlightsCursor = true,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -177,7 +184,7 @@ export function EditorSurface({
   // The pointer wins while it rests on a name.
   const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
   const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
-  const highlighted = hovered.symbol ?? atCaret.symbol;
+  const highlighted = hovered.symbol ?? (highlightsCursor ? atCaret.symbol : undefined);
   useEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
   const ownOccurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
   const occurrences = linkedOccurrences?.size ? linkedOccurrences : ownOccurrences;

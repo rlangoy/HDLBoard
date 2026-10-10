@@ -84,6 +84,7 @@ export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ..
       symbols={symbols[role]}
       linkedOccurrences={link.linked[role]}
       onHighlightChange={link.onHighlightChange[role]}
+      highlightsCursor={!both || focusedPane === role}
       {...shared}
     />
   );
@@ -127,6 +128,8 @@ interface PaneProps {
   symbols: FileSymbols | undefined;
   linkedOccurrences: ReadonlyMap<number, readonly Occurrence[]> | undefined;
   onHighlightChange: (symbol: HdlSymbol | undefined) => void;
+  /** With both panes showing, only the focused one highlights the symbol at its cursor. */
+  highlightsCursor: boolean;
 }
 
 function SplitPane({
@@ -141,6 +144,7 @@ function SplitPane({
   symbols,
   linkedOccurrences,
   onHighlightChange,
+  highlightsCursor,
 }: PaneProps & SharedProps) {
   const label = model.kind === 'file' ? (role === 'tb' ? tbPaneLabel : rtlPaneLabel)(model.file.name) : role === 'tb' ? TEXT.tbTooltip : TEXT.rtlTooltip;
   return (
@@ -168,6 +172,7 @@ function SplitPane({
               symbols={symbols}
               linkedOccurrences={linkedOccurrences}
               onHighlightChange={onHighlightChange}
+              highlightsCursor={highlightsCursor}
             />
           </>
         )
