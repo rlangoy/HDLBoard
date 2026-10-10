@@ -28,6 +28,9 @@ When the mouse rests (≈100 ms) on an identifier in the editor:
 - The highlight disappears when the pointer leaves the editor, moves to something that is not a resolvable name (keyword, comment, string, whitespace, unknown name), or moves to another symbol.
 - After an edit, the highlight is recomputed from the new text automatically.
 - Hovering never re-parses: the file is analysed once per edit, and a hover is one lookup.
+- Scrolling the text under a still pointer drops the hover highlight until the pointer moves again.
+
+The **text cursor** highlights the same way (`symbols/useCaretSymbol.ts`): clicking a name, selecting it, or moving the cursor onto it (or just after it, `count|`) lights it up, and the highlight stays while the mouse goes elsewhere. A selection that spans more than one name highlights nothing. While the pointer rests on a name, the hover wins.
 
 Shadowing examples that must work (both are unit tests):
 

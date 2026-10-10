@@ -15,6 +15,7 @@ import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
 import { occurrencesByLine } from './symbols/occurrences';
 import { buildSymbolIndex } from './symbols/symbolIndex';
 import type { Occurrence, OccurrenceKind } from './symbols/types';
+import { useCaretSymbol } from './symbols/useCaretSymbol';
 import { useHoveredSymbol } from './symbols/useHoveredSymbol';
 
 /** The file a surface edits. */
@@ -160,10 +161,13 @@ export function EditorSurface({
   const language = languageOfName(file.name);
   // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
   const tokenLines = useMemo(() => tokenizeSource(language, file.content.split('\n')), [language, file.content]);
-  // Symbol occurrence highlighting: analysed once per edit, looked up on hover.
+  // Symbol occurrence highlighting: analysed once per edit, looked up on hover or
+  // at the text cursor. The pointer wins while it rests on a name.
   const symbolIndex = useMemo(() => buildSymbolIndex(language, tokenLines), [language, tokenLines]);
   const hovered = useHoveredSymbol(lines, symbolIndex);
-  const occurrences = useMemo(() => occurrencesByLine(hovered.symbol), [hovered.symbol]);
+  const atCaret = useCaretSymbol(file.content, symbolIndex);
+  const highlighted = hovered.symbol ?? atCaret.symbol;
+  const occurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds
@@ -221,6 +225,7 @@ export function EditorSurface({
           onScroll={handleScroll}
           onChange={(e) => onChange(file.id, e.target.value)}
           {...hovered.handlers}
+          onSelect={atCaret.onSelect}
           aria-label={label ?? `${file.name} source`}
           aria-describedby={statusId}
         />
