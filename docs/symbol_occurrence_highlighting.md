@@ -23,8 +23,8 @@
 When the mouse rests (≈100 ms) on an identifier in the editor:
 
 - The identifier is resolved to **its declaration by scope**, not by text matching. An inner declaration shadows an outer one with the same name.
-- The **declaration** gets a light-blue background with a blue outline.
-- Every **reference** gets the light-blue background only.
+- Every occurrence gets a soft, semi-transparent light-blue background (`rgba(180, 210, 255, 0.45)`); the text keeps the normal identifier colour.
+- The **declaration** also gets a faint 1px edge (`rgba(59, 130, 246, 0.5)`); **references** get the background only. No border, so nothing moves.
 - The highlight disappears when the pointer leaves the editor, moves to something that is not a resolvable name (keyword, comment, string, whitespace, unknown name), or moves to another symbol.
 - After an edit, the highlight is recomputed from the new text automatically.
 - Hovering never re-parses: the file is analysed once per edit, and a hover is one lookup.
@@ -1730,8 +1730,8 @@ Replace with:
 ```css
   --wb-code-pad-x: 16px;
   /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
-  --wb-occ-bg: #dbeafe;
-  --wb-occ-decl-edge: #3b82f6;
+  --wb-occ-bg: rgba(180, 210, 255, 0.45);
+  --wb-occ-decl-edge: rgba(59, 130, 246, 0.5);
 }
 ```
 

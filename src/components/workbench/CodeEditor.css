@@ -81,8 +81,8 @@
   --wb-code-pad-top: 12px;
   --wb-code-pad-x: 16px;
   /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
-  --wb-occ-bg: #dbeafe;
-  --wb-occ-decl-edge: #3b82f6;
+  --wb-occ-bg: rgba(180, 210, 255, 0.45);
+  --wb-occ-decl-edge: rgba(59, 130, 246, 0.5);
 }
 
 .wb-editor__body {
@@ -178,12 +178,15 @@
   background: var(--wb-diag-hint-bg);
 }
 
-/* The hovered symbol's declaration and references. Background and an inset
-   box-shadow only: no border, padding or margin, so the glyphs do not move and
-   the transparent textarea stays aligned with this layer. */
+/* The hovered symbol's declaration and references: a soft, see-through blue
+   behind the name, whose text keeps the identifier colour. Background and an
+   inset box-shadow only: no border, padding or margin, so the glyphs do not move
+   and the transparent textarea stays aligned with this layer. The declaration
+   alone gets a faint 1px edge, so a beginner can tell where the name is made. */
 .wb-editor__occ-ref,
 .wb-editor__occ-decl {
   background: var(--wb-occ-bg);
+  color: inherit;
   border-radius: 2px;
 }
 .wb-editor__occ-decl {
