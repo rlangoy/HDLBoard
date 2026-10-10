@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
+import { memo, useId, useLayoutEffect, useMemo, useRef, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
-import { languageOfName } from './fileKinds';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { tokenizeSource } from './highlight';
-import { markRanges, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
+import type { CharRange, Token } from './vhdlHighlight';
+import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
+import { occurrencesByLine } from './symbols/occurrences';
+import type { FileSymbols } from './symbols/fileSymbols';
+import type { HdlSymbol, Occurrence, OccurrenceKind } from './symbols/types';
+import { useCaretSymbol } from './symbols/useCaretSymbol';
+import { useHoveredSymbol } from './symbols/useHoveredSymbol';
 
 /** The file a surface edits. */
 export interface EditorTab {
@@ -20,6 +24,12 @@ export interface EditorTab {
 }
 
 const NO_RANGES: readonly CharRange[] = [];
+const NO_OCCURRENCES: readonly Occurrence[] = [];
+
+const OCCURRENCE_CLASS: Record<OccurrenceKind, string> = {
+  declaration: 'wb-editor__occ-decl',
+  reference: 'wb-editor__occ-ref',
+};
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   keyword: 'wb-tok-keyword',
@@ -40,18 +50,23 @@ function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDia
   return hintFrom ? 'is-hint' : '';
 }
 
-/** One highlighted piece; an underlined one is wrapped, and the underline never changes the glyphs. */
-function TokenPiece({ piece }: { piece: MarkedToken }) {
+/**
+ * One highlighted piece; an underlined one is wrapped, and so is a hovered symbol's
+ * occurrence. Neither wrapper changes the glyphs' metrics.
+ */
+function TokenPiece({ piece }: { piece: DecoratedPiece }) {
   const className = TOKEN_CLASS[piece.type];
   const text = className ? <span className={className}>{piece.text}</span> : piece.text;
-  return piece.marked ? <span className="wb-editor__diag-span">{text}</span> : <>{text}</>;
+  const underlined = piece.marked ? <span className="wb-editor__diag-span">{text}</span> : text;
+  return piece.occurrence ? <span className={OCCURRENCE_CLASS[piece.occurrence]}>{underlined}</span> : <>{underlined}</>;
 }
 
-function HighlightedLine({
+const HighlightedLine = memo(function HighlightedLine({
   line,
   tokens,
   diagnostic,
   hintFrom,
+  occurrences,
 }: {
   line: string;
   /** The line's tokens (`tokenizeSource`); together they are `line`. */
@@ -59,8 +74,10 @@ function HighlightedLine({
   diagnostic?: LineDiagnostic;
   /** Rules D and E point at this line from that marked line. */
   hintFrom?: LineDiagnostic;
+  /** The hovered symbol's declaration and references on this line. */
+  occurrences: readonly Occurrence[];
 }) {
-  const pieces = markRanges(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
+  const pieces = decorateLine(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES, occurrences);
   const inline = diagnostic ? inlineText(diagnostic) : '';
   return (
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
@@ -70,16 +87,19 @@ function HighlightedLine({
       )}
     </div>
   );
-}
+});
 
-/** Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue). */
-function EditorGutter({
+/**
+ * Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue).
+ * Memoised: a symbol highlight changes nothing here, so hovering skips every line number.
+ */
+const EditorGutter = memo(function EditorGutter({
   lines,
   linesByNumber,
   hints,
   gutterRef,
 }: {
-  lines: string[];
+  lines: readonly string[];
   linesByNumber: ReadonlyMap<number, LineDiagnostic>;
   hints: ReadonlyMap<number, LineDiagnostic>;
   gutterRef: RefObject<HTMLDivElement>;
@@ -98,7 +118,7 @@ function EditorGutter({
       })}
     </div>
   );
-}
+});
 
 export interface EditorSurfaceProps {
   file: EditorTab;
@@ -113,6 +133,22 @@ export interface EditorSurfaceProps {
   announces?: boolean;
   /** The pane was clicked or focused. */
   onFocusWithin?: () => void;
+  /** The file's analysis (`useFileSymbols`), shared with the split view. */
+  symbols: FileSymbols;
+  /**
+   * Names in this file linked to the symbol highlighted in the other pane, by line
+   * (symbols/portLinks.ts). While there are any, they are shown instead of this
+   * pane's own highlight.
+   */
+  linkedOccurrences?: ReadonlyMap<number, readonly Occurrence[]>;
+  /** The symbol this pane highlights changed (or there is none any more). */
+  onHighlightChange?: (symbol: HdlSymbol | undefined) => void;
+  /**
+   * Whether the symbol at the text cursor is highlighted. Of two panes side by side
+   * only the focused one does, so a click in the other pane drops the highlight
+   * just as a click elsewhere in the same pane does. Hovering works in both.
+   */
+  highlightsCursor?: boolean;
 }
 
 /**
@@ -130,6 +166,10 @@ export function EditorSurface({
   label,
   announces = true,
   onFocusWithin,
+  symbols,
+  linkedOccurrences,
+  onHighlightChange,
+  highlightsCursor = true,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -138,10 +178,17 @@ export function EditorSurface({
   // Where both bars show, each stops short of the corner the other one runs into.
   const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
-  const lines = file.content.split('\n');
-  const language = languageOfName(file.name);
-  // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
-  const tokenLines = useMemo(() => tokenizeSource(language, file.content.split('\n')), [language, file.content]);
+  // Built once per edit by the caller; the same arrays let the memoised gutter and lines skip a highlight change.
+  const { lines, tokenLines, index: symbolIndex } = symbols;
+  // Symbol occurrence highlighting: looked up on hover or at the text cursor.
+  // The pointer wins while it rests on a name.
+  const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
+  const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
+  const highlighted = hovered.symbol ?? (highlightsCursor ? atCaret.symbol : undefined);
+  // Before paint: the other pane's link follows in the same frame, without a flash of the old one.
+  useLayoutEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
+  const ownOccurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
+  const occurrences = linkedOccurrences?.size ? linkedOccurrences : ownOccurrences;
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds
@@ -151,6 +198,7 @@ export function EditorSurface({
   useRevealLine(textareaRef, file, reveal);
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
+    hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
     const { scrollTop, scrollLeft } = e.currentTarget;
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop;
@@ -185,6 +233,7 @@ export function EditorSurface({
               key={i}
               diagnostic={linesByNumber.get(i + 1)}
               hintFrom={hints.get(i + 1)}
+              occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
             />
           ))}
         </pre>
@@ -196,6 +245,8 @@ export function EditorSurface({
           wrap="off"
           onScroll={handleScroll}
           onChange={(e) => onChange(file.id, e.target.value)}
+          {...hovered.handlers}
+          onSelect={atCaret.onSelect}
           aria-label={label ?? `${file.name} source`}
           aria-describedby={statusId}
         />

@@ -43,9 +43,12 @@ const TYPES = new Set([
 ]);
 
 // One alternation, longest-first within each group, so e.g. a number is
-// matched whole rather than digit by digit.
+// matched whole rather than digit by digit. A character literal is exactly one
+// character ('1'). A quote right after a name or `)` is a tick, not a literal:
+// the attribute in `clk'event` and the qualifier in `std_logic'('1')`. A quote is
+// punctuation on its own, so a run of punctuation never swallows a literal (`('(',`).
 const TOKEN_RE =
-  /(--[^\n]*)|("(?:[^"]|"")*"|'(?:[^']|'')*')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_]+)/g;
+  /(--[^\n]*)|("(?:[^"]|"")*"|(?<![A-Za-z0-9_)])'[^\n]')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_']+|')/g;
 
 export function tokenizeVhdlLine(line: string): Token[] {
   const tokens: Token[] = [];
@@ -85,7 +88,7 @@ export interface MarkedToken extends Token {
   readonly marked: boolean;
 }
 
-function isInside(offset: number, ranges: readonly CharRange[]): boolean {
+export function isInside(offset: number, ranges: readonly CharRange[]): boolean {
   return ranges.some((range) => range.start <= offset && offset < range.end);
 }
 

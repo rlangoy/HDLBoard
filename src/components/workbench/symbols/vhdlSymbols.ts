@@ -1,0 +1,285 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+/**
+ * VHDL scopes and declarations, found by walking tokens rather than by parsing.
+ * Only language facts live here; resolving names is symbolIndex.ts's job.
+ *
+ * Scopes: entity, architecture (inside its entity, so ports are visible), package
+ * (a package body inside its package), process, block, generate (one for all its
+ * `elsif`/`else` branches), component, configuration, function and procedure.
+ * Each closes at an `end` that is not `end if` / `end case` / `end loop` / … .
+ *
+ * Declarations: signal, variable, constant, alias, type, subtype, enumeration
+ * literals, and the names in port, generic and subprogram parameter lists.
+ * VHDL is case-insensitive; symbolIndex.ts compares names in lower case.
+ */
+
+import {
+  DeclarationMap,
+  isIdentifier,
+  matchingClose,
+  matchingOpen,
+  ScopeTracker,
+  type Analysis,
+} from './analysis';
+import type { SourceToken } from './sourceTokens';
+import type { SymbolKind } from './types';
+
+/** Keywords that open a scope (when they do not follow `end` or a label's `:`). */
+const SCOPE_OPENERS: ReadonlySet<string> = new Set([
+  'entity', 'architecture', 'package', 'process', 'block', 'generate', 'component', 'configuration',
+]);
+const SUBPROGRAMS: ReadonlySet<string> = new Set(['function', 'procedure']);
+/** `end if`, `end loop`, …: these close a statement, never one of our scopes. */
+const NON_SCOPE_ENDS: ReadonlySet<string> = new Set(['if', 'case', 'loop', 'record', 'units', 'protected', 'for']);
+/** `u0 : entity work.counter`, `u1 : component counter`: an instance, not a declaration. */
+const INSTANTIABLE: ReadonlySet<string> = new Set(['entity', 'component', 'configuration']);
+/** The word before an instantiable keyword that names a unit instead of opening one: `u0 : entity …`, `for all : c use entity …`. */
+const NAMES_A_UNIT: ReadonlySet<string> = new Set([':', 'use']);
+/** `signal a, b : …` */
+const OBJECT_DECLARATIONS: ReadonlyMap<string, SymbolKind> = new Map([
+  ['signal', 'signal'],
+  ['variable', 'variable'],
+  ['constant', 'constant'],
+]);
+/** `port (…)`, `generic (…)` */
+const INTERFACE_LISTS: ReadonlyMap<string, SymbolKind> = new Map([
+  ['port', 'port'],
+  ['generic', 'generic'],
+]);
+/** Words that may start an item of an interface list: `(signal x : out bit; constant n : integer)`. */
+const INTERFACE_CLASS_WORDS: ReadonlySet<string> = new Set(['signal', 'variable', 'constant', 'file']);
+
+export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
+  const scopes = new ScopeTracker();
+  const declarations = new DeclarationMap();
+  const ignored = new Set<number>();
+  const tokenScopes: number[] = [];
+  const unitScopes = new Map<string, number>();
+  /** Subprogram scopes whose `is` has not been seen yet, with the bracket depth they opened at. */
+  const pendingSubprograms = new Map<number, number>();
+  let depth = 0;
+  let inEndStatement = false;
+  let inElsifCondition = false;
+  /** Generate scopes: an `end;` directly inside one ends a VHDL-2008 body, not the generate. */
+  const generateScopes = new Set<number>();
+  /** `for i in` opened a scope that its `loop` or `generate` takes over. */
+  let forScopeOpen = false;
+  /** One entry per open `loop`: whether a `for` scope closes with it. */
+  const loops: boolean[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    tokenScopes[i] = scopes.current;
+    const token = tokens[i];
+    const word = token.text.toLowerCase();
+
+    if (token.text === '(') depth++;
+    else if (token.text === ')') depth--;
+
+    // `end process blink;`: the words up to the `;` close a scope; they declare and refer to nothing.
+    if (inEndStatement) {
+      if (token.text === ';') inEndStatement = false;
+      else if (isIdentifier(token)) ignored.add(i);
+      continue;
+    }
+    if (word === 'end') {
+      const ended = tokens[i + 1]?.text.toLowerCase() ?? '';
+      if (ended === 'loop' && loops.pop()) scopes.close();
+      const endsGenerateBody = generateScopes.has(scopes.current) && ended !== 'generate';
+      if (!NON_SCOPE_ENDS.has(ended) && !endsGenerateBody) scopes.close();
+      inEndStatement = true;
+      continue;
+    }
+
+    // `for i in 0 to 7 loop` / `generate`: the parameter lives in a scope of its own.
+    if (word === 'for' && isIdentifier(tokens[i + 1]) && tokens[i + 2]?.text.toLowerCase() === 'in') {
+      scopes.open();
+      declarations.add(i + 1, 'loop-parameter');
+      forScopeOpen = true;
+    }
+    if (word === 'loop') {
+      loops.push(forScopeOpen);
+      forScopeOpen = false;
+    }
+
+    // A function or procedure declared without a body (`function f (a : bit) return bit;`) ends at its `;`.
+    const pendingAt = pendingSubprograms.get(scopes.current);
+    if (pendingAt === depth && word === 'is') pendingSubprograms.delete(scopes.current);
+    if (pendingAt === depth && token.text === ';') {
+      pendingSubprograms.delete(scopes.current);
+      scopes.close();
+      continue;
+    }
+
+    // `elsif c generate` and `else generate` (VHDL-2008) continue the generate that is already open.
+    if (word === 'elsif') inElsifCondition = true;
+    else if (word === 'then') inElsifCondition = false;
+    const continuesGenerate = word === 'generate' && (inElsifCondition || tokens[i - 1]?.text.toLowerCase() === 'else');
+    if (continuesGenerate) inElsifCondition = false;
+
+    const takesOverFor = word === 'generate' && forScopeOpen;
+    if (takesOverFor) forScopeOpen = false;
+
+    const namesUnit = INSTANTIABLE.has(word) && NAMES_A_UNIT.has(tokens[i - 1]?.text.toLowerCase() ?? '');
+    if (SCOPE_OPENERS.has(word) && !namesUnit && !continuesGenerate && !takesOverFor) openScope(tokens, i, word, scopes, unitScopes);
+    if (word === 'generate' && !continuesGenerate) generateScopes.add(scopes.current);
+
+    if (SUBPROGRAMS.has(word)) {
+      pendingSubprograms.set(scopes.open(), depth);
+      const open = indexOfOpenBracket(tokens, i + 1);
+      if (open !== undefined) declareAll(declarations, interfaceNames(tokens, open), 'parameter');
+    }
+
+    const listKind = INTERFACE_LISTS.get(word);
+    if (listKind && tokens[i + 1]?.text === '(') declareAll(declarations, interfaceNames(tokens, i + 1), listKind);
+
+    const objectKind = OBJECT_DECLARATIONS.get(word);
+    if (objectKind) declareAll(declarations, namesBeforeColon(tokens, i + 1), objectKind);
+
+    if (word === 'alias' && isIdentifier(tokens[i + 1])) declarations.add(i + 1, 'alias');
+    if ((word === 'type' || word === 'subtype') && isIdentifier(tokens[i + 1])) declarations.add(i + 1, 'type');
+    if (word === 'type') declareAll(declarations, enumerationLiterals(tokens, i), 'enum-literal');
+    if (word === 'record') recordFieldNames(tokens, i).forEach((j) => ignored.add(j));
+    if (token.text === '=>' && depth > 0) {
+      const formal = namedArgumentBefore(tokens, i);
+      if (formal !== undefined) ignored.add(formal);
+    }
+
+    // A label (`blink : process`) is a name followed by `:` that declares nothing;
+    // `attribute keep of data_reg : signal` names a signal there, which is a use.
+    const isLabel = tokens[i + 1]?.text === ':' && tokens[i - 1]?.text.toLowerCase() !== 'of';
+    if (isIdentifier(token) && isLabel && !declarations.entries.has(i)) ignored.add(i);
+  }
+
+  return {
+    scopeParents: scopes.scopeParents,
+    tokenScopes,
+    declarations: declarations.entries,
+    ignored,
+  };
+}
+
+/**
+ * Opens the scope a keyword starts. An architecture sits inside its entity so it
+ * sees the ports; a package body sits inside its package so it sees the constants.
+ *
+ * @param unitScopes Scopes of the entities and packages seen so far, by `unitKey`.
+ */
+function openScope(
+  tokens: readonly SourceToken[],
+  i: number,
+  word: string,
+  scopes: ScopeTracker,
+  unitScopes: Map<string, number>,
+): void {
+  const enclosing = enclosingUnitKey(tokens, i, word);
+  const parent = enclosing ? unitScopes.get(enclosing) : undefined;
+  const scope = scopes.open(parent ?? scopes.current);
+  const declared = declaredUnitKey(tokens, i, word);
+  if (declared) unitScopes.set(declared, scope);
+}
+
+const lowerTextAt = (tokens: readonly SourceToken[], i: number) => tokens[i]?.text.toLowerCase();
+const unitKey = (kind: 'entity' | 'package', name: string | undefined) => `${kind} ${name}`;
+
+/** `architecture rtl of counter` → entity counter; `package body p` → package p. */
+function enclosingUnitKey(tokens: readonly SourceToken[], i: number, word: string): string | undefined {
+  if (word === 'architecture' && lowerTextAt(tokens, i + 2) === 'of') return unitKey('entity', lowerTextAt(tokens, i + 3));
+  if (word === 'package' && lowerTextAt(tokens, i + 1) === 'body') return unitKey('package', lowerTextAt(tokens, i + 2));
+  return undefined;
+}
+
+/** `entity counter is` → entity counter; `package p is` → package p. */
+function declaredUnitKey(tokens: readonly SourceToken[], i: number, word: string): string | undefined {
+  if (word !== 'entity' && word !== 'package') return undefined;
+  if (!isIdentifier(tokens[i + 1]) || lowerTextAt(tokens, i + 1) === 'body') return undefined;
+  return unitKey(word, lowerTextAt(tokens, i + 1));
+}
+
+function declareAll(declarations: DeclarationMap, indices: readonly number[], kind: SymbolKind): void {
+  for (const index of indices) declarations.add(index, kind);
+}
+
+/** The `(` that starts a subprogram's parameter list: `function f (` or `function "+" (` (the string is dropped). */
+function indexOfOpenBracket(tokens: readonly SourceToken[], from: number): number | undefined {
+  if (tokens[from]?.text === '(') return from;
+  if (tokens[from + 1]?.text === '(') return from + 1;
+  return undefined;
+}
+
+/** `a, b, c :` starting at `from`; nothing unless the list really ends in `:`. */
+function namesBeforeColon(tokens: readonly SourceToken[], from: number): number[] {
+  const names: number[] = [];
+  let j = from;
+  while (isIdentifier(tokens[j])) {
+    names.push(j);
+    if (tokens[j + 1]?.text !== ',') break;
+    j += 2;
+  }
+  return tokens[j + 1]?.text === ':' ? names : [];
+}
+
+/**
+ * The declared names of an interface list `( a, b : in bit; signal c : out bit )`:
+ * at the start of each `;`-separated item, the identifiers before the `:`.
+ */
+function interfaceNames(tokens: readonly SourceToken[], open: number): number[] {
+  const close = matchingClose(tokens, open);
+  const names: number[] = [];
+  let atItemStart = true;
+  for (let j = open + 1; j < close; j++) {
+    const token = tokens[j];
+    if (token.text === '(') j = matchingClose(tokens, j); // `std_logic_vector(7 downto 0)`
+    else if (token.text === ';') atItemStart = true;
+    else if (!atItemStart || token.text === ',') continue;
+    else if (INTERFACE_CLASS_WORDS.has(token.text.toLowerCase())) continue;
+    else if (isIdentifier(token)) names.push(j);
+    else atItemStart = false; // the `:` (or anything else) ends the item's names
+  }
+  return names;
+}
+
+/** `type state_t is (IDLE, RUN, DONE)`: the literals. */
+function enumerationLiterals(tokens: readonly SourceToken[], typeIndex: number): number[] {
+  const open = typeIndex + 3;
+  if (tokens[typeIndex + 2]?.text.toLowerCase() !== 'is' || tokens[open]?.text !== '(') return [];
+  const close = matchingClose(tokens, open);
+  const literals: number[] = [];
+  for (let j = open + 1; j < close; j++) if (isIdentifier(tokens[j])) literals.push(j);
+  return literals;
+}
+
+/** `record a, b : bit; c : integer; end record`: the field names, which are not references. */
+function recordFieldNames(tokens: readonly SourceToken[], recordIndex: number): number[] {
+  const fields: number[] = [];
+  for (let j = recordIndex + 1; j < tokens.length && tokens[j].text.toLowerCase() !== 'end'; j++) {
+    const startsItem = tokens[j - 1].text === ';' || j === recordIndex + 1;
+    if (startsItem) fields.push(...namesBeforeColon(tokens, j));
+  }
+  return fields;
+}
+
+/**
+ * The parameter name left of a call's `=>` (`f(a => s)`), which names the called
+ * subprogram's parameter and is no use of a local name. Undefined for anything
+ * else: an aggregate's choice (`(IDLE => 1)`) is a use, and a port or generic map's
+ * formal is handled as a formal by symbolIndex.ts.
+ */
+function namedArgumentBefore(tokens: readonly SourceToken[], arrow: number): number | undefined {
+  const name = tokens[arrow - 1]?.text === ')' ? matchingOpen(tokens, arrow - 1) - 1 : arrow - 1;
+  const startsAssociation = tokens[name - 1]?.text === '(' || tokens[name - 1]?.text === ',';
+  if (!isIdentifier(tokens[name]) || !startsAssociation) return undefined;
+  const open = enclosingOpenBracket(tokens, name);
+  return isIdentifier(tokens[open - 1]) ? name : undefined; // `f(` is a call; `:= (` an aggregate
+}
+
+/** The `(` that the token at `inside` sits in, or -1. */
+function enclosingOpenBracket(tokens: readonly SourceToken[], inside: number): number {
+  let depth = 0;
+  for (let j = inside - 1; j >= 0; j--) {
+    if (tokens[j].text === ')') depth++;
+    else if (tokens[j].text === '(' && depth-- === 0) return j;
+  }
+  return -1;
+}
