@@ -647,8 +647,10 @@ export function Workbench() {
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
   // Chrome and Edge's own picker keeps handles to the chosen files (fileSystemAccess.ts); elsewhere the file input.
+  // The Windows app uses the file input too: a file from a handle has no path on disk
+  // (pathForFile gives ''), and the path is what opens a project with its own folder.
   const handleUploadClick = () => {
-    if (!canPickWithHandles()) {
+    if (!canPickWithHandles() || desktopBridge()?.pathForFile) {
       uploadInputRef.current?.click();
       return;
     }
