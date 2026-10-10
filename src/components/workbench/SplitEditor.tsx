@@ -71,8 +71,8 @@ export function SplitEditor({ view, focusedPane, onFocusPane, tb, rtl, split, ..
   };
   const link = useLinkedHighlight(both, symbols);
   const find = {
-    tb: useFind(tb.kind === 'file' ? tb.file : undefined),
-    rtl: useFind(rtl.kind === 'file' ? rtl.file : undefined),
+    tb: useFind(tb.kind === 'file' ? tb.file : undefined, shown !== 'rtl'),
+    rtl: useFind(rtl.kind === 'file' ? rtl.file : undefined, shown !== 'tb'),
   };
   useFindShortcuts(find, shown, focusedPane, { tb: tb.kind === 'file', rtl: rtl.kind === 'file' });
   // A fraction stored for a wider column (or older, smaller minimums) still keeps each pane at its minimum.
@@ -211,8 +211,9 @@ function SplitPane({
 /**
  * Ctrl/Cmd+F and Ctrl/Cmd+H (docs/impl_search.md D10, D11): open the Find bar of
  * the pane with the text cursor, taking its one-line selection as the query.
- * Pressed inside a pane's Find bar, they act on that pane. Not while a modal
- * dialog is open.
+ * Pressed inside a pane's Find bar, they act on that pane and keep the typed
+ * query. Not while a modal dialog is open, nor while typing in a text field
+ * outside the editor (the Examples search, a file name), which keeps the key.
  */
 function useFindShortcuts(
   find: Readonly<Record<PaneRole, FindController>>,
@@ -227,14 +228,23 @@ function useFindShortcuts(
       const key = e.key.toLowerCase();
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (key !== 'f' && key !== 'h')) return;
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (isOtherTextField(e.target)) return;
       const pane = shortcutPane(latest.current, e.target);
       if (!pane) return;
       e.preventDefault();
-      latest.current.find[pane].openBar({ seedFromSelection: true, replace: key === 'h' });
+      const fromFindBar = e.target instanceof Element && e.target.closest('.wb-findbar') !== null;
+      latest.current.find[pane].openBar({ seedFromSelection: !fromFindBar, replace: key === 'h' });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+}
+
+/** A text field that is not part of an editor pane (its code or its Find bar). */
+function isOtherTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable;
+  return typing && target.closest('[data-find-pane]') === null;
 }
 
 function shortcutPane(

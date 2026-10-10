@@ -53,13 +53,14 @@ export function findMatches(text: string, query: string, max: number = MAX_MATCH
     }
     return { matches, capped: false };
   }
-  const queryChars = Array.from(query, (c) => c.toLowerCase());
-  const last = text.length - queryChars.length;
+  // One entry per UTF-16 unit, as the text is indexed: an emoji is two units on both sides.
+  const queryChars = Array.from({ length: query.length }, (_, k) => query[k].toLowerCase());
+  const last = text.length - query.length;
   for (let i = 0; i <= last; i++) {
     if (!matchesAt(text, i, queryChars)) continue;
     if (matches.length === max) return { matches, capped: true };
-    matches.push({ start: i, end: i + queryChars.length });
-    i += queryChars.length - 1;
+    matches.push({ start: i, end: i + query.length });
+    i += query.length - 1;
   }
   return { matches, capped: false };
 }
@@ -97,6 +98,28 @@ export function matchesByLine(text: string, matches: readonly TextMatch[]): Read
     else byLine.set(line, [range]);
   }
   return byLine;
+}
+
+/**
+ * `next`, with each line's ranges replaced by `previous`'s array for that line
+ * when they are equal, so a memoised line whose matches did not change is not
+ * drawn again after an edit elsewhere (docs/impl_search.md AC-14). Pure.
+ */
+export function keepUnchangedLines(
+  previous: ReadonlyMap<number, readonly CharRange[]>,
+  next: ReadonlyMap<number, readonly CharRange[]>,
+): ReadonlyMap<number, readonly CharRange[]> {
+  if (previous.size === 0) return next;
+  const kept = new Map<number, readonly CharRange[]>();
+  for (const [line, ranges] of next) {
+    const before = previous.get(line);
+    kept.set(line, before && sameRanges(before, ranges) ? before : ranges);
+  }
+  return kept;
+}
+
+function sameRanges(a: readonly CharRange[], b: readonly CharRange[]): boolean {
+  return a.length === b.length && a.every((r, i) => r.start === b[i].start && r.end === b[i].end);
 }
 
 /** The 0-based line `offset` is on. */

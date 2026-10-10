@@ -171,10 +171,21 @@ function RegionNavigator({ regions }: { regions: RegionNav }) {
   );
 }
 
-/** The role badge, a menu button: the view (D19), detection, role override, pairing. */
-function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith, viewControl }: RolePaneHeaderProps) {
+/**
+ * A role badge: a labelled TB / RTL button that opens a menu (docs/impl_search.md
+ * D18). `children` gets `choose`, which runs an action and closes the menu.
+ */
+function BadgeMenu({
+  pane,
+  plain = false,
+  children,
+}: {
+  pane: PaneRole;
+  /** The untinted RTL badge of a design with no testbench. */
+  plain?: boolean;
+  children: (choose: (action: () => void) => void) => ReactNode;
+}) {
   const menu = usePopover<HTMLSpanElement>();
-  const pairList = usePopover<HTMLDivElement>();
   const menuId = useId();
   const Icon = pane === 'tb' ? FlaskIcon : ChipIcon;
   const choose = (action: () => void) => {
@@ -185,7 +196,7 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
     <span className="wb-panehead__badge-wrap" ref={menu.rootRef}>
       <button
         type="button"
-        className={`wb-rolebadge is-${pane}`}
+        className={`wb-rolebadge is-${pane}${plain ? ' is-plain' : ''}`}
         aria-haspopup="menu"
         aria-expanded={menu.open}
         aria-controls={menu.open ? menuId : undefined}
@@ -197,6 +208,20 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
       </button>
       {menu.open && (
         <div className="wb-menu" role="menu" id={menuId}>
+          {children(choose)}
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** The role badge of a split pane: the view (D19), detection, role override, pairing. */
+function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith, viewControl }: RolePaneHeaderProps) {
+  const pairList = usePopover<HTMLDivElement>();
+  return (
+    <BadgeMenu pane={pane}>
+      {(choose) => (
+        <>
           <ViewGroup pane={pane} control={viewControl} onChoose={choose} />
           <p className="wb-menu__info" role="presentation">
             {roleOverride ? TEXT.roleFromOverride : unit ? detectedAs(unit.role, unit.confidence) : TEXT.noEvidence}
@@ -210,9 +235,22 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
             </button>
             {pairList.open && <PairList options={pairOptions} onPick={(id) => choose(() => onPairWith(id))} />}
           </div>
-        </div>
+        </>
       )}
-    </span>
+    </BadgeMenu>
+  );
+}
+
+/** *Show design beside* / *Show testbench beside*: pins both panes, disabled while the column is too narrow (D19). */
+function ShowBesideItem({ pane, control, onChoose, checked }: { pane: PaneRole; control: PaneViewControl; onChoose: (action: () => void) => void; checked?: boolean }) {
+  return (
+    <MenuItem
+      checked={checked}
+      disabled={!control.canSplit}
+      title={control.canSplit ? undefined : TEXT.tooNarrow}
+      onClick={() => onChoose(() => control.onPin('both'))}
+      label={pane === 'tb' ? TEXT.showDesignBeside : TEXT.showTestbenchBeside}
+    />
   );
 }
 
@@ -221,23 +259,20 @@ function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWit
  * other side beside it, or the split setting. Checked by the pair's pin.
  */
 function ViewGroup({ pane, control, onChoose }: { pane: PaneRole; control: PaneViewControl; onChoose: (action: () => void) => void }) {
-  const { pinned, canSplit, onPin, onUseSetting } = control;
+  const { pinned, onPin, onUseSetting } = control;
   return (
     <div role="group" aria-label={TEXT.viewGroup} className="wb-menu__group">
       <MenuItem checked={pinned === pane} onClick={() => onChoose(() => onPin(pane))} label={TEXT.showOnlyThisFile} />
-      <MenuItem
-        checked={pinned === 'both'}
-        disabled={!canSplit}
-        title={canSplit ? undefined : TEXT.tooNarrow}
-        onClick={() => onChoose(() => onPin('both'))}
-        label={pane === 'tb' ? TEXT.showDesignBeside : TEXT.showTestbenchBeside}
-      />
+      <ShowBesideItem pane={pane} control={control} onChoose={onChoose} checked={pinned === 'both'} />
       <MenuItem checked={pinned === undefined} onClick={() => onChoose(() => onUseSetting())} label={TEXT.useSplitSetting} />
     </div>
   );
 }
 
-/** A design with no testbench: an untinted RTL badge; its menu can open the testbench pane (D18, D19). */
+/**
+ * A design with no testbench: the untinted RTL badge (D18). Its menu opens the
+ * testbench pane, marks the file a testbench, or drops a role override (D19).
+ */
 function PlainRoleBadge({
   viewControl,
   roleOverride,
@@ -247,52 +282,20 @@ function PlainRoleBadge({
   roleOverride: UnitRole | undefined;
   onSetRole: (role: UnitRole | undefined) => void;
 }) {
-  const menu = usePopover<HTMLSpanElement>();
-  const menuId = useId();
-  const choose = (action: () => void) => {
-    action();
-    menu.setOpen(false);
-  };
   return (
-    <span className="wb-panehead__badge-wrap" ref={menu.rootRef}>
-      <button
-        type="button"
-        className="wb-rolebadge is-rtl is-plain"
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-        aria-controls={menu.open ? menuId : undefined}
-        title={TEXT.rtlTooltip}
-        onClick={() => menu.setOpen(!menu.open)}
-      >
-        <ChipIcon aria-hidden="true" />
-        <span className="wb-rolebadge__label">{TEXT.rtlLabel}</span>
-      </button>
-      {menu.open && (
-        <div className="wb-menu" role="menu" id={menuId}>
-          <button
-            type="button"
-            role="menuitem"
-            className="wb-menu__item"
-            disabled={!viewControl.canSplit}
-            title={viewControl.canSplit ? undefined : TEXT.tooNarrow}
-            onClick={() => choose(() => viewControl.onPin('both'))}
-          >
-            {TEXT.showTestbenchBeside}
-          </button>
-          <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(() => onSetRole('tb'))}>
-            {TEXT.treatAsTestbench}
-          </button>
-          {roleOverride && (
-            <button type="button" role="menuitem" className="wb-menu__item" onClick={() => choose(() => onSetRole(undefined))}>
-              {TEXT.useDetection}
-            </button>
-          )}
-        </div>
+    <BadgeMenu pane="rtl" plain>
+      {(choose) => (
+        <>
+          <ShowBesideItem pane="rtl" control={viewControl} onChoose={choose} />
+          <MenuItem onClick={() => choose(() => onSetRole('tb'))} label={TEXT.treatAsTestbench} />
+          {roleOverride && <MenuItem onClick={() => choose(() => onSetRole(undefined))} label={TEXT.useDetection} />}
+        </>
       )}
-    </span>
+    </BadgeMenu>
   );
 }
 
+/** A menu item; a radio item (with its tick) when `checked` is given. */
 function MenuItem({
   label,
   checked,
@@ -301,13 +304,22 @@ function MenuItem({
   title,
 }: {
   label: string;
-  checked: boolean;
+  checked?: boolean;
   onClick: () => void;
   disabled?: boolean;
   title?: string;
 }) {
+  const radio = checked !== undefined;
   return (
-    <button type="button" role="menuitemradio" aria-checked={checked} className="wb-menu__item" disabled={disabled} title={title} onClick={onClick}>
+    <button
+      type="button"
+      role={radio ? 'menuitemradio' : 'menuitem'}
+      aria-checked={radio ? checked : undefined}
+      className="wb-menu__item"
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+    >
       <span className="wb-menu__check" aria-hidden="true">
         {checked ? '✓' : ''}
       </span>

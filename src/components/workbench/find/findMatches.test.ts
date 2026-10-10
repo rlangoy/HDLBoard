@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
-import { cleanQuery, findMatches, lineOfOffset, matchesByLine, replaceAllText, stillMatches } from './findMatches';
+import { cleanQuery, findMatches, keepUnchangedLines, lineOfOffset, matchesByLine, replaceAllText, stillMatches } from './findMatches';
 
 const starts = (text: string, query: string) => findMatches(text, query).matches.map((m) => m.start);
 
@@ -30,6 +30,13 @@ describe('findMatches', () => {
     expect('İ'.toLowerCase().length).toBe(2);
     const [match] = findMatches(text, 'LEDR').matches;
     expect(text.slice(match.start, match.end)).toBe('ledr');
+  });
+
+  it('finds an emoji in a text that takes the slow path, with the whole emoji in the match', () => {
+    const text = 'İ -- 🚀 done';
+    const [match] = findMatches(text, '🚀 DONE').matches;
+    expect(match).toBeDefined();
+    expect(text.slice(match.start, match.end)).toBe('🚀 done');
   });
 
   it('stops at the cap and says so (D15)', () => {
@@ -80,5 +87,18 @@ describe('replaceAllText', () => {
 describe('cleanQuery', () => {
   it('turns line breaks into spaces', () => {
     expect(cleanQuery('a\r\nb\nc')).toBe('a b c');
+  });
+});
+
+describe('keepUnchangedLines', () => {
+  it('keeps the earlier array of a line whose ranges did not change, and takes the new one otherwise', () => {
+    const same = [{ start: 0, end: 3 }];
+    const previous = new Map([[0, same], [1, [{ start: 2, end: 5 }]]]);
+    const next = new Map([[0, [{ start: 0, end: 3 }]], [1, [{ start: 4, end: 7 }]], [2, [{ start: 0, end: 1 }]]]);
+    const kept = keepUnchangedLines(previous, next);
+    expect(kept.get(0)).toBe(same);
+    expect(kept.get(1)).toBe(next.get(1));
+    expect(kept.get(2)).toBe(next.get(2));
+    expect([...kept.keys()]).toEqual([0, 1, 2]);
   });
 });

@@ -5,7 +5,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { countLines, lineHeightOrFallback } from '../diagnosticLocation';
 import type { CharRange } from '../vhdlHighlight';
 import { applyEdit } from './applyEdit';
-import { MAX_SEED_LENGTH, cleanQuery, findMatches, lineOfOffset, matchesByLine, replaceAllText, stillMatches, type FindResult, type TextMatch } from './findMatches';
+import {
+  MAX_SEED_LENGTH, cleanQuery, findMatches, keepUnchangedLines, lineOfOffset, matchesByLine, replaceAllText, stillMatches,
+  type FindResult, type TextMatch,
+} from './findMatches';
 import { anchorAfterReplace, firstAtOrAfter, stepIndex } from './findNavigation';
 import { counterText, replacedAll } from './findText';
 
@@ -72,9 +75,10 @@ type PendingReveal = { readonly afterEditOf: string | null } | null;
  * *anchor* offset (findNavigation.ts): opening sets it to the caret, stepping to
  * the match stepped to, Replace past the inserted text (D8); an edit in the code
  * leaves it, so the current match stays near where it was (D14). Nothing is
- * searched while the bar is closed (D14a).
+ * searched while the bar is closed (D14a), or while the pane is hidden (`shown`
+ * false): its bar comes back as it was with the pane (D13).
  */
-export function useFind(file: FindFile | undefined): FindController {
+export function useFind(file: FindFile | undefined, shown = true): FindController {
   const [open, setOpen] = useState(false);
   const [query, setQueryState] = useState('');
   const [replacement, setReplacement] = useState('');
@@ -88,11 +92,12 @@ export function useFind(file: FindFile | undefined): FindController {
 
   const content = file?.content ?? '';
   const searched = useDebounced(query, content.length > DEBOUNCE_ABOVE_CHARS ? DEBOUNCE_MS : 0);
-  const result = useMemo(() => (open ? findMatches(content, searched) : NO_RESULT), [open, content, searched]);
+  const searching = open && shown;
+  const result = useMemo(() => (searching ? findMatches(content, searched) : NO_RESULT), [searching, content, searched]);
   const { matches } = result;
   const currentIndex = firstAtOrAfter(matches, anchor);
   const current: TextMatch | undefined = matches[currentIndex];
-  const byLine = useMemo(() => matchesByLine(content, matches), [content, matches]);
+  const byLine = useStableByLine(content, matches);
   const decor = useMemo(() => decorFor(content, byLine, current), [content, byLine, current]);
   const replaceVisible = useReplaceVisible(matches.length > 0);
   useConfirmationTimeout(confirmation, setConfirmation);
@@ -156,6 +161,11 @@ export function useFind(file: FindFile | undefined): FindController {
       return;
     }
     setAnchor(anchorAfterReplace(current, replacement.length));
+    if (textarea.value.slice(current.start, current.end) === replacement) {
+      // Nothing would change: no edit (and no undo step), just move on.
+      requestReveal();
+      return;
+    }
     requestReveal(textarea.value);
     applyEdit(textarea, current.start, current.end, replacement);
   };
@@ -173,7 +183,7 @@ export function useFind(file: FindFile | undefined): FindController {
     const all = findMatches(textarea.value, query, Number.POSITIVE_INFINITY).matches;
     if (all.length === 0) return;
     const { text, caret } = replaceAllText(textarea.value, all, replacement);
-    applyEdit(textarea, 0, textarea.value.length, text, { keepView: true, caret });
+    if (text !== textarea.value) applyEdit(textarea, 0, textarea.value.length, text, { keepView: true, caret });
     setConfirmation(replacedAll(all.length));
   };
 
@@ -256,11 +266,25 @@ function revealSideways(textarea: HTMLTextAreaElement): boolean {
 function useDebounced(value: string, delay: number): string {
   const [settled, setSettled] = useState(value);
   useEffect(() => {
-    if (delay === 0) return undefined;
+    if (delay === 0) {
+      // Kept current, so switching to a delay later starts from the last query, not the first.
+      setSettled(value);
+      return undefined;
+    }
     const timer = window.setTimeout(() => setSettled(value), delay);
     return () => window.clearTimeout(timer);
   }, [value, delay]);
   return delay === 0 ? value : settled;
+}
+
+/** Matches by line, keeping each unchanged line's array from the last time (keepUnchangedLines). */
+function useStableByLine(content: string, matches: readonly TextMatch[]): ReadonlyMap<number, readonly CharRange[]> {
+  const previous = useRef<ReadonlyMap<number, readonly CharRange[]>>(new Map());
+  return useMemo(() => {
+    const next = keepUnchangedLines(previous.current, matchesByLine(content, matches));
+    previous.current = next;
+    return next;
+  }, [content, matches]);
 }
 
 /** D9a: shown at once with matches; hidden only once 0 matches have lasted REPLACE_HIDE_MS. */

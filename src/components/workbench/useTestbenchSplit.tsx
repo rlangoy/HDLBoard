@@ -337,6 +337,8 @@ function useSplitToggleKey(display: EditorDisplay | null, canSplit: boolean, pin
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey || e.code !== 'KeyB') return;
+      // Never behind a dialog: the role-conflict question was asked about the layout on screen.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       const { display: d, canSplit: splittable, pin: pinTo } = latest.current;
       if (!d) return;
       e.preventDefault();
