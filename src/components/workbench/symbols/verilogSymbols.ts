@@ -51,6 +51,8 @@ export function analyzeVerilog(tokens: readonly SourceToken[]): Analysis {
   const tokenScopes: number[] = [];
   /** The token at which a function's or task's scope opens: the one after its name. */
   let subprogramBodyAt: number | undefined;
+  /** Inside a function or task, `input` declares an argument, not a module port. */
+  let inSubprogram = false;
 
   for (let i = 0; i < tokens.length; i++) {
     if (i === subprogramBodyAt) scopes.open();
@@ -60,8 +62,10 @@ export function analyzeVerilog(tokens: readonly SourceToken[]): Analysis {
     if (SCOPE_OPENERS.has(text)) scopes.open();
     else if (SCOPE_CLOSERS.has(text)) scopes.close();
 
+    if (text === 'endfunction' || text === 'endtask') inSubprogram = false;
     const subprogramKind = SUBPROGRAMS.get(text);
     if (subprogramKind) {
+      inSubprogram = true;
       const name = subprogramName(tokens, i);
       if (name === undefined) scopes.open();
       else {
@@ -70,7 +74,7 @@ export function analyzeVerilog(tokens: readonly SourceToken[]): Analysis {
       }
     }
 
-    const kind = declaringKind(text);
+    const kind = declaringKind(text, inSubprogram);
     if (kind) for (const j of declaredNameIndices(tokens, i)) declarations.add(j, kind);
 
     if (tokens[i - 1]?.text === ':' && LABELLED.has(tokens[i - 2]?.text ?? '') && isIdentifier(tokens[i])) ignored.add(i);
@@ -101,8 +105,9 @@ function subprogramName(tokens: readonly SourceToken[], keyword: number): number
 }
 
 /** The kind a declaring word declares, or undefined if the word declares nothing. */
-function declaringKind(text: string): SymbolKind | undefined {
+function declaringKind(text: string, inSubprogram: boolean): SymbolKind | undefined {
   const keywordKind = DECLARING_KEYWORDS.get(text);
+  if (keywordKind === 'port' && inSubprogram) return 'argument';
   if (keywordKind) return keywordKind;
   if (!VERILOG_TYPES.has(text)) return undefined;
   if (text === 'reg') return 'reg';

@@ -62,6 +62,12 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
   let depth = 0;
   let inEndStatement = false;
   let inElsifCondition = false;
+  /** Generate scopes: an `end;` directly inside one ends a VHDL-2008 body, not the generate. */
+  const generateScopes = new Set<number>();
+  /** `for i in` opened a scope that its `loop` or `generate` takes over. */
+  let forScopeOpen = false;
+  /** One entry per open `loop`: whether a `for` scope closes with it. */
+  const loops: boolean[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
     tokenScopes[i] = scopes.current;
@@ -78,9 +84,23 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
       continue;
     }
     if (word === 'end') {
-      if (!NON_SCOPE_ENDS.has(tokens[i + 1]?.text.toLowerCase() ?? '')) scopes.close();
+      const ended = tokens[i + 1]?.text.toLowerCase() ?? '';
+      if (ended === 'loop' && loops.pop()) scopes.close();
+      const endsGenerateBody = generateScopes.has(scopes.current) && ended !== 'generate';
+      if (!NON_SCOPE_ENDS.has(ended) && !endsGenerateBody) scopes.close();
       inEndStatement = true;
       continue;
+    }
+
+    // `for i in 0 to 7 loop` / `generate`: the parameter lives in a scope of its own.
+    if (word === 'for' && isIdentifier(tokens[i + 1]) && tokens[i + 2]?.text.toLowerCase() === 'in') {
+      scopes.open();
+      declarations.add(i + 1, 'loop-parameter');
+      forScopeOpen = true;
+    }
+    if (word === 'loop') {
+      loops.push(forScopeOpen);
+      forScopeOpen = false;
     }
 
     // A function or procedure declared without a body (`function f (a : bit) return bit;`) ends at its `;`.
@@ -98,8 +118,12 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
     const continuesGenerate = word === 'generate' && (inElsifCondition || tokens[i - 1]?.text.toLowerCase() === 'else');
     if (continuesGenerate) inElsifCondition = false;
 
+    const takesOverFor = word === 'generate' && forScopeOpen;
+    if (takesOverFor) forScopeOpen = false;
+
     const namesUnit = INSTANTIABLE.has(word) && NAMES_A_UNIT.has(tokens[i - 1]?.text.toLowerCase() ?? '');
-    if (SCOPE_OPENERS.has(word) && !namesUnit && !continuesGenerate) openScope(tokens, i, word, scopes, unitScopes);
+    if (SCOPE_OPENERS.has(word) && !namesUnit && !continuesGenerate && !takesOverFor) openScope(tokens, i, word, scopes, unitScopes);
+    if (word === 'generate' && !continuesGenerate) generateScopes.add(scopes.current);
 
     if (SUBPROGRAMS.has(word)) {
       pendingSubprograms.set(scopes.open(), depth);
@@ -118,7 +142,7 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
     if (word === 'type') declareAll(declarations, enumerationLiterals(tokens, i), 'enum-literal');
     if (word === 'record') recordFieldNames(tokens, i).forEach((j) => ignored.add(j));
     if (token.text === '=>' && depth > 0) {
-      const formal = formalBefore(tokens, i);
+      const formal = namedArgumentBefore(tokens, i);
       if (formal !== undefined) ignored.add(formal);
     }
 
@@ -237,13 +261,25 @@ function recordFieldNames(tokens: readonly SourceToken[], recordIndex: number): 
 }
 
 /**
- * The formal left of an association's `=>`, which names the other side's port or
- * parameter and is no use of a local name: `port map (clk => clk_50)`,
- * `port map (q(0) => bit0)`, `f(a => s)`. Undefined if the name before `=>` does
- * not start the association.
+ * The parameter name left of a call's `=>` (`f(a => s)`), which names the called
+ * subprogram's parameter and is no use of a local name. Undefined for anything
+ * else: an aggregate's choice (`(IDLE => 1)`) is a use, and a port or generic map's
+ * formal is handled as a formal by symbolIndex.ts.
  */
-function formalBefore(tokens: readonly SourceToken[], arrow: number): number | undefined {
+function namedArgumentBefore(tokens: readonly SourceToken[], arrow: number): number | undefined {
   const name = tokens[arrow - 1]?.text === ')' ? matchingOpen(tokens, arrow - 1) - 1 : arrow - 1;
   const startsAssociation = tokens[name - 1]?.text === '(' || tokens[name - 1]?.text === ',';
-  return isIdentifier(tokens[name]) && startsAssociation ? name : undefined;
+  if (!isIdentifier(tokens[name]) || !startsAssociation) return undefined;
+  const open = enclosingOpenBracket(tokens, name);
+  return isIdentifier(tokens[open - 1]) ? name : undefined; // `f(` is a call; `:= (` an aggregate
+}
+
+/** The `(` that the token at `inside` sits in, or -1. */
+function enclosingOpenBracket(tokens: readonly SourceToken[], inside: number): number {
+  let depth = 0;
+  for (let j = inside - 1; j >= 0; j--) {
+    if (tokens[j].text === ')') depth++;
+    else if (tokens[j].text === '(' && depth-- === 0) return j;
+  }
+  return -1;
 }

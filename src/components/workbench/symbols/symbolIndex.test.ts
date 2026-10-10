@@ -165,6 +165,62 @@ describe('VHDL', () => {
     expect(vhdl(source, 1, 'data_reg')).toEqual(['1:declaration', '2:reference']);
   });
 
+  it("does not take an attribute name for a use: cnt'high next to a constant high", () => {
+    const source = [
+      'architecture a of e is', //                              0
+      '  constant high : integer := 7;', //                     1
+      '  signal cnt : bit_vector(high downto 0);', //           2
+      'begin', //                                               3
+      "  x <= cnt'high;", //                                    4
+      'end;', //                                                5
+    ].join('\n');
+    expect(vhdl(source, 1, 'high')).toEqual(['1:declaration', '2:reference']);
+  });
+
+  it('gives a for loop parameter its own scope, apart from a signal of the same name', () => {
+    const source = [
+      'architecture a of e is', //                              0
+      '  signal i : integer;', //                               1
+      'begin', //                                               2
+      '  process begin', //                                     3
+      '    for i in 0 to 3 loop q(i) <= d(i); end loop;', //    4
+      '    i <= 1;', //                                         5
+      '  end process;', //                                      6
+      'end;', //                                                7
+    ].join('\n');
+    expect(vhdl(source, 1, 'i ')).toEqual(['1:declaration', '5:reference']);
+    expect(vhdl(source, 4, 'i ')).toEqual(['4:declaration', '4:reference', '4:reference']);
+  });
+
+  it('gives a for generate parameter its own scope, and a VHDL-2008 body end keeps the generate open', () => {
+    const source = [
+      'architecture a of e is', //                              0
+      '  signal s : bit;', //                                   1
+      'begin', //                                               2
+      '  g: for k in 0 to 3 generate', //                       3
+      '    signal t : bit;', //                                 4
+      '  begin', //                                             5
+      '    t <= q(k);', //                                      6
+      '  end;', //                                              7
+      '  end generate;', //                                     8
+      '  s <= q(0);', //                                        9
+      'end;', //                                                10
+      'architecture b of e is begin y <= s; end;', //          11
+    ].join('\n');
+    expect(vhdl(source, 3, 'k ')).toEqual(['3:declaration', '6:reference']);
+    expect(vhdl(source, 1, 's ')).toEqual(['1:declaration', '9:reference']); // not architecture b's s
+  });
+
+  it('counts an enumeration literal used as an aggregate choice', () => {
+    const source = [
+      'architecture a of e is', //                                        0
+      '  type state_t is (IDLE, RUN);', //                                1
+      '  constant T : arr_t := (IDLE => 1, RUN => 2);', //               2
+      'begin end;', //                                                    3
+    ].join('\n');
+    expect(vhdl(source, 1, 'IDLE')).toEqual(['1:declaration', '2:reference']);
+  });
+
   it('a package body sees its package', () => {
     const source = [
       'package p is', //                                          0

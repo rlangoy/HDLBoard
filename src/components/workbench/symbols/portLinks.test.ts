@@ -97,3 +97,44 @@ describe('Verilog: testbench and design side by side', () => {
     expect(linked(BENCH, 3, 'a', DESIGN, 0)).toEqual(['0:declaration', '1:reference']); // .a(a): the first a
   });
 });
+
+describe('only the instantiated unit links', () => {
+  const DESIGN = analyzeFile('gates.v', [
+    'module and_gate (input a, output y);', //                    0
+    '  function f(input a); f = a; endfunction', //               1
+    '  assign y = f(a);', //                                      2
+    'endmodule', //                                               3
+    'module or_gate (input a, output y);', //                     4
+    '  assign y = a;', //                                         5
+    'endmodule', //                                               6
+  ].join('\n'));
+  const BENCH = analyzeFile('gates_tb.v', [
+    'module tb;', //                                              0
+    '  reg x; wire z;', //                                        1
+    '  and_gate u0 (.a(x), .y(z));', //                           2
+    'endmodule', //                                               3
+  ].join('\n'));
+
+  it("a testbench signal lights and_gate's port a, not or_gate's or the function's argument a", () => {
+    expect(linked(BENCH, 1, 'x', DESIGN)).toEqual(['0:declaration', '2:reference']);
+  });
+
+  it("or_gate's port a lights nothing in a testbench that only instantiates and_gate", () => {
+    expect(linked(DESIGN, 4, 'a', BENCH)).toEqual([]);
+  });
+});
+
+describe('a VHDL testbench and a Verilog design', () => {
+  const DESIGN = analyzeFile('and_gate.v', 'module and_gate (input a, output y);\n  assign y = a;\nendmodule');
+  const BENCH = analyzeFile('and_gate_tb.vhd', [
+    'architecture sim of tb is', //                                       0
+    '  signal x, z : bit;', //                                            1
+    'begin', //                                                           2
+    '  uut : entity work.AND_GATE port map (A => x, Y => z);', //         3
+    'end;', //                                                            4
+  ].join('\n'));
+
+  it('match names ignoring case, as VHDL does', () => {
+    expect(linked(BENCH, 1, 'x', DESIGN)).toEqual(['0:declaration', '1:reference']);
+  });
+});

@@ -21,6 +21,7 @@ export type SymbolKind =
   | 'alias'
   | 'type'
   | 'enum-literal'
+  | 'loop-parameter'
   // Verilog
   | 'wire'
   | 'reg'
@@ -29,6 +30,7 @@ export type SymbolKind =
   | 'genvar'
   | 'function'
   | 'task'
+  | 'argument'
   // Both: a port-map formal, naming a port of a unit declared in another file
   | 'formal';
 

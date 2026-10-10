@@ -7,12 +7,15 @@ const NONE: ReadonlyMap<number, readonly Occurrence[]> = new Map();
 
 /** What to paint for a hovered symbol, by 0-based line: its declaration and every reference. Pure. */
 export function occurrencesByLine(symbol: HdlSymbol | undefined): ReadonlyMap<number, readonly Occurrence[]> {
-  if (!symbol) return NONE;
-  const all: Occurrence[] = [
+  return symbol ? groupByLine(occurrencesOf(symbol)) : NONE;
+}
+
+/** A symbol's declaration and every reference, in that order. Pure. */
+export function occurrencesOf(symbol: HdlSymbol): Occurrence[] {
+  return [
     { ...symbol.declaration, kind: 'declaration' },
     ...symbol.references.map((span): Occurrence => ({ ...span, kind: 'reference' })),
   ];
-  return groupByLine(all);
 }
 
 /** Groups spans by their 0-based line, keeping their order. Pure. */

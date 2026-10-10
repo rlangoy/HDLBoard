@@ -15,7 +15,7 @@ import type { Token } from '../vhdlHighlight';
 import { isIdentifier, type Analysis } from './analysis';
 import { instanceConnections, type InstanceConnection } from './instances';
 import { groupByLine } from './occurrences';
-import { sourceTokens, type SourceToken } from './sourceTokens';
+import { sourceTokens, spanOf, type SourceToken } from './sourceTokens';
 import type { HdlSymbol, SourceSpan, SymbolIndex } from './types';
 import { analyzeVerilog } from './verilogSymbols';
 import { analyzeVhdl } from './vhdlSymbols';
@@ -89,7 +89,7 @@ function indexFromAnalysis(
   const formalIndices = new Set(connections.map((c) => c.formal));
   for (const { unit, formal } of connections) {
     const token = tokens[formal];
-    const key = `${unit} ${keyOf(token.text)}`;
+    const key = `${keyOf(unit)} ${keyOf(token.text)}`;
     const symbol = formals.get(key);
     if (symbol) symbol.references.push(spanOf(token));
     else formals.set(key, { id: `${token.line}:${token.start}`, name: token.text, kind: 'formal', declaration: spanOf(token), references: [] });
@@ -108,19 +108,20 @@ function indexFromAnalysis(
   return lineLookup(names, declared);
 }
 
-/** An identifier that is not a declaration, not marked to skip, and not a selected name (`work.counter`, `.clk(`). */
+/**
+ * An identifier that is not a declaration, not marked to skip, not a selected name
+ * (`work.counter`, `.clk(`) and not an attribute (`cnt'high`, `clk'event`).
+ */
 function isReferenceCandidate(tokens: readonly SourceToken[], analysis: Analysis, i: number): boolean {
   return (
     isIdentifier(tokens[i]) &&
     !analysis.declarations.has(i) &&
     !analysis.ignored.has(i) &&
-    tokens[i - 1]?.text !== '.'
+    tokens[i - 1]?.text !== '.' &&
+    tokens[i - 1]?.text !== "'"
   );
 }
 
-function spanOf(token: SourceToken): SourceSpan {
-  return { line: token.line, start: token.start, end: token.end };
-}
 
 /** Groups the names by line so a hover looks at one short list. */
 function lineLookup(names: readonly NameOnLine[], symbols: readonly HdlSymbol[]): SymbolIndex {

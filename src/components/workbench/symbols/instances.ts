@@ -17,7 +17,7 @@ import { isIdentifier, matchingClose } from './analysis';
 import type { SourceToken } from './sourceTokens';
 
 export interface InstanceConnection {
-  /** The instantiated entity, component or module, in lower case. */
+  /** The instantiated entity, component or module, as written. */
   readonly unit: string;
   /** Token index of the formal's name. */
   readonly formal: number;
@@ -30,20 +30,27 @@ export function instanceConnections(language: Language | undefined, tokens: read
   return language === 'verilog' ? verilogConnections(tokens) : vhdlConnections(tokens);
 }
 
-/** The entities (VHDL) or modules (Verilog) a file declares, in lower case. */
-export function declaredUnits(language: Language | undefined, tokens: readonly SourceToken[]): Set<string> {
-  const units = new Set<string>();
-  tokens.forEach((token, i) => {
+/** An entity or module a file declares, and the stretch of text that belongs to it. */
+export interface DeclaredUnit {
+  /** As written. */
+  readonly name: string;
+  /** The declaring keyword's token index. */
+  readonly from: number;
+  /** The next unit's keyword, or the end of the file: an architecture belongs to the entity above it. */
+  readonly to: number;
+}
+
+/** The entities (VHDL) or modules (Verilog) a file declares, in file order. */
+export function declaredUnits(language: Language | undefined, tokens: readonly SourceToken[]): DeclaredUnit[] {
+  const starts = tokens.flatMap((token, i) => {
     const name = tokens[i + 1];
-    if (!isIdentifier(name)) return;
-    const word = token.text.toLowerCase();
     const declares =
       language === 'verilog'
         ? token.text === 'module' || token.text === 'macromodule'
-        : word === 'entity' && lower(tokens[i + 2]) === 'is';
-    if (declares) units.add(name.text.toLowerCase());
+        : lower(token) === 'entity' && lower(tokens[i + 2]) === 'is';
+    return declares && isIdentifier(name) ? [{ name: name.text, from: i }] : [];
   });
-  return units;
+  return starts.map((unit, k) => ({ ...unit, to: starts[k + 1]?.from ?? tokens.length }));
 }
 
 const lower = (token: SourceToken | undefined) => token?.text.toLowerCase();
@@ -69,7 +76,7 @@ function instantiatedUnit(tokens: readonly SourceToken[], keyword: number): stri
     else if (text === '(') depth--;
     else if (depth > 0) continue;
     else if (text === ':' || text === ';') return undefined;
-    else if (isIdentifier(tokens[j])) return text.toLowerCase();
+    else if (isIdentifier(tokens[j])) return text;
   }
   return undefined;
 }
@@ -96,7 +103,7 @@ function associations(tokens: readonly SourceToken[], open: number): Item[] {
 function verilogConnections(tokens: readonly SourceToken[]): InstanceConnection[] {
   return tokens.flatMap((token, i) => {
     if (!isIdentifier(token) || !startsStatement(tokens, i)) return [];
-    const unit = token.text.toLowerCase();
+    const unit = token.text;
     const items: Item[] = [];
     let next = i + 1;
     if (tokens[next]?.text === '#' && tokens[next + 1]?.text === '(') {

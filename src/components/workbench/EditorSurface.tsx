@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { memo, useEffect, useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
+import { memo, useId, useLayoutEffect, useMemo, useRef, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
@@ -185,7 +185,8 @@ export function EditorSurface({
   const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
   const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
   const highlighted = hovered.symbol ?? (highlightsCursor ? atCaret.symbol : undefined);
-  useEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
+  // Before paint: the other pane's link follows in the same frame, without a flash of the old one.
+  useLayoutEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
   const ownOccurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
   const occurrences = linkedOccurrences?.size ? linkedOccurrences : ownOccurrences;
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);

@@ -40,10 +40,12 @@ function characterWidth(style: CSSStyleDeclaration): number {
 /** Reads the text box's layout from the textarea's computed style. */
 function measureText(textarea: HTMLTextAreaElement): TextMetrics {
   const style = getComputedStyle(textarea);
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  const textHeight = textarea.scrollHeight - paddingTop - (parseFloat(style.paddingBottom) || 0);
   return {
-    paddingTop: parseFloat(style.paddingTop) || 0,
+    paddingTop,
     paddingLeft: parseFloat(style.paddingLeft) || 0,
-    lineHeight: lineHeightOrFallback(style.lineHeight, textarea.scrollHeight, countLines(textarea.value)), // `normal` too
+    lineHeight: lineHeightOrFallback(style.lineHeight, textHeight, countLines(textarea.value)), // `normal` too
     charWidth: characterWidth(style),
     tabSize: parseInt(style.tabSize, 10) || 4,
   };

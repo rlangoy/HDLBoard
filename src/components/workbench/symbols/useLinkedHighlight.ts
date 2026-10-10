@@ -12,47 +12,63 @@ type ByPane<T> = Readonly<Record<PaneRole, T>>;
 export interface LinkedHighlight {
   /** Give each pane its own: it reports the symbol it highlights, or undefined. */
   readonly onHighlightChange: ByPane<(symbol: HdlSymbol | undefined) => void>;
-  /** What the other pane links to the latest highlight, for the pane that did not make it. */
+  /** What the other pane links to the source's highlight, for the pane that is not the source. */
   readonly linked: Partial<ByPane<ReadonlyMap<number, readonly Occurrence[]>>>;
 }
 
-interface Source {
-  readonly pane: PaneRole;
-  readonly symbol: HdlSymbol;
+interface Highlights {
+  /** What each pane highlights now. */
+  readonly symbols: Partial<ByPane<HdlSymbol>>;
+  /** The pane that highlighted something last. */
+  readonly latest: PaneRole | undefined;
 }
 
 const OTHER: ByPane<PaneRole> = { tb: 'rtl', rtl: 'tb' };
+const NONE: Highlights = { symbols: {}, latest: undefined };
 
 /**
- * Testbench and design side by side: the pane that highlighted a symbol last is
- * the source, and the other pane shows the names wired to it through the port and
- * generic maps (symbols/portLinks.ts). Each pane's own highlighting is unchanged;
- * it shows again as soon as the source's highlight ends.
+ * Testbench and design side by side: the source is the pane that highlighted a
+ * symbol last, or, once its highlight ends, the other pane if that still
+ * highlights one. The other pane shows the names wired to the source's symbol
+ * through the port and generic maps (symbols/portLinks.ts). Each pane's own
+ * highlighting is unchanged; it shows again as soon as the link is empty.
  *
  * @param enabled Whether both panes are showing.
  */
 export function useLinkedHighlight(enabled: boolean, files: ByPane<FileSymbols | undefined>): LinkedHighlight {
-  const [source, setSource] = useState<Source | undefined>(undefined);
+  const [highlights, setHighlights] = useState<Highlights>(NONE);
 
   const onHighlightChange = useMemo(() => {
     const reporter = (pane: PaneRole) => (symbol: HdlSymbol | undefined) =>
-      setSource((previous) => {
-        if (symbol) return previous?.pane === pane && previous.symbol === symbol ? previous : { pane, symbol };
-        return previous?.pane === pane ? undefined : previous; // only the source can end the link
+      setHighlights((previous) => {
+        const unchanged = previous.symbols[pane] === symbol && (!symbol || previous.latest === pane);
+        if (unchanged) return previous;
+        return { symbols: { ...previous.symbols, [pane]: symbol }, latest: symbol ? pane : previous.latest };
       });
     return { tb: reporter('tb'), rtl: reporter('rtl') };
   }, []);
 
   const { tb, rtl } = files;
   const linked = useMemo(() => {
-    if (!enabled || !source) return {};
+    const source = enabled ? sourceOf(highlights) : undefined;
+    if (!source) return {};
     const target = OTHER[source.pane];
     const panes = { tb, rtl };
     const from = panes[source.pane];
     const to = panes[target];
     if (!from || !to || from === to) return {};
     return { [target]: linkedOccurrences(from, source.symbol, to) };
-  }, [enabled, source, tb, rtl]);
+  }, [enabled, highlights, tb, rtl]);
 
   return { onHighlightChange, linked };
+}
+
+/** The latest pane that still highlights a symbol, else the other one if it does. */
+function sourceOf({ symbols, latest }: Highlights): { pane: PaneRole; symbol: HdlSymbol } | undefined {
+  if (!latest) return undefined;
+  for (const pane of [latest, OTHER[latest]]) {
+    const symbol = symbols[pane];
+    if (symbol) return { pane, symbol };
+  }
+  return undefined;
 }

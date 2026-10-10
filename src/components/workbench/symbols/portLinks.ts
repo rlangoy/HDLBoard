@@ -10,45 +10,49 @@
  *   uut : entity work.and_gate port map (a => a_in);    -- VHDL
  *   and_gate uut (.a(a_in));                             // Verilog
  *
- * Only named association is read (`formal => actual`, `.formal(actual)`). Pure.
+ * A port belongs to the unit (entity or module) it is declared in, and only that
+ * unit's instances link to it. Only named association is read. Pure.
  */
 
-import type { Language } from '../fileKinds';
 import { isIdentifier } from './analysis';
 import type { FileSymbols } from './fileSymbols';
-import { declaredUnits, instanceConnections } from './instances';
-import { groupByLine } from './occurrences';
-import { sourceTokens, type SourceToken } from './sourceTokens';
-import type { HdlSymbol, Occurrence, SymbolKind } from './types';
+import { declaredUnits, instanceConnections, type DeclaredUnit } from './instances';
+import { groupByLine, occurrencesOf } from './occurrences';
+import { sourceTokens, spanOf, type SourceToken } from './sourceTokens';
+import type { HdlSymbol, Occurrence, SourceSpan, SymbolKind } from './types';
 
 /** One `formal => actual` of an instance. */
 interface Connection {
-  /** The instantiated entity, component or module, in lower case. */
+  /** The instantiated entity, component or module, as written. */
   readonly unit: string;
   readonly formal: SourceToken;
   /** The first name in the actual that is a symbol of this file, if any (`sw(0)` → `sw`). */
   readonly actual: SourceToken | undefined;
 }
 
+/** A declared unit and where its text runs, as spans. */
+interface UnitText {
+  readonly name: string;
+  readonly from: SourceSpan;
+  /** Undefined: to the end of the file. */
+  readonly to: SourceSpan | undefined;
+}
+
 /** What one file declares and instantiates. */
 interface Wiring {
-  /** The entities and modules it declares, in lower case. */
-  readonly units: ReadonlySet<string>;
+  readonly units: readonly UnitText[];
   readonly connections: readonly Connection[];
 }
 
-/** The kinds a port or generic map can name, per language. */
-const CONNECTABLE: Readonly<Record<Language, ReadonlySet<SymbolKind>>> = {
-  vhdl: new Set(['port', 'generic']),
-  verilog: new Set(['port', 'parameter']),
-};
+/** The kinds a port or generic map can name. Function and task arguments are not among them. */
+const CONNECTABLE: ReadonlySet<SymbolKind> = new Set(['port', 'generic', 'parameter']);
 
 const NOTHING: ReadonlyMap<number, readonly Occurrence[]> = new Map();
 
 /**
  * What to paint in `target` for the symbol highlighted in `source`, by 0-based line:
- * - a design port or generic: the formals naming it in the target's instances, and
- *   every occurrence of the signals connected to them;
+ * - a design port or generic: the formals naming it in the target's instances of
+ *   its unit, and every occurrence of the signals connected to them;
  * - a signal connected in an instance, or that connection's formal: every
  *   occurrence of the port it is wired to.
  */
@@ -57,61 +61,63 @@ export function linkedOccurrences(
   symbol: HdlSymbol,
   target: FileSymbols,
 ): ReadonlyMap<number, readonly Occurrence[]> {
-  const occurrences = [...portToConnections(source, symbol, target), ...connectionToPort(source, symbol, target)];
+  const names = nameRule(source, target);
+  const occurrences = [...portToConnections(source, symbol, target, names), ...connectionToPort(source, symbol, target, names)];
   return occurrences.length === 0 ? NOTHING : groupByLine(withoutDuplicates(occurrences));
 }
 
-/** Design → testbench: the instances of the source's units that connect `port`. */
-function portToConnections(source: FileSymbols, port: HdlSymbol, target: FileSymbols): Occurrence[] {
-  if (!isConnectable(source, port)) return [];
-  const { units } = wiringOf(source);
-  const key = nameKey(target.language, port.name);
+/** Design → testbench: the formals of instances of the port's unit that name it, and what they connect. */
+function portToConnections(source: FileSymbols, port: HdlSymbol, target: FileSymbols, names: NameRule): Occurrence[] {
+  if (!CONNECTABLE.has(port.kind)) return [];
+  const unit = wiringOf(source).units.find((u) => contains(u, port.declaration));
+  if (!unit) return [];
   return wiringOf(target)
-    .connections.filter((c) => units.has(c.unit) && nameKey(target.language, c.formal.text) === key)
-    .flatMap((c) => [{ ...spanOf(c.formal), kind: 'reference' as const }, ...occurrencesOf(target, c.actual)]);
+    .connections.filter((c) => names.same(c.unit, unit.name) && names.same(c.formal.text, port.name))
+    .flatMap((c) => [{ ...spanOf(c.formal), kind: 'reference' as const }, ...occurrencesAt(target, c.actual)]);
 }
 
-/** Testbench → design: the ports of the target's units that `symbol` (a connected signal or a formal) stands for. */
-function connectionToPort(source: FileSymbols, symbol: HdlSymbol, target: FileSymbols): Occurrence[] {
+/** Testbench → design: the port each connection of `symbol` (a connected signal or a formal) is wired to. */
+function connectionToPort(source: FileSymbols, symbol: HdlSymbol, target: FileSymbols, names: NameRule): Occurrence[] {
   const { units } = wiringOf(target);
-  const connects = (c: Connection) =>
-    symbolAtToken(source, c.formal) === symbol || (c.actual !== undefined && symbolAtToken(source, c.actual) === symbol);
-  const formals = wiringOf(source)
-    .connections.filter((c) => units.has(c.unit) && connects(c))
-    .map((c) => nameKey(target.language, c.formal.text));
-  if (formals.length === 0) return [];
-  return target.index.symbols
-    .filter((s) => isConnectable(target, s) && formals.includes(nameKey(target.language, s.name)))
-    .flatMap((s) => allOccurrences(s));
+  // By id: after an edit the caller may still hold the symbol from the previous analysis.
+  const isThisSymbol = (token: SourceToken | undefined) => token !== undefined && symbolAt(source, token)?.id === symbol.id;
+  return wiringOf(source)
+    .connections.filter((c) => isThisSymbol(c.formal) || isThisSymbol(c.actual))
+    .flatMap((c) => {
+      const unit = units.find((u) => names.same(u.name, c.unit));
+      if (!unit) return [];
+      return target.index.symbols.filter(
+        (s) => CONNECTABLE.has(s.kind) && contains(unit, s.declaration) && names.same(s.name, c.formal.text),
+      );
+    })
+    .flatMap(occurrencesOf);
 }
 
-function isConnectable(file: FileSymbols, symbol: HdlSymbol): boolean {
-  return CONNECTABLE[file.language ?? 'vhdl'].has(symbol.kind);
+interface NameRule {
+  same(a: string, b: string): boolean;
 }
 
-/** VHDL ignores case; Verilog does not. */
-function nameKey(language: Language | undefined, name: string): string {
-  return language === 'verilog' ? name : name.toLowerCase();
+/** VHDL ignores case; names only match exactly when both files are Verilog. */
+function nameRule(source: FileSymbols, target: FileSymbols): NameRule {
+  const caseSensitive = source.language === 'verilog' && target.language === 'verilog';
+  return { same: (a, b) => (caseSensitive ? a === b : a.toLowerCase() === b.toLowerCase()) };
 }
 
-function occurrencesOf(file: FileSymbols, token: SourceToken | undefined): Occurrence[] {
-  const symbol = token && symbolAtToken(file, token);
-  return symbol ? allOccurrences(symbol) : [];
+function contains(unit: UnitText, span: SourceSpan): boolean {
+  return !isBefore(span, unit.from) && (unit.to === undefined || isBefore(span, unit.to));
 }
 
-function allOccurrences(symbol: HdlSymbol): Occurrence[] {
-  return [
-    { ...symbol.declaration, kind: 'declaration' },
-    ...symbol.references.map((span): Occurrence => ({ ...span, kind: 'reference' })),
-  ];
+function isBefore(a: SourceSpan, b: SourceSpan): boolean {
+  return a.line < b.line || (a.line === b.line && a.start < b.start);
 }
 
-function symbolAtToken(file: FileSymbols, token: SourceToken): HdlSymbol | undefined {
+function occurrencesAt(file: FileSymbols, token: SourceToken | undefined): Occurrence[] {
+  const symbol = token && symbolAt(file, token);
+  return symbol ? occurrencesOf(symbol) : [];
+}
+
+function symbolAt(file: FileSymbols, token: SourceToken): HdlSymbol | undefined {
   return file.index.symbolAt(token.line, token.start);
-}
-
-function spanOf(token: SourceToken) {
-  return { line: token.line, start: token.start, end: token.end };
 }
 
 /** One occurrence per place; a declaration wins over a reference at the same place. */
@@ -128,23 +134,22 @@ const wiringCache = new WeakMap<FileSymbols, Wiring>();
 
 /** The file's wiring, worked out once per analysis. */
 function wiringOf(file: FileSymbols): Wiring {
-  let wiring = wiringCache.get(file);
-  if (!wiring) {
-    const tokens = sourceTokens(file.tokenLines);
-    wiring = {
-      units: declaredUnits(file.language, tokens),
-      connections: instanceConnections(file.language, tokens).map((c) => ({
-        unit: c.unit,
-        formal: tokens[c.formal],
-        actual: firstSymbol(tokens.slice(c.actualFrom, c.actualTo), file),
-      })),
-    };
-    wiringCache.set(file, wiring);
-  }
+  const cached = wiringCache.get(file);
+  if (cached) return cached;
+  const tokens = sourceTokens(file.tokenLines);
+  const wiring: Wiring = {
+    units: declaredUnits(file.language, tokens).map((unit) => unitText(unit, tokens)),
+    connections: instanceConnections(file.language, tokens).map((c) => ({
+      unit: c.unit,
+      formal: tokens[c.formal],
+      actual: tokens.slice(c.actualFrom, c.actualTo).find((t) => isIdentifier(t) && symbolAt(file, t)),
+    })),
+  };
+  wiringCache.set(file, wiring);
   return wiring;
 }
 
-/** The first token that names a symbol of the file (`sw(0)` → `sw`). */
-function firstSymbol(tokens: readonly SourceToken[], file: FileSymbols): SourceToken | undefined {
-  return tokens.find((t) => isIdentifier(t) && symbolAtToken(file, t));
+function unitText(unit: DeclaredUnit, tokens: readonly SourceToken[]): UnitText {
+  const end = tokens[unit.to];
+  return { name: unit.name, from: spanOf(tokens[unit.from]), to: end && spanOf(end) };
 }

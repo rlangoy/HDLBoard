@@ -37,6 +37,11 @@ export function sourceTokens(tokenLines: readonly (readonly Token[])[]): SourceT
   return result;
 }
 
+/** Where a token is written. */
+export function spanOf(token: SourceToken): SourceSpan {
+  return { line: token.line, start: token.start, end: token.end };
+}
+
 function piecesOf(token: Token, line: number, start: number): SourceToken[] {
   if (token.type !== 'punctuation') {
     return [{ text: token.text, type: token.type, line, start, end: start + token.text.length }];
