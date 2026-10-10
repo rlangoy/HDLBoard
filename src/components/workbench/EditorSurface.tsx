@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
+import { memo, useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
@@ -10,7 +10,12 @@ import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrol
 import { isOverflowing } from './scrollThumb';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import { tokenizeSource } from './highlight';
-import { markRanges, type CharRange, type MarkedToken, type Token } from './vhdlHighlight';
+import type { CharRange, Token } from './vhdlHighlight';
+import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
+import { occurrencesByLine } from './symbols/occurrences';
+import { buildSymbolIndex } from './symbols/symbolIndex';
+import type { Occurrence, OccurrenceKind } from './symbols/types';
+import { useHoveredSymbol } from './symbols/useHoveredSymbol';
 
 /** The file a surface edits. */
 export interface EditorTab {
@@ -20,6 +25,12 @@ export interface EditorTab {
 }
 
 const NO_RANGES: readonly CharRange[] = [];
+const NO_OCCURRENCES: readonly Occurrence[] = [];
+
+const OCCURRENCE_CLASS: Record<OccurrenceKind, string> = {
+  declaration: 'wb-editor__occ-decl',
+  reference: 'wb-editor__occ-ref',
+};
 
 const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   keyword: 'wb-tok-keyword',
@@ -40,18 +51,23 @@ function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDia
   return hintFrom ? 'is-hint' : '';
 }
 
-/** One highlighted piece; an underlined one is wrapped, and the underline never changes the glyphs. */
-function TokenPiece({ piece }: { piece: MarkedToken }) {
+/**
+ * One highlighted piece; an underlined one is wrapped, and so is a hovered symbol's
+ * occurrence. Neither wrapper changes the glyphs' metrics.
+ */
+function TokenPiece({ piece }: { piece: DecoratedPiece }) {
   const className = TOKEN_CLASS[piece.type];
   const text = className ? <span className={className}>{piece.text}</span> : piece.text;
-  return piece.marked ? <span className="wb-editor__diag-span">{text}</span> : <>{text}</>;
+  const underlined = piece.marked ? <span className="wb-editor__diag-span">{text}</span> : text;
+  return piece.occurrence ? <span className={OCCURRENCE_CLASS[piece.occurrence]}>{underlined}</span> : <>{underlined}</>;
 }
 
-function HighlightedLine({
+const HighlightedLine = memo(function HighlightedLine({
   line,
   tokens,
   diagnostic,
   hintFrom,
+  occurrences,
 }: {
   line: string;
   /** The line's tokens (`tokenizeSource`); together they are `line`. */
@@ -59,8 +75,10 @@ function HighlightedLine({
   diagnostic?: LineDiagnostic;
   /** Rules D and E point at this line from that marked line. */
   hintFrom?: LineDiagnostic;
+  /** The hovered symbol's declaration and references on this line. */
+  occurrences: readonly Occurrence[];
 }) {
-  const pieces = markRanges(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES);
+  const pieces = decorateLine(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES, occurrences);
   const inline = diagnostic ? inlineText(diagnostic) : '';
   return (
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
@@ -70,7 +88,7 @@ function HighlightedLine({
       )}
     </div>
   );
-}
+});
 
 /** Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue). */
 function EditorGutter({
@@ -142,6 +160,10 @@ export function EditorSurface({
   const language = languageOfName(file.name);
   // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
   const tokenLines = useMemo(() => tokenizeSource(language, file.content.split('\n')), [language, file.content]);
+  // Symbol occurrence highlighting: analysed once per edit, looked up on hover.
+  const symbolIndex = useMemo(() => buildSymbolIndex(language, tokenLines), [language, tokenLines]);
+  const hovered = useHoveredSymbol(lines, symbolIndex);
+  const occurrences = useMemo(() => occurrencesByLine(hovered.symbol), [hovered.symbol]);
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds
@@ -185,6 +207,7 @@ export function EditorSurface({
               key={i}
               diagnostic={linesByNumber.get(i + 1)}
               hintFrom={hints.get(i + 1)}
+              occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
             />
           ))}
         </pre>
@@ -196,6 +219,7 @@ export function EditorSurface({
           wrap="off"
           onScroll={handleScroll}
           onChange={(e) => onChange(file.id, e.target.value)}
+          {...hovered.handlers}
           aria-label={label ?? `${file.name} source`}
           aria-describedby={statusId}
         />

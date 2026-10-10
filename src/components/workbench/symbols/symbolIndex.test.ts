@@ -1,0 +1,293 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+import { describe, expect, it } from 'vitest';
+import type { Language } from '../fileKinds';
+import { tokenizeSource } from '../highlight';
+import { occurrencesByLine } from './occurrences';
+import { buildSymbolIndex } from './symbolIndex';
+
+/**
+ * Hovers the `nth` (0-based) `word` on `line` (0-based) and returns what would be
+ * painted, as "line:kind" in file order — e.g. ["1:declaration", "8:reference"].
+ * An empty list means nothing is highlighted.
+ */
+function hover(language: Language, source: string, line: number, word: string, nth = 0): string[] {
+  const lines = source.split('\n');
+  const index = buildSymbolIndex(language, tokenizeSource(language, lines));
+  let offset = -1;
+  for (let k = 0; k <= nth; k++) offset = lines[line].indexOf(word, offset + 1);
+  if (offset < 0) throw new Error(`"${word}" #${nth} not on line ${line}: ${lines[line]}`);
+  const byLine = occurrencesByLine(index.symbolAt(line, offset));
+  return [...byLine.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([l, list]) => [...list].sort((a, b) => a.start - b.start).map((o) => `${l}:${o.kind}`));
+}
+
+const vhdl = (source: string, line: number, word: string, nth = 0) => hover('vhdl', source, line, word, nth);
+const verilog = (source: string, line: number, word: string, nth = 0) => hover('verilog', source, line, word, nth);
+
+describe('VHDL', () => {
+  // The spec's shadowing example, inside an architecture.
+  const SHADOWING = [
+    'architecture rtl of e is', //       0
+    '  signal data : std_logic;', //     1
+    'begin', //                          2
+    '  process', //                      3
+    '    variable data : std_logic;', // 4
+    '  begin', //                        5
+    "    data := '1';", //               6
+    '  end process;', //                 7
+    "  data <= '0';", //                 8
+    'end architecture;', //              9
+  ].join('\n');
+
+  it('hovering the inner variable highlights only the variable', () => {
+    expect(vhdl(SHADOWING, 6, 'data')).toEqual(['4:declaration', '6:reference']);
+    expect(vhdl(SHADOWING, 4, 'data')).toEqual(['4:declaration', '6:reference']);
+  });
+
+  it('hovering the outer signal highlights only the signal', () => {
+    expect(vhdl(SHADOWING, 8, 'data')).toEqual(['1:declaration', '8:reference']);
+    expect(vhdl(SHADOWING, 1, 'data')).toEqual(['1:declaration', '8:reference']);
+  });
+
+  it('works for the bare snippet from the spec too', () => {
+    const bare = [
+      'signal data : std_logic;',
+      'process',
+      '    variable data : std_logic;',
+      'begin',
+      "    data := '1';",
+      'end process;',
+      "data <= '0';",
+    ].join('\n');
+    expect(vhdl(bare, 4, 'data')).toEqual(['2:declaration', '4:reference']);
+    expect(vhdl(bare, 6, 'data')).toEqual(['0:declaration', '6:reference']);
+  });
+
+  const COUNTER = [
+    'library ieee;', //                                                    0
+    'use ieee.std_logic_1164.all;', //                                     1
+    'entity counter is', //                                                2
+    '  generic (N : integer := 4);', //                                    3
+    '  port (clk : in std_logic;', //                                      4
+    '        q   : out std_logic_vector(N-1 downto 0));', //               5
+    'end entity;', //                                                      6
+    'architecture rtl of counter is', //                                   7
+    '  signal cnt : unsigned(N-1 downto 0); -- clk comment', //            8
+    'begin', //                                                            9
+    '  tick : process (CLK)', //                                           10
+    '  begin', //                                                          11
+    '    if rising_edge(clk) then cnt <= cnt + 1; end if;', //             12
+    '  end process tick;', //                                              13
+    '  q <= std_logic_vector(cnt);', //                                    14
+    'end architecture rtl;', //                                            15
+  ].join('\n');
+
+  it('links entity ports to their use in the architecture, ignoring case', () => {
+    expect(vhdl(COUNTER, 12, 'clk')).toEqual(['4:declaration', '10:reference', '12:reference']);
+    expect(vhdl(COUNTER, 14, 'q')).toEqual(['5:declaration', '14:reference']);
+  });
+
+  it('links generics', () => {
+    expect(vhdl(COUNTER, 3, 'N')).toEqual(['3:declaration', '5:reference', '8:reference']);
+  });
+
+  it('highlights signals with every use', () => {
+    expect(vhdl(COUNTER, 8, 'cnt')).toEqual(['8:declaration', '12:reference', '12:reference', '14:reference']);
+  });
+
+  it('ignores comments, keywords, labels and unknown names', () => {
+    expect(vhdl(COUNTER, 8, 'clk')).toEqual([]); // in the comment
+    expect(vhdl(COUNTER, 12, 'then')).toEqual([]);
+    expect(vhdl(COUNTER, 10, 'tick')).toEqual([]);
+    expect(vhdl(COUNTER, 13, 'tick')).toEqual([]);
+    expect(vhdl('architecture a of e is\nsignal x : bit;\nbegin\ny <= x;\nend;', 3, 'y')).toEqual([]);
+  });
+
+  it('keeps the ports of two entities in one file apart', () => {
+    const two = [
+      'entity a is port (clk : in bit); end entity;', //   0
+      'architecture r of a is begin end architecture;', // 1
+      'entity b is port (clk : in bit); end entity;', //   2
+      'architecture r of b is', //                         3
+      'begin', //                                          4
+      '  x <= clk;', //                                    5
+      'end architecture;', //                              6
+    ].join('\n');
+    expect(vhdl(two, 5, 'clk')).toEqual(['2:declaration', '5:reference']);
+  });
+
+  it('declares every name of a list', () => {
+    const source = 'architecture r of e is\nsignal a, b : bit;\nbegin\nb <= a;\nend;';
+    expect(vhdl(source, 3, 'a')).toEqual(['1:declaration', '3:reference']);
+    expect(vhdl(source, 3, 'b')).toEqual(['1:declaration', '3:reference']);
+  });
+
+  it('does not treat a port-map formal as a use of the actual', () => {
+    const tb = [
+      'architecture sim of tb is', //                                         0
+      '  signal clk : std_logic;', //                                         1
+      'begin', //                                                             2
+      '  u0 : entity work.counter port map (clk => clk, q => open);', //       3
+      'end architecture;', //                                                 4
+    ].join('\n');
+    expect(vhdl(tb, 3, 'clk', 1)).toEqual(['1:declaration', '3:reference']);
+    expect(vhdl(tb, 3, 'clk', 0)).toEqual([]);
+    expect(vhdl(tb, 3, 'counter')).toEqual([]);
+  });
+
+  it('links enumeration literals and types', () => {
+    const fsm = [
+      'architecture r of e is', //                         0
+      '  type state_t is (IDLE, RUN);', //                 1
+      '  signal state : state_t := IDLE;', //              2
+      'begin', //                                          3
+      '  process (state) begin', //                        4
+      '    case state is', //                              5
+      '      when IDLE => state <= RUN;', //               6
+      '      when others => null;', //                     7
+      '    end case;', //                                  8
+      '  end process;', //                                 9
+      'end architecture;', //                              10
+    ].join('\n');
+    expect(vhdl(fsm, 6, 'IDLE')).toEqual(['1:declaration', '2:reference', '6:reference']);
+    expect(vhdl(fsm, 2, 'state_t')).toEqual(['1:declaration', '2:reference']);
+  });
+
+  it('scopes function parameters to the function', () => {
+    const source = [
+      'architecture r of e is', //                                            0
+      '  signal x : unsigned(3 downto 0);', //                                1
+      '  function inc (x : unsigned) return unsigned is', //                  2
+      '  begin', //                                                           3
+      '    return x + 1;', //                                                 4
+      '  end function;', //                                                   5
+      'begin', //                                                             6
+      '  x <= inc(x);', //                                                    7
+      'end architecture;', //                                                 8
+    ].join('\n');
+    expect(vhdl(source, 4, 'x')).toEqual(['2:declaration', '4:reference']);
+    expect(vhdl(source, 7, 'x')).toEqual(['1:declaration', '7:reference', '7:reference']);
+  });
+
+  it('closes a function declared without a body at its semicolon', () => {
+    const pkg = [
+      'package p is', //                                           0
+      '  function f (a : bit) return bit;', //                     1
+      '  constant K : integer := 3;', //                           2
+      'end package;', //                                           3
+      'architecture r of e is', //                                 4
+      '  signal a : bit;', //                                      5
+      'begin', //                                                  6
+      '  a <= a;', //                                              7
+      'end;', //                                                   8
+    ].join('\n');
+    expect(vhdl(pkg, 7, 'a')).toEqual(['5:declaration', '7:reference', '7:reference']);
+    expect(vhdl(pkg, 1, 'a')).toEqual(['1:declaration']);
+  });
+
+  it('does not take record fields or selected names for references', () => {
+    const source = [
+      'architecture r of e is', //                                      0
+      '  signal a : bit;', //                                           1
+      '  type rec_t is record a : bit; end record;', //                 2
+      '  signal r : rec_t;', //                                         3
+      'begin', //                                                       4
+      '  a <= r.a;', //                                                 5
+      'end;', //                                                        6
+    ].join('\n');
+    expect(vhdl(source, 5, 'a')).toEqual(['1:declaration', '5:reference']);
+    expect(vhdl(source, 2, 'a')).toEqual([]);
+  });
+
+  it('builds a large file fast', () => {
+    const body = Array.from({ length: 1500 }, (_, k) => `  s${k % 50} <= s${(k + 1) % 50} and clk;`);
+    const decls = Array.from({ length: 50 }, (_, k) => `  signal s${k} : std_logic;`);
+    const source = ['entity big is port (clk : in std_logic); end;', 'architecture r of big is', ...decls, 'begin', ...body, 'end;'].join('\n');
+    const lines = source.split('\n');
+    const started = performance.now();
+    const index = buildSymbolIndex('vhdl', tokenizeSource('vhdl', lines));
+    expect(performance.now() - started).toBeLessThan(250);
+    expect(index.symbolAt(0, lines[0].indexOf('clk'))?.references).toHaveLength(1500);
+  });
+});
+
+describe('Verilog', () => {
+  // The spec's shadowing example.
+  const SHADOWING = [
+    'module m;', //              0
+    'wire valid;', //            1
+    'always @(*) begin', //      2
+    '    reg valid;', //         3
+    "    valid = 1'b1;", //      4
+    'end', //                    5
+    "assign valid = 1'b0;", //   6
+    'endmodule', //              7
+  ].join('\n');
+
+  it('hovering the inner reg does not highlight the outer wire', () => {
+    expect(verilog(SHADOWING, 4, 'valid')).toEqual(['3:declaration', '4:reference']);
+    expect(verilog(SHADOWING, 6, 'valid')).toEqual(['1:declaration', '6:reference']);
+  });
+
+  const COUNTER = [
+    'module counter #(parameter N = 4) (', //            0
+    '  input  wire clk,', //                             1
+    '  output reg [N-1:0] q', //                         2
+    ');', //                                             3
+    '  localparam MAX = 9;', //                          4
+    '  always @(posedge clk) begin : tick', //           5
+    '    /* clk in a comment */', //                     6
+    '    if (q == MAX) q <= 0; else q <= q + 1;', //     7
+    '  end', //                                          8
+    'endmodule', //                                      9
+  ].join('\n');
+
+  it('links ANSI ports, parameters and localparams', () => {
+    expect(verilog(COUNTER, 5, 'clk')).toEqual(['1:declaration', '5:reference']);
+    expect(verilog(COUNTER, 2, 'N')).toEqual(['0:declaration', '2:reference']);
+    expect(verilog(COUNTER, 7, 'MAX')).toEqual(['4:declaration', '7:reference']);
+    expect(verilog(COUNTER, 7, 'q')).toEqual(['2:declaration', '7:reference', '7:reference', '7:reference', '7:reference']);
+  });
+
+  it('ignores block comments, keywords and block labels', () => {
+    expect(verilog(COUNTER, 6, 'clk')).toEqual([]);
+    expect(verilog(COUNTER, 5, 'posedge')).toEqual([]);
+    expect(verilog(COUNTER, 5, 'tick')).toEqual([]);
+  });
+
+  it('is case-sensitive', () => {
+    const source = 'module m(input clk);\nwire Clk;\nassign Clk = clk;\nendmodule';
+    expect(verilog(source, 2, 'clk')).toEqual(['0:declaration', '2:reference']);
+    expect(verilog(source, 2, 'Clk')).toEqual(['1:declaration', '2:reference']);
+  });
+
+  it('links non-ANSI ports declared after the header', () => {
+    const source = [
+      'module m (clk, q);', //  0
+      '  input clk;', //        1
+      '  output q;', //         2
+      '  reg q;', //            3
+      'endmodule', //           4
+    ].join('\n');
+    expect(verilog(source, 0, 'q')).toEqual(['0:reference', '2:declaration', '3:reference']);
+  });
+
+  it('does not treat a named port connection as a use', () => {
+    const tb = [
+      'module tb;', //                            0
+      '  reg clk;', //                            1
+      '  counter u0 (.clk(clk), .q());', //       2
+      'endmodule', //                             3
+    ].join('\n');
+    expect(verilog(tb, 2, 'clk', 1)).toEqual(['1:declaration', '2:reference']);
+    expect(verilog(tb, 2, 'clk', 0)).toEqual([]);
+  });
+
+  it('declares every name of a list and accepts SystemVerilog logic', () => {
+    const source = 'module m;\n  logic a, b;\n  assign a = b;\nendmodule';
+    expect(verilog(source, 2, 'b')).toEqual(['1:declaration', '2:reference']);
+  });
+});

@@ -80,6 +80,9 @@
   --wb-code-line-h: 20px;
   --wb-code-pad-top: 12px;
   --wb-code-pad-x: 16px;
+  /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
+  --wb-occ-bg: #dbeafe;
+  --wb-occ-decl-edge: #3b82f6;
 }
 
 .wb-editor__body {
@@ -173,6 +176,18 @@
 /* A line another marker points at (Rules D and E): tint and edge, no glyph. */
 .wb-editor__line.is-hint {
   background: var(--wb-diag-hint-bg);
+}
+
+/* The hovered symbol's declaration and references. Background and an inset
+   box-shadow only: no border, padding or margin, so the glyphs do not move and
+   the transparent textarea stays aligned with this layer. */
+.wb-editor__occ-ref,
+.wb-editor__occ-decl {
+  background: var(--wb-occ-bg);
+  border-radius: 2px;
+}
+.wb-editor__occ-decl {
+  box-shadow: inset 0 0 0 1px var(--wb-occ-decl-edge);
 }
 
 /* The word GHDL points at. text-decoration only: the glyphs keep their exact
