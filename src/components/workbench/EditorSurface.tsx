@@ -164,6 +164,8 @@ export interface EditorSurfaceProps {
   findAttach?: (textarea: HTMLTextAreaElement | null) => void;
   /** Esc in the code: closes the pane's Find bar; true when it did (D12). */
   onFindEscape?: () => boolean;
+  /** A click in the code: hides the pane's Find bar and its marks; the query is kept for the next open. */
+  onFindDismiss?: () => void;
 }
 
 /**
@@ -188,6 +190,7 @@ export function EditorSurface({
   findDecor,
   findAttach,
   onFindEscape,
+  onFindDismiss,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -271,6 +274,7 @@ export function EditorSurface({
           onChange={(e) => onChange(file.id, e.target.value)}
           {...hovered.handlers}
           onSelect={atCaret.onSelect}
+          onPointerDown={onFindDismiss}
           onKeyDown={(e) => {
             if (e.key === 'Escape' && onFindEscape?.()) e.preventDefault();
           }}

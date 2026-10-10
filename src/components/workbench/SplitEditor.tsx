@@ -199,6 +199,7 @@ function SplitPane({
                 find.close();
                 return true;
               }}
+              onFindDismiss={find.dismiss}
             />
           </>
         )

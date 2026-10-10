@@ -56,6 +56,8 @@ export interface FindController {
   readonly attach: (textarea: HTMLTextAreaElement | null) => void;
   readonly openBar: (options?: { seedFromSelection?: boolean; replace?: boolean }) => void;
   readonly close: () => void;
+  /** A click in the code: hides the bar and its marks, keeping the query, the caret and the focus where the click puts them. */
+  readonly dismiss: () => void;
   readonly toggle: () => void;
   readonly setQuery: (query: string) => void;
   readonly setReplacement: (replacement: string) => void;
@@ -73,7 +75,8 @@ type PendingReveal = { readonly afterEditOf: string | null } | null;
 /**
  * One pane's Find bar state over its file. The current match is derived from an
  * *anchor* offset (findNavigation.ts): opening sets it to the caret, stepping to
- * the match stepped to, Replace past the inserted text (D8); an edit in the code
+ * the match stepped to, Replace past the inserted text (D8); a changed query starts
+ * again at match 1; reopening with the old query keeps it, so the bar comes back on the match it was closed on; an edit in the code
  * leaves it, so the current match stays near where it was (D14). Nothing is
  * searched while the bar is closed (D14a), or while the pane is hidden (`shown`
  * false): its bar comes back as it was with the pane (D13).
@@ -131,7 +134,9 @@ export function useFind(file: FindFile | undefined, shown = true): FindControlle
     const textarea = textareaRef.current;
     const seed = options.seedFromSelection && textarea ? selectedSeed(textarea) : undefined;
     if (seed !== undefined) setQueryState(cleanQuery(seed));
-    if ((!open || seed !== undefined) && textarea) setAnchor(textarea.selectionStart);
+    // Reopened with the old query: the current match is the one left (not the caret's).
+    const keepsCurrent = seed === undefined && query.length > 0;
+    if ((!open || seed !== undefined) && !keepsCurrent && textarea) setAnchor(textarea.selectionStart);
     if (options.replace) setReplaceOpen(true);
     setOpen(true);
     setFocusFindToken((t) => t + 1);
@@ -203,9 +208,13 @@ export function useFind(file: FindFile | undefined, shown = true): FindControlle
     attach,
     openBar,
     close,
+    dismiss: () => setOpen(false),
     toggle: () => (open ? close() : openBar()),
     setQuery: (q) => {
-      setQueryState(cleanQuery(q));
+      const next = cleanQuery(q);
+      // A changed query starts again at match 1.
+      if (next !== query) setAnchor(0);
+      setQueryState(next);
       setConfirmation(null);
       requestReveal();
     },
