@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { memo, useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
-import { languageOfName } from './fileKinds';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { tokenizeSource } from './highlight';
 import type { CharRange, Token } from './vhdlHighlight';
 import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
 import { occurrencesByLine } from './symbols/occurrences';
-import { buildSymbolIndex } from './symbols/symbolIndex';
-import type { Occurrence, OccurrenceKind } from './symbols/types';
+import type { FileSymbols } from './symbols/fileSymbols';
+import type { HdlSymbol, Occurrence, OccurrenceKind } from './symbols/types';
 import { useCaretSymbol } from './symbols/useCaretSymbol';
 import { useHoveredSymbol } from './symbols/useHoveredSymbol';
 
@@ -135,6 +133,16 @@ export interface EditorSurfaceProps {
   announces?: boolean;
   /** The pane was clicked or focused. */
   onFocusWithin?: () => void;
+  /** The file's analysis (`useFileSymbols`), shared with the split view. */
+  symbols: FileSymbols;
+  /**
+   * Names in this file linked to the symbol highlighted in the other pane, by line
+   * (symbols/portLinks.ts). While there are any, they are shown instead of this
+   * pane's own highlight.
+   */
+  linkedOccurrences?: ReadonlyMap<number, readonly Occurrence[]>;
+  /** The symbol this pane highlights changed (or there is none any more). */
+  onHighlightChange?: (symbol: HdlSymbol | undefined) => void;
 }
 
 /**
@@ -152,6 +160,9 @@ export function EditorSurface({
   label,
   announces = true,
   onFocusWithin,
+  symbols,
+  linkedOccurrences,
+  onHighlightChange,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -160,18 +171,16 @@ export function EditorSurface({
   // Where both bars show, each stops short of the corner the other one runs into.
   const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
-  // Memoised so the gutter and the highlighted lines see the same array until the text changes.
-  const lines = useMemo(() => file.content.split('\n'), [file.content]);
-  const language = languageOfName(file.name);
-  // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
-  const tokenLines = useMemo(() => tokenizeSource(language, lines), [language, lines]);
-  // Symbol occurrence highlighting: analysed once per edit, looked up on hover or
-  // at the text cursor. The pointer wins while it rests on a name.
-  const symbolIndex = useMemo(() => buildSymbolIndex(language, tokenLines), [language, tokenLines]);
+  // Built once per edit by the caller; the same arrays let the memoised gutter and lines skip a highlight change.
+  const { lines, tokenLines, index: symbolIndex } = symbols;
+  // Symbol occurrence highlighting: looked up on hover or at the text cursor.
+  // The pointer wins while it rests on a name.
   const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
   const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
   const highlighted = hovered.symbol ?? atCaret.symbol;
-  const occurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
+  useEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
+  const ownOccurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
+  const occurrences = linkedOccurrences?.size ? linkedOccurrences : ownOccurrences;
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds

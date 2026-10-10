@@ -62,4 +62,6 @@ export interface Occurrence extends SourceSpan {
 export interface SymbolIndex {
   /** The symbol whose declaration or reference covers this character, if any. */
   symbolAt(line: number, offset: number): HdlSymbol | undefined;
+  /** Every declared symbol, in file order. */
+  readonly symbols: readonly HdlSymbol[];
 }

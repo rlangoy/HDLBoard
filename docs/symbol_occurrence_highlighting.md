@@ -30,6 +30,12 @@ When the mouse rests (≈100 ms) on an identifier in the editor:
 - Hovering never re-parses: the file is analysed once per edit, and a hover is one lookup.
 - Scrolling the text under a still pointer drops the hover highlight until the pointer moves again.
 
+**Testbench and design side by side** (`symbols/portLinks.ts`, `symbols/useLinkedHighlight.ts`): with both panes showing, a symbol highlighted in one pane also lights, in the other pane, the names wired to it through named port and generic maps (`a => in_a`, `.a(in_a)`, `generic map (W => 1)`, `#(.W(1))`):
+- a design **port or generic** lights the formals that name it in the testbench's instances, and every occurrence of the signal connected to each;
+- a testbench **signal** lights every occurrence of the design port it is wired to.
+
+So `a => a` stops being confusing: hovering the design's `a` lights both sides of the arrow in the testbench, and hovering the testbench's `a` lights the design's port. The pane that highlighted last is the source; the other pane shows the linked names in place of its own highlight and gets its own back when the source's highlight ends. Each pane on its own, and the one-pane views, behave exactly as before. Positional association is not linked.
+
 The **text cursor** highlights the same way (`symbols/useCaretSymbol.ts`): clicking a name, selecting it, or moving the cursor onto it (or just after it, `count|`) lights it up, and the highlight stays while the mouse goes elsewhere. A selection that spans more than one name highlights nothing. While the pointer rests on a name, the hover wins.
 
 Shadowing examples that must work (both are unit tests):

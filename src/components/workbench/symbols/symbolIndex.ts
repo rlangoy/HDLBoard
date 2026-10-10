@@ -44,6 +44,7 @@ function indexFromAnalysis(
 ): SymbolIndex {
   const tables = analysis.scopeParents.map(() => new Map<string, MutableSymbol>());
   const names: NameOnLine[] = [];
+  const declared: MutableSymbol[] = [];
 
   const resolve = (key: string, scope: number): MutableSymbol | undefined => {
     for (let s = scope; s >= 0; s = analysis.scopeParents[s]) {
@@ -74,6 +75,7 @@ function indexFromAnalysis(
       references: [],
     };
     table.set(key, symbol);
+    declared.push(symbol);
     names.push({ ...spanOf(token), symbol });
   }
 
@@ -86,7 +88,7 @@ function indexFromAnalysis(
     names.push({ ...spanOf(token), symbol });
   });
 
-  return lineLookup(names);
+  return lineLookup(names, declared);
 }
 
 /** An identifier that is not a declaration, not marked to skip, and not a selected name (`work.counter`, `.clk(`). */
@@ -104,9 +106,10 @@ function spanOf(token: SourceToken): SourceSpan {
 }
 
 /** Groups the names by line so a hover looks at one short list. */
-function lineLookup(names: readonly NameOnLine[]): SymbolIndex {
+function lineLookup(names: readonly NameOnLine[], symbols: readonly HdlSymbol[]): SymbolIndex {
   const byLine = groupByLine(names);
   return {
+    symbols,
     symbolAt(line, offset) {
       return byLine.get(line)?.find((name) => name.start <= offset && offset < name.end)?.symbol;
     },
