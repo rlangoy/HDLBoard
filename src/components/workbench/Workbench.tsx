@@ -179,6 +179,13 @@ interface RunChoice {
 const BOARD_PANE_TITLE = 'Board I/O';
 
 /**
+ * When opening a project shows the project page: always (a URL), only when a file could
+ * not be loaded or loading warned (a gist), or only when the project lists no files
+ * (opened from this computer: straight to the code).
+ */
+type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
+
+/**
  * The workbench's main page: a file tree and tabbed editor on the left
  * driving a live DE1-SoC board mock and simulator console on the right, laid
  * out to match `DesignResources/WorkBench.png`.
@@ -189,6 +196,7 @@ const BOARD_PANE_TITLE = 'Board I/O';
  * is the real, working component from `components/board`, `Switches`,
  * `Leds`, `Pushbuttons` and `SevenSegment`.
  */
+
 export function Workbench() {
   const [files, setFiles] = useState<VhdlFile[]>(STARTER_FILES);
   // The file in the editor's focused pane (docs/cleanup_file_tabs.md): the Files
@@ -720,21 +728,21 @@ export function Workbench() {
         ? { text, location: path, localFiles, readLocal: (name) => read(pathInFolder(folderOfPath(path), name)) }
         : { text, location: projectFile.name, localFiles },
       undefined,
-      true, // straight to the code; the project page only when a file could not be loaded
+      'whenEmpty',
     );
     if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
   };
 
   /**
-   * Opens a project file's text: its files replace what Files holds, and the project page
-   * shows — with `pageOnProblems`, only when a file could not be loaded or loading warned.
+   * Opens a project file's text: its files replace what Files holds, the first of them is
+   * shown, and the project page shows as `page` says (ProjectPageWhen).
    * `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could not be
    * opened, or null.
    */
   const openProjectText = async (
     source: Omit<ProjectSource, 'fetch'>,
     gist?: GistLink,
-    pageOnProblems = false,
+    page: ProjectPageWhen = 'always',
   ): Promise<string | null> => {
     setProjectBusy(`Opening ${source.location}…`);
     let opened: OpenedProject;
@@ -748,7 +756,7 @@ export function Workbench() {
       setProjectBusy(null);
     }
     if (gist) opened = { ...opened, project: withGistLink(opened.project, gist, opened.files) };
-    applyOpenedProject(opened, source.localFiles ?? [], pageOnProblems);
+    applyOpenedProject(opened, source.localFiles ?? [], page);
     return null;
   };
 
@@ -759,7 +767,7 @@ export function Workbench() {
    */
   const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
     const localFiles = gistFiles.filter((file) => file.name !== link.projectFileName);
-    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link, true);
+    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link, 'onProblems');
     if (error === null) setDialog((shown) => (shown === 'github' ? null : shown));
     return error;
   };
@@ -781,7 +789,7 @@ export function Workbench() {
         return `Could not read ${location.path}: ${errorText(err)}`;
       }
       const folder = folderOfPath(location.path);
-      return openProjectText({ text, location: location.path, readLocal: (name) => read(pathInFolder(folder, name)) });
+      return openProjectText({ text, location: location.path, readLocal: (name) => read(pathInFolder(folder, name)) }, undefined, 'whenEmpty');
     }
     // Signed in, a gist is read through the GitHub API: current at once, and linked for Save to GitHub.
     const gist = parseGistRef(location.url);
@@ -835,7 +843,7 @@ export function Workbench() {
   const applyOpenedProject = (
     { project: opened, files: projectFiles }: OpenedProject,
     localFiles: readonly ProjectSourceFile[],
-    pageOnProblems = false,
+    page: ProjectPageWhen = 'always',
   ) => {
     endRunQuietly();
     setLogLines([]);
@@ -853,10 +861,12 @@ export function Workbench() {
     const top = projectTopFile(added);
     setTopFileId(top?.id ?? null);
     setTopUnit(null);
-    setActiveFileId(top?.id ?? added[0]?.id ?? null);
+    // The first file of the project's list (`added` keeps its order).
+    setActiveFileId(added[0]?.id ?? null);
     setProject(opened);
     const clean = Object.keys(opened.unloaded).length === 0 && opened.warnings.length === 0;
-    setOverlay(pageOnProblems && clean ? null : 'project');
+    const showPage = page === 'always' || (page === 'onProblems' ? !clean : opened.entries.length === 0);
+    setOverlay(showPage ? 'project' : null);
     // A browser read only the files chosen with the project file: ask for its folder at once.
     const notChosen = opened.entries.filter((entry) => opened.unloaded[entry.name.toLowerCase()] === MISSING_LOCAL_FILE);
     setFolderNeeded(notChosen.length > 0 ? notChosen.map((entry) => entry.name) : null);
@@ -902,6 +912,8 @@ export function Workbench() {
     }
     setFiles((prev) => [...prev, ...found]);
     setProject((p) => p && withEntriesLoaded(p, found));
+    // Nothing shown yet (only the project file was chosen): the first of the project's files.
+    if (!filesRef.current.some((f) => f.id === activeFileRef.current)) setActiveFileId(found[0].id);
     if (topFileId === null) {
       const top = projectTopFile(found);
       if (top) makeTop(top.id);

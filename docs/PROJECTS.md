@@ -87,7 +87,7 @@ Files you rename or delete keep their description, or leave the project.
 
 ## Edit a project
 
-The **project page** shows in place of the code. Open it from the project row at the top of the Files panel; close it with ✕ or Esc. A project opened from this computer (Upload File, drag and drop, Choose project folder) goes straight to the code; the page opens by itself only when a file could not be loaded. Here you edit:
+The **project page** shows in place of the code. Open it from the project row at the top of the Files panel; close it with ✕ or Esc. A project opened from this computer (Upload File, drag and drop, Choose project folder, or a path in the Windows app) goes straight to the code and shows the first file of its list; the page opens by itself only when the project lists no files. Here you edit:
 
 - the project's name, board and description, and the project file's own name;
 - each file's description, and its URL (leave it empty for "stored next to the project file").
