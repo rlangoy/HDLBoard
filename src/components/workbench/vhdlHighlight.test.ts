@@ -13,6 +13,17 @@ describe('tokenizeVhdlLine', () => {
     expect(tokens.filter((t) => t.type === 'identifier').map((t) => t.text)).toEqual(['clk', 'event', 'clk']);
     expect(tokens.filter((t) => t.type === 'string').map((t) => t.text)).toEqual(["'1'"]);
   });
+
+  test("a qualified expression's tick is not a literal either: std_logic'('1')", () => {
+    const tokens = tokenizeVhdlLine("x <= std_logic'('1');");
+    expect(tokens.filter((t) => t.type === 'string').map((t) => t.text)).toEqual(["'1'"]);
+    expect(tokens.map((t) => t.text).join('')).toBe("x <= std_logic'('1');");
+  });
+
+  test("a character literal right after a bracket or comma still is one: ('(', ',')", () => {
+    const tokens = tokenizeVhdlLine("c := ('(', ',');");
+    expect(tokens.filter((t) => t.type === 'string').map((t) => t.text)).toEqual(["'('", "','"]);
+  });
 });
 
 describe('markRanges', () => {

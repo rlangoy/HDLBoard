@@ -44,10 +44,11 @@ const TYPES = new Set([
 
 // One alternation, longest-first within each group, so e.g. a number is
 // matched whole rather than digit by digit. A character literal is exactly one
-// character ('1'), so the attribute tick in `clk'event and clk = '1'` is not
-// taken for the start of a literal that runs to the next quote.
+// character ('1'). A quote right after a name or `)` is a tick, not a literal:
+// the attribute in `clk'event` and the qualifier in `std_logic'('1')`. A quote is
+// punctuation on its own, so a run of punctuation never swallows a literal (`('(',`).
 const TOKEN_RE =
-  /(--[^\n]*)|("(?:[^"]|"")*"|'[^\n]')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_]+)/g;
+  /(--[^\n]*)|("(?:[^"]|"")*"|(?<![A-Za-z0-9_)])'[^\n]')|(\d+(?:\.\d+)?(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_']+|')/g;
 
 export function tokenizeVhdlLine(line: string): Token[] {
   const tokens: Token[] = [];

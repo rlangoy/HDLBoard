@@ -12,9 +12,14 @@ import type { HdlSymbol, SymbolIndex } from './types';
 
 /** The line and offset of a character index into the whole text. */
 export function cellAtCaret(text: string, caret: number): TextCell {
-  const before = text.slice(0, caret);
-  const lineStart = before.lastIndexOf('\n') + 1;
-  return { line: before.split('\n').length - 1, offset: caret - lineStart };
+  let line = 0;
+  let lineStart = 0;
+  // Walks the line breaks before the caret without copying the text (it runs on every cursor move).
+  for (let newline = text.indexOf('\n'); newline !== -1 && newline < caret; newline = text.indexOf('\n', newline + 1)) {
+    line++;
+    lineStart = newline + 1;
+  }
+  return { line, offset: caret - lineStart };
 }
 
 /**

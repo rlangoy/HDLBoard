@@ -160,15 +160,16 @@ export function EditorSurface({
   // Where both bars show, each stops short of the corner the other one runs into.
   const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
-  const lines = file.content.split('\n');
+  // Memoised so the gutter and the highlighted lines see the same array until the text changes.
+  const lines = useMemo(() => file.content.split('\n'), [file.content]);
   const language = languageOfName(file.name);
   // Whole file at once: a Verilog block comment runs across lines. Recomputed only when the text or language changes.
-  const tokenLines = useMemo(() => tokenizeSource(language, file.content.split('\n')), [language, file.content]);
+  const tokenLines = useMemo(() => tokenizeSource(language, lines), [language, lines]);
   // Symbol occurrence highlighting: analysed once per edit, looked up on hover or
   // at the text cursor. The pointer wins while it rests on a name.
   const symbolIndex = useMemo(() => buildSymbolIndex(language, tokenLines), [language, tokenLines]);
-  const hovered = useHoveredSymbol(lines, symbolIndex);
-  const atCaret = useCaretSymbol(file.content, symbolIndex);
+  const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
+  const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
   const highlighted = hovered.symbol ?? atCaret.symbol;
   const occurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
   const linesByNumber = useMemo(() => new Map(diagnostics.map((d) => [d.line, d])), [diagnostics]);

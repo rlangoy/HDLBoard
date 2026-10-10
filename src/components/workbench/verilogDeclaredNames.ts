@@ -13,7 +13,7 @@
  */
 
 import { tokenizeVerilog, VERILOG_TYPES } from './verilogHighlight';
-import type { Token, TokenType } from './vhdlHighlight';
+import type { Token } from './vhdlHighlight';
 import { isVerilogReservedWord } from './verilogWords';
 
 /**
@@ -36,12 +36,9 @@ const OPENING = new Set(['(', '[', '{']);
 const CLOSING = new Set([')', ']', '}']);
 
 /** The least a token needs for the name-list rules; symbols/verilogSymbols.ts shares them. */
-export interface WordToken {
-  readonly text: string;
-  readonly type: TokenType;
-}
+export type WordToken = Pick<Token, 'text' | 'type'>;
 
-interface Significant extends Pick<Token, 'text' | 'type'> {
+interface Significant extends WordToken {
   /** 0-based line of the file. */
   readonly line: number;
 }

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent } from 'react';
+import { countLines, lineHeightOrFallback } from '../diagnosticLocation';
 import { keepIfSameSymbol } from './keepIfSameSymbol';
 import { cellAtPointer, type TextCell, type TextMetrics } from './pointerPosition';
 import type { HdlSymbol, SymbolIndex } from './types';
+import { useFileScopedState } from './useFileScopedState';
 
 /** How long the pointer must rest before the highlight follows it (spec: 75–150 ms). */
 export const HOVER_DELAY_MS = 100;
@@ -41,7 +43,7 @@ function measureText(textarea: HTMLTextAreaElement): TextMetrics {
   return {
     paddingTop: parseFloat(style.paddingTop) || 0,
     paddingLeft: parseFloat(style.paddingLeft) || 0,
-    lineHeight: parseFloat(style.lineHeight) || 0,
+    lineHeight: lineHeightOrFallback(style.lineHeight, textarea.scrollHeight, countLines(textarea.value)), // `normal` too
     charWidth: characterWidth(style),
     tabSize: parseInt(style.tabSize, 10) || 4,
   };
@@ -52,11 +54,12 @@ function measureText(textarea: HTMLTextAreaElement): TextMetrics {
  * the symbol is looked up in the current index, so after an edit the highlight
  * follows the new text by itself and never shows stale positions.
  *
+ * @param fileId The file shown; the hover is forgotten when it changes.
  * @param lines The file's current lines.
  * @param index The current symbol index (rebuilt by the caller on every edit).
  */
-export function useHoveredSymbol(lines: readonly string[], index: SymbolIndex): HoveredSymbol {
-  const [cell, setCell] = useState<TextCell | undefined>(undefined);
+export function useHoveredSymbol(fileId: string, lines: readonly string[], index: SymbolIndex): HoveredSymbol {
+  const [cell, setCell] = useFileScopedState<TextCell>(fileId);
   const timer = useRef<number | undefined>(undefined);
   const metrics = useRef<TextMetrics | undefined>(undefined);
   const linesRef = useRef(lines);
@@ -89,12 +92,12 @@ export function useHoveredSymbol(lines: readonly string[], index: SymbolIndex): 
     timer.current = window.setTimeout(() => {
       setCell((previous) => keepIfSameSymbol(previous, next, (cell) => indexRef.current.symbolAt(cell.line, cell.offset)));
     }, HOVER_DELAY_MS);
-  }, []);
+  }, [setCell]);
 
   const clear = useCallback(() => {
     window.clearTimeout(timer.current);
     setCell(undefined);
-  }, []);
+  }, [setCell]);
 
   const symbol = useMemo(() => (cell ? index.symbolAt(cell.line, cell.offset) : undefined), [cell, index]);
   const handlers = useMemo(() => ({ onPointerEnter, onPointerMove, onPointerLeave: clear }), [onPointerEnter, onPointerMove, clear]);

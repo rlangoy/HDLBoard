@@ -132,6 +132,39 @@ describe('VHDL', () => {
     expect(vhdl(source, 1, 's ')).toEqual(['1:declaration', '3:reference', '4:reference', '5:reference']);
   });
 
+  it('does not take an indexed formal or a named call argument for a use', () => {
+    const source = [
+      'architecture a of e is', //                                           0
+      '  signal q, s : bit_vector(1 downto 0);', //                          1
+      'begin', //                                                            2
+      '  u0 : entity work.r port map (q(0) => s(0), d => q(1));', //         3
+      '  s <= f(q => s);', //                                                4
+      'end;', //                                                             5
+    ].join('\n');
+    expect(vhdl(source, 1, 'q')).toEqual(['1:declaration', '3:reference']); // only the actual q(1)
+  });
+
+  it("keeps a qualified expression's brackets balanced", () => {
+    const source = [
+      'architecture a of e is', //                                           0
+      '  signal s : std_logic;', //                                          1
+      'begin', //                                                            2
+      "  u0 : entity work.r port map (d => std_logic'('1'), q => s);", //    3
+      'end;', //                                                             4
+    ].join('\n');
+    expect(vhdl(source, 1, 's ')).toEqual(['1:declaration', '3:reference']);
+  });
+
+  it('counts the object of an attribute specification as a use, not a label', () => {
+    const source = [
+      'architecture a of e is', //                                           0
+      '  signal data_reg : bit;', //                                         1
+      '  attribute keep of data_reg : signal is true;', //                   2
+      'begin end;', //                                                       3
+    ].join('\n');
+    expect(vhdl(source, 1, 'data_reg')).toEqual(['1:declaration', '2:reference']);
+  });
+
   it('a package body sees its package', () => {
     const source = [
       'package p is', //                                          0
@@ -272,6 +305,20 @@ describe('Verilog', () => {
     "assign valid = 1'b0;", //   6
     'endmodule', //              7
   ].join('\n');
+
+  it('declares a function in its module, so a call outside it resolves', () => {
+    const source = [
+      'module m #(parameter N = 8);', //                0
+      '  function integer clog2;', //                  1
+      '    input integer v;', //                        2
+      '    clog2 = v;', //                              3
+      '  endfunction', //                               4
+      '  localparam W = clog2(N);', //                  5
+      'endmodule', //                                   6
+    ].join('\n');
+    expect(verilog(source, 1, 'clog2')).toEqual(['1:declaration', '3:reference', '5:reference']);
+    expect(verilog(source, 2, 'v')).toEqual(['2:declaration', '3:reference']);
+  });
 
   it('hovering the inner reg does not highlight the outer wire', () => {
     expect(verilog(SHADOWING, 4, 'valid')).toEqual(['3:declaration', '4:reference']);

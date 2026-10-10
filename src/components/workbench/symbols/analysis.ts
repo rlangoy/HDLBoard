@@ -69,6 +69,16 @@ export function matchingClose(tokens: readonly SourceToken[], open: number, open
   return tokens.length - 1;
 }
 
+/** The index of the bracket that opens the one at `close`, or 0 if it is never opened. */
+export function matchingOpen(tokens: readonly SourceToken[], close: number, opening = '(', closing = ')'): number {
+  let depth = 0;
+  for (let j = close; j >= 0; j--) {
+    if (tokens[j].text === closing) depth++;
+    else if (tokens[j].text === opening && --depth === 0) return j;
+  }
+  return 0;
+}
+
 export function isIdentifier(token: SourceToken | undefined): token is SourceToken {
   return token?.type === 'identifier';
 }

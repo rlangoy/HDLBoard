@@ -6,9 +6,10 @@
  * Only language facts live here; resolving names is symbolIndex.ts's job.
  *
  * Scopes: module … endmodule, function … endfunction, task … endtask,
- * begin … end (named or not) and fork … join.
+ * begin … end (named or not) and fork … join. A function's or task's own name
+ * belongs to the module around it, so its scope opens just after the name.
  *
- * Declarations: the names after input / output / inout, parameter / localparam,
+ * Declarations: function and task names, the names after input / output / inout, parameter / localparam,
  * genvar, the net and variable types (wire, reg, integer, …) and SystemVerilog's
  * `logic`. The name-list rules are verilogDeclaredNames.ts's, shared.
  * Verilog is case-sensitive.
@@ -16,11 +17,16 @@
 
 import { VERILOG_TYPES } from '../verilogHighlight';
 import { declaredNameIndices } from '../verilogDeclaredNames';
-import { DeclarationMap, isIdentifier, ScopeTracker, type Analysis } from './analysis';
+import { DeclarationMap, isIdentifier, matchingClose, ScopeTracker, type Analysis } from './analysis';
 import type { SourceToken } from './sourceTokens';
 import type { SymbolKind } from './types';
 
-const SCOPE_OPENERS: ReadonlySet<string> = new Set(['module', 'macromodule', 'function', 'task', 'begin', 'fork']);
+const SCOPE_OPENERS: ReadonlySet<string> = new Set(['module', 'macromodule', 'begin', 'fork']);
+/** `function integer clog2;`, `task automatic send(…)`: they open a scope after their name. */
+const SUBPROGRAMS: ReadonlyMap<string, SymbolKind> = new Map([
+  ['function', 'function'],
+  ['task', 'task'],
+]);
 const SCOPE_CLOSERS: ReadonlySet<string> = new Set([
   'endmodule', 'endfunction', 'endtask', 'end', 'join', 'join_any', 'join_none',
 ]);
@@ -43,13 +49,26 @@ export function analyzeVerilog(tokens: readonly SourceToken[]): Analysis {
   const declarations = new DeclarationMap();
   const ignored = new Set<number>();
   const tokenScopes: number[] = [];
+  /** The token at which a function's or task's scope opens: the one after its name. */
+  let subprogramBodyAt: number | undefined;
 
   for (let i = 0; i < tokens.length; i++) {
+    if (i === subprogramBodyAt) scopes.open();
     tokenScopes[i] = scopes.current;
     const { text } = tokens[i];
 
     if (SCOPE_OPENERS.has(text)) scopes.open();
     else if (SCOPE_CLOSERS.has(text)) scopes.close();
+
+    const subprogramKind = SUBPROGRAMS.get(text);
+    if (subprogramKind) {
+      const name = subprogramName(tokens, i);
+      if (name === undefined) scopes.open();
+      else {
+        declarations.add(name, subprogramKind); // before the `integer` in its header can claim it
+        subprogramBodyAt = name + 1;
+      }
+    }
 
     const kind = declaringKind(text);
     if (kind) for (const j of declaredNameIndices(tokens, i)) declarations.add(j, kind);
@@ -63,6 +82,22 @@ export function analyzeVerilog(tokens: readonly SourceToken[]): Analysis {
     declarations: declarations.entries,
     ignored,
   };
+}
+
+/**
+ * The name in a function or task header: the first identifier after the keyword,
+ * past `automatic`, a return type and a range, if a `;` or `(` follows it.
+ */
+function subprogramName(tokens: readonly SourceToken[], keyword: number): number | undefined {
+  for (let j = keyword + 1; j < tokens.length; j++) {
+    const { text } = tokens[j];
+    if (text === '[') j = matchingClose(tokens, j, '[', ']');
+    else if (text === ';' || text === '(') return undefined;
+    else if (isIdentifier(tokens[j]) && !DECLARING_KEYWORDS.has(text)) {
+      return tokens[j + 1]?.text === ';' || tokens[j + 1]?.text === '(' ? j : undefined;
+    }
+  }
+  return undefined;
 }
 
 /** The kind a declaring word declares, or undefined if the word declares nothing. */

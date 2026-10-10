@@ -19,6 +19,7 @@ import {
   DeclarationMap,
   isIdentifier,
   matchingClose,
+  matchingOpen,
   ScopeTracker,
   type Analysis,
 } from './analysis';
@@ -116,10 +117,15 @@ export function analyzeVhdl(tokens: readonly SourceToken[]): Analysis {
     if ((word === 'type' || word === 'subtype') && isIdentifier(tokens[i + 1])) declarations.add(i + 1, 'type');
     if (word === 'type') declareAll(declarations, enumerationLiterals(tokens, i), 'enum-literal');
     if (word === 'record') recordFieldNames(tokens, i).forEach((j) => ignored.add(j));
-    if (word === 'map' && tokens[i + 1]?.text === '(') formalNames(tokens, i + 1).forEach((j) => ignored.add(j));
+    if (token.text === '=>' && depth > 0) {
+      const formal = formalBefore(tokens, i);
+      if (formal !== undefined) ignored.add(formal);
+    }
 
-    // A label (`blink : process`) is a name followed by `:` that declares nothing.
-    if (isIdentifier(token) && tokens[i + 1]?.text === ':' && !declarations.entries.has(i)) ignored.add(i);
+    // A label (`blink : process`) is a name followed by `:` that declares nothing;
+    // `attribute keep of data_reg : signal` names a signal there, which is a use.
+    const isLabel = tokens[i + 1]?.text === ':' && tokens[i - 1]?.text.toLowerCase() !== 'of';
+    if (isIdentifier(token) && isLabel && !declarations.entries.has(i)) ignored.add(i);
   }
 
   return {
@@ -230,13 +236,14 @@ function recordFieldNames(tokens: readonly SourceToken[], recordIndex: number): 
   return fields;
 }
 
-/** `port map (clk => clk_50, q => leds)`: the formals left of `=>`. */
-function formalNames(tokens: readonly SourceToken[], open: number): number[] {
-  const close = matchingClose(tokens, open);
-  const formals: number[] = [];
-  for (let j = open + 1; j < close; j++) {
-    if (tokens[j].text === '(') j = matchingClose(tokens, j);
-    else if (isIdentifier(tokens[j]) && tokens[j + 1]?.text === '=>') formals.push(j);
-  }
-  return formals;
+/**
+ * The formal left of an association's `=>`, which names the other side's port or
+ * parameter and is no use of a local name: `port map (clk => clk_50)`,
+ * `port map (q(0) => bit0)`, `f(a => s)`. Undefined if the name before `=>` does
+ * not start the association.
+ */
+function formalBefore(tokens: readonly SourceToken[], arrow: number): number | undefined {
+  const name = tokens[arrow - 1]?.text === ')' ? matchingOpen(tokens, arrow - 1) - 1 : arrow - 1;
+  const startsAssociation = tokens[name - 1]?.text === '(' || tokens[name - 1]?.text === ',';
+  return isIdentifier(tokens[name]) && startsAssociation ? name : undefined;
 }

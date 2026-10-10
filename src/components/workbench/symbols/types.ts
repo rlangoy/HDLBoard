@@ -26,7 +26,9 @@ export type SymbolKind =
   | 'reg'
   | 'logic'
   | 'localparam'
-  | 'genvar';
+  | 'genvar'
+  | 'function'
+  | 'task';
 
 export type OccurrenceKind = 'declaration' | 'reference';
 
