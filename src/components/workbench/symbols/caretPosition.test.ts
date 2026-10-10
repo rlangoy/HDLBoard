@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { tokenizeSource } from '../highlight';
-import { cellAtCaret, symbolAtCaret } from './caretPosition';
+import { caretOfSelection, cellAtCaret, symbolAtCaret } from './caretPosition';
 import { buildSymbolIndex } from './symbolIndex';
 
 const SOURCE = [
@@ -22,6 +22,25 @@ describe('cellAtCaret', () => {
     expect(cellAtCaret('ab\ncd', 0)).toEqual({ line: 0, offset: 0 });
     expect(cellAtCaret('ab\ncd', 3)).toEqual({ line: 1, offset: 0 });
     expect(cellAtCaret('ab\ncd', 5)).toEqual({ line: 1, offset: 2 });
+  });
+});
+
+describe('caretOfSelection', () => {
+  const LINE = "signal a : std_logic := '0';";
+  const a = LINE.indexOf(' a ') + 1;
+
+  it('a cursor without a selection stays where it is', () => {
+    expect(caretOfSelection(LINE, a, a)).toBe(a);
+  });
+
+  it('a double-click on Windows selects the word and its trailing space; the word counts', () => {
+    expect(caretOfSelection(LINE, a, a + 2)).toBe(a); // "a "
+    expect(caretOfSelection(LINE, a - 1, a + 1)).toBe(a); // " a"
+  });
+
+  it('a selection across names, or of blanks only, points nowhere', () => {
+    expect(caretOfSelection(LINE, a, a + 4)).toBeUndefined(); // "a : "
+    expect(caretOfSelection(LINE, a - 1, a)).toBeUndefined(); // " "
   });
 });
 

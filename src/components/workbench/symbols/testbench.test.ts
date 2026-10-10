@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { tokenizeSource } from '../highlight';
+import { caretOfSelection, symbolAtCaret } from './caretPosition';
 import { occurrencesByLine } from './occurrences';
 import { buildSymbolIndex } from './symbolIndex';
 import TESTBENCH from '../../../../tests/fixtures/symbols/and_gate_truthtable_tb.vhd?raw';
@@ -36,5 +37,13 @@ describe('and_gate_truthtable_tb.vhd', () => {
   it('does not take a port-map formal or the attribute name for a use', () => {
     expect(linesLitBy(20, 'a', 0)).toEqual([]);
     expect(linesLitBy(53, 'image')).toEqual([]);
+  });
+
+  it('a double-click on the declaration (Windows selects "a ") lights the port map use on line 20', () => {
+    const text = LINES.join('\n');
+    const start = LINES.slice(0, 10).join('\n').length + 1 + LINES[10].indexOf(' a ') + 1;
+    const caret = caretOfSelection(text, start, start + 2)!;
+    const occurrences = occurrencesByLine(symbolAtCaret(INDEX, text, caret));
+    expect([...occurrences.keys()].map((l) => l + 1).sort((a, b) => a - b)).toEqual([11, 20, 42, 49, 53, 62]);
   });
 });

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useMemo, useState, type SyntheticEvent } from 'react';
-import { symbolAtCaret } from './caretPosition';
+import { caretOfSelection, symbolAtCaret } from './caretPosition';
 import type { HdlSymbol, SymbolIndex } from './types';
 
 export interface CaretSymbol {
@@ -23,10 +23,8 @@ export function useCaretSymbol(text: string, index: SymbolIndex): CaretSymbol {
   const [caret, setCaret] = useState<number | undefined>(undefined);
 
   const onSelect = useCallback((event: SyntheticEvent<HTMLTextAreaElement>) => {
-    const { selectionStart, selectionEnd } = event.currentTarget;
-    const selected = event.currentTarget.value.slice(selectionStart, selectionEnd);
-    // A selection that crosses a name boundary (`a <= b`) points at no single symbol.
-    setCaret(/^\w*$/.test(selected) ? selectionStart : undefined);
+    const { value, selectionStart, selectionEnd } = event.currentTarget;
+    setCaret(caretOfSelection(value, selectionStart, selectionEnd));
   }, []);
 
   const symbol = useMemo(() => (caret === undefined ? undefined : symbolAtCaret(index, text, caret)), [caret, index, text]);
