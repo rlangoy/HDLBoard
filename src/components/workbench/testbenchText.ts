@@ -36,6 +36,8 @@ export const TEXT = {
   noInstance: 'This testbench does not instantiate a design',
   noTestbenchCodeLeft: 'No testbench code left in this file.',
   closeSplit: 'Close split',
+  closeTestbenchPane: 'Close the testbench pane',
+  closeDesignPane: 'Close the design pane',
   openSplitView: 'Open split view',
   dismiss: 'Dismiss',
   runTestbench: 'Run testbench',

@@ -252,7 +252,9 @@ and `RunTestbenchDialog` (D25).
 ### 4.6 Empty states
 
 Shown in a pane whose side of the pair is missing (view *Both* or *TB*/*RTL*
-pinned with nothing to show).
+pinned with nothing to show). The empty pane's TB / RTL badge opens a menu with
+*Close the testbench pane* / *Close the design pane*, which pins the other side,
+the same as *Show design only* / *Show testbench only* below.
 
 **TB side empty** (design with no testbench):
 
