@@ -26,6 +26,8 @@ export interface HdlBoardBridge {
   readLocalFile?(path: string): Promise<string>;
   /** Writes one, by its full path (Save project into the folder a project was opened from). */
   writeLocalFile?(path: string, text: string): Promise<boolean>;
+  /** Where a chosen or dropped file is on disk; '' when it has no path (a file from a .zip). */
+  pathForFile?(file: File): string;
   /** The GitHub sign-in, kept encrypted for this Windows user (src/github/tokenStore.ts). */
   loadGitHubToken?(): Promise<string | null>;
   saveGitHubToken?(accessToken: string): Promise<boolean>;

@@ -44,6 +44,15 @@ export function isFilePath(location: string): boolean {
   return /^[a-z]:[\\/]/i.test(location) || /^\\\\/.test(location);
 }
 
+/**
+ * The path a chosen project file can be opened by (the Windows app): with one, its files
+ * are read from its own folder and Save project writes back there. Null in a browser,
+ * and for a file that is not on disk.
+ */
+export function localProjectPath(path: string | undefined): string | null {
+  return path !== undefined && isFilePath(path) ? path : null;
+}
+
 /** The folder of a file path, without the trailing separator. */
 export function folderOfPath(path: string): string {
   const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));

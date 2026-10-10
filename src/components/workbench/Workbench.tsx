@@ -64,7 +64,7 @@ import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, type FileHandles } from './fileSystemAccess';
-import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
+import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, localProjectPath, parseProjectLocation, pathInFolder } from './projectLocation';
 import { canPickFolder, downloadEach, pickSaveFolder, projectSaveFiles, writeToFolder, type PickedFolder } from './projectSave';
 import {
   MISSING_LOCAL_FILE,
@@ -701,15 +701,25 @@ export function Workbench() {
   /**
    * Opens a project file chosen or dropped with Upload File; the files chosen with it are
    * its folder. Whatever Files held before is closed: the project's files replace it.
+   * In the Windows app the project file's own folder is read too, so no folder is asked for,
+   * and Save project writes back there.
    */
   const openProjectUpload = async (projectFile: File, others: readonly File[]) => {
+    const bridge = desktopBridge();
+    const path = localProjectPath(bridge?.pathForFile?.(projectFile));
+    const read = bridge?.readLocalFile;
     const localFiles: ProjectSourceFile[] = await Promise.all(
       others.filter((file) => !isProjectUpload(file.name)).map(async (file) => ({ name: file.name, content: await file.text() })),
     );
     for (const extra of others.filter((file) => isProjectUpload(file.name))) {
       appendLog(`Ignored ${extra.name}: only one project file is opened at a time (${projectFile.name}).`, 'error');
     }
-    const error = await openProjectText({ text: await projectFile.text(), location: projectFile.name, localFiles });
+    const text = await projectFile.text();
+    const error = await openProjectText(
+      path && read
+        ? { text, location: path, localFiles, readLocal: (name) => read(pathInFolder(folderOfPath(path), name)) }
+        : { text, location: projectFile.name, localFiles },
+    );
     if (error !== null) setRefusal({ title: 'Project not opened', refused: [{ name: projectFile.name, reason: error }] });
   };
 

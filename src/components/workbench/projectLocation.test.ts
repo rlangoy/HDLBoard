@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
-import { folderOfPath, isFilePath, parseProjectLocation, pathInFolder } from './projectLocation';
+import { folderOfPath, isFilePath, localProjectPath, parseProjectLocation, pathInFolder } from './projectLocation';
 
 const PAGE = 'https://hdlboard.example.com/app/index.html';
 
@@ -44,5 +44,15 @@ describe('paths', () => {
     expect(folderOfPath('C:\\Labs\\lab1\\p.json')).toBe('C:\\Labs\\lab1');
     expect(pathInFolder('C:\\Labs\\lab1', 'a.vhd')).toBe('C:\\Labs\\lab1\\a.vhd');
     expect(pathInFolder('D:/x', 'a.vhd')).toBe('D:/x/a.vhd');
+  });
+});
+
+describe('localProjectPath', () => {
+  it("takes a chosen file's path only when it is a full file path", () => {
+    expect(localProjectPath('C:\\Labs\\lab1\\lab1.hdlboard.json')).toBe('C:\\Labs\\lab1\\lab1.hdlboard.json');
+    expect(localProjectPath('\\\\server\\share\\p.hdlboard.json')).toBe('\\\\server\\share\\p.hdlboard.json');
+    expect(localProjectPath(undefined)).toBeNull(); // a browser
+    expect(localProjectPath('')).toBeNull(); // a file from a .zip
+    expect(localProjectPath('lab1.hdlboard.json')).toBeNull();
   });
 });

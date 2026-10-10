@@ -69,6 +69,8 @@ A browser cannot read a folder by its path, so select the files instead. Click *
 
 If a file is missing, the project page says which, and **Choose project folder…** reads it from the folder.
 
+**In the Windows app** none of this is needed: choosing or dropping only the project file is enough. The app knows where the file is on disk, reads the project's files from that folder without asking, and **Save project** writes back there. (A project file taken out of a `.zip` has no folder, so it is opened as in a browser.)
+
 ### 4. Drag and drop
 
 Drop the project file with its files (or the `.zip`) onto the Files panel or the editor.
@@ -98,7 +100,7 @@ Click a file name to show it in the editor. **Unsaved changes** shows until the 
 
 | How the project was opened | Where Save project writes |
 |---|---|
-| Windows app, by a file path | Back into that folder, without asking |
+| Windows app, by a file path, or a project file chosen or dropped from disk | Back into that folder, without asking |
 | Chrome, Edge, or the Windows app otherwise | Asks for a folder the first time, then saves there again without asking |
 | Other browsers (Firefox, Safari) | Downloads the project file and each file; keep them in one folder |
 
