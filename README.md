@@ -6,9 +6,9 @@
 
 **Write VHDL or Verilog. Watch it light up.**
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
 
-Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
+Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant". It was created for an FPGA course at the University of South-Eastern Norway ([more below](#built-for-teaching)).
 
 - **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
 - **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
@@ -49,7 +49,7 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 
 ## Where it fits
 
-| | Compile-and-waveform sites | Vendor toolchains (Quartus, Questa) | **HDLBoard** |
+| | Compile-and-waveform sites (e.g. EDA Playground) | Vendor tools (Quartus, ModelSim/Questa, Vivado) | **HDLBoard** |
 |---|---|---|---|
 | Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
 | Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual DE1-SoC |
@@ -57,6 +57,19 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 | Setup | None | Large install, licence for some tools | **None** (browser), or a small Windows installer |
 
 HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus and the real board.
+
+## Built for teaching
+
+HDLBoard was created for **PB1180 Programmerbare logiske kretser**, an introductory FPGA course at the University of South-Eastern Norway (USN). The course is taught in VHDL. Verilog support was added later so that people outside the course could use HDLBoard too.
+
+In the first weeks of an FPGA course, students usually face several obstacles at once: a multi-gigabyte vendor toolchain, a synthesis flow, USB drivers, and a limited number of boards in the lab. HDLBoard puts those aside until later. A student can open a browser at home, write a few lines of VHDL or Verilog, and see right away whether the design behaves the way they meant.
+
+Teachers use it for:
+
+- **Lab exercises** in VHDL or Verilog, shared as a `?project=` link so everyone starts from the same files.
+- **Homework and self-study**, without needing a board at home.
+- **Classroom demonstrations:** change a line, press Start, and flip a switch while the class watches.
+- **Self-checking testbenches** that students run next to their own design.
 
 ## Features
 
@@ -102,7 +115,7 @@ HDLBoard is a learning and simulation tool, not a replacement for an FPGA toolch
 
 Yes. [HDLBoard](https://hdlboard.onrender.com/) runs VHDL on GHDL (VHDL-2008) and Verilog on Icarus Verilog, right in your browser. It is free and open source (GPL-2.0).
 
-### How can I practise VHDL or Verilog without an FPGA board?
+### Can I learn VHDL, Verilog or FPGA design without an FPGA board?
 
 Write your design using the DE1-SoC port names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …) and press Start. The virtual board's switches, buttons, LEDs and 7-segment displays behave like the real ones, so you can test a design by playing with it.
 
@@ -110,9 +123,9 @@ Write your design using the DE1-SoC port names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` 
 
 The DE1-SoC is a Terasic development board with an Intel (Altera) Cyclone V FPGA. Many universities use it for teaching digital logic. HDLBoard models its switches, pushbuttons, LEDs and 7-segment displays.
 
-### Can I use HDLBoard in my course?
+### Is HDLBoard suitable for a university or college FPGA course?
 
-Yes. Send students a `?project=` link so everyone starts from the same exercise. You can also [host your own copy](docs/HOSTING.md) for a lab, or install the Windows app on lab PCs.
+Yes. That is what it was built for. Send students a `?project=` link so everyone starts from the same exercise. You can also [host your own copy](docs/HOSTING.md) for a lab, or install the Windows app on lab PCs.
 
 ### Will my design run on a real FPGA?
 
@@ -135,10 +148,6 @@ HDLBoard does not do synthesis. Because it uses the board's real pin names, thou
 - **Found a bug or have an idea?** [Open an issue](https://github.com/rlangoy/HDLBoard/issues). Please include the HDL file and the console output if you can.
 - **Want to contribute?** Pull requests are welcome, whether they are fixes, features or example designs for teaching. Start with [BUILDING.md](docs/BUILDING.md).
 - Feedback from students and teachers who use HDLBoard in a course is especially valuable.
-
-## Background
-
-HDLBoard was created for **PB1180 Programmerbare logiske kretser** at the University of South-Eastern Norway (USN). The course is taught in VHDL. Verilog support was added later so that people outside the course could use HDLBoard too.
 
 ## Credits
 
