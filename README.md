@@ -45,6 +45,8 @@ HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learni
 
 Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
 
+- **Make a mistake. See why in a second.** HDLBoard compiles your design in under a second, while Altera Quartus Prime needs more than five. Mistakes are marked right in your code, with a message that says what is wrong and a hint about how to fix it.
+- **Find any signal at a glance.** Rest your mouse on a signal or port, or click it, and it lights up everywhere it appears: where it is declared and every place it is used. No more scrolling up and down to find where `sum` was declared.
 - **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
 - **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
 - **Real-time pacing:** an LED meant to blink once a second blinks once a second.
@@ -85,7 +87,7 @@ Typical uses:
 ### Real simulation, readable errors
 - **VHDL** runs on GHDL (VHDL-2008). **Verilog** runs on Icarus Verilog.
 - The simulator's own messages, including testbench `report`/`assert` and `$display` output, appear live in the console.
-- Errors are marked on the source line in the editor, with a short explanation of the likely cause.
+- Compiles in under a second. Errors are marked where they occur in your code, with a message that explains the likely cause and suggests a fix.
 
 ### Testbenches side by side
 
@@ -94,6 +96,7 @@ Typical uses:
 When you open a testbench, the editor splits: the testbench is on the left and the design it drives is on the right. Each pane has its own Play button.
 
 ### A small, focused editor
+- Rest the mouse on a signal or port, or click it, to highlight its declaration and every use.
 - Syntax highlighting for VHDL and Verilog, one file list with upload and drag-and-drop, and resizable panes.
 - Download a single file, or the whole project as a ZIP.
 
