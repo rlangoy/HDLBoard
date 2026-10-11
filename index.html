@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=2" />
 
 <meta property="og:title" content="HDLBoard — Write VHDL or Verilog. Watch it light up." />
 <meta property="og:description" content="A free, open-source virtual FPGA board for learning VHDL and Verilog. No hardware needed." />
@@ -83,7 +83,7 @@
       </div>
     </div>
 
-    <img class="hero-shot" src="assets/workbench.png?v=8" width="1311" height="681" loading="eager"
+    <img class="hero-shot" src="assets/workbench.png?v=9" width="1260" height="655" loading="eager"
          alt="HDLBoard running the Verilog design DE1_SoC.v under Icarus Verilog: the Simulation card and Files panel on the left, the editor in the middle, and the virtual board on the right with four switches up and their LEDs lit, plus the 7-segment displays and pushbuttons" />
   </div>
 </section>
@@ -162,8 +162,8 @@
             <h3 class="compare-label"><span class="swatch" aria-hidden="true"></span>HDLBoard</h3>
             
           </div>
-          <a class="compare-shot" href="assets/errors-hdlboard.png" target="_blank" rel="noopener" tabindex="-1">
-            <img src="assets/errors-hdlboard.png" width="899" height="925" loading="lazy"
+          <a class="compare-shot" href="assets/errors-hdlboard.png?v=2" target="_blank" rel="noopener" tabindex="-1">
+            <img src="assets/errors-hdlboard.png?v=2" width="959" height="925" loading="lazy"
                  alt="HDLBoard after compiling a VHDL file with two typos: lines 17 and 20 are tinted red with a cross in the margin, the wrong character is underlined, and each line ends with its error message, interfaces must be separated by ';' (found ','), and extra ';' at end of interface list" />
           </a>
           <figcaption>
@@ -202,11 +202,11 @@
         <h2 id="testbench-heading"><span>Test your design.</span> <span>Side by side.</span></h2>
         <p>Automatically places your test and design. Press play to see the results.</p>
       </div>
-      <a class="split-media testbench-shot" href="assets/testbench.png" target="_blank" rel="noopener" tabindex="-1">
-        <img src="assets/testbench.png?v=3" width="956" height="745" loading="lazy"
+      <a class="split-media testbench-shot" href="assets/testbench.png?v=4" target="_blank" rel="noopener" tabindex="-1">
+        <img src="assets/testbench.png?v=4" width="850" height="660" loading="lazy"
              alt="HDLBoard in split view: the AND gate truth-table testbench on the left, the AND gate design it tests on the right, and the console below listing the testbench's reports as a table - time, file and line, simulation time and text - from the truth table to All tests passed" />
       </a>
-      <p class="testbench-note">Nothing to set up. Switch between TB (test), Both and RTL (design) any time.</p>
+      <p class="testbench-note">Nothing to set up. Click the TB or RTL badge to show the test, the design or both side by side.</p>
     </div>
   </section>
 
@@ -216,8 +216,8 @@
         <h2 id="highlight-heading"><span>Point at a name.</span> <span>See where it lives.</span></h2>
         <p>Rest your mouse on a signal or port in HDLBoard's editor, or click it, and it lights up everywhere it appears in your code: where it's declared and every place it's used. No more scrolling up and down hunting for where <code>sum</code> was declared.</p>
       </div>
-      <a class="split-media testbench-shot highlight-shot" href="assets/Hoover_declaration_sample.png" target="_blank" rel="noopener" tabindex="-1">
-        <img src="assets/Hoover_declaration_sample.png" width="1191" height="492" loading="lazy"
+      <a class="split-media testbench-shot highlight-shot" href="assets/Hoover_declaration_sample.png?v=2" target="_blank" rel="noopener" tabindex="-1">
+        <img src="assets/Hoover_declaration_sample.png?v=2" width="1214" height="432" loading="lazy"
              alt="HDLBoard in split view with the testbench adder4_tb.vhdl on the left and the design adder4.vhd on the right. The signal sum is highlighted in blue: its declaration and its use in the port map sum =&gt; sum in the testbench, and the port sum and its assignment in the design" />
       </a>
       <p class="testbench-note">Side by side, it follows the wires: click <code>sum</code> in the testbench and the port it is connected to lights up in your design.</p>
