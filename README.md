@@ -4,9 +4,11 @@
 [![GitHub Release](https://img.shields.io/github/v/release/rlangoy/HDLBoard)](https://github.com/rlangoy/HDLBoard/releases)
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
-**Write VHDL or Verilog, then flip the switches, press the buttons and see the LEDs and 7-segment displays respond — on a virtual DE1-SoC FPGA board, driven by your own design.**
+**An interactive virtual DE1-SoC FPGA board for VHDL and Verilog, in your browser or on Windows.**
 
-Plenty of tools let you type HDL in a browser. HDLBoard lets you *play with* what you wrote. The board updates while the simulation is running: every time you flip a switch or press a button, your design gets the new input. No FPGA board, cable or vendor toolchain is needed. Behind the board are real simulators, [GHDL](https://github.com/ghdl/ghdl) for VHDL and [Icarus Verilog](https://github.com/steveicarus/iverilog) for Verilog, not a JavaScript approximation.
+Write real HDL, then flip the switches and press the buttons *while the simulation runs*. The LEDs and 7-segment displays respond to your own design. The simulators are the real [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
+
+Plenty of browser tools let you type and compile HDL. HDLBoard lets you *play with* what you wrote. No FPGA board, cable or vendor toolchain is needed.
 
 **[▶ Try it online](https://hdlboard.onrender.com/)** · **[⬇ Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
 
@@ -14,7 +16,19 @@ Plenty of tools let you type HDL in a browser. HDLBoard lets you *play with* wha
 
 ## Who it is for
 
-HDLBoard was built for students taking their first steps into digital logic and FPGA design, and for the teachers who run those labs. It also suits hobbyists who want to try VHDL or Verilog before buying a board. It covers the step between "my code compiles" and "my code does what I meant": students see their design working first, before they deal with synthesis, pin assignments and timing analysis.
+HDLBoard was built for **students** in their first digital logic or FPGA course and for the **teachers** who run those labs. It also suits **hobbyists** who want to try VHDL or Verilog before buying a board.
+
+It covers the step between "my code compiles" and "my code does what I meant". Students see their design working on a familiar board (switches → LEDs, buttons, 7-segment displays) *before* they have to deal with synthesis, pin assignments, timing analysis or a physical DE1-SoC.
+
+## How it is different
+
+| A typical browser HDL tool | HDLBoard |
+|---|---|
+| Compile, then read the console or a waveform | A live board you interact with while the simulation runs |
+| Abstract inputs and outputs, set in a testbench | The real DE1-SoC pin names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …), so the same code is a good starting point for Quartus |
+| Runs as fast as it can, then stops | Real-time pacing: an LED meant to blink once a second blinks once a second |
+
+HDLBoard still uses the real simulators (GHDL and Icarus Verilog) and still runs ordinary testbenches. What it adds is the closed loop: **edit → Start → flip a switch → watch the LEDs change**.
 
 ## Try it in one minute
 
@@ -27,6 +41,8 @@ HDLBoard was built for students taking their first steps into digital logic and 
 
 3. Press **Start**, then flip a few switches on the board. The matching LEDs light up.
 4. Edit the line, for example to `LEDR <= not SW;` or `LEDR(0) <= SW(0) and SW(1);`, and start again.
+
+For something with buttons and displays, open the **[4-bit adder and hex counter example](https://hdlboard.onrender.com/?project=projects/adder-and-counter/adder-and-counter.hdlboard.json)**. In it, KEY0 counts up, KEY1 resets, and the count is shown on the LEDs and in hex on the 7-segment displays. A self-checking testbench for the adder is included.
 
 The port names are the board's own pin names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` … `HEX5_N`, `CLOCK_50`). That makes a design written here a good starting point for Quartus and the real DE1-SoC. Every port is optional, so a first lab can declare only `SW` and `LEDR`.
 
