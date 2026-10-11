@@ -64,7 +64,7 @@ HDLBoard was created for **PB1180 Programmerbare logiske kretser**, an introduct
 
 In the first weeks of an FPGA course, students usually face several obstacles at once: a multi-gigabyte vendor toolchain, a synthesis flow, USB drivers, and a limited number of boards in the lab. HDLBoard puts those aside until later. A student can open a browser at home, write a few lines of VHDL or Verilog, and see right away whether the design behaves the way they meant.
 
-Teachers use it for:
+Typical uses:
 
 - **Lab exercises** in VHDL or Verilog, shared as a `?project=` link so everyone starts from the same files.
 - **Homework and self-study**, without needing a board at home.
