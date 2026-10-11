@@ -54,12 +54,13 @@ describe('newFileContent', () => {
     expect(content).toMatch(/^entity counter is$/m);
     expect(content).toMatch(/^architecture rtl of counter is$/m);
     for (const port of BOARD_PORTS) expect(content).toMatch(new RegExp(`^\\s+${port}\\s+:`, 'm'));
+    expect(content).toMatch(/^begin\n\nend architecture;\n$/m);
   });
 
   test('a Verilog file starts as a module named after the file with every board port', () => {
     const content = newFileContent('counter.v', 'verilog');
     expect(content).toMatch(/^module counter \(/);
-    expect(content).toMatch(/endmodule\n$/);
+    expect(content).toMatch(/\);\n\nendmodule\n$/);
     for (const port of BOARD_PORTS) expect(content).toMatch(new RegExp(`wire(\\s+\\[\\d+:0\\])?\\s+${port}\\b`));
   });
 });
