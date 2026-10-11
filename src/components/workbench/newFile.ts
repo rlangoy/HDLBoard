@@ -58,8 +58,7 @@ export function newFileNameError(
  * VHDL entity (with an `rtl` architecture) — declaring every DE1-SoC board port, the
  * same list as the DE1_SoC starter files. The name matters for Verilog, where a run looks
  * for the module named after the top file when it holds several (server/src/verilog/ports.ts).
- * The body wires LEDR to SW and blanks the 7-segment displays, so no output is left
- * undriven and the file can be marked as top and run straight away.
+ * The body is left empty: the behaviour is the student's to write.
  */
 export function newFileContent(input: string, language: NewFileLanguage): string {
   const name = baseName(input);
@@ -76,15 +75,7 @@ export function newFileContent(input: string, language: NewFileLanguage): string
     output wire [6:0]  HEX4_N,
     output wire [6:0]  HEX5_N
 );
-    assign LEDR = SW;
 
-    // Active low, so all-ones is "off".
-    assign HEX0_N = 7'b1111111;
-    assign HEX1_N = 7'b1111111;
-    assign HEX2_N = 7'b1111111;
-    assign HEX3_N = 7'b1111111;
-    assign HEX4_N = 7'b1111111;
-    assign HEX5_N = 7'b1111111;
 endmodule
 `;
   }
@@ -108,15 +99,7 @@ end entity;
 
 architecture rtl of ${name} is
 begin
-    LEDR <= SW;
 
-    -- Active low, so all-ones is "off".
-    HEX0_N <= (others => '1');
-    HEX1_N <= (others => '1');
-    HEX2_N <= (others => '1');
-    HEX3_N <= (others => '1');
-    HEX4_N <= (others => '1');
-    HEX5_N <= (others => '1');
 end architecture;
 `;
 }
