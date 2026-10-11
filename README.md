@@ -1,56 +1,109 @@
-# HDLBoard - Write VHDL or Verilog and watch it run [![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
+# HDLBoard — Write VHDL or Verilog. Watch it light up.
 
-Write VHDL or Verilog and watch it run on a virtual board — flip switches, light LEDs, see it work. Built on GHDL (VHDL) and Icarus Verilog (Verilog), it's designed to give beginning students a simple first step into FPGA design before tackling timing analysis and beyond. Runs standalone on Windows or hosted in a browser.
-![HDLBoard running DE1_SoC.v, a Verilog design, under Icarus Verilog: the Simulation card and Files panel on the left, the editor with the DE1-SoC module in the middle, the board's LEDs, 7-segment displays, switches and pushbuttons on the right, and Icarus Verilog's banner in the console; four switches are up and their LEDs are lit.](docs/images/workbench.png)
+[![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
+[![GitHub Release](https://img.shields.io/github/v/release/rlangoy/HDLBoard)](https://github.com/rlangoy/HDLBoard/releases)
+[![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
+
+**Write VHDL or Verilog, then flip the switches, press the buttons and see the LEDs and 7-segment displays respond — on a virtual DE1-SoC FPGA board, driven by your own design.**
+
+Plenty of tools let you type HDL in a browser. HDLBoard lets you *play with* what you wrote. The board updates while the simulation is running: every time you flip a switch or press a button, your design gets the new input. No FPGA board, cable or vendor toolchain is needed. Behind the board are real simulators, [GHDL](https://github.com/ghdl/ghdl) for VHDL and [Icarus Verilog](https://github.com/steveicarus/iverilog) for Verilog, not a JavaScript approximation.
+
+**[▶ Try it online](https://hdlboard.onrender.com/)** · **[⬇ Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
+
+![HDLBoard running a Verilog design: the simulation card and file list on the left, the editor in the middle, and the virtual DE1-SoC board on the right; four switches are up and their LEDs are lit.](docs/images/workbench.png)
+
+## Who it is for
+
+HDLBoard was built for students taking their first steps into digital logic and FPGA design, and for the teachers who run those labs. It also suits hobbyists who want to try VHDL or Verilog before buying a board. It covers the step between "my code compiles" and "my code does what I meant": students see their design working first, before they deal with synthesis, pin assignments and timing analysis.
+
+## Try it in one minute
+
+1. Open the [online version](https://hdlboard.onrender.com/) or start the Windows app.
+2. The starter design already connects the switches to the LEDs:
+
+   ```vhdl
+   LEDR <= SW;
+   ```
+
+3. Press **Start**, then flip a few switches on the board. The matching LEDs light up.
+4. Edit the line, for example to `LEDR <= not SW;` or `LEDR(0) <= SW(0) and SW(1);`, and start again.
+
+The port names are the board's own pin names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` … `HEX5_N`, `CLOCK_50`). That makes a design written here a good starting point for Quartus and the real DE1-SoC. Every port is optional, so a first lab can declare only `SW` and `LEDR`.
 
 ## Features
 
-- **Real simulation** — your VHDL runs on [GHDL](https://github.com/ghdl/ghdl) and your Verilog on [Icarus Verilog](https://github.com/steveicarus/iverilog), not an approximation; the simulator's own output and errors (file:line included) appear in the console. Drop a `.v` file, mark it as top, and Start runs the Verilog engine.
-- **A live DE1-SoC board** — clickable switches and pushbuttons, with LEDs and 7-segment displays driven by the simulation.
-- **A small IDE** — one file list with upload and drag-and-drop, an editor with no tabs to tidy (click a file, or its name above the code, to switch; VHDL and Verilog syntax highlighting), resizable panes.
-- **Testbenc support** — in VHDL or Verilog prints its messages live in the console. Open a design or a testbench and the editor splits: testbench on the left, the design it drives on the right, each at its own code; Play in a pane runs that pane's unit.
-- **Projects** — a `.hdlboard.json` project file names the project, its board and its files, each with a description. Open it by URL (a GitHub gist, any web address, a project on the HDLBoard site), by file path in the Windows app, with a `?project=` link, or with Upload File; Save project writes it and all its files into one folder. How: [**PROJECTS.md**](docs/PROJECTS.md).
-- **GitHub** — sign in once (the Windows app remembers it), and Save to GitHub keeps a project in a secret gist on your own account: list, open, update and delete your projects from any computer, with a check before overwriting changes made elsewhere. How: [**GITHUB.md**](docs/GITHUB.md).
-- **Real-time pacing** — simulated time tracks real time, so a design's timing here predicts its timing on the board.
+### An interactive virtual board
+- 10 slide switches, 4 pushbuttons, 10 red LEDs and six 7-segment displays, modelled on the Terasic DE1-SoC.
+- Inputs go to the simulation while it runs, and the design's outputs drive the board.
+- **Real-time pacing:** simulated time follows the clock on your wall, so an LED meant to blink once a second blinks once a second.
 
-## Installing
+### Real simulation, readable errors
+- **VHDL** runs on GHDL (VHDL-2008). **Verilog** runs on Icarus Verilog.
+- The simulator's own messages, including testbench `report`/`assert` and `$display` output, appear live in the console.
+- Errors are marked on the source line in the editor, with a short explanation of the likely cause.
 
-**Windows App** — download the installer from the
-[Releases page](https://github.com/rlangoy/HDLBoard/releases) and run it.<br>
-The installer is not code-signed, so Windows SmartScreen will show a warning: choose **More info → Run anyway**. <br>
-&nbsp;&nbsp;&nbsp; (Starting with version **1.2.4**, the Windows installer is built automatically using **GitHub Actions**.) <br> 
+### Testbenches side by side
 
-**Web Hosting** — host HDLBoard yourself and open it in a browser.<br>
-Requirements and step-by-step installation: [**HOSTING.md**](docs/HOSTING.md).
+![A VHDL testbench in the left pane and the design it drives in the right pane, with the testbench's truth-table report in the console below.](docs/images/testbench.png)
 
-## Compiling
+When you open a testbench, the editor splits: the testbench is on the left and the design it drives is on the right. Each pane has its own Play button.
 
-Building from source, running the dev server, and producing the Windows
-installer are covered in [**BUILDING.md**](docs/BUILDING.md).
+### A small, focused editor
+- Syntax highlighting for VHDL and Verilog, one file list with upload and drag-and-drop, and resizable panes.
+- Download a single file, or the whole project as a ZIP.
+
+### Projects and sharing
+- A `.hdlboard.json` project file holds the project's name, board and files, with a description for each file.
+- Open a project from a file on your computer, a web address, a GitHub Gist or a `?project=` link. You can send that link to a class so everyone starts from the same exercise.
+- **Save to GitHub:** sign in once, and each project is kept in a secret Gist on your own account. You can open, update and delete it from any computer, and HDLBoard checks before overwriting changes made somewhere else.
+
+How to: [PROJECTS.md](docs/PROJECTS.md) · [GITHUB.md](docs/GITHUB.md)
+
+## Get started
+
+| Option | Best for | How |
+|---|---|---|
+| **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
+| **Windows app** | Working offline on your own PC; GHDL and Icarus Verilog are included | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
+| **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
+
+**Windows note:** the installer is not code-signed, so Windows SmartScreen will show a warning. Choose **More info → Run anyway**. Since version 1.2.4, the installer has been built by GitHub Actions directly from this repository.
+
+## What HDLBoard is not
+
+HDLBoard is a learning and simulation tool, not a replacement for an FPGA toolchain.
+
+- It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, use Quartus: add pin assignments and build there.
+- Only the **DE1-SoC** board is modelled, with its switches, keys, LEDs and 7-segment displays.
+- A design that divides the real 50 MHz `CLOCK_50` down to a visible blink needs millions of simulated cycles, which is too slow to watch. For blinking and counting designs, declare the simulator-only `CLOCK_500Hz` port instead, and remove it before you build for the real board. See [Design_Description.md § 10](docs/Design_Description.md).
+- Work is not saved automatically. Save the project to a folder, download a ZIP or save to GitHub before you close the page.
 
 ## Documentation
 
-- [`BUILDING.md`](docs/BUILDING.md) — compile, run and package
-- [`HOSTING.md`](docs/HOSTING.md) — host it yourself using Docker,Linux, macOS or Windows (WSL)
-- [`Design_Description.md`](docs/Design_Description.md) — how the board components are built, plus features and known limitations
-- [`ghdl_implementation_plan.md`](docs/ghdl_implementation_plan.md) — how the GHDL backend works
-- [`Verilog_implementation_plan.md`](docs/Verilog_implementation_plan.md) — how the Verilog backend (Icarus Verilog) works: research, design, tests and what was built
-- [`PROJECTS.md`](docs/PROJECTS.md) — open, make, edit, save and publish projects (browser and Windows app)
-- [`GITHUB.md`](docs/GITHUB.md) — sign in to GitHub and save, open and sync projects as gists; hosting and OAuth App settings
-- [`Impl_project_file_and_online_storage.md`](docs/Impl_project_file_and_online_storage.md) — the project file format (`.hdlboard.json`); this build implements opening, editing and saving it (§ 4–8), not the online storage
-- [`winInstaller/README.md`](winInstaller/README.md) — the Windows desktop build
+- [BUILDING.md](docs/BUILDING.md) — build from source, run the dev server, package the Windows app
+- [HOSTING.md](docs/HOSTING.md) — self-host with Docker on Linux, macOS or Windows (WSL)
+- [PROJECTS.md](docs/PROJECTS.md) — create, open, edit, save and publish projects
+- [GITHUB.md](docs/GITHUB.md) — GitHub sign-in, Gist storage, syncing, and OAuth App settings for hosts
+- [Design_Description.md](docs/Design_Description.md) — how the board components are built, features and known limitations
+- [ghdl_implementation_plan.md](docs/ghdl_implementation_plan.md) — how the GHDL backend works
+- [Verilog_implementation_plan.md](docs/Verilog_implementation_plan.md) — how the Icarus Verilog backend works
+- [Impl_project_file_and_online_storage.md](docs/Impl_project_file_and_online_storage.md) — the `.hdlboard.json` project format
+- [winInstaller/README.md](winInstaller/README.md) — the Windows desktop build
 
-## About
+## Support and contributing
 
-Built for **PB1180 Programmerbare logiske kretser** at USN — a browser
-simulator for the DE1-SoC board, backed by real GHDL and Icarus Verilog, so students can see
-`LEDR <= SW;` and similar constructs actually behave the way the real
-board would, without needing hardware in hand.
-The Verilog support was added just for others since the frontend of the simulator was already inplace.
+- **Found a bug or have an idea?** [Open an issue](https://github.com/rlangoy/HDLBoard/issues). Please include the HDL file and the console output if you can.
+- **Want to contribute?** Pull requests are welcome, whether they are fixes, features or example designs for teaching. Start with [BUILDING.md](docs/BUILDING.md).
+- Feedback from students and teachers who use HDLBoard in a course is especially valuable.
+
+## Background
+
+HDLBoard was created for **PB1180 Programmerbare logiske kretser** at the University of South-Eastern Norway (USN). The course is taught in VHDL. Verilog support was added later so that people outside the course could use HDLBoard too.
 
 ## Credits
 
-HDLBoard stands on the work of others. Thank you to all of these projects and their contributors:
+HDLBoard builds on the work of many open-source projects. Thank you to all of them and their contributors.
 
 | Component | Used for | License |
 |---|---|---|
@@ -63,9 +116,9 @@ HDLBoard stands on the work of others. Thank you to all of these projects and th
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |
 
 The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
-DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/); HDLBoard is an independent
-teaching tool and is not affiliated with or endorsed by Terasic.
+
+DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic.
 
 ## License
 
-Licensed under the [GNU General Public License v2.0](LICENSE).
+HDLBoard is licensed under the [GNU General Public License v2.0](LICENSE).
