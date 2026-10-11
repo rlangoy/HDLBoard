@@ -1065,19 +1065,21 @@ export function Workbench() {
 
   // The next value is sent, never the `sw`/`key` state variable — React
   // state isn't updated synchronously, so sending the stale closure value
-  // here would make the board always one flip behind (§ 8.3). The refs
-  // are updated here too, synchronously, so onReady's stim() above always
-  // sees the latest positions regardless of render timing.
+  // here would make the board always one flip behind (§ 8.3). The other
+  // half comes from its ref for the same reason: a key press and a switch
+  // flip before the next render must not undo each other. The refs are
+  // updated here synchronously, so onReady's stim() above always sees the
+  // latest positions regardless of render timing.
   const handleSwChange = (next: BitVector) => {
     setSw(next);
     swRef.current = next;
-    getClient().stim(next, key);
+    getClient().stim(next, keyRef.current);
   };
 
   const handleKeyChange = (next: BitVector) => {
     setKey(next);
     keyRef.current = next;
-    getClient().stim(sw, next);
+    getClient().stim(swRef.current, next);
   };
 
   // A new run starts with an empty console, so what it shows is this run's output only.
