@@ -6,17 +6,9 @@
 
 **Write VHDL or Verilog. Watch it light up.**
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+A free online simulator with a virtual FPGA board. Flip the switches while your design runs, and watch the LEDs respond.
 
-Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant". It was created for an FPGA course at the University of South-Eastern Norway ([more below](#built-for-teaching)).
-
-- **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
-- **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
-- **Real-time pacing:** an LED meant to blink once a second blinks once a second.
-- **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
-- **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
-
-**[▶ Try it online](https://hdlboard.onrender.com/)** · **[⬇ Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
+**[Try it online](https://hdlboard.onrender.com/)** · **[Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
 
 ![HDLBoard, an online VHDL and Verilog simulator, running a Verilog design: the simulation card and file list on the left, the editor in the middle, and the virtual DE1-SoC FPGA board on the right; four switches are up and their LEDs are lit.](docs/images/workbench.png)
 
@@ -46,6 +38,18 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
+
+## What is HDLBoard?
+
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+
+Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
+
+- **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
+- **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
+- **Real-time pacing:** an LED meant to blink once a second blinks once a second.
+- **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
+- **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
 
 ## Where it fits
 
