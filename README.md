@@ -1,38 +1,30 @@
-# HDLBoard — Write VHDL or Verilog. Watch it light up.
+# HDLBoard — free online VHDL & Verilog simulator with an interactive FPGA board
 
 [![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
 [![GitHub Release](https://img.shields.io/github/v/release/rlangoy/HDLBoard)](https://github.com/rlangoy/HDLBoard/releases)
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
-**An interactive virtual DE1-SoC FPGA board for VHDL and Verilog, in your browser or on Windows.**
+**Write VHDL or Verilog. Watch it light up.**
 
-Write real HDL, then flip the switches and press the buttons *while the simulation runs*. The LEDs and 7-segment displays respond to your own design. The simulators are the real [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
 
-Plenty of browser tools let you type and compile HDL. HDLBoard lets you *play with* what you wrote. No FPGA board, cable or vendor toolchain is needed.
+Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
+
+- **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
+- **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
+- **Real-time pacing:** an LED meant to blink once a second blinks once a second.
+- **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
+- **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
 
 **[▶ Try it online](https://hdlboard.onrender.com/)** · **[⬇ Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
 
-![HDLBoard running a Verilog design: the simulation card and file list on the left, the editor in the middle, and the virtual DE1-SoC board on the right; four switches are up and their LEDs are lit.](docs/images/workbench.png)
+![HDLBoard, an online VHDL and Verilog simulator, running a Verilog design: the simulation card and file list on the left, the editor in the middle, and the virtual DE1-SoC FPGA board on the right; four switches are up and their LEDs are lit.](docs/images/workbench.png)
 
-## Who it is for
+## Get started
 
-HDLBoard was built for **students** in their first digital logic or FPGA course and for the **teachers** who run those labs. It also suits **hobbyists** who want to try VHDL or Verilog before buying a board.
+### Try it in one minute
 
-It covers the step between "my code compiles" and "my code does what I meant". Students see their design working on a familiar board (switches → LEDs, buttons, 7-segment displays) *before* they have to deal with synthesis, pin assignments, timing analysis or a physical DE1-SoC.
-
-## How it is different
-
-| A typical browser HDL tool | HDLBoard |
-|---|---|
-| Compile, then read the console or a waveform | A live board you interact with while the simulation runs |
-| Abstract inputs and outputs, set in a testbench | The real DE1-SoC pin names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …), so the same code is a good starting point for Quartus |
-| Runs as fast as it can, then stops | Real-time pacing: an LED meant to blink once a second blinks once a second |
-
-HDLBoard still uses the real simulators (GHDL and Icarus Verilog) and still runs ordinary testbenches. What it adds is the closed loop: **edit → Start → flip a switch → watch the LEDs change**.
-
-## Try it in one minute
-
-1. Open the [online version](https://hdlboard.onrender.com/) or start the Windows app.
+1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows app.
 2. The starter design already connects the switches to the LEDs:
 
    ```vhdl
@@ -44,7 +36,27 @@ HDLBoard still uses the real simulators (GHDL and Icarus Verilog) and still runs
 
 For something with buttons and displays, open the **[4-bit adder and hex counter example](https://hdlboard.onrender.com/?project=projects/adder-and-counter/adder-and-counter.hdlboard.json)**. In it, KEY0 counts up, KEY1 resets, and the count is shown on the LEDs and in hex on the 7-segment displays. A self-checking testbench for the adder is included.
 
-The port names are the board's own pin names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` … `HEX5_N`, `CLOCK_50`). That makes a design written here a good starting point for Quartus and the real DE1-SoC. Every port is optional, so a first lab can declare only `SW` and `LEDR`.
+Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
+
+### Ways to run it
+
+| Option | Best for | How |
+|---|---|---|
+| **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
+| **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
+| **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
+
+## Where it fits
+
+| | Compile-and-waveform sites | Vendor toolchains (Quartus, Questa) | **HDLBoard** |
+|---|---|---|---|
+| Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
+| Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual DE1-SoC |
+| Synthesis and bitstream for real hardware | No | Yes | No |
+| Setup | None | Large install, licence for some tools | **None** (browser), or a small Windows installer |
+
+HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus and the real board.
 
 ## Features
 
@@ -75,25 +87,36 @@ When you open a testbench, the editor splits: the testbench is on the left and t
 
 How to: [PROJECTS.md](docs/PROJECTS.md) · [GITHUB.md](docs/GITHUB.md)
 
-## Get started
-
-| Option | Best for | How |
-|---|---|---|
-| **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
-| **Windows app** | Working offline on your own PC; GHDL and Icarus Verilog are included | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
-| **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
-| **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
-
-**Windows note:** the installer is not code-signed, so Windows SmartScreen will show a warning. Choose **More info → Run anyway**. Since version 1.2.4, the installer has been built by GitHub Actions directly from this repository.
-
 ## What HDLBoard is not
 
 HDLBoard is a learning and simulation tool, not a replacement for an FPGA toolchain.
 
 - It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, use Quartus: add pin assignments and build there.
 - Only the **DE1-SoC** board is modelled, with its switches, keys, LEDs and 7-segment displays.
-- A design that divides the real 50 MHz `CLOCK_50` down to a visible blink needs millions of simulated cycles, which is too slow to watch. For blinking and counting designs, declare the simulator-only `CLOCK_500Hz` port instead, and remove it before you build for the real board. See [Design_Description.md § 10](docs/Design_Description.md).
+- A design that divides the real 50 MHz `CLOCK_50` down to a visible blink needs millions of simulated cycles, which is too slow to watch. For blinking and counting designs, declare the simulator-only `CLOCK_500Hz` port instead, and remove it before you build for the real board. See [Design_Description.md § 10](docs/Design_Description.md#10-known-limitations).
 - Work is not saved automatically. Save the project to a folder, download a ZIP or save to GitHub before you close the page.
+
+## FAQ
+
+### Is there a free online VHDL simulator?
+
+Yes. [HDLBoard](https://hdlboard.onrender.com/) runs VHDL on GHDL (VHDL-2008) and Verilog on Icarus Verilog, right in your browser. It is free and open source (GPL-2.0).
+
+### How can I practise VHDL or Verilog without an FPGA board?
+
+Write your design using the DE1-SoC port names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …) and press Start. The virtual board's switches, buttons, LEDs and 7-segment displays behave like the real ones, so you can test a design by playing with it.
+
+### What is a DE1-SoC?
+
+The DE1-SoC is a Terasic development board with an Intel (Altera) Cyclone V FPGA. Many universities use it for teaching digital logic. HDLBoard models its switches, pushbuttons, LEDs and 7-segment displays.
+
+### Can I use HDLBoard in my course?
+
+Yes. Send students a `?project=` link so everyone starts from the same exercise. You can also [host your own copy](docs/HOSTING.md) for a lab, or install the Windows app on lab PCs.
+
+### Will my design run on a real FPGA?
+
+HDLBoard does not do synthesis. Because it uses the board's real pin names, though, a working design is a good starting point: add pin assignments in Quartus and build there.
 
 ## Documentation
 
