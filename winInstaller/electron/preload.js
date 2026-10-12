@@ -42,6 +42,14 @@ api.pathForFile = (file) => {
 api.loadGitHubToken = () => ipcRenderer.invoke('hdlboard:load-github-token');
 api.saveGitHubToken = (token) => ipcRenderer.invoke('hdlboard:save-github-token', String(token));
 api.forgetGitHubToken = () => ipcRenderer.invoke('hdlboard:forget-github-token');
+// GitHub's sign-in pages in a dialog of the app's own (main.js). Answers the web flow's
+// callback, or null once the window is closed.
+api.openGitHubWindow = (url, options = {}) =>
+  ipcRenderer.invoke('hdlboard:open-github-window', String(url), {
+    title: options.title === undefined ? undefined : String(options.title),
+    callbackUrl: options.callbackUrl === undefined ? undefined : String(options.callbackUrl),
+  });
+api.closeGitHubWindow = () => ipcRenderer.invoke('hdlboard:close-github-window');
 
 if (enabled) {
   api.saveWorkspace = (json) => ipcRenderer.invoke('hdlboard:save-workspace', String(json));

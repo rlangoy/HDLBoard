@@ -102,6 +102,17 @@ function SignedOut({ connection }: { connection: GitHubConnection }) {
           {connection.error}
         </p>
       )}
+      {connection.canChooseBrowser && (
+        <label className="wb-github__option">
+          <input type="checkbox" checked={connection.signInInBrowser} onChange={(e) => connection.setSignInInBrowser(e.target.checked)} />
+          <span>
+            Open the sign-in page in my default web browser
+            <span className="wb-github__option-note">
+              Recommended: it already has your GitHub sign-in, passkeys and saved passwords. Untick it to sign in inside HDLBoard.
+            </span>
+          </span>
+        </label>
+      )}
       <button type="button" className="wb-github__btn wb-github__btn--primary wb-github__btn--big" onClick={connection.signIn}>
         <GitHubIcon aria-hidden="true" />
         Sign in with GitHub

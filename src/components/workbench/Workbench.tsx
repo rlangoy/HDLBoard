@@ -366,7 +366,7 @@ export function Workbench() {
 
   // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
   const [tokenStore] = useState(gitHubTokenStore);
-  const gitHub = useGitHub(hdlBackendHttpUrl(HDL_WS_PORT, GITHUB_AUTH_PATH), tokenStore, desktopBridge() !== undefined);
+  const gitHub = useGitHub(hdlBackendHttpUrl(HDL_WS_PORT, GITHUB_AUTH_PATH), tokenStore);
 
   const stopElapsedTimer = () => {
     if (elapsedTimer.current !== null) {

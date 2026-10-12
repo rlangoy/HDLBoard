@@ -15,6 +15,8 @@ The data formats follow § 5 of the RemoteGitRepoApp test app's `docs/hdlboard-r
 3. On the GitHub page: sign in to GitHub if it asks, paste the code (Ctrl+V), click **Continue**, then **Authorize**. GitHub asks for the authorization only the first time.
 4. HDLBoard shows your name at the top right.
 
+In the Windows app, **Open the sign-in page in my default web browser** (ticked at first, and remembered) chooses where the GitHub page opens. Ticked, it opens in your web browser, which already has your GitHub sign-in. Unticked, it opens in a dialog over HDLBoard whose title bar repeats the code. That dialog closes by itself once you are signed in; closing it yourself cancels the sign-in. You sign in to github.com in that dialog once, and it stays signed in until **Sign out**.
+
 HDLBoard asks GitHub for the **`gist` permission only**: it can list, read, save and delete your gists, and nothing else, so never your repositories.
 
 | | Stays signed in |
@@ -24,7 +26,7 @@ HDLBoard asks GitHub for the **`gist` permission only**: it can list, read, save
 
 **Other ways:** under *Sign in with a personal access token instead*, the dialog links to GitHub's token page with the `gist` scope already ticked. Create the token, paste it, and click **Sign in**. A token that lacks the `gist` scope is refused at once with a clear message.
 
-**Sign out** forgets the sign-in on this computer. To take HDLBoard's access away completely, use **Manage access on GitHub** (GitHub → Settings → Applications).
+**Sign out** forgets the sign-in on this computer (in the Windows app it also signs the GitHub dialog out of github.com). To take HDLBoard's access away completely, use **Manage access on GitHub** (GitHub → Settings → Applications).
 
 ### Save a project to GitHub
 
@@ -86,7 +88,7 @@ Only the configured client ID is forwarded, unknown parameters are dropped, and 
 | `GITHUB_CLIENT_ID` | `Ov23liDFfwtpvKX3SMvz` (HDLBoard's OAuth App) | The OAuth App the routes forward for. A fork sets its own |
 | `GITHUB_CLIENT_SECRET` | empty | Turns on the **one-click sign-in** (web flow + PKCE) in browsers. Never sent to the page |
 
-Without a secret, students use the code sign-in (device flow), which needs only the client ID and works everywhere. With a secret, a browser opens one GitHub window where the student clicks **Authorize**. The window closes by itself, and after the first time it shows nothing at all. It returns to `github-callback.html` next to the page, so the OAuth App's **Authorization callback URL** must be the page's address, e.g. `https://hdlboard.example.org/`. An OAuth App has one callback URL, so use one app per published address. The Windows app always uses the code sign-in, because it cannot hold a secret.
+Without a secret, students use the code sign-in (device flow), which needs only the client ID and works everywhere. With a secret, a browser opens one GitHub window where the student clicks **Authorize**. The window closes by itself, and after the first time it shows nothing at all. It returns to `github-callback.html` next to the page, so the OAuth App's **Authorization callback URL** must be the page's address, e.g. `https://hdlboard.example.org/`. An OAuth App has one callback URL, so use one app per published address. The Windows app ships without a secret, because an installer cannot keep one, so it uses the code sign-in. Its GitHub dialog (`winInstaller/electron/main.js`) is a modal child `BrowserWindow`: a top-level window to Chromium, so github.com shows in it although it refuses frames. A Windows app started with `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` of an OAuth App whose callback URL is `http://127.0.0.1:9010/` gets the one-click sign-in in that dialog (with the browser option unticked): GitHub's redirect back to `github-callback.html` is caught with `will-redirect` and never loaded.
 
 ### Registering your own OAuth App (forks)
 
@@ -140,9 +142,9 @@ src/components/workbench/
   useGitHub.ts                  the sign-in state
   useGitHubProjects.ts          the project actions, for the dialog and the project page
   GitHubDialog.tsx, ProjectGitHubCard.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, GitHub.css
-  gitHubWindow.ts               the GitHub window and the web flow's callback channel
+  gitHubWindow.ts               the GitHub window (pop-up, or the Windows app's dialog) and the web flow's callback channel
 public/github-callback.html     where GitHub returns after "Authorize" (web flow)
-winInstaller/electron/          main.js + preload.js: the encrypted token file
+winInstaller/electron/          main.js + preload.js: the encrypted token file and the GitHub dialog
 ```
 
 Tests: `src/github/*.test.ts` run every use case against `testSupport/fakeGitHub.ts`, an in-memory api.github.com, so they need no network. `src/components/workbench/projectGitHub.test.ts` covers the snapshot and status, and `server/src/githubAuth.test.ts` covers the forwarder over real HTTP.

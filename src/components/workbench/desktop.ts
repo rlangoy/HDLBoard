@@ -9,6 +9,7 @@
  * ------------------------------------------------------------------ */
 
 import { browserTokenStore, desktopTokenStore, type TokenStore } from '../../github/tokenStore';
+import type { AuthorizationCallback } from '../../github/webFlow';
 import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
 import { parseStoredProject, type OpenProject } from './projectFile';
@@ -32,6 +33,12 @@ export interface HdlBoardBridge {
   loadGitHubToken?(): Promise<string | null>;
   saveGitHubToken?(accessToken: string): Promise<boolean>;
   forgetGitHubToken?(): Promise<boolean>;
+  /**
+   * Shows a GitHub page in a dialog over the app (gitHubWindow.ts). With `callbackUrl`,
+   * answers GitHub's redirect there; null once the window is closed without one.
+   */
+  openGitHubWindow?(url: string, options?: { title?: string; callbackUrl?: string }): Promise<AuthorizationCallback | null>;
+  closeGitHubWindow?(): Promise<boolean>;
 }
 
 declare global {
