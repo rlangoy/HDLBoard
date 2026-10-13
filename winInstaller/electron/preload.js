@@ -38,10 +38,23 @@ api.pathForFile = (file) => {
   }
 };
 
+// The Projects page: the projects folder and the project files in it (docs/project_browse_page.md § 6.2).
+api.listLocalProjects = () => ipcRenderer.invoke('hdlboard:list-local-projects');
+api.chooseProjectsFolder = () => ipcRenderer.invoke('hdlboard:choose-projects-folder');
+api.showInFolder = (filePath) => ipcRenderer.invoke('hdlboard:show-in-folder', String(filePath));
+
 // GitHub sign-in, kept encrypted for this Windows user until Sign out (docs/GITHUB.md).
 api.loadGitHubToken = () => ipcRenderer.invoke('hdlboard:load-github-token');
 api.saveGitHubToken = (token) => ipcRenderer.invoke('hdlboard:save-github-token', String(token));
 api.forgetGitHubToken = () => ipcRenderer.invoke('hdlboard:forget-github-token');
+// GitHub's sign-in pages in a dialog of the app's own (main.js). Answers the web flow's
+// callback, or null once the window is closed.
+api.openGitHubWindow = (url, options = {}) =>
+  ipcRenderer.invoke('hdlboard:open-github-window', String(url), {
+    title: options.title === undefined ? undefined : String(options.title),
+    callbackUrl: options.callbackUrl === undefined ? undefined : String(options.callbackUrl),
+  });
+api.closeGitHubWindow = () => ipcRenderer.invoke('hdlboard:close-github-window');
 
 if (enabled) {
   api.saveWorkspace = (json) => ipcRenderer.invoke('hdlboard:save-workspace', String(json));

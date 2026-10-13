@@ -399,3 +399,59 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
 export function MinusIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M5 12h14']} {...props} />;
 }
+
+/** `</>`: a project's tile on the Projects page. */
+export function CodeIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['m16 18 6-6-6-6', 'm8 6-6 6 6 6']} {...props} />;
+}
+
+/** A laptop: a project stored on this computer. */
+export function LaptopIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={['M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16']}
+      {...props}
+    />
+  );
+}
+
+/** Three lines with dots: the Projects page's Details view. */
+export function ListIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M3 6h.01', 'M3 12h.01', 'M3 18h.01', 'M8 6h13', 'M8 12h13', 'M8 18h13']} {...props} />;
+}
+
+/** Four squares: the Projects page's Small icons view. */
+export function GridIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon
+      paths={[
+        'M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z',
+        'M15 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z',
+        'M15 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z',
+        'M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z',
+      ]}
+      {...props}
+    />
+  );
+}
+
+
+/** Three vertical dots: a row's menu. */
+export function MoreIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M11 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0', 'M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0', 'M11 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0']} {...props} />;
+}
+
+/** An arrow down: the column a table is sorted by. */
+export function ArrowDownIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 5v14', 'm19 12-7 7-7-7']} {...props} />;
+}
+
+/** A clock: when a project was last saved. */
+export function ClockIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M12 6v6l4 2']} {...props} />;
+}
+
+/** A person: whose project it is. */
+export function PersonIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z']} {...props} />;
+}

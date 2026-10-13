@@ -15,7 +15,7 @@
  * `ws://…:9010/hdlsim` URL comes out malformed.
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -251,6 +251,90 @@ function registerLocalFileIpc() {
   });
 }
 
+/*
+ * The Projects page (docs/project_browse_page.md § 6): the projects folder and the project
+ * files in it and in the folders directly inside it. Only *.hdlboard.json files are read,
+ * each at most MAX_PROJECT_FILE_BYTES, at most MAX_LISTED_PROJECTS of them.
+ */
+const PROJECT_FILE_SUFFIX = '.hdlboard.json';
+const MAX_PROJECT_FILE_BYTES = 1024 * 1024;
+const MAX_LISTED_PROJECTS = 200;
+
+/** The folder chosen on the Projects page, else Documents\HDLBoard Projects. */
+function projectsFolder() {
+  const chosen = readJson(userSettingsPath()).projectsFolder;
+  return typeof chosen === 'string' && path.isAbsolute(chosen) ? chosen : path.join(app.getPath('documents'), 'HDLBoard Projects');
+}
+
+/** The project files in `folder` (not in its subfolders), each read, or why it was skipped. */
+function readProjectFilesIn(folder, found) {
+  let names;
+  try {
+    names = fs.readdirSync(folder).filter((name) => name.toLowerCase().endsWith(PROJECT_FILE_SUFFIX));
+  } catch (err) {
+    found.skipped.push({ path: folder, reason: String(err.message ?? err) });
+    return;
+  }
+  for (const name of names) {
+    if (found.projects.length >= MAX_LISTED_PROJECTS) {
+      found.truncated = true;
+      return;
+    }
+    const file = path.join(folder, name);
+    try {
+      const stat = fs.statSync(file);
+      if (!stat.isFile()) continue;
+      if (stat.size > MAX_PROJECT_FILE_BYTES) throw new Error('larger than 1 MB');
+      found.projects.push({ path: file, text: fs.readFileSync(file, 'utf8'), modifiedMs: stat.mtimeMs });
+    } catch (err) {
+      found.skipped.push({ path: file, reason: String(err.message ?? err) });
+    }
+  }
+}
+
+function listLocalProjects() {
+  const folder = projectsFolder();
+  fs.mkdirSync(folder, { recursive: true });
+  const found = { folder, projects: [], skipped: [], truncated: false };
+  readProjectFilesIn(folder, found);
+  // Symlinked folders are not followed: a link could lead anywhere.
+  const subfolders = fs.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  for (const entry of subfolders) readProjectFilesIn(path.join(folder, entry.name), found);
+  return found;
+}
+
+function registerProjectsFolderIpc() {
+  ipcMain.handle('hdlboard:list-local-projects', (event) => {
+    fromApp(event);
+    return listLocalProjects();
+  });
+
+  ipcMain.handle('hdlboard:choose-projects-folder', async (event) => {
+    fromApp(event);
+    const picked = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      title: 'Choose the folder with your HDLBoard projects',
+      defaultPath: projectsFolder(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return null;
+    const file = userSettingsPath();
+    const settings = readJson(file);
+    settings.projectsFolder = picked.filePaths[0];
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}
+`, 'utf8');
+    return picked.filePaths[0];
+  });
+
+  ipcMain.handle('hdlboard:show-in-folder', (event, filePath) => {
+    fromApp(event);
+    const file = localFilePath(filePath);
+    if (!file.toLowerCase().endsWith(PROJECT_FILE_SUFFIX)) throw new Error(`not a project file: ${file}`);
+    shell.showItemInFolder(file);
+    return true;
+  });
+}
+
 /**
  * The GitHub sign-in (docs/GITHUB.md), kept so the student is not asked to sign in
  * at every start. Encrypted with safeStorage — on Windows that is DPAPI, so only
@@ -282,8 +366,89 @@ function saveGitHubToken(token) {
   return true;
 }
 
-function forgetGitHubToken() {
+async function forgetGitHubToken() {
   fs.rmSync(githubTokenPath(), { force: true });
+  // Sign out also signs the GitHub window out of github.com, so the next student
+  // on this Windows account does not find the last one still signed in there.
+  await session.fromPartition(GITHUB_WINDOW_PARTITION).clearStorageData();
+  return true;
+}
+
+/**
+ * GitHub's sign-in pages, shown in a dialog of the app's own: a child window,
+ * modal over the main one, rather than the user's web browser. It is a top-level
+ * window to Chromium, not a frame, so github.com's refusal to be framed does not
+ * apply. It has its own persistent session (no preload, no Node), so the student
+ * signs in to github.com there once, until Sign out.
+ *
+ * With `callbackUrl` (the one-click web flow), GitHub's redirect back to it after
+ * "Authorize" is caught with will-redirect and never loaded: the answer is the
+ * redirect's code, state and error. Without it (the code sign-in), the window
+ * just shows GitHub until the renderer closes it. Closing it by hand answers null,
+ * which the renderer takes as Cancel.
+ */
+const GITHUB_WINDOW_PARTITION = 'persist:github-sign-in';
+const GITHUB_PAGE_PREFIX = 'https://github.com/';
+const MAX_GITHUB_WINDOW_TITLE_LENGTH = 200;
+let gitHubWindow = null;
+
+function openGitHubWindow(url, options) {
+  if (typeof url !== 'string' || !url.startsWith(GITHUB_PAGE_PREFIX)) throw new Error(`not a GitHub page: ${url}`);
+  const { title, callbackUrl } = options ?? {};
+  if (callbackUrl !== undefined && (typeof callbackUrl !== 'string' || !callbackUrl.startsWith(`http://127.0.0.1:${PORT}/`))) {
+    throw new Error(`not a callback of this app: ${callbackUrl}`);
+  }
+  closeGitHubWindow();
+
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      parent: mainWindow ?? undefined,
+      modal: mainWindow !== null,
+      width: 520,
+      height: 760,
+      minimizable: false,
+      backgroundColor: '#ffffff',
+      title: typeof title === 'string' && title !== '' ? title.slice(0, MAX_GITHUB_WINDOW_TITLE_LENGTH) : 'Sign in to GitHub',
+      webPreferences: {
+        partition: GITHUB_WINDOW_PARTITION,
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+    gitHubWindow = win;
+    win.removeMenu();
+    // Our title, not GitHub's: during the code sign-in it carries the code.
+    win.on('page-title-updated', (event) => event.preventDefault());
+
+    let answer = null;
+    const catchCallback = (event, target) => {
+      if (callbackUrl === undefined || target.split(/[?#]/)[0] !== callbackUrl) return;
+      event.preventDefault();
+      const query = new URL(target).searchParams;
+      answer = { code: query.get('code'), state: query.get('state'), error: query.get('error') };
+      win.close();
+    };
+    win.webContents.on('will-redirect', catchCallback);
+    win.webContents.on('will-navigate', catchCallback);
+    // GitHub's links that open a new window (help, terms) go to the user's browser.
+    win.webContents.setWindowOpenHandler(({ url: target }) => {
+      openInBrowser(target);
+      return { action: 'deny' };
+    });
+
+    win.on('closed', () => {
+      if (gitHubWindow === win) gitHubWindow = null;
+      resolve(answer);
+    });
+    // Rejects with ERR_ABORTED when the callback is caught; the answer is already set.
+    win.loadURL(url).catch(() => {});
+  });
+}
+
+function closeGitHubWindow() {
+  if (gitHubWindow && !gitHubWindow.isDestroyed()) gitHubWindow.close();
+  gitHubWindow = null;
   return true;
 }
 
@@ -300,10 +465,19 @@ function registerGitHubTokenIpc() {
     fromApp(event);
     return forgetGitHubToken();
   });
+  ipcMain.handle('hdlboard:open-github-window', (event, url, options) => {
+    fromApp(event);
+    return openGitHubWindow(url, options);
+  });
+  ipcMain.handle('hdlboard:close-github-window', (event) => {
+    fromApp(event);
+    return closeGitHubWindow();
+  });
 }
 
 function registerIpc(persistProjects) {
   registerLocalFileIpc();
+  registerProjectsFolderIpc();
   registerGitHubTokenIpc();
 
   ipcMain.handle('hdlboard:set-enabled', (event, value) => {
@@ -344,6 +518,11 @@ function registerIpc(persistProjects) {
       throw err;
     }
   });
+}
+
+/** Links that leave HDLBoard belong in the user's own browser. */
+function openInBrowser(url) {
+  if (/^https:\/\//i.test(url)) shell.openExternal(url);
 }
 
 function showPortInUseDialog() {
@@ -471,9 +650,6 @@ app.whenReady().then(async () => {
   // Links in the app (the About and Settings dialogs point at GitHub)
   // belong in the user's own browser. Left alone, Electron would open them
   // in a second app window — or navigate this one away from HDLBoard.
-  const openInBrowser = (url) => {
-    if (/^https:\/\//i.test(url)) shell.openExternal(url);
-  };
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     openInBrowser(url);
     return { action: 'deny' };

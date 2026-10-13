@@ -71,6 +71,13 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
   const [conflict, setConflict] = useState<SaveConflict | null>(null);
   // An action the user started while signed out; it runs once they have signed in.
   const afterSignIn = useRef<SignedInAction | null>(null);
+  // The session now signed in, so a list read for an earlier session (signed out, or
+  // another account) is dropped when it arrives.
+  const currentProjects = useRef(projects);
+  currentProjects.current = projects;
+  // The actions still running, oldest first; `busy` shows the newest, and clears only when
+  // all have finished (a save's refresh of the list overlaps the save).
+  const activities = useRef<{ activity: string }[]>([]);
 
   const report = useCallback(
     (tone: GitHubMessage['tone'], text: string) => {
@@ -82,6 +89,8 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
 
   const run = useCallback(
     async (activity: string, action: () => Promise<void>) => {
+      const running = { activity };
+      activities.current.push(running);
       setBusy(activity);
       setMessage(null);
       try {
@@ -89,7 +98,8 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
       } catch (failure) {
         report('error', failure instanceof Error ? failure.message : String(failure));
       } finally {
-        setBusy(null);
+        activities.current = activities.current.filter((other) => other !== running);
+        setBusy(activities.current[activities.current.length - 1]?.activity ?? null);
       }
     },
     [report],
@@ -103,7 +113,10 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
 
   const refresh = useCallback(() => {
     if (projects === null) return;
-    void run('Reading your projects on GitHub…', async () => setEntries(await projects.list()));
+    void run('Reading your projects on GitHub…', async () => {
+      const listed = await projects.list();
+      if (currentProjects.current === projects) setEntries(listed);
+    });
   }, [projects, run]);
 
   useEffect(() => {

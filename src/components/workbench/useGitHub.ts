@@ -11,7 +11,7 @@ import { cancelledError, SignInError } from '../../github/signInError';
 import type { TokenStore } from '../../github/tokenStore';
 import { WebFlowSignIn } from '../../github/webFlow';
 import { copyText } from './clipboard';
-import { openGitHubWindow, waitForSignInCallback } from './gitHubWindow';
+import { authorizeInPopup, inAppGitHubWindow, loadSignInInBrowser, openGitHubWindow, saveSignInInBrowser } from './gitHubWindow';
 
 /** Where the sign-in is: what the GitHub dialog shows while signed out. */
 export type SignInStep =
@@ -28,6 +28,11 @@ export interface GitHubConnection {
   error: string | null;
   /** The Windows app keeps the sign-in after it is closed; a browser tab does not. */
   remembersSignIn: boolean;
+  /** The Windows app can show GitHub in its own dialog or in the user's web browser; a browser tab cannot choose. */
+  canChooseBrowser: boolean;
+  /** Whether the Windows app opens the sign-in page in the default web browser. */
+  signInInBrowser: boolean;
+  setSignInInBrowser(inBrowser: boolean): void;
   /** Call when the GitHub dialog opens: reads the sign-in settings, and retries a stored sign-in. */
   prepare(): void;
   /** Must be called from a click: it may open a window. */
@@ -41,16 +46,19 @@ const IDLE: SignInStep = { kind: 'idle' };
 
 /**
  * The GitHub sign-in (docs/GITHUB.md). The device flow — paste a code on github.com —
- * works with every HDLBoard server and in the Windows app; when the server holds the
- * OAuth App's client secret, a browser gets the one-click web flow instead.
+ * works with every HDLBoard server; when the server holds the OAuth App's client
+ * secret, the one-click web flow is used instead. A browser shows GitHub in a pop-up,
+ * the Windows app in a dialog of its own.
  */
-export function useGitHub(authBaseUrl: string, tokenStore: TokenStore, isDesktop: boolean): GitHubConnection {
+export function useGitHub(authBaseUrl: string, tokenStore: TokenStore): GitHubConnection {
   const [session, setSession] = useState<GitHubSession | null>(null);
   const [step, setStep] = useState<SignInStep>(IDLE);
   const [error, setError] = useState<string | null>(null);
   const config = useRef<AuthProxyConfig | null>(null);
   const cancelSignIn = useRef<AbortController | null>(null);
   const proxy = useMemo(() => new AuthProxy(authBaseUrl), [authBaseUrl]);
+  const inApp = useMemo(() => inAppGitHubWindow(), []);
+  const [signInInBrowser, setSignInInBrowserState] = useState(loadSignInInBrowser);
 
   const startSession = useCallback(
     async (accessToken: string) => {
@@ -100,21 +108,18 @@ export function useGitHub(authBaseUrl: string, tokenStore: TokenStore, isDesktop
 
   const beginCancellable = () => {
     cancelSignIn.current = new AbortController();
-    return cancelSignIn.current.signal;
+    return cancelSignIn.current;
   };
 
-  // The window is opened before the first await, while the click still allows pop-ups.
+  // The pop-up is opened before the first await, while the click still allows it.
   const signInWithWebFlow = (clientId: string) =>
     attempt({ kind: 'waiting-for-github' }, async () => {
-      const githubWindow = openGitHubWindow();
-      if (githubWindow === null) throw new SignInError('popup-blocked', 'The browser blocked the GitHub window. Allow pop-ups for this page and try again.');
-      const signal = beginCancellable();
-      const callback = waitForSignInCallback(signal);
+      const { signal } = beginCancellable();
+      const githubWindow = inApp ? inApp.authorizer(callbackUrl(), signal) : authorizeInPopup(signal);
       try {
         const webFlow = new WebFlowSignIn(clientId, callbackUrl(), proxy.post);
         const request = await webFlow.createRequest();
-        githubWindow.location.href = request.url;
-        await startSession(await webFlow.exchangeForToken(request, await callback));
+        await startSession(await webFlow.exchangeForToken(request, await githubWindow.authorize(request.url)));
       } finally {
         githubWindow.close();
       }
@@ -122,30 +127,47 @@ export function useGitHub(authBaseUrl: string, tokenStore: TokenStore, isDesktop
 
   const signInWithDeviceCode = () =>
     attempt({ kind: 'starting' }, async () => {
-      const githubWindow = isDesktop ? null : openGitHubWindow();
+      const githubWindow = inApp ? null : openGitHubWindow();
+      const dialog = signInInBrowser ? null : inApp;
       try {
         const deviceFlow = new DeviceFlowSignIn((await readConfig()).clientId, proxy.post);
         const code = await deviceFlow.requestCode();
         setStep({ kind: 'device-code', code });
-        if (githubWindow === null) openGitHubWindow(code.verificationUri);
+        const cancellable = beginCancellable();
+        // Closing the app's GitHub dialog is the Cancel button, since it covers the app's own.
+        // Without the dialog, the Windows app opens the page in the default web browser (main.js).
+        if (dialog) dialog.show(code.verificationUri, `Sign in to GitHub — paste the code ${code.userCode}`, () => cancellable.abort(cancelledError()));
+        else if (githubWindow === null) openGitHubWindow(code.verificationUri);
         else githubWindow.location.href = code.verificationUri;
         // Not awaited: with the GitHub window in front, the clipboard may wait for focus that never comes.
         void copyText(code.userCode);
-        await startSession(await deviceFlow.waitForAccessToken(code, beginCancellable()));
+        await startSession(await deviceFlow.waitForAccessToken(code, cancellable.signal));
       } finally {
         githubWindow?.close();
+        inApp?.close();
       }
     });
 
   const signIn = () => {
     const known = config.current;
-    if (known?.webFlow && !isDesktop) void signInWithWebFlow(known.clientId);
+    // GitHub's redirect after "Authorize" cannot find its way from the user's browser back into
+    // the Windows app, so there the browser always gets the code sign-in.
+    if (known?.webFlow && !(inApp && signInInBrowser)) void signInWithWebFlow(known.clientId);
     else void signInWithDeviceCode();
   };
 
   const signInWithToken = (accessToken: string) => void attempt({ kind: 'starting' }, () => startSession(accessToken.trim()));
 
-  const cancel = () => cancelSignIn.current?.abort(cancelledError());
+  const cancel = () => {
+    cancelSignIn.current?.abort(cancelledError());
+    // At once, not at the next poll: the dialog covers the app.
+    inApp?.close();
+  };
+
+  const setSignInInBrowser = (inBrowser: boolean) => {
+    saveSignInInBrowser(inBrowser);
+    setSignInInBrowserState(inBrowser);
+  };
 
   const signOut = () => {
     void tokenStore.forget();
@@ -153,7 +175,20 @@ export function useGitHub(authBaseUrl: string, tokenStore: TokenStore, isDesktop
     setError(null);
   };
 
-  return { session, step, error, remembersSignIn: tokenStore.remembersAcrossRestarts, prepare, signIn, signInWithToken, cancel, signOut };
+  return {
+    session,
+    step,
+    error,
+    remembersSignIn: tokenStore.remembersAcrossRestarts,
+    canChooseBrowser: inApp !== null,
+    signInInBrowser,
+    setSignInInBrowser,
+    prepare,
+    signIn,
+    signInWithToken,
+    cancel,
+    signOut,
+  };
 }
 
 /** public/github-callback.html, next to the page: GitHub returns there after "Authorize". */
