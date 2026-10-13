@@ -2,7 +2,7 @@
 
 **Implementation specification** · Status: ready to implement · Date: 2026-10-13
 Visual reference: the running app (the HTML mockup used while designing it was removed once the page was built).
-Sketch it is based on: [`docs/images/UI_Project_Open_page.png`](images/UI_Project_Open_page.png).
+Screenshot of the page as built: [`docs/images/UI_Project_Open_page.png`](images/UI_Project_Open_page.png) (Details view, one row opened).
 
 This is a UI change. Work directly on `main` (no feature branch). Build it in the order of § 12; each
 step leaves the app working, type-checked (`npm run typecheck`) and tested (`npm test`).
