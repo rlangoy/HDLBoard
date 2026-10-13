@@ -108,7 +108,9 @@ Drop the project file with its files (or the `.zip`) onto the Files panel or the
 
 ## Make a project
 
-With no project open, Files shows **Create Project**. Click it: the project page opens with an empty project. Type its name (the project file is named after it), and under **Files you can add** click **Add to project** for each file that belongs to it, or **Add all**. Files you make or upload afterwards join the project at once. The **−** button on a file in Project Files takes it out of the project again; the file stays in Files.
+There is always a project. When no other is open, the files in Files are the **Default** project (description "Not set yet"): the start-up files, examples you open, and files you drop or make all join it, and **Save project** stores it as `default.hdlboard.json` with its files in `default/src/`, like any project. Rename it and describe it on the project page to make it your own. **Close project** goes back to the Default project, with the files Files holds.
+
+To start a new, empty project, click **New project** on the Projects page. Type its name (the project file is named after it), and under **Files you can add** click **Add to project** for each file that belongs to it, or **Add all**. Files you make or upload afterwards join the project at once. The **−** button on a file in Project Files takes it out of the project again; the file stays in Files.
 
 **+** (New File) → **Project** still works too: it makes a project with every file now in Files.
 

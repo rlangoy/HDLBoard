@@ -232,6 +232,20 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
   return project;
 }
 
+export const DEFAULT_PROJECT_NAME = 'Default';
+export const DEFAULT_PROJECT_DESCRIPTION = 'Not set yet';
+
+/**
+ * The project the workspace is when no other is open: "Default", holding every file in
+ * Files — the start-up files, opened examples, dropped and new files — kept in `src`
+ * like any project. It reads as saved until something changes, so a fresh start shows
+ * no unsaved changes.
+ */
+export function defaultProject(files: readonly ProjectSourceFile[]): OpenProject {
+  const project = { ...newProject(DEFAULT_PROJECT_NAME, files.map((file) => file.name)), description: DEFAULT_PROJECT_DESCRIPTION };
+  return withSaved(project, files);
+}
+
 /**
  * Create Project: a new, empty project. The files now in Files are offered on the
  * project page to be added (availableFiles); files made or uploaded later join at once.

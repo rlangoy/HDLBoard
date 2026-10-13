@@ -33,40 +33,6 @@ export function downloadSourceFile(file: Pick<VhdlFile, 'name' | 'content'>): vo
 }
 
 /**
- * The archive layout mirrors the Files panel: `vhdl/…`, `verilog/…`,
- * `work/…`. Two files can share a name in one folder (nothing here
- * stops it), and a ZIP with duplicate paths extracts only one of them,
- * so later duplicates get a ` (2)`, ` (3)` … suffix before the extension.
- */
-export function projectZipEntries(files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[]): ZipEntry[] {
-  const used = new Set<string>();
-  return files.map((f) => {
-    const dot = f.name.lastIndexOf('.');
-    const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
-    const ext = dot > 0 ? f.name.slice(dot) : '';
-    let path = `${f.folder}/${f.name}`;
-    for (let n = 2; used.has(path.toLowerCase()); n++) path = `${f.folder}/${stem} (${n})${ext}`;
-    used.add(path.toLowerCase());
-    return { path, data: f.content };
-  });
-}
-
-/** e.g. `HDLBoard-project-2026-09-27.zip` — dated so repeated exports don't collide. */
-export function projectZipName(now: Date = new Date()): string {
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `HDLBoard-project-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.zip`;
-}
-
-/**
- * Downloads every file in Files as one ZIP, when no project is open. An open project
- * downloads as its own archive instead (downloadProjectArchive).
- */
-export function downloadProjectZip(files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[]): void {
-  const now = new Date();
-  downloadBlob(new Blob([createZip(projectZipEntries(files), now)], { type: 'application/zip' }), projectZipName(now));
-}
-
-/**
  * A project's .zip (docs/impl_project_structure.md § 6.7): the project file at the top,
  * each of the project's files at its path relative to it (`lab1/src/a.vhd`), exactly as
  * Save project writes them (D25). Files in Files that are not in the project stay out (D20).

@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { projectJson } from '../../project/testHelpers';
 import {
+  defaultProject,
+  hasUnsavedChanges,
   newProject,
   openProject,
   parseStoredProject,
@@ -260,5 +262,33 @@ describe('keeping track of places on disk', () => {
     const stored = parseStoredProject(JSON.parse(JSON.stringify(older)));
     expect(stored?.sourceDirectory).toBe('src');
     expect(stored?.onDisk).toBeUndefined();
+  });
+});
+
+describe('the Default project: the workspace when no other project is open', () => {
+  const files = [
+    { name: 'DE1_SoC.vhdl', content: '-- vhdl' },
+    { name: 'DE1_SoC.v', content: '// v' },
+  ];
+
+  it('is "Default", "Not set yet", with its files in src', () => {
+    const p = defaultProject(files);
+    const json = JSON.parse(projectFileText(p, files.map((f) => f.name)));
+    expect([json.name, json.description, json.sourceDirectory, json.projectDirectory]).toEqual(['Default', 'Not set yet', 'src', 'default']);
+    expect(json.files.map((f: { name: string }) => f.name)).toEqual(['DE1_SoC.vhdl', 'DE1_SoC.v']);
+    expect(targetPathOf(p, 'DE1_SoC.vhdl')).toBe('default/src/DE1_SoC.vhdl');
+  });
+
+  it('reads as saved until something changes', () => {
+    const p = defaultProject(files);
+    expect(hasUnsavedChanges(p, files)).toBe(false);
+    expect(hasUnsavedChanges(p, [...files, { name: 'and_gate.vhd', content: '' }])).toBe(true);
+    expect(hasUnsavedChanges(p, [{ ...files[0], content: 'edited' }, files[1]])).toBe(true);
+  });
+
+  it('takes in an example or a dropped file at once', () => {
+    const p = defaultProject(files);
+    const json = JSON.parse(projectFileText(p, [...files.map((f) => f.name), 'and_gate.vhd']));
+    expect(json.files.map((f: { name: string }) => f.name)).toContain('and_gate.vhd');
   });
 });

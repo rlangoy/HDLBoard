@@ -3,7 +3,6 @@
 
 import { describe, expect, test } from 'vitest';
 import { crc32, createZip } from './zip';
-import { projectZipEntries, projectZipName } from './download';
 
 /** Reads a stored-only archive back through its central directory. */
 function readZip(zip: Uint8Array): { path: string; text: string; crc: number }[] {
@@ -53,32 +52,5 @@ describe('createZip', () => {
 
   test('an empty project is still a valid (empty) archive', () => {
     expect(readZip(createZip([]))).toEqual([]);
-  });
-});
-
-describe('projectZipEntries', () => {
-  test('mirrors the folder tree and de-duplicates clashing names', () => {
-    const entries = projectZipEntries([
-      { name: 'a.vhd', folder: 'vhdl', content: '1' },
-      { name: 'a.vhd', folder: 'vhdl', content: '2' },
-      { name: 'A.vhd', folder: 'vhdl', content: '3' },
-      { name: 'a.vhd', folder: 'work', content: '4' },
-      { name: 'README', folder: 'vhdl', content: '5' },
-      { name: 'README', folder: 'vhdl', content: '6' },
-    ]);
-    expect(entries.map((e) => e.path)).toEqual([
-      'vhdl/a.vhd',
-      'vhdl/a (2).vhd',
-      'vhdl/A (3).vhd',
-      'work/a.vhd',
-      'vhdl/README',
-      'vhdl/README (2)',
-    ]);
-  });
-});
-
-describe('projectZipName', () => {
-  test('is dated in local time', () => {
-    expect(projectZipName(new Date(2026, 8, 7))).toBe('HDLBoard-project-2026-09-07.zip');
   });
 });

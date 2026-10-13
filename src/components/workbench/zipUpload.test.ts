@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { createZip, readZip } from './zip';
 import { baseName, filesInZip, isZipName, projectFileInZip, zipPathOf } from './zipUpload';
-import { projectArchiveEntries, projectZipEntries } from './download';
+import { projectArchiveEntries } from './download';
 
 // Made by Python's zipfile with ZIP_DEFLATED, as Windows Explorer and macOS Finder pack:
 // project/ (a folder), project/vhdl/counter.vhd ("library ieee;\n" × 20),
@@ -21,7 +21,7 @@ describe('readZip', () => {
       { name: 'DE1_SoC.vhdl', folder: 'vhdl' as const, content: '-- Ø\nentity x is end;\n' },
       { name: 'top.v', folder: 'verilog' as const, content: 'module top; endmodule\n' },
     ];
-    const read = await readZip(createZip(projectZipEntries(files)));
+    const read = await readZip(createZip(files.map((f) => ({ path: `${f.folder}/${f.name}`, data: f.content }))));
     expect(read.map((f) => [f.path, text(f.data)])).toEqual([
       ['vhdl/DE1_SoC.vhdl', files[0].content],
       ['verilog/top.v', files[1].content],
@@ -100,7 +100,7 @@ describe('a project .zip (docs/impl_project_structure.md § 6.7)', () => {
   });
 
   test('a zip without a project file has none: its files are added to Files', async () => {
-    const members = await filesInZip(new Blob([createZip(projectZipEntries([{ name: 'a.vhd', folder: 'vhdl', content: '' }]))]));
+    const members = await filesInZip(new Blob([createZip([{ path: 'vhdl/a.vhd', data: '' }])]));
     expect(projectFileInZip(members)).toBeUndefined();
   });
 
