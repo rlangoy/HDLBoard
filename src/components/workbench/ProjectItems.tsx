@@ -278,7 +278,12 @@ function TableRow(props: TableRowProps) {
       <td>
         <div className="wb-projects__p-actions">
           <OpenButton item={item} opening={props.opening} onOpen={onOpen} look="filled" />
-          <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
+          {item.source === 'github' || props.onShowInFolder ? (
+            <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
+          ) : (
+            // An empty slot where a local project has no Show in Explorer (the browser), so every Open lines up.
+            <span className="wb-projects__icon-btn is-external is-empty" aria-hidden="true" />
+          )}
           <MenuButton item={item} onMenu={props.onMenu} />
         </div>
       </td>
