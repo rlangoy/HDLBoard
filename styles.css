@@ -274,6 +274,7 @@ p { margin: 0; }
 
 /* ---------- Cloud: GitHub storage, text left, dialog right ---------- */
 .cloud { background: var(--surface); }  /* sets it apart from the testbench section above */
+.cloud .split-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 64px; }  /* wider column for the dialog: near its own 720px width */
 .cloud .split-media,
 .split-media.glow {
   background: var(--bg);
@@ -573,7 +574,7 @@ p { margin: 0; }
   .split { padding: 96px 0; }
   .split-grid { grid-template-columns: 1fr; gap: 48px; }
   /* Cloud section: the screenshot sits between the intro paragraph and the checklist */
-  .cloud .split-grid { gap: 24px; }
+  .cloud .split-grid { grid-template-columns: 1fr; gap: 24px; }
   .cloud .split-text { display: contents; }
   .cloud .split-media { order: 1; margin: 24px 0; }
   .cloud .checks { order: 2; }
