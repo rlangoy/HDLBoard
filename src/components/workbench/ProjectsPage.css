@@ -173,10 +173,12 @@
   gap: 12px;
 }
 
+/* Narrow, the button drops to a second line rather than squeezing the text. */
 .wb-projects__account {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
@@ -211,9 +213,21 @@
   height: 22px;
 }
 
+/* The picture and the text, kept together: its basis is their one-line width, so the
+   button wraps before the text does. Alone on its line the text wraps beside the picture,
+   which stays at the top, but never narrower than a readable line. */
+.wb-projects__account-main {
+  flex: 1 1 auto;
+  min-width: min(calc(14rem + 52px), 100%);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .wb-projects__account-text {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  align-self: center;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -244,6 +258,11 @@
   background: var(--wb-accent-soft);
   border: 1px solid #cfe0ff;
   border-radius: 12px;
+}
+
+.wb-projects__account .wb-projects__btn {
+  flex: none;
+  margin-left: auto;
 }
 
 .wb-projects__current-text {
@@ -1274,6 +1293,11 @@
 
   .wb-projects__account .wb-projects__btn {
     flex: 1;
+  }
+
+  /* Tight: the heading and the button are enough. */
+  .wb-projects__account .wb-projects__small {
+    display: none;
   }
 
   .wb-projects__new-label {
