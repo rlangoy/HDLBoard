@@ -309,11 +309,8 @@
   .ptable tbody tr:hover { background: #f8fafc; }
   .ptable tbody tr.is-open { background: #f3f7ff; box-shadow: inset 3px 0 0 var(--wb-accent); }
   .p-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .p-name > svg { width: 20px; height: 20px; }
-  .p-name.lang-vhdl > svg { color: var(--wb-accent-dark); }
-  .p-name.lang-verilog > svg { color: var(--wb-success-dark); }
-  .p-name.lang-both > svg { color: #6d28d9; }
-  .p-name.lang-none > svg { color: #64748b; }
+  .p-name .tile { width: 30px; height: 30px; border-radius: 8px; flex: none; }
+  .p-name .tile svg { width: 17px; height: 17px; }
   .p-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .p-desc { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .p-desc mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
@@ -509,9 +506,9 @@
             <svg aria-hidden="true"><use href="#i-chevron-down"/></svg>
           </span>
           <div class="segmented" role="radiogroup" aria-label="View">
-            <button type="button" role="radio" aria-checked="true" data-view="list" aria-label="Details" title="Details"><svg><use href="#i-list"/></svg></button>
-            <button type="button" role="radio" aria-checked="false" data-view="compact" aria-label="Compact list" title="Compact list"><svg><use href="#i-rows"/></svg></button>
+            <button type="button" role="radio" aria-checked="true" data-view="compact" aria-label="Compact list" title="Compact list"><svg><use href="#i-rows"/></svg></button>
             <button type="button" role="radio" aria-checked="false" data-view="grid" aria-label="Small icons" title="Small icons"><svg><use href="#i-grid"/></svg></button>
+            <button type="button" role="radio" aria-checked="false" data-view="list" aria-label="Details" title="Details"><svg><use href="#i-list"/></svg></button>
           </div>
         </div>
 
@@ -615,7 +612,7 @@
   };
 
   // ---------- state ----------
-  const state = { view: 'list' };
+  const state = { view: 'compact' };
   try { Object.assign(state, JSON.parse(localStorage.getItem('hdlboard.projectsPage') || '{}')); } catch { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem('hdlboard.projectsPage', JSON.stringify({ type: $('type').value, sort: $('sort').value, view: state.view })); } catch { /* ignore */ } };
   if (state.type) $('type').value = state.type;
@@ -698,7 +695,7 @@
         : `<button type="button" class="icon-btn p-ext" aria-label="Show ${esc(it.name)} in Explorer" title="Show in Explorer">${icon('open-in')}</button>`;
       return `
         <tr class="${isOpen ? 'is-open' : ''}" data-key="${it.key}">
-          <td><span class="p-name lang-${tileClass(it)}" title="${langs}">${icon('code')}<strong>${esc(it.name || 'Untitled project')}</strong>${isOpen ? '<span class="chip chip--open">Open now</span>' : ''}</span></td>
+          <td><span class="p-name"><span class="tile tile--${tileClass(it)}" title="${langs}">${icon('code')}</span><strong>${esc(it.name || 'Untitled project')}</strong>${isOpen ? '<span class="chip chip--open">Open now</span>' : ''}</span></td>
           <td class="p-desc-cell"><div class="p-desc" title="${esc(hit ? `${hit.name} — ${hit.description}` : it.description)}">${desc}</div></td>
           <td>${badgeHtml(it)}</td>
           <td class="p-saved-cell"><span class="p-saved" title="${it.updatedAt ? new Date(it.updatedAt).toLocaleString() : 'Not known'}">${it.updatedAt ? ago(it.updatedAt) : '—'}</span></td>
