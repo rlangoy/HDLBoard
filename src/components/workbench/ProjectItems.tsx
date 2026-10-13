@@ -253,10 +253,10 @@ function TableRow(props: TableRowProps) {
     >
       <td>
         <button type="button" className="wb-projects__p-name" onClick={onToggle} aria-expanded={expanded} title={item.name}>
+          <ChevronDownIcon className="wb-projects__p-chevron" aria-hidden="true" />
           <Tile item={item} />
           <strong>{projectName(item)}</strong>
           {isOpenNow(item) && <OpenNowChip />}
-          <ChevronDownIcon className="wb-projects__p-chevron" aria-hidden="true" />
         </button>
       </td>
       <td className="is-desc">
