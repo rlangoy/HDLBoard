@@ -234,7 +234,13 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
 }
 
 export const DEFAULT_PROJECT_NAME = 'Default';
-export const DEFAULT_PROJECT_DESCRIPTION = 'Not set yet';
+/** What Download All writes as the project's description while it has none. */
+export const UNSET_DESCRIPTION = 'Not set yet';
+
+/** The project as Download All writes it: an empty description reads "Not set yet". */
+export function withDescriptionForDownload(project: OpenProject): OpenProject {
+  return project.description.trim() === '' ? { ...project, description: UNSET_DESCRIPTION } : project;
+}
 
 /** What the start-up files (DE1_SoC.vhdl, DE1_SoC.v) are for, in the Default project's file list. */
 export const STARTER_FILE_DESCRIPTION = 'Displays the switch states on the LEDs';
@@ -252,7 +258,7 @@ export function defaultProject(files: readonly ProjectSourceFile[], descriptions
   const base = newProject(DEFAULT_PROJECT_NAME, []);
   const project: OpenProject = {
     ...base,
-    description: DEFAULT_PROJECT_DESCRIPTION,
+    description: '',
     entries: files.map((file) => ({ name: file.name, url: '', description: described(file.name) })),
   };
   return withSaved(project, files);

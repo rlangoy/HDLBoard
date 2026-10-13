@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { projectJson } from '../../project/testHelpers';
 import {
   defaultProject,
+  withDescriptionForDownload,
   hasUnsavedChanges,
   newProject,
   projectEntries,
@@ -272,12 +273,20 @@ describe('the Default project: the workspace when no other project is open', () 
     { name: 'DE1_SoC.v', content: '// v' },
   ];
 
-  it('is "Default", "Not set yet", with its files in src', () => {
+  it('is "Default", with no description and its files in src', () => {
     const p = defaultProject(files);
     const json = JSON.parse(projectFileText(p, files.map((f) => f.name)));
-    expect([json.name, json.description, json.sourceDirectory, json.projectDirectory]).toEqual(['Default', 'Not set yet', 'src', 'default']);
+    expect([json.name, json.description, json.sourceDirectory, json.projectDirectory]).toEqual(['Default', '', 'src', 'default']);
     expect(json.files.map((f: { name: string }) => f.name)).toEqual(['DE1_SoC.vhdl', 'DE1_SoC.v']);
     expect(targetPathOf(p, 'DE1_SoC.vhdl')).toBe('default/src/DE1_SoC.vhdl');
+  });
+
+  it('is downloaded as "Not set yet" while its description is empty, and keeps one it was given', () => {
+    const p = defaultProject(files);
+    const names = files.map((f) => f.name);
+    expect(JSON.parse(projectFileText(withDescriptionForDownload(p), names)).description).toBe('Not set yet');
+    expect(JSON.parse(projectFileText(withDescriptionForDownload({ ...p, description: 'Mine' }), names)).description).toBe('Mine');
+    expect(p.description).toBe('');
   });
 
   it('describes the start-up files DE1_SoC.vhdl and DE1_SoC.v', () => {

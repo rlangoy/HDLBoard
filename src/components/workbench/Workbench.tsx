@@ -96,6 +96,7 @@ import {
   withEntryRenamed,
   withEntryUnloaded,
   withSaved,
+  withDescriptionForDownload,
   type OpenedProject,
   type OpenProject,
   type LocalSourceFile,
@@ -598,9 +599,9 @@ export function Workbench() {
     return projectFiles.length;
   };
 
-  // The project's own .zip (the Default project's too).
+  // The project's own .zip (the Default project's too). An empty description is written as "Not set yet".
   const handleDownloadAll = () => {
-    downloadOpenProject(project, files);
+    downloadOpenProject(withDescriptionForDownload(project), files);
     setProject(withSaved(project, files));
   };
 
