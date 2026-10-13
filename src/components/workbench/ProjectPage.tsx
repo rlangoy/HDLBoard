@@ -304,7 +304,7 @@ export function ProjectPage(props: ProjectPageProps) {
             <button type="button" className="wb-project__link-btn" onClick={props.onCloseProject}>
               Close project
             </button>
-            <span>Files keeps its files; they are no longer listed in a project.</span>
+            <span>Files keeps its files, in the Default project.</span>
           </div>
         </div>
       </ScrollArea>

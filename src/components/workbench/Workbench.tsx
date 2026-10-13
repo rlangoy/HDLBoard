@@ -641,10 +641,12 @@ export function Workbench() {
   const handleOpenExample = (example: Example) => {
     endRunQuietly();
     setLogLines([]);
-    const { added, kept, openId } = copyExample(example, filesRef.current, nextFileId);
+    const { added, kept, openId, descriptions } = copyExample(example, filesRef.current, nextFileId);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
     for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
     setFiles((prev) => [...prev, ...added]);
+    // Each copied file joins the project with what its example says it is for.
+    setProject((p) => added.reduce((next, f) => withEntryEdited(next, f.name, { description: descriptions[f.name] ?? '' }), p));
     if (added.some((f) => f.id === openId)) showNewFile(openId);
     else handleOpenFile(openId);
     makeTop(openId);
