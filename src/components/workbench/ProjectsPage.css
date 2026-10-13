@@ -872,11 +872,59 @@
   box-shadow: inset 3px 0 0 var(--wb-accent);
 }
 
+.wb-projects__row {
+  cursor: pointer;
+}
+
 .wb-projects__p-name {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-projects__p-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: #94a3b8;
+  transition: transform 0.15s;
+}
+
+.wb-projects__row.is-expanded .wb-projects__p-chevron {
+  transform: rotate(180deg);
+}
+
+.wb-projects__table tbody tr.is-expanded {
+  background: #f8fafc;
+}
+
+.wb-projects__table tbody tr.is-expanded td {
+  border-bottom: 0;
+}
+
+.wb-projects__table tbody .wb-projects__detail-row td {
+  height: auto;
+  padding: 2px 14px 14px;
+  background: #f8fafc;
+  cursor: default;
+}
+
+.wb-projects__detail-row .wb-projects__item {
+  padding: 14px;
+}
+
+.wb-projects__detail-row .wb-projects__item:hover {
+  box-shadow: none;
 }
 
 .wb-projects__p-name .wb-projects__tile {
@@ -1103,11 +1151,13 @@
     flex-basis: 100%;
   }
 
-  .wb-projects__list:not(.is-grid) .wb-projects__item {
+  .wb-projects__list:not(.is-grid) .wb-projects__item,
+  .wb-projects__detail-row .wb-projects__item {
     grid-template-columns: 48px minmax(0, 1fr) auto;
   }
 
-  .wb-projects__list:not(.is-grid) .wb-projects__langs {
+  .wb-projects__list:not(.is-grid) .wb-projects__langs,
+  .wb-projects__detail-row .wb-projects__langs {
     grid-column: 2;
     grid-row: 2;
   }

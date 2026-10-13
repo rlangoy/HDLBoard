@@ -48,6 +48,14 @@ export function languagesOf(fileNames: readonly string[]): ProjectLanguage[] {
   return (['vhdl', 'verilog'] as const).filter((language) => found.has(language));
 }
 
+// "Shift Register (Verilog)", "Full Adder (VHDL testbench)": the tile and the language chips say it already.
+const LANGUAGE_SUFFIX = /\s*\((?:vhdl|verilog)\b[^)]*\)\s*$/i;
+
+/** A project's name as the list shows it: without a language in brackets at the end. */
+export function displayName(name: string): string {
+  return name.replace(LANGUAGE_SUFFIX, '') || name;
+}
+
 export function itemFromIndexEntry(entry: IndexEntry, owner: string): ProjectListItem {
   const files = entry.files ?? [];
   return {
