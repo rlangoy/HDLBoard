@@ -107,6 +107,7 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  │  there are no files
 │  ├─ .wb-center                       (flex: 1 — takes the remaining width)
 │  │  ├─ CodeEditor
+│  │  ├─ ProjectsPage                  (only while open: local and GitHub projects in one list; useLocalProjects, projectCatalog.ts)
 │  │  └─ ExamplesPane                  (only while open: covers the editor, which stays mounted)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
 │  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")

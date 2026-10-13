@@ -96,7 +96,10 @@ import { fetchText } from '../../project/fetchText';
 import { parseGistRef, resolveProjectUrl } from '../../project/gistUrl';
 import { GITHUB_AUTH_PATH } from '../../github/config';
 import type { GistLink, OpenedGistProject } from '../../github/projectGists';
-import { GitHubDialog } from './GitHubDialog';
+import { GitHubSignInDialog } from './GitHubSignInDialog';
+import { ProjectsPage } from './ProjectsPage';
+import type { ProjectListItem } from './projectCatalog';
+import { useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
 import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
@@ -253,11 +256,11 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'github' | null>(null);
+  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
-  // What is shown over the editor (which stays mounted underneath): the Examples pane or the project page.
-  const [overlay, setOverlay] = useState<'examples' | 'project' | null>(null);
+  // What is shown over the editor (which stays mounted underneath): the Examples pane, the project page or the Projects page.
+  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   const [project, setProject] = useState<OpenProject | null>(null);
   // What the project is busy with, e.g. downloading a file; shown on the project page.
@@ -763,15 +766,13 @@ export function Workbench() {
   };
 
   /**
-   * A project read from its gist through the GitHub API (the GitHub dialog, Get the GitHub
+   * A project read from its gist through the GitHub API (the Projects page, Get the GitHub
    * version). Opened cleanly, it goes straight to the editor; the project page shows only
    * when something needs a look.
    */
   const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
     const localFiles = gistFiles.filter((file) => file.name !== link.projectFileName);
-    const error = await openProjectText({ text, location: rawProjectUrl, localFiles }, link, 'onProblems');
-    if (error === null) setDialog((shown) => (shown === 'github' ? null : shown));
-    return error;
+    return openProjectText({ text, location: rawProjectUrl, localFiles }, link, 'onProblems');
   };
 
   /**
@@ -816,7 +817,7 @@ export function Workbench() {
     files,
     setProject,
     openGistProject,
-    showSignIn: () => setDialog('github'),
+    showSignIn: () => setDialog('githubSignIn'),
     log: appendLog,
   });
 
@@ -833,6 +834,57 @@ export function Workbench() {
     setOpenProjectError(null);
     setDialog(null);
     await openProjectUpload(projectFile, filesDirectlyInFolder(chosen).filter((file) => file !== projectFile));
+  };
+
+  const localProjects = useLocalProjects(overlay === 'projects');
+
+  // Signing in from the dialog ends in the Projects page, where the projects are.
+  const signedIn = gitHub.session !== null;
+  useEffect(() => {
+    if (!signedIn || dialog !== 'githubSignIn') return;
+    setDialog(null);
+    setOverlay('projects');
+  }, [signedIn, dialog]);
+
+  /** Opening a project replaces Files: ask first when the open project has changes that would be lost. */
+  const confirmLeavingUnsaved = (opening: string) =>
+    !project ||
+    !projectUnsaved ||
+    window.confirm(`Open ${opening}?\n\n${project.name || 'The open project'} has changes that are not saved. They are lost when another project opens.`);
+
+  const openLocalProject = async (request: LocalOpenRequest): Promise<string | null> => {
+    if (request.kind === 'path') return openProjectFrom(request.path);
+    if (request.kind === 'files') {
+      await openProjectUpload(request.projectFile, request.others);
+      return null;
+    }
+    const { text, location, localFiles, folder } = request;
+    const error = await openProjectText({ text, location, localFiles }, undefined, 'whenEmpty');
+    // Opening forgets the folder Save project writes to; this project's own folder is it again.
+    if (error === null) saveFolderRef.current = folder;
+    return error;
+  };
+
+  /** Projects page: open a project from the list, GitHub or local (docs/project_browse_page.md § 8). */
+  const handleOpenListedProject = async (item: ProjectListItem) => {
+    const isOpenProject = item.gistId !== undefined ? project?.gist?.gistId === item.gistId : project?.location === item.location;
+    if (isOpenProject) {
+      setOverlay(null);
+      return;
+    }
+    if (item.source === 'github' && item.entry) {
+      // Open asks about changes not on GitHub itself; other unsaved changes it does not know of.
+      if (gitHubSync === 'changed' || confirmLeavingUnsaved(item.name)) gitHubProjects.open(item.entry);
+      return;
+    }
+    if (!confirmLeavingUnsaved(item.name)) return;
+    try {
+      const error = await openLocalProject(await localProjects.readForOpen(item));
+      if (error !== null) throw new Error(error);
+    } catch (err) {
+      appendLog(`Project not opened: ${item.name}: ${errorText(err)}`, 'error');
+      setRefusal({ title: 'Project not opened', refused: [{ name: item.name, reason: errorText(err) }] });
+    }
   };
 
   const handleOpenProjectFrom = async (input: string) => {
@@ -1235,7 +1287,7 @@ export function Workbench() {
         onSettings={() => setDialog('settings')}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
-        onGitHub={() => setDialog('github')}
+        onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
       />
       <SettingsDialog
@@ -1290,14 +1342,7 @@ export function Workbench() {
           onClose={() => setFolderNeeded(null)}
         />
       )}
-      {dialog === 'github' && (
-        <GitHubDialog
-          connection={gitHub}
-          projects={gitHubProjects}
-          openProject={project && { name: project.name, gistId: project.gist?.gistId, syncState: gitHubSync }}
-          onClose={() => setDialog(null)}
-        />
-      )}
+      {dialog === 'githubSignIn' && <GitHubSignInDialog connection={gitHub} onClose={() => setDialog(null)} />}
       {gitHubProjects.conflict && project && (
         <GitHubConflictDialog
           conflict={gitHubProjects.conflict}
@@ -1365,10 +1410,8 @@ export function Workbench() {
               onSelect={handleOpenFile}
               onUpload={handleUploadClick}
               onNewFile={handleNewFile}
-              onOpenProject={() => {
-                setOpenProjectError(null);
-                setDialog('openProject');
-              }}
+              onOpenProject={() => setOverlay((shown) => (shown === 'projects' ? null : 'projects'))}
+              projectsOpen={overlay === 'projects'}
               onRename={handleRenameFile}
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
@@ -1437,6 +1480,27 @@ export function Workbench() {
                     projects={gitHubProjects}
                   />
                 }
+              />
+            )}
+            {overlay === 'projects' && (
+              <ProjectsPage
+                connection={gitHub}
+                gitHubProjects={gitHubProjects}
+                localProjects={localProjects}
+                openProject={
+                  project && { name: project.name, gistId: project.gist?.gistId, location: project.location, syncState: gitHubSync, unsaved: projectUnsaved }
+                }
+                opening={projectBusy !== null || gitHubProjects.busy !== null}
+                onOpenItem={(item) => void handleOpenListedProject(item)}
+                onNewProject={handleStartProject}
+                onShowProjectPage={() => setOverlay('project')}
+                onSignIn={() => setDialog('githubSignIn')}
+                onShowInFolder={desktopBridge()?.showInFolder && ((path) => void desktopBridge()?.showInFolder?.(path))}
+                onOpenFromUrl={() => {
+                  setOpenProjectError(null);
+                  setDialog('openProject');
+                }}
+                onClose={() => setOverlay(null)}
               />
             )}
             {overlay === 'examples' && (

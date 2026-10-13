@@ -42,12 +42,15 @@ export function canPickFolder(): boolean {
   return folderPicker() !== undefined;
 }
 
-/** Asks for a folder to save into; undefined if the student cancelled. */
-export async function pickSaveFolder(): Promise<PickedFolder | undefined> {
+/**
+ * Asks for a folder to save into; undefined if the student cancelled. `id` makes the browser
+ * remember where each kind of folder was last chosen.
+ */
+export async function pickSaveFolder(id = 'hdlboard-project'): Promise<PickedFolder | undefined> {
   const picker = folderPicker();
   if (!picker) return undefined;
   try {
-    return await picker({ id: 'hdlboard-project', mode: 'readwrite' });
+    return await picker({ id, mode: 'readwrite' });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return undefined;
     throw err;
