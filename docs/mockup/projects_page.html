@@ -1,0 +1,774 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<!-- Copyright (C) 2026 Rune Langøy -->
+<!--
+  Static reference mockup for docs/project_browse_page.md: the Projects page.
+  Open it straight from disk in a browser. No build, no network.
+  The dashed "Mockup controls" bar at the very top is NOT part of the UI: it
+  switches between the states the spec describes. Everything below it is.
+  Colours are the app's own --wb-* tokens (src/components/workbench/Workbench.css).
+  The icon sheet at the bottom has every icon the page uses, with its name in
+  icons.tsx; the SVG paths are the ones to copy.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HDLBoard Projects Page</title>
+<style>
+  :root {
+    --wb-border: #e2e8f0;
+    --wb-sidebar-bg: #f8fafc;
+    --wb-hover: #eef2f7;
+    --wb-text: #0f172a;
+    --wb-text-muted: #64748b;
+    --wb-accent: #2f6fed;
+    --wb-accent-dark: #1d4ed8;
+    --wb-accent-soft: #e5efff;
+    --wb-header-bg: #3f6fc4;
+    --wb-header-bg-dark: #315999;
+    --wb-success: #16a34a;
+    --wb-success-dark: #15803d;
+    --wb-danger: #ef4444;
+    --wb-danger-dark: #dc2626;
+    --wb-font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --wb-mono: 'Cascadia Mono', Consolas, ui-monospace, 'SF Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--wb-font);
+    font-size: 14px;
+    color: var(--wb-text);
+    background: var(--wb-sidebar-bg);
+  }
+  button, input, select { font: inherit; color: inherit; }
+  svg { display: block; flex: none; }
+  :focus-visible { outline: 2px solid var(--wb-accent); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------------- mockup controls (not part of the UI) ---------------- */
+  .mock-controls {
+    display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+    padding: 8px 16px; background: #fffbeb; border-bottom: 2px dashed #f59e0b;
+    font-size: 12px; color: #78350f;
+  }
+  .mock-controls strong { margin-right: 4px; }
+  .mock-controls label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+
+  /* ---------------- app chrome (context only) ---------------- */
+  .wb-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    height: 56px; padding: 0 20px; color: #fff; flex: none;
+    background: linear-gradient(180deg, var(--wb-header-bg), var(--wb-header-bg-dark));
+  }
+  .wb-header__brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .wb-header__logo { width: 30px; height: 30px; border-radius: 7px; background: #fff3; display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+  .wb-header__title { font-size: 18px; font-weight: 700; white-space: nowrap; }
+  .wb-header__tagline { font-size: 13px; color: #ffffffc7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wb-header__actions { display: flex; gap: 6px; flex: none; }
+  .wb-header__action {
+    display: flex; align-items: center; gap: 6px; border: 0; background: transparent; color: #ffffffeb;
+    padding: 6px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  }
+  .wb-header__action:hover, .wb-header__action[aria-pressed='true'] { background: #ffffff26; }
+  .wb-header__action svg { width: 18px; height: 18px; }
+  .wb-header__avatar { width: 22px; height: 22px; border-radius: 50%; }
+
+  .app-body { display: flex; height: max(560px, calc(100vh - 56px)); }
+  .ctx-sidebar {
+    width: 230px; flex: none; border-right: 1px solid var(--wb-border); background: #fff;
+    padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;
+  }
+  .ctx-sidebar__title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--wb-text-muted); }
+  .ctx-btn {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--wb-border);
+    border-radius: 8px; background: #fff; cursor: pointer; text-align: left;
+  }
+  .ctx-btn svg { width: 18px; height: 18px; color: var(--wb-accent); }
+  .ctx-btn[aria-pressed='true'] { background: var(--wb-accent-soft); border-color: #bcd3ff; }
+  .ctx-note { color: var(--wb-text-muted); font-size: 12px; margin-top: auto; }
+  @media (max-width: 860px) { .ctx-sidebar { display: none; } }
+
+  /* ================= THE PROJECTS PAGE ================= */
+  .wb-center { position: relative; flex: 1; min-width: 0; }
+  .wb-projects {
+    position: absolute; inset: 0; overflow: auto; background: var(--wb-sidebar-bg);
+    container: wb-projects / inline-size; outline: none;
+  }
+  .wb-projects__inner {
+    display: flex; flex-direction: column; gap: 16px;
+    max-width: 1040px; margin: 24px auto; padding: 0 24px;
+  }
+
+  /* --- A: top bar --- */
+  .wb-projects__top { display: flex; align-items: center; gap: 12px; }
+  .wb-projects__account {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: #fff; border: 1px solid var(--wb-border); border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  }
+  .wb-projects__avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; background: #e2e8f0; object-fit: cover; }
+  .wb-projects__gh-tile { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #24292f; color: #fff; }
+  .wb-projects__gh-tile svg { width: 22px; height: 22px; }
+  .wb-projects__account-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .wb-projects__small { font-size: 12px; color: var(--wb-text-muted); }
+  .wb-projects__small a { color: var(--wb-accent-dark); text-decoration: none; }
+  .wb-projects__small a:hover { text-decoration: underline; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px;
+    border: 1px solid var(--wb-border); border-radius: 9px; background: #fff; cursor: pointer;
+    font-weight: 600; white-space: nowrap; transition: background .12s, border-color .12s, box-shadow .12s;
+  }
+  .btn svg { width: 18px; height: 18px; }
+  .btn:hover { background: var(--wb-hover); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn--primary { background: var(--wb-accent); border-color: var(--wb-accent); color: #fff; box-shadow: 0 1px 2px rgba(29, 78, 216, .3); }
+  .btn--primary:hover { background: var(--wb-accent-dark); border-color: var(--wb-accent-dark); }
+  .btn--big { height: 44px; padding: 0 18px; font-size: 15px; }
+  .btn--dark { background: #24292f; border-color: #24292f; color: #fff; }
+  .btn--dark:hover { background: #1b1f24; }
+  .btn--open { color: var(--wb-accent-dark); border-color: #bcd3ff; background: #f5f9ff; }
+  .btn--open:hover { background: var(--wb-accent-soft); border-color: var(--wb-accent); }
+  .btn--text { border: 0; background: none; height: auto; padding: 0; color: var(--wb-accent-dark); font-weight: 600; }
+  .btn--text:hover { background: none; text-decoration: underline; }
+  .icon-btn {
+    width: 38px; height: 38px; display: inline-grid; place-items: center; border-radius: 9px;
+    border: 1px solid transparent; background: transparent; cursor: pointer; color: #475569;
+  }
+  .icon-btn svg { width: 20px; height: 20px; }
+  .icon-btn:hover { background: var(--wb-hover); color: var(--wb-text); }
+  .icon-btn--boxed { border-color: var(--wb-border); background: #fff; }
+  .icon-btn--close { background: #eef2f7; }
+  .icon-btn.is-spinning svg { animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* --- B: open now --- */
+  .wb-projects__current {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 14px; background: var(--wb-accent-soft); border: 1px solid #cfe0ff; border-radius: 12px;
+  }
+  .wb-projects__current-text { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .wb-projects__current-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .chip svg { width: 14px; height: 14px; }
+  .chip--ok { background: #dcfce7; color: #166534; }
+  .chip--warn { background: #fef3c7; color: #92400e; }
+  .chip--open { height: 22px; background: var(--wb-accent-soft); color: var(--wb-accent-dark); }
+
+  /* --- C: title --- */
+  .wb-projects__title-row { display: flex; align-items: flex-end; gap: 12px; margin-top: 4px; }
+  .wb-projects__titles { flex: 1; min-width: 0; }
+  .wb-projects__title { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -.015em; }
+  .wb-projects__subtitle { margin: 2px 0 0; color: var(--wb-text-muted); }
+
+  /* --- D: toolbar --- */
+  .wb-projects__toolbar { display: flex; gap: 10px; align-items: center; }
+  .wb-projects__search { position: relative; flex: 1; min-width: 0; }
+  .wb-projects__search svg { position: absolute; left: 12px; top: 50%; translate: 0 -50%; width: 20px; height: 20px; color: #64748b; pointer-events: none; }
+  .wb-projects__search input {
+    width: 100%; height: 42px; padding: 0 12px 0 42px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .wb-projects__search input:focus { outline: none; border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+  .select { position: relative; flex: none; }
+  .select select {
+    appearance: none; height: 42px; padding: 0 38px 0 14px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; cursor: pointer;
+  }
+  .select select:focus { outline: none; border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+  .select svg { position: absolute; right: 10px; top: 50%; translate: 0 -50%; width: 20px; height: 20px; pointer-events: none; color: #475569; }
+  .segmented { display: flex; flex: none; padding: 3px; gap: 3px; border: 1px solid #cbd5e1; border-radius: 11px; background: #fff; }
+  .segmented button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #475569; cursor: pointer; }
+  .segmented button svg { width: 20px; height: 20px; }
+  .segmented button:hover { background: var(--wb-hover); }
+  .segmented button[aria-checked='true'] { background: var(--wb-accent); color: #fff; }
+
+  /* --- E: status line --- */
+  .wb-projects__status { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--wb-text-muted); margin-top: -4px; }
+  .wb-projects__folder { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .wb-projects__folder svg { width: 16px; height: 16px; }
+  .wb-projects__folder code { font-family: var(--wb-mono); font-size: 12px; color: #334155; background: #eef2f7; padding: 2px 6px; border-radius: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
+
+  /* --- error banner --- */
+  .wb-projects__error { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .wb-projects__error svg { width: 18px; height: 18px; }
+  .wb-projects__error span { flex: 1; }
+
+  /* --- F: list --- */
+  .wb-projects__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .item {
+    display: grid; grid-template-columns: 48px minmax(0, 1fr) 170px auto; align-items: center; gap: 16px;
+    padding: 16px; background: #fff; border: 1px solid var(--wb-border); border-radius: 12px;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .item:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(15, 23, 42, .06); }
+  .item.is-open { border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+  .tile { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; color: #fff; box-shadow: inset 0 -2px 0 rgba(0,0,0,.12); }
+  .tile svg { width: 26px; height: 26px; }
+  .tile--vhdl { background: linear-gradient(160deg, #4f8bff, #1d4ed8); }
+  .tile--verilog { background: linear-gradient(160deg, #34d399, #15803d); }
+  .tile--both { background: linear-gradient(160deg, #a78bfa, #6d28d9); }
+  .tile--none { background: linear-gradient(160deg, #94a3b8, #475569); }
+  .item__main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .item__name { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 700; }
+  .item__name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item__desc { margin: 0; color: #475569; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item__hit { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; }
+  .item__hit svg { width: 14px; height: 14px; }
+  .item__hit mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
+  .item__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 4px; font-size: 12.5px; color: var(--wb-text-muted); }
+  .item__meta > span { display: inline-flex; align-items: center; gap: 5px; }
+  .item__meta svg { width: 15px; height: 15px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
+  .badge svg { width: 14px; height: 14px; }
+  .badge--local { color: #334155; background: #f1f5f9; border-color: #e2e8f0; }
+  .badge--github { color: #1f2328; background: #f6f8fa; border-color: #d0d7de; }
+  .item__langs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .lang { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: #f8fafc; border: 1px solid var(--wb-border); font-size: 12.5px; color: #334155; }
+  .lang::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+  .lang--vhdl { --dot: var(--wb-accent); }
+  .lang--verilog { --dot: var(--wb-success); }
+  .item__actions { display: flex; align-items: center; gap: 4px; }
+  .item__actions .btn--open { margin-right: 4px; }
+
+  /* grid view */
+  .wb-projects__list.is-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .is-grid .item { grid-template-columns: 40px 1fr auto; grid-template-rows: auto auto 1fr auto auto; align-items: start; gap: 10px; padding: 14px; position: relative; }
+  .is-grid .tile { width: 40px; height: 40px; border-radius: 10px; }
+  .is-grid .tile svg { width: 22px; height: 22px; }
+  .is-grid .item__main { grid-column: 1 / -1; grid-row: 2; }
+  .is-grid .item__name { font-size: 14.5px; flex-wrap: wrap; row-gap: 4px; }
+  .is-grid .item__desc { font-size: 13px; }
+  .is-grid .item__meta, .is-grid .item__hit { display: none; }
+  .is-grid .item__langs { grid-column: 1 / -1; grid-row: 4; }
+  .is-grid .lang { height: 22px; font-size: 11.5px; padding: 0 8px; }
+  .is-grid .item__actions { grid-column: 1 / -1; grid-row: 5; }
+  .is-grid .item__actions .btn--open { flex: 1; margin: 0; }
+  .is-grid .item__actions .ext { display: none; }
+  .item__corner { display: none; }
+  .is-grid .item__corner { display: flex; grid-column: 2 / -1; grid-row: 1; justify-self: end; align-items: center; gap: 2px; }
+  .is-grid .item__corner .badge { padding: 0 6px; }
+  .is-grid .item__corner .badge .badge-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .is-grid .item__actions .more { display: none; }
+
+  /* menu */
+  .menu {
+    position: fixed; z-index: 20; min-width: 200px; padding: 6px; background: #fff; border: 1px solid var(--wb-border);
+    border-radius: 10px; box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+  }
+  .menu button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 7px; background: none; cursor: pointer; text-align: left; }
+  .menu button svg { width: 18px; height: 18px; color: #475569; }
+  .menu button:hover, .menu button:focus-visible { background: var(--wb-hover); outline: none; }
+  .menu .danger, .menu .danger svg { color: var(--wb-danger-dark); }
+  .menu hr { border: 0; border-top: 1px solid var(--wb-border); margin: 4px 2px; }
+
+  /* skeleton */
+  .skeleton { display: grid; grid-template-columns: 48px 1fr; gap: 16px; padding: 16px; background: #fff; border: 1px solid var(--wb-border); border-radius: 12px; }
+  .skeleton i { display: block; border-radius: 6px; background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+  .skeleton .sk-tile { height: 48px; border-radius: 12px; }
+  .skeleton .sk-lines { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton i, .icon-btn.is-spinning svg { animation: none; } }
+
+  /* empty */
+  .wb-projects__empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 16px; text-align: center; color: var(--wb-text-muted); background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; }
+  .wb-projects__empty > svg { width: 40px; height: 40px; color: #94a3b8; }
+  .wb-projects__empty p { margin: 0; max-width: 46ch; }
+
+  /* G: footnote */
+  .wb-projects__note { display: flex; gap: 10px; align-items: flex-start; color: var(--wb-text-muted); font-size: 13px; line-height: 1.5; margin: 4px 0 8px; }
+  .wb-projects__note svg { width: 18px; height: 18px; margin-top: 1px; }
+
+  /* responsive (container queries) */
+  @container wb-projects (max-width: 720px) {
+    .wb-projects__toolbar { flex-wrap: wrap; }
+    .wb-projects__search { flex-basis: 100%; }
+    .item { grid-template-columns: 48px minmax(0, 1fr) auto; }
+    .item__langs { grid-column: 2; grid-row: 2; }
+    .item__actions .ext { display: none; }
+  }
+  @container wb-projects (max-width: 480px) {
+    .wb-projects__inner { padding: 0 16px; margin-top: 16px; }
+    .wb-projects__top { flex-wrap: wrap; }
+    .wb-projects__account { flex-basis: 100%; order: 2; flex-wrap: wrap; }
+    .wb-projects__account .btn { flex: 1; }
+    .wb-projects__top .new-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .wb-projects__top-spacer { flex: 1; }
+    .item { grid-template-columns: 40px minmax(0, 1fr); }
+    .item .tile { width: 40px; height: 40px; }
+    .item__actions { grid-column: 1 / -1; }
+    .item__actions .btn--open { flex: 1; }
+    .item__langs { grid-column: 1 / -1; grid-row: auto; }
+  }
+
+  /* ---------------- sign-in dialog (GitHubSignInDialog) ---------------- */
+  .backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .45); }
+  .dialog { width: min(520px, 100%); background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); overflow: hidden; }
+  .dialog__head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--wb-border); }
+  .dialog__icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: #24292f; color: #fff; }
+  .dialog__icon svg { width: 22px; height: 22px; }
+  .dialog__titles { flex: 1; }
+  .dialog__titles h3 { margin: 0; font-size: 17px; }
+  .dialog__titles p { margin: 2px 0 0; font-size: 13px; color: var(--wb-text-muted); }
+  .dialog__body { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .dialog__body ul { margin: 0; padding-left: 20px; color: #334155; line-height: 1.55; }
+  .dialog__body .btn--big { align-self: flex-start; }
+
+  /* ---------------- icon sheet (reference) ---------------- */
+  .sheet { padding: 24px; border-top: 2px dashed #f59e0b; background: #fff; }
+  .sheet h2 { margin: 0 0 4px; font-size: 18px; }
+  .sheet p { margin: 0 0 16px; color: var(--wb-text-muted); }
+  .sheet ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .sheet li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--wb-border); border-radius: 10px; }
+  .sheet li svg { width: 24px; height: 24px; color: var(--wb-text); }
+  .sheet code { font-family: var(--wb-mono); font-size: 12px; }
+  .sheet .new { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 2px 7px; }
+</style>
+</head>
+<body>
+
+<!-- ======================= ICON DEFINITIONS ======================= -->
+<!-- Material Symbols (viewBox 0 -960 960 960, fill) and Lucide-style outline (viewBox 0 0 24 24, stroke 2) - as in icons.tsx -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-search" viewBox="0 -960 960 960"><path fill="currentColor" d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></symbol>
+    <symbol id="i-close" viewBox="0 -960 960 960"><path fill="currentColor" d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 -960 960 960"><path fill="currentColor" d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640H447l-80-80H160v480l96-320h684L837-217q-8 26-29.5 41.5T760-160H160Zm84-80h516l72-240H316l-72 240Zm0 0 72-240-72 240Zm-84-400v-80 80Z"/></symbol>
+    <symbol id="i-info" viewBox="0 -960 960 960"><path fill="currentColor" d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></symbol>
+    <symbol id="i-delete" viewBox="0 -960 960 960"><path fill="currentColor" d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></symbol>
+    <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-open-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-sign-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+    <symbol id="i-cloud-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v8"/><path d="m8 17 4-4 4 4"/><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-project" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <!-- NEW icons for icons.tsx (OutlineIcon paths) -->
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z"/><path d="M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/><path d="M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/><path d="M11 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></symbol>
+  </defs>
+</svg>
+
+<!-- ======================= MOCKUP CONTROLS (not UI) ======================= -->
+<div class="mock-controls" role="group" aria-label="Mockup controls">
+  <strong>Mockup controls (not part of the UI):</strong>
+  <label><input type="checkbox" id="m-signed" checked /> Signed in to GitHub</label>
+  <label><input type="checkbox" id="m-open" checked /> A project is open</label>
+  <label><input type="checkbox" id="m-folder" checked /> Local folder chosen</label>
+  <label><input type="checkbox" id="m-loading" /> Loading (skeletons)</label>
+  <label><input type="checkbox" id="m-error" /> GitHub list failed</label>
+</div>
+
+<!-- ======================= APP CHROME (context) ======================= -->
+<header class="wb-header">
+  <div class="wb-header__brand">
+    <span class="wb-header__logo" aria-hidden="true">HB</span>
+    <span class="wb-header__title">HDLBoard</span>
+    <span class="wb-header__tagline">&mdash; VHDL &amp; Verilog on a virtual DE1-SoC</span>
+  </div>
+  <div class="wb-header__actions">
+    <button type="button" class="wb-header__action" id="hdr-github" aria-pressed="true"></button>
+    <button type="button" class="wb-header__action">Settings</button>
+    <button type="button" class="wb-header__action">Help</button>
+    <button type="button" class="wb-header__action">About</button>
+  </div>
+</header>
+
+<div class="app-body">
+  <aside class="ctx-sidebar" aria-label="Explorer (context only)">
+    <span class="ctx-sidebar__title">Files</span>
+    <button type="button" class="ctx-btn" aria-pressed="true" title="Open Project: your projects on this computer and on GitHub"><svg><use href="#i-folder-open"/></svg>Open Project</button>
+    <button type="button" class="ctx-btn"><svg><use href="#i-project"/></svg>Full Adder Truth Table</button>
+    <p class="ctx-note">The Explorer is shown only for context: its Open Project button now opens the Projects page.</p>
+  </aside>
+
+  <div class="wb-center">
+    <!-- ===================== ProjectsPage.tsx ===================== -->
+    <section class="wb-projects" aria-labelledby="wb-projects-title" tabindex="-1" id="page">
+      <div class="wb-projects__inner">
+
+        <!-- A: top bar -->
+        <div class="wb-projects__top">
+          <div class="wb-projects__account" id="account"></div>
+          <span class="wb-projects__top-spacer"></span>
+          <button type="button" class="btn btn--primary" aria-label="New project" title="Start a new project: name it, add files, then save it on this computer or on GitHub">
+            <svg><use href="#i-plus"/></svg><span class="new-label">New project</span>
+          </button>
+          <button type="button" class="icon-btn icon-btn--close" aria-label="Close the projects page" title="Back to the code (Esc)">
+            <svg><use href="#i-close"/></svg>
+          </button>
+        </div>
+
+        <!-- B: open now -->
+        <div class="wb-projects__current" id="current">
+          <div class="wb-projects__current-text">
+            <span class="wb-projects__small">Open now</span>
+            <strong>Full Adder Truth Table (VHDL testbench)</strong>
+          </div>
+          <span class="chip chip--ok"><svg><use href="#i-check"/></svg>Saved on GitHub</span>
+          <button type="button" class="btn"><svg><use href="#i-project"/></svg>Project page</button>
+          <button type="button" class="btn btn--primary" disabled><svg><use href="#i-cloud-up"/></svg>Save to GitHub</button>
+        </div>
+
+        <!-- C: title -->
+        <div class="wb-projects__title-row">
+          <div class="wb-projects__titles">
+            <h2 class="wb-projects__title" id="wb-projects-title">My Projects</h2>
+            <p class="wb-projects__subtitle">Projects on this computer and on GitHub, in one place.</p>
+          </div>
+          <button type="button" class="icon-btn icon-btn--boxed" id="refresh" aria-label="Read the lists again" title="Read the lists again">
+            <svg><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+
+        <!-- D: toolbar -->
+        <div class="wb-projects__toolbar">
+          <label class="wb-projects__search">
+            <svg aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" id="q" placeholder="Search projects and files…" aria-label="Search projects" autocomplete="off" />
+          </label>
+          <span class="select">
+            <select id="type" aria-label="Language">
+              <option value="all">All types</option>
+              <option value="vhdl">VHDL</option>
+              <option value="verilog">Verilog</option>
+            </select>
+            <svg aria-hidden="true"><use href="#i-chevron-down"/></svg>
+          </span>
+          <span class="select">
+            <select id="sort" aria-label="Sort by">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name">Name A–Z</option>
+            </select>
+            <svg aria-hidden="true"><use href="#i-chevron-down"/></svg>
+          </span>
+          <div class="segmented" role="radiogroup" aria-label="View">
+            <button type="button" role="radio" aria-checked="true" data-view="list" aria-label="Details" title="Details"><svg><use href="#i-list"/></svg></button>
+            <button type="button" role="radio" aria-checked="false" data-view="grid" aria-label="Small icons" title="Small icons"><svg><use href="#i-grid"/></svg></button>
+          </div>
+        </div>
+
+        <!-- E: status line -->
+        <div class="wb-projects__status">
+          <span class="wb-projects__folder" id="folder"></span>
+          <span id="counts"></span>
+        </div>
+        <p class="sr" role="status" id="announce"></p>
+
+        <div id="error-slot"></div>
+
+        <!-- F: list -->
+        <ul class="wb-projects__list" id="list" aria-label="Projects"></ul>
+
+        <!-- G: footnote -->
+        <p class="wb-projects__note">
+          <svg aria-hidden="true"><use href="#i-info"/></svg>
+          <span>Local projects are the project files in your projects folder and the folders directly inside it.
+            Projects on GitHub are stored as secret gists on your account.
+            <button type="button" class="btn btn--text">Open from a URL or path…</button></span>
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ======================= ICON SHEET (reference) ======================= -->
+<section class="sheet" aria-labelledby="sheet-title">
+  <h2 id="sheet-title">Icon sheet</h2>
+  <p>Every icon on the Projects page, named as in <code>src/components/workbench/icons.tsx</code>. “new” ones are to be added (OutlineIcon, the paths in this file).</p>
+  <ul id="sheet"></ul>
+</section>
+
+<script>
+  // ---------- sample data (what ProjectListItem would hold) ----------
+  const ITEMS = [
+    { key: 'github:1', source: 'github', name: 'VHDL-Examples', description: 'Simple VHDL examples with testbenches and waveforms.', owner: 'rlangoy', updatedAt: '2026-10-05T09:12:00Z',
+      files: [{ name: 'and_gate.vhd', description: 'Two-input AND gate' }, { name: 'tb_and_gate.vhd', description: 'Testbench that walks the truth table' }] },
+    { key: 'local:2', source: 'local', name: 'QuickSnippets', description: 'Useful code snippets for embedded and FPGA development.', owner: '', updatedAt: '2026-10-03T14:40:00Z',
+      files: [{ name: 'debounce.vhd', description: 'Push-button debouncer' }, { name: 'uart_tx.v', description: 'UART transmitter, 115200 baud' }] },
+    { key: 'github:3', source: 'github', name: 'HDLBoard', description: 'Web-based VHDL/Verilog IDE and simulator for FPGA beginners.', owner: 'rlangoy', updatedAt: '2026-10-11T18:03:00Z',
+      files: [{ name: 'top.vhd', description: 'Board top level' }] },
+    { key: 'local:4', source: 'local', name: 'Lab 2 – Counter', description: 'A 4-bit counter shown on HEX0, stepped with KEY0.', owner: '', updatedAt: '2026-09-28T10:00:00Z',
+      files: [{ name: 'counter.vhd', description: '4-bit counter with enable' }, { name: 'hex7seg.vhd', description: 'Seven-segment decoder' }, { name: 'DE1_SoC.vhd', description: 'Board top level' }] },
+    { key: 'local:5', source: 'local', name: 'Lab 10 – Traffic light', description: 'A Moore state machine driving LEDR as a traffic light.', owner: '', updatedAt: '2026-10-12T08:30:00Z',
+      files: [{ name: 'traffic.v', description: 'Moore FSM with a 1 s tick' }, { name: 'traffic_tb.v', description: 'Testbench with a fast clock' }] },
+    { key: 'github:6', source: 'github', name: 'Full Adder Truth Table (VHDL testbench)', description: 'A full adder and a testbench that checks all eight input combinations.', owner: 'rlangoy', updatedAt: '2026-10-13T07:55:00Z', open: true,
+      files: [{ name: 'full_adder.vhd', description: 'Full adder, dataflow style' }, { name: 'tb_full_adder.vhd', description: 'Exhaustive self-checking testbench' }] },
+    { key: 'github:7', source: 'github', name: 'Notes', description: '', owner: 'rlangoy', updatedAt: '',
+      files: [] },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const icon = (id) => `<svg aria-hidden="true"><use href="#i-${id}"/></svg>`;
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const norm = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+  function languagesOf(names) {
+    const out = [];
+    if (names.some((n) => /\.vhdl?$/i.test(n))) out.push('vhdl');
+    if (names.some((n) => /\.(v|vh|sv)$/i.test(n))) out.push('verilog');
+    return out;
+  }
+  for (const it of ITEMS) it.languages = languagesOf(it.files.map((f) => f.name));
+
+  const searchText = (it) => norm([it.name, it.description, it.owner, ...it.files.flatMap((f) => [f.name, f.description])].join(' '));
+  const words = (q) => norm(q).split(/\s+/).filter(Boolean);
+
+  function filterItems(items, q, type) {
+    const w = words(q);
+    return items.filter((it) => (type === 'all' || it.languages.includes(type)) && w.every((x) => searchText(it).includes(x)));
+  }
+  function sortItems(items, order) {
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.key.localeCompare(b.key);
+    const byDate = (dir) => (a, b) => {
+      if (!a.updatedAt !== !b.updatedAt) return a.updatedAt ? -1 : 1; // unknown dates last
+      return dir * a.updatedAt.localeCompare(b.updatedAt) || byName(a, b);
+    };
+    return [...items].sort(order === 'name' ? byName : byDate(order === 'newest' ? -1 : 1));
+  }
+  function fileHit(it, q) {
+    const w = words(q);
+    if (w.length === 0) return undefined;
+    const own = norm(`${it.name} ${it.description} ${it.owner}`);
+    const rest = w.filter((x) => !own.includes(x));
+    if (rest.length === 0) return undefined;
+    return it.files.find((f) => rest.every((x) => norm(`${f.name} ${f.description}`).includes(x)));
+  }
+  const highlight = (text, q) => {
+    let html = esc(text);
+    for (const w of words(q)) {
+      const i = norm(text).indexOf(w);
+      if (i >= 0) { html = esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + w.length)) + '</mark>' + esc(text.slice(i + w.length)); break; }
+    }
+    return html;
+  };
+
+  // ---------- state ----------
+  const state = { view: 'list' };
+  try { Object.assign(state, JSON.parse(localStorage.getItem('hdlboard.projectsPage') || '{}')); } catch { /* defaults */ }
+  const savePrefs = () => { try { localStorage.setItem('hdlboard.projectsPage', JSON.stringify({ type: $('type').value, sort: $('sort').value, view: state.view })); } catch { /* ignore */ } };
+  if (state.type) $('type').value = state.type;
+  if (state.sort) $('sort').value = state.sort;
+
+  const AVATAR = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#c7d2fe"/><circle cx="20" cy="15" r="7" fill="#4338ca"/><path d="M6 38c2-9 8-13 14-13s12 4 14 13z" fill="#4338ca"/></svg>');
+  const signedIn = () => $('m-signed').checked;
+
+  // ---------- A: account card + header button ----------
+  function renderAccount() {
+    if (signedIn()) {
+      $('account').innerHTML = `
+        <img class="wb-projects__avatar" alt="" src="${AVATAR}" />
+        <span class="wb-projects__account-text">
+          <span>Signed in as <strong>rlangoy</strong></span>
+          <span class="wb-projects__small">Until you close this tab. <a href="#" onclick="return false">Manage access on GitHub</a></span>
+        </span>
+        <button type="button" class="btn">${icon('sign-out')}Sign out</button>`;
+      $('hdr-github').innerHTML = `<img class="wb-header__avatar" alt="" src="${AVATAR}" />rlangoy`;
+      $('hdr-github').title = 'Your projects';
+    } else {
+      $('account').innerHTML = `
+        <span class="wb-projects__gh-tile">${icon('github')}</span>
+        <span class="wb-projects__account-text">
+          <strong>Connect GitHub</strong>
+          <span class="wb-projects__small">Sign in to see and save your projects on GitHub, on any computer.</span>
+        </span>
+        <button type="button" class="btn btn--dark" id="signin">${icon('github')}Sign in with GitHub</button>`;
+      $('signin').onclick = openSignIn;
+      $('hdr-github').innerHTML = `${icon('github')}GitHub`;
+      $('hdr-github').title = 'Sign in to GitHub to save your projects there';
+    }
+  }
+
+  // ---------- E: folder line ----------
+  function renderFolder() {
+    $('folder').innerHTML = $('m-folder').checked
+      ? `${icon('laptop')}Local folder: <code title="C:\\Users\\rune\\Documents\\HDLBoard Projects">C:\\Users\\rune\\Documents\\HDLBoard Projects</code> <button type="button" class="btn btn--text">Change…</button>`
+      : `${icon('laptop')}No local folder chosen. <button type="button" class="btn btn--text">Choose folder…</button>`;
+  }
+
+  // ---------- F: list ----------
+  function visibleSources() {
+    return ITEMS.filter((it) => (it.source === 'github' ? signedIn() && !$('m-error').checked : $('m-folder').checked));
+  }
+  function tileClass(it) {
+    const l = it.languages;
+    return l.length === 2 ? 'both' : l[0] ?? 'none';
+  }
+  const LANG = { vhdl: 'VHDL', verilog: 'Verilog' };
+  const date = (iso) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+
+  function itemHtml(it, q) {
+    const isOpen = $('m-open').checked && it.open;
+    const badge = it.source === 'github'
+      ? `<span class="badge badge--github" title="Stored on GitHub">${icon('github')}<span class="badge-text">GitHub</span></span>`
+      : `<span class="badge badge--local" title="Stored on this computer">${icon('laptop')}<span class="badge-text">Local</span></span>`;
+    const hit = fileHit(it, q);
+    const ext = it.source === 'github'
+      ? `<a class="icon-btn ext" href="#" onclick="return false" aria-label="Show ${esc(it.name)} on github.com" title="Show on github.com">${icon('open-in')}</a>`
+      : `<button type="button" class="icon-btn ext" aria-label="Show ${esc(it.name)} in Explorer" title="Show in Explorer">${icon('open-in')}</button>`;
+    const more = (cls) => `<button type="button" class="icon-btn ${cls}" data-more="${it.key}" aria-haspopup="menu" aria-label="More for ${esc(it.name)}">${icon('more')}</button>`;
+    return `
+      <li class="item${isOpen ? ' is-open' : ''}" data-key="${it.key}">
+        <span class="tile tile--${tileClass(it)}" aria-hidden="true">${icon('code')}</span>
+        <span class="item__corner">${badge}${more('')}</span>
+        <div class="item__main">
+          <h3 class="item__name"><span>${esc(it.name || 'Untitled project')}</span>${isOpen ? '<span class="chip chip--open">Open now</span>' : ''}</h3>
+          ${it.description ? `<p class="item__desc">${esc(it.description)}</p>` : ''}
+          ${hit ? `<span class="item__hit">${icon('file')}<span><strong>${highlight(hit.name, q)}</strong> — ${highlight(hit.description, q)}</span></span>` : ''}
+          <div class="item__meta">
+            <span>${icon('person')}${it.source === 'github' ? esc(it.owner) : 'This computer'}</span>
+            ${it.updatedAt ? `<span>${icon('clock')}Updated ${date(it.updatedAt)}</span>` : ''}
+            ${badge}
+          </div>
+        </div>
+        <div class="item__langs">${it.languages.map((l) => `<span class="lang lang--${l}">${LANG[l]}</span>`).join('')}</div>
+        <div class="item__actions">
+          <button type="button" class="btn btn--open" aria-label="Open ${esc(it.name)}">${icon('folder-open')}Open</button>
+          ${ext}
+          ${more('more')}
+        </div>
+      </li>`;
+  }
+
+  function render() {
+    renderAccount();
+    renderFolder();
+    $('current').hidden = !$('m-open').checked;
+    $('refresh').classList.toggle('is-spinning', $('m-loading').checked);
+    $('error-slot').innerHTML = $('m-error').checked && signedIn()
+      ? `<div class="wb-projects__error" role="alert">${icon('alert')}<span>Could not read your projects on GitHub: the network is not reachable.</span><button type="button" class="btn">Try again</button></div>`
+      : '';
+
+    const list = $('list');
+    list.classList.toggle('is-grid', state.view === 'grid');
+    document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === state.view)));
+
+    if ($('m-loading').checked) {
+      list.classList.remove('is-grid');
+      list.innerHTML = Array.from({ length: 3 }, () => `<li class="skeleton" aria-hidden="true"><i class="sk-tile"></i><span class="sk-lines"><i style="height:14px;width:40%"></i><i style="height:12px;width:75%"></i><i style="height:10px;width:30%"></i></span></li>`).join('');
+      $('counts').textContent = 'Reading…';
+      return;
+    }
+
+    const q = $('q').value, type = $('type').value;
+    const all = visibleSources();
+    const shown = sortItems(filterItems(all, q, type), $('sort').value);
+    const local = all.filter((i) => i.source === 'local').length, gh = all.length - local;
+
+    if (all.length === 0) {
+      list.innerHTML = `<li class="wb-projects__empty">${icon('project')}<p>No projects yet. Create one, choose a local folder, or connect GitHub.</p><button type="button" class="btn btn--primary">${icon('plus')}New project</button></li>`;
+    } else if (shown.length === 0) {
+      const why = q.trim() ? `No projects match “${esc(q.trim())}”.` : `No ${LANG[type]} projects.`;
+      list.innerHTML = `<li class="wb-projects__empty">${icon('search')}<p>${why}</p><button type="button" class="btn" id="clear">Clear filters</button></li>`;
+      $('clear').onclick = () => { $('q').value = ''; $('type').value = 'all'; savePrefs(); render(); };
+    } else {
+      list.innerHTML = shown.map((it) => itemHtml(it, q)).join('');
+    }
+    const parts = [local && `${local} local`, gh && `${gh} on GitHub`].filter(Boolean).join(' · ');
+    $('counts').textContent = shown.length < all.length ? `Showing ${shown.length} of ${all.length}` : parts;
+    $('announce').textContent = `Showing ${shown.length} of ${all.length} projects`;
+  }
+
+  // ---------- ⋮ menu ----------
+  let menu = null;
+  function closeMenu() { menu?.remove(); menu = null; }
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-more]');
+    if (!btn) { if (menu && !menu.contains(e.target)) closeMenu(); return; }
+    e.stopPropagation();
+    closeMenu();
+    const it = ITEMS.find((i) => i.key === btn.dataset.more);
+    menu = document.createElement('div');
+    menu.className = 'menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = `<button role="menuitem">${icon('folder-open')}Open</button>` + (it.source === 'github'
+      ? `<button role="menuitem">${icon('copy')}Copy share link</button><hr/><button role="menuitem" class="danger">${icon('delete')}Delete from GitHub…</button>`
+      : `<button role="menuitem">${icon('copy')}Copy path</button><button role="menuitem">${icon('open-in')}Show in Explorer</button>`);
+    document.body.append(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = `${Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8)}px`;
+    menu.style.left = `${Math.max(8, r.right - menu.offsetWidth)}px`;
+    menu.querySelector('button').focus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!menu) return;
+    const items = [...menu.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+  $('page').addEventListener('scroll', closeMenu);
+
+  // ---------- sign-in dialog (GitHubSignInDialog) ----------
+  function openSignIn() {
+    const back = document.createElement('div');
+    back.className = 'backdrop';
+    back.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+        <div class="dialog__head">
+          <span class="dialog__icon">${icon('github')}</span>
+          <div class="dialog__titles"><h3 id="dlg-t">Sign in to GitHub</h3><p>Keep your projects on GitHub, and open them on any computer</p></div>
+          <button type="button" class="icon-btn" aria-label="Close">${icon('close')}</button>
+        </div>
+        <div class="dialog__body">
+          <ul>
+            <li>Each project is stored as a <strong>secret gist</strong>: only people you give its link to can see it.</li>
+            <li>HDLBoard asks for access to your <strong>gists only</strong>, never your repositories.</li>
+            <li>You stay signed in until you close this browser tab.</li>
+          </ul>
+          <button type="button" class="btn btn--dark btn--big">${icon('github')}Sign in with GitHub</button>
+          <span class="wb-projects__small">No GitHub account yet? <a href="#" onclick="return false">Create one for free</a>, then come back here. (Content unchanged from today's dialog: see GitHubDialog.tsx SignedOut / DeviceCodeSteps / TokenSignIn.)</span>
+        </div>
+      </div>`;
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+    document.addEventListener('keydown', onKey);
+    back.addEventListener('click', (e) => { if (e.target === back || e.target.closest('[aria-label="Close"]')) close(); });
+    back.querySelector('.btn--big').onclick = () => { close(); $('m-signed').checked = true; render(); };
+    document.body.append(back);
+    back.querySelector('.btn--big').focus();
+  }
+  $('hdr-github').onclick = () => { if (!signedIn()) openSignIn(); };
+
+  // ---------- wiring ----------
+  $('q').addEventListener('input', render);
+  $('type').addEventListener('change', () => { savePrefs(); render(); });
+  $('sort').addEventListener('change', () => { savePrefs(); render(); });
+  document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; savePrefs(); render(); }));
+  document.querySelectorAll('.mock-controls input').forEach((c) => c.addEventListener('change', render));
+  $('list').addEventListener('dblclick', (e) => { const li = e.target.closest('.item'); if (li) li.querySelector('.btn--open').focus(); });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey && e.key === 'f') || (e.key === '/' && document.activeElement.tagName !== 'INPUT')) { e.preventDefault(); $('q').focus(); }
+  });
+
+  // ---------- icon sheet ----------
+  const SHEET = [
+    ['code', 'CodeIcon', true], ['laptop', 'LaptopIcon', true], ['list', 'ListIcon', true], ['grid', 'GridIcon', true],
+    ['more', 'MoreIcon', true], ['clock', 'ClockIcon', true], ['person', 'PersonIcon', true],
+    ['github', 'GitHubIcon'], ['plus', 'PlusIcon'], ['search', 'SearchIcon'], ['folder-open', 'FolderOpenIcon'], ['open-in', 'OpenInIcon'],
+    ['refresh', 'RefreshIcon'], ['sign-out', 'SignOutIcon'], ['close', 'CloseIcon'], ['cloud-up', 'CloudUploadIcon'], ['copy', 'CopyIcon'],
+    ['delete', 'DeleteIcon'], ['project', 'ProjectIcon'], ['info', 'InfoIcon'], ['file', 'FileIcon'], ['alert', 'AlertIcon'], ['chevron-down', 'ChevronDownIcon'], ['check', 'CheckIcon'],
+  ];
+  $('sheet').innerHTML = SHEET.map(([id, name, isNew]) => `<li>${icon(id)}<code>${name}</code>${isNew ? '<span class="new">new</span>' : ''}</li>`).join('');
+
+  render();
+  $('q').focus();
+</script>
+</body>
+</html>
