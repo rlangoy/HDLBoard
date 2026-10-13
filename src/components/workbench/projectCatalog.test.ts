@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import {
+  displayName,
   fileHit,
   filterItems,
   itemFromIndexEntry,
@@ -31,6 +32,18 @@ const counter = item({
   description: 'A counter on HEX0.',
   files: [{ name: 'counter.vhd', description: '4-bit counter with enable' }],
   languages: ['vhdl'],
+});
+
+describe('displayName', () => {
+  test('drops a language in brackets at the end', () => {
+    expect(displayName('Shift Register (Verilog)')).toBe('Shift Register');
+    expect(displayName('Full Adder Truth Table (VHDL testbench)')).toBe('Full Adder Truth Table');
+  });
+
+  test('keeps other brackets, and a name that is only the language', () => {
+    expect(displayName('Counter (4-bit)')).toBe('Counter (4-bit)');
+    expect(displayName('(VHDL)')).toBe('(VHDL)');
+  });
 });
 
 describe('languagesOf', () => {

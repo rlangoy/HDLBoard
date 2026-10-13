@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import type { ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { cx } from '../board';
 import {
   ArrowDownIcon,
+  ChevronDownIcon,
   ClockIcon,
   CodeIcon,
   FileIcon,
@@ -15,7 +16,7 @@ import {
   OpenInIcon,
   PersonIcon,
 } from './icons';
-import { fileHit, relativeTime, type CatalogFile, type ProjectLanguage, type ProjectListItem, type SortOrder } from './projectCatalog';
+import { displayName, fileHit, relativeTime, type CatalogFile, type ProjectLanguage, type ProjectListItem, type SortOrder } from './projectCatalog';
 
 /** What the three views of the list share (docs/project_browse_page.md § 4.6). */
 export interface ProjectItemsProps {
@@ -42,7 +43,7 @@ function languageKind(item: ProjectListItem): LanguageKind {
 }
 
 const languageTitle = (item: ProjectListItem) => item.languages.map((l) => LANGUAGE_LABEL[l]).join(' + ') || 'No source files';
-const projectName = (item: ProjectListItem) => item.name || 'Untitled project';
+const projectName = (item: ProjectListItem) => displayName(item.name) || 'Untitled project';
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 const formatDateTime = (iso: string) => new Date(iso).toLocaleString();
 
@@ -172,6 +173,9 @@ export interface ProjectTableProps extends ProjectItemsProps {
 export function ProjectTable(props: ProjectTableProps) {
   const { items, sort, onSort, total } = props;
   const byDate = sort !== 'name';
+  // One row at a time shows its details.
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const toggle = (key: string) => setExpanded((shown) => (shown === key ? null : key));
   return (
     <div className="wb-projects__table-wrap">
       <table className="wb-projects__table" aria-label="Projects">
@@ -201,7 +205,10 @@ export function ProjectTable(props: ProjectTableProps) {
         </thead>
         <tbody>
           {items.map((item) => (
-            <TableRow key={item.key} {...props} item={item} />
+            <Fragment key={item.key}>
+              <TableRow {...props} item={item} expanded={item.key === expanded} onToggle={() => toggle(item.key)} />
+              {item.key === expanded && <DetailsRow {...props} item={item} />}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -228,18 +235,29 @@ function SortButton({ label, active, ascending, onClick }: SortButtonProps) {
   );
 }
 
-function TableRow(props: ProjectItemsProps & { item: ProjectListItem }) {
-  const { item, query, isOpenNow, onOpen } = props;
+interface TableRowProps extends ProjectItemsProps {
+  item: ProjectListItem;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+/** One project; a click on it (not on its buttons) shows its details below it. */
+function TableRow(props: TableRowProps) {
+  const { item, query, isOpenNow, onOpen, expanded, onToggle } = props;
   const hit = fileHit(item, query);
   const description = hit ? `${hit.name}${hit.description === '' ? '' : ` — ${hit.description}`}` : item.description;
   return (
-    <tr className={cx(isOpenNow(item) && 'is-open')} onDoubleClick={() => !props.opening && onOpen(item)}>
+    <tr
+      className={cx('wb-projects__row', isOpenNow(item) && 'is-open', expanded && 'is-expanded')}
+      onClick={(e) => !(e.target as Element).closest('button, a') && onToggle()}
+    >
       <td>
-        <span className="wb-projects__p-name">
+        <button type="button" className="wb-projects__p-name" onClick={onToggle} aria-expanded={expanded} title={item.name}>
           <Tile item={item} />
           <strong>{projectName(item)}</strong>
           {isOpenNow(item) && <OpenNowChip />}
-        </span>
+          <ChevronDownIcon className="wb-projects__p-chevron" aria-hidden="true" />
+        </button>
       </td>
       <td className="is-desc">
         <div className={cx('wb-projects__p-desc', hit && 'is-hit')} title={description}>
@@ -302,6 +320,28 @@ function DetailsCard(props: CardProps) {
   const { item, isOpenNow, opening, onOpen } = props;
   return (
     <li className={cx('wb-projects__item', isOpenNow(item) && 'is-open')} onDoubleClick={() => !opening && onOpen(item)}>
+      <DetailsCardContent {...props} />
+    </li>
+  );
+}
+
+/** A compact list row's details: the details view's card, below the row, across the table. */
+function DetailsRow(props: CardProps) {
+  return (
+    <tr className="wb-projects__detail-row">
+      <td colSpan={5}>
+        <div className="wb-projects__item">
+          <DetailsCardContent {...props} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function DetailsCardContent(props: CardProps) {
+  const { item, opening, onOpen } = props;
+  return (
+    <>
       <Tile item={item} />
       <CardBody {...props}>
         <ItemMeta item={item} />
@@ -312,7 +352,7 @@ function DetailsCard(props: CardProps) {
         <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
         <MenuButton item={item} onMenu={props.onMenu} />
       </div>
-    </li>
+    </>
   );
 }
 

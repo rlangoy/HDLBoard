@@ -63,6 +63,17 @@ describe('ProjectGists', () => {
       ]);
     });
 
+    it('gives an entry saved without file names the names in its gist', async () => {
+      const link = await publishAdder();
+      const indexGist = [...github.gists.values()].find((gist) => gist.files.has(INDEX_FILE_NAME))!;
+      const index = JSON.parse(indexGist.files.get(INDEX_FILE_NAME)!);
+      delete index.projects[0].files;
+      indexGist.files.set(INDEX_FILE_NAME, JSON.stringify(index));
+      const [entry] = await projects.list();
+      expect(entry.gistId).toBe(link.gistId);
+      expect(entry.files).toEqual([{ name: 'adder.vhd', description: '' }]);
+    });
+
     it('refuses an empty file, which GitHub cannot store', async () => {
       await expect(projects.publish(snapshot({ 'empty.vhd': '  ' }))).rejects.toMatchObject({ kind: 'empty-files' });
       expect(github.writes()).toEqual([]);

@@ -187,7 +187,8 @@ then a footer line.
   sort `'name'`; clicking *Last saved* sets `'newest'`, or `'oldest'` when it already is `'newest'`.
   This is the same state as the Sort `<select>` (§ 4.4), so both always agree.
 - Footer (`#f8fafc`, top border, 13 px muted): `Showing 1–6 of 6 projects` (shown count of all).
-- Double-click on a row = Open. Loading and empty states are the same as the other views.
+- **A click on a row** (anywhere but its buttons) expands it: the details view's card for that project shows in a row below, across the table; a second click, or a click on another row, closes it. The name cell is a button with `aria-expanded` and a chevron, so the keyboard reaches it too. (No double-click to open here: it would clash with the click.)
+- Loading and empty states are the same as the other views.
 
 **Small icons view (`'grid'`)** — CSS grid `repeat(auto-fill, minmax(200px, 1fr))`, 12 px gap. Each
 card: tile (40 px) top-left, source badge top-right (icon only, with `title`), name (1 line,
@@ -496,8 +497,7 @@ export interface IndexEntry {
 - `projectGists.ts` `indexEntryFor(snapshot, gist)`: add `files: snapshot.entries`.
 - Tests in `projectIndex.test.ts`: round-trip with `files`; an entry without `files` still parses;
   an entry with a broken `files` value parses with `files: undefined`.
-- Projects saved before this change show no languages and are found by name/description only, until
-  they are saved again. That is acceptable; do not fetch every gist to fill it in.
+- Entries saved before this change have no `files`. `ProjectGists.list()` gives them the file names in their gist (no descriptions) from one listing of the user's gists (`GET /gists`, which the index lookup already uses), so their language is known and the type filter works; nothing is written back. Their file descriptions are found only after they are saved again.
 
 ## 8. Opening an item
 
@@ -662,6 +662,8 @@ Run with `scripts\start-windows.cmd` (browser) and in the Windows app build.
 - The storage-model work in `hdlboard_project_panel_gist_spec.md` (branch `project_page_touchup`).
 
 ## 15. As built (differences from the text above)
+
+- **Names** in the list are shown without a language in brackets at the end (`displayName`: "Shift Register (Verilog)" → "Shift Register"); the tile and the language chips say it. The full name is in the tooltip, and search still matches it.
 
 - **Search hit in the compact list** is the file's name in bold followed by its description, not `<mark>`-highlighted words (the mockup highlights; the app does not).
 - **Busy and success messages** of the GitHub actions use the existing `Activity` line under the Open now card; only *errors* use the red banner with **Try again** (the local scan's error too).
