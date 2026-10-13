@@ -28,7 +28,9 @@ import { ProjectMenu, type MenuAction } from './ProjectMenu';
 import {
   PROJECTS_PAGE_PREFS_KEY,
   filterItems,
+  isSameProject,
   itemFromIndexEntry,
+  languagesOf,
   parseProjectsPagePrefs,
   sortItems,
   type ProjectListItem,
@@ -85,13 +87,12 @@ export function ProjectsPage(props: ProjectsPageProps) {
 
   useFocusSearchOnOpen(searchRef);
 
-  const items = useProjectItems(connection, gitHubProjects, localProjects);
+  const items = useProjectItems(connection, gitHubProjects, localProjects, openProject);
   const shown = useMemo(() => sortItems(filterItems(items, query, prefs.type), prefs.sort), [items, query, prefs.type, prefs.sort]);
   const readingGitHub = connection.session !== null && gitHubProjects.entries === null && gitHubProjects.busy !== null;
   const loading = items.length === 0 && (localProjects.scanning || readingGitHub);
 
-  const isOpenNow = (item: ProjectListItem) =>
-    openProject !== null && (item.gistId !== undefined ? item.gistId === openProject.gistId : item.location === openProject.location);
+  const isOpenNow = (item: ProjectListItem) => openProject !== null && isSameProject(item, openProject);
   const { onShowInFolder } = props;
   const listProps: ProjectItemsProps = {
     items: shown,
@@ -196,15 +197,40 @@ export function ProjectsPage(props: ProjectsPageProps) {
   );
 }
 
-/** The local projects and, signed in, the user's projects on GitHub, as one list. */
-function useProjectItems(connection: GitHubConnection, gitHubProjects: GitHubProjects, localProjects: LocalProjects): ProjectListItem[] {
+/**
+ * The local projects and, signed in, the user's projects on GitHub, as one list. A project open
+ * from this computer that the projects folder does not hold (one opened with Upload File, say)
+ * is listed too, so it is never missing from the page.
+ */
+function useProjectItems(
+  connection: GitHubConnection,
+  gitHubProjects: GitHubProjects,
+  localProjects: LocalProjects,
+  openProject: OpenProjectInfo | null,
+): ProjectListItem[] {
   const login = connection.session?.user.login ?? null;
   const entries = gitHubProjects.entries;
   const local = localProjects.items;
   return useMemo(() => {
     const github = login !== null && entries !== null ? entries.map((entry) => itemFromIndexEntry(entry, login)) : [];
-    return [...(local ?? []), ...github];
-  }, [login, entries, local]);
+    const scanned = local ?? [];
+    const openHere = openProject?.storedLocally && !scanned.some((item) => isSameProject(item, openProject)) ? [openProjectItem(openProject)] : [];
+    return [...openHere, ...scanned, ...github];
+  }, [login, entries, local, openProject]);
+}
+
+function openProjectItem(open: OpenProjectInfo): ProjectListItem {
+  return {
+    key: `open:${open.location}`,
+    source: 'local',
+    name: open.name,
+    description: open.description,
+    files: open.files,
+    languages: languagesOf(open.files.map((file) => file.name)),
+    updatedAt: '',
+    owner: '',
+    location: open.location,
+  };
 }
 
 /** The type, sort and view choices, kept in this browser (the search text is not). */
@@ -301,6 +327,8 @@ function Toolbar({ searchRef, query, onQuery, prefs, onPrefs }: ToolbarProps) {
         <option value="newest">Newest first</option>
         <option value="oldest">Oldest first</option>
         <option value="name">Name A–Z</option>
+        <option value="local">Local first</option>
+        <option value="github">GitHub first</option>
       </Select>
       <div className="wb-projects__segmented" role="radiogroup" aria-label="View">
         {VIEWS.map(({ view, label, icon: Icon }) => (
@@ -357,6 +385,7 @@ function FolderLine({ local }: { local: LocalProjects }) {
           <button type="button" className="wb-projects__btn is-text" onClick={local.chooseFolder}>
             Choose folder…
           </button>
+          <span>Choose the folder that holds your project files to list them all here.</span>
         </>
       )}
       {folderState === 'needs-permission' && (

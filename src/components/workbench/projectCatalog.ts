@@ -13,7 +13,8 @@ import { languageOfName } from './fileKinds';
 export type ProjectLanguage = 'vhdl' | 'verilog';
 export type ProjectSource = 'local' | 'github';
 export type TypeFilter = 'all' | ProjectLanguage;
-export type SortOrder = 'newest' | 'oldest' | 'name';
+/** 'local' and 'github': that place's projects first, each place newest first. */
+export type SortOrder = 'newest' | 'oldest' | 'name' | 'local' | 'github';
 export type ProjectsView = 'list' | 'compact' | 'grid';
 
 export interface CatalogFile {
@@ -125,7 +126,22 @@ export function sortItems(items: readonly ProjectListItem[], order: SortOrder): 
     if ((a.updatedAt === '') !== (b.updatedAt === '')) return a.updatedAt === '' ? 1 : -1;
     return direction * a.updatedAt.localeCompare(b.updatedAt) || byName(a, b);
   };
-  return [...items].sort(order === 'name' ? byName : byDate(order === 'newest' ? -1 : 1));
+  const newest = byDate(-1);
+  const bySource = (first: ProjectSource) => (a: ProjectListItem, b: ProjectListItem) =>
+    Number(b.source === first) - Number(a.source === first) || newest(a, b);
+  const compare = { name: byName, newest, oldest: byDate(1), local: bySource('local'), github: bySource('github') }[order];
+  return [...items].sort(compare);
+}
+
+/**
+ * Whether a list item is the open project: the same gist, or the same local project file. A
+ * project opened with Upload File knows only its file name, so a scanned file of that name and
+ * project name counts too.
+ */
+export function isSameProject(item: ProjectListItem, open: { name: string; gistId: string | undefined; location: string }): boolean {
+  if (item.gistId !== undefined || open.gistId !== undefined) return item.gistId === open.gistId;
+  if (open.location === '') return false;
+  return item.location === open.location || (item.location.endsWith(`/${open.location}`) && item.name === open.name);
 }
 
 /**
@@ -167,7 +183,7 @@ export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
     allowed.includes(value as T) ? (value as T) : fallback;
   return {
     type: pick(record.type, ['all', 'vhdl', 'verilog'], DEFAULT_PREFS.type),
-    sort: pick(record.sort, ['newest', 'oldest', 'name'], DEFAULT_PREFS.sort),
+    sort: pick(record.sort, ['newest', 'oldest', 'name', 'local', 'github'], DEFAULT_PREFS.sort),
     view: pick(record.view, ['compact', 'grid', 'list'], DEFAULT_PREFS.view),
   };
 }

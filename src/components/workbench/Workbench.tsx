@@ -98,7 +98,8 @@ import { GITHUB_AUTH_PATH } from '../../github/config';
 import type { GistLink, OpenedGistProject } from '../../github/projectGists';
 import { GitHubSignInDialog } from './GitHubSignInDialog';
 import { ProjectsPage } from './ProjectsPage';
-import type { ProjectListItem } from './projectCatalog';
+import { openProjectInfo } from './ProjectsAccount';
+import { isSameProject, type ProjectListItem } from './projectCatalog';
 import { useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
 import { ProjectGitHubCard } from './ProjectGitHubCard';
@@ -867,8 +868,7 @@ export function Workbench() {
 
   /** Projects page: open a project from the list, GitHub or local (docs/project_browse_page.md § 8). */
   const handleOpenListedProject = async (item: ProjectListItem) => {
-    const isOpenProject = item.gistId !== undefined ? project?.gist?.gistId === item.gistId : project?.location === item.location;
-    if (isOpenProject) {
+    if (project && isSameProject(item, { name: project.name, gistId: project.gist?.gistId, location: project.location })) {
       setOverlay(null);
       return;
     }
@@ -1487,9 +1487,7 @@ export function Workbench() {
                 connection={gitHub}
                 gitHubProjects={gitHubProjects}
                 localProjects={localProjects}
-                openProject={
-                  project && { name: project.name, gistId: project.gist?.gistId, location: project.location, syncState: gitHubSync, unsaved: projectUnsaved }
-                }
+                openProject={project && openProjectInfo(project, gitHubSync, projectUnsaved)}
                 opening={projectBusy !== null || gitHubProjects.busy !== null}
                 onOpenItem={(item) => void handleOpenListedProject(item)}
                 onNewProject={handleStartProject}
