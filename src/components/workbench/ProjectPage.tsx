@@ -367,12 +367,14 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
         {loaded ? (
           <button type="button" className="wb-project__file" onClick={() => onOpenFile(row.name)} title={`Show ${row.name} in the editor`}>
             <FileIcon className="wb-project__file-icon" aria-hidden="true" />
-            {row.name}
+            <span className="wb-project__file-name">{row.name}</span>
           </button>
         ) : (
           <span className="wb-project__file is-unloaded">
             <AlertIcon className="wb-project__warn-icon" aria-hidden="true" />
-            {row.name}
+            <span className="wb-project__file-name" title={row.name}>
+              {row.name}
+            </span>
           </span>
         )}
         {!loaded && <span className="wb-project__problem">{row.problem}</span>}

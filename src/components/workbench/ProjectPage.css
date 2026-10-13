@@ -439,7 +439,6 @@
 .wb-project__table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 
 .wb-project__table th {
@@ -453,12 +452,14 @@
   color: var(--wb-text-muted);
 }
 
-.wb-project__table th:nth-child(1) {
-  width: 32%;
-}
-
+/*
+ * Name and actions take only the width they need; the description takes the rest, so it
+ * starts right after the longest file name and runs as long as the row allows.
+ */
+.wb-project__table th:nth-child(1),
 .wb-project__table th:nth-child(3) {
-  width: 84px;
+  width: 1%;
+  white-space: nowrap;
 }
 
 .wb-project__table td {
@@ -472,14 +473,22 @@
 }
 
 .wb-project__cell-name {
-  overflow-wrap: anywhere;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+
+.wb-project__cell-description {
+  width: 100%;
+  /* Takes the width that is left, and never more: a long description wraps instead of widening the page. */
+  max-width: 0;
 }
 
 .wb-project__file {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  max-width: 100%;
+  /* A very long name shortens with … (the full name is in the tooltip) rather than squeezing the description. */
+  max-width: 280px;
   padding: 6px 6px 6px 2px;
   border: 0;
   border-radius: 6px;
@@ -502,6 +511,12 @@ button.wb-project__file:hover {
   cursor: default;
 }
 
+.wb-project__file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .wb-project__file-icon {
   width: 18px;
   height: 18px;
@@ -510,6 +525,7 @@ button.wb-project__file:hover {
 
 .wb-project__problem {
   display: block;
+  white-space: normal;
   margin: 2px 0 0 26px;
   font-size: 12px;
   line-height: 1.4;
