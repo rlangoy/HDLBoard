@@ -36,6 +36,13 @@ export interface LocalProjects {
   /** Must be called from a click: the browser asks for the folder permission again. */
   allowAccess(): void;
   readForOpen(item: ProjectListItem): Promise<LocalOpenRequest>;
+  /**
+   * A folder the user picked for a project (the project folder dialog) becomes the projects
+   * folder when none is chosen yet, so the project's own folder is listed without asking again.
+   */
+  adoptFolder(folder: FolderHandle): void;
+  /** The same for browsers without folder handles: the files a folder input chose. */
+  adoptFolderFiles(files: readonly File[]): void;
 }
 
 type Backend = 'desktop' | 'handle' | 'files';
@@ -118,7 +125,7 @@ export function useLocalProjects(active: boolean): LocalProjects {
     const handle = folderHandle.current;
     if (!handle?.requestPermission) return;
     handle
-      .requestPermission({ mode: 'readwrite' })
+      .requestPermission({ mode: 'read' })
       .then(() => scan())
       .catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
@@ -128,6 +135,23 @@ export function useLocalProjects(active: boolean): LocalProjects {
     const source = reading.outcome?.sources.get(item.key);
     if (!source) throw new Error(`${item.name} is no longer in the folder. Read the list again.`);
     return openRequestFor(item, source);
+  };
+
+  const adoptFolder = (folder: FolderHandle) => {
+    if (backend !== 'handle') return;
+    void (async () => {
+      folderHandle.current ??= await loadProjectsFolder();
+      if (folderHandle.current !== null) return;
+      folderHandle.current = folder;
+      setRemembered(await saveProjectsFolder(folder));
+      if (active) await scan();
+    })();
+  };
+
+  const adoptFolderFiles = (files: readonly File[]) => {
+    if (backend !== 'files' || chosenFiles.current !== null) return;
+    chosenFiles.current = [...files];
+    if (active) void scan();
   };
 
   return {
@@ -143,6 +167,8 @@ export function useLocalProjects(active: boolean): LocalProjects {
     chooseFolder,
     allowAccess,
     readForOpen,
+    adoptFolder,
+    adoptFolderFiles,
   };
 }
 

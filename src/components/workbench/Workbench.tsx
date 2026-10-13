@@ -100,6 +100,7 @@ import { GitHubSignInDialog } from './GitHubSignInDialog';
 import { ProjectsPage } from './ProjectsPage';
 import { openProjectInfo } from './ProjectsAccount';
 import { isSameProject, type ProjectListItem } from './projectCatalog';
+import type { FolderHandle } from './localProjectScan';
 import { useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
 import { ProjectGitHubCard } from './ProjectGitHubCard';
@@ -823,7 +824,7 @@ export function Workbench() {
   });
 
   /**
-   * Open Project › Choose project folder: the folder's own files (not its subfolders'),
+   * Open from a URL or path › Choose project folder: the folder's own files (not its subfolders'),
    * its project file opened with the others as the files next to it (§ 6.4).
    */
   const handleProjectFolderOpened = async (chosen: File[]) => {
@@ -1106,7 +1107,11 @@ export function Workbench() {
   const chooseProjectFolderNextTo = (handle: FileSystemFileHandle) => {
     setFolderNeeded(null);
     pickFolderOf(handle)
-      .then((files) => files && handleProjectFolderChosen(files))
+      .then((picked) => {
+        if (!picked) return;
+        localProjects.adoptFolder(picked.folder as unknown as FolderHandle);
+        return handleProjectFolderChosen(picked.files);
+      })
       .catch((err: unknown) => appendLog(`Choose project folder: ${errorText(err)}`, 'error'));
   };
 
@@ -1337,6 +1342,7 @@ export function Workbench() {
           onChooseInFolder={projectFileHandleRef.current ? () => chooseProjectFolderNextTo(projectFileHandleRef.current!) : undefined}
           onFolderChosen={(chosen) => {
             setFolderNeeded(null);
+            localProjects.adoptFolderFiles(chosen);
             void handleProjectFolderChosen(chosen);
           }}
           onClose={() => setFolderNeeded(null)}
