@@ -4,6 +4,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -1277,6 +1278,10 @@ export function Workbench() {
   const projectUnsaved = project !== null && hasUnsavedChanges(project, files);
   const gitHubSync = project === null ? 'not-on-github' : gitHubSyncState(project, files);
 
+  // The Projects page's view of the open project, new only when it changes (its list is memoised on it).
+  const openProjectSummary = useMemo(() => project && openProjectInfo(project, gitHubSync, projectUnsaved), [project, gitHubSync, projectUnsaved]);
+  const showInFolder = desktopBridge()?.showInFolder;
+
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
   // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
   const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
@@ -1493,13 +1498,13 @@ export function Workbench() {
                 connection={gitHub}
                 gitHubProjects={gitHubProjects}
                 localProjects={localProjects}
-                openProject={project && openProjectInfo(project, gitHubSync, projectUnsaved)}
+                openProject={openProjectSummary}
                 opening={projectBusy !== null || gitHubProjects.busy !== null}
                 onOpenItem={(item) => void handleOpenListedProject(item)}
                 onNewProject={handleStartProject}
                 onShowProjectPage={() => setOverlay('project')}
                 onSignIn={() => setDialog('githubSignIn')}
-                onShowInFolder={desktopBridge()?.showInFolder && ((path) => void desktopBridge()?.showInFolder?.(path))}
+                onShowInFolder={showInFolder && ((path) => void showInFolder(path))}
                 onOpenFromUrl={() => {
                   setOpenProjectError(null);
                   setDialog('openProject');

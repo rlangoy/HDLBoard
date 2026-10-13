@@ -29,11 +29,19 @@ function settle<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** Runs `use` on the database and closes it again, also when `use` fails. */
+async function withDatabase<T>(use: (database: IDBDatabase) => Promise<T>): Promise<T> {
+  const database = await openDatabase();
+  try {
+    return await use(database);
+  } finally {
+    database.close();
+  }
+}
+
 export async function loadProjectsFolder(): Promise<FolderHandle | null> {
   try {
-    const database = await openDatabase();
-    const handle = await settle(database.transaction(STORE).objectStore(STORE).get(KEY));
-    database.close();
+    const handle = await withDatabase((database) => settle(database.transaction(STORE).objectStore(STORE).get(KEY)));
     return (handle as FolderHandle | undefined) ?? null;
   } catch {
     return null;
@@ -43,9 +51,7 @@ export async function loadProjectsFolder(): Promise<FolderHandle | null> {
 /** True when the folder is remembered. */
 export async function saveProjectsFolder(handle: FolderHandle): Promise<boolean> {
   try {
-    const database = await openDatabase();
-    await settle(database.transaction(STORE, 'readwrite').objectStore(STORE).put(handle, KEY));
-    database.close();
+    await withDatabase((database) => settle(database.transaction(STORE, 'readwrite').objectStore(STORE).put(handle, KEY)));
     return true;
   } catch {
     return false;

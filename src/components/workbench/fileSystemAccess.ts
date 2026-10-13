@@ -23,7 +23,9 @@ interface OpenFilePickerOptions {
 }
 
 interface DirectoryPickerOptions {
-  startIn: FileSystemHandle;
+  /** Where the picker opens; the browser remembers the last folder per `id`. */
+  startIn?: FileSystemHandle;
+  id?: string;
   mode: 'read';
 }
 
@@ -97,6 +99,16 @@ export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder
     if (isFileHandle(entry)) files.push(await entry.getFile());
   }
   return { folder, files };
+}
+
+/** The Projects page's Choose folder: a folder to list, read only. Undefined when cancelled. */
+export async function pickProjectsFolder(): Promise<FileSystemDirectoryHandle | undefined> {
+  try {
+    return await pickers().showDirectoryPicker!({ id: 'hdlboard-projects', mode: 'read' });
+  } catch (error) {
+    if (isCancel(error)) return undefined;
+    throw error;
+  }
 }
 
 function isFileHandle(handle: FileSystemHandle | null): handle is FileSystemFileHandle {

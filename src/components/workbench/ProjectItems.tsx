@@ -18,7 +18,7 @@ import {
 } from './icons';
 import { displayName, fileHit, relativeTime, type CatalogFile, type ProjectLanguage, type ProjectListItem, type SortOrder } from './projectCatalog';
 
-/** What the three views of the list share (docs/project_browse_page.md § 4.6). */
+/** What the two views of the list share (docs/project_browse_page.md § 4.6). */
 export interface ProjectItemsProps {
   items: readonly ProjectListItem[];
   /** The search text: a file that matched it is shown under its project. */
@@ -96,17 +96,17 @@ function FileHit({ file }: { file: CatalogFile }) {
 
 type RowActions = Pick<ProjectItemsProps, 'opening' | 'onOpen' | 'onMenu' | 'onShowInFolder'>;
 
-/** Open: filled in the dense compact list, an outline with a folder in the cards. */
-function OpenButton({ item, opening, onOpen, filled }: { item: ProjectListItem; filled: boolean } & Pick<RowActions, 'opening' | 'onOpen'>) {
+/** Open: `filled` in the dense table rows, where it is the strongest thing in the row; `outline` with a folder in the cards. */
+function OpenButton({ item, opening, onOpen, look }: { item: ProjectListItem; look: 'filled' | 'outline' } & Pick<RowActions, 'opening' | 'onOpen'>) {
   return (
     <button
       type="button"
-      className={cx('wb-projects__btn', filled ? 'is-primary' : 'is-open')}
+      className={cx('wb-projects__btn', look === 'filled' ? 'is-primary' : 'is-open')}
       onClick={() => onOpen(item)}
       disabled={opening}
       aria-label={`Open ${projectName(item)}`}
     >
-      {!filled && <FolderOpenIcon aria-hidden="true" />}
+      {look === 'outline' && <FolderOpenIcon aria-hidden="true" />}
       Open
     </button>
   );
@@ -160,7 +160,7 @@ function savedText(item: ProjectListItem): string {
   return item.updatedAt === '' ? '—' : relativeTime(item.updatedAt);
 }
 
-/* ---------------------------------------------------------------- compact list */
+/* ---------------------------------------------------------------- details: the table */
 
 export interface ProjectTableProps extends ProjectItemsProps {
   sort: SortOrder;
@@ -169,7 +169,7 @@ export interface ProjectTableProps extends ProjectItemsProps {
   total: number;
 }
 
-/** The compact list: one table row per project. */
+/** The details view: one table row per project; a row opens to the project's details card. */
 export function ProjectTable(props: ProjectTableProps) {
   const { items, sort, onSort, total } = props;
   const byDate = sort === 'newest' || sort === 'oldest';
@@ -277,7 +277,7 @@ function TableRow(props: TableRowProps) {
       </td>
       <td>
         <div className="wb-projects__p-actions">
-          <OpenButton item={item} opening={props.opening} onOpen={onOpen} filled />
+          <OpenButton item={item} opening={props.opening} onOpen={onOpen} look="filled" />
           <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
           <MenuButton item={item} onMenu={props.onMenu} />
         </div>
@@ -286,16 +286,14 @@ function TableRow(props: TableRowProps) {
   );
 }
 
-/* ---------------------------------------------------------------- details and small icons */
+/* ---------------------------------------------------------------- small icons */
 
-/** The details view and the small icons view: one card per project. */
-export function ProjectCards(props: ProjectItemsProps & { grid: boolean }) {
-  const { items, grid } = props;
-  const Card = grid ? GridCard : DetailsCard;
+/** The small icons view: one card per project. */
+export function ProjectGrid(props: ProjectItemsProps) {
   return (
-    <ul className={cx('wb-projects__list', grid && 'is-grid')} aria-label="Projects">
-      {items.map((item) => (
-        <Card key={item.key} {...props} item={item} />
+    <ul className="wb-projects__grid" aria-label="Projects">
+      {props.items.map((item) => (
+        <GridCard key={item.key} {...props} item={item} />
       ))}
     </ul>
   );
@@ -303,7 +301,7 @@ export function ProjectCards(props: ProjectItemsProps & { grid: boolean }) {
 
 type CardProps = ProjectItemsProps & { item: ProjectListItem };
 
-/** What both kinds of card show: the tile, the name, the description and a matching file. */
+/** What a card shows of a project: its name, description and a matching file. */
 function CardBody({ item, query, isOpenNow, children }: CardProps & { children?: ReactNode }) {
   const hit = fileHit(item, query);
   return (
@@ -319,16 +317,7 @@ function CardBody({ item, query, isOpenNow, children }: CardProps & { children?:
   );
 }
 
-function DetailsCard(props: CardProps) {
-  const { item, isOpenNow, opening, onOpen } = props;
-  return (
-    <li className={cx('wb-projects__item', isOpenNow(item) && 'is-open')} onDoubleClick={() => !opening && onOpen(item)}>
-      <DetailsCardContent {...props} />
-    </li>
-  );
-}
-
-/** A compact list row's details: the details view's card, below the row, across the table. */
+/** An open row's details card, below the row, across the table. */
 function DetailsRow(props: CardProps) {
   return (
     <tr className="wb-projects__detail-row">
@@ -351,7 +340,7 @@ function DetailsCardContent(props: CardProps) {
       </CardBody>
       <Languages item={item} />
       <div className="wb-projects__item-actions">
-        <OpenButton item={item} opening={opening} onOpen={onOpen} filled={false} />
+        <OpenButton item={item} opening={opening} onOpen={onOpen} look="outline" />
         <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
         <MenuButton item={item} onMenu={props.onMenu} />
       </div>
@@ -372,7 +361,7 @@ function GridCard(props: CardProps) {
         <MenuButton item={item} onMenu={props.onMenu} />
       </span>
       <div className="wb-projects__item-actions">
-        <OpenButton item={item} opening={opening} onOpen={onOpen} filled={false} />
+        <OpenButton item={item} opening={opening} onOpen={onOpen} look="outline" />
       </div>
     </li>
   );
