@@ -185,12 +185,14 @@ describe('isSameProject', () => {
 describe('parseProjectsPagePrefs', () => {
   test('a bad value gives the default for that choice', () => {
     expect(parseProjectsPagePrefs('{"view":"grid","sort":"bogus"}')).toEqual({ type: 'all', sort: 'newest', view: 'grid' });
-    expect(parseProjectsPagePrefs('{"view":"table"}').view).toBe('compact');
+    // Views of earlier versions ('compact', 'list') read as the default.
+    expect(parseProjectsPagePrefs('{"view":"compact"}').view).toBe('details');
+    expect(parseProjectsPagePrefs('{"view":"list"}').view).toBe('details');
     expect(parseProjectsPagePrefs('{"sort":"github"}').sort).toBe('github');
   });
 
   test('nothing, or text that is not JSON, gives the defaults', () => {
-    const defaults = { type: 'all', sort: 'newest', view: 'compact' };
+    const defaults = { type: 'all', sort: 'newest', view: 'details' };
     expect(parseProjectsPagePrefs(null)).toEqual(defaults);
     expect(parseProjectsPagePrefs('{nope')).toEqual(defaults);
     expect(parseProjectsPagePrefs('5')).toEqual(defaults);

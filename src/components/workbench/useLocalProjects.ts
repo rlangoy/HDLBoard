@@ -8,7 +8,8 @@ import type { ProjectListItem } from './projectCatalog';
 import type { ProjectSourceFile } from './projectFile';
 import { NO_FOLDER, readChosenFolderFiles, readDesktopFolder, readRememberedFolder, type FolderReading, type FolderState } from './projectsFolderReading';
 import { loadProjectsFolder, saveProjectsFolder } from './projectsFolderStore';
-import { canPickFolder, pickSaveFolder, type PickedFolder } from './projectSave';
+import { pickProjectsFolder } from './fileSystemAccess';
+import { canPickFolder, type PickedFolder } from './projectSave';
 
 /** What opening a local project needs; the Workbench opens it the way its kind says (docs/project_browse_page.md § 8). */
 export type LocalOpenRequest =
@@ -110,7 +111,7 @@ export function useLocalProjects(active: boolean): LocalProjects {
       if (backend === 'desktop') {
         if (!(await desktopBridge()?.chooseProjectsFolder?.())) return;
       } else {
-        const picked = (await pickSaveFolder('hdlboard-projects')) as FolderHandle | undefined;
+        const picked = (await pickProjectsFolder()) as FolderHandle | undefined;
         if (!picked) return;
         folderHandle.current = picked;
         setRemembered(await saveProjectsFolder(picked));

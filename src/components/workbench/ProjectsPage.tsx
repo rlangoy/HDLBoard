@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { copyText } from './clipboard';
 import { Activity } from './GitHubStatus';
@@ -20,10 +20,9 @@ import {
   PlusIcon,
   ProjectIcon,
   RefreshIcon,
-  RowsIcon,
   SearchIcon,
 } from './icons';
-import { ProjectCards, ProjectTable, type ProjectItemsProps } from './ProjectItems';
+import { ProjectGrid, ProjectTable, type ProjectItemsProps } from './ProjectItems';
 import { ProjectMenu, type MenuAction } from './ProjectMenu';
 import {
   PROJECTS_PAGE_PREFS_KEY,
@@ -66,10 +65,9 @@ export interface ProjectsPageProps {
   onClose: () => void;
 }
 
-const VIEWS: readonly { view: ProjectsView; label: string; icon: typeof RowsIcon }[] = [
-  { view: 'compact', label: 'Compact list', icon: RowsIcon },
+const VIEWS: readonly { view: ProjectsView; label: string; icon: typeof ListIcon }[] = [
+  { view: 'details', label: 'Details', icon: ListIcon },
   { view: 'grid', label: 'Small icons', icon: GridIcon },
-  { view: 'list', label: 'Details', icon: ListIcon },
 ];
 
 /**
@@ -84,6 +82,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const [query, setQuery] = useState('');
   const [prefs, setPrefs] = usePersistedPrefs();
   const [menu, setMenu] = useState<{ item: ProjectListItem; anchor: HTMLElement } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   useFocusSearchOnOpen(searchRef);
 
@@ -192,7 +191,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
           </p>
         </div>
       </ScrollArea>
-      {menu && <ProjectMenu anchor={menu.anchor} actions={menuActionsFor(menu.item, gitHubProjects, props.onOpenItem, onShowInFolder)} onClose={() => setMenu(null)} />}
+      {menu && <ProjectMenu anchor={menu.anchor} actions={menuActionsFor(menu.item, gitHubProjects, props.onOpenItem, onShowInFolder)} onClose={closeMenu} />}
     </section>
   );
 }
@@ -466,8 +465,8 @@ function Results({ loading, all, shown, query, prefs, listProps, onSort, onNewPr
       </EmptyState>
     );
   }
-  if (prefs.view === 'compact') return <ProjectTable {...listProps} sort={prefs.sort} onSort={onSort} total={all} />;
-  return <ProjectCards {...listProps} grid={prefs.view === 'grid'} />;
+  if (prefs.view === 'grid') return <ProjectGrid {...listProps} />;
+  return <ProjectTable {...listProps} sort={prefs.sort} onSort={onSort} total={all} />;
 }
 
 function EmptyState({ icon, text, children }: { icon: React.ReactNode; text: string; children: React.ReactNode }) {
@@ -482,7 +481,7 @@ function EmptyState({ icon, text, children }: { icon: React.ReactNode; text: str
 
 function Skeletons() {
   return (
-    <ul className="wb-projects__list" aria-hidden="true">
+    <ul className="wb-projects__skeletons" aria-hidden="true">
       {[0, 1, 2].map((n) => (
         <li key={n} className="wb-projects__skeleton">
           <i className="is-tile" />

@@ -15,7 +15,8 @@ export type ProjectSource = 'local' | 'github';
 export type TypeFilter = 'all' | ProjectLanguage;
 /** 'local' and 'github': that place's projects first, each place newest first. */
 export type SortOrder = 'newest' | 'oldest' | 'name' | 'local' | 'github';
-export type ProjectsView = 'list' | 'compact' | 'grid';
+/** 'details': the table, a row opening to the project's details; 'grid': small icons. */
+export type ProjectsView = 'details' | 'grid';
 
 export interface CatalogFile {
   name: string;
@@ -168,7 +169,7 @@ export interface ProjectsPagePrefs {
 }
 
 export const PROJECTS_PAGE_PREFS_KEY = 'hdlboard.projectsPage';
-const DEFAULT_PREFS: ProjectsPagePrefs = { type: 'all', sort: 'newest', view: 'compact' };
+const DEFAULT_PREFS: ProjectsPagePrefs = { type: 'all', sort: 'newest', view: 'details' };
 
 /** The remembered choices; bad or missing JSON, or a value that is no choice, gives the default. */
 export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
@@ -184,7 +185,7 @@ export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
   return {
     type: pick(record.type, ['all', 'vhdl', 'verilog'], DEFAULT_PREFS.type),
     sort: pick(record.sort, ['newest', 'oldest', 'name', 'local', 'github'], DEFAULT_PREFS.sort),
-    view: pick(record.view, ['compact', 'grid', 'list'], DEFAULT_PREFS.view),
+    view: pick(record.view, ['details', 'grid'], DEFAULT_PREFS.view),
   };
 }
 

@@ -128,13 +128,14 @@ One row (wraps on narrow widths, § 4.8):
    `All types` (`'all'`), `VHDL` (`'vhdl'`), `Verilog` (`'verilog'`).
 3. **Sort** — native `<select aria-label="Sort by">`:
    `Newest first` (`'newest'`, default), `Oldest first` (`'oldest'`), `Name A–Z` (`'name'`).
-4. **View switch** — a 3-button segmented control (`role="radiogroup" aria-label="View"`), each a
-   34×34 icon button with `role="radio"` and `aria-checked`, in this order: **Compact list**
-   (`RowsIcon`, value `'compact'`, the **default**), **Small icons** (`GridIcon`, value `'grid'`) and
-   **Details** (`ListIcon`, value `'list'`). Selected one: accent background, white icon.
+4. **View switch** — a 2-button segmented control (`role="radiogroup" aria-label="View"`), each a
+   34×34 icon button with `role="radio"` and `aria-checked`, in this order: **Details** (`ListIcon`,
+   value `'details'`, the **default**: the table below, where a row opens to the project's details
+   card) and **Small icons** (`GridIcon`, value `'grid'`). Selected one: accent background, white icon.
+   (Earlier drafts had a third, card-per-row "Details" view; the table replaced it.)
 
 The type, sort and view choices are remembered in `localStorage` under one key
-`hdlboard.projectsPage` as `{"type":"all","sort":"newest","view":"compact"}`; wrap reads/writes in
+`hdlboard.projectsPage` as `{"type":"all","sort":"newest","view":"details"}` (a stored view of an earlier version, `compact` or `list`, reads as the default); wrap reads/writes in
 `try/catch` and fall back to the defaults. The search text is **not** remembered.
 
 ### 4.5 E — status line
@@ -266,7 +267,7 @@ export type ProjectLanguage = 'vhdl' | 'verilog';
 export type ProjectSource = 'local' | 'github';
 export type TypeFilter = 'all' | ProjectLanguage;
 export type SortOrder = 'newest' | 'oldest' | 'name';
-export type ProjectsView = 'list' | 'compact' | 'grid';
+export type ProjectsView = 'details' | 'grid';
 
 export interface CatalogFile {
   name: string;
@@ -642,8 +643,7 @@ Run with `scripts\start-windows.cmd` (browser) and in the Windows app build.
    matching file under it — for local projects, and for GitHub projects saved after § 7.
 7. **All types / VHDL / Verilog** filters; a project with both languages appears under both.
 8. **Newest first / Oldest first / Name A–Z** sort as § 5.4.
-9. The page first opens in the compact list. The Compact list / Small icons / Details switch (in that
-   order) changes the layout; type, sort and view survive a reload. In the compact list, clicking *Project name* or *Last saved* sorts and the Sort select follows.
+9. The page first opens in Details (the table). The Details / Small icons switch changes the layout; type, sort and view survive a reload. In the compact list, clicking *Project name* or *Last saved* sorts and the Sort select follows.
 10. **Open** on a local project in the Windows app opens it and **Save project** writes back into its
     folder; in Chrome after **Allow access** the same; in Firefox via **Choose folder…**.
 11. **Open** on a GitHub project opens it (as today from the dialog).

@@ -435,10 +435,6 @@ export function GridIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** A box with two lines across it: the Projects page's Compact list view. */
-export function RowsIcon(props: SVGProps<SVGSVGElement>) {
-  return <OutlineIcon paths={['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M21 9H3', 'M21 15H3']} {...props} />;
-}
 
 /** Three vertical dots: a row's menu. */
 export function MoreIcon(props: SVGProps<SVGSVGElement>) {
