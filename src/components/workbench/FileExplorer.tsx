@@ -207,7 +207,7 @@ export function FileExplorer({
           type="button"
           className="wb-files__upload"
           onClick={onUpload}
-          title="Upload File: add source files, or a .zip such as one Download All saved. Choose a project .json (with its files) to open a project."
+          title="Upload File: add source files or a .zip, or open a project from this computer or a URL"
         >
           <UploadIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
