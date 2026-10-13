@@ -891,17 +891,19 @@
   cursor: pointer;
 }
 
+/* At the row's left edge: › collapsed, ⌄ expanded. */
 .wb-projects__p-chevron {
   flex: none;
   width: 16px;
   height: 16px;
-  margin-left: auto;
-  color: #94a3b8;
+  margin-right: -2px;
+  color: #64748b;
+  transform: rotate(-90deg);
   transition: transform 0.15s;
 }
 
 .wb-projects__row.is-expanded .wb-projects__p-chevron {
-  transform: rotate(180deg);
+  transform: none;
 }
 
 .wb-projects__table tbody tr.is-expanded {
