@@ -330,17 +330,16 @@ function DetailsRow(props: CardProps) {
   );
 }
 
+/** No Open here: the row above it has one. */
 function DetailsCardContent(props: CardProps) {
-  const { item, opening, onOpen } = props;
+  const { item } = props;
   return (
     <>
       <Tile item={item} />
       <CardBody {...props}>
         <ItemMeta item={item} />
       </CardBody>
-      <Languages item={item} />
       <div className="wb-projects__item-actions">
-        <OpenButton item={item} opening={opening} onOpen={onOpen} look="outline" />
         <ExternalButton item={item} onShowInFolder={props.onShowInFolder} />
         <MenuButton item={item} onMenu={props.onMenu} />
       </div>
@@ -367,7 +366,7 @@ function GridCard(props: CardProps) {
   );
 }
 
-/** Who, when, and where it is stored. */
+/** Who, when, where it is stored and its languages. */
 function ItemMeta({ item }: { item: ProjectListItem }): ReactNode {
   return (
     <div className="wb-projects__item-meta">
@@ -382,6 +381,7 @@ function ItemMeta({ item }: { item: ProjectListItem }): ReactNode {
         </span>
       )}
       <SourceBadge item={item} />
+      <Languages item={item} />
     </div>
   );
 }
