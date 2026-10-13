@@ -163,7 +163,11 @@ export function ProjectsPage(props: ProjectsPageProps) {
             Showing {shown.length} of {items.length} projects
           </p>
 
-          <ErrorBanner message={errorMessage(gitHubProjects, localProjects)} onRetry={refresh} />
+          {noLocalFolder(localProjects) ? (
+            <NoFolderBanner onChooseFolder={localProjects.chooseFolder} />
+          ) : (
+            <ErrorBanner message={errorMessage(gitHubProjects, localProjects)} onRetry={refresh} />
+          )}
 
           <Results
             loading={loading}
@@ -262,6 +266,11 @@ function useFocusSearchOnOpen(searchRef: { current: HTMLInputElement | null }) {
     searchRef.current?.focus();
     return () => opener?.focus();
   }, [searchRef]);
+}
+
+/** The folder could not be read and none is chosen (say, the remembered one is gone): ask for one. */
+function noLocalFolder(localProjects: LocalProjects): boolean {
+  return localProjects.error !== null && localProjects.folderState === 'none';
 }
 
 function errorMessage(gitHubProjects: GitHubProjects, localProjects: LocalProjects): string | null {
@@ -425,6 +434,23 @@ function ErrorBanner({ message, onRetry }: { message: string | null; onRetry: ()
       <span>{message}</span>
       <button type="button" className="wb-projects__btn" onClick={onRetry}>
         Try again
+      </button>
+    </div>
+  );
+}
+
+/** No local projects folder to read: what it is for, and a button to choose one. */
+function NoFolderBanner({ onChooseFolder }: { onChooseFolder: () => void }) {
+  return (
+    <div className="wb-projects__error wb-projects__error--no-folder" role="alert">
+      <AlertIcon aria-hidden="true" />
+      <span className="wb-projects__error-text">
+        <strong>No local project folder is set</strong>
+        <span>Choose the folder on this computer that holds your projects, and they are listed here beside the ones on GitHub.</span>
+      </span>
+      <button type="button" className="wb-projects__btn is-primary" onClick={onChooseFolder}>
+        <FolderOpenIcon aria-hidden="true" />
+        Choose folder…
       </button>
     </div>
   );
