@@ -38,11 +38,6 @@ api.pathForFile = (file) => {
   }
 };
 
-// The Projects page: the projects folder and the project files in it (docs/project_browse_page.md § 6.2).
-api.listLocalProjects = () => ipcRenderer.invoke('hdlboard:list-local-projects');
-api.chooseProjectsFolder = () => ipcRenderer.invoke('hdlboard:choose-projects-folder');
-api.showInFolder = (filePath) => ipcRenderer.invoke('hdlboard:show-in-folder', String(filePath));
-
 // GitHub sign-in, kept encrypted for this Windows user until Sign out (docs/GITHUB.md).
 api.loadGitHubToken = () => ipcRenderer.invoke('hdlboard:load-github-token');
 api.saveGitHubToken = (token) => ipcRenderer.invoke('hdlboard:save-github-token', String(token));

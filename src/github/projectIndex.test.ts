@@ -25,18 +25,6 @@ describe('the project index', () => {
     expect(parseIndex(text).projects[0].updatedAt).toBe('');
   });
 
-  it('reads back the files of an entry, and an entry without them', () => {
-    const withFiles = { ...ENTRY, files: [{ name: 'a.vhd', description: 'An adder' }] };
-    expect(parseIndex(serializeIndex(withEntry(emptyIndex(), withFiles))).projects[0].files).toEqual(withFiles.files);
-    expect(parseIndex(serializeIndex(withEntry(emptyIndex(), ENTRY))).projects[0].files).toBeUndefined();
-  });
-
-  it('leaves out a files value that is broken instead of refusing the index', () => {
-    const { name, description, url, gistId } = ENTRY;
-    const text = JSON.stringify({ version: 1, projects: [{ name, description, url, gistId, files: [{ name: 5 }] }] });
-    expect(parseIndex(text).projects[0].files).toBeUndefined();
-  });
-
   it('refuses another format version', () => {
     expect(() => parseIndex(JSON.stringify({ version: 2, projects: [] }))).toThrow('"version" must be 1');
   });

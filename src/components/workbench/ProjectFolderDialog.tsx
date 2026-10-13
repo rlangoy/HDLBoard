@@ -70,7 +70,7 @@ export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onCh
         {onChooseInFolder
           ? `Click Choose project folder: it opens in the project file's folder, so just click Select Folder, and HDLBoard loads ${one ? 'it' : 'them'}.`
           : `Choose the folder the project file is in, and HDLBoard loads ${one ? 'it' : 'them'}.`}{' '}
-        Next time, select the project file together with its files (Ctrl+A) in Upload File, or open it from the folder's list in Open Project.
+        Next time, select the project file together with its files (Ctrl+A) in Upload File, or use Open Project › Choose project folder.
       </p>
       <input ref={inputRef} type="file" multiple hidden onChange={handleChange} tabIndex={-1} />
     </Dialog>

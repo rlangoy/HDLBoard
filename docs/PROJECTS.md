@@ -27,15 +27,11 @@ Opening a project **replaces the files in Files** with the project's files.
 
 ## Open a project
 
-There are five ways. All of them work in the browser version and in the Windows app, except opening by a file path, which only the Windows app can do.
+There are four ways. All of them work in the browser version and in the Windows app, except opening by a file path, which only the Windows app can do.
 
-### 0. Open Project: the Projects page
+### 1. Open Project: a URL or a path
 
-Click **Open Project** (the folder icon in the Files panel) or, signed in, **GitHub** at the top right. The **Projects page** lists the projects in your **projects folder** (and the folders directly inside it) and your projects on GitHub in one list: search them (names, descriptions, file names and file descriptions), filter by VHDL or Verilog, sort them, and switch between the compact list, small icons and details. Click **Open**. In the Windows app the projects folder is `Documents\HDLBoard Projects` until you click **Change…**; Chrome and Edge remember the folder you choose (and ask to allow access again in a later session); other browsers use the folder for that visit only. **Save project** writes an opened project back into its own folder. See [project_browse_page.md](project_browse_page.md).
-
-### 1. Open from a URL or a path
-
-Click **Open from a URL or path…** at the bottom of the Projects page and enter where the project file is:
+Click **Open Project** (the link icon in the Files panel, next to **+**) and enter where the project file is:
 
 | What you enter | Example | Browser | Windows app |
 |---|---|---|---|
@@ -116,7 +112,7 @@ Files that have a URL are saved as local copies too; the project file keeps thei
 
 ## Save projects on GitHub
 
-Sign in with **GitHub** (top right), and the project page's **Save to GitHub** keeps the project in a secret gist on your own account; the Projects page lists your projects and opens them on any computer. See [GITHUB.md](GITHUB.md).
+Sign in with **GitHub** (top right), and the project page's **Save to GitHub** keeps the project in a secret gist on your own account; the GitHub dialog lists your projects and opens them on any computer. See [GITHUB.md](GITHUB.md).
 
 ---
 

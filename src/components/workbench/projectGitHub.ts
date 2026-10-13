@@ -40,7 +40,6 @@ export function projectSnapshot(project: OpenProject, files: readonly SourceFile
       ...filesInProject(stored, files).map(({ name, content }) => ({ name, content })),
     ],
     listedNames: projectEntries(stored, fileNames).map((row) => row.name),
-    entries: projectEntries(stored, fileNames).map(({ name, description }) => ({ name, description })),
   };
 }
 
@@ -97,7 +96,7 @@ export function gistLinkFromUrl(projectUrl: string): GistLink | undefined {
 }
 
 /** A link that opens the project in HDLBoard for anyone who has it (`?project=`, docs/PROJECTS.md). */
-export function shareLink(pageUrl: string, link: Pick<GistLink, 'htmlUrl'>): string {
+export function shareLink(pageUrl: string, link: GistLink): string {
   const page = new URL(pageUrl);
   page.search = '';
   page.hash = '';

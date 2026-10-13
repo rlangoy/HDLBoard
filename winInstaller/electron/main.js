@@ -251,90 +251,6 @@ function registerLocalFileIpc() {
   });
 }
 
-/*
- * The Projects page (docs/project_browse_page.md § 6): the projects folder and the project
- * files in it and in the folders directly inside it. Only *.hdlboard.json files are read,
- * each at most MAX_PROJECT_FILE_BYTES, at most MAX_LISTED_PROJECTS of them.
- */
-const PROJECT_FILE_SUFFIX = '.hdlboard.json';
-const MAX_PROJECT_FILE_BYTES = 1024 * 1024;
-const MAX_LISTED_PROJECTS = 200;
-
-/** The folder chosen on the Projects page, else Documents\HDLBoard Projects. */
-function projectsFolder() {
-  const chosen = readJson(userSettingsPath()).projectsFolder;
-  return typeof chosen === 'string' && path.isAbsolute(chosen) ? chosen : path.join(app.getPath('documents'), 'HDLBoard Projects');
-}
-
-/** The project files in `folder` (not in its subfolders), each read, or why it was skipped. */
-function readProjectFilesIn(folder, found) {
-  let names;
-  try {
-    names = fs.readdirSync(folder).filter((name) => name.toLowerCase().endsWith(PROJECT_FILE_SUFFIX));
-  } catch (err) {
-    found.skipped.push({ path: folder, reason: String(err.message ?? err) });
-    return;
-  }
-  for (const name of names) {
-    if (found.projects.length >= MAX_LISTED_PROJECTS) {
-      found.truncated = true;
-      return;
-    }
-    const file = path.join(folder, name);
-    try {
-      const stat = fs.statSync(file);
-      if (!stat.isFile()) continue;
-      if (stat.size > MAX_PROJECT_FILE_BYTES) throw new Error('larger than 1 MB');
-      found.projects.push({ path: file, text: fs.readFileSync(file, 'utf8'), modifiedMs: stat.mtimeMs });
-    } catch (err) {
-      found.skipped.push({ path: file, reason: String(err.message ?? err) });
-    }
-  }
-}
-
-function listLocalProjects() {
-  const folder = projectsFolder();
-  fs.mkdirSync(folder, { recursive: true });
-  const found = { folder, projects: [], skipped: [], truncated: false };
-  readProjectFilesIn(folder, found);
-  // Symlinked folders are not followed: a link could lead anywhere.
-  const subfolders = fs.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-  for (const entry of subfolders) readProjectFilesIn(path.join(folder, entry.name), found);
-  return found;
-}
-
-function registerProjectsFolderIpc() {
-  ipcMain.handle('hdlboard:list-local-projects', (event) => {
-    fromApp(event);
-    return listLocalProjects();
-  });
-
-  ipcMain.handle('hdlboard:choose-projects-folder', async (event) => {
-    fromApp(event);
-    const picked = await dialog.showOpenDialog(mainWindow ?? undefined, {
-      title: 'Choose the folder with your HDLBoard projects',
-      defaultPath: projectsFolder(),
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    if (picked.canceled || picked.filePaths.length === 0) return null;
-    const file = userSettingsPath();
-    const settings = readJson(file);
-    settings.projectsFolder = picked.filePaths[0];
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}
-`, 'utf8');
-    return picked.filePaths[0];
-  });
-
-  ipcMain.handle('hdlboard:show-in-folder', (event, filePath) => {
-    fromApp(event);
-    const file = localFilePath(filePath);
-    if (!file.toLowerCase().endsWith(PROJECT_FILE_SUFFIX)) throw new Error(`not a project file: ${file}`);
-    shell.showItemInFolder(file);
-    return true;
-  });
-}
-
 /**
  * The GitHub sign-in (docs/GITHUB.md), kept so the student is not asked to sign in
  * at every start. Encrypted with safeStorage — on Windows that is DPAPI, so only
@@ -477,7 +393,6 @@ function registerGitHubTokenIpc() {
 
 function registerIpc(persistProjects) {
   registerLocalFileIpc();
-  registerProjectsFolderIpc();
   registerGitHubTokenIpc();
 
   ipcMain.handle('hdlboard:set-enabled', (event, value) => {

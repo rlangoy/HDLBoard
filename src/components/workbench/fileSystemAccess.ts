@@ -23,9 +23,7 @@ interface OpenFilePickerOptions {
 }
 
 interface DirectoryPickerOptions {
-  /** Where the picker opens; the browser remembers the last folder per `id`. */
-  startIn?: FileSystemHandle;
-  id?: string;
+  startIn: FileSystemHandle;
   mode: 'read';
 }
 
@@ -83,10 +81,9 @@ export function droppedFileHandles(dataTransfer: DataTransfer): Promise<FileHand
 
 /**
  * Asks for the folder the file is in, with the folder picker opened there, and reads
- * the files in it (not its subfolders). The folder comes back too: it can become the
- * Projects page's folder. Undefined when the student cancels.
+ * the files in it (not its subfolders). Undefined when the student cancels.
  */
-export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder: FileSystemDirectoryHandle; files: File[] } | undefined> {
+export async function pickFolderOf(file: FileSystemFileHandle): Promise<File[] | undefined> {
   let folder: FileSystemDirectoryHandle;
   try {
     folder = await pickers().showDirectoryPicker!({ startIn: file, mode: 'read' });
@@ -98,17 +95,7 @@ export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder
   for await (const entry of (folder as unknown as IterableDirectory).values()) {
     if (isFileHandle(entry)) files.push(await entry.getFile());
   }
-  return { folder, files };
-}
-
-/** The Projects page's Choose folder: a folder to list, read only. Undefined when cancelled. */
-export async function pickProjectsFolder(): Promise<FileSystemDirectoryHandle | undefined> {
-  try {
-    return await pickers().showDirectoryPicker!({ id: 'hdlboard-projects', mode: 'read' });
-  } catch (error) {
-    if (isCancel(error)) return undefined;
-    throw error;
-  }
+  return files;
 }
 
 function isFileHandle(handle: FileSystemHandle | null): handle is FileSystemFileHandle {

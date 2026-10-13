@@ -37,8 +37,6 @@ export interface ProjectSnapshot {
   files: TextFile[];
   /** Every file the project file lists, also those not loaded or stored at their own URL. */
   listedNames: readonly string[];
-  /** The listed files with their descriptions: what the project index keeps, for searching. */
-  entries: readonly { name: string; description: string }[];
 }
 
 export interface OpenedGistProject {
@@ -88,22 +86,7 @@ export class ProjectGists {
   ) {}
 
   async list(): Promise<IndexEntry[]> {
-    return newestFirst(await this.withFileNames(await this.index.listEntries()));
-  }
-
-  /**
-   * Entries saved before the index kept file names get the names in their gist (without
-   * descriptions), so a project's language is known; one listing of the user's gists, and
-   * only when some entry needs it. Nothing is written back: the next save stores them.
-   */
-  private async withFileNames(entries: IndexEntry[]): Promise<IndexEntry[]> {
-    if (entries.every((entry) => entry.files !== undefined)) return entries;
-    const namesByGist = new Map((await this.gists.listOwnGists()).map((gist) => [gist.id, gist.fileNames]));
-    return entries.map((entry) => {
-      const names = namesByGist.get(entry.gistId);
-      if (entry.files !== undefined || names === undefined) return entry;
-      return { ...entry, files: names.filter((name) => !isProjectFileName(name)).map((name) => ({ name, description: '' })) };
-    });
+    return newestFirst(await this.index.listEntries());
   }
 
   async open(gistId: string): Promise<OpenedGistProject> {
@@ -170,14 +153,7 @@ export class ProjectGists {
   }
 
   private indexEntryFor(snapshot: ProjectSnapshot, gist: Gist): Omit<IndexEntry, 'createdAt'> {
-    return {
-      name: snapshot.name,
-      description: snapshot.description,
-      url: gist.htmlUrl,
-      gistId: gist.id,
-      updatedAt: this.timestamp(),
-      files: snapshot.entries.map(({ name, description }) => ({ name, description })),
-    };
+    return { name: snapshot.name, description: snapshot.description, url: gist.htmlUrl, gistId: gist.id, updatedAt: this.timestamp() };
   }
 
   private timestamp(): string {

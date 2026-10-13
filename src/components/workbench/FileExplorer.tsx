@@ -6,7 +6,7 @@ import { cx } from '../board';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderOpenIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
+import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderZipIcon, LinkIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
 import './FileExplorer.css';
@@ -19,8 +19,6 @@ export interface FileExplorerProps {
   onNewFile: () => void;
   /** Open a project file by its URL or, in the Windows app, its path. */
   onOpenProject: () => void;
-  /** The Projects page is showing: the Open Project button looks pressed. */
-  projectsOpen?: boolean;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   /** Save one file to the user's disk, as it currently reads in the editor. */
@@ -93,7 +91,6 @@ export function FileExplorer({
   onUpload,
   onNewFile,
   onOpenProject,
-  projectsOpen = false,
   onRename,
   onDelete,
   onDownload,
@@ -220,10 +217,9 @@ export function FileExplorer({
           type="button"
           className="wb-files__open-project"
           onClick={onOpenProject}
-          aria-pressed={projectsOpen}
-          title="Open Project: your projects on this computer and on GitHub"
+          title="Open Project: open a project file by its URL (e.g. a GitHub gist) or, in the Windows app, its path"
         >
-          <FolderOpenIcon className="wb-files__action-icon" aria-hidden="true" />
+          <LinkIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Open Project</span>
         </button>
         <button
