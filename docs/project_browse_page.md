@@ -129,12 +129,12 @@ One row (wraps on narrow widths, § 4.8):
 3. **Sort** — native `<select aria-label="Sort by">`:
    `Newest first` (`'newest'`, default), `Oldest first` (`'oldest'`), `Name A–Z` (`'name'`).
 4. **View switch** — a 3-button segmented control (`role="radiogroup" aria-label="View"`), each a
-   34×34 icon button with `role="radio"` and `aria-checked`, in this order: **Details** (`ListIcon`,
-   value `'list'`), **Compact list** (`RowsIcon`, value `'compact'`) and **Small icons** (`GridIcon`,
-   value `'grid'`). Selected one: accent background, white icon.
+   34×34 icon button with `role="radio"` and `aria-checked`, in this order: **Compact list**
+   (`RowsIcon`, value `'compact'`, the **default**), **Small icons** (`GridIcon`, value `'grid'`) and
+   **Details** (`ListIcon`, value `'list'`). Selected one: accent background, white icon.
 
 The type, sort and view choices are remembered in `localStorage` under one key
-`hdlboard.projectsPage` as `{"type":"all","sort":"newest","view":"list"}`; wrap reads/writes in
+`hdlboard.projectsPage` as `{"type":"all","sort":"newest","view":"compact"}`; wrap reads/writes in
 `try/catch` and fall back to the defaults. The search text is **not** remembered.
 
 ### 4.5 E — status line
@@ -172,7 +172,7 @@ then a footer line.
 
 | Column | Width | Header | Cell |
 |--------|-------|--------|------|
-| Project name | 30 % | Sort button **Project name** | `CodeIcon` 20 px coloured by language (VHDL `--wb-accent-dark`, Verilog `--wb-success-dark`, both `#6d28d9`, none `#64748b`; `title` = `VHDL + Verilog` etc.), the name bold, one line with ellipsis, then the **Open now** chip for the open project. |
+| Project name | 30 % | Sort button **Project name** | The same project tile as the other views (§ 4.9 gradient by language, white `CodeIcon`), smaller: 30×30, radius 8, icon 17 px; `title` on the tile = `VHDL`, `Verilog`, `VHDL + Verilog` or `No source files`. Then the name bold, one line with ellipsis, then the **Open now** chip for the open project. |
 | Description | rest | `Description` | One line, ellipsis, muted; full text in `title`. While searching with a file hit (§ 5.3) it shows `counter.vhd — 4-bit counter with enable` instead, matches marked with `<mark>`. |
 | Stored | 104 px | `Stored` | The source badge (§ 4.6 table), with text. |
 | Last saved | 150 px | Sort button **Last saved** | `relativeTime(item.updatedAt)` (§ 5.2), e.g. `4 days ago`; `title` = full local date and time; `—` when unknown. One line, ellipsis. |
@@ -357,7 +357,7 @@ export function relativeTime(iso: string, now: number = Date.now()): string;
 8. `itemFromIndexEntry` without `files` gives `files: []`, `languages: []`.
 9. `itemFromProjectFile` with invalid JSON → `undefined`.
 10. `parseProjectsPagePrefs('{"view":"grid","sort":"bogus"}')` → `{type:'all', sort:'newest', view:'grid'}`;
-    `'{"view":"compact"}'` keeps `'compact'`; `'{"view":"table"}'` → `'list'`.
+    `parseProjectsPagePrefs(null)` → `{type:'all', sort:'newest', view:'compact'}`; `'{"view":"table"}'` → `'compact'`.
 11. `fileHit` returns the file for a file-only hit, `undefined` when the name matches.
 12. `relativeTime` with a fixed `now` (use `new Intl.RelativeTimeFormat('en', …)` output for the
     expected strings, or run the test with locale `en`): 4 days earlier → `4 days ago`; 9 days →
@@ -642,8 +642,8 @@ Run with `scripts\start-windows.cmd` (browser) and in the Windows app build.
    matching file under it — for local projects, and for GitHub projects saved after § 7.
 7. **All types / VHDL / Verilog** filters; a project with both languages appears under both.
 8. **Newest first / Oldest first / Name A–Z** sort as § 5.4.
-9. The Details / Compact list / Small icons switch changes the layout; type, sort and view survive a
-   reload. In the compact list, clicking *Project name* or *Last saved* sorts and the Sort select follows.
+9. The page first opens in the compact list. The Compact list / Small icons / Details switch (in that
+   order) changes the layout; type, sort and view survive a reload. In the compact list, clicking *Project name* or *Last saved* sorts and the Sort select follows.
 10. **Open** on a local project in the Windows app opens it and **Save project** writes back into its
     folder; in Chrome after **Allow access** the same; in Firefox via **Choose folder…**.
 11. **Open** on a GitHub project opens it (as today from the dialog).
