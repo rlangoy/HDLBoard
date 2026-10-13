@@ -26,8 +26,8 @@ export interface FolderFile {
 export interface FolderHandle extends PickedFolder {
   readonly kind: 'directory';
   entries(): AsyncIterable<[string, FolderFile | FolderHandle]>;
-  queryPermission?(descriptor: { mode: 'readwrite' }): Promise<PermissionState>;
-  requestPermission?(descriptor: { mode: 'readwrite' }): Promise<PermissionState>;
+  queryPermission?(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
+  requestPermission?(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
 }
 
 export interface SkippedFile {

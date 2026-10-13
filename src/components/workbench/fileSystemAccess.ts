@@ -81,9 +81,10 @@ export function droppedFileHandles(dataTransfer: DataTransfer): Promise<FileHand
 
 /**
  * Asks for the folder the file is in, with the folder picker opened there, and reads
- * the files in it (not its subfolders). Undefined when the student cancels.
+ * the files in it (not its subfolders). The folder comes back too: it can become the
+ * Projects page's folder. Undefined when the student cancels.
  */
-export async function pickFolderOf(file: FileSystemFileHandle): Promise<File[] | undefined> {
+export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder: FileSystemDirectoryHandle; files: File[] } | undefined> {
   let folder: FileSystemDirectoryHandle;
   try {
     folder = await pickers().showDirectoryPicker!({ startIn: file, mode: 'read' });
@@ -95,7 +96,7 @@ export async function pickFolderOf(file: FileSystemFileHandle): Promise<File[] |
   for await (const entry of (folder as unknown as IterableDirectory).values()) {
     if (isFileHandle(entry)) files.push(await entry.getFile());
   }
-  return files;
+  return { folder, files };
 }
 
 function isFileHandle(handle: FileSystemHandle | null): handle is FileSystemFileHandle {

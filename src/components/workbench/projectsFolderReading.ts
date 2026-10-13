@@ -44,8 +44,9 @@ export async function readRememberedFolder(
 ): Promise<RememberedFolderReading> {
   const folder = known ?? (await loadRemembered());
   if (folder === null) return { folder: null, reading: NO_FOLDER };
-  // A browser without queryPermission has no permission prompts: the handle is readable.
-  const permission = (await folder.queryPermission?.({ mode: 'readwrite' })) ?? 'granted';
+  // Read access is all a list needs (Save project asks for write access itself when it writes);
+  // a browser without queryPermission has no permission prompts, so the handle is readable.
+  const permission = (await folder.queryPermission?.({ mode: 'read' })) ?? 'granted';
   if (permission === 'denied') return { folder: null, reading: NO_FOLDER };
   if (permission === 'prompt') return { folder, reading: { outcome: null, folderState: 'needs-permission', folderLabel: folder.name } };
   return { folder, reading: { outcome: await scanFolder(folder), folderState: 'ready', folderLabel: folder.name } };
