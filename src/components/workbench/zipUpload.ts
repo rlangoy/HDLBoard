@@ -24,10 +24,37 @@ function isJunk(path: string): boolean {
   return path.startsWith('__MACOSX/') || baseName(path).startsWith('.');
 }
 
+/** A file taken out of a .zip: named by its base name, with its path in the archive. */
+export type ZipMember = File & { readonly zipPath: string };
+
 /** The files inside `archive`, named by their base name. Rejects if it is no readable ZIP. */
-export async function filesInZip(archive: Blob): Promise<File[]> {
+export async function filesInZip(archive: Blob): Promise<ZipMember[]> {
   const entries = await readZip(new Uint8Array(await archive.arrayBuffer()));
   return entries
     .filter((entry) => !isJunk(entry.path))
-    .map((entry) => new File([entry.data], baseName(entry.path), { type: 'text/plain' }));
+    .map((entry) => Object.assign(new File([entry.data], baseName(entry.path), { type: 'text/plain' }), { zipPath: entry.path.replace(/\\/g, '/') }));
+}
+
+/** Where a file was in its .zip, or undefined for one that did not come from one. */
+export function zipPathOf(file: File): string | undefined {
+  const path = (file as Partial<ZipMember>).zipPath;
+  return typeof path === 'string' ? path : undefined;
+}
+
+/**
+ * The project file among a .zip's files (docs/impl_project_structure.md § 6.7): the
+ * shallowest `.hdlboard.json`, so a project zipped inside a folder opens too. Undefined
+ * when the archive holds none.
+ */
+export function projectFileInZip<T extends ZipMember>(members: readonly T[]): T | undefined {
+  const depth = (member: T) => member.zipPath.split('/').length;
+  return members
+    .filter((member) => /\.hdlboard\.json$/i.test(member.name))
+    .sort((a, b) => depth(a) - depth(b) || a.zipPath.localeCompare(b.zipPath))[0];
+}
+
+/** `path` relative to the folder `folder` of the archive ('' is its top); undefined when it is outside it. */
+export function relativeInZip(folder: string, path: string): string | undefined {
+  if (folder === '') return path;
+  return path.toLowerCase().startsWith(`${folder.toLowerCase()}/`) ? path.slice(folder.length + 1) : undefined;
 }

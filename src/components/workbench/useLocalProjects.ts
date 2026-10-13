@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { desktopBridge } from './desktop';
 import type { FolderFile, FolderHandle, ItemSource, SkippedFile } from './localProjectScan';
 import type { ProjectListItem } from './projectCatalog';
-import type { ProjectSourceFile } from './projectFile';
+import type { LocalSourceFile } from './projectFile';
+import { storedLayout } from './projectLayout';
 import { NO_FOLDER, readChosenFolderFiles, readDesktopFolder, readRememberedFolder, type FolderReading, type FolderState } from './projectsFolderReading';
 import { loadProjectsFolder, saveProjectsFolder } from './projectsFolderStore';
 import { pickProjectsFolder } from './fileSystemAccess';
@@ -14,7 +15,7 @@ import { canPickFolder, type PickedFolder } from './projectSave';
 /** What opening a local project needs; the Workbench opens it the way its kind says (docs/project_browse_page.md § 8). */
 export type LocalOpenRequest =
   | { kind: 'path'; path: string }
-  | { kind: 'handle'; text: string; location: string; localFiles: ProjectSourceFile[]; folder: PickedFolder }
+  | { kind: 'handle'; text: string; location: string; localFiles: LocalSourceFile[]; folder: PickedFolder }
   | { kind: 'files'; projectFile: File; others: File[] };
 
 export type { FolderState } from './projectsFolderReading';
@@ -186,20 +187,48 @@ function chooseFolderWithInput(onChosen: (files: File[]) => void): void {
   input.click();
 }
 
+/**
+ * What opening a listed project needs. From a folder handle: the project file, and its
+ * files next to it and in its own `<project>/<source folder>/`, each with its path
+ * (docs/impl_project_structure.md § 6.8).
+ */
 async function openRequestFor(item: ProjectListItem, source: ItemSource): Promise<LocalOpenRequest> {
   if (source.kind === 'files') return { kind: 'files', projectFile: source.projectFile, others: source.others };
   const listed = new Set(item.files.map((file) => file.name.toLowerCase()));
   let text = '';
-  const localFiles: ProjectSourceFile[] = [];
+  const localFiles: LocalSourceFile[] = [];
   for await (const [, child] of source.folder.entries()) {
     if (child.kind !== 'file') continue;
     if (child.name === source.fileName) text = await (await child.getFile()).text();
-    else if (listed.has(child.name.toLowerCase())) localFiles.push(await sourceFileOf(child));
+    else if (listed.has(child.name.toLowerCase())) localFiles.push(await sourceFileOf(child, child.name));
   }
   if (text === '') throw new Error(`${source.fileName} could not be read.`);
+  const { projectDirectory, sourceDirectory } = storedLayout(text, source.fileName);
+  const inner = await subfolder(source.folder, [projectDirectory, sourceDirectory]);
+  if (inner) {
+    for await (const [, child] of inner.entries()) {
+      if (child.kind === 'file' && listed.has(child.name.toLowerCase())) {
+        localFiles.push(await sourceFileOf(child, `${projectDirectory}/${sourceDirectory}/${child.name}`));
+      }
+    }
+  }
   return { kind: 'handle', text, location: item.location, localFiles, folder: source.folder };
 }
 
-async function sourceFileOf(child: FolderFile): Promise<ProjectSourceFile> {
-  return { name: child.name, content: await (await child.getFile()).text() };
+/** The folder at `parts` inside `folder`, or null when it is not there. Names are matched ignoring case. */
+async function subfolder(folder: FolderHandle, parts: readonly string[]): Promise<FolderHandle | null> {
+  let current: FolderHandle = folder;
+  for (const part of parts) {
+    let next: FolderHandle | null = null;
+    for await (const [, child] of current.entries()) {
+      if (child.kind === 'directory' && child.name.toLowerCase() === part.toLowerCase()) next = child;
+    }
+    if (!next) return null;
+    current = next;
+  }
+  return current;
+}
+
+async function sourceFileOf(child: FolderFile, path: string): Promise<LocalSourceFile> {
+  return { name: child.name, content: await (await child.getFile()).text(), path };
 }

@@ -14,9 +14,11 @@
  */
 
 import { fetchText, type FetchFn } from '../../project/fetchText';
-import { fileNameProblem, isProjectFileName, nameKey, sameFileName } from '../../project/fileName';
+import { fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
 import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../project/parseProject';
-import { PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
+import { DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
+import { diskPath } from '../../project/resolveSource';
+import { projectDirectoryOf } from './projectLayout';
 import { isHttpUrl, urlProblem } from '../../project/url';
 import { fingerprintOf } from '../../project/fingerprint';
 import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
@@ -32,6 +34,26 @@ export interface OpenProject {
   description: string;
   /** The project file's own name, e.g. `counter.hdlboard.json`. */
   fileName: string;
+  /**
+   * The folder inside the project folder that holds the project's files on local disk,
+   * `src` unless changed on the project page (docs/impl_project_structure.md D3). The
+   * project folder itself is not stored: it is always the project file name (projectLayout.ts).
+   */
+  sourceDirectory: string;
+  /**
+   * Where each file of the project is on local disk now, by nameKey, relative to the
+   * project file's folder: `fantasicleds/src/DE1_SoC.vhdl`, or `DE1_SoC.vhdl` for a flat
+   * project. Set when a file is read from a folder or saved to one; missing for a project
+   * that is not on disk (a gist, a URL, a new project) and for a file new since then.
+   */
+  onDisk?: Record<string, string>;
+  /** The project file's name on disk as last opened or saved there, so a rename is seen as a move (D11). */
+  onDiskFileName?: string;
+  /**
+   * Paths a save wrote before it failed (docs/impl_project_structure.md § 6.5): this
+   * project's own copies, so the next save writes over them without asking.
+   */
+  ownWrites?: string[];
   /** Where the project was opened from: a file name, a URL, or '' for a new project. */
   location: string;
   /** Every entry in project order. Entries of files in Files are kept in step with them (projectEntries). */
@@ -120,6 +142,8 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
     name: project.name,
     board: project.board,
     description: project.description,
+    projectDirectory: projectDirectoryOf(project),
+    sourceDirectory: project.sourceDirectory,
     files: projectEntries(project, fileNames).map(({ name, url, description }) => ({ name, url, description })),
   });
 }
@@ -183,6 +207,12 @@ export function projectFileNameError(fileName: string): string | undefined {
   return undefined;
 }
 
+/** Why the project's files cannot be kept in the folder `name`, or undefined if they can (§ 6.2). */
+export function sourceDirectoryError(name: string): string | undefined {
+  const problem = folderNameProblem(name);
+  return problem ? `The source folder is not usable: ${problem}.` : undefined;
+}
+
 /** Why a file entry's URL cannot be used, or undefined; an empty URL means "in the project folder". */
 export function entryUrlError(url: string): string | undefined {
   if (url.trim() === '') return undefined;
@@ -197,6 +227,7 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
     board: DEFAULT_KNOWN_BOARDS[0],
     description: NEW_PROJECT_DESCRIPTION,
     fileName: projectFileNameFor(name),
+    sourceDirectory: DEFAULT_SOURCE_DIRECTORY,
     location: '',
     entries: fileNames.map((fileName) => ({ name: fileName, url: '', description: '' })),
     unloaded: {},
@@ -214,7 +245,7 @@ export function startProject(fileNames: readonly string[]): OpenProject {
   return { ...newProject('', []), excluded: fileNames.map(nameKey) };
 }
 
-export type ProjectDetails = Partial<Pick<OpenProject, 'name' | 'board' | 'description' | 'fileName'>>;
+export type ProjectDetails = Partial<Pick<OpenProject, 'name' | 'board' | 'description' | 'fileName' | 'sourceDirectory'>>;
 
 /**
  * Edits the project's details. While a new project has never been saved and its file
@@ -260,6 +291,8 @@ export function withEntryRenamed(project: OpenProject, oldName: string, newName:
     ...project,
     entries: project.entries.map((entry) => (sameFileName(entry.name, oldName) ? { ...entry, name: newName } : entry)),
     ...(project.excluded ? { excluded: project.excluded.map((key) => (key === nameKey(oldName) ? nameKey(newName) : key)) } : {}),
+    // The renamed file has no place on disk yet: the old one is another file now.
+    ...withoutOnDisk(project, oldName),
   };
 }
 
@@ -269,7 +302,29 @@ export function withEntryRemoved(project: OpenProject, name: string): OpenProjec
   delete unloaded[nameKey(name)];
   const entries = project.entries.filter((entry) => !sameFileName(entry.name, name));
   const excluded = project.excluded?.filter((key) => key !== nameKey(name));
-  return { ...project, entries, unloaded, ...(excluded ? { excluded } : {}) };
+  return { ...project, entries, unloaded, ...(excluded ? { excluded } : {}), ...withoutOnDisk(project, name) };
+}
+
+function withoutOnDisk(project: OpenProject, name: string): Pick<OpenProject, 'onDisk'> | Record<string, never> {
+  if (!project.onDisk || !(nameKey(name) in project.onDisk)) return {};
+  const onDisk = { ...project.onDisk };
+  delete onDisk[nameKey(name)];
+  return { onDisk };
+}
+
+/**
+ * Records a save to local disk: every file of the project is at its place now, and the
+ * project file has the name it was saved under (docs/impl_project_structure.md § 6.5).
+ */
+export function withOnDisk(project: OpenProject, onDisk: Record<string, string>, fileName: string): OpenProject {
+  const { ownWrites: _done, ...rest } = project;
+  return { ...rest, onDisk, onDiskFileName: fileName };
+}
+
+/** The project is not in a folder this page can write to (a new folder was picked, say): nothing is known on disk. */
+export function withoutDiskPlaces(project: OpenProject): OpenProject {
+  const { onDisk: _onDisk, onDiskFileName: _name, ownWrites: _own, ...rest } = project;
+  return rest;
 }
 
 /**
@@ -300,15 +355,28 @@ export const NOT_SOURCE_ENTRY = 'Not a VHDL or Verilog file (.vhd / .vhdl / .v /
 export const MISSING_LOCAL_FILE =
   'Not found: it is stored in the project folder. Choose the project folder, or upload it together with the project file.';
 
+/**
+ * A file chosen, dropped, unpacked or read with the project file. `path` is where it is,
+ * relative to the project file's folder (`fantasicleds/src/DE1_SoC.vhdl`), when that is
+ * known; a file without one is matched by its name only.
+ */
+export interface LocalSourceFile extends ProjectSourceFile {
+  path?: string;
+}
+
 /** Where the project file came from, and the files picked or dropped beside it. */
 export interface ProjectSource {
   text: string;
   /** The project file's own name, or URL. */
   location: string;
-  /** Files chosen together with the project file: the project folder. Matched by name, ignoring case. */
-  localFiles?: readonly ProjectSourceFile[];
-  /** Reads a file next to the project file (the Windows app, for a project opened by its path). */
-  readLocal?: (name: string) => Promise<string>;
+  /**
+   * Files chosen together with the project file: the project folder. Matched by path
+   * first (the project's source folder, then next to the project file), then by name,
+   * ignoring case. Only this project's files: the caller leaves out other projects' folders.
+   */
+  localFiles?: readonly LocalSourceFile[];
+  /** Reads a file by its path relative to the project file's folder (the Windows app, for a project opened by its path). */
+  readLocal?: (relativePath: string) => Promise<string>;
   fetch?: FetchFn;
   /** The gist the project was opened from, through the GitHub API. */
   gist?: ProjectGistLink;
@@ -320,45 +388,93 @@ export interface OpenedProject {
   files: ProjectSourceFile[];
 }
 
+/** A file found for an entry, and where it was on disk when that is known. */
+interface Found {
+  content: string;
+  path?: string;
+}
+
+/**
+ * Finds an entry's file among the local files, or on disk (docs/impl_project_structure.md
+ * § 6.4): in the project's source folder first, then next to the project file. Undefined
+ * when it is in neither; `readError` says why reading it failed.
+ */
+async function findLocal(
+  name: string,
+  candidates: readonly string[],
+  source: ProjectSource,
+  byPath: ReadonlyMap<string, LocalSourceFile>,
+  byName: ReadonlyMap<string, LocalSourceFile>,
+): Promise<{ found?: Found; readError?: string }> {
+  for (const path of candidates) {
+    const file = byPath.get(nameKey(path));
+    if (file) return { found: { content: file.content, path: file.path } };
+  }
+  const named = byName.get(nameKey(name));
+  if (named) return { found: { content: named.content, ...(named.path !== undefined ? { path: named.path } : {}) } };
+  if (!source.readLocal) return {};
+  let readError: string | undefined;
+  for (const path of candidates) {
+    try {
+      return { found: { content: await source.readLocal(path), path } };
+    } catch (error) {
+      readError ??= (error as Error).message;
+    }
+  }
+  return { readError };
+}
+
 /**
  * Opens a project file (§ 6.2): parses and validates it (throws ProjectError when it
  * cannot be opened at all), then reads every entry — from its URL when it has one,
  * else from the files chosen with it — without giving up on the others when one fails.
+ * Read from a folder, each file is looked for in the project's source folder first and
+ * next to the project file second; where it was found is kept in `onDisk`.
  */
 export async function openProject(source: ProjectSource): Promise<OpenedProject> {
   const { project, board, warnings, skipped } = parseProject(source.text);
-  const local = new Map((source.localFiles ?? []).map((file) => [nameKey(file.name), file.content]));
+  const localFiles = source.localFiles ?? [];
+  const byPath = new Map(localFiles.filter((file) => file.path !== undefined).map((file) => [nameKey(file.path!), file]));
+  // By name: a file without a path, else the shallowest one with that name.
+  const byName = new Map<string, LocalSourceFile>();
+  const depth = (file: LocalSourceFile) => (file.path === undefined ? 0 : file.path.split('/').length);
+  for (const file of [...localFiles].sort((a, b) => depth(a) - depth(b))) {
+    if (!byName.has(nameKey(file.name))) byName.set(nameKey(file.name), file);
+  }
   const fetchFn = source.fetch ?? fetch;
+  const fileName = projectFileName(source.location, project.name);
+  // Where the project file says its files are; its folder is found by its own name when it does not say (§ 3.2).
+  const storedFolder = project.projectDirectory ?? projectFolderName(fileName);
+  const sourceDirectory = project.sourceDirectory ?? DEFAULT_SOURCE_DIRECTORY;
+  const candidatesFor = (name: string) => [diskPath(storedFolder, sourceDirectory, name), name];
+  const fromUrl = isHttpUrl(source.location);
 
   const results = await Promise.all(
-    project.files.map(async (entry): Promise<{ entry: ProjectFileEntry; content?: string; problem?: string }> => {
+    project.files.map(async (entry): Promise<{ entry: ProjectFileEntry; content?: string; problem?: string; path?: string }> => {
       const refusal = entryFileRefusal(entry.name);
       if (refusal) return { entry, problem: refusal };
-      // A file handed over with the project (chosen beside it, or read from its gist) is used as it is.
-      const given = entry.url === '' ? local.get(nameKey(entry.name)) : undefined;
-      if (given !== undefined) return { entry, content: given };
-      if (entry.url === '' && isHttpUrl(source.location)) {
-        // A project opened from a URL: its folder is the URL's folder (§ 5).
-        try {
-          return { entry, content: await fetchText(new URL(entry.name, source.location).toString(), fetchFn) };
-        } catch (error) {
-          return { entry, problem: (error as Error).message };
-        }
-      }
       if (entry.url === '') {
-        if (!source.readLocal) return { entry, problem: MISSING_LOCAL_FILE };
-        try {
-          return { entry, content: await source.readLocal(entry.name) };
-        } catch (error) {
-          return { entry, problem: `Not found next to the project file: ${(error as Error).message}` };
+        // A file handed over with the project (chosen beside it, or read from its gist), or read from its folder.
+        const { found, readError } = await findLocal(entry.name, candidatesFor(entry.name), source, byPath, byName);
+        if (found) return { entry, ...found };
+        if (fromUrl) {
+          // A project opened from a URL: its folder is the URL's folder, flat (§ 5, D6).
+          try {
+            return { entry, content: await fetchText(new URL(entry.name, source.location).toString(), fetchFn) };
+          } catch (error) {
+            return { entry, problem: (error as Error).message };
+          }
         }
+        if (!source.readLocal) return { entry, problem: MISSING_LOCAL_FILE };
+        return { entry, problem: `Not found in ${storedFolder}/${sourceDirectory} or next to the project file: ${readError ?? 'no such file'}` };
       }
+      // A file with its own URL is downloaded; its saved copy, if there is one, tells where it is on disk.
+      const copy = fromUrl ? {} : await findLocal(entry.name, candidatesFor(entry.name), source, byPath, byName);
       try {
-        return { entry, content: await fetchText(entry.url, fetchFn) };
+        return { entry, content: await fetchText(entry.url, fetchFn), ...(copy.found?.path !== undefined ? { path: copy.found.path } : {}) };
       } catch (error) {
         // A copy picked from the project folder stands in for a download that failed.
-        const copy = local.get(nameKey(entry.name));
-        if (copy !== undefined) return { entry, content: copy };
+        if (copy.found) return { entry, ...copy.found };
         return { entry, problem: (error as Error).message };
       }
     }),
@@ -366,17 +482,22 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
 
   const unloaded: Record<string, string> = {};
   const files: ProjectSourceFile[] = [];
-  for (const { entry, content, problem } of results) {
+  const onDisk: Record<string, string> = {};
+  for (const { entry, content, problem, path } of results) {
     if (content === undefined) unloaded[nameKey(entry.name)] = problem ?? 'Not loaded.';
     else files.push({ name: entry.name, content });
+    if (content !== undefined && path !== undefined) onDisk[nameKey(entry.name)] = path;
   }
+  const onFolder = Object.keys(onDisk).length > 0;
 
   const opened: OpenProject = {
     version: project.version,
     name: project.name,
     board,
     description: project.description,
-    fileName: projectFileName(source.location, project.name),
+    fileName,
+    sourceDirectory,
+    ...(onFolder ? { onDisk, onDiskFileName: fileName } : {}),
     location: source.location,
     entries: project.files,
     unloaded,
@@ -432,12 +553,23 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     r.savedFiles && typeof r.savedFiles === 'object' && Object.values(r.savedFiles).every((value) => typeof value === 'string')
       ? (r.savedFiles as Record<string, string>)
       : undefined;
+  // A workspace stored before project folders existed has none: `src`, and nothing known on disk.
+  const sourceDirectory =
+    typeof r.sourceDirectory === 'string' && folderNameProblem(r.sourceDirectory) === null ? r.sourceDirectory : DEFAULT_SOURCE_DIRECTORY;
+  const onDisk =
+    r.onDisk && typeof r.onDisk === 'object' && Object.values(r.onDisk).every((value) => typeof value === 'string')
+      ? (r.onDisk as Record<string, string>)
+      : undefined;
+  const onDiskFileName = typeof r.onDiskFileName === 'string' ? r.onDiskFileName : undefined;
   return {
     version: r.version,
     name: r.name as string,
     board: r.board as string,
     description: r.description as string,
     fileName: r.fileName as string,
+    sourceDirectory,
+    ...(onDisk ? { onDisk } : {}),
+    ...(onDiskFileName !== undefined ? { onDiskFileName } : {}),
     location: r.location as string,
     entries: entries.map(({ name, url, description }) => ({ name, url, description })),
     unloaded: unloaded as Record<string, string>,

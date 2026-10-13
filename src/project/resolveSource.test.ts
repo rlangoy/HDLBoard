@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { baseName, fileNameProblem, sameFileName } from './fileName';
-import { resolveSource } from './resolveSource';
+import { diskPath, resolveSource } from './resolveSource';
 import { selectProjectFile } from './selectProjectFile';
 import { entry } from './testHelpers';
 
@@ -74,5 +74,11 @@ describe('selectProjectFile', () => {
 
   it('never treats the sync sidecar as a project file', () => {
     expect(selectProjectFile(['.hdlboard-sync.json'])).toEqual({ kind: 'none' });
+  });
+});
+
+describe('diskPath', () => {
+  it('joins the project folder, the source folder and the name with "/"', () => {
+    expect(diskPath('fantasicleds', 'src', 'DE1_SoC.vhdl')).toBe('fantasicleds/src/DE1_SoC.vhdl');
   });
 });

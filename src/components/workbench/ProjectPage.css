@@ -737,3 +737,31 @@ button.wb-project__file:hover {
   width: 16px;
   height: 16px;
 }
+
+/* Project folder and Source folder (docs/impl_project_structure.md § 7). */
+.wb-project__folder {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--wb-text-muted);
+}
+
+/* What the next save does to the files on disk. */
+.wb-project__layout-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--wb-text);
+}
+
+/* A folder the last save emptied, offered for removal. */
+.wb-project__emptied {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}

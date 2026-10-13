@@ -24,6 +24,7 @@ import {
   MISSING_LOCAL_FILE,
   entryUrlError,
   projectFileBase,
+  sourceDirectoryError,
   projectFileNameError,
   projectFileNameFromBase,
   type OpenProject,
@@ -31,6 +32,7 @@ import {
   type ProjectEntryRow,
 } from './projectFile';
 import { ScrollArea } from './ScrollArea';
+import { pendingLayoutChange, projectDirectoryOf, sourceFolderOf } from './projectLayout';
 import './ProjectPage.css';
 
 export interface ProjectPageProps {
@@ -55,6 +57,9 @@ export interface ProjectPageProps {
   onSave: () => void;
   /** Where Save project writes, for its tooltip. */
   saveHint: string;
+  /** Folders the last save emptied (docs/impl_project_structure.md D13): offered for removal, never removed unasked. */
+  emptiedFolders: readonly string[];
+  onRemoveFolder: (folder: string) => void;
   /** Stop working in a project: Files keeps its files. */
   onCloseProject: () => void;
   /** Back to the code. */
@@ -79,6 +84,9 @@ export function ProjectPage(props: ProjectPageProps) {
   const missingInFolder = rows.filter((row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE);
   const unloadedCount = rows.filter((row) => row.status === 'unloaded').length;
   const ids = useId();
+  // What is typed in Source folder and cannot be used: Save waits for a fix (AC-6).
+  const [folderError, setFolderError] = useState<string | undefined>(undefined);
+  const layoutChange = pendingLayoutChange(project);
   // Keyboard focus starts on the page, so Escape closes it and Tab walks its fields.
   const sectionRef = useRef<HTMLElement>(null);
   // A new project without a name starts in its name field instead (AutoTextArea autoFocus).
@@ -125,8 +133,8 @@ export function ProjectPage(props: ProjectPageProps) {
                   type="button"
                   className="wb-project__btn wb-project__btn--primary"
                   onClick={props.onSave}
-                  disabled={busy !== null}
-                  title={props.saveHint}
+                  disabled={busy !== null || folderError !== undefined}
+                  title={folderError ?? props.saveHint}
                 >
                   <SaveIcon aria-hidden="true" />
                   Save project
@@ -178,6 +186,27 @@ export function ProjectPage(props: ProjectPageProps) {
                   />
                 </dd>
               </div>
+              <div className="wb-project__fact">
+                <dt>Project folder</dt>
+                <dd className="wb-project__mono wb-project__folder" title="Named after the project file">
+                  {projectDirectoryOf(project)}
+                </dd>
+              </div>
+              <div className="wb-project__fact">
+                <dt>
+                  <label htmlFor={`${ids}-source`}>Source folder</label>
+                </dt>
+                <dd>
+                  <CommitField
+                    id={`${ids}-source`}
+                    value={project.sourceDirectory}
+                    validate={sourceDirectoryError}
+                    onCommit={(sourceDirectory) => onDetailsChange({ sourceDirectory })}
+                    onErrorChange={setFolderError}
+                    className="wb-project__mono"
+                  />
+                </dd>
+              </div>
               <div className="wb-project__fact wb-project__fact--wide">
                 <dt>
                   <label htmlFor={`${ids}-description`}>Description</label>
@@ -198,7 +227,20 @@ export function ProjectPage(props: ProjectPageProps) {
                 Location <span className="wb-project__mono">{project.location}</span>
               </p>
             )}
+            <LayoutHint project={project} change={layoutChange} />
           </section>
+
+          {props.emptiedFolders.map((folder) => (
+            <p key={folder} className="wb-project__card wb-project__emptied" role="status">
+              <span>
+                The old folder <span className="wb-project__mono">{folder}</span> is empty.
+              </span>
+              <button type="button" className="wb-project__btn" onClick={() => props.onRemoveFolder(folder)} disabled={busy !== null}>
+                <DeleteIcon aria-hidden="true" />
+                Remove folder
+              </button>
+            </p>
+          ))}
 
           {props.available.length > 0 && (
             <AvailableFilesCard names={props.available} onAdd={props.onAddFiles} hasFiles={rows.length > 0} />
@@ -272,9 +314,10 @@ export function ProjectPage(props: ProjectPageProps) {
           <p className="wb-project__note">
             <InfoIcon className="wb-project__note-icon" aria-hidden="true" />
             <span>
-              The project file lists the project's files, each with a description. A file without a URL is stored next to the
-              project file; one with a URL is downloaded from it. Save project writes the project file and all its files into one
-              folder. To open a project, use Open Project with its URL or path, or Upload File with the project file and its
+              The project file lists the project's files, each with a description. On this computer the files are stored in
+              the project folder next to the project file, in its source folder ({sourceFolderOf(project)}); a file with a URL
+              is downloaded from it. Save project writes the project file and all its files; Download All gives the same as a
+              .zip. To open a project, use Open Project with its URL or path, or Upload File with the project file and its
               files selected together. Files you add, rename or delete in Files are added, renamed or removed here too.
             </span>
           </p>
@@ -287,6 +330,43 @@ export function ProjectPage(props: ProjectPageProps) {
         </div>
       </ScrollArea>
     </section>
+  );
+}
+
+/**
+ * What the next save does to the files on disk (docs/impl_project_structure.md § 7): copy a
+ * flat project into its source folder, or move the files to a new one. Nothing is said
+ * about the flat files themselves: they are left alone (D9).
+ */
+function LayoutHint({ project, change }: { project: OpenProject; change: ReturnType<typeof pendingLayoutChange> }) {
+  const target = sourceFolderOf(project);
+  let text: ReactNode = null;
+  if (change.renamedOutsideFrom !== undefined) {
+    text = (
+      <>
+        The project file was renamed: its files move from <span className="wb-project__mono">{change.renamedOutsideFrom}</span> to{' '}
+        <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  } else if (change.move) {
+    text = (
+      <>
+        Files move to <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  } else if (change.copy) {
+    text = (
+      <>
+        Files are copied to <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  }
+  if (text === null) return null;
+  return (
+    <p className="wb-project__layout-hint" role="status">
+      <InfoIcon className="wb-project__note-icon" aria-hidden="true" />
+      <span>{text}</span>
+    </p>
   );
 }
 
@@ -476,6 +556,8 @@ interface CommitFieldProps {
   /** With `suffix`: the value as it is edited (without the suffix), and back. */
   toDraft?: (value: string) => string;
   fromDraft?: (draft: string) => string;
+  /** Told whenever what is typed turns invalid or valid again, so Save can wait for a fix. */
+  onErrorChange?: (error: string | undefined) => void;
 }
 
 const same = (text: string) => text;
@@ -496,11 +578,13 @@ function CommitField({
   suffix,
   toDraft = same,
   fromDraft = same,
+  onErrorChange,
 }: CommitFieldProps) {
   const [draft, setDraft] = useState(() => toDraft(value));
   useEffect(() => setDraft(toDraft(value)), [value, toDraft]);
   const next = fromDraft(draft);
   const error = next === value ? undefined : validate(next);
+  useEffect(() => onErrorChange?.(error), [error, onErrorChange]);
   const errorId = useId();
   const suffixId = useId();
   const inputRef = useRef<HTMLInputElement>(null);

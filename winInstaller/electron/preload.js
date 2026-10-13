@@ -27,6 +27,11 @@ const api = {
 // Always there: they do not depend on workspace storage being on.
 api.readLocalFile = (filePath) => ipcRenderer.invoke('hdlboard:read-local-file', String(filePath));
 api.writeLocalFile = (filePath, text) => ipcRenderer.invoke('hdlboard:write-local-file', String(filePath), String(text));
+// Save project's folder layout: a folder and a path relative to it (docs/impl_project_structure.md § 6.6).
+api.listFolderFiles = (base, relative) => ipcRenderer.invoke('hdlboard:list-folder-files', String(base), String(relative));
+api.deleteLocalFile = (base, relative) => ipcRenderer.invoke('hdlboard:delete-local-file', String(base), String(relative));
+api.folderIsEmpty = (base, relative) => ipcRenderer.invoke('hdlboard:folder-is-empty', String(base), String(relative));
+api.removeEmptyFolder = (base, relative) => ipcRenderer.invoke('hdlboard:remove-empty-folder', String(base), String(relative));
 // Where a chosen or dropped file is on disk, so a project file opened with Upload File
 // reads its files from its own folder without asking for it. '' for a file with no path
 // (one taken out of a .zip).

@@ -30,3 +30,12 @@ function joinPath(directory: string, name: string): string {
   const separator = directory.includes('\\') && !directory.includes('/') ? '\\' : '/';
   return `${directory}${separator}${name}`;
 }
+
+/**
+ * Where a project's file is kept on local disk, relative to the project file's folder:
+ * `<projectDirectory>/<sourceDirectory>/<name>` (docs/impl_project_structure.md § 6.3).
+ * Always `/`; the Windows app turns it into `\`.
+ */
+export function diskPath(projectDirectory: string, sourceDirectory: string, name: string): string {
+  return `${projectDirectory}/${sourceDirectory}/${name}`;
+}

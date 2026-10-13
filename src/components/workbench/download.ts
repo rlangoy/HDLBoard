@@ -58,17 +58,26 @@ export function projectZipName(now: Date = new Date()): string {
 }
 
 /**
- * Downloads every file in the project as one ZIP. An open project's file goes in at the
- * top, and names the archive, so uploading the .zip opens the project again.
+ * Downloads every file in Files as one ZIP, when no project is open. An open project
+ * downloads as its own archive instead (downloadProjectArchive).
  */
-export function downloadProjectZip(
-  files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[],
-  projectFile?: { name: string; text: string },
-): void {
+export function downloadProjectZip(files: Pick<VhdlFile, 'name' | 'folder' | 'content'>[]): void {
   const now = new Date();
-  const entries = projectZipEntries(files);
-  if (projectFile) entries.unshift({ path: projectFile.name, data: projectFile.text });
-  const zip = createZip(entries, now);
-  const name = projectFile ? `${projectFile.name.replace(/\.hdlboard\.json$/i, '')}.zip` : projectZipName(now);
+  downloadBlob(new Blob([createZip(projectZipEntries(files), now)], { type: 'application/zip' }), projectZipName(now));
+}
+
+/**
+ * A project's .zip (docs/impl_project_structure.md § 6.7): the project file at the top,
+ * each of the project's files at its path relative to it (`lab1/src/a.vhd`), exactly as
+ * Save project writes them (D25). Files in Files that are not in the project stay out (D20).
+ */
+export function projectArchiveEntries(projectFile: { name: string; text: string }, files: readonly { path: string; text: string }[]): ZipEntry[] {
+  return [{ path: projectFile.name, data: projectFile.text }, ...files.map(({ path, text }) => ({ path, data: text }))];
+}
+
+/** Downloads a project as its .zip, named after the project file: `lab1.zip`. */
+export function downloadProjectArchive(projectFile: { name: string; text: string }, files: readonly { path: string; text: string }[]): void {
+  const zip = createZip(projectArchiveEntries(projectFile, files), new Date());
+  const name = `${projectFile.name.replace(/\.hdlboard\.json$/i, '')}.zip`;
   downloadBlob(new Blob([zip], { type: 'application/zip' }), name);
 }

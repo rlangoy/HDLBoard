@@ -136,6 +136,8 @@ describe('the project follows Files', () => {
       name: 'Counter',
       board: 'DE1-SoC',
       description: '',
+      projectDirectory: 'counter',
+      sourceDirectory: 'src',
       files: [entry('a.vhd'), entry('gone.vhd')],
     });
   });
