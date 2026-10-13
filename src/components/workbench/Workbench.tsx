@@ -653,6 +653,12 @@ export function Workbench() {
   };
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
+  // Upload File: the Open project or files dialog, whose Select files is the picker below.
+  const showOpenDialog = () => {
+    setOpenProjectError(null);
+    setDialog('openProject');
+  };
+
   // Chrome and Edge's own picker keeps handles to the chosen files (fileSystemAccess.ts); elsewhere the file input.
   // The Windows app uses the file input too: a file from a handle has no path on disk
   // (pathForFile gives ''), and the path is what opens a project with its own folder.
@@ -826,8 +832,8 @@ export function Workbench() {
   });
 
   /**
-   * Open from a URL or path › Choose project folder: the folder's own files (not its subfolders'),
-   * its project file opened with the others as the files next to it (§ 6.4).
+   * Open project or files › Open project folder: the folder's own files (not its subfolders'),
+   * its project file opened with the others as the files next to it (§ 6.4), then the Projects page.
    */
   const handleProjectFolderOpened = async (chosen: File[]) => {
     const projectFile = projectFileInFolder(chosen);
@@ -838,6 +844,8 @@ export function Workbench() {
     setOpenProjectError(null);
     setDialog(null);
     await openProjectUpload(projectFile, filesDirectlyInFolder(chosen).filter((file) => file !== projectFile));
+    // Then the Projects page, where the opened project is listed.
+    setOverlay('projects');
   };
 
   const localProjects = useLocalProjects(overlay === 'projects');
@@ -1338,6 +1346,10 @@ export function Workbench() {
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
+          onSelectFiles={() => {
+            setDialog(null);
+            handleUploadClick();
+          }}
           onClose={() => setDialog(null)}
         />
       )}
@@ -1420,7 +1432,7 @@ export function Workbench() {
             <FileExplorer
               rows={rows}
               onSelect={handleOpenFile}
-              onUpload={handleUploadClick}
+              onUpload={showOpenDialog}
               onNewFile={handleNewFile}
               onOpenProject={() => setOverlay((shown) => (shown === 'projects' ? null : 'projects'))}
               projectsOpen={overlay === 'projects'}
@@ -1460,7 +1472,7 @@ export function Workbench() {
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (
-                  <EmptyProject onExamples={() => setOverlay('examples')} onNewFile={handleNewFile} onUpload={handleUploadClick} />
+                  <EmptyProject onExamples={() => setOverlay('examples')} onNewFile={handleNewFile} onUpload={showOpenDialog} />
                 )
               }
             />
@@ -1506,10 +1518,7 @@ export function Workbench() {
                 onShowProjectPage={() => setOverlay('project')}
                 onSignIn={() => setDialog('githubSignIn')}
                 onShowInFolder={showInFolder && ((path) => void showInFolder(path))}
-                onOpenFromUrl={() => {
-                  setOpenProjectError(null);
-                  setDialog('openProject');
-                }}
+                onOpenFromUrl={showOpenDialog}
                 onClose={() => setOverlay(null)}
               />
             )}

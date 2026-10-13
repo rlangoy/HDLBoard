@@ -24,8 +24,8 @@ export interface SettingsDialogProps {
 }
 
 /**
- * VHDL and/or Verilog: which examples the Examples pane opens with. At least one
- * stays ticked — the last one cannot be cleared.
+ * VHDL and/or Verilog: which examples the Examples pane opens with. Each box is
+ * ticked on its own; with neither, the pane opens asking for a language.
  */
 function LanguageSetting({ value, onChange }: { value: PreferredLanguages; onChange: (l: PreferredLanguages) => void }) {
   const toggle = (language: ExampleLanguage) => {
@@ -38,15 +38,12 @@ function LanguageSetting({ value, onChange }: { value: PreferredLanguages; onCha
     <fieldset className="wb-settings__group">
       <legend className="wb-settings__heading">Languages</legend>
       <div className="wb-settings__languages">
-        {EXAMPLE_LANGUAGES.map((language) => {
-          const isLastTicked = value.size === 1 && value.has(language);
-          return (
-            <label key={language} className="wb-settings__option" title={isLastTicked ? 'Keep at least one language' : undefined}>
-              <input type="checkbox" checked={value.has(language)} disabled={isLastTicked} onChange={() => toggle(language)} />
-              <strong>{LANGUAGE_LABEL[language]}</strong>
-            </label>
-          );
-        })}
+        {EXAMPLE_LANGUAGES.map((language) => (
+          <label key={language} className="wb-settings__option">
+            <input type="checkbox" checked={value.has(language)} onChange={() => toggle(language)} />
+            <strong>{LANGUAGE_LABEL[language]}</strong>
+          </label>
+        ))}
       </div>
       <span className="wb-settings__note">
         The languages you work in. Examples opens with these ticked; you can still change it there.

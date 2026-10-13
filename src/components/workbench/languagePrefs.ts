@@ -19,12 +19,14 @@ const STORAGE_KEY = 'hdlboard.languages.v1';
 
 const isLanguage = (v: unknown): v is ExampleLanguage => EXAMPLE_LANGUAGES.includes(v as ExampleLanguage);
 
-/** The stored languages; anything malformed, or none at all, falls back to both. */
+/**
+ * The stored languages: a stored list is the choice, an empty one too (both boxes cleared);
+ * nothing stored, or anything that is not a list, falls back to both.
+ */
 export function parsePreferredLanguages(json: string | null): PreferredLanguages {
   try {
     const raw: unknown = JSON.parse(json ?? 'null');
-    const languages = Array.isArray(raw) ? raw.filter(isLanguage) : [];
-    return languages.length > 0 ? new Set(languages) : DEFAULT_LANGUAGES;
+    return Array.isArray(raw) ? new Set(raw.filter(isLanguage)) : DEFAULT_LANGUAGES;
   } catch {
     return DEFAULT_LANGUAGES;
   }

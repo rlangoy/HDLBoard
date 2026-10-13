@@ -200,7 +200,7 @@ state, so at most one is open.
   the **"ABSOLUTELY NO WARRANTY — use it at your own risk"** notice. Opened
   from the header's About button, or by dispatching `ABOUT_EVENT` on
   `window`, which `<Workbench>` listens for.
-- **Settings** — *Languages* (VHDL and/or Verilog, at least one; the Examples
+- **Settings** — *Languages* (VHDL and Verilog, each ticked on its own; the Examples
   pane opens with these ticked and never changes them: `languagePrefs.ts`) and
   *Editor › Testbench split view* (`editorSplit.ts`), both in localStorage, which
   the desktop app keeps between launches too. With a host bridge present it also

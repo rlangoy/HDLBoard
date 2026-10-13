@@ -998,6 +998,10 @@
   height: 32px;
 }
 
+.wb-projects__p-actions .wb-projects__icon-btn.is-empty {
+  visibility: hidden;
+}
+
 .wb-projects__p-actions .wb-projects__icon-btn svg {
   width: 18px;
   height: 18px;

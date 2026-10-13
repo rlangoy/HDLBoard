@@ -152,7 +152,7 @@
   text-decoration: underline;
 }
 
-/* Open Project: Choose project folder, above the URL field. */
+/* Open project or files: Select files and Open project folder, above the URL field. */
 .wb-openproject__folder {
   display: flex;
   flex-direction: column;
@@ -161,6 +161,12 @@
   padding-bottom: 16px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-openproject__folder-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .wb-openproject__folder-btn {
