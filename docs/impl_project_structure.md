@@ -485,3 +485,27 @@ Review points not taken:
 - **Removing emptied folders automatically.** D13 was decided explicitly: emptied folders stay. Removing a folder the user may have put other things in is riskier than leaving an empty one. Since 1.2, the project page offers to remove a folder that a save emptied, but only on request (§ 7).
 - **A note after conversion that the flat files are no longer used.** D9 says the flat files are left alone, with no message about them. The hint before saving says only where the files are copied to.
 - **Storing `projectDirectory` and a layout status in `OpenProject`.** Both are derived instead (§ 6.1), so they can never disagree with the file name or with `onDisk`. They are just as easy to show and to test.
+
+---
+
+## 12. As built (branch `imp_project_structure`)
+
+Where the code differs from the sections above, and what is known not to be done.
+
+| Topic | As built |
+|---|---|
+| Helpers (§ 6.1) | `projectDirectoryOf`, `diskLayout`, `targetPathOf`, `sourceFolderOf`, `pendingLayoutChange`, `storedLayout` and `belongsToLayout` live in `projectLayout.ts`, tested in `projectLayout.test.ts` (with the opening tests of § 6.4). |
+| `planDiskSave` (§ 6.5) | Also returns `onDisk`, the places after the save. A save that fails partway records what it wrote in `OpenProject.ownWrites`, so the next save writes over those copies without asking; `withOnDisk` clears it. `runSavePlan` and `readExisting` (the two listings of § 6.6) are in the same file, against a `SaveDisk` interface. |
+| Disks (§ 6.6) | `projectSave.ts`: `folderHandleDisk` (Chrome, Edge) and `desktopDisk` (Windows app). The Windows app has one more call than planned, `folder-is-empty`, so emptied folders can be offered. |
+| Zip (§ 6.7) | Built by `projectArchiveEntries` / `downloadProjectArchive` in `download.ts`, tested in `zipUpload.test.ts` (not a new `download.test.ts`). The project file of a .zip is its **shallowest** `.hdlboard.json`, so a project zipped inside a folder opens too; paths are then relative to that file. |
+| Chosen files (§ 6.8) | `pathBeside` and `filesBesideProject` (`chosenFolder.ts`) tell where each chosen, dropped, unpacked or handle-read file is beside the project file, and leave other projects' folders out. |
+| Remove folder (§ 7) | After a folder is removed, its parent is offered too when it is empty now (the old project folder after a rename). |
+| Folder gone (§ 6.11) | Not built as a picker: in the Windows app `write-local-file` creates the folder again, so the save simply recreates it. |
+| Overwrite dialog (§ 7) | `OverwriteDialog.tsx`. |
+
+Known limits:
+
+- In Chrome and Edge, a project opened without a folder handle (Upload File, a .zip) and then saved into a **newly picked** folder that already holds it asks before overwriting its own files: nothing known about one folder is trusted for another (`withoutDiskPlaces`).
+- `ownWrites` is not kept with the Windows app's stored workspace: after a restart, the copies of a failed save are asked about once.
+- Tested in Chrome against the browser's private file system (OPFS), which is case-sensitive; AC-17 (case-only change) is covered by unit tests on a disk that ignores case, as Windows does.
+- The Windows app was not run; its new IPC handlers were run in Node against a temporary folder.

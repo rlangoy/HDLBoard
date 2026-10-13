@@ -64,15 +64,3 @@ export function pathInFolder(folder: string, name: string): string {
   const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\';
   return `${folder}${separator}${name.split('/').join(separator)}`;
 }
-
-/**
- * Where `path` is relative to `folder` (both full paths), with `/`; undefined when it is
- * not inside it. Case is ignored, as on Windows.
- */
-export function relativeToFolder(folder: string, path: string): string | undefined {
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
-  const root = norm(folder);
-  const full = norm(path);
-  if (!full.toLowerCase().startsWith(`${root.toLowerCase()}/`)) return undefined;
-  return full.slice(root.length + 1);
-}

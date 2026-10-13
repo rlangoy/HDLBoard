@@ -35,6 +35,8 @@ JSON, with the extension `.hdlboard.json` (e.g. `counter.hdlboard.json`).
 | `name` | string | yes | Short project name. |
 | `board` | string | yes | Name of the board the project targets (e.g. `"DE1-SoC"`). See 4.2. |
 | `description` | string | yes | Description of the overall project. Plain text, multi-line allowed (`\n`). |
+| `projectDirectory` | string | no | The folder next to the project file that holds the project's files **on local disk**: always the project file name without `.hdlboard.json`. Missing or invalid → that name. See [`impl_project_structure.md`](impl_project_structure.md). |
+| `sourceDirectory` | string | no | The folder inside `projectDirectory` for the HDL files on local disk. Missing or invalid → `src`. One folder name only. |
 | `files` | array | yes | List of project files (see 4.3). |
 
 ### 4.2 Board name
@@ -86,6 +88,8 @@ Where the content comes from:
 ```
 
 ## 5. File Resolution
+
+> **Local disk** (a folder in the Windows app, a folder in Chrome / Edge, a `.zip`): a file with an empty `url` is at `<projectDirectory>/<sourceDirectory>/<name>`, and only when it is not there, next to the project file (an older, flat project, copied into the folders on the next Save project). Gists, web addresses and `?project=` links stay flat as described below. See [`impl_project_structure.md`](impl_project_structure.md) § 4 and § 6.4.
 
 For each file entry:
 

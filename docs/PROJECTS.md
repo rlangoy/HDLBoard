@@ -10,6 +10,8 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
   "name": "4-bit Counter",
   "board": "DE1-SoC",
   "description": "Introductory exercise: a 4-bit counter driven by KEY0, shown on LEDR[3:0].",
+  "projectDirectory": "counter",
+  "sourceDirectory": "src",
   "files": [
     { "name": "counter.vhd",    "url": "", "description": "Design: 4-bit counter" },
     { "name": "counter_tb.vhd", "url": "", "description": "Testbench for the counter" },
@@ -18,8 +20,31 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
 }
 ```
 
-- A file with an **empty `url`** is stored in the same folder as the project file.
+- A file with an **empty `url`** is stored with the project (below).
 - A file with a **`url`** is downloaded from that address (`http://` or `https://`; a GitHub gist page works too).
+
+### Where the files are on this computer
+
+On your computer each project keeps its files in its own folder next to the project file: the **project folder**, named after the project file, and inside it the **source folder** (`src` unless you change it on the project page). Several projects can then share one folder, even with files of the same name:
+
+```text
+Labs/
+├── fantasicleds.hdlboard.json
+├── fantasicleds/src/
+│   ├── DE1_SoC.vhdl
+│   └── led_controller.vhdl
+├── not_so_fantasicleds.hdlboard.json
+└── not_so_fantasicleds/src/
+    ├── DE1_SoC.vhdl
+    └── led_controller.vhdl
+```
+
+- An **older project** with its files next to the project file still opens. **Save project** copies its files into the source folder; the old files stay where they are.
+- Change **Source folder** on the project page, or rename the project file, and the files **move** to the new folder when you save. A folder left empty stays; the project page offers **Remove folder**.
+- If a file of the same name is already where Save project would write, it asks before overwriting (**Cancel** saves nothing).
+- **GitHub gists, web addresses and `?project=` links stay flat**: all files side by side, as before. They keep the two folder names in the project file, so a project saved to your computer from GitHub lands in its folders.
+
+Details: [`impl_project_structure.md`](impl_project_structure.md).
 
 Opening a project **replaces the files in Files** with the project's files.
 
@@ -44,7 +69,7 @@ Click **Open from a URL or path…** at the bottom of the Projects page and ente
 | A project on the HDLBoard site itself | `projects/adder-and-counter/adder-and-counter.hdlboard.json` | ✓ | ✓ |
 | A file on this computer | `C:\Labs\lab1\lab1.hdlboard.json` (or `file:///C:/Labs/...`) | – | ✓ |
 
-The files listed without a URL are read from the folder the project file is in: next to it on the web server, in the gist, or in the folder on disk.
+The files listed without a URL are read from beside the project file: next to it on the web server or in the gist, and in its project and source folder on disk (or next to it, for an older project).
 
 HDLBoard ships with one example project, `projects/adder-and-counter/adder-and-counter.hdlboard.json`; click it in the dialog to fill it in.
 
@@ -69,7 +94,7 @@ In **Open Project**, click **Choose project folder…** and pick the folder that
 
 If you choose only the project file, HDLBoard asks for its folder at once, because a browser can read only the files you choose. In Chrome and Edge the folder picker opens in the project file's folder, so you just click **Select Folder**. Select the project file together with its files (Ctrl+A) and no question is asked.
 
-A browser cannot read a folder by its path, so select the files instead. Click **Upload File** and select the project file **together with its files** (Ctrl+A in the project folder selects them all). A `.zip` that **Download All** saved works too: it holds the project file and all its files.
+A browser cannot read a folder by its path, so select the files instead. Click **Upload File** and select the project file **together with its files** (Ctrl+A in the project folder selects them all). A `.zip` that **Download All** saved works too: it holds the project file and all its files in their folders.
 
 If a file is missing, the project page says which, and **Choose project folder…** reads it from the folder.
 
@@ -94,23 +119,24 @@ Files you rename or delete keep their description, or leave the project.
 The **project page** shows in place of the code. Open it from the project row at the top of the Files panel; close it with ✕ or Esc. A project opened from this computer (Upload File, drag and drop, Choose project folder, or a path in the Windows app) goes straight to the code and shows the first file of its list; the page opens by itself only when the project lists no files. Here you edit:
 
 - the project's name, board and description, and the project file's own name;
-- each file's description, and its URL (leave it empty for "stored next to the project file").
+- the **source folder** the files are kept in on this computer (the **project folder** is shown beside it; it always follows the project file name);
+- each file's description, and its URL (leave it empty for "stored with the project").
 
 Click a file name to show it in the editor. **Unsaved changes** shows until the project is saved.
 
 ## Save a project
 
-**Save project** writes the project file **and all its files** (only the project's, not other files in Files) into one folder, so that folder opens again as the same project:
+**Save project** writes the project file **and all its files** (only the project's, not other files in Files): the project file into a folder, its files into `<project folder>/<source folder>/` beside it, so that folder opens again as the same project:
 
 | How the project was opened | Where Save project writes |
 |---|---|
 | Windows app, by a file path, or a project file chosen or dropped from disk | Back into that folder, without asking |
 | Chrome, Edge, or the Windows app otherwise | Asks for a folder the first time, then saves there again without asking |
-| Other browsers (Firefox, Safari) | Downloads the project file and each file; keep them in one folder |
+| Other browsers (Firefox, Safari) | Downloads the project as one `.zip`, laid out the same way; unpack it to keep it |
 
 Files that have a URL are saved as local copies too; the project file keeps their URL.
 
-**Download All** in the Files panel saves the same files as one `.zip`.
+**Download All** in the Files panel saves the same as one `.zip`, in every browser and the Windows app: the project file at the top, its files in their folders.
 
 ---
 

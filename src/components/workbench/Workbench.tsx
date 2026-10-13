@@ -68,7 +68,7 @@ import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, type FileHandle
 import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, localProjectPath, parseProjectLocation, pathInFolder } from './projectLocation';
 import { canPickFolder, desktopDisk, folderHandleDisk, pickSaveFolder, type DesktopFiles, type PickedFolder } from './projectSave';
 import { planDiskSave, readExisting, runSavePlan, SaveWriteError, type SaveDisk } from './projectSavePlan';
-import { samePath, sourceFolderOf, storedLayout, targetPathOf } from './projectLayout';
+import { folderOfRelative, samePath, sourceFolderOf, storedLayout, targetPathOf } from './projectLayout';
 import { OverwriteDialog } from './OverwriteDialog';
 import {
   MISSING_LOCAL_FILE,
@@ -1175,6 +1175,11 @@ export function Workbench() {
     try {
       await disk.removeEmptyFolder(folder);
       appendLog(`Removed the empty folder ${folder}.`, 'success');
+      // The old project folder can be empty now too (after a rename): offered the same way.
+      const parent = folderOfRelative(folder);
+      if (parent !== '' && (await disk.isEmptyFolder(parent).catch(() => false))) {
+        setEmptiedFolders((left) => (left.includes(parent) ? left : [...left, parent]));
+      }
     } catch (err) {
       appendLog(`Did not remove ${folder}: ${errorText(err)}`, 'error');
     }

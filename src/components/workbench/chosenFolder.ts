@@ -16,7 +16,7 @@ export interface ChosenFile {
   webkitRelativePath: string;
 }
 
-/** The files in the chosen folder itself, not in its subfolders (a project is flat, § 5). */
+/** The files in the chosen folder itself, not in its subfolders: where its project file is looked for (§ 6.4). */
 export function filesDirectlyInFolder<T extends ChosenFile>(files: readonly T[]): T[] {
   return files.filter((file) => (file.webkitRelativePath || file.name).split('/').length <= 2);
 }
