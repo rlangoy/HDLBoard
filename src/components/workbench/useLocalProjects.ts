@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { desktopBridge } from './desktop';
-import type { FolderFile, FolderHandle, ItemSource, SkippedFile } from './localProjectScan';
+import { emptyOutcome, scanFolder, type FolderFile, type FolderHandle, type ItemSource, type ScanOutcome, type SkippedFile } from './localProjectScan';
 import type { ProjectListItem } from './projectCatalog';
 import type { LocalSourceFile } from './projectFile';
 import { storedLayout } from './projectLayout';
@@ -53,6 +53,14 @@ export interface LocalProjects {
   adoptFolder(folder: FolderHandle): void;
   /** The same for browsers without folder handles: the files a folder input chose. */
   adoptFolderFiles(files: readonly File[]): void;
+  /**
+   * A folder the student chose to open projects from (Open project folder): it becomes the
+   * projects folder, remembered where the browser can, and is read at once. Resolves to what
+   * it holds, so the caller can open its project.
+   */
+  openFolder(folder: FolderHandle): Promise<ScanOutcome>;
+  /** The same for browsers without folder handles: every file a folder input chose. */
+  openFolderFiles(files: readonly File[]): Promise<ScanOutcome>;
   /**
    * A folder Save project just wrote to, with access granted by its picker: it becomes the
    * projects folder unless the known one can be read and already holds it (adoptsSavedFolder),
@@ -173,6 +181,24 @@ export function useLocalProjects(active: boolean): LocalProjects {
     if (active) await scan();
   };
 
+  const openFolder = async (folder: FolderHandle): Promise<ScanOutcome> => {
+    folderHandle.current = folder;
+    setRemembered(await saveProjectsFolder(folder));
+    const outcome = await scanFolder(folder);
+    ++newestScan.current;
+    setReading({ outcome, folderState: 'ready', folderLabel: folder.name });
+    return outcome;
+  };
+
+  const openFolderFiles = async (files: readonly File[]): Promise<ScanOutcome> => {
+    chosenFiles.current = [...files];
+    setRemembered(false);
+    const next = await readChosenFolderFiles(files);
+    ++newestScan.current;
+    setReading(next);
+    return next.outcome ?? emptyOutcome();
+  };
+
   const adoptFolderFiles = (files: readonly File[]) => {
     if (backend !== 'files' || chosenFiles.current !== null) return;
     chosenFiles.current = [...files];
@@ -195,6 +221,8 @@ export function useLocalProjects(active: boolean): LocalProjects {
     adoptFolder,
     adoptFolderFiles,
     adoptSavedFolder,
+    openFolder,
+    openFolderFiles,
   };
 }
 
@@ -216,7 +244,7 @@ function chooseFolderWithInput(onChosen: (files: File[]) => void): void {
  * files next to it and in its own `<project>/<source folder>/`, each with its path
  * (docs/impl_project_structure.md § 6.8).
  */
-async function openRequestFor(item: ProjectListItem, source: ItemSource): Promise<LocalOpenRequest> {
+export async function openRequestFor(item: ProjectListItem, source: ItemSource): Promise<LocalOpenRequest> {
   if (source.kind === 'files') return { kind: 'files', projectFile: source.projectFile, others: source.others };
   const listed = new Set(item.files.map((file) => file.name.toLowerCase()));
   let text = '';

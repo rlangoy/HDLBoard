@@ -64,7 +64,7 @@ import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } f
 import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
-import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, type FileHandles } from './fileSystemAccess';
+import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, pickProjectFolder, type FileHandles } from './fileSystemAccess';
 import { PATH_NEEDS_DESKTOP, folderOfPath, isFilePath, localProjectPath, parseProjectLocation, pathInFolder } from './projectLocation';
 import { canPickFolder, desktopDisk, folderHandleDisk, pickSaveFolder, type DesktopFiles, type PickedFolder } from './projectSave';
 import { planDiskSave, readExisting, runSavePlan, SaveWriteError, type SaveDisk } from './projectSavePlan';
@@ -108,15 +108,15 @@ import { GitHubSignInDialog } from './GitHubSignInDialog';
 import { ProjectsPage } from './ProjectsPage';
 import { openProjectInfo } from './ProjectsAccount';
 import { isSameProject, type ProjectListItem } from './projectCatalog';
-import type { FolderHandle } from './localProjectScan';
-import { useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
+import type { FolderHandle, ScanOutcome } from './localProjectScan';
+import { openRequestFor, useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
 import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
 import { useGitHub } from './useGitHub';
 import { useGitHubProjects } from './useGitHubProjects';
 import { sameFileName } from '../../project/fileName';
-import { filesBesideProject, pathBeside, projectFileInFolder, type Placed, type TaggedFile } from './chosenFolder';
+import { filesBesideProject, pathBeside, type Placed, type TaggedFile } from './chosenFolder';
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
@@ -869,20 +869,42 @@ export function Workbench() {
   });
 
   /**
-   * Open project or files › Open project folder: the folder's own files (not its subfolders'),
-   * its project file opened with the others as the files next to it (§ 6.4), then the Projects page.
+   * Open project or files › Open project folder, once the folder is read: it is the
+   * projects folder now, and the Projects page lists every project in it (and the folders
+   * directly inside it). A folder with exactly one project file of its own opens that project
+   * too; with several, the student picks one from the list.
    */
-  const handleProjectFolderOpened = async (chosen: File[]) => {
-    const projectFile = projectFileInFolder(chosen);
-    if (!projectFile) {
+  const showOpenedFolder = async (outcome: ScanOutcome) => {
+    if (outcome.items.length === 0) {
       setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
       return;
     }
     setOpenProjectError(null);
     setDialog(null);
-    await openProjectUpload(projectFile, chosen.filter((file) => file !== projectFile));
-    // Then the Projects page, where the opened project is listed.
+    // `folder/name.hdlboard.json`: a project file in the folder itself, not one folder down.
+    const own = outcome.items.filter((item) => item.location.split('/').length === 2);
+    const source = own.length === 1 ? outcome.sources.get(own[0].key) : undefined;
+    if (source) {
+      const error = await openLocalProject(await openRequestFor(own[0], source)).catch((err: unknown) => errorText(err));
+      if (error) appendLog(`Project not opened: ${own[0].name}: ${error}`, 'error');
+    }
     setOverlay('projects');
+  };
+
+  /** Open project folder with a browser folder input (Firefox, Safari): every file of the folder. */
+  const handleProjectFolderOpened = async (chosen: File[]) => {
+    await showOpenedFolder(await localProjects.openFolderFiles(chosen));
+  };
+
+  /** Open project folder in Chrome and Edge: the folder itself, kept as the projects folder with access to save into it. */
+  const handleChooseProjectFolder = async () => {
+    try {
+      const folder = await pickProjectFolder();
+      if (!folder) return;
+      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle));
+    } catch (err) {
+      setOpenProjectError(errorText(err));
+    }
   };
 
   const localProjects = useLocalProjects(overlay === 'projects');
@@ -1488,6 +1510,7 @@ export function Workbench() {
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
+          onChooseFolder={canPickFolder() && !desktopBridge()?.listLocalProjects ? () => void handleChooseProjectFolder() : undefined}
           onSelectFiles={() => {
             setDialog(null);
             handleUploadClick();

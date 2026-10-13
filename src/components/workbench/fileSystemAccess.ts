@@ -28,7 +28,7 @@ interface DirectoryPickerOptions {
   /** Where the picker opens; the browser remembers the last folder per `id`. */
   startIn?: FileSystemHandle;
   id?: string;
-  mode: 'read';
+  mode: 'read' | 'readwrite';
 }
 
 interface PickerWindow {
@@ -116,6 +116,20 @@ async function filesIn(folder: FileSystemDirectoryHandle, prefix: string): Promi
     if (isFileHandle(entry)) files.push(tagPath(await entry.getFile(), prefix === '' ? entry.name : `${prefix}/${entry.name}`));
   }
   return files;
+}
+
+/**
+ * Open project or files › Open project folder (Chrome, Edge): a folder that holds projects,
+ * with access to save into it too, so neither listing it on the Projects page nor Save project
+ * asks again in this visit. Undefined when cancelled.
+ */
+export async function pickProjectFolder(): Promise<FileSystemDirectoryHandle | undefined> {
+  try {
+    return await pickers().showDirectoryPicker!({ id: 'hdlboard-projects', mode: 'readwrite' });
+  } catch (error) {
+    if (isCancel(error)) return undefined;
+    throw error;
+  }
 }
 
 /** The Projects page's Choose folder: a folder to list, read only. Undefined when cancelled. */

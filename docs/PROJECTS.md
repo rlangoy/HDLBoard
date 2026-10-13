@@ -88,7 +88,7 @@ This is the easiest way to hand out an exercise: put the link on the course page
 
 ### 3. Choose project folder: from this computer
 
-In **Open Project**, click **Choose project folder…** and pick the folder that holds the `.hdlboard.json` file. The project opens with all its files. This works in every browser and in the Windows app. (A browser cannot read the files next to one chosen file, so choosing only the project file leaves its files "Not found"; choosing the folder avoids that.)
+In **Upload File**, click **Open project folder…** and pick the folder that holds the `.hdlboard.json` file (or several). The folder becomes your projects folder and the Projects page lists every project in it and in the folders directly inside it; a folder with just one project opens it at once. In Chrome and Edge the folder is remembered, with access to save into it, so Open Project lists it again without asking (until a new browser session). This works in every browser and in the Windows app. (A browser cannot read the files next to one chosen file, so choosing only the project file leaves its files "Not found"; choosing the folder avoids that.)
 
 ### Upload File: from this computer, in a browser
 

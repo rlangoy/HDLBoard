@@ -2,31 +2,11 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * A folder the student chose in a browser (`<input webkitdirectory>`): every file in
- * it and its subfolders, each with its path from the chosen folder in
- * `webkitRelativePath`, e.g. `test_s/DE1_SoC.vhdl`. Pure: no DOM.
+ * Where the files chosen, dropped, unpacked or read with a project file are beside it
+ * (docs/impl_project_structure.md § 6.4, § 6.8). Pure: no DOM.
  */
 
-import { isProjectFileName } from '../../project/fileName';
 import { belongsToLayout, type StoredLayout } from './projectLayout';
-
-export interface ChosenFile {
-  name: string;
-  /** `folder/name` for a file in the chosen folder itself; empty when the file was not chosen as part of a folder. */
-  webkitRelativePath: string;
-}
-
-/** The files in the chosen folder itself, not in its subfolders: where its project file is looked for (§ 6.4). */
-export function filesDirectlyInFolder<T extends ChosenFile>(files: readonly T[]): T[] {
-  return files.filter((file) => (file.webkitRelativePath || file.name).split('/').length <= 2);
-}
-
-/** The folder's project file: its first `.hdlboard.json` by name, or undefined when there is none (§ 6.4). */
-export function projectFileInFolder<T extends ChosenFile>(files: readonly T[]): T | undefined {
-  return filesDirectlyInFolder(files)
-    .filter((file) => isProjectFileName(file.name))
-    .sort((a, b) => a.name.localeCompare(b.name))[0];
-}
 
 /** A file read through a folder handle, tagged with its path relative to the project file's folder. */
 export type TaggedFile = File & { readonly relativePath?: string };
