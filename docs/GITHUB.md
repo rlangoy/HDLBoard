@@ -26,7 +26,7 @@ HDLBoard asks GitHub for the **`gist` permission only**: it can list, read, save
 
 **Other ways:** under *Sign in with a personal access token instead*, the dialog links to GitHub's token page with the `gist` scope already ticked. Create the token, paste it, and click **Sign in**. A token that lacks the `gist` scope is refused at once with a clear message.
 
-**Sign out** forgets the sign-in on this computer (in the Windows app it also signs the GitHub dialog out of github.com). To take HDLBoard's access away completely, use **Manage access on GitHub** (GitHub → Settings → Applications).
+**Sign out** forgets the sign-in on this computer (in the Windows app it also signs the GitHub sign-in window out of github.com). To take HDLBoard's access away completely, use **Manage access on GitHub** (GitHub → Settings → Applications).
 
 ### Save a project to GitHub
 
@@ -39,9 +39,11 @@ Open or make a project (**New File → Project**), then on the project page, in 
 
 ### Open a project from GitHub
 
-Click **GitHub** at the top right: the dialog lists your projects, newest first. Click **Open**: the project's files open in the editor (the project page shows only when a file could not be loaded). The icon beside it shows the gist on github.com, and the bin deletes the project from GitHub (after a question; the files open in HDLBoard are kept).
+Click **GitHub** at the top right (or **Open Project** in Files): the **Projects page** lists your projects on GitHub together with the projects on this computer, with a search field (it also searches file names and file descriptions), a language filter, a sort order and three views. A GitHub project has the GitHub mark and **GitHub**. Click **Open**: the project's files open in the editor (the project page shows only when a file could not be loaded). The ⋮ menu has **Copy share link** and **Delete from GitHub…** (after a question; the files open in HDLBoard are kept), and the arrow icon shows the gist on github.com. Signed out, the page offers **Sign in with GitHub**, which opens the small sign-in dialog. See [project_browse_page.md](project_browse_page.md).
 
-Open Project (the link icon in Files) with a gist address also works. Signed in, it reads the gist through GitHub, so the project is linked for **Save to GitHub**.
+A project saved before 1.5 is found by name and description only until it is saved again: the project list on GitHub now also keeps each project's file names and descriptions, for the search.
+
+**Open from a URL or path…** at the bottom of the page, with a gist address, also works. Signed in, it reads the gist through GitHub, so the project is linked for **Save to GitHub**.
 
 ### Two computers: get the GitHub version
 
@@ -141,10 +143,11 @@ src/components/workbench/
   gistLink.ts, projectGitHub.ts an open project and its gist: snapshot, status, links (pure)
   useGitHub.ts                  the sign-in state
   useGitHubProjects.ts          the project actions, for the dialog and the project page
-  GitHubDialog.tsx, ProjectGitHubCard.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, GitHub.css
+  GitHubSignInDialog.tsx, ProjectGitHubCard.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, GitHub.css
+  ProjectsPage.tsx (+ ProjectItems, ProjectMenu, ProjectsAccount), projectCatalog.ts, useLocalProjects.ts   the Projects page
   gitHubWindow.ts               the GitHub window (pop-up, or the Windows app's dialog) and the web flow's callback channel
 public/github-callback.html     where GitHub returns after "Authorize" (web flow)
-winInstaller/electron/          main.js + preload.js: the encrypted token file and the GitHub dialog
+winInstaller/electron/          main.js + preload.js: the encrypted token file, the GitHub sign-in window and the projects folder
 ```
 
 Tests: `src/github/*.test.ts` run every use case against `testSupport/fakeGitHub.ts`, an in-memory api.github.com, so they need no network. `src/components/workbench/projectGitHub.test.ts` covers the snapshot and status, and `server/src/githubAuth.test.ts` covers the forwarder over real HTTP.

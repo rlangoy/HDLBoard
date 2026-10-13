@@ -15,6 +15,15 @@ import type { VhdlFile } from './files';
 import { parseStoredProject, type OpenProject } from './projectFile';
 import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
+/** What the Windows app found in the projects folder. */
+export interface LocalProjectsListing {
+  folder: string;
+  projects: { path: string; text: string; modifiedMs: number }[];
+  skipped: { path: string; reason: string }[];
+  /** More project files than the limit: the rest were left out. */
+  truncated: boolean;
+}
+
 export interface HdlBoardBridge {
   /** Whether project storage is on for this launch. */
   readonly enabled: boolean;
@@ -29,6 +38,12 @@ export interface HdlBoardBridge {
   writeLocalFile?(path: string, text: string): Promise<boolean>;
   /** Where a chosen or dropped file is on disk; '' when it has no path (a file from a .zip). */
   pathForFile?(file: File): string;
+  /** The projects folder (created if missing) and the project files in it, one folder level down too (Projects page). */
+  listLocalProjects?(): Promise<LocalProjectsListing>;
+  /** Shows the system folder picker; the folder chosen becomes the projects folder. null when cancelled. */
+  chooseProjectsFolder?(): Promise<string | null>;
+  /** Opens Explorer with the project file selected. */
+  showInFolder?(path: string): Promise<boolean>;
   /** The GitHub sign-in, kept encrypted for this Windows user (src/github/tokenStore.ts). */
   loadGitHubToken?(): Promise<string | null>;
   saveGitHubToken?(accessToken: string): Promise<boolean>;

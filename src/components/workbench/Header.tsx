@@ -14,7 +14,7 @@ export interface HeaderProps {
   onHelp?: () => void;
   /** Opens the About dialog. */
   onAbout?: () => void;
-  /** Opens the GitHub dialog; the signed-in user, if any, is shown on the button. */
+  /** Opens the sign-in dialog, or, signed in, the Projects page; the signed-in user is shown on the button. */
   onGitHub?: () => void;
   gitHubUser?: GitHubUser | null;
 }
@@ -39,7 +39,7 @@ export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser }: He
             type="button"
             className="wb-header__action"
             onClick={onGitHub}
-            title={gitHubUser ? `Signed in to GitHub as ${gitHubUser.login}: your projects on GitHub` : 'Sign in to GitHub to save your projects there'}
+            title={gitHubUser ? `Signed in to GitHub as ${gitHubUser.login}: your projects` : 'Sign in to GitHub to save your projects there'}
           >
             {gitHubUser?.avatarUrl ? (
               <img className="wb-header__github-avatar" src={gitHubUser.avatarUrl} alt="" />

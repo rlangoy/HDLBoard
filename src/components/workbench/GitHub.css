@@ -34,14 +34,12 @@
   background: var(--wb-hover);
 }
 
-.wb-github__btn:focus-visible,
-.wb-github__icon-btn:focus-visible {
+.wb-github__btn:focus-visible {
   outline: 2px solid var(--wb-accent);
   outline-offset: 2px;
 }
 
-.wb-github__btn:disabled,
-.wb-github__icon-btn:disabled {
+.wb-github__btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -80,39 +78,6 @@
 .wb-github__btn--small svg {
   width: 15px;
   height: 15px;
-}
-
-.wb-github__icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--wb-text-muted);
-  cursor: pointer;
-}
-
-/* `.wb-dialog a` (Dialog.css) makes every link blue; the github.com link is an icon button. */
-.wb-dialog a.wb-github__icon-btn {
-  color: var(--wb-text-muted);
-}
-
-.wb-github__icon-btn svg {
-  width: 19px;
-  height: 19px;
-}
-
-.wb-github__icon-btn:hover:not(:disabled),
-.wb-dialog a.wb-github__icon-btn:hover {
-  background: var(--wb-hover);
-  color: var(--wb-text);
-}
-
-.wb-github__icon-btn--danger:hover:not(:disabled) {
-  color: var(--wb-danger-dark);
 }
 
 /* ---- Text ---- */
@@ -225,8 +190,7 @@
 }
 
 .wb-github__signin,
-.wb-github__device,
-.wb-github__signed-in {
+.wb-github__device {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -313,210 +277,6 @@
   letter-spacing: 0.12em;
   color: var(--wb-text);
   user-select: all;
-}
-
-/* ---- Signed in ---- */
-
-.wb-github__signed-in {
-  gap: 14px;
-}
-
-.wb-github__account,
-.wb-github__current {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--wb-border);
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-}
-
-.wb-github__account {
-  background: #f8fafc;
-}
-
-.wb-github__current {
-  background: var(--wb-accent-soft);
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.wb-github__avatar {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px var(--wb-border);
-}
-
-.wb-github__account-text,
-.wb-github__current-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  font-size: 14.5px;
-  color: var(--wb-text);
-}
-
-.wb-github__current-text strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wb-github__empty {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--wb-text-muted);
-}
-
-.wb-github__empty {
-  padding: 18px 16px;
-  border: 1px dashed var(--wb-border);
-  border-radius: 14px;
-  text-align: center;
-}
-
-.wb-github__list-section {
-  margin-top: 6px;
-}
-
-.wb-github__list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.wb-github__heading {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--wb-text);
-}
-
-.wb-github__list-head .wb-github__icon-btn {
-  border: 1px solid var(--wb-border);
-  border-radius: 50%;
-}
-
-.wb-github__list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wb-github__row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--wb-border);
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
-}
-
-.wb-github__row:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
-}
-
-.wb-github__row.is-open {
-  border-color: var(--wb-accent);
-}
-
-.wb-github__row-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
-}
-
-.wb-github__row-icon svg {
-  width: 21px;
-  height: 21px;
-}
-
-.wb-github__row-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.wb-github__row-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--wb-text);
-  overflow-wrap: anywhere;
-}
-
-.wb-github__row-description {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 13.5px;
-  line-height: 1.45;
-  white-space: pre-line;
-  color: #475569;
-}
-
-.wb-github__row-meta {
-  margin-top: 2px;
-  font-size: 12px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-}
-
-.wb-github__row-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-}
-
-.wb-github__row-actions .wb-github__btn {
-  margin-right: 4px;
-}
-
-.wb-github__chip {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--wb-accent-soft);
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--wb-accent-dark);
-}
-
-@media (max-width: 520px) {
-  .wb-github__row {
-    flex-wrap: wrap;
-  }
-
-  .wb-github__row-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
 }
 
 /* ---- Status chip ---- */
