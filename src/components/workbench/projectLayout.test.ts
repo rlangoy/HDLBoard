@@ -7,6 +7,7 @@ import {
   defaultProject,
   hasUnsavedChanges,
   newProject,
+  projectEntries,
   openProject,
   parseStoredProject,
   projectFileText,
@@ -277,6 +278,20 @@ describe('the Default project: the workspace when no other project is open', () 
     expect([json.name, json.description, json.sourceDirectory, json.projectDirectory]).toEqual(['Default', 'Not set yet', 'src', 'default']);
     expect(json.files.map((f: { name: string }) => f.name)).toEqual(['DE1_SoC.vhdl', 'DE1_SoC.v']);
     expect(targetPathOf(p, 'DE1_SoC.vhdl')).toBe('default/src/DE1_SoC.vhdl');
+  });
+
+  it('describes the start-up files DE1_SoC.vhdl and DE1_SoC.v', () => {
+    const rows = projectEntries(defaultProject(files), files.map((f) => f.name));
+    expect(rows.map((row) => row.description)).toEqual(['Displays the switch states on the LEDs', 'Displays the switch states on the LEDs']);
+  });
+
+  it('keeps the descriptions of a project just closed', () => {
+    const rows = projectEntries(defaultProject([...files, { name: 'a.vhd', content: '' }], { 'a.vhd': 'Mine', 'de1_soc.v': 'Edited' }), [
+      'DE1_SoC.vhdl',
+      'DE1_SoC.v',
+      'a.vhd',
+    ]);
+    expect(rows.map((row) => row.description)).toEqual(['Displays the switch states on the LEDs', 'Edited', 'Mine']);
   });
 
   it('reads as saved until something changes', () => {

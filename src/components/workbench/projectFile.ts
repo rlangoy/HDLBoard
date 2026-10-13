@@ -23,6 +23,7 @@ import { isHttpUrl } from '../../project/url';
 import { fingerprintOf } from '../../project/fingerprint';
 import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
+import { STARTER_FILES } from './files';
 import { RESERVED_PREFIX_REASON, RESERVED_PREFIX } from './fileNameRules';
 
 export { DEFAULT_KNOWN_BOARDS as KNOWN_BOARDS };
@@ -235,14 +236,25 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
 export const DEFAULT_PROJECT_NAME = 'Default';
 export const DEFAULT_PROJECT_DESCRIPTION = 'Not set yet';
 
+/** What the start-up files (DE1_SoC.vhdl, DE1_SoC.v) are for, in the Default project's file list. */
+export const STARTER_FILE_DESCRIPTION = 'Displays the switch states on the LEDs';
+
 /**
  * The project the workspace is when no other is open: "Default", holding every file in
  * Files — the start-up files, opened examples, dropped and new files — kept in `src`
- * like any project. It reads as saved until something changes, so a fresh start shows
- * no unsaved changes.
+ * like any project. `descriptions` (by nameKey) keeps what the files were described as
+ * before (a project just closed); the start-up files are described otherwise. It reads as
+ * saved until something changes, so a fresh start shows no unsaved changes.
  */
-export function defaultProject(files: readonly ProjectSourceFile[]): OpenProject {
-  const project = { ...newProject(DEFAULT_PROJECT_NAME, files.map((file) => file.name)), description: DEFAULT_PROJECT_DESCRIPTION };
+export function defaultProject(files: readonly ProjectSourceFile[], descriptions: Readonly<Record<string, string>> = {}): OpenProject {
+  const starters = new Set(STARTER_FILES.map((file) => nameKey(file.name)));
+  const described = (name: string) => descriptions[nameKey(name)] ?? (starters.has(nameKey(name)) ? STARTER_FILE_DESCRIPTION : '');
+  const base = newProject(DEFAULT_PROJECT_NAME, []);
+  const project: OpenProject = {
+    ...base,
+    description: DEFAULT_PROJECT_DESCRIPTION,
+    entries: files.map((file) => ({ name: file.name, url: '', description: described(file.name) })),
+  };
   return withSaved(project, files);
 }
 

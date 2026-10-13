@@ -117,7 +117,7 @@ import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
 import { useGitHub } from './useGitHub';
 import { useGitHubProjects } from './useGitHubProjects';
-import { sameFileName } from '../../project/fileName';
+import { nameKey, sameFileName } from '../../project/fileName';
 import { filesBesideProject, pathBeside, type Placed, type TaggedFile } from './chosenFolder';
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
@@ -1222,7 +1222,9 @@ export function Workbench() {
   // Files keeps its files, in the Default project again.
   const handleCloseProject = () => {
     appendLog(`Closed project ${project.name}; Files keeps its files, in the ${DEFAULT_PROJECT_NAME} project.`);
-    setProject(defaultProject(filesRef.current));
+    // The files keep what they were described as.
+    const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
+    setProject(defaultProject(filesRef.current, descriptions));
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
