@@ -37,6 +37,8 @@ export interface ProjectSnapshot {
   files: TextFile[];
   /** Every file the project file lists, also those not loaded or stored at their own URL. */
   listedNames: readonly string[];
+  /** The listed files with their descriptions: what the project index keeps, for searching. */
+  entries: readonly { name: string; description: string }[];
 }
 
 export interface OpenedGistProject {
@@ -153,7 +155,14 @@ export class ProjectGists {
   }
 
   private indexEntryFor(snapshot: ProjectSnapshot, gist: Gist): Omit<IndexEntry, 'createdAt'> {
-    return { name: snapshot.name, description: snapshot.description, url: gist.htmlUrl, gistId: gist.id, updatedAt: this.timestamp() };
+    return {
+      name: snapshot.name,
+      description: snapshot.description,
+      url: gist.htmlUrl,
+      gistId: gist.id,
+      updatedAt: this.timestamp(),
+      files: snapshot.entries.map(({ name, description }) => ({ name, description })),
+    };
   }
 
   private timestamp(): string {

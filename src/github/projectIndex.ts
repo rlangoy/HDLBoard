@@ -30,6 +30,13 @@ export interface IndexEntry {
   createdAt: string;
   /** ISO 8601 in UTC of the last save from HDLBoard; empty when unknown. */
   updatedAt: string;
+  /** The project's files and their descriptions, written on every save; missing in older indexes. */
+  files?: IndexFile[];
+}
+
+export interface IndexFile {
+  name: string;
+  description: string;
 }
 
 export interface ProjectIndex {
@@ -86,5 +93,20 @@ function parseEntry(value: unknown, sourceName: string): IndexEntry {
     gistId: readString(record, 'gistId', sourceName),
     createdAt: readOptionalString(record, 'createdAt'),
     updatedAt: readOptionalString(record, 'updatedAt'),
+    files: readOptionalFiles(record),
   };
+}
+
+/** The `files` list when it is one; anything else is left out rather than failing the whole index. */
+function readOptionalFiles(record: Record<string, unknown>): IndexFile[] | undefined {
+  const value = record.files;
+  if (!Array.isArray(value)) return undefined;
+  const files: IndexFile[] = [];
+  for (const file of value) {
+    if (!file || typeof file !== 'object') return undefined;
+    const { name, description } = file as Record<string, unknown>;
+    if (typeof name !== 'string' || typeof description !== 'string') return undefined;
+    files.push({ name, description });
+  }
+  return files;
 }

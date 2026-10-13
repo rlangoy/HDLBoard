@@ -660,3 +660,12 @@ Run with `scripts\start-windows.cmd` (browser) and in the Windows app build.
 - Thumbnails/previews of project contents.
 - GitHub *repositories* (HDLBoard uses gists only; see `docs/GITHUB.md`).
 - The storage-model work in `hdlboard_project_panel_gist_spec.md` (branch `project_page_touchup`).
+
+## 15. As built (differences from the text above)
+
+- **Search hit in the compact list** is the file's name in bold followed by its description, not `<mark>`-highlighted words (the mockup highlights; the app does not).
+- **Busy and success messages** of the GitHub actions use the existing `Activity` line under the Open now card; only *errors* use the red banner with **Try again** (the local scan's error too).
+- **Opening** does not clear the overlay first: a successful open sets it itself (`applyOpenedProject`), and a failed one leaves the page open with the reason in the "Project not opened" dialog.
+- **Show in Explorer** reaches the page as the prop `onShowInFolder` (present only in the Windows app) instead of the page asking `desktopBridge()` itself.
+- **Escape** closes the page while focus is inside it; the ⋮ menu takes its own Escape first.
+- **Not verified in this build:** the Electron side (`main.js` is syntax-checked only), and the Firefox / Safari folder input.

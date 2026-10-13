@@ -25,6 +25,7 @@ function snapshot(sources: Record<string, string>, projectFileName = 'adder.hdlb
     projectFileName,
     files: [{ name: projectFileName, content: projectFileText('Adder', names) }, ...names.map((name) => ({ name, content: sources[name] }))],
     listedNames: names,
+    entries: names.map((name) => ({ name, description: `the ${name}` })),
   };
 }
 
@@ -57,6 +58,7 @@ describe('ProjectGists', () => {
           gistId: link.gistId,
           createdAt: NOW.toISOString(),
           updatedAt: NOW.toISOString(),
+          files: [{ name: 'adder.vhd', description: 'the adder.vhd' }],
         },
       ]);
     });
