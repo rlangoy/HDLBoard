@@ -781,8 +781,11 @@
   table-layout: fixed;
 }
 
+/* The name keeps its width while the pane narrows: the description takes the
+   squeeze, and the narrow-pane rules below drop Last saved, then Stored's
+   text, then the description, before the name has to give. */
 .wb-projects__table col.is-name {
-  width: 30%;
+  width: 240px;
 }
 
 .wb-projects__table col.is-stored {
@@ -1160,6 +1163,15 @@
 
 /* --- narrow centre pane ------------------------------------------------ */
 
+/* The table gives way column by column, so the project name goes last:
+   Last saved (840px), Stored's text (690px), Description (620px), then Name. */
+@container wb-projects (max-width: 840px) {
+  .wb-projects__table col.is-saved,
+  .wb-projects__table .is-saved {
+    display: none;
+  }
+}
+
 @container wb-projects (max-width: 720px) {
   .wb-projects__toolbar {
     flex-wrap: wrap;
@@ -1172,16 +1184,9 @@
   .wb-projects__item-actions .is-external {
     display: none;
   }
+}
 
-  .wb-projects__table col.is-desc,
-  .wb-projects__table .is-desc {
-    display: none;
-  }
-
-  .wb-projects__table col.is-name {
-    width: auto;
-  }
-
+@container wb-projects (max-width: 690px) {
   .wb-projects__table col.is-stored {
     width: 52px;
   }
@@ -1196,6 +1201,17 @@
 
   .wb-projects__table .wb-projects__badge {
     padding: 0 6px;
+  }
+}
+
+@container wb-projects (max-width: 620px) {
+  .wb-projects__table col.is-desc,
+  .wb-projects__table .is-desc {
+    display: none;
+  }
+
+  .wb-projects__table col.is-name {
+    width: auto;
   }
 }
 
@@ -1240,8 +1256,6 @@
     height: 40px;
   }
 
-  .wb-projects__table col.is-saved,
-  .wb-projects__table .is-saved,
   .wb-projects__table .is-external {
     display: none;
   }
