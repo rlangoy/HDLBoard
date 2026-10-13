@@ -169,9 +169,16 @@ export interface ProjectsPagePrefs {
 }
 
 export const PROJECTS_PAGE_PREFS_KEY = 'hdlboard.projectsPage';
+/** What is written to PROJECTS_PAGE_PREFS_KEY: the type filter lasts for the visit only. */
+export const storedProjectsPagePrefs = ({ sort, view }: ProjectsPagePrefs) => JSON.stringify({ sort, view });
+
 const DEFAULT_PREFS: ProjectsPagePrefs = { type: 'all', sort: 'newest', view: 'details' };
 
-/** The remembered choices; bad or missing JSON, or a value that is no choice, gives the default. */
+/**
+ * The remembered choices; bad or missing JSON, or a value that is no choice, gives the default.
+ * The type filter is never remembered: a filter left on from an earlier visit hid projects
+ * without anyone noticing, so every visit starts at All types (a stored type is ignored).
+ */
 export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
   let record: Record<string, unknown> = {};
   try {
@@ -183,7 +190,7 @@ export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
   const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
     allowed.includes(value as T) ? (value as T) : fallback;
   return {
-    type: pick(record.type, ['all', 'vhdl', 'verilog'], DEFAULT_PREFS.type),
+    type: DEFAULT_PREFS.type,
     sort: pick(record.sort, ['newest', 'oldest', 'name', 'local', 'github'], DEFAULT_PREFS.sort),
     view: pick(record.view, ['details', 'grid'], DEFAULT_PREFS.view),
   };

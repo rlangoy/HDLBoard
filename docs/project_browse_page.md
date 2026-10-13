@@ -134,9 +134,12 @@ One row (wraps on narrow widths, § 4.8):
    card) and **Small icons** (`GridIcon`, value `'grid'`). Selected one: accent background, white icon.
    (Earlier drafts had a third, card-per-row "Details" view; the table replaced it.)
 
-The type, sort and view choices are remembered in `localStorage` under one key
-`hdlboard.projectsPage` as `{"type":"all","sort":"newest","view":"details"}` (a stored view of an earlier version, `compact` or `list`, reads as the default); wrap reads/writes in
-`try/catch` and fall back to the defaults. The search text is **not** remembered.
+The sort and view choices are remembered in `localStorage` under one key
+`hdlboard.projectsPage` as `{"sort":"newest","view":"details"}` (a stored view of an earlier version, `compact` or `list`, reads as the default); wrap reads/writes in
+`try/catch` and fall back to the defaults. The type filter and the search text are **not**
+remembered: every visit starts at **All types**, and a `type` stored by an earlier version is
+ignored (a Verilog filter left on from an earlier visit hid the VHDL-only projects of a newly
+chosen folder, and *Showing 1 of 3* was easy to miss).
 
 ### 4.5 E — status line
 

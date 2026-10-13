@@ -32,6 +32,7 @@ import {
   languagesOf,
   parseProjectsPagePrefs,
   sortItems,
+  storedProjectsPagePrefs,
   type ProjectListItem,
   type ProjectsPagePrefs,
   type ProjectsView,
@@ -232,13 +233,13 @@ function openProjectItem(open: OpenProjectInfo): ProjectListItem {
   };
 }
 
-/** The type, sort and view choices, kept in this browser (the search text is not). */
+/** The sort and view choices, kept in this browser (the type filter and the search text are not). */
 function usePersistedPrefs(): [ProjectsPagePrefs, (prefs: ProjectsPagePrefs) => void] {
   const [prefs, setPrefsState] = useState(() => parseProjectsPagePrefs(readStored()));
   const setPrefs = (next: ProjectsPagePrefs) => {
     setPrefsState(next);
     try {
-      localStorage.setItem(PROJECTS_PAGE_PREFS_KEY, JSON.stringify(next));
+      localStorage.setItem(PROJECTS_PAGE_PREFS_KEY, storedProjectsPagePrefs(next));
     } catch {
       // Private window or blocked storage: the choice lasts for this visit.
     }

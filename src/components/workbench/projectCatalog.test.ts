@@ -11,6 +11,7 @@ import {
   itemFromProjectFile,
   languagesOf,
   parseProjectsPagePrefs,
+  storedProjectsPagePrefs,
   relativeTime,
   sortItems,
   type ProjectListItem,
@@ -196,6 +197,11 @@ describe('parseProjectsPagePrefs', () => {
     expect(parseProjectsPagePrefs(null)).toEqual(defaults);
     expect(parseProjectsPagePrefs('{nope')).toEqual(defaults);
     expect(parseProjectsPagePrefs('5')).toEqual(defaults);
+  });
+
+  test('the type filter is not remembered: a stored one is ignored, and none is written', () => {
+    expect(parseProjectsPagePrefs('{"type":"verilog","sort":"local"}')).toEqual({ type: 'all', sort: 'local', view: 'details' });
+    expect(JSON.parse(storedProjectsPagePrefs({ type: 'vhdl', sort: 'name', view: 'grid' }))).toEqual({ sort: 'name', view: 'grid' });
   });
 });
 
