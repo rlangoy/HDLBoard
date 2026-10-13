@@ -47,16 +47,18 @@ export function AccountCard({ connection, onSignIn }: { connection: GitHubConnec
   const { user } = session;
   return (
     <div className="wb-projects__account">
-      {user.avatarUrl !== '' && <img className="wb-projects__avatar" src={user.avatarUrl} alt="" />}
-      <span className="wb-projects__account-text">
-        <span>
-          Signed in as <strong>{user.login}</strong>
-        </span>
-        <span className="wb-projects__small">
-          {connection.remembersSignIn ? 'Remembered on this computer until you sign out.' : 'Until you close this tab.'}{' '}
-          <a href={AUTHORIZED_APPS_URL} target="_blank" rel="noreferrer">
-            Manage access on GitHub
-          </a>
+      <span className="wb-projects__account-main">
+        {user.avatarUrl !== '' && <img className="wb-projects__avatar" src={user.avatarUrl} alt="" />}
+        <span className="wb-projects__account-text">
+          <span>
+            Signed in as <strong>{user.login}</strong>
+          </span>
+          <span className="wb-projects__small">
+            {connection.remembersSignIn ? 'Remembered on this computer until you sign out.' : 'Until you close this tab.'}{' '}
+            <a href={AUTHORIZED_APPS_URL} target="_blank" rel="noreferrer">
+              Manage access on GitHub
+            </a>
+          </span>
         </span>
       </span>
       <button type="button" className="wb-projects__btn" onClick={connection.signOut}>
@@ -70,16 +72,18 @@ export function AccountCard({ connection, onSignIn }: { connection: GitHubConnec
 function SignedOutCard({ signingIn, onSignIn }: { signingIn: boolean; onSignIn: () => void }) {
   return (
     <div className="wb-projects__account">
-      <span className="wb-projects__gh-tile" aria-hidden="true">
-        <GitHubIcon />
-      </span>
-      <span className="wb-projects__account-text">
-        <strong>Connect GitHub</strong>
-        <span className="wb-projects__small">Sign in to see and save your projects on GitHub, on any computer.</span>
+      <span className="wb-projects__account-main">
+        <span className="wb-projects__gh-tile" aria-hidden="true">
+          <GitHubIcon />
+        </span>
+        <span className="wb-projects__account-text">
+          <strong>Connect GitHub</strong>
+          <span className="wb-projects__small">Sign in to see and save your projects on GitHub, on any computer.</span>
+        </span>
       </span>
       <button type="button" className="wb-projects__btn is-dark" onClick={onSignIn} disabled={signingIn}>
         {signingIn ? <span className="wb-github__spinner" aria-hidden="true" /> : <GitHubIcon aria-hidden="true" />}
-        {signingIn ? 'Signing in…' : 'Sign in with GitHub'}
+        {signingIn ? 'Signing in…' : 'Sign in'}
       </button>
     </div>
   );
