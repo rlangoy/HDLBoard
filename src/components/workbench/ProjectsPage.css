@@ -473,6 +473,43 @@
   flex: 1;
 }
 
+/* No local project folder: a heading, a line on what it is for, and Choose folder. */
+.wb-projects__error--no-folder {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+
+.wb-projects__error--no-folder > svg {
+  margin-top: 2px;
+}
+
+.wb-projects__error .wb-projects__error-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  line-height: 1.45;
+}
+
+.wb-projects__error-text strong {
+  font-weight: 600;
+}
+
+.wb-projects__error-text span {
+  color: #7f1d1d;
+  font-size: 14px;
+}
+
+.wb-projects__error--no-folder .wb-projects__btn {
+  align-self: center;
+}
+
+.wb-projects__error--no-folder .wb-projects__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* --- F: the details card (an open table row) and the small icons ------ */
 
 .wb-projects__skeletons {
