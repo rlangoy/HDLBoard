@@ -4,6 +4,8 @@
 import { AUTHORIZED_APPS_URL } from '../../github/config';
 import { GitHubStatus } from './GitHubStatus';
 import { CloudUploadIcon, GitHubIcon, ProjectIcon, SignOutIcon } from './icons';
+import type { CatalogFile } from './projectCatalog';
+import type { OpenProject } from './projectFile';
 import type { GitHubSyncState } from './projectGitHub';
 import type { GitHubConnection } from './useGitHub';
 import './GitHub.css';
@@ -17,6 +19,25 @@ export interface OpenProjectInfo {
   syncState: GitHubSyncState;
   /** It differs from its project file as last opened or saved. */
   unsaved: boolean;
+  description: string;
+  files: CatalogFile[];
+  /** Opened from or saved to this computer (not from GitHub or a web address, not new). */
+  storedLocally: boolean;
+}
+
+/** The open project as the Projects page needs it. */
+export function openProjectInfo(project: OpenProject, syncState: GitHubSyncState, unsaved: boolean): OpenProjectInfo {
+  const { name, description, location, gist, entries } = project;
+  return {
+    name,
+    description,
+    gistId: gist?.gistId,
+    location,
+    syncState,
+    unsaved,
+    files: entries.map((entry) => ({ name: entry.name, description: entry.description })),
+    storedLocally: gist === undefined && location !== '' && !/^https?:\/\//i.test(location),
+  };
 }
 
 /** Who is signed in to GitHub (with Sign out), or the way to sign in. */

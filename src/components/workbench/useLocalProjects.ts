@@ -2,19 +2,11 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { desktopBridge, type HdlBoardBridge } from './desktop';
-import {
-  itemsFromListing,
-  scanChosenFiles,
-  scanFolder,
-  type FolderFile,
-  type FolderHandle,
-  type ItemSource,
-  type ScanOutcome,
-  type SkippedFile,
-} from './localProjectScan';
+import { desktopBridge } from './desktop';
+import type { FolderFile, FolderHandle, ItemSource, SkippedFile } from './localProjectScan';
 import type { ProjectListItem } from './projectCatalog';
 import type { ProjectSourceFile } from './projectFile';
+import { NO_FOLDER, readChosenFolderFiles, readDesktopFolder, readRememberedFolder, type FolderReading, type FolderState } from './projectsFolderReading';
 import { loadProjectsFolder, saveProjectsFolder } from './projectsFolderStore';
 import { canPickFolder, pickSaveFolder, type PickedFolder } from './projectSave';
 
@@ -24,7 +16,7 @@ export type LocalOpenRequest =
   | { kind: 'handle'; text: string; location: string; localFiles: ProjectSourceFile[]; folder: PickedFolder }
   | { kind: 'files'; projectFile: File; others: File[] };
 
-export type FolderState = 'none' | 'needs-permission' | 'ready';
+export type { FolderState } from './projectsFolderReading';
 
 export interface LocalProjects {
   /** null until a folder has been read. */
@@ -55,21 +47,13 @@ function backendOfThisBrowser(): Backend {
   return canPickFolder() ? 'handle' : 'files';
 }
 
-interface Reading {
-  outcome: ScanOutcome | null;
-  folderState: FolderState;
-  folderLabel: string;
-}
-
-const NO_FOLDER: Reading = { outcome: null, folderState: 'none', folderLabel: '' };
-
 /**
  * The projects in the local projects folder (docs/project_browse_page.md § 6). Reads when
  * `active` turns on — the Projects page opening — and on rescan.
  */
 export function useLocalProjects(active: boolean): LocalProjects {
   const backend = useMemo(backendOfThisBrowser, []);
-  const [reading, setReading] = useState<Reading>(NO_FOLDER);
+  const [reading, setReading] = useState<FolderReading>(NO_FOLDER);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [remembered, setRemembered] = useState(backend !== 'files');
@@ -77,10 +61,12 @@ export function useLocalProjects(active: boolean): LocalProjects {
   const chosenFiles = useRef<File[] | null>(null);
   const newestScan = useRef(0);
 
-  const read = useCallback(async (): Promise<Reading> => {
-    if (backend === 'desktop') return readDesktop(desktopBridge()!);
-    if (backend === 'handle') return readHandle(folderHandle);
-    return chosenFiles.current === null ? NO_FOLDER : readChosenFiles(chosenFiles.current);
+  const read = useCallback(async (): Promise<FolderReading> => {
+    if (backend === 'desktop') return readDesktopFolder(desktopBridge()!.listLocalProjects!);
+    if (backend === 'files') return readChosenFolderFiles(chosenFiles.current ?? []);
+    const { folder, reading: next } = await readRememberedFolder(folderHandle.current, loadProjectsFolder);
+    folderHandle.current = folder;
+    return next;
   }, [backend]);
 
   const scan = useCallback(async () => {
@@ -158,29 +144,6 @@ export function useLocalProjects(active: boolean): LocalProjects {
     allowAccess,
     readForOpen,
   };
-}
-
-async function readDesktop(bridge: HdlBoardBridge): Promise<Reading> {
-  const listing = await bridge.listLocalProjects!();
-  return { outcome: itemsFromListing(listing), folderState: 'ready', folderLabel: listing.folder };
-}
-
-async function readHandle(remembered: { current: FolderHandle | null }): Promise<Reading> {
-  remembered.current ??= await loadProjectsFolder();
-  const folder = remembered.current;
-  if (!folder) return NO_FOLDER;
-  const permission = (await folder.queryPermission?.({ mode: 'readwrite' })) ?? 'granted';
-  if (permission === 'prompt') return { outcome: null, folderState: 'needs-permission', folderLabel: folder.name };
-  if (permission === 'denied') {
-    remembered.current = null;
-    return NO_FOLDER;
-  }
-  return { outcome: await scanFolder(folder), folderState: 'ready', folderLabel: folder.name };
-}
-
-async function readChosenFiles(files: File[]): Promise<Reading> {
-  const rootName = (files[0]?.webkitRelativePath ?? '').split('/')[0] ?? '';
-  return { outcome: await scanChosenFiles(files), folderState: 'ready', folderLabel: rootName };
 }
 
 /** Opens the browser's folder picker for browsers that cannot keep a folder handle. */

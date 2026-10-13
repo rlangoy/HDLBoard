@@ -6,6 +6,7 @@ import {
   displayName,
   fileHit,
   filterItems,
+  isSameProject,
   itemFromIndexEntry,
   itemFromProjectFile,
   languagesOf,
@@ -98,6 +99,14 @@ describe('sortItems', () => {
     expect(sortItems([lab10, lab2], 'name')).toEqual([lab2, lab10]);
   });
 
+  test('by where it is stored: that place first, each place newest first', () => {
+    const gitHubOld = item({ name: 'g-old', source: 'github', updatedAt: old.updatedAt });
+    const gitHubNew = item({ name: 'g-new', source: 'github', updatedAt: recent.updatedAt });
+    const items = [gitHubOld, old, gitHubNew, recent];
+    expect(sortItems(items, 'local')).toEqual([recent, old, gitHubNew, gitHubOld]);
+    expect(sortItems(items, 'github')).toEqual([gitHubNew, gitHubOld, recent, old]);
+  });
+
   test('does not change its input', () => {
     const input = [unknown, old];
     sortItems(input, 'newest');
@@ -152,10 +161,32 @@ describe('fileHit', () => {
   });
 });
 
+describe('isSameProject', () => {
+  const open = { name: 'Runes', gistId: undefined, location: 'project.hdlboard.json' };
+
+  test('a scanned file of the uploaded file name and project name is the open project', () => {
+    expect(isSameProject(item({ name: 'Runes', location: 'test_s/project.hdlboard.json' }), open)).toBe(true);
+  });
+
+  test('another project in a file of that name is not', () => {
+    expect(isSameProject(item({ name: 'Other', location: 'lab/project.hdlboard.json' }), open)).toBe(false);
+  });
+
+  test('a GitHub project is matched by its gist only', () => {
+    expect(isSameProject(item({ name: 'Runes', source: 'github', gistId: 'g1', location: 'project.hdlboard.json' }), open)).toBe(false);
+    expect(isSameProject(item({ name: 'x', source: 'github', gistId: 'g1' }), { ...open, gistId: 'g1' })).toBe(true);
+  });
+
+  test('a project not saved anywhere yet is no list item', () => {
+    expect(isSameProject(item({ name: 'Runes', location: '' }), { ...open, location: '' })).toBe(false);
+  });
+});
+
 describe('parseProjectsPagePrefs', () => {
   test('a bad value gives the default for that choice', () => {
     expect(parseProjectsPagePrefs('{"view":"grid","sort":"bogus"}')).toEqual({ type: 'all', sort: 'newest', view: 'grid' });
     expect(parseProjectsPagePrefs('{"view":"table"}').view).toBe('compact');
+    expect(parseProjectsPagePrefs('{"sort":"github"}').sort).toBe('github');
   });
 
   test('nothing, or text that is not JSON, gives the defaults', () => {

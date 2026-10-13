@@ -174,7 +174,7 @@ then a footer line.
 |--------|-------|--------|------|
 | Project name | 30 % | Sort button **Project name** | The same project tile as the other views (§ 4.9 gradient by language, white `CodeIcon`), smaller: 30×30, radius 8, icon 17 px; `title` on the tile = `VHDL`, `Verilog`, `VHDL + Verilog` or `No source files`. Then the name bold, one line with ellipsis, then the **Open now** chip for the open project. |
 | Description | rest | `Description` | One line, ellipsis, muted; full text in `title`. While searching with a file hit (§ 5.3) it shows `counter.vhd — 4-bit counter with enable` instead, matches marked with `<mark>`. |
-| Stored | 104 px | `Stored` | The source badge (§ 4.6 table), with text. |
+| Stored | 104 px | Sort button **Stored** | The source badge (§ 4.6 table), with text. Clicking the header sorts Local first, again GitHub first (sorts `'local'` / `'github'`, each place newest first); the Sort select has the same two choices. |
 | Last saved | 150 px | Sort button **Last saved** | `relativeTime(item.updatedAt)` (§ 5.2), e.g. `4 days ago`; `title` = full local date and time; `—` when unknown. One line, ellipsis. |
 | Actions | 160 px | `Actions` (right-aligned) | **Open** as a small **filled** primary button (32 px high — the table is dense, so the main action is the strongest colour in the row), the external icon button and `⋮` (both 32×32). |
 
@@ -662,6 +662,9 @@ Run with `scripts\start-windows.cmd` (browser) and in the Windows app build.
 - The storage-model work in `hdlboard_project_panel_gist_spec.md` (branch `project_page_touchup`).
 
 ## 15. As built (differences from the text above)
+
+- **A project open from this computer is always listed.** A browser's file input (Upload File) gives the page the files but never their folder, so an uploaded project cannot register a projects folder. Until the folder that holds it is chosen, the open project is listed as **Local · Open now** on its own, and the status line says *Choose the folder that holds your project files to list them all here.* When the chosen folder holds it, it is the same row (`isSameProject`: same path, or same file name and project name), never a second one.
+- **Reading the folder** lives in `projectsFolderReading.ts`, with tests for a first visit (nothing remembered), a remembered folder that is granted, one that needs permission again (a new browser session), a refused one, and the Windows app's listing.
 
 - **Names** in the list are shown without a language in brackets at the end (`displayName`: "Shift Register (Verilog)" → "Shift Register"); the tile and the language chips say it. The full name is in the tooltip, and search still matches it.
 

@@ -172,7 +172,8 @@ export interface ProjectTableProps extends ProjectItemsProps {
 /** The compact list: one table row per project. */
 export function ProjectTable(props: ProjectTableProps) {
   const { items, sort, onSort, total } = props;
-  const byDate = sort !== 'name';
+  const byDate = sort === 'newest' || sort === 'oldest';
+  const bySource = sort === 'local' || sort === 'github';
   // One row at a time shows its details.
   const [expanded, setExpanded] = useState<string | null>(null);
   const toggle = (key: string) => setExpanded((shown) => (shown === key ? null : key));
@@ -188,13 +189,15 @@ export function ProjectTable(props: ProjectTableProps) {
         </colgroup>
         <thead>
           <tr>
-            <th scope="col" aria-sort={byDate ? undefined : 'ascending'}>
-              <SortButton label="Project name" active={!byDate} ascending onClick={() => onSort('name')} />
+            <th scope="col" aria-sort={sort === 'name' ? 'ascending' : undefined}>
+              <SortButton label="Project name" active={sort === 'name'} ascending onClick={() => onSort('name')} />
             </th>
             <th scope="col" className="is-desc">
               Description
             </th>
-            <th scope="col">Stored</th>
+            <th scope="col" aria-sort={bySource ? (sort === 'github' ? 'ascending' : 'descending') : undefined}>
+              <SortButton label="Stored" active={bySource} ascending={sort === 'github'} onClick={() => onSort(sort === 'local' ? 'github' : 'local')} />
+            </th>
             <th scope="col" className="is-saved" aria-sort={byDate ? (sort === 'oldest' ? 'ascending' : 'descending') : undefined}>
               <SortButton label="Last saved" active={byDate} ascending={sort === 'oldest'} onClick={() => onSort(sort === 'newest' ? 'oldest' : 'newest')} />
             </th>
