@@ -454,14 +454,10 @@
 }
 
 .wb-project__table th:nth-child(1) {
-  width: 23%;
+  width: 32%;
 }
 
-.wb-project__table th:nth-child(2) {
-  width: 22%;
-}
-
-.wb-project__table th:nth-child(4) {
+.wb-project__table th:nth-child(3) {
   width: 84px;
 }
 
@@ -518,10 +514,6 @@ button.wb-project__file:hover {
   font-size: 12px;
   line-height: 1.4;
   color: #92400e;
-}
-
-.wb-project__url .wb-project__field {
-  font-size: 13px;
 }
 
 .wb-project__cell-actions {
@@ -738,7 +730,7 @@ button.wb-project__file:hover {
   height: 16px;
 }
 
-/* Project folder and Source folder (docs/impl_project_structure.md § 7). */
+/* Project folder (docs/impl_project_structure.md § 7). */
 .wb-project__folder {
   display: flex;
   align-items: center;

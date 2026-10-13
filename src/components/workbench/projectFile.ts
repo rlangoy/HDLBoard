@@ -19,7 +19,7 @@ import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../proj
 import { DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
 import { diskPath } from '../../project/resolveSource';
 import { projectDirectoryOf } from './projectLayout';
-import { isHttpUrl, urlProblem } from '../../project/url';
+import { isHttpUrl } from '../../project/url';
 import { fingerprintOf } from '../../project/fingerprint';
 import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
@@ -213,11 +213,6 @@ export function sourceDirectoryError(name: string): string | undefined {
   return problem ? `The source folder is not usable: ${problem}.` : undefined;
 }
 
-/** Why a file entry's URL cannot be used, or undefined; an empty URL means "in the project folder". */
-export function entryUrlError(url: string): string | undefined {
-  if (url.trim() === '') return undefined;
-  return urlProblem(url.trim()) ?? undefined;
-}
 
 /** A new project listing every file now in Files (the New File dialog's Project choice). */
 export function newProject(name: string, fileNames: readonly string[]): OpenProject {

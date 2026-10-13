@@ -5,7 +5,8 @@
 | | |
 |---|---|
 | **Document** | `docs/impl_project_structure.md` |
-| **Version** | 1.3 |
+| **Version** | 1.4 |
+| **Changes in 1.4** | Source folder and Stored at removed from the project page as advanced settings for later (§ 13). |
 | **Changes in 1.3** | Third review: the project file can clash too (AC-18); all plan comparisons ignore case, and a case-only change is the same place, not a move (§ 6.5); `exists` comes from two folder listings (`list-folder-files` replaces `local-file-exists`); an invalid `projectDirectory` repairs itself instead of blocking Save (§ 3.2); `planDiskSave` takes the current project file text; opening a project zip described (§ 6.7); `diskLayout` ignores new files; a failed save converges on the next one; the `webkitdirectory` segment filter (§ 6.8). |
 | **Changes in 1.2** | Second review: Remove-folder button for a folder a save emptied (D13, § 7); hint when the project file was renamed outside HDLBoard; the clash dialog lists full relative paths; the "no delete on failure" rule is its own bullet (§ 6.5); the AC-15 test is named after the criterion. |
 | **Status** | Ready for implementation |
@@ -58,14 +59,14 @@ Two new fields in `.hdlboard.json` say where: `projectDirectory` (derived from t
 |---|---|
 | D1 | Two new top-level fields: `projectDirectory` and `sourceDirectory`. Both are always written to the project file, wherever it is stored. |
 | D2 | `projectDirectory` is the project file name without `.hdlboard.json` (e.g. `fantasicleds.hdlboard.json` → `fantasicleds`). It is not editable on the project page. |
-| D3 | `sourceDirectory` defaults to `src` and is editable on the project page. |
+| D3 | `sourceDirectory` defaults to `src`. *Since 1.4 it is not editable on the project page* (an advanced setting for later, § 13); a value written in the project file is still honoured. |
 | D4 | Project files are stored at `<projectDirectory>/<sourceDirectory>/<name>`, relative to the project file. Only the `.hdlboard.json` itself is outside `projectDirectory`. |
 | D5 | Both fields must be **one** folder name: no `/` or `\`, no `..`, no absolute path or drive letter, not empty, none of the characters forbidden in file names (§ 6.2). |
 | D6 | The folders apply **only to local disk** (the Windows app, a folder in Chrome/Edge, and `.zip` files). Gists, web addresses, HDLBoard site paths, `?project=` and *Open from a URL or path* stay flat; the two fields are kept in the project file but ignored there. |
 | D7 | `?project=` and *Open from a URL or path* keep accepting everything they accept today (gist, any web address, site path, Windows path). |
 | D8 | A gist or URL project saved to local disk is written into the folder layout from its stored fields. A local project saved to GitHub is uploaded flat, with the fields unchanged in its project file. |
 | D9 | An existing **flat project on disk** is converted on **Save project**: its files are **copied** into `<projectDirectory>/<sourceDirectory>/`. The old flat files are left alone, with no message about them. |
-| D10 | Changing `sourceDirectory` on the project page **moves** the files to the new folder on **Save project**. |
+| D10 | A changed `sourceDirectory` **moves** the files to the new folder on **Save project**. *Since 1.4 only reachable by editing the project file*, until the setting comes back (§ 13). |
 | D11 | Renaming the project **file** updates `projectDirectory` and **moves** the files to the new folder on **Save project**. Renaming the project's display `name` changes nothing on disk. |
 | D12 | A move into a folder that already has a file with the same name **asks whether to overwrite**. |
 | D13 | An emptied old folder is **left in place**. The project page then offers to remove it, but only on request (§ 7). |
@@ -509,3 +510,13 @@ Known limits:
 - `ownWrites` is not kept with the Windows app's stored workspace: after a restart, the copies of a failed save are asked about once.
 - Tested in Chrome against the browser's private file system (OPFS), which is case-sensitive; AC-17 (case-only change) is covered by unit tests on a disk that ignores case, as Windows does.
 - The Windows app was not run; its new IPC handlers were run in Node against a temporary folder.
+
+---
+
+## 13. Version 1.4: advanced settings left off the project page
+
+After trying the page, the project page is kept simple for students:
+
+- **Source folder** is not shown or edited. Projects use `src`, or what their project file says. The model, the save plan (moves included) and the tests are unchanged, so the field can come back as an advanced setting.
+- **Stored at** (each file's URL) is no longer a column of Project Files. URLs in a project file are still read, downloaded and kept on save; they are only not edited on the page (`entryUrlError` removed with the field).
+- What changes for § 7: no Source folder row, no save block for an invalid one (the save still refuses an invalid stored value, `sourceDirectoryError`), and AC-6 can only be met by a project file edited by hand.

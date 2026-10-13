@@ -11,7 +11,6 @@ import {
   FileIcon,
   FolderOpenIcon,
   InfoIcon,
-  LinkIcon,
   MinusIcon,
   OpenInIcon,
   PlusIcon,
@@ -22,9 +21,7 @@ import {
 import {
   KNOWN_BOARDS,
   MISSING_LOCAL_FILE,
-  entryUrlError,
   projectFileBase,
-  sourceDirectoryError,
   projectFileNameError,
   projectFileNameFromBase,
   type OpenProject,
@@ -84,8 +81,6 @@ export function ProjectPage(props: ProjectPageProps) {
   const missingInFolder = rows.filter((row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE);
   const unloadedCount = rows.filter((row) => row.status === 'unloaded').length;
   const ids = useId();
-  // What is typed in Source folder and cannot be used: Save waits for a fix (AC-6).
-  const [folderError, setFolderError] = useState<string | undefined>(undefined);
   const layoutChange = pendingLayoutChange(project);
   // Keyboard focus starts on the page, so Escape closes it and Tab walks its fields.
   const sectionRef = useRef<HTMLElement>(null);
@@ -133,8 +128,8 @@ export function ProjectPage(props: ProjectPageProps) {
                   type="button"
                   className="wb-project__btn wb-project__btn--primary"
                   onClick={props.onSave}
-                  disabled={busy !== null || folderError !== undefined}
-                  title={folderError ?? props.saveHint}
+                  disabled={busy !== null}
+                  title={props.saveHint}
                 >
                   <SaveIcon aria-hidden="true" />
                   Save project
@@ -190,21 +185,6 @@ export function ProjectPage(props: ProjectPageProps) {
                 <dt>Project folder</dt>
                 <dd className="wb-project__mono wb-project__folder" title="Named after the project file">
                   {projectDirectoryOf(project)}
-                </dd>
-              </div>
-              <div className="wb-project__fact">
-                <dt>
-                  <label htmlFor={`${ids}-source`}>Source folder</label>
-                </dt>
-                <dd>
-                  <CommitField
-                    id={`${ids}-source`}
-                    value={project.sourceDirectory}
-                    validate={sourceDirectoryError}
-                    onCommit={(sourceDirectory) => onDetailsChange({ sourceDirectory })}
-                    onErrorChange={setFolderError}
-                    className="wb-project__mono"
-                  />
                 </dd>
               </div>
               <div className="wb-project__fact wb-project__fact--wide">
@@ -295,7 +275,6 @@ export function ProjectPage(props: ProjectPageProps) {
                 <thead>
                   <tr>
                     <th scope="col">Name</th>
-                    <th scope="col">Stored at</th>
                     <th scope="col">Description</th>
                     <th scope="col">
                       <span className="wb-project__sr">Actions</span>
@@ -375,7 +354,11 @@ interface EntryRowProps extends Omit<ProjectPageProps, 'busy'> {
   rowBusy: boolean;
 }
 
-/** One file of the project: its name, URL and description, and what can be done with it. */
+/**
+ * One file of the project: its name and description, and what can be done with it. Where
+ * it is stored (its URL) is kept in the project file but not edited here: an advanced
+ * setting for later.
+ */
 function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry, onReloadFromUrl, onLeaveProject }: EntryRowProps) {
   const loaded = row.status === 'loaded';
   return (
@@ -393,17 +376,6 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
           </span>
         )}
         {!loaded && <span className="wb-project__problem">{row.problem}</span>}
-      </td>
-      <td className="wb-project__cell-url">
-        <CommitField
-          value={row.url}
-          validate={entryUrlError}
-          onCommit={(url) => onEntryChange(row.name, { url: url.trim() })}
-          placeholder="(project folder)"
-          ariaLabel={`URL of ${row.name}`}
-          icon={row.url !== '' ? <LinkIcon aria-hidden="true" /> : undefined}
-          className="wb-project__url"
-        />
       </td>
       <td className="wb-project__cell-description">
         <AutoTextArea
@@ -556,8 +528,6 @@ interface CommitFieldProps {
   /** With `suffix`: the value as it is edited (without the suffix), and back. */
   toDraft?: (value: string) => string;
   fromDraft?: (draft: string) => string;
-  /** Told whenever what is typed turns invalid or valid again, so Save can wait for a fix. */
-  onErrorChange?: (error: string | undefined) => void;
 }
 
 const same = (text: string) => text;
@@ -578,13 +548,11 @@ function CommitField({
   suffix,
   toDraft = same,
   fromDraft = same,
-  onErrorChange,
 }: CommitFieldProps) {
   const [draft, setDraft] = useState(() => toDraft(value));
   useEffect(() => setDraft(toDraft(value)), [value, toDraft]);
   const next = fromDraft(draft);
   const error = next === value ? undefined : validate(next);
-  useEffect(() => onErrorChange?.(error), [error, onErrorChange]);
   const errorId = useId();
   const suffixId = useId();
   const inputRef = useRef<HTMLInputElement>(null);

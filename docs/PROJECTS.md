@@ -25,7 +25,7 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
 
 ### Where the files are on this computer
 
-On your computer each project keeps its files in its own folder next to the project file: the **project folder**, named after the project file, and inside it the **source folder** (`src` unless you change it on the project page). Several projects can then share one folder, even with files of the same name:
+On your computer each project keeps its files in its own folder next to the project file: the **project folder**, named after the project file, and inside it the **source folder**, `src`. Several projects can then share one folder, even with files of the same name:
 
 ```text
 Labs/
@@ -40,7 +40,7 @@ Labs/
 ```
 
 - An **older project** with its files next to the project file still opens. **Save project** copies its files into the source folder; the old files stay where they are.
-- Change **Source folder** on the project page, or rename the project file, and the files **move** to the new folder when you save. A folder left empty stays; the project page offers **Remove folder**.
+- Rename the project file and the files **move** to the new project folder when you save. A folder left empty stays; the project page offers **Remove folder**.
 - If a file of the same name is already where Save project would write, it asks before overwriting (**Cancel** saves nothing).
 - **GitHub gists, web addresses and `?project=` links stay flat**: all files side by side, as before. They keep the two folder names in the project file, so a project saved to your computer from GitHub lands in its folders.
 
@@ -119,8 +119,9 @@ Files you rename or delete keep their description, or leave the project.
 The **project page** shows in place of the code. Open it from the project row at the top of the Files panel; close it with ✕ or Esc. A project opened from this computer (Upload File, drag and drop, Choose project folder, or a path in the Windows app) goes straight to the code and shows the first file of its list; the page opens by itself only when the project lists no files. Here you edit:
 
 - the project's name, board and description, and the project file's own name;
-- the **source folder** the files are kept in on this computer (the **project folder** is shown beside it; it always follows the project file name);
-- each file's description, and its URL (leave it empty for "stored with the project").
+- each file's description.
+
+The page also shows the **project folder** the files are kept in on this computer; it always follows the project file name. A file's URL and the source folder are kept in the project file, but are not edited on the page.
 
 Click a file name to show it in the editor. **Unsaved changes** shows until the project is saved.
 
