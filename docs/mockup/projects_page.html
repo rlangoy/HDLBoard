@@ -35,6 +35,7 @@
     --wb-mono: 'Cascadia Mono', Consolas, ui-monospace, 'SF Mono', monospace;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     font-family: var(--wb-font);
@@ -135,7 +136,7 @@
   .btn--text:hover { background: none; text-decoration: underline; }
   .icon-btn {
     width: 38px; height: 38px; display: inline-grid; place-items: center; border-radius: 9px;
-    border: 1px solid transparent; background: transparent; cursor: pointer; color: #475569;
+    padding: 0; border: 1px solid transparent; background: transparent; cursor: pointer; color: #475569;
   }
   .icon-btn svg { width: 20px; height: 20px; }
   .icon-btn:hover { background: var(--wb-hover); color: var(--wb-text); }
@@ -283,8 +284,54 @@
   .wb-projects__note { display: flex; gap: 10px; align-items: flex-start; color: var(--wb-text-muted); font-size: 13px; line-height: 1.5; margin: 4px 0 8px; }
   .wb-projects__note svg { width: 18px; height: 18px; margin-top: 1px; }
 
+  /* compact list (table) view */
+  .ptable-wrap { background: #fff; border: 1px solid var(--wb-border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+  .ptable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .ptable col.c-name { width: 30%; }
+  .ptable col.c-stored { width: 104px; }
+  .ptable col.c-saved { width: 150px; }
+  .ptable col.c-actions { width: 160px; }
+  .ptable th {
+    height: 42px; padding: 0 14px; text-align: left; font-size: 12.5px; font-weight: 600; color: #475569;
+    background: #f8fafc; border-bottom: 1px solid var(--wb-border); white-space: nowrap;
+  }
+  .ptable th.is-right { text-align: right; }
+  .th-sort { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 4px 6px; margin-left: -6px; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; }
+  .th-sort:hover { background: var(--wb-hover); color: var(--wb-text); }
+  .th-sort svg { width: 16px; height: 16px; opacity: 0; }
+  .th-sort:hover svg { opacity: .4; }
+  .th-sort.is-sorted { color: var(--wb-text); }
+  .th-sort.is-sorted svg { opacity: 1; }
+  .th-sort.is-asc svg { transform: rotate(180deg); }
+  .ptable td { height: 50px; padding: 0 14px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+  .ptable tbody tr:last-child td { border-bottom: 0; }
+  .ptable tbody tr { transition: background .12s; }
+  .ptable tbody tr:hover { background: #f8fafc; }
+  .ptable tbody tr.is-open { background: #f3f7ff; box-shadow: inset 3px 0 0 var(--wb-accent); }
+  .p-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .p-name > svg { width: 20px; height: 20px; }
+  .p-name.lang-vhdl > svg { color: var(--wb-accent-dark); }
+  .p-name.lang-verilog > svg { color: var(--wb-success-dark); }
+  .p-name.lang-both > svg { color: #6d28d9; }
+  .p-name.lang-none > svg { color: #64748b; }
+  .p-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-desc { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-desc mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
+  .p-desc .p-file { color: #334155; font-weight: 600; }
+  .p-saved { display: block; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+  .p-actions .btn { height: 32px; padding: 0 16px; margin-right: 6px; }
+  .p-actions .icon-btn { width: 32px; height: 32px; }
+  .p-actions .icon-btn svg { width: 18px; height: 18px; }
+  .ptable-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--wb-border); background: #f8fafc; font-size: 13px; color: var(--wb-text-muted); }
+
   /* responsive (container queries) */
   @container wb-projects (max-width: 720px) {
+    .ptable col.c-desc, .ptable .p-desc-cell { display: none; }
+    .ptable col.c-name { width: auto; }
+    .ptable col.c-stored { width: 52px; }
+    .ptable .badge .badge-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .ptable .badge { padding: 0 6px; }
     .wb-projects__toolbar { flex-wrap: wrap; }
     .wb-projects__search { flex-basis: 100%; }
     .item { grid-template-columns: 48px minmax(0, 1fr) auto; }
@@ -292,6 +339,8 @@
     .item__actions .ext { display: none; }
   }
   @container wb-projects (max-width: 480px) {
+    .ptable col.c-saved, .ptable .p-saved-cell, .ptable .p-ext { display: none; }
+    .ptable col.c-actions { width: 118px; }
     .wb-projects__inner { padding: 0 16px; margin-top: 16px; }
     .wb-projects__top { flex-wrap: wrap; }
     .wb-projects__account { flex-basis: 100%; order: 2; flex-wrap: wrap; }
@@ -359,6 +408,8 @@
     <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z"/><path d="M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/><path d="M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/><path d="M11 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-rows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M21 9H3"/><path d="M21 15H3"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
     <symbol id="i-person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></symbol>
   </defs>
 </svg>
@@ -459,6 +510,7 @@
           </span>
           <div class="segmented" role="radiogroup" aria-label="View">
             <button type="button" role="radio" aria-checked="true" data-view="list" aria-label="Details" title="Details"><svg><use href="#i-list"/></svg></button>
+            <button type="button" role="radio" aria-checked="false" data-view="compact" aria-label="Compact list" title="Compact list"><svg><use href="#i-rows"/></svg></button>
             <button type="button" role="radio" aria-checked="false" data-view="grid" aria-label="Small icons" title="Small icons"><svg><use href="#i-grid"/></svg></button>
           </div>
         </div>
@@ -474,6 +526,7 @@
 
         <!-- F: list -->
         <ul class="wb-projects__list" id="list" aria-label="Projects"></ul>
+        <div class="ptable-wrap" id="table" hidden></div>
 
         <!-- G: footnote -->
         <p class="wb-projects__note">
@@ -496,18 +549,21 @@
 
 <script>
   // ---------- sample data (what ProjectListItem would hold) ----------
+  // Dates relative to now, so "Last saved" always reads naturally.
+  const MINUTE = 60e3, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
+  const ago_ = (ms) => new Date(Date.now() - ms).toISOString();
   const ITEMS = [
-    { key: 'github:1', source: 'github', name: 'VHDL-Examples', description: 'Simple VHDL examples with testbenches and waveforms.', owner: 'rlangoy', updatedAt: '2026-10-05T09:12:00Z',
+    { key: 'github:1', source: 'github', name: 'VHDL-Examples', description: 'Simple VHDL examples with testbenches and waveforms.', owner: 'rlangoy', updatedAt: ago_(8 * DAY),
       files: [{ name: 'and_gate.vhd', description: 'Two-input AND gate' }, { name: 'tb_and_gate.vhd', description: 'Testbench that walks the truth table' }] },
-    { key: 'local:2', source: 'local', name: 'QuickSnippets', description: 'Useful code snippets for embedded and FPGA development.', owner: '', updatedAt: '2026-10-03T14:40:00Z',
+    { key: 'local:2', source: 'local', name: 'QuickSnippets', description: 'Useful code snippets for embedded and FPGA development.', owner: '', updatedAt: ago_(10 * DAY),
       files: [{ name: 'debounce.vhd', description: 'Push-button debouncer' }, { name: 'uart_tx.v', description: 'UART transmitter, 115200 baud' }] },
-    { key: 'github:3', source: 'github', name: 'HDLBoard', description: 'Web-based VHDL/Verilog IDE and simulator for FPGA beginners.', owner: 'rlangoy', updatedAt: '2026-10-11T18:03:00Z',
+    { key: 'github:3', source: 'github', name: 'HDLBoard', description: 'Web-based VHDL/Verilog IDE and simulator for FPGA beginners.', owner: 'rlangoy', updatedAt: ago_(2 * DAY),
       files: [{ name: 'top.vhd', description: 'Board top level' }] },
-    { key: 'local:4', source: 'local', name: 'Lab 2 – Counter', description: 'A 4-bit counter shown on HEX0, stepped with KEY0.', owner: '', updatedAt: '2026-09-28T10:00:00Z',
+    { key: 'local:4', source: 'local', name: 'Lab 2 – Counter', description: 'A 4-bit counter shown on HEX0, stepped with KEY0.', owner: '', updatedAt: ago_(15 * DAY),
       files: [{ name: 'counter.vhd', description: '4-bit counter with enable' }, { name: 'hex7seg.vhd', description: 'Seven-segment decoder' }, { name: 'DE1_SoC.vhd', description: 'Board top level' }] },
-    { key: 'local:5', source: 'local', name: 'Lab 10 – Traffic light', description: 'A Moore state machine driving LEDR as a traffic light.', owner: '', updatedAt: '2026-10-12T08:30:00Z',
+    { key: 'local:5', source: 'local', name: 'Lab 10 – Traffic light', description: 'A Moore state machine driving LEDR as a traffic light.', owner: '', updatedAt: ago_(23 * HOUR),
       files: [{ name: 'traffic.v', description: 'Moore FSM with a 1 s tick' }, { name: 'traffic_tb.v', description: 'Testbench with a fast clock' }] },
-    { key: 'github:6', source: 'github', name: 'Full Adder Truth Table (VHDL testbench)', description: 'A full adder and a testbench that checks all eight input combinations.', owner: 'rlangoy', updatedAt: '2026-10-13T07:55:00Z', open: true,
+    { key: 'github:6', source: 'github', name: 'Full Adder Truth Table (VHDL testbench)', description: 'A full adder and a testbench that checks all eight input combinations.', owner: 'rlangoy', updatedAt: ago_(40 * MINUTE), open: true,
       files: [{ name: 'full_adder.vhd', description: 'Full adder, dataflow style' }, { name: 'tb_full_adder.vhd', description: 'Exhaustive self-checking testbench' }] },
     { key: 'github:7', source: 'github', name: 'Notes', description: '', owner: 'rlangoy', updatedAt: '',
       files: [] },
@@ -612,6 +668,63 @@
   const LANG = { vhdl: 'VHDL', verilog: 'Verilog' };
   const date = (iso) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 
+  /** "4 days ago", "2 weeks ago" (Intl.RelativeTimeFormat); the full date goes in the title. */
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const UNIT_SECONDS = [['year', 31557600], ['month', 2629800], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]];
+  function ago(iso, now = Date.now()) {
+    const seconds = Math.min(0, (new Date(iso).getTime() - now) / 1000); // the future (clock skew) reads as now
+    const [unit, size] = UNIT_SECONDS.find(([, size]) => Math.abs(seconds) >= size) ?? ['second', 1];
+    return rtf.format(Math.round(seconds / size), unit);
+  }
+
+  function badgeHtml(it) {
+    return it.source === 'github'
+      ? `<span class="badge badge--github" title="Stored on GitHub">${icon('github')}<span class="badge-text">GitHub</span></span>`
+      : `<span class="badge badge--local" title="Stored on this computer">${icon('laptop')}<span class="badge-text">Local</span></span>`;
+  }
+
+  function tableHtml(items, q, total) {
+    const sort = $('sort').value;
+    const sortBtn = (label, active, asc, next) =>
+      `<button type="button" class="th-sort${active ? ' is-sorted' : ''}${asc ? ' is-asc' : ''}" data-sort="${next}">${label}${icon('arrow-down')}</button>`;
+    const ariaSort = (active, asc) => (active ? ` aria-sort="${asc ? 'ascending' : 'descending'}"` : '');
+    const rows = items.map((it) => {
+      const isOpen = $('m-open').checked && it.open;
+      const hit = fileHit(it, q);
+      const desc = hit ? `<span class="p-file">${highlight(hit.name, q)}</span> — ${highlight(hit.description, q)}` : esc(it.description);
+      const langs = it.languages.map((l) => LANG[l]).join(' + ') || 'No source files';
+      const ext = it.source === 'github'
+        ? `<a class="icon-btn p-ext" href="#" onclick="return false" aria-label="Show ${esc(it.name)} on github.com" title="Show on github.com">${icon('open-in')}</a>`
+        : `<button type="button" class="icon-btn p-ext" aria-label="Show ${esc(it.name)} in Explorer" title="Show in Explorer">${icon('open-in')}</button>`;
+      return `
+        <tr class="${isOpen ? 'is-open' : ''}" data-key="${it.key}">
+          <td><span class="p-name lang-${tileClass(it)}" title="${langs}">${icon('code')}<strong>${esc(it.name || 'Untitled project')}</strong>${isOpen ? '<span class="chip chip--open">Open now</span>' : ''}</span></td>
+          <td class="p-desc-cell"><div class="p-desc" title="${esc(hit ? `${hit.name} — ${hit.description}` : it.description)}">${desc}</div></td>
+          <td>${badgeHtml(it)}</td>
+          <td class="p-saved-cell"><span class="p-saved" title="${it.updatedAt ? new Date(it.updatedAt).toLocaleString() : 'Not known'}">${it.updatedAt ? ago(it.updatedAt) : '—'}</span></td>
+          <td><div class="p-actions">
+            <button type="button" class="btn btn--primary" aria-label="Open ${esc(it.name)}">Open</button>
+            ${ext}
+            <button type="button" class="icon-btn" data-more="${it.key}" aria-haspopup="menu" aria-label="More for ${esc(it.name)}">${icon('more')}</button>
+          </div></td>
+        </tr>`;
+    }).join('');
+    const byDate = sort !== 'name';
+    return `
+      <table class="ptable" aria-label="Projects">
+        <colgroup><col class="c-name"/><col class="c-desc"/><col class="c-stored"/><col class="c-saved"/><col class="c-actions"/></colgroup>
+        <thead><tr>
+          <th scope="col"${ariaSort(!byDate, true)}>${sortBtn('Project name', !byDate, true, 'name')}</th>
+          <th scope="col" class="p-desc-cell">Description</th>
+          <th scope="col">Stored</th>
+          <th scope="col" class="p-saved-cell"${ariaSort(byDate, sort === 'oldest')}>${sortBtn('Last saved', byDate, sort === 'oldest', sort === 'newest' ? 'oldest' : 'newest')}</th>
+          <th scope="col" class="is-right">Actions</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="ptable-foot"><span>Showing ${items.length ? `1–${items.length}` : 0} of ${total} projects</span></div>`;
+  }
+
   function itemHtml(it, q) {
     const isOpen = $('m-open').checked && it.open;
     const badge = it.source === 'github'
@@ -655,6 +768,9 @@
       : '';
 
     const list = $('list');
+    const table = $('table');
+    list.hidden = false;
+    table.hidden = true;
     list.classList.toggle('is-grid', state.view === 'grid');
     document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === state.view)));
 
@@ -677,7 +793,13 @@
       list.innerHTML = `<li class="wb-projects__empty">${icon('search')}<p>${why}</p><button type="button" class="btn" id="clear">Clear filters</button></li>`;
       $('clear').onclick = () => { $('q').value = ''; $('type').value = 'all'; savePrefs(); render(); };
     } else {
-      list.innerHTML = shown.map((it) => itemHtml(it, q)).join('');
+      if (state.view === 'compact') {
+        list.hidden = true;
+        table.hidden = false;
+        table.innerHTML = tableHtml(shown, q, all.length);
+      } else {
+        list.innerHTML = shown.map((it) => itemHtml(it, q)).join('');
+      }
     }
     const parts = [local && `${local} local`, gh && `${gh} on GitHub`].filter(Boolean).join(' · ');
     $('counts').textContent = shown.length < all.length ? `Showing ${shown.length} of ${all.length}` : parts;
@@ -750,6 +872,15 @@
   $('q').addEventListener('input', render);
   $('type').addEventListener('change', () => { savePrefs(); render(); });
   $('sort').addEventListener('change', () => { savePrefs(); render(); });
+  // Compact list: the column headers sort too, and keep the Sort select in step.
+  $('table').addEventListener('click', (e) => {
+    const th = e.target.closest('[data-sort]');
+    if (!th) return;
+    $('sort').value = th.dataset.sort;
+    savePrefs();
+    render();
+  });
+  $('table').addEventListener('dblclick', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) tr.querySelector('.btn--primary').focus(); });
   document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; savePrefs(); render(); }));
   document.querySelectorAll('.mock-controls input').forEach((c) => c.addEventListener('change', render));
   $('list').addEventListener('dblclick', (e) => { const li = e.target.closest('.item'); if (li) li.querySelector('.btn--open').focus(); });
@@ -760,7 +891,7 @@
   // ---------- icon sheet ----------
   const SHEET = [
     ['code', 'CodeIcon', true], ['laptop', 'LaptopIcon', true], ['list', 'ListIcon', true], ['grid', 'GridIcon', true],
-    ['more', 'MoreIcon', true], ['clock', 'ClockIcon', true], ['person', 'PersonIcon', true],
+    ['rows', 'RowsIcon', true], ['arrow-down', 'ArrowDownIcon', true], ['more', 'MoreIcon', true], ['clock', 'ClockIcon', true], ['person', 'PersonIcon', true],
     ['github', 'GitHubIcon'], ['plus', 'PlusIcon'], ['search', 'SearchIcon'], ['folder-open', 'FolderOpenIcon'], ['open-in', 'OpenInIcon'],
     ['refresh', 'RefreshIcon'], ['sign-out', 'SignOutIcon'], ['close', 'CloseIcon'], ['cloud-up', 'CloudUploadIcon'], ['copy', 'CopyIcon'],
     ['delete', 'DeleteIcon'], ['project', 'ProjectIcon'], ['info', 'InfoIcon'], ['file', 'FileIcon'], ['alert', 'AlertIcon'], ['chevron-down', 'ChevronDownIcon'], ['check', 'CheckIcon'],
