@@ -7,7 +7,15 @@ import type { FolderFile, FolderHandle, ItemSource, SkippedFile } from './localP
 import type { ProjectListItem } from './projectCatalog';
 import type { LocalSourceFile } from './projectFile';
 import { storedLayout } from './projectLayout';
-import { NO_FOLDER, readChosenFolderFiles, readDesktopFolder, readRememberedFolder, type FolderReading, type FolderState } from './projectsFolderReading';
+import {
+  NO_FOLDER,
+  adoptsSavedFolder,
+  readChosenFolderFiles,
+  readDesktopFolder,
+  readRememberedFolder,
+  type FolderReading,
+  type FolderState,
+} from './projectsFolderReading';
 import { loadProjectsFolder, saveProjectsFolder } from './projectsFolderStore';
 import { pickProjectsFolder } from './fileSystemAccess';
 import { canPickFolder, type PickedFolder } from './projectSave';
@@ -45,6 +53,12 @@ export interface LocalProjects {
   adoptFolder(folder: FolderHandle): void;
   /** The same for browsers without folder handles: the files a folder input chose. */
   adoptFolderFiles(files: readonly File[]): void;
+  /**
+   * A folder Save project just wrote to, with access granted by its picker: it becomes the
+   * projects folder unless the known one can be read and already holds it (adoptsSavedFolder),
+   * so Open Project lists it without asking for access again.
+   */
+  adoptSavedFolder(folder: FolderHandle): Promise<void>;
 }
 
 type Backend = 'desktop' | 'handle' | 'files';
@@ -150,6 +164,15 @@ export function useLocalProjects(active: boolean): LocalProjects {
     })();
   };
 
+  const adoptSavedFolder = async (folder: FolderHandle) => {
+    if (backend !== 'handle') return;
+    const known = folderHandle.current ?? (await loadProjectsFolder());
+    if (!(await adoptsSavedFolder(folder, known))) return;
+    folderHandle.current = folder;
+    setRemembered(await saveProjectsFolder(folder));
+    if (active) await scan();
+  };
+
   const adoptFolderFiles = (files: readonly File[]) => {
     if (backend !== 'files' || chosenFiles.current !== null) return;
     chosenFiles.current = [...files];
@@ -171,6 +194,7 @@ export function useLocalProjects(active: boolean): LocalProjects {
     readForOpen,
     adoptFolder,
     adoptFolderFiles,
+    adoptSavedFolder,
   };
 }
 

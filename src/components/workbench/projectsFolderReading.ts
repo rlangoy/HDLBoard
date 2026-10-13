@@ -57,3 +57,27 @@ export async function readChosenFolderFiles(files: readonly File[]): Promise<Fol
   const rootName = files[0].webkitRelativePath.split('/')[0] ?? '';
   return { outcome: await scanChosenFiles(files), folderState: 'ready', folderLabel: rootName };
 }
+
+/** The parts of a folder handle that compare it with another (Chrome, Edge). */
+interface ComparableFolder {
+  isSameEntry?(other: unknown): Promise<boolean>;
+  resolve?(possibleDescendant: unknown): Promise<string[] | null>;
+}
+
+/**
+ * Whether the folder a project was just saved into should become the projects folder, so
+ * the Projects page lists it at once, without asking for access again: the save already
+ * got it. Yes when no projects folder is known yet, when it is that same folder (a handle
+ * from an earlier visit that would need asking again), or when the known one cannot be
+ * read without asking. No when the known folder can be read and already holds the saved
+ * one (the saved folder is listed there anyway).
+ */
+export async function adoptsSavedFolder(saved: FolderHandle, known: FolderHandle | null): Promise<boolean> {
+  if (known === null) return true;
+  const comparable = known as unknown as ComparableFolder;
+  if (await comparable.isSameEntry?.(saved).catch(() => false)) return true;
+  const permission = (await known.queryPermission?.({ mode: 'read' }).catch(() => 'prompt' as const)) ?? 'granted';
+  if (permission !== 'granted') return true;
+  const inside = await comparable.resolve?.(saved).catch(() => null);
+  return inside === null || inside === undefined;
+}

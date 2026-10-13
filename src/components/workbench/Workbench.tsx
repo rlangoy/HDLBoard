@@ -1151,7 +1151,11 @@ export function Workbench() {
         );
         return;
       }
-      if (picked) saveFolderRef.current = picked;
+      if (picked) {
+        saveFolderRef.current = picked;
+        // The picker granted access to this folder: Open Project lists it without asking again.
+        void localProjects.adoptSavedFolder(picked as unknown as FolderHandle).catch(() => undefined);
+      }
       savedDiskRef.current = disk;
       setProject((p) => p && withSaved(withOnDisk({ ...p, location }, plan.onDisk, projectFile.name), current));
       setEmptiedFolders(outcome.emptiedFolders);
