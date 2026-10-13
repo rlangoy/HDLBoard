@@ -51,7 +51,7 @@ export interface GitHubProjectsOptions {
   project: OpenProject | null;
   /** The files in Files: the open project's files. */
   files: readonly SourceFile[];
-  setProject: (update: (project: OpenProject | null) => OpenProject | null) => void;
+  setProject: (update: (project: OpenProject) => OpenProject) => void;
   /** Opens a project read from its gist, replacing Files. Returns why not, or null. */
   openGistProject: (opened: OpenedGistProject) => Promise<string | null>;
   /** Shows the GitHub dialog, so the user can sign in. */
@@ -128,7 +128,7 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
   }, [projects, refresh]);
 
   const linkSaved = (result: SaveResult, saved: ProjectSnapshot) => {
-    setProject((current) => current && withSavedGistLink(current, result.link, saved));
+    setProject((current) => withSavedGistLink(current, result.link, saved));
     setConflict(null);
     refresh();
   };
@@ -189,7 +189,7 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
     if (projects === null || !window.confirm(deleteQuestion(entry))) return;
     void run(`Deleting ${entry.name} from GitHub…`, async () => {
       await projects.remove(entry.gistId);
-      if (project?.gist?.gistId === entry.gistId) setProject((current) => current && withoutGistLink(current));
+      if (project?.gist?.gistId === entry.gistId) setProject((current) => withoutGistLink(current));
       setEntries((current) => current?.filter((other) => other.gistId !== entry.gistId) ?? null);
       report('success', `Deleted ${entry.name} from GitHub. The files open in HDLBoard are kept.`);
     });

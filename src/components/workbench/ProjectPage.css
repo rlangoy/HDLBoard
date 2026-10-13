@@ -439,7 +439,6 @@
 .wb-project__table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 
 .wb-project__table th {
@@ -453,16 +452,14 @@
   color: var(--wb-text-muted);
 }
 
-.wb-project__table th:nth-child(1) {
-  width: 23%;
-}
-
-.wb-project__table th:nth-child(2) {
-  width: 22%;
-}
-
-.wb-project__table th:nth-child(4) {
-  width: 84px;
+/*
+ * Name and actions take only the width they need; the description takes the rest, so it
+ * starts right after the longest file name and runs as long as the row allows.
+ */
+.wb-project__table th:nth-child(1),
+.wb-project__table th:nth-child(3) {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .wb-project__table td {
@@ -476,14 +473,22 @@
 }
 
 .wb-project__cell-name {
-  overflow-wrap: anywhere;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+
+.wb-project__cell-description {
+  width: 100%;
+  /* Takes the width that is left, and never more: a long description wraps instead of widening the page. */
+  max-width: 0;
 }
 
 .wb-project__file {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  max-width: 100%;
+  /* A very long name shortens with … (the full name is in the tooltip) rather than squeezing the description. */
+  max-width: 280px;
   padding: 6px 6px 6px 2px;
   border: 0;
   border-radius: 6px;
@@ -506,6 +511,12 @@ button.wb-project__file:hover {
   cursor: default;
 }
 
+.wb-project__file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .wb-project__file-icon {
   width: 18px;
   height: 18px;
@@ -514,14 +525,11 @@ button.wb-project__file:hover {
 
 .wb-project__problem {
   display: block;
+  white-space: normal;
   margin: 2px 0 0 26px;
   font-size: 12px;
   line-height: 1.4;
   color: #92400e;
-}
-
-.wb-project__url .wb-project__field {
-  font-size: 13px;
 }
 
 .wb-project__cell-actions {
@@ -736,4 +744,32 @@ button.wb-project__file:hover {
 .wb-project__btn--small svg {
   width: 16px;
   height: 16px;
+}
+
+/* Project folder (docs/impl_project_structure.md § 7). */
+.wb-project__folder {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--wb-text-muted);
+}
+
+/* What the next save does to the files on disk. */
+.wb-project__layout-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--wb-text);
+}
+
+/* A folder the last save emptied, offered for removal. */
+.wb-project__emptied {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
 }

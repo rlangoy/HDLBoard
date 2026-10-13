@@ -11,7 +11,6 @@ import {
   FileIcon,
   FolderOpenIcon,
   InfoIcon,
-  LinkIcon,
   MinusIcon,
   OpenInIcon,
   PlusIcon,
@@ -22,7 +21,6 @@ import {
 import {
   KNOWN_BOARDS,
   MISSING_LOCAL_FILE,
-  entryUrlError,
   projectFileBase,
   projectFileNameError,
   projectFileNameFromBase,
@@ -31,6 +29,7 @@ import {
   type ProjectEntryRow,
 } from './projectFile';
 import { ScrollArea } from './ScrollArea';
+import { pendingLayoutChange, projectDirectoryOf, sourceFolderOf } from './projectLayout';
 import './ProjectPage.css';
 
 export interface ProjectPageProps {
@@ -55,6 +54,9 @@ export interface ProjectPageProps {
   onSave: () => void;
   /** Where Save project writes, for its tooltip. */
   saveHint: string;
+  /** Folders the last save emptied (docs/impl_project_structure.md D13): offered for removal, never removed unasked. */
+  emptiedFolders: readonly string[];
+  onRemoveFolder: (folder: string) => void;
   /** Stop working in a project: Files keeps its files. */
   onCloseProject: () => void;
   /** Back to the code. */
@@ -79,6 +81,7 @@ export function ProjectPage(props: ProjectPageProps) {
   const missingInFolder = rows.filter((row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE);
   const unloadedCount = rows.filter((row) => row.status === 'unloaded').length;
   const ids = useId();
+  const layoutChange = pendingLayoutChange(project);
   // Keyboard focus starts on the page, so Escape closes it and Tab walks its fields.
   const sectionRef = useRef<HTMLElement>(null);
   // A new project without a name starts in its name field instead (AutoTextArea autoFocus).
@@ -178,6 +181,12 @@ export function ProjectPage(props: ProjectPageProps) {
                   />
                 </dd>
               </div>
+              <div className="wb-project__fact">
+                <dt>Project folder</dt>
+                <dd className="wb-project__mono wb-project__folder" title="Named after the project file">
+                  {projectDirectoryOf(project)}
+                </dd>
+              </div>
               <div className="wb-project__fact wb-project__fact--wide">
                 <dt>
                   <label htmlFor={`${ids}-description`}>Description</label>
@@ -198,7 +207,20 @@ export function ProjectPage(props: ProjectPageProps) {
                 Location <span className="wb-project__mono">{project.location}</span>
               </p>
             )}
+            <LayoutHint project={project} change={layoutChange} />
           </section>
+
+          {props.emptiedFolders.map((folder) => (
+            <p key={folder} className="wb-project__card wb-project__emptied" role="status">
+              <span>
+                The old folder <span className="wb-project__mono">{folder}</span> is empty.
+              </span>
+              <button type="button" className="wb-project__btn" onClick={() => props.onRemoveFolder(folder)} disabled={busy !== null}>
+                <DeleteIcon aria-hidden="true" />
+                Remove folder
+              </button>
+            </p>
+          ))}
 
           {props.available.length > 0 && (
             <AvailableFilesCard names={props.available} onAdd={props.onAddFiles} hasFiles={rows.length > 0} />
@@ -253,7 +275,6 @@ export function ProjectPage(props: ProjectPageProps) {
                 <thead>
                   <tr>
                     <th scope="col">Name</th>
-                    <th scope="col">Stored at</th>
                     <th scope="col">Description</th>
                     <th scope="col">
                       <span className="wb-project__sr">Actions</span>
@@ -272,9 +293,10 @@ export function ProjectPage(props: ProjectPageProps) {
           <p className="wb-project__note">
             <InfoIcon className="wb-project__note-icon" aria-hidden="true" />
             <span>
-              The project file lists the project's files, each with a description. A file without a URL is stored next to the
-              project file; one with a URL is downloaded from it. Save project writes the project file and all its files into one
-              folder. To open a project, use Open Project with its URL or path, or Upload File with the project file and its
+              The project file lists the project's files, each with a description. On this computer the files are stored in
+              the project folder next to the project file, in its source folder ({sourceFolderOf(project)}); a file with a URL
+              is downloaded from it. Save project writes the project file and all its files; Download All gives the same as a
+              .zip. To open a project, use Open Project with its URL or path, or Upload File with the project file and its
               files selected together. Files you add, rename or delete in Files are added, renamed or removed here too.
             </span>
           </p>
@@ -282,11 +304,48 @@ export function ProjectPage(props: ProjectPageProps) {
             <button type="button" className="wb-project__link-btn" onClick={props.onCloseProject}>
               Close project
             </button>
-            <span>Files keeps its files; they are no longer listed in a project.</span>
+            <span>Files keeps its files, in the Default project.</span>
           </div>
         </div>
       </ScrollArea>
     </section>
+  );
+}
+
+/**
+ * What the next save does to the files on disk (docs/impl_project_structure.md § 7): copy a
+ * flat project into its source folder, or move the files to a new one. Nothing is said
+ * about the flat files themselves: they are left alone (D9).
+ */
+function LayoutHint({ project, change }: { project: OpenProject; change: ReturnType<typeof pendingLayoutChange> }) {
+  const target = sourceFolderOf(project);
+  let text: ReactNode = null;
+  if (change.renamedOutsideFrom !== undefined) {
+    text = (
+      <>
+        The project file was renamed: its files move from <span className="wb-project__mono">{change.renamedOutsideFrom}</span> to{' '}
+        <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  } else if (change.move) {
+    text = (
+      <>
+        Files move to <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  } else if (change.copy) {
+    text = (
+      <>
+        Files are copied to <span className="wb-project__mono">{target}</span> when you save.
+      </>
+    );
+  }
+  if (text === null) return null;
+  return (
+    <p className="wb-project__layout-hint" role="status">
+      <InfoIcon className="wb-project__note-icon" aria-hidden="true" />
+      <span>{text}</span>
+    </p>
   );
 }
 
@@ -295,7 +354,11 @@ interface EntryRowProps extends Omit<ProjectPageProps, 'busy'> {
   rowBusy: boolean;
 }
 
-/** One file of the project: its name, URL and description, and what can be done with it. */
+/**
+ * One file of the project: its name and description, and what can be done with it. Where
+ * it is stored (its URL) is kept in the project file but not edited here: an advanced
+ * setting for later.
+ */
 function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry, onReloadFromUrl, onLeaveProject }: EntryRowProps) {
   const loaded = row.status === 'loaded';
   return (
@@ -304,26 +367,17 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
         {loaded ? (
           <button type="button" className="wb-project__file" onClick={() => onOpenFile(row.name)} title={`Show ${row.name} in the editor`}>
             <FileIcon className="wb-project__file-icon" aria-hidden="true" />
-            {row.name}
+            <span className="wb-project__file-name">{row.name}</span>
           </button>
         ) : (
           <span className="wb-project__file is-unloaded">
             <AlertIcon className="wb-project__warn-icon" aria-hidden="true" />
-            {row.name}
+            <span className="wb-project__file-name" title={row.name}>
+              {row.name}
+            </span>
           </span>
         )}
         {!loaded && <span className="wb-project__problem">{row.problem}</span>}
-      </td>
-      <td className="wb-project__cell-url">
-        <CommitField
-          value={row.url}
-          validate={entryUrlError}
-          onCommit={(url) => onEntryChange(row.name, { url: url.trim() })}
-          placeholder="(project folder)"
-          ariaLabel={`URL of ${row.name}`}
-          icon={row.url !== '' ? <LinkIcon aria-hidden="true" /> : undefined}
-          className="wb-project__url"
-        />
       </td>
       <td className="wb-project__cell-description">
         <AutoTextArea

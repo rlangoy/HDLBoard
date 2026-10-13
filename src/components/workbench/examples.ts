@@ -129,6 +129,17 @@ export interface ExampleCopy {
   kept: string[];
   /** The project file to open: the new copy of the first file, or the existing one it matched. */
   openId: string;
+  /**
+   * What each added file is for, by its name: the description of the example card the file
+   * opens itself (the AND gate a testbench brings along is described as the AND gate), else
+   * the opened example's. Goes into the project's file list.
+   */
+  descriptions: Record<string, string>;
+}
+
+/** The description of the example `fileId` is the first file of, else of `example`, which it came with. */
+function descriptionOf(fileId: string, example: Example): string {
+  return (EXAMPLES.find((other) => other.fileIds[0] === fileId) ?? example).description;
 }
 
 /**
@@ -139,6 +150,7 @@ export interface ExampleCopy {
 export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string): ExampleCopy {
   const added: VhdlFile[] = [];
   const kept: string[] = [];
+  const descriptions: Record<string, string> = {};
   const projectIdOf = (source: VhdlFile): string => {
     const existing = files.find((f) => f.name.toLowerCase() === source.name.toLowerCase());
     if (existing) {
@@ -147,8 +159,9 @@ export function copyExample(example: Example, files: readonly VhdlFile[], newId:
     }
     const copy = { ...source, id: newId() };
     added.push(copy);
+    descriptions[copy.name] = descriptionOf(source.id, example);
     return copy.id;
   };
   const [openId] = example.fileIds.map((id) => projectIdOf(exampleFile(id)));
-  return { added, kept, openId };
+  return { added, kept, openId, descriptions };
 }

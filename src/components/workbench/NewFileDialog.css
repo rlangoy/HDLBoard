@@ -232,3 +232,16 @@
   width: 18px;
   height: 18px;
 }
+
+/* Save project's Overwrite files? (OverwriteDialog.tsx): one full path per line. */
+.wb-overwrite__list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.wb-overwrite__list li {
+  margin: 2px 0;
+}

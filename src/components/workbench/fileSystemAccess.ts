@@ -12,6 +12,8 @@
  * falls back to the plain file input and a folder input.
  */
 
+import { tagPath, type TaggedFile } from './chosenFolder';
+
 /** The handles of chosen or dropped files, by file name. */
 export type FileHandles = ReadonlyMap<string, FileSystemFileHandle>;
 
@@ -26,7 +28,7 @@ interface DirectoryPickerOptions {
   /** Where the picker opens; the browser remembers the last folder per `id`. */
   startIn?: FileSystemHandle;
   id?: string;
-  mode: 'read';
+  mode: 'read' | 'readwrite';
 }
 
 interface PickerWindow {
@@ -83,10 +85,14 @@ export function droppedFileHandles(dataTransfer: DataTransfer): Promise<FileHand
 
 /**
  * Asks for the folder the file is in, with the folder picker opened there, and reads
- * the files in it (not its subfolders). The folder comes back too: it can become the
- * Projects page's folder. Undefined when the student cancels.
+ * the files in it and in `subfolder` (`lab1/src`, the project's source folder,
+ * docs/impl_project_structure.md), each tagged with its path. The folder comes back too:
+ * it can become the Projects page's folder. Undefined when the student cancels.
  */
-export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder: FileSystemDirectoryHandle; files: File[] } | undefined> {
+export async function pickFolderOf(
+  file: FileSystemFileHandle,
+  subfolder?: string,
+): Promise<{ folder: FileSystemDirectoryHandle; files: TaggedFile[] } | undefined> {
   let folder: FileSystemDirectoryHandle;
   try {
     folder = await pickers().showDirectoryPicker!({ startIn: file, mode: 'read' });
@@ -94,11 +100,36 @@ export async function pickFolderOf(file: FileSystemFileHandle): Promise<{ folder
     if (isCancel(error)) return undefined;
     throw error;
   }
-  const files: File[] = [];
-  for await (const entry of (folder as unknown as IterableDirectory).values()) {
-    if (isFileHandle(entry)) files.push(await entry.getFile());
+  const files = await filesIn(folder, '');
+  if (subfolder) {
+    let inner: FileSystemDirectoryHandle | null = folder;
+    for (const part of subfolder.split('/')) inner = inner && (await inner.getDirectoryHandle(part).catch(() => null));
+    if (inner) files.push(...(await filesIn(inner, subfolder)));
   }
   return { folder, files };
+}
+
+/** The files directly in `folder`, tagged with `prefix/name`. */
+async function filesIn(folder: FileSystemDirectoryHandle, prefix: string): Promise<TaggedFile[]> {
+  const files: TaggedFile[] = [];
+  for await (const entry of (folder as unknown as IterableDirectory).values()) {
+    if (isFileHandle(entry)) files.push(tagPath(await entry.getFile(), prefix === '' ? entry.name : `${prefix}/${entry.name}`));
+  }
+  return files;
+}
+
+/**
+ * Open project or files › Open project folder (Chrome, Edge): a folder that holds projects,
+ * with access to save into it too, so neither listing it on the Projects page nor Save project
+ * asks again in this visit. Undefined when cancelled.
+ */
+export async function pickProjectFolder(): Promise<FileSystemDirectoryHandle | undefined> {
+  try {
+    return await pickers().showDirectoryPicker!({ id: 'hdlboard-projects', mode: 'readwrite' });
+  } catch (error) {
+    if (isCancel(error)) return undefined;
+    throw error;
+  }
 }
 
 /** The Projects page's Choose folder: a folder to list, read only. Undefined when cancelled. */

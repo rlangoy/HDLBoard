@@ -86,6 +86,20 @@ describe('scanChosenFiles', () => {
     expect(outcome.items.map((item) => item.name)).toEqual(['Lab 1']);
     expect(outcome.sources.get(outcome.items[0].key)).toEqual({ kind: 'files', projectFile: project, others: [sibling] });
   });
+
+  test("takes the files in the project's own folders too, at 4 and 5 path segments (docs/impl_project_structure.md § 6.8)", async () => {
+    const atRoot = chosen('Projects/fantasicleds.hdlboard.json', projectText('Fantasic'));
+    const own = chosen('Projects/fantasicleds/src/DE1_SoC.vhdl');
+    const oneDown = chosen('Projects/lab1/lab1.hdlboard.json', projectText('Lab 1'));
+    const ownOneDown = chosen('Projects/lab1/lab1/src/a.vhd');
+    const outcome = await scanChosenFiles([atRoot, own, oneDown, ownOneDown]);
+    const others = (name: string) => {
+      const source = outcome.sources.get(outcome.items.find((item) => item.name === name)!.key);
+      return source?.kind === 'files' ? source.others : [];
+    };
+    expect(others('Fantasic')).toContain(own);
+    expect(others('Lab 1')).toEqual([ownOneDown]);
+  });
 });
 
 describe('itemsFromListing', () => {
