@@ -62,7 +62,7 @@ export interface GitHubProjectsOptions {
 
 type SignedInAction = (projects: ProjectGists) => Promise<void>;
 
-/** The GitHub actions on projects (docs/GITHUB.md), for the GitHub dialog and the project page. */
+/** The GitHub actions on projects (docs/GITHUB.md), for the GitHub dialog and the project settings. */
 export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProjects {
   const { github, project, files, setProject, openGistProject, showSignIn, log } = options;
   const projects = github.session?.projects ?? null;

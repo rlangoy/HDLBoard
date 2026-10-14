@@ -3,7 +3,6 @@
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../board';
-import { PROJECT_FILE_EXTENSION } from '../../project/types';
 import {
   AlertIcon,
   CloseIcon,
@@ -21,9 +20,6 @@ import {
 import {
   KNOWN_BOARDS,
   MISSING_LOCAL_FILE,
-  projectFileBase,
-  projectFileNameError,
-  projectFileNameFromBase,
   type OpenProject,
   type ProjectDetails,
   type ProjectEntryRow,
@@ -32,7 +28,7 @@ import {
 import { GitHubStatus } from './GitHubStatus';
 import { CloudUploadIcon, EditIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
-import { pendingLayoutChange, projectDirectoryOf, sourceFolderOf } from './projectLayout';
+import { pendingLayoutChange, sourceFolderOf } from './projectLayout';
 import './ProjectPage.css';
 
 export interface ProjectPageProps {
@@ -81,7 +77,7 @@ export interface ProjectPageProps {
 }
 
 /**
- * The project page: shown in place of the code while open (the editor stays mounted
+ * The project settings: shown in place of the code while open (the editor stays mounted
  * underneath, like the Examples pane). Everything the project file holds can be edited
  * here — its name, board and description, its own file name, and each file's
  * description and URL. The files themselves are added, renamed and deleted in Files.
@@ -125,7 +121,7 @@ export function ProjectPage(props: ProjectPageProps) {
               </div>
               <div className="wb-project__names">
                 <span className="wb-project__eyebrow">
-                  Project
+                  Project name
                   {unsaved && <span className="wb-project__unsaved">Unsaved changes</span>}
                 </span>
                 <div className={cx('wb-project__name-row', asking && 'is-asking', asking && nameMissing && 'is-error')}>
@@ -183,7 +179,7 @@ export function ProjectPage(props: ProjectPageProps) {
                     Save project
                   </button>
                 )}
-                <button type="button" className="wb-project__close" onClick={onClose} aria-label="Close the project page" title="Back to the code (Esc)">
+                <button type="button" className="wb-project__close" onClick={onClose} aria-label="Close the project settings" title="Back to the code (Esc)">
                   <CloseIcon aria-hidden="true" />
                 </button>
               </div>
@@ -215,25 +211,12 @@ export function ProjectPage(props: ProjectPageProps) {
               </div>
               <div className="wb-project__fact wb-project__fact--grow">
                 <dt>
-                  <label htmlFor={`${ids}-file`}>Project file</label>
+                  <span>Project file</span>
                 </dt>
                 <dd>
-                  <CommitField
-                    id={`${ids}-file`}
-                    value={project.fileName}
-                    validate={projectFileNameError}
-                    onCommit={(fileName) => onDetailsChange({ fileName })}
-                    className="wb-project__mono"
-                    suffix={PROJECT_FILE_EXTENSION}
-                    toDraft={projectFileBase}
-                    fromDraft={projectFileNameFromBase}
-                  />
-                </dd>
-              </div>
-              <div className="wb-project__fact">
-                <dt>Project folder</dt>
-                <dd className="wb-project__mono wb-project__folder" title="Named after the project file">
-                  {projectDirectoryOf(project)}
+                  <span id={`${ids}-file`} className="wb-project__mono wb-project__file-name-static" title="Named after the project">
+                    {project.fileName}
+                  </span>
                 </dd>
               </div>
               <div className="wb-project__fact wb-project__fact--wide">
@@ -571,116 +554,6 @@ function MissingFilesCard({ names, busy, onFolderChosen }: MissingFilesCardProps
       </button>
       <input ref={inputRef} type="file" multiple className="wb-project__hidden-input" onChange={handleChange} tabIndex={-1} />
     </section>
-  );
-}
-
-interface CommitFieldProps {
-  value: string;
-  /** Why a typed value cannot be used, or undefined. */
-  validate: (value: string) => string | undefined;
-  onCommit: (value: string) => void;
-  id?: string;
-  placeholder?: string;
-  ariaLabel?: string;
-  icon?: ReactNode;
-  className?: string;
-  /**
-   * A fixed ending drawn after the field, outside what can be typed, e.g. `.hdlboard.json`
-   * (the input-group pattern): it cannot be deleted, and screen readers hear it with the field.
-   */
-  suffix?: string;
-  /** With `suffix`: the value as it is edited (without the suffix), and back. */
-  toDraft?: (value: string) => string;
-  fromDraft?: (draft: string) => string;
-}
-
-const same = (text: string) => text;
-
-/**
- * A text field that takes effect when left or on Enter, and only with a valid value —
- * a project file name or URL half typed is never saved. Escape goes back to the value.
- */
-function CommitField({
-  value,
-  validate,
-  onCommit,
-  id,
-  placeholder,
-  ariaLabel,
-  icon,
-  className,
-  suffix,
-  toDraft = same,
-  fromDraft = same,
-}: CommitFieldProps) {
-  const [draft, setDraft] = useState(() => toDraft(value));
-  useEffect(() => setDraft(toDraft(value)), [value, toDraft]);
-  const next = fromDraft(draft);
-  const error = next === value ? undefined : validate(next);
-  const errorId = useId();
-  const suffixId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const commit = () => {
-    if (next !== value && validate(next) === undefined) onCommit(next);
-    // An extension typed into the name is shown dropped once the field is left.
-    else if (next === value) setDraft(toDraft(value));
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commit();
-    } else if (e.key === 'Escape' && draft !== toDraft(value)) {
-      e.preventDefault();
-      setDraft(toDraft(value));
-    }
-  };
-
-  const describedBy = [suffix ? suffixId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined;
-
-  return (
-    <div className={cx('wb-project__commit', className)}>
-      <span className={cx('wb-project__field-wrap', suffix && 'has-suffix', error !== undefined && 'is-invalid')}>
-        {icon && <span className="wb-project__field-icon">{icon}</span>}
-        <input
-          ref={inputRef}
-          id={id}
-          className={cx('wb-project__field', icon !== undefined && 'has-icon')}
-          value={draft}
-          placeholder={placeholder}
-          aria-label={ariaLabel}
-          aria-invalid={error !== undefined}
-          aria-describedby={describedBy}
-          spellCheck={false}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={handleKeyDown}
-        />
-        {suffix && (
-          // Part of the field to the eye and the pointer, never part of what is typed.
-          <span
-            id={suffixId}
-            className="wb-project__field-suffix"
-            title={`The project file always ends in ${suffix}`}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const input = inputRef.current;
-              input?.focus();
-              input?.setSelectionRange(input.value.length, input.value.length);
-            }}
-          >
-            <span className="wb-project__sr">ends in </span>
-            {suffix}
-          </span>
-        )}
-      </span>
-      {error && (
-        <span id={errorId} className="wb-project__field-error" role="alert">
-          {error}
-        </span>
-      )}
-    </div>
   );
 }
 

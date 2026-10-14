@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (C) 2026 Rune Langøy */
 
-/* GitHub: the dialog (GitHubDialog.tsx), the project page's card (ProjectGitHubCard.tsx),
+/* GitHub: the dialog (GitHubDialog.tsx), the project settings' card (ProjectGitHubCard.tsx),
    the conflict dialog and the status chip. The dialog shell is in Dialog.css. */
 
 /* ---- Buttons ---- */
@@ -320,7 +320,7 @@
   color: #b45309;
 }
 
-/* ---- Project page card ---- */
+/* ---- Project settings card ---- */
 
 .wb-github__card {
   display: flex;
@@ -394,7 +394,7 @@
   gap: 10px;
 }
 
-/* Waiting for a project name: dimmed, but clickable so the project page can ask for it. */
+/* Waiting for a project name: dimmed, but clickable so the project settings can ask for it. */
 .wb-github__btn[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;

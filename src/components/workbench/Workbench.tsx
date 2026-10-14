@@ -200,7 +200,7 @@ interface RunChoice {
 const BOARD_PANE_TITLE = 'Board I/O';
 
 /**
- * When opening a project shows the project page: always (a URL), only when a file could
+ * When opening a project shows the project settings: always (a URL), only when a file could
  * not be loaded or loading warned (a gist), or only when the project lists no files
  * (opened from this computer: straight to the code).
  */
@@ -277,12 +277,12 @@ export function Workbench() {
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
-  // What is shown over the editor (which stays mounted underneath): the Examples pane, the project page or the Projects page.
+  // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
   const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(() => defaultProject(STARTER_FILES));
-  // What the project is busy with, e.g. downloading a file; shown on the project page.
+  // What the project is busy with, e.g. downloading a file; shown on the project settings.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
   // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
   const [folderNeeded, setFolderNeeded] = useState<readonly string[] | null>(null);
@@ -294,7 +294,7 @@ export function Workbench() {
   const saveFolderRef = useRef<PickedFolder | null>(null);
   // Save project would overwrite files that are not the project's own: the question, and its answer.
   const [overwriteAsk, setOverwriteAsk] = useState<{ paths: readonly string[]; answer: (overwrite: boolean) => void } | null>(null);
-  // Folders the last save emptied, offered for removal on the project page (D13), and the disk they are on.
+  // Folders the last save emptied, offered for removal on the project settings (D13), and the disk they are on.
   const [emptiedFolders, setEmptiedFolders] = useState<readonly string[]>([]);
   const savedDiskRef = useRef<SaveDisk | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
@@ -794,7 +794,7 @@ export function Workbench() {
 
   /**
    * Opens a project file's text: its files replace what Files holds, the first of them is
-   * shown, and the project page shows as `page` says (ProjectPageWhen).
+   * shown, and the project settings shows as `page` says (ProjectPageWhen).
    * `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could not be
    * opened, or null.
    */
@@ -821,7 +821,7 @@ export function Workbench() {
 
   /**
    * A project read from its gist through the GitHub API (the Projects page, Get the GitHub
-   * version). Opened cleanly, it goes straight to the editor; the project page shows only
+   * version). Opened cleanly, it goes straight to the editor; the project settings shows only
    * when something needs a look.
    */
   const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
@@ -1022,7 +1022,7 @@ export function Workbench() {
     });
   }, []);
 
-  /** Project page: the files of the folder the student chose, for the entries that were not found. */
+  /** Project settings: the files of the folder the student chose, for the entries that were not found. */
   const handleProjectFolderChosen = async (chosen: TaggedFile[]) => {
     const missing = projectEntries(project, filesRef.current.map((f) => f.name)).filter(
       (row) => row.status === 'unloaded' && row.problem === MISSING_LOCAL_FILE,
@@ -1059,7 +1059,7 @@ export function Workbench() {
     for (const f of found) appendLog(`Opened ${f.name} from the project folder.`, 'success');
   };
 
-  /** Project page: download a file again from its URL, into Files. */
+  /** Project settings: download a file again from its URL, into Files. */
   const handleReloadFromUrl = async (name: string) => {
     const row = projectEntries(project, fileNames).find((r) => sameFileName(r.name, name));
     if (!row || row.url === '') return;
@@ -1197,7 +1197,7 @@ export function Workbench() {
     }
   };
 
-  /** Project page: remove a folder the last save emptied, if it is still empty (D13). */
+  /** Project settings: remove a folder the last save emptied, if it is still empty (D13). */
   const handleRemoveEmptyFolder = async (folder: string) => {
     const disk = savedDiskRef.current;
     setEmptiedFolders((left) => left.filter((other) => other !== folder));
@@ -1241,17 +1241,17 @@ export function Workbench() {
     if (file) handleOpenFile(file.id);
   };
 
-  // New File > Project: a project listing every file now in Files, shown on the project page.
+  // New File > Project: a project listing every file now in Files, shown on the project settings.
   const handleCreateProject = (name: string) => {
     setDialog(null);
     const created = newProject(name, fileNames);
     saveFolderRef.current = null;
     setProject(created);
     setOverlay('project');
-    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project page.`, 'success');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project settings.`, 'success');
   };
 
-  // Create Project (Files panel): a new, empty project; the project page offers the files now in Files.
+  // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
   const handleStartProject = () => {
     const started = startProject(fileNames);
     saveFolderRef.current = null;
@@ -1455,9 +1455,9 @@ export function Workbench() {
   });
 
   // Ctrl+Shift+S saves to GitHub (Ctrl+S, above, saves the shown file to disk).
-  // The untouched Default project is named on the project page before it is saved to GitHub.
+  // The untouched Default project is named on the project settings before it is saved to GitHub.
   const untouchedDefault = isUntouchedDefault(project, projectUnsaved);
-  // Whether the project page was opened for that first save: decided as it opens, and kept while it
+  // Whether the project settings was opened for that first save: decided as it opens, and kept while it
   // stays open, so editing the project's details does not change the page under the user.
   const [firstSaveAsked, setFirstSaveAsked] = useState(false);
   useEffect(() => {
@@ -1683,7 +1683,7 @@ export function Workbench() {
           />
 
           <div className="wb-center">
-            {/* Under the Examples pane or the project page the editor is inert: no caret, no typing into a hidden file. */}
+            {/* Under the Examples pane or the project settings the editor is inert: no caret, no typing into a hidden file. */}
             <div className="wb-center__editor" {...(overlay !== null ? { inert: '' } : {})}>
             <CodeEditor
               onChange={handleContentChange}
@@ -1744,6 +1744,8 @@ export function Workbench() {
                 onOpenItem={(item) => void handleOpenListedProject(item)}
                 onNewProject={handleStartProject}
                 onShowProjectPage={() => setOverlay('project')}
+                // A project without a name is named on its settings first.
+                onSaveLocal={() => (projectNeedsName(project) ? setOverlay('project') : void handleSaveProject())}
                 onSignIn={() => setDialog('githubSignIn')}
                 onShowInFolder={showInFolder && ((path) => void showInFolder(path))}
                 onOpenFromUrl={showOpenDialog}

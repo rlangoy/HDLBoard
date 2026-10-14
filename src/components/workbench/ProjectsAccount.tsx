@@ -3,7 +3,7 @@
 
 import { AUTHORIZED_APPS_URL } from '../../github/config';
 import { GitHubStatus } from './GitHubStatus';
-import { CloudUploadIcon, GitHubIcon, ProjectIcon, SignOutIcon } from './icons';
+import { CloudUploadIcon, GitHubIcon, ProjectIcon, SaveIcon, SignOutIcon } from './icons';
 import type { CatalogFile } from './projectCatalog';
 import type { OpenProject } from './projectFile';
 import type { GitHubSyncState } from './projectGitHub';
@@ -94,27 +94,39 @@ export interface OpenNowCardProps {
   /** A GitHub action is running. */
   busy: boolean;
   onShowProjectPage: () => void;
+  /** Saves the project on this computer (enabled while it has unsaved changes). */
+  onSaveLocal: () => void;
   onSaveToGitHub: () => void;
 }
 
 /** The project open now: whether it is on GitHub, whether it is saved, and the two ways on from here. */
-export function OpenNowCard({ project, busy, onShowProjectPage, onSaveToGitHub }: OpenNowCardProps) {
+export function OpenNowCard({ project, busy, onShowProjectPage, onSaveLocal, onSaveToGitHub }: OpenNowCardProps) {
   return (
     <div className="wb-projects__current">
       <span className="wb-projects__current-text">
         <span className="wb-projects__small">Open now</span>
         <strong>{project.name || 'Untitled project'}</strong>
       </span>
-      <GitHubStatus state={project.syncState} />
-      {project.unsaved && <span className="wb-projects__chip is-warn">Unsaved changes</span>}
-      <button type="button" className="wb-projects__btn" onClick={onShowProjectPage}>
-        <ProjectIcon aria-hidden="true" />
-        Project page
-      </button>
-      <button type="button" className="wb-projects__btn is-primary" onClick={onSaveToGitHub} disabled={busy || project.syncState === 'saved'}>
-        <CloudUploadIcon aria-hidden="true" />
-        Save to GitHub
-      </button>
+      <div className="wb-projects__current-actions">
+        <div className="wb-projects__current-buttons">
+          <button type="button" className="wb-projects__btn" onClick={onShowProjectPage}>
+            <ProjectIcon aria-hidden="true" />
+            Project settings
+          </button>
+          <button type="button" className="wb-projects__btn is-primary" onClick={onSaveLocal} disabled={busy || !project.unsaved} title="Save the project on this computer">
+            <SaveIcon aria-hidden="true" />
+            Save project
+          </button>
+          <button type="button" className="wb-projects__btn is-primary" onClick={onSaveToGitHub} disabled={busy || project.syncState === 'saved'}>
+            <CloudUploadIcon aria-hidden="true" />
+            Save to GitHub
+          </button>
+        </div>
+        <div className="wb-projects__current-status">
+          <GitHubStatus state={project.syncState} />
+          {project.unsaved && <span className="wb-projects__chip is-warn">Unsaved changes</span>}
+        </div>
+      </div>
     </div>
   );
 }

@@ -22,7 +22,7 @@ export interface ProjectGitHubCardProps {
 
 const COPIED_FEEDBACK_MS = 2000;
 
-/** The project page's GitHub card (docs/GITHUB.md): save the project there, or get the version that is there. */
+/** The project settings' GitHub card (docs/GITHUB.md): save the project there, or get the version that is there. */
 export function ProjectGitHubCard({ link, syncState, userLogin, projects, named = true }: ProjectGitHubCardProps) {
   const busy = projects.busy !== null;
   const someoneElses = isSomeoneElses(link, userLogin);

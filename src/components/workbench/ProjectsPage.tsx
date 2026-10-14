@@ -54,9 +54,11 @@ export interface ProjectsPageProps {
   /** A project is being opened: every Open button waits. */
   opening: boolean;
   onOpenItem: (item: ProjectListItem) => void;
-  /** Starts a new, empty project and shows its project page. */
+  /** Starts a new, empty project and shows its project settings. */
   onNewProject: () => void;
   onShowProjectPage: () => void;
+  /** Saves the open project on this computer. */
+  onSaveLocal: () => void;
   onSignIn: () => void;
   /** The old way in: a project file by its URL or path. */
   onOpenFromUrl: () => void;
@@ -73,7 +75,7 @@ const VIEWS: readonly { view: ProjectsView; label: string; icon: typeof ListIcon
 
 /**
  * The Projects page (docs/project_browse_page.md): the projects in the local projects folder
- * and on GitHub in one list, shown over the editor like the project page. Opening and the
+ * and on GitHub in one list, shown over the editor like the project settings. Opening and the
  * GitHub actions are the Workbench's; this page lists, searches and asks.
  */
 export function ProjectsPage(props: ProjectsPageProps) {
@@ -135,7 +137,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
           </div>
 
           {openProject && (
-            <OpenNowCard project={openProject} busy={gitHubProjects.busy !== null} onShowProjectPage={props.onShowProjectPage} onSaveToGitHub={gitHubProjects.save} />
+            <OpenNowCard project={openProject} busy={gitHubProjects.busy !== null} onShowProjectPage={props.onShowProjectPage} onSaveLocal={props.onSaveLocal} onSaveToGitHub={gitHubProjects.save} />
           )}
           <Activity projects={{ busy: gitHubProjects.busy, message: gitHubProjects.message?.tone === 'error' ? null : gitHubProjects.message }} />
 

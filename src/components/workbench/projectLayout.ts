@@ -64,7 +64,7 @@ export function diskLayout(project: Located & Pick<OpenProject, 'onDisk'>): Disk
   return 'mixed';
 }
 
-/** What the next save does to the files already on disk, for the project page's hint (§ 7). */
+/** What the next save does to the files already on disk, for the project settings' hint (§ 7). */
 export interface PendingLayoutChange {
   /** Files found flat are copied to the source folder (D9). */
   copy: boolean;
