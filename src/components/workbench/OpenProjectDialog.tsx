@@ -19,6 +19,8 @@ export interface OpenProjectDialogProps {
   onOpen: (location: string) => void;
   /** Every file of a folder the student chose: the project file and its files. */
   onFolderChosen: (files: File[]) => void;
+  /** Chrome and Edge: Open project folder asks for the folder itself instead (a handle the Projects page keeps). */
+  onChooseFolder?: () => void;
   /** Select files: Upload File's own picker (source files, a .zip, or a project file with its files). */
   onSelectFiles: () => void;
   onClose: () => void;
@@ -30,7 +32,7 @@ export interface OpenProjectDialogProps {
  * GitHub gist, a path on the HDLBoard site, or, in the Windows app, a file path.
  * The project's files are read from next to it, or from their own URLs.
  */
-export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderChosen, onSelectFiles, onClose }: OpenProjectDialogProps) {
+export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderChosen, onChooseFolder, onSelectFiles, onClose }: OpenProjectDialogProps) {
   const [location, setLocation] = useState('');
   const formId = useId();
   const empty = location.trim() === '';
@@ -58,7 +60,7 @@ export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderC
         </div>
       }
     >
-      <FromThisComputer busy={busy} onFolderChosen={onFolderChosen} onSelectFiles={onSelectFiles} />
+      <FromThisComputer busy={busy} onFolderChosen={onFolderChosen} onChooseFolder={onChooseFolder} onSelectFiles={onSelectFiles} />
       <form id={formId} className="wb-newfile" onSubmit={handleSubmit}>
         <label className="wb-newfile__label" htmlFor={`${formId}-location`}>
           {canOpenPaths ? 'Project file URL or path' : 'Project file URL'}
@@ -120,10 +122,12 @@ export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderC
 function FromThisComputer({
   busy,
   onFolderChosen,
+  onChooseFolder,
   onSelectFiles,
 }: {
   busy: boolean;
   onFolderChosen: (files: File[]) => void;
+  onChooseFolder?: () => void;
   onSelectFiles: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,7 +149,7 @@ function FromThisComputer({
           <UploadIcon aria-hidden="true" />
           Select files…
         </button>
-        <button type="button" className="wb-openproject__folder-btn" disabled={busy} onClick={() => inputRef.current?.click()}>
+        <button type="button" className="wb-openproject__folder-btn" disabled={busy} onClick={() => (onChooseFolder ? onChooseFolder() : inputRef.current?.click())}>
           <FolderOpenIcon aria-hidden="true" />
           Open project folder…
         </button>

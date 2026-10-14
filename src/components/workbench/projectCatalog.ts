@@ -8,6 +8,7 @@
 
 import type { IndexEntry } from '../../github/projectIndex';
 import { parseProject } from '../../project/parseProject';
+import { baseName, projectFolderName } from '../../project/fileName';
 import { languageOfName } from './fileKinds';
 
 export type ProjectLanguage = 'vhdl' | 'verilog';
@@ -87,7 +88,8 @@ export function itemFromProjectFile(text: string, location: string, modifiedMs: 
   return {
     key: `local:${location}`,
     source: 'local',
-    name: project.name,
+    // A project saved without a name is listed by its file name.
+    name: project.name.trim() || projectFolderName(baseName(location)),
     description: project.description,
     files,
     languages: languagesOf(files.map((file) => file.name)),

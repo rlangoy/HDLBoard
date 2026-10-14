@@ -96,6 +96,11 @@ export function gistLinkFromUrl(projectUrl: string): GistLink | undefined {
   };
 }
 
+/** Whether the gist is another user's; an unknown owner counts as the user's own (as ProjectGists.isOwnedByUser does). */
+export function isSomeoneElses(link: GistLink | undefined, userLogin: string | null): boolean {
+  return link !== undefined && userLogin !== null && link.ownerLogin !== '' && link.ownerLogin.toLowerCase() !== userLogin.toLowerCase();
+}
+
 /** A link that opens the project in HDLBoard for anyone who has it (`?project=`, docs/PROJECTS.md). */
 export function shareLink(pageUrl: string, link: Pick<GistLink, 'htmlUrl'>): string {
   const page = new URL(pageUrl);

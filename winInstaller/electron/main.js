@@ -249,6 +249,57 @@ function registerLocalFileIpc() {
     fs.writeFileSync(file, text, 'utf8');
     return true;
   });
+
+  // Save project's folder layout (docs/impl_project_structure.md § 6.6). Everything below
+  // takes the project file's folder and a path relative to it, and refuses a path that
+  // leaves that folder.
+
+  // The file names directly in a folder; none when it does not exist.
+  ipcMain.handle('hdlboard:list-folder-files', (event, base, relative) => {
+    fromApp(event);
+    // '' is the project file's own folder.
+    const folder = relative === '' ? insideFolder(base, '.', true) : insideFolder(base, relative);
+    if (!fs.existsSync(folder)) return [];
+    return fs
+      .readdirSync(folder, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name);
+  });
+
+  // The old copy of a moved file, or the old project file after a rename.
+  ipcMain.handle('hdlboard:delete-local-file', (event, base, relative) => {
+    fromApp(event);
+    const file = localFilePath(insideFolder(base, relative));
+    fs.unlinkSync(file);
+    return true;
+  });
+
+  ipcMain.handle('hdlboard:folder-is-empty', (event, base, relative) => {
+    fromApp(event);
+    const folder = insideFolder(base, relative);
+    return fs.existsSync(folder) && fs.statSync(folder).isDirectory() && fs.readdirSync(folder).length === 0;
+  });
+
+  // Remove folder on the project page: rmdir fails on a folder that is not empty.
+  ipcMain.handle('hdlboard:remove-empty-folder', (event, base, relative) => {
+    fromApp(event);
+    fs.rmdirSync(insideFolder(base, relative));
+    return true;
+  });
+}
+
+/**
+ * `relative` (with `/`) inside the absolute folder `base`; throws when it would leave it.
+ * `orBase`: `base` itself is allowed too.
+ */
+function insideFolder(base, relative, orBase = false) {
+  if (typeof base !== 'string' || !path.isAbsolute(base)) throw new Error(`not a full path: ${base}`);
+  if (typeof relative !== 'string' || relative === '' || path.isAbsolute(relative)) throw new Error(`not a relative path: ${relative}`);
+  const root = path.resolve(base);
+  const resolved = path.resolve(root, ...relative.split('/'));
+  if (orBase && resolved === root) return root;
+  if (!resolved.startsWith(root + path.sep)) throw new Error(`outside the project folder: ${relative}`);
+  return resolved;
 }
 
 /*
@@ -475,7 +526,45 @@ function registerGitHubTokenIpc() {
   });
 }
 
+/**
+ * window.confirm, shown from here. Electron's own confirm box, on Windows,
+ * leaves the page without keyboard focus once it closes: the editors
+ * look fine but take no typing until the window is left and re-entered.
+ * A box shown by the main process, modal to the window, does not do that.
+ */
+function registerConfirmIpc() {
+  // A synchronous IPC must always get a reply, or the page stays frozen:
+  // on any failure the answer is Cancel, and the failure goes to the log.
+  ipcMain.on('hdlboard:confirm', (event, message) => {
+    try {
+      fromApp(event);
+      event.returnValue = askOkCancel(BrowserWindow.fromWebContents(event.sender), String(message));
+    } catch (err) {
+      console.error(`confirm failed: ${err && err.stack ? err.stack : String(err)}`);
+      event.returnValue = false;
+    }
+  });
+}
+
+const OK_BUTTON = 0;
+const CANCEL_BUTTON = 1;
+
+/** The OK/Cancel box, modal to `win`; true for OK. */
+function askOkCancel(win, message) {
+  const choice = dialog.showMessageBoxSync(win ?? undefined, {
+    type: 'question',
+    title: 'HDLBoard',
+    message,
+    buttons: ['OK', 'Cancel'],
+    defaultId: OK_BUTTON,
+    cancelId: CANCEL_BUTTON,
+    noLink: true,
+  });
+  return choice === OK_BUTTON;
+}
+
 function registerIpc(persistProjects) {
+  registerConfirmIpc();
   registerLocalFileIpc();
   registerProjectsFolderIpc();
   registerGitHubTokenIpc();

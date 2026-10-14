@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { fileNameProblem, nameKey } from './fileName';
+import { fileNameProblem, folderNameProblem, nameKey } from './fileName';
 import {
+  DEFAULT_SOURCE_DIRECTORY,
   SUPPORTED_PROJECT_VERSION,
   type Diagnostic,
   type HdlBoardProject,
@@ -46,14 +47,33 @@ export function parseProject(json: string, options: ParseOptions = {}): ParsedPr
   const board = resolveBoard(raw.board as string, options.knownBoards ?? DEFAULT_KNOWN_BOARDS, warnings);
   const { files, skipped } = parseFileEntries(raw.files as unknown[], warnings);
 
+  const projectDirectory = folderField(raw, 'projectDirectory', warnings);
+  const sourceDirectory = folderField(raw, 'sourceDirectory', warnings);
+
   const project: HdlBoardProject = {
     version: raw.version as number,
     name: raw.name as string,
     board: raw.board as string,
     description: raw.description as string,
+    ...(projectDirectory !== undefined ? { projectDirectory } : {}),
+    ...(sourceDirectory !== undefined ? { sourceDirectory } : {}),
     files,
   };
   return { project, board, warnings, skipped };
+}
+
+/**
+ * `projectDirectory` or `sourceDirectory` (docs/impl_project_structure.md § 3.2): the value
+ * when it is a valid folder name; undefined when missing, or, with a warning, when invalid.
+ */
+function folderField(raw: Record<string, unknown>, field: 'projectDirectory' | 'sourceDirectory', warnings: Diagnostic[]): string | undefined {
+  if (!(field in raw)) return undefined;
+  const value = raw[field];
+  const fallback = field === 'projectDirectory' ? 'the project file name' : `"${DEFAULT_SOURCE_DIRECTORY}"`;
+  const problem = typeof value === 'string' ? folderNameProblem(value) : 'it is not a string';
+  if (problem === null) return value as string;
+  warnings.push({ severity: 'warning', message: `"${field}" is not a usable folder (${problem}); using ${fallback}` });
+  return undefined;
 }
 
 function parseJsonObject(json: string): Record<string, unknown> {
@@ -153,6 +173,8 @@ export function serializeProject(project: HdlBoardProject): string {
     name: project.name,
     board: project.board,
     description: project.description,
+    ...(project.projectDirectory !== undefined ? { projectDirectory: project.projectDirectory } : {}),
+    ...(project.sourceDirectory !== undefined ? { sourceDirectory: project.sourceDirectory } : {}),
     files: project.files.map(({ name, url, description }) => ({ name, url, description })),
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;

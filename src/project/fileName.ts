@@ -13,6 +13,26 @@ export function fileNameProblem(name: string): string | null {
   return forbidden ? `file name contains forbidden "${forbidden}"` : null;
 }
 
+/** Names Windows keeps for devices, with or without an extension: `CON`, `nul.txt`. */
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
+/**
+ * Returns why `name` cannot be a project or source folder (docs/impl_project_structure.md
+ * § 6.2), or null. One folder only, and Windows' rules: a project saved anywhere must open
+ * on Windows too.
+ */
+export function folderNameProblem(name: string): string | null {
+  if (name.trim() === '') return 'the folder name is empty';
+  if (name === '.' || name.includes('..')) return 'a folder name cannot be "." or contain ".."';
+  if (name.includes('/') || name.includes('\\')) return 'only one folder is allowed: no "/" or "\\"';
+  const forbidden = FORBIDDEN_NAME_PARTS.find((part) => name.includes(part));
+  if (forbidden) return `a folder name cannot contain "${forbidden}"`;
+  if (/[. ]$/.test(name)) return 'a folder name cannot end in a dot or a space on Windows';
+  if (name !== name.trimStart()) return 'a folder name cannot start with a space';
+  if (WINDOWS_RESERVED.test(name)) return `"${name}" cannot be a folder name on Windows`;
+  return null;
+}
+
 export function isValidFileName(name: string): boolean {
   return fileNameProblem(name) === null;
 }

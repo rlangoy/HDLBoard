@@ -8,6 +8,8 @@
 
 export const PROJECT_FILE_EXTENSION = '.hdlboard.json';
 export const SUPPORTED_PROJECT_VERSION = 1;
+/** Where a project's HDL files are kept inside its project folder, unless it says otherwise (D3). */
+export const DEFAULT_SOURCE_DIRECTORY = 'src';
 
 export interface ProjectFileEntry {
   /** File name in the project directory, no path separators (§ 5.1). */
@@ -23,6 +25,14 @@ export interface HdlBoardProject {
   /** Board name only; board definitions are built into HDLBoard (§ 4.2). */
   board: string;
   description: string;
+  /**
+   * The folder next to the project file that holds the project's files on local disk
+   * (docs/impl_project_structure.md). Undefined when the file leaves it out or names an
+   * invalid folder: the project file name without `.hdlboard.json` is used then.
+   */
+  projectDirectory?: string;
+  /** The folder inside `projectDirectory` for the HDL files; undefined → `src`. */
+  sourceDirectory?: string;
   files: ProjectFileEntry[];
 }
 

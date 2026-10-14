@@ -59,8 +59,8 @@ export function folderOfPath(path: string): string {
   return cut < 0 ? '' : path.slice(0, cut);
 }
 
-/** `name` in `folder`, with the separator the folder already uses. */
+/** `name` — or a relative path with `/`, like `lab1/src/a.vhd` — in `folder`, with the separator the folder already uses. */
 export function pathInFolder(folder: string, name: string): string {
   const separator = folder.includes('/') && !folder.includes('\\') ? '/' : '\\';
-  return `${folder}${separator}${name}`;
+  return `${folder}${separator}${name.split('/').join(separator)}`;
 }

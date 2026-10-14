@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { FolderFile, FolderHandle } from './localProjectScan';
-import { NO_FOLDER, readChosenFolderFiles, readDesktopFolder, readRememberedFolder } from './projectsFolderReading';
+import { NO_FOLDER, adoptsSavedFolder, readChosenFolderFiles, readDesktopFolder, readRememberedFolder } from './projectsFolderReading';
 
 const projectText = (name: string) =>
   JSON.stringify({ version: 1, name, board: 'DE1-SoC', description: '', files: [{ name: 'DE1_SoC.vhdl', url: '', description: '' }] });
@@ -86,5 +86,37 @@ describe('readDesktopFolder', () => {
   test('shows the full path of the Windows app folder', async () => {
     const reading = await readDesktopFolder(async () => ({ folder: 'C:\\Users\\me\\Documents\\HDLBoard Projects', projects: [], skipped: [], truncated: false }));
     expect(reading).toMatchObject({ folderState: 'ready', folderLabel: 'C:\\Users\\me\\Documents\\HDLBoard Projects' });
+  });
+});
+
+describe('adoptsSavedFolder: the folder Save project wrote to becomes the projects folder', () => {
+  /** A folder handle that knows which handles are itself or inside it. */
+  const handle = (name: string, permission: PermissionState, same: string[] = [], holds: string[] = []): FolderHandle =>
+    ({
+      ...folder(permission),
+      name,
+      isSameEntry: async (other: FolderHandle) => same.includes(other.name),
+      resolve: async (other: FolderHandle) => (holds.includes(other.name) ? [other.name] : null),
+    }) as unknown as FolderHandle;
+  const saved = handle('Labs', 'granted');
+
+  test('when no projects folder is known yet', async () => {
+    expect(await adoptsSavedFolder(saved, null)).toBe(true);
+  });
+
+  test('when it is the known folder: its new handle needs no asking', async () => {
+    expect(await adoptsSavedFolder(saved, handle('Labs', 'prompt', ['Labs']))).toBe(true);
+  });
+
+  test('when the known folder cannot be read without asking again', async () => {
+    expect(await adoptsSavedFolder(saved, handle('Other', 'prompt'))).toBe(true);
+  });
+
+  test('when the known folder can be read but does not hold it', async () => {
+    expect(await adoptsSavedFolder(saved, handle('Other', 'granted'))).toBe(true);
+  });
+
+  test('not when the known folder can be read and already holds it', async () => {
+    expect(await adoptsSavedFolder(saved, handle('All projects', 'granted', [], ['Labs']))).toBe(false);
   });
 });

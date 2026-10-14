@@ -44,6 +44,9 @@ describe('paths', () => {
     expect(folderOfPath('C:\\Labs\\lab1\\p.json')).toBe('C:\\Labs\\lab1');
     expect(pathInFolder('C:\\Labs\\lab1', 'a.vhd')).toBe('C:\\Labs\\lab1\\a.vhd');
     expect(pathInFolder('D:/x', 'a.vhd')).toBe('D:/x/a.vhd');
+    // A path in the project's folders (docs/impl_project_structure.md § 6.3) takes the folder's separator.
+    expect(pathInFolder('C:\\Labs', 'lab1/src/a.vhd')).toBe('C:\\Labs\\lab1\\src\\a.vhd');
+    expect(pathInFolder('D:/x', 'lab1/src/a.vhd')).toBe('D:/x/lab1/src/a.vhd');
   });
 });
 

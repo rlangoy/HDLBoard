@@ -89,6 +89,21 @@ describe('copyExample', () => {
     expect(result.kept).toEqual(['and_gate.v']);
 
     const again = copyExample(example('and_gate_verilog'), [edited], idSequence());
-    expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9' });
+    expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9', descriptions: {} });
+  });
+
+  test("describes each copied file for the project's file list, by the example card it opens itself", () => {
+    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence());
+    expect(result.descriptions).toEqual({
+      'and_gate_tb.v': example('and_gate_tb_verilog').description,
+      'and_gate.v': example('and_gate_verilog').description,
+    });
+    expect(result.descriptions['and_gate.v']).toBe('Basic AND gate implementation.');
+  });
+
+  test('describes a single-file example by its own card', () => {
+    expect(copyExample(example('blink_vhdl'), STARTER_FILES, idSequence()).descriptions).toEqual({
+      'blinkTest.vhdl': 'Simple blinking LED example using a counter.',
+    });
   });
 });

@@ -99,6 +99,13 @@
   font-weight: 700;
 }
 
+.wb-header__divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
 /* The GitHub button: the signed-in user's avatar, or GitHub's mark. */
 
 .wb-header__github-avatar {

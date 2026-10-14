@@ -128,3 +128,50 @@ describe('serializeProject', () => {
     expect(parseProject(serializeProject(project)).project).toEqual(project);
   });
 });
+
+describe('projectDirectory and sourceDirectory (docs/impl_project_structure.md § 3)', () => {
+  it('reads both folders', () => {
+    const { project, warnings } = parseProject(projectJson([], { projectDirectory: 'fantasicleds', sourceDirectory: 'rtl' }));
+    expect(project.projectDirectory).toBe('fantasicleds');
+    expect(project.sourceDirectory).toBe('rtl');
+    expect(warnings).toEqual([]);
+  });
+
+  it('leaves missing folders undefined, without a warning', () => {
+    const { project, warnings } = parseProject(projectJson([]));
+    expect(project.projectDirectory).toBeUndefined();
+    expect(project.sourceDirectory).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns about an invalid sourceDirectory and falls back to src', () => {
+    const { project, warnings } = parseProject(projectJson([], { sourceDirectory: '../outside' }));
+    expect(project.sourceDirectory).toBeUndefined();
+    expect(warnings.map((w) => w.message).join()).toMatch(/"sourceDirectory" is not a usable folder.*using "src"/);
+  });
+
+  it('treats an invalid projectDirectory as missing, with a warning', () => {
+    const { project, warnings } = parseProject(projectJson([], { projectDirectory: 'C:\\labs' }));
+    expect(project.projectDirectory).toBeUndefined();
+    expect(warnings.map((w) => w.message).join()).toMatch(/"projectDirectory" is not a usable folder.*project file name/);
+  });
+
+  it('warns about a folder that is not a string', () => {
+    const { project, warnings } = parseProject(projectJson([], { sourceDirectory: 3 }));
+    expect(project.sourceDirectory).toBeUndefined();
+    expect(warnings[0].message).toMatch(/not a string/);
+  });
+
+  it('writes both folders after the description, before files', () => {
+    const text = serializeProject({
+      version: 1,
+      name: 'Fantasic_Leds',
+      board: 'DE1-SoC',
+      description: 'Show the status of the LEDS',
+      projectDirectory: 'fantasicleds',
+      sourceDirectory: 'src',
+      files: [entry('DE1_SoC.vhdl')],
+    });
+    expect(Object.keys(JSON.parse(text))).toEqual(['version', 'name', 'board', 'description', 'projectDirectory', 'sourceDirectory', 'files']);
+  });
+});

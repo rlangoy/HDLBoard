@@ -36,6 +36,15 @@ export interface HdlBoardBridge {
   readLocalFile?(path: string): Promise<string>;
   /** Writes one, by its full path (Save project into the folder a project was opened from). */
   writeLocalFile?(path: string, text: string): Promise<boolean>;
+  /**
+   * Save project's folder layout (docs/impl_project_structure.md § 6.6): `base` is the project
+   * file's folder, `relative` a path in it with `/`. The app refuses one that leaves `base`.
+   * listFolderFiles: the file names directly in the folder ('' is `base` itself), none when it is missing.
+   */
+  listFolderFiles?(base: string, relative: string): Promise<string[]>;
+  deleteLocalFile?(base: string, relative: string): Promise<boolean>;
+  folderIsEmpty?(base: string, relative: string): Promise<boolean>;
+  removeEmptyFolder?(base: string, relative: string): Promise<boolean>;
   /** Where a chosen or dropped file is on disk; '' when it has no path (a file from a .zip). */
   pathForFile?(file: File): string;
   /** The projects folder (created if missing) and the project files in it, one folder level down too (Projects page). */
@@ -54,6 +63,8 @@ export interface HdlBoardBridge {
    */
   openGitHubWindow?(url: string, options?: { title?: string; callbackUrl?: string }): Promise<AuthorizationCallback | null>;
   closeGitHubWindow?(): Promise<boolean>;
+  /** window.confirm, answered by the app itself (see confirmDialog). */
+  confirm?(message: string): boolean;
 }
 
 declare global {
@@ -64,6 +75,17 @@ declare global {
 
 export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
+}
+
+/**
+ * Asks OK/Cancel. Use this, not window.confirm: on Windows, Electron's own
+ * confirm box leaves the page without keyboard focus once it closes, so the
+ * editors take no typing. The Windows app shows the box from its main
+ * process instead, which keeps the focus.
+ */
+export function confirmDialog(message: string): boolean {
+  const appConfirm = desktopBridge()?.confirm;
+  return appConfirm ? appConfirm(message) : window.confirm(message);
 }
 
 /** Where the GitHub sign-in is kept: encrypted by the Windows app, else for this browser tab only. */

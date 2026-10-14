@@ -146,6 +146,11 @@ describe('itemFromProjectFile', () => {
     expect(made?.files).toEqual([{ name: 'adder.vhd', description: 'The adder' }]);
   });
 
+  test('lists a project saved without a name by its file name', () => {
+    const nameless = JSON.stringify({ ...JSON.parse(text), name: '' });
+    expect(itemFromProjectFile(nameless, 'myHdlProjects/fhffhhfhfdsfdsf.hdlboard.json', 0)?.name).toBe('fhffhhfhfdsfdsf');
+  });
+
   test('is undefined for text that is not a project file', () => {
     expect(itemFromProjectFile('{nope', 'x', 0)).toBeUndefined();
   });

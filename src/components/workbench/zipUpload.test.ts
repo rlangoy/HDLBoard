@@ -3,8 +3,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { createZip, readZip } from './zip';
-import { baseName, filesInZip, isZipName } from './zipUpload';
-import { projectZipEntries } from './download';
+import { baseName, filesInZip, isZipName, projectFileInZip, zipPathOf } from './zipUpload';
+import { projectArchiveEntries } from './download';
 
 // Made by Python's zipfile with ZIP_DEFLATED, as Windows Explorer and macOS Finder pack:
 // project/ (a folder), project/vhdl/counter.vhd ("library ieee;\n" × 20),
@@ -21,7 +21,7 @@ describe('readZip', () => {
       { name: 'DE1_SoC.vhdl', folder: 'vhdl' as const, content: '-- Ø\nentity x is end;\n' },
       { name: 'top.v', folder: 'verilog' as const, content: 'module top; endmodule\n' },
     ];
-    const read = await readZip(createZip(projectZipEntries(files)));
+    const read = await readZip(createZip(files.map((f) => ({ path: `${f.folder}/${f.name}`, data: f.content }))));
     expect(read.map((f) => [f.path, text(f.data)])).toEqual([
       ['vhdl/DE1_SoC.vhdl', files[0].content],
       ['verilog/top.v', files[1].content],
@@ -56,5 +56,57 @@ describe('zip upload', () => {
     const files = await filesInZip(new Blob([deflated()]));
     expect(files.map((f) => f.name)).toEqual(['counter.vhd', 'top.v']);
     expect(await files[1].text()).toBe('module top; endmodule\n');
+  });
+});
+
+describe('a project .zip (docs/impl_project_structure.md § 6.7)', () => {
+  const projectFile = { name: 'lab1.hdlboard.json', text: '{"version":1}' };
+  const files = [
+    { path: 'lab1/src/a.vhd', text: '-- a' },
+    { path: 'lab1/src/b.v', text: '// b' },
+  ];
+
+  test('holds the project file at the top and each file at its path (D25)', async () => {
+    const read = await readZip(createZip(projectArchiveEntries(projectFile, files)));
+    expect(read.map((f) => [f.path, text(f.data)])).toEqual([
+      ['lab1.hdlboard.json', '{"version":1}'],
+      ['lab1/src/a.vhd', '-- a'],
+      ['lab1/src/b.v', '// b'],
+    ]);
+  });
+
+  test('unpacks with each file named by its base name and keeping its path', async () => {
+    const zip = new Blob([createZip(projectArchiveEntries(projectFile, files))]);
+    const members = await filesInZip(zip);
+    expect(members.map((m) => [m.name, m.zipPath])).toEqual([
+      ['lab1.hdlboard.json', 'lab1.hdlboard.json'],
+      ['a.vhd', 'lab1/src/a.vhd'],
+      ['b.v', 'lab1/src/b.v'],
+    ]);
+    expect(zipPathOf(members[1])).toBe('lab1/src/a.vhd');
+    expect(zipPathOf(new File([''], 'x.vhd'))).toBeUndefined();
+  });
+
+  test('finds the project file at the top, or the shallowest one in a zipped folder', async () => {
+    const top = await filesInZip(new Blob([createZip(projectArchiveEntries(projectFile, files))]));
+    expect(projectFileInZip(top)?.zipPath).toBe('lab1.hdlboard.json');
+    const wrapped = await filesInZip(
+      new Blob([createZip([
+        { path: 'labs/deep/x/other.hdlboard.json', data: '{}' },
+        { path: 'labs/lab1.hdlboard.json', data: '{}' },
+      ])]),
+    );
+    expect(projectFileInZip(wrapped)?.zipPath).toBe('labs/lab1.hdlboard.json');
+  });
+
+  test('a zip without a project file has none: its files are added to Files', async () => {
+    const members = await filesInZip(new Blob([createZip([{ path: 'vhdl/a.vhd', data: '' }])]));
+    expect(projectFileInZip(members)).toBeUndefined();
+  });
+
+  test('zips 500 files', async () => {
+    const many = Array.from({ length: 500 }, (_, i) => ({ path: `big/src/f${i}.vhd`, text: `-- ${i}` }));
+    const read = await readZip(createZip(projectArchiveEntries({ name: 'big.hdlboard.json', text: '{}' }, many)));
+    expect(read).toHaveLength(501);
   });
 });

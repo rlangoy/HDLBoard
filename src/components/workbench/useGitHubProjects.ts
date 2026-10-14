@@ -10,7 +10,8 @@ import {
   type SaveResult,
 } from '../../github/projectGists';
 import type { IndexEntry } from '../../github/projectIndex';
-import type { OpenProject } from './projectFile';
+import { confirmDialog } from './desktop';
+import { unsavedChangesQuestion, type OpenProject } from './projectFile';
 import { describeSavePlan, gitHubSyncState, projectSnapshot, withoutGistLink, withSavedGistLink, type SourceFile } from './projectGitHub';
 import type { GitHubConnection } from './useGitHub';
 
@@ -51,7 +52,7 @@ export interface GitHubProjectsOptions {
   project: OpenProject | null;
   /** The files in Files: the open project's files. */
   files: readonly SourceFile[];
-  setProject: (update: (project: OpenProject | null) => OpenProject | null) => void;
+  setProject: (update: (project: OpenProject) => OpenProject) => void;
   /** Opens a project read from its gist, replacing Files. Returns why not, or null. */
   openGistProject: (opened: OpenedGistProject) => Promise<string | null>;
   /** Shows the GitHub dialog, so the user can sign in. */
@@ -128,7 +129,7 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
   }, [projects, refresh]);
 
   const linkSaved = (result: SaveResult, saved: ProjectSnapshot) => {
-    setProject((current) => current && withSavedGistLink(current, result.link, saved));
+    setProject((current) => withSavedGistLink(current, result.link, saved));
     setConflict(null);
     refresh();
   };
@@ -186,10 +187,10 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
   };
 
   const remove = (entry: IndexEntry) => {
-    if (projects === null || !window.confirm(deleteQuestion(entry))) return;
+    if (projects === null || !confirmDialog(deleteQuestion(entry))) return;
     void run(`Deleting ${entry.name} from GitHub…`, async () => {
       await projects.remove(entry.gistId);
-      if (project?.gist?.gistId === entry.gistId) setProject((current) => current && withoutGistLink(current));
+      if (project?.gist?.gistId === entry.gistId) setProject((current) => withoutGistLink(current));
       setEntries((current) => current?.filter((other) => other.gistId !== entry.gistId) ?? null);
       report('success', `Deleted ${entry.name} from GitHub. The files open in HDLBoard are kept.`);
     });
@@ -217,10 +218,10 @@ function deleteQuestion(entry: IndexEntry): string {
 /** Opening another project replaces Files: ask first when the open project has changes not saved anywhere. */
 function confirmReplacingFiles(project: OpenProject | null, files: readonly SourceFile[], question: string): boolean {
   if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return window.confirm(`${question}\n\n${project.name} has changes that are not saved to GitHub. They are lost when another project opens.`);
+  return confirmDialog(unsavedChangesQuestion(question, project.name, 'GitHub'));
 }
 
 function confirmLosingChanges(project: OpenProject | null, files: readonly SourceFile[]): boolean {
   if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return window.confirm('Replace the files in HDLBoard with the version on GitHub?\n\nYour changes since the last Save to GitHub are lost.');
+  return confirmDialog('Replace the files in HDLBoard with the version on GitHub?\n\nYour changes since the last Save to GitHub are lost.');
 }

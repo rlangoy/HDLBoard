@@ -49,6 +49,28 @@ describe('projectSnapshot', () => {
     expect(entries.find((entry: { name: string }) => entry.name === 'lost.vhd').url).toBe('https://example.com/lost.vhd');
   });
 
+  it('stays flat on GitHub, its project file carrying both folders (docs/impl_project_structure.md D6, D8)', () => {
+    const project = { ...adder(), sourceDirectory: 'rtl', onDisk: { 'adder.vhd': 'adder/rtl/adder.vhd' } };
+    const snapshot = projectSnapshot(project, FILES);
+    expect(snapshot.files.every((file) => !file.name.includes('/'))).toBe(true);
+    const json = JSON.parse(snapshot.files[0].content);
+    expect([json.projectDirectory, json.sourceDirectory]).toEqual(['adder', 'rtl']);
+  });
+
+  it('opens from GitHub flat, keeping the folders for a later save to disk (AC-16)', async () => {
+    const snapshot = projectSnapshot({ ...adder(), sourceDirectory: 'rtl' }, FILES);
+    const { project, files } = await openProject({
+      text: snapshot.files[0].content,
+      location: 'https://gist.githubusercontent.com/student/abc123/raw/adder.hdlboard.json',
+      localFiles: snapshot.files.slice(1),
+    });
+    expect(files.map((file) => file.name)).toEqual(['adder.vhd', 'adder_tb.vhd']);
+    expect(project.sourceDirectory).toBe('rtl');
+    expect(project.onDisk).toBeUndefined();
+    // Saved back, it is the same flat gist with the same two fields.
+    expect(projectSnapshot(project, FILES).files).toEqual(snapshot.files);
+  });
+
   it('lists a file that could not be loaded, so saving does not delete it on GitHub', () => {
     const project = withEntryUnloaded(withEntryEdited(adder(), 'lost.vhd', {}), 'lost.vhd', 'Not found');
     expect(projectSnapshot(project, FILES).listedNames).toContain('lost.vhd');

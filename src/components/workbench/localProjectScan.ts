@@ -113,7 +113,9 @@ export async function scanChosenFiles(files: readonly File[]): Promise<ScanOutco
       break;
     }
     const folder = folderPathOf(projectFile);
-    const others = files.filter((file) => file !== projectFile && !isProjectFileName(file.name) && folderPathOf(file) === folder);
+    // Next to the project file, and up to two folders down: `<project>/<source folder>/`
+    // (docs/impl_project_structure.md § 6.8). Opening keeps only this project's own folder.
+    const others = files.filter((file) => file !== projectFile && !isProjectFileName(file.name) && isWithin(folder, folderPathOf(file), 2));
     await addChosenFile(outcome, projectFile, others);
   }
   return outcome;
@@ -126,6 +128,13 @@ async function addChosenFile(outcome: ScanOutcome, projectFile: File, others: Fi
   } catch (error) {
     outcome.skipped.push({ path: location, reason: errorReason(error) });
   }
+}
+
+/** Whether `inner` is `folder` or a folder at most `levels` below it. */
+function isWithin(folder: string, inner: string, levels: number): boolean {
+  if (inner === folder) return true;
+  if (!inner.startsWith(`${folder}/`)) return false;
+  return inner.slice(folder.length + 1).split('/').length <= levels;
 }
 
 /** Reads a project file and adds it; the text is read only after the size check, so a huge file is never read. */
