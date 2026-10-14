@@ -37,9 +37,9 @@ export interface FileExplorerProps {
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
-  /** The open project, if any: drawn above the folders, and opens the project page. */
+  /** The open project, if any: drawn above the folders, and opens the project settings. */
   project?: { name: string; fileName: string; description: string; unsaved: boolean };
-  /** The project page is showing: the project row looks pressed. */
+  /** The project settings is showing: the project row looks pressed. */
   projectOpen?: boolean;
   onToggleProject?: () => void;
 }
@@ -219,7 +219,7 @@ export function FileExplorer({
           className="wb-files__open-project"
           onClick={onOpenProject}
           aria-pressed={projectsOpen}
-          title="Open Project: your projects on this computer and on GitHub"
+          title="Open Project Manager"
         >
           <FolderOpenIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Open Project</span>
@@ -242,7 +242,7 @@ export function FileExplorer({
           className={cx('wb-files__project', projectOpen && 'is-open')}
           onClick={onToggleProject}
           aria-pressed={projectOpen}
-          title="Open Project Page"
+          title="Open Project Settings"
         >
           <ProjectIcon className="wb-files__project-icon" aria-hidden="true" />
           <span className="wb-files__project-text">

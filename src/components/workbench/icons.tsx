@@ -279,7 +279,7 @@ export function CheckIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** A 24px outline icon drawn in the text colour: the project page's own icons below. */
+/** A 24px outline icon drawn in the text colour: the project settings' own icons below. */
 function OutlineIcon({ paths, ...props }: SVGProps<SVGSVGElement> & { paths: readonly string[] }) {
   return (
     <svg

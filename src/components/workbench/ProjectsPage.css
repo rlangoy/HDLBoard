@@ -2,7 +2,7 @@
 /* Copyright (C) 2026 Rune Langøy */
 
 /* The Projects page (docs/project_browse_page.md). Covers the editor (.wb-center) while open,
-   like the project page and the Examples pane; the editor stays mounted below. */
+   like the project settings and the Examples pane; the editor stays mounted below. */
 .wb-projects {
   outline: none;
   position: absolute;
@@ -263,6 +263,22 @@
 .wb-projects__account .wb-projects__btn {
   flex: none;
   margin-left: auto;
+}
+
+.wb-projects__current-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.wb-projects__current-buttons,
+.wb-projects__current-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .wb-projects__current-text {

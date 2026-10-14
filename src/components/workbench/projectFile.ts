@@ -37,7 +37,7 @@ export interface OpenProject {
   fileName: string;
   /**
    * The folder inside the project folder that holds the project's files on local disk,
-   * `src` unless changed on the project page (docs/impl_project_structure.md D3). The
+   * `src` unless changed on the project settings (docs/impl_project_structure.md D3). The
    * project folder itself is not stored: it is always the project file name (projectLayout.ts).
    */
   sourceDirectory: string;
@@ -82,7 +82,7 @@ export interface OpenProject {
   excluded?: string[];
 }
 
-/** One row of the project page's file table. */
+/** One row of the project settings' file table. */
 export interface ProjectEntryRow extends ProjectFileEntry {
   /** In Files, or listed by the project only. */
   status: 'loaded' | 'unloaded';
@@ -124,7 +124,7 @@ export function projectEntries(project: OpenProject, fileNames: readonly string[
   return rows;
 }
 
-/** Files in Files that the project leaves out, in Files order: what the project page offers to add. */
+/** Files in Files that the project leaves out, in Files order: what the project settings offers to add. */
 export function availableFiles(project: OpenProject, fileNames: readonly string[]): string[] {
   const excluded = new Set(project.excluded ?? []);
   return fileNames.filter((name) => excluded.has(nameKey(name)));
@@ -246,7 +246,7 @@ export const DEFAULT_PROJECT_NAME = 'Default';
 /**
  * The Default project exactly as the workspace made it: still named Default, its project file
  * still default, nothing changed since, and not on GitHub. Saving it to GitHub goes through the
- * project page first, where it can be named (docs/implementation_spec_one_click_share.md).
+ * project settings first, where it can be named (docs/implementation_spec_one_click_share.md).
  */
 export function isUntouchedDefault(project: OpenProject, unsaved: boolean): boolean {
   return (
@@ -256,7 +256,7 @@ export function isUntouchedDefault(project: OpenProject, unsaved: boolean): bool
 
 /**
  * The project has no name of its own yet: it is empty, or it is the Default project's name and
- * not on GitHub. Saving (to disk or GitHub) waits for one, and the project page asks for it.
+ * not on GitHub. Saving (to disk or GitHub) waits for one, and the project settings asks for it.
  */
 export function projectNeedsName(project: OpenProject): boolean {
   return project.name.trim() === '' || (project.name === DEFAULT_PROJECT_NAME && project.gist === undefined);
@@ -294,7 +294,7 @@ export function defaultProject(files: readonly ProjectSourceFile[], descriptions
 
 /**
  * Create Project: a new, empty project. The files now in Files are offered on the
- * project page to be added (availableFiles); files made or uploaded later join at once.
+ * project settings to be added (availableFiles); files made or uploaded later join at once.
  */
 export function startProject(fileNames: readonly string[]): OpenProject {
   return { ...newProject('', []), excluded: fileNames.map(nameKey) };
@@ -312,7 +312,7 @@ export function withDetails(project: OpenProject, details: ProjectDetails): Open
   return { ...project, ...details, ...(followsName ? { fileName: projectFileNameFor(details.name ?? '') } : {}) };
 }
 
-/** Files offered on the project page join the project. */
+/** Files offered on the project settings join the project. */
 export function withFilesAdded(project: OpenProject, names: readonly string[]): OpenProject {
   const added = new Set(names.map(nameKey));
   return { ...project, excluded: (project.excluded ?? []).filter((key) => !added.has(key)) };
@@ -351,7 +351,7 @@ export function withEntryRenamed(project: OpenProject, oldName: string, newName:
   };
 }
 
-/** A file deleted from Files, or an unloaded entry removed on the project page, leaves the project. */
+/** A file deleted from Files, or an unloaded entry removed on the project settings, leaves the project. */
 export function withEntryRemoved(project: OpenProject, name: string): OpenProject {
   const unloaded = { ...project.unloaded };
   delete unloaded[nameKey(name)];

@@ -121,7 +121,7 @@ export class SaveWriteError extends Error {
 export interface SaveOutcome {
   /** Old copies a delete failed for: harmless strays the student can remove (§ 6.5). */
   leftBehind: { path: string; reason: string }[];
-  /** Folders this save emptied, for the project page's Remove folder (D13). */
+  /** Folders this save emptied, for the project settings' Remove folder (D13). */
   emptiedFolders: string[];
 }
 

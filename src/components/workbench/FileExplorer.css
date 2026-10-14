@@ -503,7 +503,7 @@
   flex: none;
 }
 
-/* The open project, above the folders: opens the project page. */
+/* The open project, above the folders: opens the project settings. */
 .wb-files__project {
   display: flex;
   align-items: center;

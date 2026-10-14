@@ -749,14 +749,6 @@ button.wb-project__file:hover {
   height: 16px;
 }
 
-/* Project folder (docs/impl_project_structure.md § 7). */
-.wb-project__folder {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-  color: var(--wb-text-muted);
-}
-
 /* What the next save does to the files on disk. */
 .wb-project__layout-hint {
   display: flex;
@@ -882,4 +874,12 @@ button.wb-project__file:hover {
 
 .wb-project__textarea.has-pencil {
   padding-left: 32px;
+}
+
+/* The project file name is read-only: it follows the project name. */
+.wb-project__file-name-static {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--wb-text-muted);
 }

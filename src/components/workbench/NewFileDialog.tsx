@@ -23,7 +23,7 @@ export interface NewFileDialogProps {
   kind?: 'design' | 'testbench';
   /**
    * Offers a third choice, Project: a project file listing the files now in Files,
-   * opened on the project page. Not offered when this is not given.
+   * opened on the project settings. Not offered when this is not given.
    */
   onCreateProject?: (projectName: string) => void;
   /** How many files a new project would list. */
@@ -176,7 +176,7 @@ function ProjectHint({ name, fileCount, openProjectName }: ProjectHintProps) {
   const files = fileCount === 0 ? 'no files yet' : fileCount === 1 ? 'the file in Files' : `the ${fileCount} files in Files`;
   return (
     <>
-      Creates <strong>{projectFileNameFor(name)}</strong> listing {files}, and opens the project page.
+      Creates <strong>{projectFileNameFor(name)}</strong> listing {files}, and opens the project settings.
       {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
     </>
   );

@@ -92,7 +92,7 @@ describe('diskLayout', () => {
   });
 });
 
-describe('pendingLayoutChange (the project page hints, § 7)', () => {
+describe('pendingLayoutChange (the project settings hints, § 7)', () => {
   it('says nothing when every file is at its target', () => {
     expect(pendingLayoutChange(project({ onDisk: { 'a.vhd': 'fantasicleds/src/a.vhd' } }))).toEqual({ copy: false, move: false });
   });
