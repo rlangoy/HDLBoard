@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import type { ReactNode } from 'react';
 import type { GitHubUser } from '../../github/githubUser';
 import { HeaderLogo } from './logo';
 import { GearIcon, GitHubIcon } from './icons';
@@ -17,6 +18,8 @@ export interface HeaderProps {
   /** Opens the sign-in dialog, or, signed in, the Projects page; the signed-in user is shown on the button. */
   onGitHub?: () => void;
   gitHubUser?: GitHubUser | null;
+  /** Shown left of the GitHub account button, with a divider: the save/share split button. */
+  gitHubActions?: ReactNode;
 }
 
 /**
@@ -25,7 +28,7 @@ export interface HeaderProps {
  * chrome actions (Settings, Help, About), each of which opens a dialog
  * owned by `<Workbench>`.
  */
-export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser }: HeaderProps) {
+export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitHubActions }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
@@ -34,6 +37,8 @@ export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser }: He
         <span className="wb-header__tagline">&mdash; {APP_TAGLINE}</span>
       </div>
       <div className="wb-header__actions">
+        {gitHubActions}
+        {gitHubActions && <span className="wb-header__divider" aria-hidden="true" />}
         {onGitHub && (
           <button
             type="button"

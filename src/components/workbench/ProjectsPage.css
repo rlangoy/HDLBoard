@@ -1116,6 +1116,37 @@
   color: var(--wb-danger-dark);
 }
 
+.wb-projects__menu:has(.wb-projects__menu-detail) {
+  width: 290px;
+}
+
+.wb-projects__menu-item svg {
+  flex: none;
+}
+
+.wb-projects__menu-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--wb-border);
+  font-size: 12px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects__menu-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-projects__menu-detail {
+  display: block;
+  font-size: 11.5px;
+  color: var(--wb-text-muted);
+}
+
 .wb-projects__menu-rule {
   margin: 4px 2px;
   border: 0;

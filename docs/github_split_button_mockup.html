@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub split button — mockup</title>
+<!--
+  Mockup for the "Save to GitHub" split button in the workbench header.
+  Self-contained: open in a browser. Colours are the workbench tokens from
+  src/components/workbench/Workbench.css; header styling follows Header.css.
+-->
+<style>
+  :root {
+    --wb-header-h: 56px;
+    --wb-border: #e2e8f0;
+    --wb-sidebar-bg: #f8fafc;
+    --wb-hover: #eef2f7;
+    --wb-text: #0f172a;
+    --wb-text-muted: #64748b;
+    --wb-accent: #2f6fed;
+    --wb-accent-dark: #1d4ed8;
+    --wb-accent-soft: #e5efff;
+    --wb-header-bg: #3f6fc4;
+    --wb-header-bg-dark: #315999;
+    --wb-success: #16a34a;
+    --wb-warning: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    color: var(--wb-text);
+    background: var(--wb-sidebar-bg);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 36px 0 10px; }
+  p.lead { color: var(--wb-text-muted); margin: 0 0 20px; }
+  code { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12.5px; background: #eef2f7; padding: 1px 4px; border-radius: 4px; }
+
+  /* ---------- Header replica (Header.css) ---------- */
+  .wb-header {
+    display: flex; align-items: center; justify-content: space-between;
+    height: var(--wb-header-h); padding: 0 20px;
+    background: linear-gradient(180deg, var(--wb-header-bg) 0%, var(--wb-header-bg-dark) 100%);
+    color: #fff; box-shadow: 0 1px 0 rgba(15,23,42,.15);
+    border-radius: 8px 8px 0 0;
+  }
+  .wb-header__brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .wb-header__logo { width: 32px; height: 32px; border-radius: 6px; background: rgba(255,255,255,.18); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+  .wb-header__title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+  .wb-header__tagline { font-size: 13px; color: rgba(255,255,255,.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wb-header__actions { display: flex; align-items: center; gap: 6px; flex: none; }
+  .wb-header__action {
+    display: flex; align-items: center; gap: 6px; border: none; background: transparent;
+    color: rgba(255,255,255,.92); font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .wb-header__action:hover { background: rgba(255,255,255,.14); }
+  .wb-header__action:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  .avatar { width: 20px; height: 20px; border-radius: 50%; background: #f0c48a; color: #5b3a12; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+  .wb-header__sep { width: 1px; height: 24px; background: rgba(255,255,255,.25); margin: 0 4px; }
+  .workbench-body { height: 120px; background: #fff; border: 1px solid var(--wb-border); border-top: none; border-radius: 0 0 8px 8px; display: grid; place-items: center; color: var(--wb-text-muted); font-size: 13px; }
+  @media (max-width: 900px) { .wb-header__tagline { display: none; } .hide-narrow { display: none; } }
+
+  /* ---------- The split button ---------- */
+  .gh-split { position: relative; display: inline-flex; align-items: stretch; height: 32px; border-radius: 6px; }
+  .gh-split button {
+    font: inherit; font-size: 13px; font-weight: 600; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; transition: background 140ms ease, color 140ms ease;
+  }
+  .gh-split button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; position: relative; z-index: 1; }
+  .gh-split__main { padding: 0 12px 0 10px; border-radius: 6px 0 0 6px; white-space: nowrap; }
+  .gh-split__chev { width: 30px; justify-content: center; border-radius: 0 6px 6px 0; }
+  .gh-split svg { width: 16px; height: 16px; flex: none; }
+  .gh-split__chev svg { width: 14px; height: 14px; transition: transform 140ms ease; }
+  .gh-split[data-open="true"] .gh-split__chev svg { transform: rotate(180deg); }
+  .gh-split__icon { position: relative; display: inline-flex; }
+  .gh-split__dot { position: absolute; top: -2px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--wb-warning); box-shadow: 0 0 0 2px #fff; display: none; }
+
+  /* Primary (signed in, something to save): white on the blue header, accent text */
+  .gh-split[data-variant="primary"] .gh-split__main,
+  .gh-split[data-variant="primary"] .gh-split__chev { background: #fff; color: var(--wb-accent-dark); }
+  .gh-split[data-variant="primary"] .gh-split__chev { border-left: 1px solid rgba(29,78,216,.22); }
+  .gh-split[data-variant="primary"] .gh-split__main:hover,
+  .gh-split[data-variant="primary"] .gh-split__chev:hover,
+  .gh-split[data-variant="primary"][data-open="true"] .gh-split__chev { background: var(--wb-accent-soft); }
+  .gh-split[data-variant="primary"] .gh-split__main:active { background: #d3e3ff; }
+  .gh-split[data-unsaved="true"] .gh-split__dot { display: block; }
+
+  /* Quiet (saved / busy): translucent, white text; primary half is inert */
+  .gh-split[data-variant="quiet"] .gh-split__main,
+  .gh-split[data-variant="quiet"] .gh-split__chev { background: rgba(255,255,255,.16); color: #fff; }
+  .gh-split[data-variant="quiet"] .gh-split__chev { border-left: 1px solid rgba(255,255,255,.22); }
+  .gh-split[data-variant="quiet"] .gh-split__chev:hover,
+  .gh-split[data-variant="quiet"][data-open="true"] .gh-split__chev { background: rgba(255,255,255,.26); }
+  .gh-split[data-variant="quiet"] .gh-split__main[aria-disabled="true"] { cursor: default; }
+
+  /* Ghost (signed out): outline only — still clickable, starts sign-in then saves */
+  .gh-split[data-variant="ghost"] .gh-split__main,
+  .gh-split[data-variant="ghost"] .gh-split__chev { background: transparent; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.65); }
+  .gh-split[data-variant="ghost"] .gh-split__main { box-shadow: inset 1px 0 0 rgba(255,255,255,.65), inset 0 1px 0 rgba(255,255,255,.65), inset 0 -1px 0 rgba(255,255,255,.65); }
+  .gh-split[data-variant="ghost"] .gh-split__main:hover,
+  .gh-split[data-variant="ghost"] .gh-split__chev:hover { background: rgba(255,255,255,.14); }
+
+  .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tooltip (shown on hover and keyboard focus — a native title is not reliable) */
+  .gh-tip {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: max-content; max-width: 260px;
+    background: #0f172a; color: #fff; font-size: 12px; font-weight: 400; padding: 6px 9px; border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(15,23,42,.25); pointer-events: none; opacity: 0; transform: translateY(-2px); transition: opacity 120ms, transform 120ms;
+  }
+  .gh-tip::before { content: ""; position: absolute; top: -4px; right: 18px; width: 8px; height: 8px; background: #0f172a; transform: rotate(45deg); }
+  .gh-split:hover .gh-tip, .gh-split:focus-within .gh-tip { opacity: 1; transform: none; }
+  .gh-split[data-open="true"] .gh-tip, .gh-tip:empty { display: none; }
+
+  /* Menu */
+  .gh-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: 290px;
+    background: #fff; color: var(--wb-text); border: 1px solid var(--wb-border); border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(15,23,42,.18), 0 2px 6px rgba(15,23,42,.08); padding: 6px; font-weight: 400;
+  }
+  .gh-menu[hidden] { display: none; }
+  .gh-menu__head { padding: 6px 8px 8px; border-bottom: 1px solid var(--wb-border); margin-bottom: 4px; }
+  .gh-menu__addr { font-family: Consolas, monospace; font-size: 11.5px; color: var(--wb-text-muted); margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .chip--saved { background: #dcfce7; color: #15803d; }
+  .chip--unsaved { background: #fef3c7; color: #b45309; }
+  .chip--none { background: #eef2f7; color: #475569; }
+  .gh-menu__item {
+    width: 100%; display: flex; align-items: flex-start; gap: 10px; text-align: left;
+    border: none; background: transparent; font: inherit; font-size: 13px; color: var(--wb-text);
+    padding: 8px; border-radius: 6px; cursor: pointer;
+  }
+  .gh-menu__item svg { width: 16px; height: 16px; margin-top: 1px; color: var(--wb-text-muted); flex: none; }
+  .gh-menu__item:hover:not([aria-disabled="true"]), .gh-menu__item:focus-visible { background: var(--wb-accent-soft); outline: none; }
+  .gh-menu__item:hover:not([aria-disabled="true"]) svg, .gh-menu__item:focus-visible svg { color: var(--wb-accent-dark); }
+  .gh-menu__item[aria-disabled="true"] { color: #94a3b8; cursor: default; }
+  .gh-menu__item[aria-disabled="true"] svg { color: #cbd5e1; }
+  .gh-menu__sub { display: block; font-size: 11.5px; color: var(--wb-text-muted); margin-top: 1px; }
+  .gh-menu__item[aria-disabled="true"] .gh-menu__sub { color: #94a3b8; }
+  .gh-menu__kbd { margin-left: auto; font-size: 11px; color: var(--wb-text-muted); padding-top: 2px; }
+  .gh-menu hr { border: none; border-top: 1px solid var(--wb-border); margin: 4px 0; }
+
+  /* ---------- Page controls ---------- */
+  .states { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .states button {
+    font: inherit; font-size: 12.5px; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--wb-border); background: #fff; color: var(--wb-text);
+  }
+  .states button[aria-pressed="true"] { background: var(--wb-accent); border-color: var(--wb-accent); color: #fff; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); opacity: 0;
+    background: #0f172a; color: #fff; padding: 9px 14px; border-radius: 8px; font-size: 13px; transition: all 180ms; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .cell { background: #fff; border: 1px solid var(--wb-border); border-radius: 8px; overflow: hidden; }
+  .cell__stage { background: linear-gradient(180deg, var(--wb-header-bg), var(--wb-header-bg-dark)); padding: 14px 16px; display: flex; justify-content: flex-end; min-height: 60px; align-items: center; }
+  .cell__text { padding: 10px 14px 12px; font-size: 13px; }
+  .cell__text strong { display: block; margin-bottom: 2px; }
+  .cell__text span { color: var(--wb-text-muted); }
+  .cell .gh-tip, .cell .gh-menu { display: none !important; }
+  .muted-box { color: rgba(255,255,255,.75); font-size: 12.5px; font-style: italic; }
+
+  table { border-collapse: collapse; width: 100%; background: #fff; border: 1px solid var(--wb-border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--wb-border); vertical-align: top; }
+  th { background: #f1f5f9; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  ul.notes { padding-left: 20px; margin: 0; }
+  ul.notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GitHub split button — mockup</h1>
+  <p class="lead">Proposal for the header's <em>Save to GitHub</em> / <em>Copy share link</em> control. Pick a state, then click the button, the chevron, or the menu items. Keyboard: Tab to the button, <code>Enter</code>/<code>↓</code> on the chevron opens the menu, <code>↑</code>/<code>↓</code> move, <code>Esc</code> closes.</p>
+
+  <div class="states" role="group" aria-label="State">
+    <button data-state="unsaved" aria-pressed="true">Changes not saved</button>
+    <button data-state="new">Not on GitHub yet</button>
+    <button data-state="saved">Saved</button>
+    <button data-state="busy">Saving…</button>
+    <button data-state="others">Teacher's project</button>
+    <button data-state="signedout">Signed out</button>
+    <button data-state="noproject">No project open</button>
+  </div>
+
+  <header class="wb-header">
+    <div class="wb-header__brand">
+      <div class="wb-header__logo">HB</div>
+      <span class="wb-header__title">HDLBoard</span>
+      <span class="wb-header__tagline">— VHDL and Verilog on a virtual board</span>
+    </div>
+    <div class="wb-header__actions">
+      <div id="live-slot"></div>
+      <span class="wb-header__sep" id="sep"></span>
+      <button class="wb-header__action" id="account" type="button"></button>
+      <button class="wb-header__action hide-narrow" type="button">⚙ Settings</button>
+      <button class="wb-header__action hide-narrow" type="button">? Help</button>
+      <button class="wb-header__action hide-narrow" type="button">i About</button>
+    </div>
+  </header>
+  <div class="workbench-body"><span>Project <code>traffic_light</code> open in the editor</span></div>
+
+  <h2>All states</h2>
+  <div class="grid" id="grid"></div>
+
+  <h2>Behaviour</h2>
+  <table>
+    <thead><tr><th>State</th><th>Primary half</th><th>Chevron menu</th></tr></thead>
+    <tbody>
+      <tr><td>No project open</td><td colspan="2">Split button hidden; the account button stays.</td></tr>
+      <tr><td>Signed out</td><td>Outline style, enabled. Tooltip “Sign in with GitHub to save projects and share links”. Click → sign-in dialog, then saves (existing <code>whenSignedIn</code> flow).</td><td>Copy share link and Open on github.com work without signing in; Get the GitHub version signs in first.</td></tr>
+      <tr><td>Not on GitHub yet</td><td>White, <em>Save to GitHub</em>.</td><td><em>Copy share link</em> disabled with “Save first to get a link”. <em>Get the GitHub version</em> and <em>Open on github.com</em> not shown.</td></tr>
+      <tr><td>Changes not saved</td><td>White, amber dot on the icon, <em>Save to GitHub</em>.</td><td>All items enabled.</td></tr>
+      <tr><td>Saved</td><td>Translucent, ✓ <em>Saved</em>, inert (<code>aria-disabled</code>, still focusable).</td><td>All items enabled — sharing stays one click away.</td></tr>
+      <tr><td>Saving / loading</td><td>Spinner, <em>Saving…</em>, inert.</td><td>Chevron disabled.</td></tr>
+      <tr><td>Someone else's project</td><td>White, <em>Save a copy to my GitHub</em>.</td><td><em>Copy share link</em> copies the teacher's link; <em>Get the GitHub version</em> enabled.</td></tr>
+      <tr><td>Conflict on save</td><td colspan="2">Existing <code>GitHubConflictDialog</code> — unchanged.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Notes for implementation</h2>
+  <ul class="notes">
+    <li>Two real <code>&lt;button&gt;</code>s in one group. Chevron: <code>aria-haspopup="menu"</code>, <code>aria-expanded</code>, <code>aria-controls</code>; menu <code>role="menu"</code>, items <code>role="menuitem"</code>; focus returns to the chevron on close.</li>
+    <li>Colours are the workbench tokens: white button with <code>--wb-accent-dark</code> text on the <code>--wb-header-bg</code> gradient (a blue button on a blue header would not stand out); hover <code>--wb-accent-soft</code>.</li>
+    <li>The status chip in the menu header is the same <code>GitHubStatus</code> component as on the project page.</li>
+    <li>Shortcut suggestion: <code>Ctrl+Shift+S</code> = Save to GitHub (works in this mockup; named in the tooltip).</li>
+    <li>Below 900 px the label can shrink to the icon only, with the label kept in <code>aria-label</code>.</li>
+  </ul>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const ICON = {
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v8"/><path d="m8 17 4-4 4 4"/><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+    gh: '<svg viewBox="0 0 16 16" fill="currentColor" width="17" height="17"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
+  };
+
+  const STATES = {
+    unsaved:   { variant: 'primary', label: 'Save to GitHub', unsaved: true, gist: true, chip: ['unsaved', 'Changes not saved to GitHub'], tip: 'Save your changes to GitHub (Ctrl+Shift+S)', title: 'Changes not saved', desc: 'Primary action; amber dot shows unsaved changes.' },
+    new:       { variant: 'primary', label: 'Save to GitHub', gist: false, chip: ['none', 'Not on GitHub yet'], tip: 'Save the project as a secret gist on your GitHub', title: 'Not on GitHub yet', desc: 'Copy share link disabled until the first save.' },
+    saved:     { variant: 'quiet', label: 'Saved', icon: 'check', inert: true, gist: true, chip: ['saved', 'Saved on GitHub'], tip: 'Everything is saved on GitHub', title: 'Saved', desc: 'Quiet style; menu still offers sharing.' },
+    busy:      { variant: 'quiet', label: 'Saving…', icon: 'spin', inert: true, chevOff: true, gist: true, chip: ['unsaved', 'Saving…'], tip: '', title: 'Saving / loading', desc: 'Spinner; both halves inert.' },
+    others:    { variant: 'primary', label: 'Save a copy to my GitHub', gist: true, owner: 'teacher-usn', chip: ['none', "From teacher-usn's GitHub"], tip: 'Make your own copy of this project on GitHub', title: "Teacher's project", desc: 'Label changes; the first save makes your own gist.' },
+    signedout: { variant: 'ghost', label: 'Save to GitHub', gist: false, signedOut: true, chip: ['none', 'Not signed in'], tip: 'Sign in with GitHub to save projects and share links', title: 'Signed out', desc: 'Outline, still clickable: signs in, then saves.' },
+    noproject: { hidden: true, title: 'No project open', desc: 'Hidden — nothing to save.' }
+  };
+
+  function buttonHtml(s, id) {
+    if (s.hidden) return '<span class="muted-box">(no split button)</span>';
+    const icon = s.icon === 'check' ? ICON.check : s.icon === 'spin' ? '<span class="spinner" aria-hidden="true"></span>' : ICON.up;
+    const gistUrl = s.owner ? 'gist.github.com/teacher-usn/4b1e…9c2' : 'gist.github.com/runelangoy/a73f…0e1';
+    const share = s.gist
+      ? `<button class="gh-menu__item" role="menuitem" data-act="share">${ICON.link}<span>Copy share link<span class="gh-menu__sub">Opens this project in HDLBoard for anyone with the link</span></span></button>`
+      : `<button class="gh-menu__item" role="menuitem" aria-disabled="true" tabindex="-1">${ICON.link}<span>Copy share link<span class="gh-menu__sub">Save first to get a link</span></span></button>`;
+    const more = s.gist ? `
+          <button class="gh-menu__item" role="menuitem" data-act="get">${ICON.down}<span>Get the GitHub version<span class="gh-menu__sub">Replace the files here with the version on GitHub</span></span></button>
+          <hr>
+          <button class="gh-menu__item" role="menuitem" data-act="open">${ICON.ext}<span>Open on github.com</span></button>` : '';
+    return `
+      <div class="gh-split" data-variant="${s.variant}" data-unsaved="${!!s.unsaved}" data-open="false" role="group" aria-label="GitHub">
+        <button type="button" class="gh-split__main" data-act="save" ${s.inert ? 'aria-disabled="true"' : ''}>
+          <span class="gh-split__icon">${icon}<span class="gh-split__dot"></span></span>${s.label}
+        </button>
+        <button type="button" class="gh-split__chev" aria-label="More GitHub actions" aria-haspopup="menu" aria-expanded="false" aria-controls="${id}" ${s.chevOff ? 'disabled style="cursor:default;opacity:.6"' : ''}>${ICON.chev}</button>
+        <div class="gh-tip">${s.tip || ''}</div>
+        <div class="gh-menu" id="${id}" role="menu" hidden>
+          <div class="gh-menu__head"><span class="chip chip--${s.chip[0]}">${s.chip[1]}</span>${s.gist ? `<div class="gh-menu__addr">${gistUrl}</div>` : ''}</div>
+          ${share}${more}
+        </div>
+      </div>`;
+  }
+
+  // Static grid of every state
+  document.getElementById('grid').innerHTML = Object.entries(STATES).map(([k, s]) =>
+    `<div class="cell"><div class="cell__stage">${buttonHtml(s, 'g-' + k)}</div><div class="cell__text"><strong>${s.title}</strong><span>${s.desc}</span></div></div>`).join('');
+  document.querySelectorAll('#grid button').forEach(b => { b.tabIndex = -1; });
+
+  // Live header
+  const slot = document.getElementById('live-slot');
+  const account = document.getElementById('account');
+  const sep = document.getElementById('sep');
+  const toast = document.getElementById('toast');
+  let current = 'unsaved', toastTimer;
+
+  function say(text) {
+    toast.textContent = text; toast.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+
+  function render(stateKey) {
+    current = stateKey;
+    const s = STATES[stateKey];
+    slot.innerHTML = s.hidden ? '' : buttonHtml(s, 'live-menu');
+    sep.style.display = s.hidden ? 'none' : '';
+    account.innerHTML = s.signedOut ? `${ICON.gh} GitHub` : '<span class="avatar">RL</span> runelangoy';
+    document.querySelectorAll('.states button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.state === stateKey)));
+    if (!s.hidden) wire(slot.querySelector('.gh-split'), s);
+  }
+
+  function wire(root, s) {
+    const chev = root.querySelector('.gh-split__chev');
+    const menu = root.querySelector('.gh-menu');
+    const items = () => [...menu.querySelectorAll('.gh-menu__item:not([aria-disabled="true"])')];
+    const open = (focusFirst) => {
+      menu.hidden = false; root.dataset.open = 'true'; chev.setAttribute('aria-expanded', 'true');
+      if (focusFirst) (items()[0] || chev).focus();
+    };
+    const close = (refocus) => {
+      menu.hidden = true; root.dataset.open = 'false'; chev.setAttribute('aria-expanded', 'false');
+      if (refocus) chev.focus();
+    };
+    chev.addEventListener('click', () => (menu.hidden ? open(false) : close(false)));
+    chev.addEventListener('keydown', e => { if (e.key === 'ArrowDown') { e.preventDefault(); open(true); } });
+    menu.addEventListener('keydown', e => {
+      const list = items(); const i = list.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus(); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(true); }
+    });
+    document.addEventListener('click', e => { if (!root.contains(e.target)) close(false); }, { capture: true });
+    root.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]');
+      if (!b || b.getAttribute('aria-disabled') === 'true') return;
+      const act = b.dataset.act;
+      if (s.signedOut) { close(false); say('Sign-in dialog opens → after sign-in the action runs'); return; }
+      if (act === 'save') {
+        render('busy');
+        setTimeout(() => { render('saved'); say(stateKey(s) ? 'Saved a copy to your GitHub' : 'Saved to GitHub'); }, 1200);
+      } else {
+        close(true);
+        say({ share: 'Share link copied', get: 'Asks first, then opens the GitHub version', open: 'Opens the gist on github.com' }[act]);
+      }
+    });
+  }
+  const stateKey = s => !!s.owner;
+
+  document.querySelectorAll('.states button').forEach(b => b.addEventListener('click', () => render(b.dataset.state)));
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      const main = slot.querySelector('.gh-split__main:not([aria-disabled="true"])');
+      if (main) main.click();
+    }
+  });
+  render(current);
+})();
+</script>
+</body>
+</html>

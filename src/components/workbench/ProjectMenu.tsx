@@ -10,6 +10,8 @@ export interface MenuAction {
   onSelect: () => void;
   /** Drawn in red and set apart from the others. */
   danger?: boolean;
+  /** A second, muted line under the label. */
+  detail?: string;
 }
 
 export interface ProjectMenuProps {
@@ -17,6 +19,8 @@ export interface ProjectMenuProps {
   anchor: HTMLElement;
   actions: readonly MenuAction[];
   onClose: () => void;
+  /** Shown above the items, not focusable. */
+  header?: ReactNode;
 }
 
 const GAP = 4;
@@ -26,7 +30,7 @@ const EDGE = 8;
  * A small menu below the button that opened it (docs/project_browse_page.md § 4.7): arrow keys
  * move between the items; Escape, Tab, a click outside or scrolling closes it.
  */
-export function ProjectMenu({ anchor, actions, onClose }: ProjectMenuProps) {
+export function ProjectMenu({ anchor, actions, onClose, header }: ProjectMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
 
@@ -84,12 +88,20 @@ export function ProjectMenu({ anchor, actions, onClose }: ProjectMenuProps) {
 
   return (
     <div ref={menuRef} className="wb-projects__menu" role="menu" style={position} onKeyDown={handleKeyDown}>
+      {header && <div className="wb-projects__menu-head">{header}</div>}
       {actions.map((action, at) => (
         <div key={action.label} role="none">
           {action.danger && at > 0 && <hr className="wb-projects__menu-rule" />}
           <button type="button" role="menuitem" className={cx('wb-projects__menu-item', action.danger && 'is-danger')} onClick={() => choose(action)}>
             {action.icon}
-            {action.label}
+            {action.detail ? (
+              <span>
+                {action.label}
+                <span className="wb-projects__menu-detail">{action.detail}</span>
+              </span>
+            ) : (
+              action.label
+            )}
           </button>
         </div>
       ))}
