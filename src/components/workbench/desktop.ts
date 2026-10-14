@@ -63,6 +63,8 @@ export interface HdlBoardBridge {
    */
   openGitHubWindow?(url: string, options?: { title?: string; callbackUrl?: string }): Promise<AuthorizationCallback | null>;
   closeGitHubWindow?(): Promise<boolean>;
+  /** window.confirm, answered by the app itself (see confirmDialog). */
+  confirm?(message: string): boolean;
 }
 
 declare global {
@@ -73,6 +75,17 @@ declare global {
 
 export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
+}
+
+/**
+ * Asks OK/Cancel. Use this, not window.confirm: on Windows, Electron's own
+ * confirm box leaves the page without keyboard focus once it closes, so the
+ * editors take no typing. The Windows app shows the box itself and gives
+ * the page its focus back.
+ */
+export function confirmDialog(message: string): boolean {
+  const confirm = desktopBridge()?.confirm;
+  return confirm ? confirm(message) : window.confirm(message);
 }
 
 /** Where the GitHub sign-in is kept: encrypted by the Windows app, else for this browser tab only. */

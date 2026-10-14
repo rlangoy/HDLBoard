@@ -712,9 +712,16 @@ interface HdlBoardBridge {
   setEnabled(enabled: boolean): Promise<boolean>;   // applies after restart
   saveWorkspace?(json: string): Promise<boolean>;   // present only while enabled
   loadWorkspace?(): Promise<string | null>;
+  confirm?(message: string): boolean;               // window.confirm, shown by the app
 }
 // window.hdlboard?: HdlBoardBridge
 ```
+
+Every OK/Cancel question goes through `confirmDialog(message)`, never
+`window.confirm`: on Windows, Electron's own confirm box leaves the page
+without keyboard focus once it closes, so the editors take no typing. With
+the bridge's `confirm` the Windows app shows the box itself and hands the
+focus back; in a browser it is plain `window.confirm`.
 
 The optional host bridge for project storage. `<Workbench>` feature-detects
 `window.hdlboard`; when `loadWorkspace` is present it loads the stored

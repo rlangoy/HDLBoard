@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { cx } from '../board';
+import { confirmDialog } from './desktop';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
@@ -165,7 +166,7 @@ export function FileExplorer({
   };
 
   const handleDelete = (f: FileRow) => {
-    if (window.confirm(`Delete ${f.name}? This cannot be undone.`)) {
+    if (confirmDialog(`Delete ${f.name}? This cannot be undone.`)) {
       onDelete(f.id);
     }
   };

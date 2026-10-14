@@ -526,7 +526,41 @@ function registerGitHubTokenIpc() {
   });
 }
 
+/**
+ * window.confirm, shown from here. Electron's own confirm box, on Windows,
+ * leaves the page without keyboard focus once it closes: the editors
+ * look fine but take no typing until the window is left and re-entered.
+ * Here the page gets its focus back after the box.
+ */
+function registerConfirmIpc() {
+  ipcMain.on('hdlboard:confirm', (event, message) => {
+    try {
+      fromApp(event);
+    } catch (err) {
+      event.returnValue = false;
+      throw err;
+    }
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const choice = dialog.showMessageBoxSync(win ?? undefined, {
+      type: 'question',
+      title: 'HDLBoard',
+      message: String(message),
+      buttons: ['OK', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    event.returnValue = choice === 0;
+    if (win) {
+      win.blur();
+      win.focus();
+      event.sender.focus();
+    }
+  });
+}
+
 function registerIpc(persistProjects) {
+  registerConfirmIpc();
   registerLocalFileIpc();
   registerProjectsFolderIpc();
   registerGitHubTokenIpc();

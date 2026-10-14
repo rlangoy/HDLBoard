@@ -61,7 +61,7 @@ import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectArchive, downloadSourceFile } from './download';
-import { desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
+import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
@@ -926,7 +926,7 @@ export function Workbench() {
   /** Opening a project replaces Files: ask first when the open project has changes that would be lost. */
   const confirmLeavingUnsaved = (opening: string) =>
     !projectUnsaved ||
-    window.confirm(`Open ${opening}?\n\n${project.name || 'The open project'} has changes that are not saved. They are lost when another project opens.`);
+    confirmDialog(`Open ${opening}?\n\n${project.name || 'The open project'} has changes that are not saved. They are lost when another project opens.`);
 
   const openLocalProject = async (request: LocalOpenRequest): Promise<string | null> => {
     if (request.kind === 'path') return openProjectFrom(request.path);
@@ -1080,7 +1080,7 @@ export function Workbench() {
         appendLog(`${name} is the same as at its URL.`);
         return;
       }
-      if (!window.confirm(`Replace ${name} in Files with the version at its URL? Your changes to it are lost.`)) return;
+      if (!confirmDialog(`Replace ${name} in Files with the version at its URL? Your changes to it are lost.`)) return;
       handleContentChange(existing.id, content);
       appendLog(`Downloaded ${name} again from its URL.`, 'success');
       return;

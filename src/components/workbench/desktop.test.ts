@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { describe, expect, it } from 'vitest';
-import { parseWorkspace, serializeWorkspace, type Workspace } from './desktop';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { confirmDialog, parseWorkspace, serializeWorkspace, type Workspace } from './desktop';
 import { newProject, withEntryEdited } from './projectFile';
 
 const ws: Workspace = {
@@ -81,5 +81,25 @@ describe('workspace storage format', () => {
   it('reads a project that does not look like one we wrote as none', () => {
     const stored = JSON.stringify({ version: 1, ...ws, project: { name: 'x' } });
     expect(parseWorkspace(stored)?.project).toBeUndefined();
+  });
+});
+
+describe('confirmDialog', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks the Windows app when it answers confirms (Electron's own box leaves the page without focus)", () => {
+    const appConfirm = vi.fn(() => true);
+    const browserConfirm = vi.fn(() => false);
+    vi.stubGlobal('window', { hdlboard: { confirm: appConfirm }, confirm: browserConfirm });
+    expect(confirmDialog('Open it?')).toBe(true);
+    expect(appConfirm).toHaveBeenCalledWith('Open it?');
+    expect(browserConfirm).not.toHaveBeenCalled();
+  });
+
+  it('falls back to window.confirm in a browser', () => {
+    const browserConfirm = vi.fn(() => false);
+    vi.stubGlobal('window', { confirm: browserConfirm });
+    expect(confirmDialog('Open it?')).toBe(false);
+    expect(browserConfirm).toHaveBeenCalledWith('Open it?');
   });
 });

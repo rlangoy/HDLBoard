@@ -23,6 +23,9 @@ const api = {
   setEnabled: (value) => ipcRenderer.invoke('hdlboard:set-enabled', value === true),
 };
 
+// window.confirm's stand-in (desktop.ts confirmDialog): synchronous, like confirm itself.
+api.confirm = (message) => ipcRenderer.sendSync('hdlboard:confirm', String(message)) === true;
+
 // Open Project by a file path, and Save project back into its folder (docs/PROJECTS.md).
 // Always there: they do not depend on workspace storage being on.
 api.readLocalFile = (filePath) => ipcRenderer.invoke('hdlboard:read-local-file', String(filePath));

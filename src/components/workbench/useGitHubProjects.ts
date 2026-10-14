@@ -10,6 +10,7 @@ import {
   type SaveResult,
 } from '../../github/projectGists';
 import type { IndexEntry } from '../../github/projectIndex';
+import { confirmDialog } from './desktop';
 import type { OpenProject } from './projectFile';
 import { describeSavePlan, gitHubSyncState, projectSnapshot, withoutGistLink, withSavedGistLink, type SourceFile } from './projectGitHub';
 import type { GitHubConnection } from './useGitHub';
@@ -186,7 +187,7 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
   };
 
   const remove = (entry: IndexEntry) => {
-    if (projects === null || !window.confirm(deleteQuestion(entry))) return;
+    if (projects === null || !confirmDialog(deleteQuestion(entry))) return;
     void run(`Deleting ${entry.name} from GitHub…`, async () => {
       await projects.remove(entry.gistId);
       if (project?.gist?.gistId === entry.gistId) setProject((current) => withoutGistLink(current));
@@ -217,10 +218,10 @@ function deleteQuestion(entry: IndexEntry): string {
 /** Opening another project replaces Files: ask first when the open project has changes not saved anywhere. */
 function confirmReplacingFiles(project: OpenProject | null, files: readonly SourceFile[], question: string): boolean {
   if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return window.confirm(`${question}\n\n${project.name} has changes that are not saved to GitHub. They are lost when another project opens.`);
+  return confirmDialog(`${question}\n\n${project.name} has changes that are not saved to GitHub. They are lost when another project opens.`);
 }
 
 function confirmLosingChanges(project: OpenProject | null, files: readonly SourceFile[]): boolean {
   if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return window.confirm('Replace the files in HDLBoard with the version on GitHub?\n\nYour changes since the last Save to GitHub are lost.');
+  return confirmDialog('Replace the files in HDLBoard with the version on GitHub?\n\nYour changes since the last Save to GitHub are lost.');
 }
