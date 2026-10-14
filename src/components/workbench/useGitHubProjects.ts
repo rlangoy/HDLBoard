@@ -11,7 +11,7 @@ import {
 } from '../../github/projectGists';
 import type { IndexEntry } from '../../github/projectIndex';
 import { confirmDialog } from './desktop';
-import type { OpenProject } from './projectFile';
+import { unsavedChangesQuestion, type OpenProject } from './projectFile';
 import { describeSavePlan, gitHubSyncState, projectSnapshot, withoutGistLink, withSavedGistLink, type SourceFile } from './projectGitHub';
 import type { GitHubConnection } from './useGitHub';
 
@@ -218,7 +218,7 @@ function deleteQuestion(entry: IndexEntry): string {
 /** Opening another project replaces Files: ask first when the open project has changes not saved anywhere. */
 function confirmReplacingFiles(project: OpenProject | null, files: readonly SourceFile[], question: string): boolean {
   if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return confirmDialog(`${question}\n\n${project.name} has changes that are not saved to GitHub. They are lost when another project opens.`);
+  return confirmDialog(unsavedChangesQuestion(question, project.name, 'GitHub'));
 }
 
 function confirmLosingChanges(project: OpenProject | null, files: readonly SourceFile[]): boolean {

@@ -161,6 +161,15 @@ export function hasUnsavedChanges(project: OpenProject, files: readonly ProjectS
   return filesInProject(project, files).some((file) => saved[nameKey(file.name)] !== fingerprintOf([file]));
 }
 
+/**
+ * What is asked before another project replaces Files that hold unsaved changes.
+ * `savedTo` says where they are not saved ('GitHub'); left out, they are not saved anywhere.
+ */
+export function unsavedChangesQuestion(question: string, projectName: string, savedTo?: string): string {
+  const where = savedTo === undefined ? '' : ` to ${savedTo}`;
+  return `${question}\n\n${projectName || 'The open project'} has changes that are not saved${where}. They are lost when another project opens.`;
+}
+
 /** Records a save (or an open): the project file and its files as they are now become the saved state. */
 export function withSaved(project: OpenProject, files: readonly ProjectSourceFile[]): OpenProject {
   return {

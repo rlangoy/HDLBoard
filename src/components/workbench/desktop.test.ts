@@ -87,19 +87,21 @@ describe('workspace storage format', () => {
 describe('confirmDialog', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("asks the Windows app when it answers confirms (Electron's own box leaves the page without focus)", () => {
-    const appConfirm = vi.fn(() => true);
-    const browserConfirm = vi.fn(() => false);
-    vi.stubGlobal('window', { hdlboard: { confirm: appConfirm }, confirm: browserConfirm });
+  // Electron's own confirm box leaves the page without focus; the Windows app answers instead.
+  it("answers with the Windows app's box", () => {
+    vi.stubGlobal('window', { hdlboard: { confirm: (message: string) => message === 'Open it?' }, confirm: () => false });
     expect(confirmDialog('Open it?')).toBe(true);
-    expect(appConfirm).toHaveBeenCalledWith('Open it?');
+  });
+
+  it("never shows Electron's own box in the Windows app", () => {
+    const browserConfirm = vi.fn(() => false);
+    vi.stubGlobal('window', { hdlboard: { confirm: () => true }, confirm: browserConfirm });
+    confirmDialog('Open it?');
     expect(browserConfirm).not.toHaveBeenCalled();
   });
 
   it('falls back to window.confirm in a browser', () => {
-    const browserConfirm = vi.fn(() => false);
-    vi.stubGlobal('window', { confirm: browserConfirm });
-    expect(confirmDialog('Open it?')).toBe(false);
-    expect(browserConfirm).toHaveBeenCalledWith('Open it?');
+    vi.stubGlobal('window', { confirm: (message: string) => message === 'Open it?' });
+    expect(confirmDialog('Open it?')).toBe(true);
   });
 });

@@ -80,12 +80,12 @@ export function desktopBridge(): HdlBoardBridge | undefined {
 /**
  * Asks OK/Cancel. Use this, not window.confirm: on Windows, Electron's own
  * confirm box leaves the page without keyboard focus once it closes, so the
- * editors take no typing. The Windows app shows the box itself and gives
- * the page its focus back.
+ * editors take no typing. The Windows app shows the box from its main
+ * process instead, which keeps the focus.
  */
 export function confirmDialog(message: string): boolean {
-  const confirm = desktopBridge()?.confirm;
-  return confirm ? confirm(message) : window.confirm(message);
+  const appConfirm = desktopBridge()?.confirm;
+  return appConfirm ? appConfirm(message) : window.confirm(message);
 }
 
 /** Where the GitHub sign-in is kept: encrypted by the Windows app, else for this browser tab only. */

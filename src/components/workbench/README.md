@@ -720,8 +720,10 @@ interface HdlBoardBridge {
 Every OK/Cancel question goes through `confirmDialog(message)`, never
 `window.confirm`: on Windows, Electron's own confirm box leaves the page
 without keyboard focus once it closes, so the editors take no typing. With
-the bridge's `confirm` the Windows app shows the box itself and hands the
-focus back; in a browser it is plain `window.confirm`.
+the bridge's `confirm` the Windows app shows the box from its main process,
+which keeps the focus; in a browser it is plain `window.confirm`.
+`noNativeDialogs.test.ts` fails if `confirm`, `alert` or `prompt` is called
+anywhere else.
 
 The optional host bridge for project storage. `<Workbench>` feature-detects
 `window.hdlboard`; when `loadWorkspace` is present it loads the stored

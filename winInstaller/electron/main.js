@@ -530,33 +530,37 @@ function registerGitHubTokenIpc() {
  * window.confirm, shown from here. Electron's own confirm box, on Windows,
  * leaves the page without keyboard focus once it closes: the editors
  * look fine but take no typing until the window is left and re-entered.
- * Here the page gets its focus back after the box.
+ * A box shown by the main process, modal to the window, does not do that.
  */
 function registerConfirmIpc() {
+  // A synchronous IPC must always get a reply, or the page stays frozen:
+  // on any failure the answer is Cancel, and the failure goes to the log.
   ipcMain.on('hdlboard:confirm', (event, message) => {
     try {
       fromApp(event);
+      event.returnValue = askOkCancel(BrowserWindow.fromWebContents(event.sender), String(message));
     } catch (err) {
+      console.error(`confirm failed: ${err && err.stack ? err.stack : String(err)}`);
       event.returnValue = false;
-      throw err;
-    }
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const choice = dialog.showMessageBoxSync(win ?? undefined, {
-      type: 'question',
-      title: 'HDLBoard',
-      message: String(message),
-      buttons: ['OK', 'Cancel'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    });
-    event.returnValue = choice === 0;
-    if (win) {
-      win.blur();
-      win.focus();
-      event.sender.focus();
     }
   });
+}
+
+const OK_BUTTON = 0;
+const CANCEL_BUTTON = 1;
+
+/** The OK/Cancel box, modal to `win`; true for OK. */
+function askOkCancel(win, message) {
+  const choice = dialog.showMessageBoxSync(win ?? undefined, {
+    type: 'question',
+    title: 'HDLBoard',
+    message,
+    buttons: ['OK', 'Cancel'],
+    defaultId: OK_BUTTON,
+    cancelId: CANCEL_BUTTON,
+    noLink: true,
+  });
+  return choice === OK_BUTTON;
 }
 
 function registerIpc(persistProjects) {

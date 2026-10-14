@@ -100,6 +100,7 @@ import {
   withDescriptionForDownload,
   isUntouchedDefault,
   projectNeedsName,
+  unsavedChangesQuestion,
   type OpenedProject,
   type OpenProject,
   type LocalSourceFile,
@@ -926,7 +927,7 @@ export function Workbench() {
   /** Opening a project replaces Files: ask first when the open project has changes that would be lost. */
   const confirmLeavingUnsaved = (opening: string) =>
     !projectUnsaved ||
-    confirmDialog(`Open ${opening}?\n\n${project.name || 'The open project'} has changes that are not saved. They are lost when another project opens.`);
+    confirmDialog(unsavedChangesQuestion(`Open ${opening}?`, project.name));
 
   const openLocalProject = async (request: LocalOpenRequest): Promise<string | null> => {
     if (request.kind === 'path') return openProjectFrom(request.path);

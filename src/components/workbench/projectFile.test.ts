@@ -10,6 +10,7 @@ import {
   newProject,
   openProject,
   pickProjectUpload,
+  unsavedChangesQuestion,
   projectEntries,
   projectFileBase,
   projectFileNameFromBase,
@@ -226,5 +227,21 @@ describe('unsaved changes', () => {
 
   it('keeps the checksum in the desktop workspace', () => {
     expect(parseStoredProject(JSON.parse(JSON.stringify(saved)))?.savedFiles).toEqual(saved.savedFiles);
+  });
+});
+
+describe('unsavedChangesQuestion', () => {
+  it('names the project and warns the changes are lost', () => {
+    expect(unsavedChangesQuestion('Open Adder?', 'Counter')).toBe(
+      'Open Adder?\n\nCounter has changes that are not saved. They are lost when another project opens.',
+    );
+  });
+
+  it('says where they are not saved', () => {
+    expect(unsavedChangesQuestion('Open Adder?', 'Counter', 'GitHub')).toContain('Counter has changes that are not saved to GitHub.');
+  });
+
+  it('speaks of the open project when it has no name', () => {
+    expect(unsavedChangesQuestion('Open Adder?', '')).toContain('The open project has changes');
   });
 });
