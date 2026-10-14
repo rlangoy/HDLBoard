@@ -6,7 +6,7 @@ import { copyText } from './clipboard';
 import { Activity, GitHubStatus } from './GitHubStatus';
 import { CloudDownloadIcon, CloudUploadIcon, CopyIcon, GitHubIcon } from './icons';
 import type { ProjectGistLink } from './gistLink';
-import { shareLink, type GitHubSyncState } from './projectGitHub';
+import { isSomeoneElses, shareLink, type GitHubSyncState } from './projectGitHub';
 import type { GitHubProjects } from './useGitHubProjects';
 import './GitHub.css';
 
@@ -16,14 +16,16 @@ export interface ProjectGitHubCardProps {
   /** The signed-in GitHub user, or null when signed out. */
   userLogin: string | null;
   projects: GitHubProjects;
+  /** The project has a name; saving waits for one. */
+  named?: boolean;
 }
 
 const COPIED_FEEDBACK_MS = 2000;
 
 /** The project page's GitHub card (docs/GITHUB.md): save the project there, or get the version that is there. */
-export function ProjectGitHubCard({ link, syncState, userLogin, projects }: ProjectGitHubCardProps) {
+export function ProjectGitHubCard({ link, syncState, userLogin, projects, named = true }: ProjectGitHubCardProps) {
   const busy = projects.busy !== null;
-  const someoneElses = link !== undefined && userLogin !== null && link.ownerLogin.toLowerCase() !== userLogin.toLowerCase();
+  const someoneElses = isSomeoneElses(link, userLogin);
   return (
     <section className="wb-project__card wb-github__card" aria-label="GitHub">
       <div className="wb-github__card-head">
@@ -36,7 +38,7 @@ export function ProjectGitHubCard({ link, syncState, userLogin, projects }: Proj
       <p className="wb-github__card-text">{explanation(link, someoneElses)}</p>
       {link !== undefined && <GistAddress link={link} />}
       <div className="wb-github__card-actions">
-        <button type="button" className="wb-github__btn wb-github__btn--primary" onClick={projects.save} disabled={busy || syncState === 'saved'}>
+        <button type="button" className="wb-github__btn wb-github__btn--primary" onClick={projects.save} disabled={busy || syncState === 'saved'} aria-disabled={!named || undefined}>
           <CloudUploadIcon aria-hidden="true" />
           {someoneElses ? 'Save a copy to my GitHub' : 'Save to GitHub'}
         </button>

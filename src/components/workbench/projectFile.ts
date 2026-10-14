@@ -234,6 +234,25 @@ export function newProject(name: string, fileNames: readonly string[]): OpenProj
 }
 
 export const DEFAULT_PROJECT_NAME = 'Default';
+/**
+ * The Default project exactly as the workspace made it: still named Default, its project file
+ * still default, nothing changed since, and not on GitHub. Saving it to GitHub goes through the
+ * project page first, where it can be named (docs/implementation_spec_one_click_share.md).
+ */
+export function isUntouchedDefault(project: OpenProject, unsaved: boolean): boolean {
+  return (
+    !unsaved && project.gist === undefined && project.name === DEFAULT_PROJECT_NAME && project.fileName === projectFileNameFor(DEFAULT_PROJECT_NAME)
+  );
+}
+
+/**
+ * The project has no name of its own yet: it is empty, or it is the Default project's name and
+ * not on GitHub. Saving (to disk or GitHub) waits for one, and the project page asks for it.
+ */
+export function projectNeedsName(project: OpenProject): boolean {
+  return project.name.trim() === '' || (project.name === DEFAULT_PROJECT_NAME && project.gist === undefined);
+}
+
 /** What Download All writes as the project's description while it has none. */
 export const UNSET_DESCRIPTION = 'Not set yet';
 

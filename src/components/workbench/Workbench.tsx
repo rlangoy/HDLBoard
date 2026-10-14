@@ -21,6 +21,7 @@ import {
   type SegmentVector,
 } from '../SevenSegment';
 import { Header } from './Header';
+import { GitHubSplitButton } from './GitHubSplitButton';
 import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
@@ -97,6 +98,8 @@ import {
   withEntryUnloaded,
   withSaved,
   withDescriptionForDownload,
+  isUntouchedDefault,
+  projectNeedsName,
   type OpenedProject,
   type OpenProject,
   type LocalSourceFile,
@@ -115,7 +118,8 @@ import type { FolderHandle, ScanOutcome } from './localProjectScan';
 import { openRequestFor, useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
 import { ProjectGitHubCard } from './ProjectGitHubCard';
-import { gistLinkFromUrl, gitHubSyncState, withGistLink } from './projectGitHub';
+import { gistLinkFromUrl, gitHubSyncState, isSomeoneElses, withGistLink } from './projectGitHub';
+import { gitHubShareView } from './gitHubShare';
 import { useGitHub } from './useGitHub';
 import { useGitHubProjects } from './useGitHubProjects';
 import { nameKey, sameFileName } from '../../project/fileName';
@@ -1438,6 +1442,45 @@ export function Workbench() {
 
   const projectUnsaved = project !== null && hasUnsavedChanges(project, files);
   const gitHubSync = gitHubSyncState(project, files);
+  const gitHubSomeoneElses = isSomeoneElses(project.gist, gitHub.session?.user.login ?? null);
+  const gitHubShare = gitHubShareView({
+    hasProject: true,
+    signedIn,
+    link: project.gist,
+    someoneElses: gitHubSomeoneElses,
+    syncState: gitHubSync,
+    busy: gitHubProjects.busy,
+    failed: gitHubProjects.message?.tone === 'error' ? gitHubProjects.message.text : null,
+  });
+
+  // Ctrl+Shift+S saves to GitHub (Ctrl+S, above, saves the shown file to disk).
+  // The untouched Default project is named on the project page before it is saved to GitHub.
+  const untouchedDefault = isUntouchedDefault(project, projectUnsaved);
+  // Whether the project page was opened for that first save: decided as it opens, and kept while it
+  // stays open, so editing the project's details does not change the page under the user.
+  const [firstSaveAsked, setFirstSaveAsked] = useState(false);
+  useEffect(() => {
+    if (overlay !== 'project') setFirstSaveAsked(false);
+  }, [overlay]);
+  const gitHubFirstSave = firstSaveAsked && overlay === 'project' && signedIn && project.gist === undefined;
+  const saveToGitHub = untouchedDefault || projectNeedsName(project)
+    ? () => {
+        setFirstSaveAsked(true);
+        setOverlay('project');
+      }
+    : gitHubProjects.save;
+  const shareRef = useRef({ view: gitHubShare, save: saveToGitHub });
+  shareRef.current = { view: gitHubShare, save: saveToGitHub };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      const { view, save } = shareRef.current;
+      if (view.visible && view.action === 'save' && !view.primaryInert) save();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // The Projects page's view of the open project, new only when it changes (its list is memoised on it).
   const openProjectSummary = useMemo(() => openProjectInfo(project, gitHubSync, projectUnsaved), [project, gitHubSync, projectUnsaved]);
@@ -1460,6 +1503,18 @@ export function Workbench() {
         onAbout={() => setDialog('about')}
         onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
+        gitHubActions={
+          gitHubShare.visible && (
+            <GitHubSplitButton
+              view={gitHubShare}
+              link={project.gist}
+              someoneElses={gitHubSomeoneElses}
+              onSave={saveToGitHub}
+              onGetGitHubVersion={gitHubProjects.getGitHubVersion}
+              onOpenProjects={() => setOverlay('projects')}
+            />
+          )
+        }
       />
       <SettingsDialog
         open={dialog === 'settings'}
@@ -1663,13 +1718,18 @@ export function Workbench() {
                 onLeaveProject={(name) => setProject((p) => withFileLeft(p, name))}
                 onCloseProject={handleCloseProject}
                 onClose={() => setOverlay(null)}
+                gitHubSave={gitHubFirstSave ? gitHubProjects.save : undefined}
+                askName={gitHubFirstSave && projectNeedsName(project)}
                 github={
+                  gitHubFirstSave ? undefined : (
                   <ProjectGitHubCard
                     link={project.gist}
                     syncState={gitHubSync}
                     userLogin={gitHub.session?.user.login ?? null}
                     projects={gitHubProjects}
+                    named={!projectNeedsName(project)}
                   />
+                  )
                 }
               />
             )}

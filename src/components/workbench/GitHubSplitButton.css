@@ -1,0 +1,199 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+.wb-gh-split {
+  position: relative;
+  display: inline-flex;
+  height: 32px;
+  margin-right: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wb-gh-split__main,
+.wb-gh-split__chevron {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: #ffffff;
+  color: var(--wb-accent-dark);
+  font: inherit;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-gh-split__main {
+  gap: 7px;
+  padding: 0 12px 0 10px;
+  border-radius: 6px 0 0 6px;
+}
+
+.wb-gh-split__chevron {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+  border-left: 1px solid rgba(29, 78, 216, 0.22);
+  border-radius: 0 6px 6px 0;
+}
+
+.wb-gh-split__main:hover,
+.wb-gh-split__chevron:hover,
+.wb-gh-split__chevron[aria-expanded='true'] {
+  background: var(--wb-accent-soft);
+}
+
+.wb-gh-split__main:active {
+  background: #d3e3ff;
+}
+
+.wb-gh-split__main:focus-visible,
+.wb-gh-split__chevron:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.wb-gh-split svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wb-gh-split__chevron svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms ease;
+}
+
+.wb-gh-split__chevron[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.wb-gh-split__icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.wb-gh-split__dot {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* The tooltip: below the button, right-aligned, with a small arrow. */
+
+.wb-gh-split__tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 15;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+}
+
+.wb-gh-split__tip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  right: 12px;
+  border: 5px solid transparent;
+  border-bottom-color: #0f172a;
+}
+
+.wb-gh-split:hover .wb-gh-split__tip,
+.wb-gh-split:focus-within .wb-gh-split__tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.wb-gh-split:has(.wb-gh-split__chevron[aria-expanded='true']) .wb-gh-split__tip {
+  display: none;
+}
+
+.wb-gh-split__dot.is-error {
+  background: var(--wb-danger);
+}
+
+.wb-gh-split.is-single .wb-gh-split__main {
+  border-radius: 6px;
+}
+
+/* Busy: the quiet look, with a spinner for the icon. */
+
+.wb-gh-split.is-quiet .wb-gh-split__main,
+.wb-gh-split.is-quiet .wb-gh-split__chevron {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.wb-gh-split.is-quiet .wb-gh-split__chevron {
+  border-left-color: rgba(255, 255, 255, 0.22);
+}
+
+.wb-gh-split.is-quiet .wb-gh-split__main {
+  cursor: default;
+}
+
+.wb-gh-split__chevron:disabled {
+  cursor: default;
+}
+
+.wb-gh-split__spinner {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: wb-gh-split-spin 0.8s linear infinite;
+}
+
+@keyframes wb-gh-split-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wb-gh-split__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 900px) {
+  .wb-gh-split__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .wb-gh-split__main {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-gh-split__spinner {
+    animation: none;
+  }
+
+  .wb-gh-split__chevron svg {
+    transition: none;
+  }
+}

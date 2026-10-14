@@ -27,7 +27,10 @@ import {
   type OpenProject,
   type ProjectDetails,
   type ProjectEntryRow,
+  projectNeedsName,
 } from './projectFile';
+import { GitHubStatus } from './GitHubStatus';
+import { CloudUploadIcon, EditIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import { pendingLayoutChange, projectDirectoryOf, sourceFolderOf } from './projectLayout';
 import './ProjectPage.css';
@@ -61,6 +64,13 @@ export interface ProjectPageProps {
   onCloseProject: () => void;
   /** Back to the code. */
   onClose: () => void;
+  /**
+   * The untouched Default project (isUntouchedDefault): Save to GitHub, with "Not on GitHub yet"
+   * beside it, takes the place of Save project, and there is no GitHub card.
+   */
+  gitHubSave?: () => void;
+  /** The name is still the Default's: its field is shown empty and highlighted, asking for one, and Save to GitHub waits for it. */
+  askName?: boolean;
   /** The GitHub card (ProjectGitHubCard), shown under the project's details. */
   github?: ReactNode;
   /** Files in Files that are not in the project (availableFiles): offered to be added. */
@@ -86,6 +96,14 @@ export function ProjectPage(props: ProjectPageProps) {
   const sectionRef = useRef<HTMLElement>(null);
   // A new project without a name starts in its name field instead (AutoTextArea autoFocus).
   const startsUnnamed = useRef(project.name === '');
+  // Save to GitHub was clicked while the name is still asked for: the hint turns into an error.
+  const [nameMissing, setNameMissing] = useState(false);
+  // The name is asked for while it is empty, and — on the first save to GitHub — while it is still the Default's.
+  const asking = props.askName === true || projectNeedsName(project);
+  useEffect(() => {
+    if (!asking) setNameMissing(false);
+  }, [asking]);
+  const focusName = () => document.getElementById(`${ids}-title`)?.querySelector('textarea')?.focus();
   useEffect(() => {
     if (!startsUnnamed.current) sectionRef.current?.focus({ preventScroll: true });
   }, []);
@@ -110,30 +128,61 @@ export function ProjectPage(props: ProjectPageProps) {
                   Project
                   {unsaved && <span className="wb-project__unsaved">Unsaved changes</span>}
                 </span>
-                <h2 id={`${ids}-title`} className="wb-project__title">
-                  <AutoTextArea
-                    className="wb-project__name-input"
-                    value={project.name}
-                    onChange={(name) => onDetailsChange({ name: name.replace(/\s*\n\s*/g, ' ') })}
-                    placeholder="Project name"
-                    ariaLabel="Project name"
-                    autoFocus={startsUnnamed.current}
-                    minRows={1}
-                    singleLine
-                  />
-                </h2>
+                <div className={cx('wb-project__name-row', asking && 'is-asking', asking && nameMissing && 'is-error')}>
+                  {asking && <EditIcon className="wb-project__name-icon" aria-hidden="true" />}
+                  <h2 id={`${ids}-title`} className="wb-project__title">
+                    <AutoTextArea
+                      className={cx('wb-project__name-input', asking && 'is-asking')}
+                      value={asking ? '' : project.name}
+                      onChange={(name) => onDetailsChange({ name: name.replace(/\s*\n\s*/g, ' ') })}
+                      placeholder={asking ? 'Enter project name' : 'Project name'}
+                      ariaLabel="Project name"
+                      autoFocus={startsUnnamed.current || props.askName}
+                      minRows={1}
+                      singleLine
+                    />
+                  </h2>
+                </div>
+                {asking && (
+                  <span className={cx('wb-project__name-hint', nameMissing && 'is-error')} role="status">
+                    Project name is required
+                  </span>
+                )}
+                {props.gitHubSave && (
+                  <div className="wb-project__github-state">
+                    <GitHubStatus state="not-on-github" />
+                  </div>
+                )}
               </div>
               <div className="wb-project__actions">
-                <button
-                  type="button"
-                  className="wb-project__btn wb-project__btn--primary"
-                  onClick={props.onSave}
-                  disabled={busy !== null}
-                  title={props.saveHint}
-                >
-                  <SaveIcon aria-hidden="true" />
-                  Save project
-                </button>
+                {props.gitHubSave ? (
+                  <button type="button" className="wb-project__btn wb-project__btn--primary" aria-disabled={asking || undefined}
+                      onClick={() => {
+                        if (!asking) return props.gitHubSave?.();
+                        setNameMissing(true);
+                        focusName();
+                      }}
+                      disabled={busy !== null}>
+                    <CloudUploadIcon aria-hidden="true" />
+                    Save to GitHub
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="wb-project__btn wb-project__btn--primary"
+                    aria-disabled={asking || undefined}
+                    onClick={() => {
+                      if (!asking) return props.onSave();
+                      setNameMissing(true);
+                      focusName();
+                    }}
+                    disabled={busy !== null}
+                    title={props.saveHint}
+                  >
+                    <SaveIcon aria-hidden="true" />
+                    Save project
+                  </button>
+                )}
                 <button type="button" className="wb-project__close" onClick={onClose} aria-label="Close the project page" title="Back to the code (Esc)">
                   <CloseIcon aria-hidden="true" />
                 </button>
@@ -198,6 +247,7 @@ export function ProjectPage(props: ProjectPageProps) {
                     placeholder="What the project is about: the exercise, what to try on the board…"
                     onChange={(description) => onDetailsChange({ description })}
                     minRows={3}
+                    pencilWhenEmpty
                   />
                 </dd>
               </div>
@@ -226,7 +276,18 @@ export function ProjectPage(props: ProjectPageProps) {
             <AvailableFilesCard names={props.available} onAdd={props.onAddFiles} hasFiles={rows.length > 0} />
           )}
 
-          {props.github}
+          {/* The GitHub card's Save to GitHub waits for a name too: a click on it asks for the name. */}
+          <div
+            onClickCapture={(event) => {
+              if (!asking || !(event.target as HTMLElement).closest('.wb-github__btn--primary')) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setNameMissing(true);
+              focusName();
+            }}
+          >
+            {props.github}
+          </div>
 
           {busy !== null && (
             <p className="wb-project__busy" role="status">
@@ -386,6 +447,7 @@ function EntryRow({ row, rowBusy: busy, onEntryChange, onOpenFile, onRemoveEntry
           ariaLabel={`Description of ${row.name}`}
           onChange={(description) => onEntryChange(row.name, { description })}
           minRows={1}
+          pencilWhenEmpty
         />
       </td>
       <td className="wb-project__cell-actions">
@@ -634,10 +696,12 @@ interface AutoTextAreaProps {
   placeholder?: string;
   ariaLabel?: string;
   autoFocus?: boolean;
+  /** A small pencil inside the field while it is empty. */
+  pencilWhenEmpty?: boolean;
 }
 
 /** A textarea as tall as its text, so a description is read without scrolling inside it. */
-function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, className, singleLine, autoFocus }: AutoTextAreaProps) {
+function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, className, singleLine, autoFocus, pencilWhenEmpty }: AutoTextAreaProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => fitHeight(ref.current), [value]);
   // A change of width rewraps the text: the column narrowing, or the page first laid out.
@@ -654,11 +718,12 @@ function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, cl
     return () => observer.disconnect();
   }, []);
 
-  return (
+  const pencil = pencilWhenEmpty === true && value === '';
+  const area = (
     <textarea
       ref={ref}
       id={id}
-      className={className ?? 'wb-project__field wb-project__textarea'}
+      className={cx(className ?? 'wb-project__field wb-project__textarea', pencil && 'has-pencil')}
       value={value}
       spellCheck={singleLine ? false : undefined}
       onKeyDown={singleLine ? (e) => e.key === 'Enter' && e.preventDefault() : undefined}
@@ -668,6 +733,13 @@ function AutoTextArea({ value, onChange, minRows, id, placeholder, ariaLabel, cl
       autoFocus={autoFocus}
       onChange={(e) => onChange(e.target.value)}
     />
+  );
+  if (pencilWhenEmpty !== true) return area;
+  return (
+    <span className="wb-project__pencil-wrap">
+      {area}
+      {pencil && <EditIcon className="wb-project__pencil" aria-hidden="true" />}
+    </span>
   );
 }
 

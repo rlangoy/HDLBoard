@@ -30,6 +30,8 @@ HDLBoard asks GitHub for the **`gist` permission only**: it can list, read, save
 
 ### Save a project to GitHub
 
+Signed in, click **Save to GitHub** at the top of the window (or press **Ctrl+Shift+S**). Once everything is saved the same button reads **Copy share link** and copies the address of the gist; its ⌄ menu has **Get the GitHub version**. The project page's **GitHub** card has the same buttons, in more detail.
+
 Open or make a project (**New File → Project**), then on the project page, in the **GitHub** card, click **Save to GitHub**. If you are not signed in yet, the sign-in comes first and the project is saved right after.
 
 - The first save makes a new secret gist holding the project file and **every file of the project**. A file that came from its own URL (a teacher's gist, say) is saved as your copy, and the saved project file lists it as stored in the gist, so your edits to it are kept and the gist opens to exactly what you saved. Only a file that could not be loaded keeps its URL.
