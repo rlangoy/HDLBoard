@@ -172,6 +172,17 @@ function errorText(err: unknown): string {
   return message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
 }
 
+/** A path with `/` only and no `/` at the end: Windows paths and browser paths compare alike. */
+function withSlashes(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/** The folder a listed project file is in: `folder` of `folder/name.hdlboard.json`, or of `C:\…\folder\name.hdlboard.json`. */
+function parentFolder(location: string): string {
+  const path = withSlashes(location);
+  return path.slice(0, path.lastIndexOf('/'));
+}
+
 let nextFileSeq = 1;
 const nextFileId = () => `file-${nextFileSeq++}`;
 
@@ -881,26 +892,40 @@ export function Workbench() {
    * directly inside it). A folder with exactly one project file of its own opens that project
    * too; with several, the student picks one from the list.
    */
-  const showOpenedFolder = async (outcome: ScanOutcome) => {
+  const showOpenedFolder = async (outcome: ScanOutcome, folder: string) => {
     if (outcome.items.length === 0) {
       setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
       return;
     }
     setOpenProjectError(null);
     setDialog(null);
-    // `folder/name.hdlboard.json`: a project file in the folder itself, not one folder down.
-    const own = outcome.items.filter((item) => item.location.split('/').length === 2);
-    const source = own.length === 1 ? outcome.sources.get(own[0].key) : undefined;
-    if (source) {
-      const error = await openLocalProject(await openRequestFor(own[0], source)).catch((err: unknown) => errorText(err));
-      if (error) appendLog(`Project not opened: ${own[0].name}: ${error}`, 'error');
+    // A project file in the folder itself, not one folder down.
+    const own = outcome.items.filter((item) => parentFolder(item.location) === withSlashes(folder));
+    if (own.length === 1) {
+      const item = own[0];
+      const source = outcome.sources.get(item.key);
+      // The Windows app lists full paths and opens them as such; browsers read their source.
+      const error = await (source ? openRequestFor(item, source) : Promise.resolve<LocalOpenRequest>({ kind: 'path', path: item.location }))
+        .then(openLocalProject)
+        .catch((err: unknown) => errorText(err));
+      if (error) appendLog(`Project not opened: ${item.name}: ${error}`, 'error');
     }
     setOverlay('projects');
   };
 
+  /** Open project folder in the Windows app: its own folder dialog, which also sets the projects folder. */
+  const handleChooseDesktopFolder = async () => {
+    try {
+      const opened = await localProjects.openDesktopFolder();
+      if (opened) await showOpenedFolder(opened.outcome, opened.folder);
+    } catch (err) {
+      setOpenProjectError(errorText(err));
+    }
+  };
+
   /** Open project folder with a browser folder input (Firefox, Safari): every file of the folder. */
   const handleProjectFolderOpened = async (chosen: File[]) => {
-    await showOpenedFolder(await localProjects.openFolderFiles(chosen));
+    await showOpenedFolder(await localProjects.openFolderFiles(chosen), chosen[0]?.webkitRelativePath.split('/')[0] ?? '');
   };
 
   /** Open project folder in Chrome and Edge: the folder itself, kept as the projects folder with access to save into it. */
@@ -908,7 +933,7 @@ export function Workbench() {
     try {
       const folder = await pickProjectFolder();
       if (!folder) return;
-      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle));
+      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
     } catch (err) {
       setOpenProjectError(errorText(err));
     }
@@ -1567,7 +1592,13 @@ export function Workbench() {
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
-          onChooseFolder={canPickFolder() && !desktopBridge()?.listLocalProjects ? () => void handleChooseProjectFolder() : undefined}
+          onChooseFolder={
+            desktopBridge()?.listLocalProjects && desktopBridge()?.chooseProjectsFolder
+              ? () => void handleChooseDesktopFolder()
+              : canPickFolder()
+                ? () => void handleChooseProjectFolder()
+                : undefined
+          }
           onSelectFiles={() => {
             setDialog(null);
             handleUploadClick();
