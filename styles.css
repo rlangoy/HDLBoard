@@ -273,7 +273,7 @@ p { margin: 0; }
 .split-text .text-link { font-size: 1.0625rem; }
 
 /* ---------- Cloud: save + share, text left, two-step card right ---------- */
-.cloud { background: var(--surface); }  /* sets it apart from the testbench section above */
+.projects { background: var(--surface); }  /* sets it apart from the highlight section above */
 .cloud h2 { margin-bottom: 24px; }  /* heading spans the row, so the text and the card start level */
 .cloud .split-grid { align-items: stretch; gap: 64px; }  /* card is as tall as the paragraph + checklist */
 .split-media.glow {
@@ -310,7 +310,7 @@ p { margin: 0; }
   width: fit-content;  /* frame hugs its content on wide screens */
   max-width: 100%;
   padding: 20px 28px 20px 24px;
-  background: var(--bg);
+  background: var(--surface);  /* white card on the light-blue section */
   border: 1px solid var(--line);
   border-radius: 24px;
   box-shadow: 0 40px 90px -30px rgba(47, 111, 237, 0.35), 0 12px 30px -18px rgba(15, 23, 42, 0.3);
@@ -625,10 +625,13 @@ p { margin: 0; }
   .split-media.glow::before { inset: -40px -24px; }  /* keep the glow inside the page: no sideways scroll */
   .split { padding: 96px 0; }
   .split-grid { grid-template-columns: 1fr; gap: 48px; }
-  /* Cloud section: the screenshot sits between the intro paragraph and the checklist */
-  .cloud .split-grid, .projects .split-grid { grid-template-columns: 1fr; gap: 48px; }
-  .projects .split-text { order: 0; }  /* text first, then the dialog */
-  .projects .split-media { order: 1; }
+  /* Projects and cloud: the picture sits between the intro paragraph and the checklist */
+  .cloud .split-grid, .projects .split-grid { grid-template-columns: 1fr; gap: 24px; }
+  .cloud .split-text, .projects .split-text { display: contents; }
+  .projects h2 { order: 0; }
+  .cloud .split-text p, .projects .split-text p { order: 1; }
+  .projects .split-media, .cloud .flow { order: 2; margin: 24px 0; }
+  .cloud .checks, .projects .checks { order: 3; }
   .band-grid { gap: 40px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 48px; }
   .paths { grid-template-columns: repeat(2, minmax(0, 1fr)); }
