@@ -272,18 +272,17 @@ p { margin: 0; }
 .split-text .split-note { font-size: 1.0625rem; }
 .split-text .text-link { font-size: 1.0625rem; }
 
-/* ---------- Cloud: GitHub storage, text left, dialog right ---------- */
+/* ---------- Cloud: save + share, text left, two-step card right ---------- */
 .cloud { background: var(--surface); }  /* sets it apart from the testbench section above */
-.cloud .split-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 64px; }  /* wider column for the dialog: near its own 720px width */
-.cloud .split-media,
+.cloud h2 { margin-bottom: 24px; }  /* heading spans the row, so the text and the card start level */
+.cloud .split-grid { align-items: stretch; gap: 64px; }  /* card is as tall as the paragraph + checklist */
 .split-media.glow {
   background: var(--bg);
   position: relative;
   z-index: 0;
   box-shadow: 0 40px 90px -30px rgba(47, 111, 237, 0.35), 0 12px 30px -18px rgba(15, 23, 42, 0.3);
 }
-.cloud .split-media::before,
-.split-media.glow::before {  /* soft blue glow ties the dialog to the text beside it */
+.split-media.glow::before {  /* soft blue glow behind the screenshot */
   content: "";
   position: absolute;
   inset: -40px;
@@ -291,13 +290,65 @@ p { margin: 0; }
   border-radius: 40px;
   background: radial-gradient(closest-side, var(--accent-soft), transparent);
 }
-.cloud .h2-soft { display: block; font-weight: 600; color: var(--ink-2); }
-.cloud h2 { margin-bottom: 24px; }  /* extra air before the body text */
-.cloud .checks { gap: 28px; }
-.cloud .checks li::before {
+.cloud .h2-soft,
+.projects .h2-soft { display: block; font-weight: 600; color: var(--ink-2); }
+.cloud .checks,
+.projects .checks { gap: 28px; }
+.cloud .checks li::before,
+.projects .checks li::before {
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='5 12 10 17 19 7'/%3E%3C/svg%3E");
 }
+
+/* Two-step card: the app's Save to GitHub and Copy share link buttons, drawn in CSS */
+.flow {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  justify-self: start;
+  width: fit-content;  /* frame hugs its content on wide screens */
+  max-width: 100%;
+  padding: 20px 28px 20px 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: 0 40px 90px -30px rgba(47, 111, 237, 0.35), 0 12px 30px -18px rgba(15, 23, 42, 0.3);
+}
+.flow-step { display: grid; grid-template-columns: 40px 1fr; column-gap: 20px; row-gap: 8px; align-items: center; }
+.flow-step p { grid-column: 2; font-size: 1rem; line-height: 1.55; color: var(--muted); }
+.flow-step strong { color: var(--ink); font-weight: 600; }
+.flow-num { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 1.125rem/40px var(--font-display); text-align: center; }
+.share-btn {
+  display: inline-flex;
+  justify-self: start;
+  height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 1.125rem;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px -10px rgba(15, 23, 42, 0.35);
+}
+.share-btn-main { display: inline-flex; align-items: center; gap: 10px; padding: 0 20px; }
+.share-btn-more { display: inline-flex; align-items: center; padding: 0 14px; border-left: 1px solid var(--line-strong); }
+.ico-dot { position: relative; display: inline-flex; }
+.ico-dot::after {  /* the app's orange "unsaved changes" dot */
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #F59E0B;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* ---------- Projects: My Projects dialog left, text right ---------- */
+.projects .split-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 64px; }  /* wider column for the dialog */
 
 /* ---------- Testbench: split view, one wide screenshot ---------- */
 .testbench-intro { gap: 24px; }
@@ -571,13 +622,13 @@ p { margin: 0; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
+  .split-media.glow::before { inset: -40px -24px; }  /* keep the glow inside the page: no sideways scroll */
   .split { padding: 96px 0; }
   .split-grid { grid-template-columns: 1fr; gap: 48px; }
   /* Cloud section: the screenshot sits between the intro paragraph and the checklist */
-  .cloud .split-grid { grid-template-columns: 1fr; gap: 24px; }
-  .cloud .split-text { display: contents; }
-  .cloud .split-media { order: 1; margin: 24px 0; }
-  .cloud .checks { order: 2; }
+  .cloud .split-grid, .projects .split-grid { grid-template-columns: 1fr; gap: 48px; }
+  .projects .split-text { order: 0; }  /* text first, then the dialog */
+  .projects .split-media { order: 1; }
   .band-grid { gap: 40px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 48px; }
   .paths { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -590,6 +641,11 @@ p { margin: 0; }
 }
 
 @media (max-width: 720px) {
+  .flow { padding: 24px 20px; }
+  .flow-step { grid-template-columns: 32px 1fr; column-gap: 14px; }
+  .flow-num { width: 32px; height: 32px; line-height: 32px; font-size: 1rem; }
+  .share-btn-main { padding: 0 14px; gap: 8px; }
+  .share-btn-more { padding: 0 10px; }
   .band { padding-top: calc(var(--overlap) + 64px); padding-bottom: 72px; }
   .band-grid { grid-template-columns: 1fr; gap: 36px; }
   .hero-text { padding-top: 32px; gap: 22px; }
@@ -633,4 +689,14 @@ p { margin: 0; }
   .race-name { grid-column: 1 / -1; padding-top: 4px; }
   .race-track { height: 40px; }
   .race-axis > span:first-child { display: none; }
+}
+
+@media (max-width: 360px) {
+  /* very narrow phones: keep both buttons on one line inside the card */
+  .flow { padding: 20px 16px; }
+  .flow-step { grid-template-columns: 28px 1fr; column-gap: 10px; }
+  .flow-num { width: 28px; height: 28px; line-height: 28px; font-size: 0.9375rem; }
+  .share-btn { height: 44px; font-size: 1rem; }
+  .share-btn-main { padding: 0 10px; gap: 6px; }
+  .share-btn-more { padding: 0 8px; }
 }
