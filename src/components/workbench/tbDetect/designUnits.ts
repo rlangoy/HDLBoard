@@ -153,12 +153,20 @@ function vhdlPorts(code: string, from: number, to: number): Instance[] | undefin
 }
 
 const VHDL_INSTANCE =
-  /\b(\w+)\s*:\s*(?:entity\s+(?:\w+\.)?(\w+)(?:\s*\(\s*\w+\s*\))?|component\s+(\w+)|(\w+))\s*(?:generic|port)\s+map\b/gi;
+  /\b(\w+)\s*:\s*(?:entity\s+(?:(\w+)\.)?(\w+)(?:\s*\(\s*\w+\s*\))?|component\s+(\w+)|(\w+))\s*(?:generic|port)\s+map\b/gi;
+
+/**
+ * HDLBoard's plugin library (docs/plugin_batch_implementation_plan.md): a monitor such
+ * as `entity hdlboard.uart_monitor` is part of the installation, never a project
+ * unit, so it is not the design a testbench tests.
+ */
+const PLUGIN_LIBRARY = 'hdlboard';
 
 function vhdlInstances(text: string, base: number, lineOf: LineOf): Instance[] {
   return [...text.matchAll(VHDL_INSTANCE)].flatMap((m) => {
-    const name = m[2] ?? m[3] ?? m[4];
-    if (m[4] && isReservedWord(m[4])) return [];
+    if (m[2]?.toLowerCase() === PLUGIN_LIBRARY) return [];
+    const name = m[3] ?? m[4] ?? m[5];
+    if (m[5] && isReservedWord(m[5])) return [];
     return [{ name, line: lineOf(base + (m.index ?? 0)) }];
   });
 }

@@ -30,6 +30,16 @@ end architecture;`;
     expect(units('vhdl', src)[0].instances.map((i) => i.name)).toEqual(['one', 'two', 'three']);
   });
 
+  test('a plugin from the library hdlboard is not an instance of a project unit', () => {
+    const src = `library hdlboard;
+entity t is end entity;
+architecture a of t is begin
+  dut : entity work.uart_tx port map (tx => tx);
+  mon : entity HDLBoard.uart_monitor generic map (name => "TX") port map (rx => tx);
+end architecture;`;
+    expect(units('vhdl', src)[0].instances.map((i) => i.name)).toEqual(['uart_tx']);
+  });
+
   test('board ports and the line of the first one', () => {
     const [unit] = units('vhdl', fixture('vhdl/de1_soc_stray.vhd'));
     expect(unit).toMatchObject({ hasPorts: true, hasBoardPorts: true, boardPortLine: 6 });

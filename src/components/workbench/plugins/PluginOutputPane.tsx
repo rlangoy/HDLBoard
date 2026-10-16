@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from 'react';
+import { cx } from '../../board';
 import { copyText } from '../clipboard';
+import { payloadView } from './payloadView';
 import { CheckIcon, CloseIcon, CopyIcon } from '../icons';
 import { hdlbLine } from './pluginFrame';
 import type { PluginEntry } from './pluginLog';
@@ -36,10 +38,35 @@ function PluginRow({ entry, top }: { entry: PluginEntry; top: number }) {
       <span className="wb-plugins-out__instance" role="cell">
         {entry.instance}
       </span>
-      <span className="wb-plugins-out__payload" role="cell">
-        {entry.payload}
-      </span>
+      <PayloadCells kind={entry.kind} payload={entry.payload} />
     </div>
+  );
+}
+
+/** Hex and ASCII for a payload of bytes; the raw text, across both columns, for anything else. */
+function PayloadCells({ kind, payload }: { kind: string; payload: string }) {
+  const view = payloadView(kind, payload);
+  if (!view.decoded) {
+    return (
+      <span className="wb-plugins-out__raw" role="cell" title={payload}>
+        {payload}
+      </span>
+    );
+  }
+  return (
+    <>
+      <span className="wb-plugins-out__hex" role="cell">
+        {view.hex}
+        {view.framingError && (
+          <span className="wb-plugins-out__fe" title="Framing error: the stop bit was not '1'">
+            FE
+          </span>
+        )}
+      </span>
+      <span className={cx('wb-plugins-out__ascii', view.asciiName !== undefined && 'is-special')} role="cell" title={view.asciiName}>
+        {view.ascii}
+      </span>
+    </>
   );
 }
 
@@ -121,7 +148,8 @@ export function PluginOutputPane({ output, onClose }: PluginOutputPaneProps) {
         <span>Time</span>
         <span>Kind</span>
         <span>Instance</span>
-        <span>Payload</span>
+        <span>Hex</span>
+        <span>ASCII</span>
       </div>
       <div className="wb-plugins-out__body" ref={bodyRef} onScroll={handleScroll} role="table" aria-label="Plugin lines">
         {dropped > 0 && <p className="wb-plugins-out__dropped">{plural(dropped, 'earlier line')} not shown</p>}

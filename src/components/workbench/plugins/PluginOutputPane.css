@@ -81,7 +81,7 @@
 .wb-plugins-out__columns,
 .wb-plugins-out__row {
   display: grid;
-  grid-template-columns: 11ch 8ch 10ch minmax(0, 1fr);
+  grid-template-columns: 11ch 8ch 10ch 7ch minmax(0, 1fr);
   column-gap: 12px;
   padding: 0 16px;
 }
@@ -138,6 +138,33 @@
 
 .wb-plugins-out__instance {
   color: #7dd3fc;
+}
+
+/* A payload that is not bytes: shown as it came, across the Hex and ASCII columns. */
+.wb-plugins-out__raw {
+  grid-column: 4 / -1;
+}
+
+.wb-plugins-out__hex {
+  color: #fde68a;
+}
+
+.wb-plugins-out__ascii {
+  color: #e2e8f0;
+}
+
+/* A control picture (␊) or a stand-in (·, ?): dimmer than a real character. */
+.wb-plugins-out__ascii.is-special {
+  color: #64748b;
+}
+
+.wb-plugins-out__fe {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #7f1d1d;
+  color: #fecaca;
+  font-size: 11px;
 }
 
 .wb-plugins-out__dropped {
