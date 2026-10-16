@@ -14,6 +14,12 @@
  * The server checks only the header. The payload is passed on untouched and
  * interpreted by the GUI widget for <kind>, so a new plugin type needs no
  * server change. Pure.
+ *
+ * The payload is printable ASCII (0x20..0x7E) and at most MAX_PAYLOAD_LENGTH
+ * characters. That keeps one plugin line one physical line (no CR, LF, NUL or other
+ * control characters), bounds the memory a single line can take in the server, in a
+ * WebSocket frame and in the browser, and means the same rule applies unchanged at
+ * every hop. A line that breaks it goes to the console like any other output.
  */
 
 export const HDLB_PREFIX = '@@HDLB ';
@@ -29,15 +35,20 @@ export interface PluginLine {
   readonly payload: string;
 }
 
+/** Longest payload, in characters (= bytes, as it is ASCII). */
+export const MAX_PAYLOAD_LENGTH = 200;
+
 const NAME = '[A-Za-z_][A-Za-z0-9_]*';
 /** At most 16 digits, then checked with Number.isSafeInteger (2**53 ns = 104 days). */
 const TIME = '\\d{1,16}';
-const LINE = new RegExp(`^@@HDLB (${NAME}) (${NAME}) (${TIME})(?: (.*))?$`);
+const PAYLOAD = `[\\x20-\\x7e]{0,${MAX_PAYLOAD_LENGTH}}`;
+const LINE = new RegExp(`^@@HDLB (${NAME}) (${NAME}) (${TIME})(?: (${PAYLOAD}))?$`);
 const FRAME_HEAD = new RegExp(`^(${NAME}) (${NAME}) (${TIME})$`);
+const FRAME_BODY = new RegExp(`^${PAYLOAD}$`);
 
 function toPluginLine(kind: string, instance: string, time: string, payload: string): PluginLine | undefined {
   const timeNs = Number(time);
-  return Number.isSafeInteger(timeNs) ? { kind, instance, timeNs, payload } : undefined;
+  return Number.isSafeInteger(timeNs) && FRAME_BODY.test(payload) ? { kind, instance, timeNs, payload } : undefined;
 }
 
 /** The plugin line in `line`, or `undefined` if it is not one (or its header is malformed). */
@@ -75,4 +86,18 @@ export function decodePluginFrame(inline: string, body: string): PluginLine | { 
   const m = FRAME_HEAD.exec(inline);
   const line = m ? toPluginLine(m[1], m[2], m[3], body) : undefined;
   return line ?? { message: `PLUGIN requires "<kind> <instance> <t_ns>", got: ${JSON.stringify(inline)}` };
+}
+
+/**
+ * True if VHDL `source` declares the library `hdlboard` in a library clause - the
+ * condition for analysing the plugin library before the student's files. Comments
+ * (`--` and VHDL-2008 block comments) and string literals are blanked out first, so a
+ * commented-out `library hdlboard;` or one inside a string does not count. A
+ * `use hdlboard...` without a library clause is not a dependency: the student's own
+ * error, which GHDL reports. Pure; the server may swap this for the existing
+ * comment stripper in portDetect.ts.
+ */
+export function usesHdlboardLibrary(source: string): boolean {
+  const code = source.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'"'|"(?:[^"\n]|"")*"/g, ' ');
+  return /\blibrary\b[^;]*\bhdlboard\b/i.test(code);
 }

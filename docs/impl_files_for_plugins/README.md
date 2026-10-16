@@ -9,14 +9,15 @@ this folder holds the code they refer to.
 
 | Path | What it is | Status | Intended home when implemented |
 |---|---|---|---|
-| `vhdl/hdlb_pkg.vhd` | `hdlb_emit` – writes one `@@HDLB` line with the timestamp | verified (GHDL 4.1) | `server/plugins/vhdl/` |
-| `vhdl/uart_monitor.vhd` | reference plugin: behavioural UART receiver (8N1) | verified (GHDL 4.1) | `server/plugins/vhdl/` |
+| `vhdl/hdlb_pkg.vhd` | `hdlb_emit` – writes one `@@HDLB` line with the timestamp; `hdlb_is_ident` | verified (GHDL 4.1) | `server/plugins/vhdl/` |
+| `vhdl/uart_monitor.vhd` | reference plugin: behavioural UART receiver (8N1); receiver semantics documented in the file header | verified (GHDL 4.1) | `server/plugins/vhdl/` |
 | `examples/uart_tx.vhd` | example student design: synthesizable UART transmitter | verified | example project / course material |
 | `examples/uart_tx_tb.vhd` | example student testbench using `hdlboard.uart_monitor` | verified | example project / course material |
 | `examples/uart_monitor_fe_tb.vhd` | plugin self-test: framing error, timestamp > 2³¹ ns | verified | server integration test |
-| `examples/*.expected.txt` | expected `@@HDLB` lines for the two testbenches | – | integration test fixtures |
+| `examples/uart_monitor_edge_tb.vhd` | plugin self-test: glitch, initial `U`, back-to-back bytes, undefined bit (`XX`), 9600 baud | verified | server integration test |
+| `examples/*.expected.txt` | expected `@@HDLB` lines for the three testbenches | – | integration test fixtures |
 | `examples/run_examples.sh` | runs the examples as batch mode will and compares output | – | – |
-| `ts/pluginLine.ts` (+ `.test.ts`) | server: parse/route `@@HDLB` lines, `PLUGIN` frame encode/decode | proposal, unit-tested, not wired in | `server/src/pluginLine.ts` |
+| `ts/pluginLine.ts` (+ `.test.ts`) | server: parse/route `@@HDLB` lines (printable ASCII, ≤ 200 characters), `PLUGIN` frame encode/decode, `usesHdlboardLibrary` | proposal, unit-tested, not wired in | `server/src/pluginLine.ts` |
 | `ts/uartPayload.ts` (+ `.test.ts`) | frontend: decode `uart` payload, text view, time formatting | proposal, unit-tested, not wired in | `src/components/workbench/plugins/uart/` |
 
 ## Running the examples

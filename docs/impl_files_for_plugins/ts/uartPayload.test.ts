@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'vitest';
 import { formatSimTime, parseUartPayload, uartDisplay, type UartByte } from './uartPayload';
 
-const byte = (value: number, timeNs = 0): UartByte => ({ timeNs, value, framingError: false });
+const byte = (value: number | null, timeNs = 0): UartByte => ({ timeNs, value, framingError: false });
 
 describe('parseUartPayload', () => {
   test('parses a byte', () => {
@@ -17,7 +17,12 @@ describe('parseUartPayload', () => {
     expect(parseUartPayload(92465, '00 FE')).toEqual({ timeNs: 92465, value: 0, framingError: true });
   });
 
-  test.each(['', '4', '481', 'GG', '48 XX', '48  FE'])('rejects %j', (payload) => {
+  test('parses undefined data bits', () => {
+    expect(parseUartPayload(417815, 'XX')).toEqual({ timeNs: 417815, value: null, framingError: false });
+    expect(parseUartPayload(1, 'XX FE')).toEqual({ timeNs: 1, value: null, framingError: true });
+  });
+
+  test.each(['', '4', '481', 'GG', '48 XX', '48  FE', 'xx'])('rejects %j', (payload) => {
     expect(parseUartPayload(0, payload)).toBeUndefined();
   });
 });
@@ -29,6 +34,10 @@ describe('uartDisplay', () => {
 
   test('treats CR, LF and CR LF as one line break each', () => {
     expect(uartDisplay([0x61, 0x0d, 0x0a, 0x62, 0x0a, 0x63, 0x0d, 0x64].map((v) => byte(v))).join('')).toBe('a\nb\nc\nd');
+  });
+
+  test('shows an undefined byte as ⟨??⟩', () => {
+    expect(uartDisplay([byte(null)])).toEqual(['⟨??⟩']);
   });
 
   test('shows non-printable bytes as hex', () => {

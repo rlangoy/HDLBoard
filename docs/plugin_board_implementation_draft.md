@@ -100,6 +100,7 @@ GHDL: `prepareBoard` in `ghdlEngine.ts` analyses the `hdlboard` library (as in t
 ### 2.3 Design → GUI (Rx)
 
 - **No new channel.** The plugin's `@@HDLB` lines arrive on stdout and go through the same `routeOutputLine` → `PLUGIN` path as in batch mode.
+- **Same line rules.** The payload limits of the batch plan (printable ASCII, 200 characters, the plugin and total budgets) and the run-generation check apply unchanged, because the path is the same code. A board run is long-lived, so the per-run volume cap of the batch plan needs a second look here (OPEN-7).
 - **Timestamps** stay simulated time. Without `CLOCK_50` a paced run keeps simulated time close to real time; with `CLOCK_50` simulated time runs far slower (LIMIT-2), and the GUI still shows simulated time.
 - **Invariant to update:** `runtime.ts` states that a generated testbench never writes to stdout, so every stdout line is the student's own. With plugins in `hdl_board_tb` this becomes "every line that is not a plugin line is the student's own".
 

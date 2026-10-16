@@ -5,7 +5,14 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { decodePluginFrame, encodePluginFrame, parsePluginLine, routeOutputLine } from './pluginLine.js';
+import {
+  decodePluginFrame,
+  encodePluginFrame,
+  MAX_PAYLOAD_LENGTH,
+  parsePluginLine,
+  routeOutputLine,
+  usesHdlboardLibrary,
+} from './pluginLine.js';
 
 describe('parsePluginLine', () => {
   test('P-1: parses a uart byte', () => {
@@ -18,6 +25,10 @@ describe('parsePluginLine', () => {
 
   test('P-3: accepts an empty payload', () => {
     assert.equal(parsePluginLine('@@HDLB uart RX 0')?.payload, '');
+  });
+
+  test('P-4b: accepts a payload of exactly the maximum length', () => {
+    assert.equal(parsePluginLine(`@@HDLB uart TX 1 ${'x'.repeat(MAX_PAYLOAD_LENGTH)}`)?.payload.length, MAX_PAYLOAD_LENGTH);
   });
 
   test('P-4: accepts timestamps beyond 2**31 ns', () => {
@@ -33,6 +44,11 @@ describe('parsePluginLine', () => {
     ['time glued to payload', '@@HDLB uart TX 12abc'],
     ['invalid instance name', '@@HDLB uart 1TX 1 48'],
     ['time beyond 2**53', '@@HDLB uart TX 9999999999999999 48'],
+    ['trailing carriage return', '@@HDLB uart TX 1 48\r'],
+    ['tab in payload', '@@HDLB uart TX 1 4\t8'],
+    ['NUL in payload', '@@HDLB uart TX 1 4\u00008'],
+    ['non-ASCII payload', '@@HDLB uart TX 1 æøå'],
+    ['payload over the limit', `@@HDLB uart TX 1 ${'x'.repeat(MAX_PAYLOAD_LENGTH + 1)}`],
   ];
   for (const [label, text] of rejected) {
     test(`P-5: rejects ${label}`, () => {
@@ -64,4 +80,40 @@ describe('PLUGIN frame', () => {
   test('P-9: rejects a malformed header', () => {
     assert.ok('message' in decodePluginFrame('uart RX', '48'));
   });
+
+  test('P-10: applies the payload rule to the frame body too', () => {
+    assert.ok('message' in decodePluginFrame('uart RX 1', 'a\nb'));
+    assert.ok('message' in decodePluginFrame('uart RX 1', 'x'.repeat(MAX_PAYLOAD_LENGTH + 1)));
+    assert.ok(!('message' in decodePluginFrame('uart RX 1', '')));
+  });
+});
+
+describe('usesHdlboardLibrary', () => {
+  const yes: Array<[string, string]> = [
+    ['plain', 'library hdlboard;'],
+    ['mixed case and spacing', 'LIBRARY   HdlBoard ;'],
+    ['in a list', 'library ieee, hdlboard;'],
+    ['over several lines', 'library ieee,\n  hdlboard\n;'],
+    ['after a comment that contains a quote', `-- don't "quote\nlibrary hdlboard;`],
+    ['after a character literal quote', `constant q : character := '"';\nlibrary hdlboard;`],
+  ];
+  for (const [label, source] of yes) {
+    test(`D-1: detects ${label}`, () => {
+      assert.equal(usesHdlboardLibrary(source), true);
+    });
+  }
+
+  const no: Array<[string, string]> = [
+    ['a line comment', '-- library hdlboard;'],
+    ['a block comment', '/* library hdlboard; */'],
+    ['a string literal', 'report "library hdlboard;";'],
+    ['a longer name', 'library hdlboardx;'],
+    ['use without library clause', 'use work.hdlboard_pkg.all;'],
+    ['another library only', 'library ieee; use ieee.std_logic_1164.all;'],
+  ];
+  for (const [label, source] of no) {
+    test(`D-2: ignores ${label}`, () => {
+      assert.equal(usesHdlboardLibrary(source), false);
+    });
+  }
 });

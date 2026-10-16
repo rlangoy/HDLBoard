@@ -7,23 +7,25 @@
  * Intended home: src/components/workbench/plugins/uart/uartPayload.ts,
  * used by the uart widget. Pure.
  *
- * Payload of a `uart` line:  "<hh>"  or  "<hh> FE"  (framing error).
+ * Payload of a `uart` line:  "<hh>" | "<hh> FE" | "XX" | "XX FE"
+ *   FE = framing error (stop bit was not '1'); XX = a data bit was undefined.
  */
 
 export interface UartByte {
   /** Simulated time since the start of the run, ns (from the PLUGIN frame). */
   readonly timeNs: number;
-  readonly value: number;
-  /** The stop bit was '0'. */
+  /** The byte, or `null` if a data bit was undefined (`XX`). */
+  readonly value: number | null;
+  /** The stop bit was not '1'. */
   readonly framingError: boolean;
 }
 
-const PAYLOAD = /^([0-9A-Fa-f]{2})( FE)?$/;
+const PAYLOAD = /^([0-9A-Fa-f]{2}|XX)( FE)?$/;
 
 /** The byte in a `uart` payload, or `undefined` if the payload is not one. */
 export function parseUartPayload(timeNs: number, payload: string): UartByte | undefined {
   const m = PAYLOAD.exec(payload);
-  return m ? { timeNs, value: parseInt(m[1], 16), framingError: m[2] !== undefined } : undefined;
+  return m ? { timeNs, value: m[1] === 'XX' ? null : parseInt(m[1], 16), framingError: m[2] !== undefined } : undefined;
 }
 
 const CR = 0x0d;
@@ -32,13 +34,14 @@ const TAB = 0x09;
 
 /**
  * What the text view shows for each byte, in order: printable ASCII as itself,
- * CR, LF and CR LF each as one line break, TAB as itself, anything else as
- * ⟨hh⟩. The widget renders one span per entry (to colour framing errors and
+ * CR, LF and CR LF each as one line break, TAB as itself, an undefined byte as
+ * ⟨??⟩, anything else as ⟨hh⟩. The widget renders one span per entry (to colour framing errors and
  * show `timeNs` on hover) and joins them.
  */
 export function uartDisplay(bytes: readonly UartByte[]): string[] {
   return bytes.map((byte, i) => {
     const v = byte.value;
+    if (v === null) return '⟨??⟩';
     if (v === LF) return bytes[i - 1]?.value === CR ? '' : '\n';
     if (v === CR) return '\n';
     if (v === TAB || (v >= 0x20 && v < 0x7f)) return String.fromCharCode(v);

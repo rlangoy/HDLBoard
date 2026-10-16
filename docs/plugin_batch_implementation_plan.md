@@ -1,6 +1,6 @@
 # Testbench-driven (batch) plugins – implementation plan
 
-> **Status:** proposal, ready to implement. Last updated 2026-10-16.
+> **Status:** proposal, ready to implement. Last updated 2026-10-16 (revised after review, see section 13).
 > **Scope:** the first plugin version – a UART receive monitor (`uart_monitor`) used from the student's own testbench.
 > **Overview:** [`plugin_structure.md`](plugin_structure.md) · **Code:** [`impl_files_for_plugins/`](impl_files_for_plugins/) · **Later:** [`plugin_board_implementation_draft.md`](plugin_board_implementation_draft.md)
 
@@ -15,6 +15,9 @@
 | B3 | The plugin is **testbench-driven**: the student instantiates it explicitly in their own testbench (batch mode). Real-time (board) mode comes last. |
 | B4 | The first plugin is a **receive monitor**: it decodes a serial line and the GUI shows the bytes as text. Transmit (Tx) comes later. |
 | B5 | Plugins talk to the GUI through **stdout lines that start with `@@HDLB`**, each with a **timestamp relative to the start of the run** (simulated time, not date/time of day). The GUI is updated from these lines. |
+| B6 | A plugin line is **one physical line of printable ASCII with bounded length** (3.3). There is no escaping or length framing. |
+| B7 | The server is **strict, the plugin validates itself**: a plugin checks its own `name` at time 0 and stops the run with a clear message; the server parser never guesses (3.5). |
+| B8 | A run's plugin output belongs to **one run generation**; output from a run that was stopped or replaced is never forwarded (6.1). |
 
 Out of scope here: real-time mode, Tx, Verilog (see the overview, *Later*).
 
@@ -23,8 +26,21 @@ Out of scope here: real-time mode, Tx, Verilog (see the overview, *Later*).
 ## 2. Background: today's batch flow
 
 - A top entity **without ports** (a testbench) runs in batch mode (`engines/ghdlEngine.ts`, `prepareBatch`): `ghdl -e --std=08 <tb>` then `ghdl -r --std=08 <tb>`, bounded by `BATCH_TIMEOUT_MS` (60 s), stdin closed.
-- The simulator's stdout is split into lines (`runtime.ts`, `lineSplitter`) and passed to `Session.forwardOutputLine`, which sends them through `OutputLimiter` (200 lines/s) as `LOG` frames. The frontend (`hdlClient.ts`, `onLog`) shows them in the console.
+- The simulator's stdout is split into lines (`runtime.ts`, `lineSplitter`; a trailing CR is removed) and passed to `Session.forwardOutputLine`, which sends them through `OutputLimiter` (200 lines/s) as `LOG` frames. The frontend (`hdlClient.ts`, `onLog`) shows them in the console.
 - Batch mode does **not** use the board testbench (`hdl_board_tb`), board polling or pacing. None of that is touched by this plan.
+- The editor has **no live linting**: diagnostics come only from a run (`editor_diagnostics_implementation_plan.md`, D-list). There is therefore no second source model that could flag `library hdlboard;` before GHDL has seen it.
+
+### 2.1 Supported project layout
+
+What a run uploads is decided by `filesForRun` (`hdlClient.ts`): **all files in the folder of the top file** (`vhdl/` for a VHDL top), plus the top itself if it is a `work/` testbench started from the TB pane. Other `work/` files are not sent.
+
+| Layout | Works with plugins? |
+|---|---|
+| Design and testbench both in `vhdl/` | yes |
+| Design in `vhdl/`, one testbench in `work/` run from the TB pane | yes – the whole `vhdl/` folder is sent with it |
+| A `work/` testbench that needs a second `work/` file | no – unchanged limitation, not caused by plugins |
+
+Plugin sources are **not project files**: they are part of the HDLBoard installation (section 5), so the file-selection contract is unchanged. The integration test (section 9) uses the first two layouts.
 
 ---
 
@@ -46,17 +62,19 @@ GHDL (ghdl -r <student testbench>)
   └─ report/assert ─────────────────► stdout: "tb.vhd:27:5:@1us:(report note): …"
                                           │
                                           ▼  runtime.ts: lineSplitter (one line at a time, live)
-Session.forwardOutputLine(line)  →  routeOutputLine(line)
-  ├─ "@@HDLB " + valid header ──► plugin budget ──► PLUGIN uart TX 83495\n48
-  └─ anything else ─────────────► OutputLimiter  ──► LOG …
+Session.forwardOutputLine(line)   [run generation checked first, 6.1]
+  └─ routeOutputLine(line)
+       ├─ "@@HDLB " + valid header and payload ──► plugin budget ──► PLUGIN uart TX 83495\n48
+       └─ anything else ─────────────────────────► OutputLimiter ──► LOG …
                                           │
-                                          ▼  WebSocket
+                                          ▼  WebSocket (ordered)
 hdlClient.ts handleFrame
+  ├─ READY  → clear plugin tabs (new run)
   ├─ PLUGIN → onPlugin(line) → plugin registry["uart"] → uart widget, tab "TX"
   └─ LOG    → onLog(text)    → console
 ```
 
-Verified (GHDL 4.1, Linux): `writeline(output, …)` is **not held back** when stdout is a pipe – in a 1.9 s run the first line arrived after 0.04 s. The GUI therefore updates while the simulation runs, not only at the end.
+Verified (GHDL 4.1, Linux): `writeline(output, …)` is **not held back** when stdout is a pipe – in a 1.9 s run the first line arrived after 0.04 s. The GUI therefore updates while the simulation runs, not only at the end. Windows and Docker are still to be verified (section 10).
 
 ### 3.3 Line protocol
 
@@ -70,16 +88,19 @@ Verified (GHDL 4.1, Linux): `writeline(output, …)` is **not held back** when s
 | `<kind>` | plugin type; selects the GUI widget | `[A-Za-z_][A-Za-z0-9_]*`, e.g. `uart` |
 | `<instance>` | instance name from the plugin's `name` generic; one GUI tab each | `[A-Za-z_][A-Za-z0-9_]*`, e.g. `TX` |
 | `<t_ns>` | timestamp (3.4) | non-negative integer, ≤ 2⁵³ |
-| `<payload>` | rest of the line; only the widget for `<kind>` interprets it | free format per kind; may be empty |
+| `<payload>` | rest of the line; only the widget for `<kind>` interprets it | **printable ASCII `0x20`–`0x7E`, at most 200 characters**; may be empty |
+
+**Framing (B6).** One plugin line is one physical stdout line, so the payload cannot hold CR, LF, NUL or any other control character, and non-ASCII text is not allowed. A plugin that needs binary or structured data encodes it itself (hex, as `uart` does). The rule is enforced identically at every hop – the same pattern in `parsePluginLine` (simulator line), `decodePluginFrame` (frame body) and the frontend's frame check – so the three cannot disagree. A line that breaks any rule is **not** a plugin line: it goes to the console as ordinary output, which makes the problem visible, and it cannot bypass the `LOG` limiter, because it is limited there. Memory per line is therefore bounded by the header plus 200 bytes in the server, in a WebSocket frame and in the browser.
+
+Not covered by this plan: `lineSplitter` buffers a stdout stream without any newline indefinitely. That is an existing property of all output (not only plugin output), so a cap there is a separate change.
 
 Payload of `kind = uart`:
 
 | Payload | Meaning |
 |---|---|
 | `48` | one byte, two hex digits |
-| `00 FE` | byte received with a **framing error** (stop bit was `'0'`) |
-
-A line that starts with `@@HDLB` but has a malformed header (wrong field count, invalid name, non-numeric time) is sent to the console as an ordinary `LOG` line – nothing disappears, and the student sees what went wrong.
+| `48 FE` | byte received, **framing error** (stop bit was not `'1'`) |
+| `XX` / `XX FE` | at least one data bit was undefined (`U`, `X`, `Z`, `W`, `-`); the byte value is unknown |
 
 ### 3.4 Timestamp
 
@@ -90,15 +111,23 @@ A line that starts with `@@HDLB` but has a malformed header (wrong field count, 
 - It is set in one place (`hdlb_emit`, section 4), so every plugin uses the same definition.
 - The GUI formats it for display (`83.495 µs`, `1.204 ms`) and can show Δt between entries.
 - Range: verified past 2³¹ ns (≈ 2.1 s) in GHDL 4.1 (`@@HDLB uart RX 3000179270 FF`). A JavaScript `number` holds integers exactly up to 2⁵³ ns (≈ 104 days), so no BigInt is needed.
+- Resolution: GHDL's time unit is 1 fs; `now / 1 ns` truncates to whole nanoseconds. Plugins whose events are closer than 1 ns do not make sense here; `uart_monitor` limits `baud` to 10 Mbaud for that reason.
 
 ### 3.5 Rules for plugin authors
 
 1. Analysed into the library `hdlboard` (`--work=hdlboard`).
 2. All GUI output goes through `hdlb_emit(kind, instance, payload)` – never `report` (which prefixes `file:line:col:@time:(report note):`) and never files of its own.
 3. Every setting is a generic **with a default**. No configuration outside VHDL.
-4. A `name : string` generic gives the instance name, so several instances can be told apart in the GUI. It must match `[A-Za-z_][A-Za-z0-9_]*`; otherwise the lines fall back to the console (3.3).
-5. A plugin never ends the simulation (`std.env.finish`/`stop`) – that is the testbench's job.
-6. A receive-only plugin has inputs only; it cannot affect the design under test.
+4. A `name : string` generic gives the instance name, so several instances can be told apart in the GUI.
+5. **Validation (B7).** The plugin checks its own `name` once, at time 0, with a concurrent assertion using `hdlb_is_ident` from `hdlb_pkg`:
+
+   ```vhdl
+   assert hdlb_is_ident(name) report "…" severity failure;
+   ```
+
+   A bad name then stops the run immediately with a message that names the generic and shows the value, instead of making every later line fall back to the console. `kind` is a literal chosen by the plugin author, not by the student, so it is not checked at run time; the plugin's own tests cover it. `hdlb_emit` stays a plain formatter and does not validate (it would have to report on every call). The server parser stays strict and never repairs a line.
+6. A plugin never ends the simulation (`std.env.finish`/`stop`) – that is the testbench's job. (The assertion above is the one exception: it ends a run that cannot work.)
+7. A receive-only plugin has inputs only; it cannot affect the design under test.
 
 ---
 
@@ -108,13 +137,14 @@ All files are in [`impl_files_for_plugins/`](impl_files_for_plugins/); see its [
 
 | File | Purpose |
 |---|---|
-| [`vhdl/hdlb_pkg.vhd`](impl_files_for_plugins/vhdl/hdlb_pkg.vhd) | `hdlb_emit` – one `@@HDLB` line with timestamp |
+| [`vhdl/hdlb_pkg.vhd`](impl_files_for_plugins/vhdl/hdlb_pkg.vhd) | `hdlb_emit` – one `@@HDLB` line with timestamp; `hdlb_is_ident` |
 | [`vhdl/uart_monitor.vhd`](impl_files_for_plugins/vhdl/uart_monitor.vhd) | reference plugin: behavioural UART receiver, 8N1, LSB first |
 | [`examples/uart_tx.vhd`](impl_files_for_plugins/examples/uart_tx.vhd) | example student design (synthesizable UART transmitter, 50 MHz / 115200 baud) |
 | [`examples/uart_tx_tb.vhd`](impl_files_for_plugins/examples/uart_tx_tb.vhd) | example student testbench using the plugin |
 | [`examples/uart_monitor_fe_tb.vhd`](impl_files_for_plugins/examples/uart_monitor_fe_tb.vhd) | plugin self-test: framing error and timestamps > 2³¹ ns |
-| [`examples/run_examples.sh`](impl_files_for_plugins/examples/run_examples.sh) | runs both testbenches as batch mode will and compares with `*.expected.txt` |
-| [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts) | server proposal: parse/route `@@HDLB` lines, `PLUGIN` frame |
+| [`examples/uart_monitor_edge_tb.vhd`](impl_files_for_plugins/examples/uart_monitor_edge_tb.vhd) | plugin self-test: glitch, initial `U`, back-to-back bytes, undefined bit, non-default baud |
+| [`examples/run_examples.sh`](impl_files_for_plugins/examples/run_examples.sh) | runs the testbenches as batch mode will and compares with `*.expected.txt` |
+| [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts) | server proposal: parse/route `@@HDLB` lines, `PLUGIN` frame, library detection |
 | [`ts/uartPayload.ts`](impl_files_for_plugins/ts/uartPayload.ts) | frontend proposal: `uart` payload, text view, time format |
 
 ### 4.1 `hdlb_emit` (core of `hdlb_pkg.vhd`)
@@ -129,7 +159,7 @@ begin
 end procedure;
 ```
 
-### 4.2 `uart_monitor` interface
+### 4.2 `uart_monitor`
 
 ```vhdl
 entity uart_monitor is
@@ -143,7 +173,18 @@ entity uart_monitor is
 end entity;
 ```
 
-Behaviour: wait for a falling edge (start bit), sample it again half a bit later (shorter glitches are ignored), sample eight data bits one bit-time apart (LSB first), then check the stop bit. Emit `"<hh>"`, or `"<hh> FE"` if the stop bit is `'0'`.
+Behaviour (8N1, LSB first), pinned by `uart_monitor_edge_tb` and `uart_monitor_fe_tb`:
+
+| Situation | Behaviour |
+|---|---|
+| Start bit | A falling edge `'1'` → `'0'` (`falling_edge`). `U` → `'0'` and `X` → `'0'` are **not** edges, so an undriven line at time 0 does not start a byte. |
+| Sampling | In the middle of each bit. Changes between two samples are not seen. |
+| Glitch | If the line is not `'0'` half a bit after the edge, the edge is ignored and the monitor waits for the next one. No output. |
+| Unknown values | Each sample is mapped with `to_x01`. If a **data** bit is `U`/`X`/`Z`/`W`/`-`, the byte is reported as `XX`. |
+| Stop bit | Sampled half a bit into the stop bit. Anything but `'1'` (including unknown) adds `FE`. One line per byte, so one `FE` per byte. |
+| Back-to-back bytes | Work with no idle gap beyond the stop bit: the stop bit is sampled half a bit before its end, so the monitor is waiting for the next falling edge when the next start bit arrives. |
+| After a framing error | No resynchronisation inside the frame; the monitor waits for the next falling edge. If the line stays low (a break), there is no new edge until it returns high, so a frame that begins while the line is low is missed. |
+| Baud | `positive`, at most 10 Mbaud (asserted at time 0). Non-default values are set in `generic map`; tested at 9600. |
 
 Naming: "rx" is seen from the plugin – the line it listens to. That is usually the design's TX output, hence `rx => tx` below.
 
@@ -170,32 +211,59 @@ The GUI shows `Hei!` in the tab "TX". A testbench with a free-running clock must
 
 ---
 
-## 5. GHDL flow
+## 5. GHDL flow and the plugin library build step
 
 ```
-ghdl -a --std=08 --work=hdlboard hdlb_pkg.vhd uart_monitor.vhd   # NEW – only if a file uses library hdlboard
-ghdl -a --std=08 <student files>                                 # unchanged (fixed-point analysis)
-ghdl -e --std=08 <testbench>                                     # unchanged
-ghdl -r --std=08 <testbench>                                     # unchanged
+ghdl -a --std=08 --work=hdlboard <root>/hdlb_pkg.vhd <root>/uart_monitor.vhd    # NEW – only if a student file declares library hdlboard
+ghdl -a --std=08 <student files>                                                # unchanged (fixed-point analysis)
+ghdl -e --std=08 <testbench>                                                    # unchanged
+ghdl -r --std=08 <testbench>                                                    # unchanged
 ```
 
-| Topic | Proposal |
+All four run with the session directory as working directory, which is what the existing commands do (`ghdl()` in `ghdlEngine.ts`).
+
+| Topic | Decision |
 |---|---|
-| When | Only if one of the student's files contains `library hdlboard` (case-insensitive regex, comments stripped). Otherwise the run is exactly as today. |
-| Order | The plugin library is analysed **before** the student's files. Inside it, `hdlb_pkg.vhd` first, then the plugins (or the existing fixed-point analysis with `--work=hdlboard`). |
-| Clean-up | Extend `clearWorkLibrary` (`WORK_LIBRARY_FILE`) to also remove `hdlboard-obj08.cf`, so the plugin library is re-analysed every run (milliseconds). |
-| Location | `server/plugins/vhdl/`, shipped with the Windows installer and the Docker image like GHDL itself. The path is resolved like `ghdlPath.ts` resolves GHDL. |
-| Name clash | A student entity called `uart_monitor` in `work` does not clash with `hdlboard.uart_monitor`. |
-| Errors | An analysis error in a plugin file is an internal error (`stage: 'internal'`), not shown against the student's code. |
-| Mode | The same plugin step is harmless in board mode, but board mode is out of scope here. |
+| **Plugin root** | One function `getPluginRoot()` next to `getGhdlExe()`, resolved like `ghdlPath.ts` resolves GHDL: (1) env `HDLBOARD_PLUGIN_DIR` if set; (2) the directory passed by Electron's `startBackend()` (packaged Windows app: `resources/plugins/vhdl/`); (3) otherwise `../plugins/vhdl/` relative to the compiled module in `server/dist/` (development: `server/plugins/vhdl/`; Docker: `/srv/HDLBoard/server/plugins/vhdl/`). The result is an **absolute path**; files are analysed in place, not copied. |
+| **Library and work directory** | `--work=hdlboard` makes GHDL write `hdlboard-obj08.cf` into the working directory (the session directory). `ghdl -e` / `ghdl -r` find it there, so no `--workdir` or `-P` option is needed – this is the exact flow the examples use. |
+| **Which files** | When a student file declares `library hdlboard`, **all** shipped plugin files are analysed, in a fixed order given by a list in code (`hdlb_pkg.vhd` first). They are tiny (milliseconds), and a per-plugin dependency graph would add a parser for no gain. |
+| **Dependency detection** | `usesHdlboardLibrary(source)` in [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts): blank out comments (`--` and VHDL-2008 block comments), string literals and the character literal `'"'`, then match `\blibrary\b[^;]*\bhdlboard\b` case-insensitively. Covers `library ieee, hdlboard;`, several lines, odd whitespace and mixed case, and is not fooled by commented-out or quoted text. A `use hdlboard…` **without** a library clause is the student's own error; GHDL reports it. A full lexer is not needed because the grammar of a library clause is this simple; the function has 12 tests for the cases above. If the server's existing comment stripper (`portDetect.ts`) is reused, the tests carry over unchanged. |
+| **Clean-up** | `clearWorkLibrary` also removes every `hdlboard-obj*.cf` (a pattern, not the single name `-obj08`, so a different standard suffix is covered), so the library is rebuilt each run. |
+| **Missing or broken assets** | Missing plugin directory or file, or a failing `ghdl -a` on a plugin file, is `stage: 'internal'`, never shown against the student's code. The text names the file and the command: `Plugin library: could not analyse hdlb_pkg.vhd (ghdl -a --std=08 --work=hdlboard, plugin root C:\…\plugins\vhdl):` followed by GHDL's output, or `…plugin root not found` with the path that was tried. An incompatible GHDL fails in the same place with the same message. |
+| **Name clash** | A student entity called `uart_monitor` in `work` does not clash with `hdlboard.uart_monitor`. |
+| **Board mode** | The same step is harmless there, but board mode is out of scope here. |
 
 ---
 
 ## 6. Server changes
 
-Proposal code: [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts) – `parsePluginLine`, `routeOutputLine`, `encodePluginFrame`, `decodePluginFrame` (unit tests in `pluginLine.test.ts`, Node test runner like the rest of `server/`).
+Proposal code: [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts) – `parsePluginLine`, `routeOutputLine`, `encodePluginFrame`, `decodePluginFrame`, `usesHdlboardLibrary` (unit tests in `pluginLine.test.ts`, Node test runner like the rest of `server/`).
 
-### 6.1 `session.ts` – routing before the limiter
+### 6.1 `session.ts` – run generation, then routing before the limiter
+
+**What already protects a new run.** `kill()` calls `stopDelivering` (removes the `data` listeners), so a killed process delivers no further line, and `done`/`onExit` are identity-checked against the current handle (`this.batchRun !== handle`). Lines still buffered in the stream are dropped with the listeners.
+
+**What is added (B8).** The output callback itself is not identity-checked, and it should not rely on the stream internals. A run generation is captured when the process starts and checked before every forward:
+
+```ts
+private outputGeneration = 0;
+
+private startBatchRun(engine: SimEngine, plan: RunPlan): void {
+  this.beginOutput();
+  const generation = ++this.outputGeneration;                   // captured when the process starts
+  const handle = engine.startBatchRun(plan, (line) => {
+    if (generation !== this.outputGeneration || this.destroyed) return;   // output of an old run
+    this.forwardOutputLine(line);
+  }, BATCH_TIMEOUT_MS);
+  …
+}
+```
+
+`handleStop`/`handleReset` and `destroy` also bump `outputGeneration`. The same check goes into the board path's `handle.onOutput` callback. It covers **both** ordinary log lines and plugin lines, because both go through `forwardOutputLine`.
+
+**Client side.** WebSocket frames are ordered, so everything the old run sent arrives before the new run's `READY`. The frontend therefore clears plugin state **on `READY`**, not when the user clicks Start; with the server check above, nothing from the old run can arrive after that `READY`.
+
+**Routing.**
 
 ```ts
 private forwardOutputLine(line: string): void {
@@ -207,14 +275,32 @@ private forwardOutputLine(line: string): void {
 ```
 
 - Plugin lines must not count against, or be dropped by, the 200 lines/s `LOG` budget.
-- The server checks only the header. It does **not** interpret the payload, so a new plugin type needs no server change – only VHDL and a widget.
+- The server checks the header and payload rule (3.3) only. It does not interpret the payload, so a new plugin type needs no server change – only VHDL and a widget.
 - The same path works in board mode (`RunHandle.onOutput` → `forwardOutputLine`), which the real-time draft reuses.
 
-### 6.2 Plugin budget
+### 6.2 Plugin budget: rate and volume
 
-- Separate budget with the same window logic as `OutputLimiter`, higher limit (proposal: 2000 lines/s).
-- Dropped plugin lines are reported as one `LOG` summary, e.g. `… 1234 plugin lines not shown (plugin limit: 2000 lines/s)`.
-- Implementation choice: make `createOutputLimiter` generic over the item type, or add a small counter next to it.
+| Limit | Proposal | When exceeded |
+|---|---|---|
+| Rate | 2000 plugin lines per second window | lines in the window are dropped |
+| Volume | 100 000 plugin lines per run (`MAX_PLUGIN_LINES_PER_RUN`) | all further plugin lines of the run are dropped |
+| Frontend retention | the newest 10 000 entries per instance (ring buffer) | the widget shows "N earlier entries not shown" |
+
+The numbers are proposals to tune; the point is that all three exist: the rate limit bounds frames per second, the volume limit bounds frames per run, and the ring buffer bounds browser memory.
+
+**The summary reaches the console.** Dropped lines are reported as one `LOG` line (`… 1234 plugin lines not shown (plugin limit: 2000 lines/s)`, or `… (plugin limit: 100000 lines per run)`). It is sent with `sendLogLines`, **not** through `limiter.accept`, exactly like the existing limiter's own summary – so the ordinary 200 lines/s limit does not apply to it and it cannot be dropped by it.
+
+**Lifecycle.** The plugin budget is created in `beginOutput` next to the existing limiter, flushed by the same timer (`LIMITER_FLUSH_MS`), and finished in `endOutput`. `endOutput` is already called on every path that ends a run:
+
+| Event | Where |
+|---|---|
+| Normal completion, error, timeout | `done`/`onExit` handlers (`endOutput()`) |
+| `STOP`, `RESET` | `stopActive()` (`endOutput()` before killing) |
+| New `RUN` | `beginOutput()` calls `endOutput()` first |
+| Socket close | `destroy()` – stops the timer; nobody is left to receive a summary |
+| Compilation fails | no run starts, so no budget exists |
+
+Implementation choice: make `createOutputLimiter` generic over the item, or add a small counter class beside it.
 
 ### 6.3 `protocol.ts` – new server frame
 
@@ -235,7 +321,17 @@ case 'PLUGIN': {
 }
 ```
 
-Compatibility: the frontend ignores unknown verbs ([`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 6.2), so an older frontend simply does not show plugin output.
+**Compatibility.**
+
+| Combination | What happens |
+|---|---|
+| Old frontend, new backend | The frontend ignores unknown verbs ([`ghdl_implementation_plan.md`](ghdl_implementation_plan.md) § 6.2): no plugin view, nothing breaks. |
+| New frontend, old backend | No capability negotiation is added. An old backend has no plugin library, so a testbench with `library hdlboard` fails in analysis with GHDL's own, clear error, and no `PLUGIN` frame is expected. If such a backend ever did print `@@HDLB` lines, they would appear in the console as ordinary text. The failure is loud either way. |
+| Malformed `PLUGIN` frame | The frontend drops the frame and logs it once with `console.warn` (as it does for other malformed frames); the server never produces one because it builds frames from lines it has already validated. |
+
+`WELCOME`'s version stays `1`: the change is purely additive.
+
+**Cross-side tests.** The frontend parses frames on its own (`hdlClient.ts`), independently of `server/src/protocol.ts`. To keep the two from drifting, both test suites read **one shared fixture** of valid and invalid `PLUGIN` frames (header pattern, safe-integer check, body rule, unknown verb ignored) – a JSON file under `server/src/testSupport/` that the frontend test also imports.
 
 ---
 
@@ -243,21 +339,44 @@ Compatibility: the frontend ignores unknown verbs ([`ghdl_implementation_plan.md
 
 Proposal code: [`ts/uartPayload.ts`](impl_files_for_plugins/ts/uartPayload.ts) – `parseUartPayload`, `uartDisplay`, `formatSimTime` (vitest tests in `uartPayload.test.ts`).
 
+### 7.1 Parts
+
 | Part | Proposal |
 |---|---|
-| `hdlClient.ts` | `case 'PLUGIN'` in `handleFrame`: check the header (`<kind> <instance> <t_ns>`, same pattern as the server – copied, as `STATE_LENGTH` already is), call a new handler `onPlugin({ kind, instance, timeNs, payload })` in `HdlClientHandlers`. |
+| `hdlClient.ts` | `case 'PLUGIN'` in `handleFrame`: check the header and body with the rule of 3.3 (copied, as `STATE_LENGTH` already is), call a new handler `onPlugin({ kind, instance, timeNs, payload })` in `HdlClientHandlers`. |
 | Plugin registry | `kind → { parse(timeNs, payload), Widget }`. First entry: `uart` → terminal widget. New plugin type = new entry. |
-| Instances | One tab per `<instance>`, created on its first line. |
-| Life cycle | Cleared on a new `RUN`/`RESET`; kept after `DONE` so the student can read the result. |
-| Unknown kind | Shown in the console as text with a note, so it is not lost. |
-| Invalid payload | Shown in the widget as raw text, marked invalid. |
+| State | `Map<key, { kind, instance, entries, dropped }>`, one tab per key. |
 
-uart widget:
+### 7.2 State model and life cycle
 
-- Text view: printable ASCII as text; CR, LF and CR LF each as one line break; TAB as is; other bytes as `⟨hh⟩` (`uartDisplay`).
+| Situation | Behaviour |
+|---|---|
+| Key | `kind + '/' + instance`. The same instance name with a **different kind** is a different tab (shown as the instance name with a kind badge), so a payload is never read with the wrong schema. |
+| New run | State cleared on `READY` (see 6.1). Two runs in a row without leaving the workbench therefore never mix. After `DONE` or an error, the result stays visible until the next `READY`. |
+| `PLUGIN` before `READY` | Ignored. The server sends `READY` before it forwards any output, and WebSocket frames are ordered, so this indicates a bug and is logged with `console.warn`. |
+| Unknown `kind` | A generic tab with the raw lines (`<t_ns> <payload>`), marked "no viewer for kind `x`" – never silently dropped. |
+| Invalid payload for a known kind | The entry is shown as raw text in the widget and marked invalid; later entries are still parsed. |
+| Widget closed / tab changed | Closing hides the tab until the next run; data is kept so reopening is instant. Which tab is selected is UI state only and does not affect the data. |
+| Run fails before any plugin line | No tabs are created; the console shows the error as today. |
+| More than the retention limit | Oldest entries are dropped; the widget shows "N earlier entries not shown". |
+
+### 7.3 uart widget
+
+- Text view: printable ASCII as text; CR, LF and CR LF each as one line break; TAB as is; undefined bytes (`XX`) as `⟨??⟩`; other bytes as `⟨hh⟩` (`uartDisplay`).
 - Hex view as an alternative (toggle).
 - Timestamp per byte on hover or in a column (`formatSimTime`), with Δt to the previous byte.
 - Framing errors (`FE`) highlighted in red.
+
+### 7.4 Call sites of `HdlClientHandlers`
+
+Adding `onPlugin` to the interface requires updating every construction of `HdlClient`:
+
+| Site | Change |
+|---|---|
+| `src/components/workbench/Workbench.tsx` (`new HdlClient(hdlBackendUrl(HDL_WS_PORT), { … })`, around line 467) | add `onPlugin` |
+| `src/components/workbench/hdlClient.test.ts` (`new HdlClient('ws://test', { … })`, around line 66) | add a no-op or recording `onPlugin` to the test double |
+
+There is no other entry point (no demo or bundled variant) that constructs `HdlClient`.
 
 ---
 
@@ -265,16 +384,28 @@ uart widget:
 
 | File | Change |
 |---|---|
-| `server/plugins/vhdl/hdlb_pkg.vhd` (new) | from `impl_files_for_plugins/vhdl/` |
-| `server/plugins/vhdl/uart_monitor.vhd` (new) | from `impl_files_for_plugins/vhdl/` |
+| `server/plugins/vhdl/hdlb_pkg.vhd`, `uart_monitor.vhd` (new) | from `impl_files_for_plugins/vhdl/`; both already carry the SPDX header (`GPL-2.0-only`, copyright line) |
 | `server/src/pluginLine.ts` (+ test, new) | from `impl_files_for_plugins/ts/` |
-| `server/src/engines/ghdlEngine.ts` | detect `library hdlboard`, analyse plugins with `--work=hdlboard` before the student files, clean `hdlboard-obj08.cf` |
-| `server/src/session.ts` | route `@@HDLB` lines before the limiter, plugin budget |
+| `server/src/pluginRoot.ts` (new) | `getPluginRoot()` (section 5) |
+| `server/src/engines/ghdlEngine.ts` | detect `library hdlboard`, analyse plugins with `--work=hdlboard` before the student files, clean `hdlboard-obj*.cf` |
+| `server/src/session.ts` | run generation (6.1), route `@@HDLB` lines before the limiter, plugin budget (6.2) |
 | `server/src/protocol.ts` | `PLUGIN` frame (type, encode, decode) |
-| `src/components/workbench/hdlClient.ts` | `case 'PLUGIN'`, `onPlugin` handler |
+| `server/src/testSupport/` | shared `PLUGIN` frame fixture |
+| `src/components/workbench/hdlClient.ts` | `case 'PLUGIN'`, `onPlugin` |
+| `src/components/workbench/Workbench.tsx`, `hdlClient.test.ts` | `onPlugin` at the two construction sites (7.4); plugin panel / tabs |
 | `src/components/workbench/plugins/` (new) | registry, `uart/uartPayload.ts` (from `impl_files_for_plugins/ts/`), uart widget |
-| `src/components/workbench/Workbench.tsx` | plugin panel / tabs |
-| Windows installer, Docker image | include `server/plugins/vhdl/` |
+
+### 8.1 Release-blocking packaging changes
+
+These are not deployment details: without them the feature works in development and fails in every shipped build.
+
+| Area | Change |
+|---|---|
+| Docker (`docker/Dockerfile`) | the `server-build` stage copies only `server/src/`, and the `backend` stage takes only `package.json`, `node_modules/` and `dist/` from it, so plugins reach the image by neither route. Add `COPY server/plugins/ /srv/HDLBoard/server/plugins/` to the `backend` stage (the files are plain VHDL, nothing to build); the relative path in section 5 then resolves without `HDLBOARD_PLUGIN_DIR`. The existing build-time probe is the place to add a one-line plugin analysis check |
+| Windows installer (`winInstaller/build.ps1`, step "Assembling resources/") | copy `server/plugins/vhdl/` to `resources/plugins/vhdl/`, pass the directory to `startBackend()` like `ghdlExe`, and add it to the installer manifest |
+| Clean builds / generated bundles | `server/dist/` must not be the only place plugins live; plugin files are copied, not compiled. A clean-build check must list `plugins/vhdl/*.vhd` in the artifact |
+| Licensing | the VHDL files carry the same SPDX header as the TypeScript sources; the installer's third-party notice does not need an entry because the files are HDLBoard's own |
+| Verification | a post-build check (script or CI step) that runs `run_examples.sh` against the **packaged** plugin directory |
 
 ---
 
@@ -282,38 +413,51 @@ uart widget:
 
 | Level | Test |
 |---|---|
-| Unit (server) | `pluginLine.test.ts` (P-1 … P-9): valid lines, empty payload, time > 2³¹, rejected headers, routing, frame round-trip |
-| Unit (server) | `session`: a `@@HDLB` line bypasses the `LOG` budget; a malformed one becomes `LOG`; plugin budget summary |
-| Unit (server) | `protocol`: `PLUGIN` encode/decode in `protocol.test.ts` |
-| Unit (frontend) | `uartPayload.test.ts`: payload parsing, text view, time format |
-| Integration (GHDL) | `uart_tx_tb` gives four `PLUGIN` frames `48 65 69 21` with the expected `t_ns` (`uart_tx_tb.expected.txt`) |
-| Integration (GHDL) | `uart_monitor_fe_tb` gives `00 FE` and a timestamp > 2³¹ ns (`uart_monitor_fe_tb.expected.txt`) |
-| Integration (GHDL) | no `library hdlboard` → plugin library not analysed, run unchanged |
-| Integration (GHDL) | student entity `uart_monitor` in `work` → no clash |
-| Platforms | GHDL 4.1, 5.0.1 (Windows app) and 6.0.0 (Docker), including that stdout is delivered live on Windows |
+| Unit (server) | `pluginLine.test.ts`: valid lines, empty and maximum-length payload, time > 2³¹, rejected headers, **oversized payload, CR, NUL, tab, non-ASCII**, routing, frame round-trip, frame body rule, `usesHdlboardLibrary` (12 cases) |
+| Unit (server) | `session`: a `@@HDLB` line bypasses the `LOG` budget; a malformed one becomes `LOG`; rate summary and per-run cap summary reach the console; **a delayed line from the previous run, delivered while the next run is active, is not forwarded** (regression test for 6.1) |
+| Unit (server) | `protocol`: `PLUGIN` encode/decode; shared fixture |
+| Unit (server) | plugin root: resolution order (env, Electron directory, relative), missing directory → `internal` error naming the path and file |
+| Unit (frontend) | `uartPayload.test.ts`; state model of 7.2 (key by kind, clear on `READY`, ring buffer, unknown kind); shared fixture |
+| Integration (GHDL) | `uart_tx_tb`, `uart_monitor_fe_tb`, `uart_monitor_edge_tb` give the expected `PLUGIN` frames (`*.expected.txt`) |
+| Integration (GHDL) | layouts of 2.1: design and testbench in `vhdl/`; design in `vhdl/` with a testbench in `work/` |
+| Integration (GHDL) | no `library hdlboard` → plugin library not analysed, run unchanged; student entity `uart_monitor` in `work` → no clash; invalid `name` → run stops with the assertion message |
+| **End-to-end (WebSocket)** | start a batch session, send `RUN` with `uart_tx_tb` + `uart_tx`, expect `READY`, four `PLUGIN` frames, `DONE`; then `RUN` again and confirm the second run contains only its own four frames |
+| End-to-end (WebSocket) | mixed `report` and plugin output (each on its own path, order within each kept); a malformed `@@HDLB` line → `LOG`; unknown plugin kind reaches the client; plugin-budget overflow → summary; client disconnect during a flood → no exception, process killed; timeout → `ERROR`, no stale frames |
+| Platforms | see section 10 |
 
 ---
 
-## 10. Verification status
+## 10. Verification status and cross-platform plan
 
 | Item | Status |
 |---|---|
-| `hdlb_pkg`, `uart_monitor`, both example testbenches | ✅ GHDL 4.1 (Linux), `run_examples.sh` passes |
+| `hdlb_pkg`, `uart_monitor`, the three example testbenches | ✅ GHDL 4.1 (Linux), `run_examples.sh` passes |
+| Name assertion (bad `name` stops the run) | ✅ GHDL 4.1 |
 | Timestamp > 2³¹ ns | ✅ GHDL 4.1 |
 | stdout delivered live through a pipe | ✅ GHDL 4.1 (Linux) |
-| `pluginLine.ts` | ✅ 16 tests (Node test runner), type-checks with `server/tsconfig.json` settings |
-| `uartPayload.ts` | ✅ 15 tests (vitest), type-checks with `tsconfig.app.json` settings |
-| GHDL 5.0.1 (Windows) / 6.0.0 (Docker) | ⏳ not yet tested |
-| Server/frontend integration | ⏳ not implemented |
+| `pluginLine.ts` | ✅ 35 tests (Node test runner), type-checks with `server/tsconfig.json` settings |
+| `uartPayload.ts` | ✅ 18 tests (vitest), type-checks with `tsconfig.app.json` settings |
+| GHDL 5.0.1 (Windows app), 6.0.0 (Docker) | ⏳ not yet tested |
+| Server/frontend integration, WebSocket end-to-end | ⏳ not implemented |
+
+The stdout-arrival check is only part of what is platform-sensitive. Each supported platform needs the full path run once, with the exact versions recorded in this table when done:
+
+| Platform | Reproducible commands | Also check |
+|---|---|---|
+| Linux (development) | `sh docs/impl_files_for_plugins/examples/run_examples.sh`; `cd server && npm test && npm run test:integration` | – |
+| Windows app | the same `ghdl` commands against `resources/ghdl/bin/ghdl.exe` and `resources/plugins/vhdl/` (PowerShell variant of the script); then the WebSocket end-to-end test against the packaged backend | CRLF in GHDL's stdout (handled by `lineSplitter`; add a test line that ends in `\r\n`), `--work=hdlboard` writing `hdlboard-obj08.cf` into a session directory with spaces, live delivery without buffering, process termination on `STOP`, ordering of `LOG` and `PLUGIN` under the pipe |
+| Docker | `docker run` the image with the examples mounted, the end-to-end test against the container's port | plugin directory present in the **runtime** image, GHDL 6.0.0 time formatting of `now / 1 ns` |
+
+Record per platform: GHDL version string (`ghdl --version`), installer revision or image tag, date.
 
 ---
 
 ## 11. Open questions
 
-1. Size of the plugin budget (lines per second, or per run).
-2. Whether the editor's static analysis / diagnostics must know the library `hdlboard`, so `library hdlboard;` does not give false warnings.
-3. Whether plugin lines should optionally also appear in the console (debug toggle).
-4. GUI layout when a testbench uses several plugin types at once (the line format already supports it).
+1. Final numbers for the plugin budget (rate, per-run cap, ring-buffer size).
+2. Whether plugin lines should optionally also appear in the console (debug toggle).
+3. GUI layout when a testbench uses several plugin types at once (the line format and the state model already support it).
+4. A cap on a stdout line without any newline in `lineSplitter` (affects all output; separate change).
 
 ## 12. Rejected alternatives
 
@@ -324,3 +468,28 @@ uart widget:
 | Separate file channels (append files) for plugin data | unnecessary in batch: stdout is already ordered, lossless and delivered live |
 | Timestamp from the wall clock (Node) | meaningless in batch; simulated time (`now`) is the right reference |
 | `report` for plugin output | its `file:line:col:@time:(report note):` prefix hides the `@@HDLB` marker |
+| Length framing or escaping so the payload can hold any text | adds a second parser at every hop for a need no plugin has; plugins encode their data (hex) |
+| `WELCOME` capability flag for plugin support | the reverse case already fails loudly (6.3) |
+| A lexer for dependency detection | the library-clause grammar is simple enough for a comment-blanking regex with tests |
+
+---
+
+## 13. Review log (2026-10-16)
+
+An external review listed 13 points. Each was checked against the code and decided; the table shows what was taken.
+
+| # | Point | Decision | Where |
+|---|---|---|---|
+| 1 | Old run's output attributed to the new run | **Accepted, narrowed.** The kill path already stops delivery and the exit handlers are identity-checked, but the output callback is not; a run generation is added and the client clears on `READY`. Regression test added. | 6.1, 9 |
+| 2 | Payload framing and size | **Accepted.** Printable ASCII, 200 characters, one physical line; the same rule at all three hops. | 3.3, B6 |
+| 3 | Rate vs. volume; summary delivery | **Accepted, one claim corrected.** A per-run cap and a frontend ring buffer are added. The summary cannot be dropped by the ordinary limiter: the existing limiter's summaries are sent with `sendLogLines`, not through `accept`, and the plugin summary does the same. The `endOutput` lifecycle is listed per event. | 6.2 |
+| 4 | Invalid `name` / `kind` | **Accepted.** `name` is asserted at time 0 in the plugin; `kind` is the author's literal; `hdlb_emit` stays a formatter; the server stays strict. | 3.5, B7 |
+| 5 | Frontend file selection | **Rejected as stated, documented instead.** `filesForRun` sends *all* files of the top file's folder plus a `work/` top, so a `work/` testbench does receive the design in `vhdl/`. The supported layouts are written down and tested. | 2.1, 9 |
+| 6 | Plugin-library build contract | **Accepted.** Root resolution, exact arguments, all-or-nothing analysis, clean-up pattern, error text with file and command. | 5 |
+| 7 | Dependency detection | **Accepted in part.** Specified grammar and a tested function instead of a lexer; `use` without a library clause is the student's error. | 5, `pluginLine.ts` |
+| 8 | Protocol compatibility | **Accepted in part.** Malformed-frame policy and a shared test fixture added; a capability flag in `WELCOME` is rejected because the failure is already loud. | 6.3 |
+| 9 | UI lifecycle and call sites | **Accepted.** State model table; the two `HdlClient` construction sites listed. | 7.2, 7.4 |
+| 10 | UART semantics | **Accepted.** Behaviour table; `XX` for undefined data bits; baud limit; edge testbench covering glitch, initial `U`, back-to-back bytes, undefined bit, non-default baud. | 4.2 |
+| 11 | Cross-platform validation | **Accepted** as a plan; not yet executed here (no Windows or Docker available). | 10 |
+| 12 | Diagnostics and packaging | **Accepted in part.** Diagnostics come only from a run, so there is no second model to update. The packaging gaps are real (the Dockerfile copies only `server/src/`) and are listed as release-blocking. | 2, 8.1 |
+| 13 | End-to-end tests | **Accepted.** Listed with the cases named in the review. | 9 |
