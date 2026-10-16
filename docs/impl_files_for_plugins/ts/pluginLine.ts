@@ -66,14 +66,15 @@ export type OutputRoute =
  * Where one stdout line goes. A line that starts with @@HDLB but has a malformed
  * header goes to the console like any other output, so nothing disappears.
  *
- * `enabledKinds` is the set of plugin kinds enabled for this run (`enabledKinds` in
- * pluginCatalog.ts). A line of any other kind is ordinary output: a disabled plugin is
- * indistinguishable from no plugin, even if the student's own code prints @@HDLB.
- * Omitted, every kind is accepted.
+ * `disabledKinds` holds the kinds of the plugins that are switched off for this run
+ * (`disabledKinds` in pluginCatalog.ts). A line of such a kind is ordinary output, so a
+ * disabled plugin is indistinguishable from no plugin. Every other kind is routed,
+ * including kinds no catalog row knows: a plugin edited or written on the Plugins page
+ * may introduce one, and the frontend shows it raw.
  */
-export function routeOutputLine(text: string, enabledKinds?: ReadonlySet<string>): OutputRoute {
+export function routeOutputLine(text: string, disabledKinds: ReadonlySet<string> = new Set()): OutputRoute {
   const line = parsePluginLine(text);
-  if (line === undefined || (enabledKinds !== undefined && !enabledKinds.has(line.kind))) return { to: 'log', text };
+  if (line === undefined || disabledKinds.has(line.kind)) return { to: 'log', text };
   return { to: 'plugin', line };
 }
 

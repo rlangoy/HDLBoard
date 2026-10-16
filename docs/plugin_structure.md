@@ -33,9 +33,20 @@ A plugin can be used in two ways:
 
 The structure was checked against I2C, SPI and 1-Wire with prototype monitors run in GHDL; it carries them without changes to the line protocol (batch plan, section 3.7). Active device models (an EEPROM, a temperature sensor) fit the same way as explicitly instantiated VHDL entities.
 
+A real course project (a SAP-1 CPU on a Mojo board) was also reviewed. It has no plugin system, but it confirmed three assumptions: tri-state buses need the same resolved-signal handling as open-drain lines, a front-panel port can load a design's memory, and a silent testbench needs something that prints its state (batch plan, section 3.8).
+
 ## Enabling and disabling
 
 Every plugin can be switched on and off from HDLBoard (Settings, section Plugins). A disabled plugin behaves as if it were not installed: its entities are not in the library `hdlboard`, no tab is shown, and its output lines are ordinary console text. A testbench that uses a disabled plugin fails to compile with an explanatory hint. The set is sent to the server before each run. Details: batch plan, section 3.6.
+
+## First-stage user interface
+
+The first implementation has two UI parts; the widget UI for batch simulations comes later.
+
+- **Split console.** After a batch run that used a plugin, the console splits and the second pane lists the raw `@@HDLB` output: simulated-time timestamp, kind, instance, payload. No widgets yet.
+- **Plugins page.** A page for editing the plugin VHDL files (there is no plugin config file; settings are generics in the VHDL) and for enabling plugins. It is switched on from the Settings dialog and is off by default. The shipped sources are bundled into the frontend so they are easy to edit; edited copies live in the browser and are sent to the backend with a run. The installed files are never changed.
+
+Details: batch plan, sections 6.4 and 7.0–7.4.
 
 ## Documents
 
@@ -48,4 +59,6 @@ Every plugin can be switched on and off from HDLBoard (Settings, section Plugins
 ## Later
 
 - **Tx** (GUI or testbench sends to the design): a VHDL procedure for testbenches; a file channel for real-time. Values the user changes in the GUI while a simulation runs (for example a simulated temperature) need the same channel.
+- **Front-panel / program loader:** the GUI sends address–data pairs plus a strobe into a design's memory, as the `ext*` port of a SAP-1 CPU does. Needs the same GUI → design channel as Tx (board draft, OPEN-10); in batch mode the testbench drives the pins itself.
+- **Value probe:** a generic plugin that prints a named signal when it changes, for testbenches that otherwise print nothing (batch plan, open question 10).
 - **Verilog:** the same `@@HDLB` format via `$display`; language support follows from which plugin files exist (`.vhd`, later `.v`), still without config.

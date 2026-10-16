@@ -129,6 +129,8 @@ Why not reuse the existing inputs:
 - **OPEN-4 – acknowledgement path:** in-band on stdout (proposed above) or through a separate output file.
 - **OPEN-5 – flow control in the GUI:** what happens when the user types faster than the line can send (queue length, blocking the input field, or dropping).
 
+**Second use – front-panel devices.** Some designs take data through address, data and strobe pins instead of a serial line – for example the `extaddr`/`extdata`/`extload` port that loads the RAM of a SAP-1 CPU (batch plan, 3.8). The same channel can serve them: one queue entry carries an `<addr> <data>` pair and the plugin turns it into a one-cycle strobe. Two differences from the UART: the design is in a program mode (`run = 0` in the example) while entries are applied, and entries must be applied in order and exactly once, which the `seq` mechanism already gives. See OPEN-10.
+
 ### 2.5 Board port handling
 
 - Plugin pins are added to the known port set, so `extraPorts.ts` neither warns about them nor ties them to `'0'`. A UART line held at `'0'` is a continuous *break*.
@@ -180,6 +182,7 @@ Clock vs. baud (GHDL, paced):
 | **OPEN-7** | Plugin output budget in a long-running board session | same as batch (per second); per session cap | same as batch |
 | **OPEN-8** | How the generated testbench handles an `inout` plugin pin | add `sig <= 'H';` and connect the plugin to the resolved signal; or require the student to declare the pull-up in their own top level | generator adds the pull-up (the student's design is then the same as on real hardware, where the board has the pull-up) |
 | **OPEN-9** | Timing of buses at real clock speeds (LIMIT-2) | I2C 100 kHz and 1-Wire slots from a `CLOCK_50` design run at about 0.0015× real time: an I2C byte ≈ 60 ms and a 1-Wire byte ≈ 0.4 s of real time. Acceptable for a demo; to be measured when these buses are made | – |
+| **OPEN-10** | Front-panel / program-loader device (2.4, second use) | one plugin kind with generics for address and data width; or nothing, leaving the student to use `SW`/`KEY` (14 bits is barely enough for a 4+8-bit port with a strobe and leaves nothing for run/clear/step) | nothing in the first real-time version; revisit with a concrete course need |
 
 ---
 

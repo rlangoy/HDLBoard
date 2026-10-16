@@ -9,8 +9,8 @@ this folder holds the code they refer to.
 
 | Path | What it is | Status | Intended home when implemented |
 |---|---|---|---|
-| `vhdl/hdlb_pkg.vhd` | `hdlb_emit` – writes one `@@HDLB` line with the timestamp; `hdlb_is_ident` | verified (GHDL 4.1) | `server/plugins/vhdl/` |
-| `vhdl/uart_monitor.vhd` | reference plugin: behavioural UART receiver (8N1); receiver semantics documented in the file header | verified (GHDL 4.1) | `server/plugins/vhdl/` |
+| `vhdl/hdlb_pkg.vhd` | `hdlb_emit` – writes one `@@HDLB` line with the timestamp; `hdlb_is_ident` | verified (GHDL 4.1) | `plugins/vhdl/` |
+| `vhdl/uart_monitor.vhd` | reference plugin: behavioural UART receiver (8N1); receiver semantics documented in the file header | verified (GHDL 4.1) | `plugins/vhdl/` |
 | `examples/uart_tx.vhd` | example student design: synthesizable UART transmitter | verified | example project / course material |
 | `examples/uart_tx_tb.vhd` | example student testbench using `hdlboard.uart_monitor` | verified | example project / course material |
 | `examples/uart_monitor_fe_tb.vhd` | plugin self-test: framing error, timestamp > 2³¹ ns | verified | server integration test |
@@ -19,7 +19,7 @@ this folder holds the code they refer to.
 | `examples/run_examples.sh` | runs the examples as batch mode will and compares output | – | – |
 | `ts/pluginLine.ts` (+ `.test.ts`) | server: parse/route `@@HDLB` lines (printable ASCII, ≤ 200 characters), `PLUGIN` frame encode/decode, `usesHdlboardLibrary` | proposal, unit-tested, not wired in | `server/src/pluginLine.ts` |
 | `ts/uartPayload.ts` (+ `.test.ts`) | frontend: decode `uart` payload, text view, time formatting | proposal, unit-tested, not wired in | `src/components/workbench/plugins/uart/` |
-| `ts/pluginCatalog.ts` (+ `.test.ts`) | server: plugin catalog, enabled kinds, files to analyse, hint for a disabled plugin, `PLUGINS` list | proposal, unit-tested, not wired in | `server/src/pluginCatalog.ts` |
+| `ts/pluginCatalog.ts` (+ `.test.ts`) | server: plugin catalog, disabled kinds, files to analyse, hint for a disabled plugin, `PLUGINS` list | proposal, unit-tested, not wired in | `server/src/pluginCatalog.ts` |
 | `feasibility/` | prototype monitors for I2C, SPI and 1-Wire with testbenches and expected output | **prototype, not shipped**; verified (GHDL 4.1) | later plugins `i2c`, `spi`, `onewire` |
 
 ## Running the examples

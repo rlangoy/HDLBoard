@@ -40,9 +40,9 @@ export function defaultPluginIds(catalog: readonly PluginInfo[] = PLUGIN_CATALOG
   return catalog.filter((p) => p.defaultEnabled).map((p) => p.id);
 }
 
-/** The kinds that may be routed as plugin output: those of the enabled plugins. Unknown ids are ignored. */
-export function enabledKinds(ids: readonly string[], catalog: readonly PluginInfo[] = PLUGIN_CATALOG): Set<string> {
-  return new Set(catalog.filter((p) => ids.includes(p.id)).flatMap((p) => p.kinds));
+/** The kinds of the catalog plugins that are not in `ids`. Unknown ids are ignored. */
+export function disabledKinds(enabledIds: readonly string[], catalog: readonly PluginInfo[] = PLUGIN_CATALOG): Set<string> {
+  return new Set(catalog.filter((p) => !enabledIds.includes(p.id)).flatMap((p) => p.kinds));
 }
 
 /**

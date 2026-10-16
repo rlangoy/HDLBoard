@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { defaultPluginIds, disabledPluginHint, enabledKinds, filesToAnalyse, type PluginInfo } from './pluginCatalog.js';
+import { defaultPluginIds, disabledKinds, disabledPluginHint, filesToAnalyse, type PluginInfo } from './pluginCatalog.js';
 import { parsePluginIds, routeOutputLine } from './pluginLine.js';
 
 const CATALOG: readonly PluginInfo[] = [
@@ -18,9 +18,9 @@ describe('catalog', () => {
     assert.deepEqual(defaultPluginIds(CATALOG), ['rs232']);
   });
 
-  test('C-2: enabled kinds are the union of the enabled plugins; unknown ids are ignored', () => {
-    assert.deepEqual([...enabledKinds(['rs232', 'i2c', 'nope'], CATALOG)].sort(), ['i2c', 'uart']);
-    assert.equal(enabledKinds([], CATALOG).size, 0);
+  test('C-2: disabled kinds are those of the plugins not enabled; unknown ids are ignored', () => {
+    assert.deepEqual([...disabledKinds(['rs232', 'nope'], CATALOG)].sort(), ['i2c']);
+    assert.deepEqual([...disabledKinds([], CATALOG)].sort(), ['i2c', 'uart']);
   });
 
   test('C-3: the shared package is always analysed first; disabled plugins are left out', () => {
@@ -57,15 +57,19 @@ describe('enabled plugins and routing', () => {
   const line = '@@HDLB i2c BUS 30000 S';
 
   test('C-9: a line of a disabled kind is ordinary output', () => {
-    assert.equal(routeOutputLine(line, enabledKinds(['rs232'], CATALOG)).to, 'log');
+    assert.equal(routeOutputLine(line, disabledKinds(['rs232'], CATALOG)).to, 'log');
   });
 
   test('C-10: a line of an enabled kind is routed to the plugin', () => {
-    assert.equal(routeOutputLine(line, enabledKinds(['i2c'], CATALOG)).to, 'plugin');
+    assert.equal(routeOutputLine(line, disabledKinds(['i2c'], CATALOG)).to, 'plugin');
   });
 
-  test('C-11: without an enabled set every kind is accepted', () => {
+  test('C-11: without a disabled set every kind is accepted', () => {
     assert.equal(routeOutputLine(line).to, 'plugin');
+  });
+
+  test('C-14: a kind no catalog row knows is routed (edited or new plugin)', () => {
+    assert.equal(routeOutputLine('@@HDLB probe X 5 1', disabledKinds(['rs232'], CATALOG)).to, 'plugin');
   });
 });
 
