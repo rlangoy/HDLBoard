@@ -78,6 +78,14 @@ entity blinkTest is
 end entity;
 ```
 
+Pins for the other planned buses (all **sketches**, nothing is decided; the batch plan, section 3.7, shows the monitors work):
+
+| Bus | Pins (student's view) | Notes |
+|---|---|---|
+| I2C | `I2C_SCL` (`inout`), `I2C_SDA` (`inout`) | open-drain: needs a pull-up and `'Z'` handling, see OPEN-8 |
+| SPI | `SPI_CS_N`, `SPI_SCLK`, `SPI_MOSI` (`out`), `SPI_MISO` (`in`) | four pins per bus; mode and word length are generics, so the generator needs a way to set them (OPEN-3 is the same problem) |
+| 1-Wire | `OW_DQ` (`inout`) | open-drain, single line |
+
 - **OPEN-1 – pin names.** The DE1-SoC has no RS232 connector on the FPGA side, so these are virtual pins. Choose names (`RS232_Tx`/`RS232_Rx`, `UART_TXD`/`UART_RXD`, a GPIO pin …) and whether the board graphic shows them as a connector.
 - **OPEN-2 – where the pin → plugin mapping lives.** A TS table in `boardPorts.ts` (proposed) is HDLBoard code, not plugin config, but every new plugin pin then needs a server change. The alternative is a convention in the VHDL itself, for example a plugin port named after the board pin.
 
@@ -126,7 +134,11 @@ Why not reuse the existing inputs:
 - Plugin pins are added to the known port set, so `extraPorts.ts` neither warns about them nor ties them to `'0'`. A UART line held at `'0'` is a continuous *break*.
 - `boardPortSuggestions.ts` can suggest the plugin pin names for typos (e.g. `RS232_TXD` → `RS232_Tx`).
 
-### 2.6 RESET / STOP
+### 2.6 Enabling and disabling
+
+Same rule as in batch mode ([`plugin_batch_implementation_plan.md`](plugin_batch_implementation_plan.md), 3.6): the `PLUGINS` set sent before `RUN` decides. A plugin pin whose plugin is **disabled** is treated as an ordinary extra port (tied to `'0'` if an input, left open if an output, with the existing warning), and no plugin is instantiated for it. An enabled plugin's pin is a known port. The set is captured at `RUN`; a changed checkbox applies from the next run, so there is no live (de)activation of a running board simulation.
+
+### 2.7 RESET / STOP
 
 `RESET` restarts the GHDL process, so plugin state starts over; the GUI clears the plugin tabs on `RESET`, the same as for a new `RUN`.
 
@@ -143,6 +155,7 @@ Why not reuse the existing inputs:
 | **LIMIT-5** | **Latency GUI → design.** | One poll interval plus Node file I/O per entry; acceptable for typing, not for bulk data. |
 | **LIMIT-6** | **VHDL only.** | The Verilog engine has its own testbench generator (`verilog/testbench.ts`) and would need Verilog versions of the plugins. |
 | **LIMIT-7** | **Exact pin names required.** | A mistyped pin is treated as an ordinary extra port (tied / left open, with a warning). |
+| **LIMIT-8** | **Bidirectional pins.** `inout` ports (SDA, DQ) are left open by `extraPorts.ts` today, and the generated testbench has no pull-up. | I2C and 1-Wire need the generator to add a resolved signal with a `'H'` pull-up for such a pin (OPEN-8). |
 
 Clock vs. baud (GHDL, paced):
 
@@ -165,6 +178,8 @@ Clock vs. baud (GHDL, paced):
 | **OPEN-5** | Flow control when the user types faster than the line sends | bounded queue + disabled input; drop with a warning | bounded queue |
 | **OPEN-6** | Should plugin pins be drawn on the virtual board? | connector symbol; only the plugin tab | – |
 | **OPEN-7** | Plugin output budget in a long-running board session | same as batch (per second); per session cap | same as batch |
+| **OPEN-8** | How the generated testbench handles an `inout` plugin pin | add `sig <= 'H';` and connect the plugin to the resolved signal; or require the student to declare the pull-up in their own top level | generator adds the pull-up (the student's design is then the same as on real hardware, where the board has the pull-up) |
+| **OPEN-9** | Timing of buses at real clock speeds (LIMIT-2) | I2C 100 kHz and 1-Wire slots from a `CLOCK_50` design run at about 0.0015× real time: an I2C byte ≈ 60 ms and a 1-Wire byte ≈ 0.4 s of real time. Acceptable for a demo; to be measured when these buses are made | – |
 
 ---
 
@@ -172,12 +187,12 @@ Clock vs. baud (GHDL, paced):
 
 | File | Change |
 |---|---|
-| `server/src/engines/boardPorts.ts` | plugin pin table (OPEN-2) |
+| `server/src/engines/boardPorts.ts` | plugin pin table (OPEN-2), `inout` pins with pull-up (OPEN-8) |
 | `server/src/engines/extraPorts.ts`, `boardPortSuggestions.ts` | plugin pins are known ports; suggestions |
 | `server/src/tbTemplate.ts` | plugin signals, instances, Tx reader process (2.4) |
 | `server/src/engines/ghdlEngine.ts` | `prepareBoard`: analyse `hdlboard` before the testbench |
 | `server/src/session.ts` | Tx queue files, `ACK` handling |
-| `server/src/protocol.ts` | client verb `PIN` |
+| `server/src/protocol.ts` | client verb `PIN`; `PLUGINS` is shared with batch mode |
 | `server/src/runtime.ts` | update the stdout invariant comment (2.3) |
 | `server/plugins/vhdl/uart_sender.vhd` (new) | Tx plugin |
 | `src/components/workbench/hdlClient.ts`, uart widget | send `PIN`; input field |

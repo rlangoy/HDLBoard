@@ -19,6 +19,8 @@ this folder holds the code they refer to.
 | `examples/run_examples.sh` | runs the examples as batch mode will and compares output | – | – |
 | `ts/pluginLine.ts` (+ `.test.ts`) | server: parse/route `@@HDLB` lines (printable ASCII, ≤ 200 characters), `PLUGIN` frame encode/decode, `usesHdlboardLibrary` | proposal, unit-tested, not wired in | `server/src/pluginLine.ts` |
 | `ts/uartPayload.ts` (+ `.test.ts`) | frontend: decode `uart` payload, text view, time formatting | proposal, unit-tested, not wired in | `src/components/workbench/plugins/uart/` |
+| `ts/pluginCatalog.ts` (+ `.test.ts`) | server: plugin catalog, enabled kinds, files to analyse, hint for a disabled plugin, `PLUGINS` list | proposal, unit-tested, not wired in | `server/src/pluginCatalog.ts` |
+| `feasibility/` | prototype monitors for I2C, SPI and 1-Wire with testbenches and expected output | **prototype, not shipped**; verified (GHDL 4.1) | later plugins `i2c`, `spi`, `onewire` |
 
 ## Running the examples
 
@@ -38,6 +40,22 @@ ghdl -r --std=08 uart_tx_tb
 Only the `@@HDLB` lines are compared with the expected files, because GHDL's
 own messages (`simulation finished @…`) differ between GHDL versions.
 
+## Feasibility prototypes (I2C, SPI, 1-Wire)
+
+`feasibility/` shows that the plugin structure carries other buses. It is **not part of the first implementation** and not shipped. It reuses `vhdl/hdlb_pkg.vhd` and compares the `@@HDLB` lines with the expected files, as `run_examples.sh` does:
+
+```sh
+sh docs/impl_files_for_plugins/feasibility/run_feasibility.sh
+```
+
+| Prototype | Testbench | Covers |
+|---|---|---|
+| `i2c_monitor.vhd` | `i2c_tb.vhd` | open-drain bus with pull-ups; S, address+W, data, repeated start, address+R, data with NACK, P |
+| `spi_monitor.vhd` | `spi_tb.vhd` | modes 0, 3 and 1; 8 and 16 bit words; chip-select frames |
+| `onewire_monitor.vhd` | `onewire_tb.vhd` | reset with and without presence; write and read slots at standard speed |
+
+Payload grammars and limits are in the batch plan, section 3.7.
+
 ## Running the TypeScript tests
 
 The `.ts` files are proposals, not part of any build yet. Each follows the
@@ -45,7 +63,7 @@ conventions of the place it is meant for, so it can be moved there as is:
 
 | File | Conventions | How to run after moving it |
 |---|---|---|
-| `ts/pluginLine.ts` + test | server: ESM with `.js` import suffixes, Node's own test runner (`node:test`, `node:assert/strict`), numbered test ids | `cd server && npm test` |
+| `ts/pluginLine.ts`, `ts/pluginCatalog.ts` + tests | server: ESM with `.js` import suffixes, Node's own test runner (`node:test`, `node:assert/strict`), numbered test ids | `cd server && npm test` |
 | `ts/uartPayload.ts` + test | frontend: bundler imports without suffix, vitest | `npm test` (root `vitest.config.ts` searches `src/**/*.test.ts` only) |
 
 Both type-check under the repository's strict settings (`server/tsconfig.json`

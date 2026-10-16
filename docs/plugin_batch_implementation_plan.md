@@ -1,7 +1,7 @@
 # Testbench-driven (batch) plugins – implementation plan
 
 > **Status:** proposal, ready to implement. Last updated 2026-10-16 (revised after review, see section 13).
-> **Scope:** the first plugin version – a UART receive monitor (`uart_monitor`) used from the student's own testbench.
+> **Scope:** the first plugin version – a UART receive monitor (`uart_monitor`, plugin id `rs232`) used from the student's own testbench. The structure is also meant for I2C, SPI and 1-Wire (3.7); those come later.
 > **Overview:** [`plugin_structure.md`](plugin_structure.md) · **Code:** [`impl_files_for_plugins/`](impl_files_for_plugins/) · **Later:** [`plugin_board_implementation_draft.md`](plugin_board_implementation_draft.md)
 
 ---
@@ -18,6 +18,8 @@
 | B6 | A plugin line is **one physical line of printable ASCII with bounded length** (3.3). There is no escaping or length framing. |
 | B7 | The server is **strict, the plugin validates itself**: a plugin checks its own `name` at time 0 and stops the run with a clear message; the server parser never guesses (3.5). |
 | B8 | A run's plugin output belongs to **one run generation**; output from a run that was stopped or replaced is never forwarded (6.1). |
+| B9 | Every plugin can be **enabled and disabled from HDLBoard** (3.6). A disabled plugin behaves as if it were not installed. |
+| B10 | The structure must also carry **I2C, SPI and 1-Wire** (3.7, feasibility shown with prototypes). **RS232 is implemented first**; nothing in the first implementation may assume a single plugin or a single line per bus. |
 
 Out of scope here: real-time mode, Tx, Verilog (see the overview, *Later*).
 
@@ -129,6 +131,60 @@ Payload of `kind = uart`:
 6. A plugin never ends the simulation (`std.env.finish`/`stop`) – that is the testbench's job. (The assertion above is the one exception: it ends a run that cannot work.)
 7. A receive-only plugin has inputs only; it cannot affect the design under test.
 
+### 3.6 Enabling and disabling plugins (B9)
+
+**Requirement.** Each plugin can be switched on and off from HDLBoard. Switching a plugin off must be equivalent to not having it: no library entity, no tab, no plugin output.
+
+**Where the user does it.** A Plugins section in HDLBoard's settings (exact place in the UI to be decided) lists the shipped plugins with a checkbox, a title and a one-line description each. The choice is stored per user in the browser, like other settings. Whether a project file may carry its own list is an open question (section 11).
+
+**Catalog.** The list of shipped plugins is a table in HDLBoard's own code ([`ts/pluginCatalog.ts`](impl_files_for_plugins/ts/pluginCatalog.ts)), one row per plugin: `id`, `title`, `kinds` (the `@@HDLB` kinds it prints), `entities` (the VHDL entities it adds to `hdlboard`), `files` (analysis order) and `defaultEnabled`. It is not plugin configuration: the plugin's VHDL stays free of settings (B2). The frontend needs the same ids and titles; one shared test keeps the two copies in step.
+
+**Protocol.** The client sends `PLUGINS <id>,<id>,...` before each `RUN` (empty list = none). It is stateless: every run carries its own set, so a reconnect cannot leave a stale one behind. A frontend that never sends it gets the catalog defaults. The set is captured when the run starts; changing a checkbox during a run applies from the next run. `parsePluginIds` validates the list (lower-case ids, at most 32, duplicates removed); unknown ids are ignored so a newer frontend can talk to an older backend.
+
+**What disabled means, place by place.**
+
+| Place | Enabled | Disabled |
+|---|---|---|
+| Analysis (section 5) | the plugin's files are analysed into `hdlboard` | not analysed. The shared package `hdlb_pkg` is still analysed when a student file declares `library hdlboard`, so the library exists and GHDL gives its precise error |
+| Student instantiates the entity | works | analysis stops with `unit "uart_monitor" not found in library "hdlboard"`, followed by a hint from `disabledPluginHint`: *The plugin "RS232 (UART)" is disabled. Enable it in Settings > Plugins and run again.* A name that is no plugin entity at all (a typo) gets the list of available entities instead |
+| Output routing (6.1) | `@@HDLB` lines of its kinds become `PLUGIN` frames | `routeOutputLine(text, enabledKinds)` treats them as ordinary output, so even a student's own code that prints `@@HDLB ...` cannot reach a widget of a disabled plugin |
+| Frontend | tab appears on the first line | no tab; the plugin is not offered anywhere in the run UI |
+| Real-time mode (later) | its board pin is connected to the plugin | its pin is an ordinary extra port: tied or left open with the usual warning |
+
+A testbench that uses a disabled plugin deliberately does not compile. That is the useful behaviour for a teacher who wants students to write their own monitor, and it is explicit rather than silently empty. Whether a hosted server may fix the set for everyone is an open question (section 11).
+
+### 3.7 Beyond RS232: I2C, SPI and 1-Wire (B10)
+
+**Can the structure carry them?** Yes, with no change to the line protocol, the budget, the routing or the state model. This was checked by writing a prototype monitor for each bus and running it in GHDL against a testbench with realistic masters and slaves. The prototypes are in [`impl_files_for_plugins/feasibility/`](impl_files_for_plugins/feasibility/); they are **not shipped and not part of the first implementation**. `sh impl_files_for_plugins/feasibility/run_feasibility.sh` passes (GHDL 4.1).
+
+| Plugin id / kind | Monitor ports | Generics (all with defaults) | Payload | Verified |
+|---|---|---|---|---|
+| `rs232` / `uart` | `rx` | `name`, `baud` | `<hh>` · `<hh> FE` · `XX` · `XX FE` | first implementation |
+| `i2c` / `i2c` | `scl`, `sda` | `name` | `S` · `Sr` · `P` · `ADDR <hh> <R\|W> <A\|N>` · `DATA <hh> <A\|N>` | S, address+write, data, repeated start, address+read, data with NACK, P – including the SCL edge a repeated start causes |
+| `spi` / `spi` | `cs_n`, `sclk`, `mosi`, `miso` | `name`, `cpol`, `cpha`, `bits` (1–32) | `B` · `<mosi hex> <miso hex>` · `E` | mode 0 (8 bit, two words in one frame), mode 3 (16 bit), mode 1 (falling-edge sampling) |
+| `onewire` / `onewire` | `dq` | `name` | `RESET` · `PRESENCE` · `NOPRESENCE` · `<hh>` | reset with and without a slave, write 0xCC, write 0x44, read 0x5A |
+
+What the checks showed:
+
+1. **One plugin = one bus = one instance.** A bus has several lines, so a monitor has several input ports; the instance name (the tab) identifies the bus. Several buses are several instances, as in `spi_tb` (three buses, one testbench).
+2. **Open-drain lines work with ordinary `std_logic`.** The lines are resolved signals: the master and slave drive `'0'` or `'Z'` and the testbench adds a pull-up with `sda <= 'H';`. The monitors read through `to_x01`, which maps `'H'` to `'1'`. The pull-up is one line in the student's testbench; nothing is needed from the plugin library. This must be in the student documentation.
+3. **Settings are generics, as decided (B2).** SPI mode and word length are `cpol`, `cpha` and `bits` in `generic map`; no config file was needed.
+4. **Bus-level events, one line per byte or word.** Payloads stay far below the 200-character limit. Timestamps in whole nanoseconds are sufficient (1-Wire slots are microseconds; an SPI word is stamped when its last bit is sampled).
+5. **Event rate is much higher than the first budget assumed** – see 6.2. A testbench-driven line produces about 24 000 plugin lines per second of real time, so the I2C/SPI/1-Wire plugins would hit a 2000 lines/s limit at once.
+6. **Active device models fit too.** An I2C EEPROM, an SPI flash or a 1-Wire temperature sensor is a VHDL entity with open-drain outputs that the student instantiates, exactly like a monitor. Their settings (a temperature, a memory image) can be generics. Values the user changes **in the GUI while the simulation runs** need a GUI → design channel, which belongs to the real-time draft, not to batch mode.
+
+Limits to document with each plugin when it is made:
+
+| Bus | Not covered |
+|---|---|
+| I2C | multi-master arbitration; 10-bit addresses and the general call are shown as ordinary bytes; the monitor does not check the timing of SCL |
+| SPI | word length is fixed per instance (a device with mixed lengths needs two instances); LSB-first buses need a generic that is not in the prototype; no check of the chip-select setup time |
+| 1-Wire | standard speed only (the 14 µs sampling point and the 480 µs reset are constants; overdrive needs generics); the direction of a byte is not visible on the wire, so ROM and function commands are shown as plain bytes – decoding them is a layer above the monitor |
+
+Real-time mode (draft): SDA and DQ are bidirectional and need a pull-up, which the generated board testbench does not do today (`extraPorts.ts` leaves an `inout` open). That is recorded in [`plugin_board_implementation_draft.md`](plugin_board_implementation_draft.md).
+
+**Consequences for the first implementation (RS232).** Nothing needs to be built for the other buses, but these things must not be assumed: that there is one plugin (the catalog, `PLUGINS` and `enabledKinds` take a list), that a plugin has one input port (the instance model is "one tab per instance"), that the payload is a hex byte (the server never interprets it), or that the rate stays low (6.2 is sized for the buses).
+
 ---
 
 ## 4. Reference implementation
@@ -146,6 +202,8 @@ All files are in [`impl_files_for_plugins/`](impl_files_for_plugins/); see its [
 | [`examples/run_examples.sh`](impl_files_for_plugins/examples/run_examples.sh) | runs the testbenches as batch mode will and compares with `*.expected.txt` |
 | [`ts/pluginLine.ts`](impl_files_for_plugins/ts/pluginLine.ts) | server proposal: parse/route `@@HDLB` lines, `PLUGIN` frame, library detection |
 | [`ts/uartPayload.ts`](impl_files_for_plugins/ts/uartPayload.ts) | frontend proposal: `uart` payload, text view, time format |
+| [`ts/pluginCatalog.ts`](impl_files_for_plugins/ts/pluginCatalog.ts) | server proposal: plugin catalog, enabled kinds, files to analyse, hint for a disabled plugin |
+| [`feasibility/`](impl_files_for_plugins/feasibility/) | prototypes for I2C, SPI and 1-Wire (not shipped), see 3.7 |
 
 ### 4.1 `hdlb_emit` (core of `hdlb_pkg.vhd`)
 
@@ -280,15 +338,25 @@ private forwardOutputLine(line: string): void {
 
 ### 6.2 Plugin budget: rate and volume
 
+**Measured (GHDL 4.1, Linux, plugin lines read through a pipe):**
+
+| Case | Lines | Wall time | Rate |
+|---|---|---|---|
+| Testbench drives the line itself (20 000 UART bytes, 1.74 s simulated) | 20 000 | 0.83 s | **≈ 24 000 lines/s** |
+| Student design clocked at 50 MHz (`uart_tx`, 300 bytes) | 300 | 2.97 s | ≈ 100 lines/s |
+
+A batch run is not paced to real time, so a testbench that stimulates the plugin directly emits plugin lines as fast as GHDL can. A limit of 2000 lines/s would have thrown away about 90 % of a 20 000-byte test. The rate limit therefore has to sit near the measured maximum, and the volume cap is what actually protects the system.
+
 | Limit | Proposal | When exceeded |
 |---|---|---|
-| Rate | 2000 plugin lines per second window | lines in the window are dropped |
+| Rate | 20 000 plugin lines per second window (≈ the measured maximum; a socket-flood guard, not a throttle) | lines in the window are dropped |
 | Volume | 100 000 plugin lines per run (`MAX_PLUGIN_LINES_PER_RUN`) | all further plugin lines of the run are dropped |
 | Frontend retention | the newest 10 000 entries per instance (ring buffer) | the widget shows "N earlier entries not shown" |
+| Frontend update rate | state updates are coalesced to one per animation frame | – (rendering 24 000 updates a second would stall the page) |
 
-The numbers are proposals to tune; the point is that all three exist: the rate limit bounds frames per second, the volume limit bounds frames per run, and the ring buffer bounds browser memory.
+The numbers are proposals to tune. All of them exist for a reason: the rate limit bounds frames per second, the volume limit bounds frames per run (a 60 s batch run could otherwise produce over a million), the ring buffer bounds browser memory, and coalescing keeps the page responsive.
 
-**The summary reaches the console.** Dropped lines are reported as one `LOG` line (`… 1234 plugin lines not shown (plugin limit: 2000 lines/s)`, or `… (plugin limit: 100000 lines per run)`). It is sent with `sendLogLines`, **not** through `limiter.accept`, exactly like the existing limiter's own summary – so the ordinary 200 lines/s limit does not apply to it and it cannot be dropped by it.
+**The summary reaches the console.** Dropped lines are reported as one `LOG` line (`… 1234 plugin lines not shown (plugin limit: 20000 lines/s)`, or `… (plugin limit: 100000 lines per run)`). It is sent with `sendLogLines`, **not** through `limiter.accept`, exactly like the existing limiter's own summary – so the ordinary 200 lines/s limit does not apply to it and it cannot be dropped by it.
 
 **Lifecycle.** The plugin budget is created in `beginOutput` next to the existing limiter, flushed by the same timer (`LIMITER_FLUSH_MS`), and finished in `endOutput`. `endOutput` is already called on every path that ends a run:
 
@@ -302,16 +370,20 @@ The numbers are proposals to tune; the point is that all three exist: the rate l
 
 Implementation choice: make `createOutputLimiter` generic over the item, or add a small counter class beside it.
 
-### 6.3 `protocol.ts` – new server frame
+### 6.3 `protocol.ts` – new frames
 
 ```ts
+// server → client
 | { verb: 'PLUGIN'; kind: string; instance: string; timeNs: number; payload: string }
+// client → server (3.6)
+| { verb: 'PLUGINS'; ids: string[] }
 ```
 
-Wire format mirrors `LOG` (header line, payload as body):
+Wire format of `PLUGIN` mirrors `LOG` (header line, payload as body); `PLUGINS` is one line:
 
 ```
 PLUGIN <kind> <instance> <t_ns>\n<payload>
+PLUGINS <id>,<id>,...
 ```
 
 ```ts
@@ -385,13 +457,14 @@ There is no other entry point (no demo or bundled variant) that constructs `HdlC
 | File | Change |
 |---|---|
 | `server/plugins/vhdl/hdlb_pkg.vhd`, `uart_monitor.vhd` (new) | from `impl_files_for_plugins/vhdl/`; both already carry the SPDX header (`GPL-2.0-only`, copyright line) |
-| `server/src/pluginLine.ts` (+ test, new) | from `impl_files_for_plugins/ts/` |
+| `server/src/pluginLine.ts`, `pluginCatalog.ts` (+ tests, new) | from `impl_files_for_plugins/ts/` |
 | `server/src/pluginRoot.ts` (new) | `getPluginRoot()` (section 5) |
-| `server/src/engines/ghdlEngine.ts` | detect `library hdlboard`, analyse plugins with `--work=hdlboard` before the student files, clean `hdlboard-obj*.cf` |
-| `server/src/session.ts` | run generation (6.1), route `@@HDLB` lines before the limiter, plugin budget (6.2) |
-| `server/src/protocol.ts` | `PLUGIN` frame (type, encode, decode) |
+| `server/src/engines/ghdlEngine.ts` | detect `library hdlboard`, analyse `filesToAnalyse(enabled)` with `--work=hdlboard` before the student files, clean `hdlboard-obj*.cf`, append `disabledPluginHint` to analysis errors |
+| `server/src/session.ts` | run generation (6.1), route `@@HDLB` lines before the limiter with the run's enabled kinds, plugin budget (6.2), keep the `PLUGINS` set for the next `RUN` |
+| `server/src/protocol.ts` | `PLUGIN` frame and `PLUGINS` verb (type, encode, decode) |
 | `server/src/testSupport/` | shared `PLUGIN` frame fixture |
-| `src/components/workbench/hdlClient.ts` | `case 'PLUGIN'`, `onPlugin` |
+| `src/components/workbench/hdlClient.ts` | `case 'PLUGIN'`, `onPlugin`; send `PLUGINS` before `RUN` |
+| Settings UI (new section "Plugins") + settings store | one checkbox per catalog row, stored per user |
 | `src/components/workbench/Workbench.tsx`, `hdlClient.test.ts` | `onPlugin` at the two construction sites (7.4); plugin panel / tabs |
 | `src/components/workbench/plugins/` (new) | registry, `uart/uartPayload.ts` (from `impl_files_for_plugins/ts/`), uart widget |
 
@@ -416,6 +489,7 @@ These are not deployment details: without them the feature works in development 
 | Unit (server) | `pluginLine.test.ts`: valid lines, empty and maximum-length payload, time > 2³¹, rejected headers, **oversized payload, CR, NUL, tab, non-ASCII**, routing, frame round-trip, frame body rule, `usesHdlboardLibrary` (12 cases) |
 | Unit (server) | `session`: a `@@HDLB` line bypasses the `LOG` budget; a malformed one becomes `LOG`; rate summary and per-run cap summary reach the console; **a delayed line from the previous run, delivered while the next run is active, is not forwarded** (regression test for 6.1) |
 | Unit (server) | `protocol`: `PLUGIN` encode/decode; shared fixture |
+| Unit (server) | `pluginCatalog.test.ts` (13 tests): defaults, enabled kinds, files to analyse (shared package always first), hint for a disabled plugin and for a mistyped entity, routing of disabled kinds, `parsePluginIds` |
 | Unit (server) | plugin root: resolution order (env, Electron directory, relative), missing directory → `internal` error naming the path and file |
 | Unit (frontend) | `uartPayload.test.ts`; state model of 7.2 (key by kind, clear on `READY`, ring buffer, unknown kind); shared fixture |
 | Integration (GHDL) | `uart_tx_tb`, `uart_monitor_fe_tb`, `uart_monitor_edge_tb` give the expected `PLUGIN` frames (`*.expected.txt`) |
@@ -423,6 +497,9 @@ These are not deployment details: without them the feature works in development 
 | Integration (GHDL) | no `library hdlboard` → plugin library not analysed, run unchanged; student entity `uart_monitor` in `work` → no clash; invalid `name` → run stops with the assertion message |
 | **End-to-end (WebSocket)** | start a batch session, send `RUN` with `uart_tx_tb` + `uart_tx`, expect `READY`, four `PLUGIN` frames, `DONE`; then `RUN` again and confirm the second run contains only its own four frames |
 | End-to-end (WebSocket) | mixed `report` and plugin output (each on its own path, order within each kept); a malformed `@@HDLB` line → `LOG`; unknown plugin kind reaches the client; plugin-budget overflow → summary; client disconnect during a flood → no exception, process killed; timeout → `ERROR`, no stale frames |
+| Integration (GHDL) | enable/disable: with `rs232` enabled the example gives four `PLUGIN` frames; disabled, the same testbench fails with the `unit ... not found` error plus the hint, and a student's own `@@HDLB uart ...` print stays in the console |
+| End-to-end (WebSocket) | `PLUGINS` before `RUN` is honoured, a second run with a different set uses the new set, a run without `PLUGINS` uses the defaults |
+| Feasibility | `sh feasibility/run_feasibility.sh` (I2C, SPI, 1-Wire prototypes); rerun when `hdlb_pkg` changes |
 | Platforms | see section 10 |
 
 ---
@@ -435,7 +512,9 @@ These are not deployment details: without them the feature works in development 
 | Name assertion (bad `name` stops the run) | ✅ GHDL 4.1 |
 | Timestamp > 2³¹ ns | ✅ GHDL 4.1 |
 | stdout delivered live through a pipe | ✅ GHDL 4.1 (Linux) |
-| `pluginLine.ts` | ✅ 35 tests (Node test runner), type-checks with `server/tsconfig.json` settings |
+| `pluginLine.ts`, `pluginCatalog.ts` | ✅ 48 tests in two files (Node test runner), type-check with `server/tsconfig.json` settings |
+| I2C, SPI, 1-Wire prototype monitors | ✅ GHDL 4.1, `run_feasibility.sh` passes (not shipped) |
+| Plugin line rate | ✅ measured on GHDL 4.1 / Linux: ≈ 24 000 lines/s testbench-driven, ≈ 100 lines/s with a 50 MHz design |
 | `uartPayload.ts` | ✅ 18 tests (vitest), type-checks with `tsconfig.app.json` settings |
 | GHDL 5.0.1 (Windows app), 6.0.0 (Docker) | ⏳ not yet tested |
 | Server/frontend integration, WebSocket end-to-end | ⏳ not implemented |
@@ -458,6 +537,11 @@ Record per platform: GHDL version string (`ghdl --version`), installer revision 
 2. Whether plugin lines should optionally also appear in the console (debug toggle).
 3. GUI layout when a testbench uses several plugin types at once (the line format and the state model already support it).
 4. A cap on a stdout line without any newline in `lineSplitter` (affects all output; separate change).
+5. Whether a project file may carry its own list of enabled plugins, and which wins over the user's setting when both exist.
+6. Whether a hosted server may fix the enabled set for all users (for example an environment setting), so a teacher can run an exam with plugins off.
+7. Default state: the proposal is "on" for every shipped plugin, because a plugin does nothing until a testbench instantiates it.
+8. Where the Plugins section lives in the UI, and whether the run UI shows which plugins were enabled for a run.
+9. Whether the I2C/SPI/1-Wire prototypes become shipped plugins as they are, or are first extended with the limits listed in 3.7 (LSB-first SPI, overdrive 1-Wire).
 
 ## 12. Rejected alternatives
 

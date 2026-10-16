@@ -65,10 +65,16 @@ export type OutputRoute =
 /**
  * Where one stdout line goes. A line that starts with @@HDLB but has a malformed
  * header goes to the console like any other output, so nothing disappears.
+ *
+ * `enabledKinds` is the set of plugin kinds enabled for this run (`enabledKinds` in
+ * pluginCatalog.ts). A line of any other kind is ordinary output: a disabled plugin is
+ * indistinguishable from no plugin, even if the student's own code prints @@HDLB.
+ * Omitted, every kind is accepted.
  */
-export function routeOutputLine(text: string): OutputRoute {
+export function routeOutputLine(text: string, enabledKinds?: ReadonlySet<string>): OutputRoute {
   const line = parsePluginLine(text);
-  return line ? { to: 'plugin', line } : { to: 'log', text };
+  if (line === undefined || (enabledKinds !== undefined && !enabledKinds.has(line.kind))) return { to: 'log', text };
+  return { to: 'plugin', line };
 }
 
 /**
@@ -100,4 +106,23 @@ export function decodePluginFrame(inline: string, body: string): PluginLine | { 
 export function usesHdlboardLibrary(source: string): boolean {
   const code = source.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'"'|"(?:[^"\n]|"")*"/g, ' ');
   return /\blibrary\b[^;]*\bhdlboard\b/i.test(code);
+}
+
+/** At most this many ids in one `PLUGINS` verb; far more than will ever be shipped. */
+export const MAX_PLUGIN_IDS = 32;
+const PLUGIN_ID = /^[a-z][a-z0-9_]{0,31}$/;
+
+/**
+ * The ids in the argument of the client verb `PLUGINS <id>,<id>,...` - the plugins
+ * enabled for the next run. An empty argument means none. Unknown ids are not an error
+ * here (a newer frontend may know plugins an older backend does not); the catalog
+ * ignores them. Pure.
+ */
+export function parsePluginIds(inline: string): string[] | { message: string } {
+  if (inline === '') return [];
+  const ids = inline.split(',');
+  if (ids.length > MAX_PLUGIN_IDS) return { message: `PLUGINS accepts at most ${MAX_PLUGIN_IDS} ids` };
+  const bad = ids.find((id) => !PLUGIN_ID.test(id));
+  if (bad !== undefined) return { message: `PLUGINS: invalid plugin id ${JSON.stringify(bad)}` };
+  return [...new Set(ids)];
 }
