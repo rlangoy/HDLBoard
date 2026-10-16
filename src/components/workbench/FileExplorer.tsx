@@ -7,7 +7,7 @@ import { confirmDialog } from './desktop';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
 import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
-import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderOpenIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
+import { BookIcon, ChipIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderOpenIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
 import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
 import './FileExplorer.css';
@@ -32,6 +32,9 @@ export interface FileExplorerProps {
   onToggleExamples: () => void;
   /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
+  /** Show the Plugins page, or hide it again; no button while the page is switched off in Settings. */
+  onTogglePlugins?: () => void;
+  pluginsOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
   onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void;
   onSetTopFile: (id: string) => void;
@@ -99,6 +102,8 @@ export function FileExplorer({
   onDownloadAll,
   onToggleExamples,
   examplesOpen = false,
+  onTogglePlugins,
+  pluginsOpen = false,
   onFilesDropped,
   onSetTopFile,
   topLocked = false,
@@ -198,6 +203,18 @@ export function FileExplorer({
           <BookIcon className="wb-files__examples-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Examples</span>
         </button>
+        {onTogglePlugins && (
+          <button
+            type="button"
+            className="wb-files__examples"
+            onClick={onTogglePlugins}
+            aria-pressed={pluginsOpen}
+            title="Read and edit the plugin VHDL files (library hdlboard)"
+          >
+            <ChipIcon className="wb-files__examples-icon" aria-hidden="true" />
+            <span className="wb-files__label-text">Plugins</span>
+          </button>
+        )}
       </div>
 
       <div className="wb-files__actions">

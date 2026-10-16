@@ -1,6 +1,6 @@
 # Testbench-driven (batch) plugins – implementation plan
 
-> **Status:** proposal, ready to implement. Last updated 2026-10-16 (revised after review, see section 13; reference design reviewed in 3.8).
+> **Status:** stage 1 implemented on branch `impl_plugin` (2026-10-16); see section 10 for what is verified and 14 for where the code is. Revised after review (section 13); reference design reviewed in 3.8.
 > **Stage 1 user interface:** split console with raw plugin output (7.3) and an optional Plugins page for editing the plugin VHDL files (7.4); the widget UI is stage 2 (7.0).
 > **Scope:** the first plugin version – a UART receive monitor (`uart_monitor`, plugin id `rs232`) used from the student's own testbench. The structure is also meant for I2C, SPI and 1-Wire (3.7); those come later.
 > **Overview:** [`plugin_structure.md`](plugin_structure.md) · **Code:** [`impl_files_for_plugins/`](impl_files_for_plugins/) · **Later:** [`plugin_board_implementation_draft.md`](plugin_board_implementation_draft.md)
@@ -629,8 +629,9 @@ Review checklist for each change: can every function be explained in one sentenc
 | I2C, SPI, 1-Wire prototype monitors | ✅ GHDL 4.1, `run_feasibility.sh` passes (not shipped) |
 | Plugin line rate | ✅ measured on GHDL 4.1 / Linux: ≈ 24 000 lines/s testbench-driven, ≈ 100 lines/s with a 50 MHz design |
 | `uartPayload.ts` | ✅ 18 tests (vitest), type-checks with `tsconfig.app.json` settings |
-| GHDL 5.0.1 (Windows app), 6.0.0 (Docker) | ⏳ not yet tested |
-| Server/frontend integration, WebSocket end-to-end | ⏳ not implemented |
+| GHDL 6.0.0 (Windows 11, winget ucrt64 mcode) | ✅ `run_examples.sh` passes; the 13 GHDL integration tests in `server/src/integration/plugins.test.ts` pass (CRLF stdout, live delivery, edited files, flood budget) |
+| GHDL 5.0.1 (Windows app), 6.0.0 (Docker) | ⏳ not yet tested (Docker Desktop was not running; the image build and its new plugin probe are unverified) |
+| Server/frontend integration, WebSocket end-to-end | ✅ implemented; server 407 unit + 115 integration tests, frontend 1650 tests; checked by hand in Chrome (split console, disabled-plugin hint, Plugins page edit / syntax error / reset) |
 
 The stdout-arrival check is only part of what is platform-sensitive. Each supported platform needs the full path run once, with the exact versions recorded in this table when done:
 
@@ -656,7 +657,7 @@ Record per platform: GHDL version string (`ghdl --version`), installer revision 
 8. Where the Plugins section lives in the UI, and whether the run UI shows which plugins were enabled for a run.
 9. Whether the I2C/SPI/1-Wire prototypes become shipped plugins as they are, or are first extended with the limits listed in 3.7 (LSB-first SPI, overdrive 1-Wire).
 10. A generic **value probe** plugin (kind `probe`): prints a named signal value whenever it changes. It would give silent testbenches such as the SAP-1 one (3.8, row 5) a view in the GUI without hand-written `report` statements. Not part of the first version; the line protocol, the catalog and the budget already allow it.
-11. *(Decided: the sources are bundled into the frontend, 6.4. Open only: whether Vite may import `server/plugins/vhdl/` with `?raw`, or the canonical copy moves to a shared folder.)*
+11. *(Decided: the sources are bundled into the frontend, 6.4. Vite and vitest import `server/plugins/vhdl/*.vhd?raw` directly; the Docker page build copies `server/plugins/` for it.)*
 12. *(Decided: no restriction on edited plugin files for now; a server-side switch can be added later if needed.)*
 13. *(Decided: handled as in 7.4a – mark the file, keep the user's copy, choose Keep mine or Reset to shipped. A side-by-side diff may come later; automatic merge is not planned.)*
 
@@ -694,3 +695,32 @@ An external review listed 13 points. Each was checked against the code and decid
 | 11 | Cross-platform validation | **Accepted** as a plan; not yet executed here (no Windows or Docker available). | 10 |
 | 12 | Diagnostics and packaging | **Accepted in part.** Diagnostics come only from a run, so there is no second model to update. The packaging gaps are real (the Dockerfile copies only `server/src/`) and are listed as release-blocking. | 2, 8.1 |
 | 13 | End-to-end tests | **Accepted.** Listed with the cases named in the review. | 9 |
+
+---
+
+## 14. Implementation map (stage 1)
+
+| Plan | Code |
+|---|---|
+| Plugin VHDL (4) | `server/plugins/vhdl/hdlb_pkg.vhd`, `uart_monitor.vhd` – the single canonical copy |
+| Line protocol, routing, `PLUGINS` ids (3.3, 6.1) | `server/src/pluginLine.ts` |
+| Catalog, disabled kinds, hint (3.6) | `server/src/pluginCatalog.ts`; frontend copy `src/components/workbench/plugins/pluginCatalog.ts`; both checked against `tests/fixtures/plugins/pluginCatalog.json` |
+| Plugin root (5) | `server/src/pluginRoot.ts` (`HDLBOARD_PLUGIN_DIR`, `startBackend({ pluginDir })`, `server/plugins/vhdl/`) |
+| Library build, edited copies, notices, `stage: 'plugin'` (5, 6.4) | `server/src/engines/pluginLibrary.ts`, called from `ghdlEngine.ts` only when a file declares `library hdlboard`; edited copies go to `<session>/hdlboard/` |
+| `hdlboard/*` files in `RUN` (6.4) | `server/src/pluginFiles.ts` |
+| Budget and summaries (6.2) | `server/src/pluginOutput.ts` (20 000 lines/s, 100 000 per run) |
+| Run generation (6.1) | `session.ts`: `outputGeneration`, bumped by `endOutput` and `destroy` |
+| Frames (6.3) | `protocol.ts`; shared fixture `tests/fixtures/plugins/pluginFrames.json` |
+| Client (7.1, 7.6) | `hdlClient.ts`: `onPlugin`, `PLUGINS` before `RUN`, frames before `READY` dropped |
+| State model, retention (7.2) | `plugins/pluginLog.ts` (10 000 per instance), updates coalesced per animation frame in `plugins/usePlugins.ts` |
+| Split console (7.3) | `plugins/ConsoleArea.tsx`, `plugins/PluginOutputPane.tsx` (only the visible rows are drawn) |
+| Settings (3.6, 7.4) | `plugins/PluginSettings.tsx`, `plugins/pluginPrefs.ts` |
+| Plugins page, 7.4a | `plugins/PluginsPage.tsx`, `plugins/pluginSources.ts`; opened from the "Plugins" pill beside "Examples" in Files |
+| Packaging (8.1) | `docker/Dockerfile` (both stages + build probe), `winInstaller/build.ps1`, `electron-builder.yml`, `electron/main.js` |
+
+Deviations from the text above:
+
+- The plugin pane is also cleared when Start is clicked, not only on `READY`, so a run that fails to compile does not show the last run's lines. `HdlClient` drops `PLUGIN` frames between `run()` and `READY`, so the race 6.1 guards against stays closed.
+- The ring buffer drops the oldest tenth at once when an instance passes 10 000 entries (cheap appends at 24 000 lines/s); between 9 000 and 10 000 entries are kept.
+- "Revert changes" on the Plugins page returns to the text the file had when it was opened there; saving to the browser is automatic.
+- The "shipped file changed since your edit" notice is written by the frontend (it holds the base hash); "using edited files" by the server, which compares each sent file with the installed one.

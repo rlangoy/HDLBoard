@@ -1,0 +1,147 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The console row of the workbench grid: the console, and the plugin pane beside it once a run printed plugin lines. */
+.wb-console-area {
+  grid-row: 4;
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  background: var(--wb-console-bg);
+}
+
+.wb-console-area > .wb-console {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.wb-console-area__splitter {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  background: #1e293b;
+  touch-action: none;
+}
+
+.wb-console-area__splitter:hover,
+.wb-console-area__splitter:focus-visible {
+  background: #334155;
+  outline: none;
+}
+
+.wb-console-area__pane {
+  flex: 0 0 auto;
+  display: flex;
+  min-width: 0;
+}
+
+.wb-plugins-out {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--wb-console-bg);
+}
+
+.wb-plugins-out__count {
+  margin-left: 6px;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.wb-plugins-out__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-plugins-out__close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.wb-plugins-out__close:hover {
+  background: #1e293b;
+}
+
+.wb-plugins-out__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-plugins-out__columns,
+.wb-plugins-out__row {
+  display: grid;
+  grid-template-columns: 11ch 8ch 10ch minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 0 16px;
+}
+
+.wb-plugins-out__columns {
+  flex: none;
+  padding-top: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e293b;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.wb-plugins-out__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 8px;
+  font-family: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+
+.wb-plugins-out__rows {
+  position: relative;
+}
+
+/* The height is ROW_HEIGHT_PX in PluginOutputPane.tsx. */
+.wb-plugins-out__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  line-height: 20px;
+  color: #cbd5e1;
+  white-space: pre;
+}
+
+.wb-plugins-out__row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-plugins-out__time {
+  color: #64748b;
+  text-align: right;
+}
+
+.wb-plugins-out__kind {
+  color: #c4b5fd;
+}
+
+.wb-plugins-out__instance {
+  color: #7dd3fc;
+}
+
+.wb-plugins-out__dropped {
+  margin: 6px 16px 2px;
+  font-style: italic;
+  color: #94a3b8;
+}

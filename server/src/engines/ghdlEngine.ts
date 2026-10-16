@@ -12,6 +12,9 @@
 import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getGhdlExe, runBatch, startPersistentRun } from '../ghdl.js';
+import { defaultPluginIds, disabledPluginHint } from '../pluginCatalog.js';
+import { usesHdlboardLibrary } from '../pluginLine.js';
+import { getPluginRoot } from '../pluginRoot.js';
 import { findEntityNames, findTopEntity, type TopEntity } from '../portDetect.js';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
@@ -19,8 +22,9 @@ import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
+import { buildPluginLibrary, clearPluginLibrary, type LibraryResult } from './pluginLibrary.js';
 import { sameNameNotes } from './sameNameNotes.js';
-import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
+import type { BoardFiles, BoardTiming, PluginRequest, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const TB_ENTITY = 'hdl_board_tb';
 const GHDL_STANDARD = '--std=08';
@@ -36,6 +40,19 @@ const PACING: RunPlan['pacing'] = process.platform === 'win32' ? 'stdin' : 'fifo
 const ghdl = (args: string[], dir: string): Promise<CmdResult> => runCommand({ cmd: getGhdlExe(), args, cwd: dir });
 
 const failure = (stage: ErrorStage, text: string): PrepareResult => ({ ok: false, stage, text });
+
+/** A request that says nothing about plugins gets the catalog defaults, as a client that never sent `PLUGINS` does. */
+const DEFAULT_PLUGINS: PluginRequest = { enabledIds: defaultPluginIds(), editedFiles: [] };
+
+/**
+ * A failure, followed by why a plugin entity GHDL could not find is missing (switched
+ * off, or no plugin at all). Any other result is returned as it is.
+ */
+function withPluginHint(result: PrepareResult, plugins: PluginRequest): PrepareResult {
+  if (result.ok) return result;
+  const hint = disabledPluginHint(result.text, plugins.enabledIds);
+  return hint === undefined ? result : failure(result.stage, `${result.text}\n${hint}`);
+}
 
 /** The error text if `ghdl -a` rejects the file, `undefined` if it is analysed. */
 async function analyzeFile(dir: string, name: string): Promise<string | undefined> {
@@ -173,10 +190,33 @@ function clearWorkLibrary(dir: string): void {
   }
 }
 
-async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Promise<PrepareResult> {
-  clearWorkLibrary(dir);
-  for (const file of files) writeFileSync(join(dir, file.name), file.content);
+/**
+ * Builds the plugin library when a student file declares `library hdlboard`, and returns
+ * the console notices it owes the run (an edited plugin file in use). A run without
+ * the library clause is left exactly as it was before plugins existed.
+ */
+async function preparePluginLibrary(dir: string, files: readonly VhdlFileInput[], plugins: PluginRequest): Promise<LibraryResult> {
+  if (!files.some((file) => usesHdlboardLibrary(file.content))) return { ok: true, notices: [] };
+  return buildPluginLibrary({ dir, request: plugins, pluginRoot: getPluginRoot(), ghdl: (args) => ghdl(args, dir) });
+}
 
+/** A fresh session directory: no library of an earlier run, then this run's files. */
+function writeSources(dir: string, files: readonly VhdlFileInput[]): void {
+  clearWorkLibrary(dir);
+  clearPluginLibrary(dir);
+  for (const file of files) writeFileSync(join(dir, file.name), file.content);
+}
+
+async function prepare(request: PrepareRequest): Promise<PrepareResult> {
+  const plugins = request.plugins ?? DEFAULT_PLUGINS;
+  writeSources(request.dir, request.files);
+  const library = await preparePluginLibrary(request.dir, request.files, plugins);
+  if (!library.ok) return failure(library.stage, library.text);
+  return withPluginHint(await prepareAnalysed(request, library.notices), plugins);
+}
+
+/** Analyses the student's files, then decides how the top runs. `notices` go before the run's own messages. */
+async function prepareAnalysed({ dir, files, topFile, runTarget }: PrepareRequest, notices: readonly string[]): Promise<PrepareResult> {
   // Every file is analysed before our own port scan, so a genuine syntax error gets
   // GHDL's real diagnosis under `analyze` instead of being intercepted early by
   // `findTopEntity`'s regex heuristic, which runs on source not yet known to be VHDL.
@@ -191,7 +231,7 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
   const others = otherFilesDeclaring(files, top);
   const reanalysisError = others.length > 0 ? await analyzeFile(dir, top.fileName) : undefined;
   if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
-  const notes = sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others });
+  const notes = [...notices, ...sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others })];
 
   if (top.ports.size === 0) return prepareBatch(dir, top.name, notes);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';

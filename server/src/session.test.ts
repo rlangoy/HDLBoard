@@ -6,7 +6,9 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import type { PrepareResult, RunPlan, SimEngine } from './engines/types.js';
+import type { PrepareRequest, PrepareResult, RunPlan, SimEngine } from './engines/types.js';
+import { LOG_LINES_PER_SECOND } from './outputLimiter.js';
+import { defaultPluginIds } from './pluginCatalog.js';
 import type { ServerFrame } from './protocol.js';
 import type { BatchHandle } from './runtime.js';
 import { Session } from './session.js';
@@ -133,5 +135,156 @@ describe('Session runs that outlive their request', () => {
     session.destroy();
 
     assert.deepEqual(verbs(frames), ['READY']);
+  });
+});
+
+/** An engine whose compiles succeed at once and whose batch runs the test feeds stdout lines into. */
+function outputEngine() {
+  const requests: PrepareRequest[] = [];
+  const outputs: Array<(line: string) => void> = [];
+  const engine: SimEngine = {
+    language: 'vhdl',
+    prepare: async (request) => {
+      requests.push(request);
+      return { ok: true, plan: batchPlan(tmpdir()) };
+    },
+    startBoardRun: () => assert.fail('these tests only prepare batch runs'),
+    startBatchRun: (_plan, onOutput) => {
+      outputs.push(onOutput);
+      return { kill: () => {}, done: new Promise(() => {}) };
+    },
+  };
+  return { engine, requests, outputs };
+}
+
+const pluginFrames = (frames: readonly ServerFrame[]) => frames.filter((frame) => frame.verb === 'PLUGIN');
+const logTexts = (frames: readonly ServerFrame[]) => frames.flatMap((frame) => (frame.verb === 'LOG' ? [frame.text] : []));
+
+describe('Session plugin output', () => {
+  test('a plugin line becomes a PLUGIN frame', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    outputs[0]('@@HDLB uart TX 83495 48');
+    session.destroy();
+
+    assert.deepEqual(pluginFrames(frames), [{ verb: 'PLUGIN', kind: 'uart', instance: 'TX', timeNs: 83495, payload: '48' }]);
+  });
+
+  test('plugin lines bypass the console budget', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    for (let i = 0; i < LOG_LINES_PER_SECOND + 50; i++) outputs[0](`report ${i}`);
+    for (let i = 0; i < 1000; i++) outputs[0](`@@HDLB uart TX ${i} 48`);
+    session.destroy();
+
+    assert.equal(pluginFrames(frames).length, 1000);
+  });
+
+  test('a malformed plugin line goes to the console', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    outputs[0]('@@HDLB uart TX');
+    session.destroy();
+
+    assert.deepEqual(pluginFrames(frames), []);
+    assert.deepEqual(logTexts(frames), ['@@HDLB uart TX']);
+  });
+
+  test('a delayed line from the previous run is not forwarded while the next run is active', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    await session.handleRun(FILES, 'top.vhdl');
+    outputs[0]('@@HDLB uart TX 1 41');
+    outputs[0]('old report');
+    outputs[1]('@@HDLB uart TX 2 42');
+    session.destroy();
+
+    assert.deepEqual(pluginFrames(frames).map((frame) => frame.verb === 'PLUGIN' && frame.payload), ['42']);
+    assert.equal(logTexts(frames).includes('old report'), false);
+  });
+
+  test('a line delivered after Stop is not forwarded', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    session.handleStop();
+    outputs[0]('@@HDLB uart TX 1 41');
+    session.destroy();
+
+    assert.deepEqual(pluginFrames(frames), []);
+  });
+
+  test('without PLUGINS a run uses the catalog defaults', async () => {
+    const { engine, requests } = outputEngine();
+    const session = new Session(() => {}, () => engine);
+
+    await session.handleRun(FILES, 'top.vhdl');
+    session.destroy();
+
+    assert.deepEqual(requests[0].plugins, { enabledIds: defaultPluginIds(), editedFiles: [] });
+  });
+
+  test('PLUGINS before RUN is honoured, and a later PLUGINS applies to the next run', async () => {
+    const { engine, requests } = outputEngine();
+    const session = new Session(() => {}, () => engine);
+
+    session.handlePlugins([]);
+    await session.handleRun(FILES, 'top.vhdl');
+    session.handlePlugins(['rs232']);
+    await session.handleRun(FILES, 'top.vhdl');
+    session.destroy();
+
+    assert.deepEqual(requests.map((request) => request.plugins?.enabledIds), [[], ['rs232']]);
+  });
+
+  test('a line of a disabled plugin goes to the console', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, outputs } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    session.handlePlugins([]);
+    await session.handleRun(FILES, 'top.vhdl');
+    outputs[0]('@@HDLB uart TX 1 41');
+    session.destroy();
+
+    assert.deepEqual(pluginFrames(frames), []);
+    assert.deepEqual(logTexts(frames), ['@@HDLB uart TX 1 41']);
+  });
+
+  test('plugin files sent with the run reach the engine apart from the student files', async () => {
+    const { engine, requests } = outputEngine();
+    const session = new Session(() => {}, () => engine);
+
+    await session.handleRun([...FILES, { name: 'hdlboard/uart_monitor.vhd', content: '-- edited' }], 'top.vhdl');
+    session.destroy();
+
+    assert.deepEqual(requests[0].files, FILES);
+    assert.deepEqual(requests[0].plugins?.editedFiles, [{ name: 'uart_monitor.vhd', content: '-- edited' }]);
+  });
+
+  test('a student file under the reserved prefix is refused', async () => {
+    const frames: ServerFrame[] = [];
+    const { engine, requests } = outputEngine();
+    const session = new Session((frame) => frames.push(frame), () => engine);
+
+    await session.handleRun([{ name: 'hdlboard/top.vhdl', content: '' }], 'top.vhdl');
+    session.destroy();
+
+    assert.equal(requests.length, 0);
+    assert.equal(frames[0]?.verb, 'ERROR');
   });
 });

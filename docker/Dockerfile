@@ -44,6 +44,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
+# The Plugins page bundles the shipped plugin VHDL (src/components/workbench/plugins/pluginSources.ts).
+COPY server/plugins/ server/plugins/
 # Projects published with the page (docs/PROJECTS.md): copied into dist/ by the build.
 COPY public/ public/
 # The port the browser opens ws://<host>:<port>/hdlsim on. With nginx proxying
@@ -63,6 +65,9 @@ COPY --from=ghdl /out/usr/local/ /usr/local/
 COPY --from=server-build /src/server/package.json  /srv/HDLBoard/server/package.json
 COPY --from=server-build /src/server/node_modules/ /srv/HDLBoard/server/node_modules/
 COPY --from=server-build /src/server/dist/         /srv/HDLBoard/server/dist/
+# The plugin library (docs/plugin_batch_implementation_plan.md § 8.1): plain VHDL,
+# found beside server/dist/ without HDLBOARD_PLUGIN_DIR.
+COPY server/plugins/                             /srv/HDLBoard/server/plugins/
 # The tier-2 installation check (HOSTING.md § 11), runnable inside the container:
 #   docker compose exec backend node tools/verify-backend.mjs
 COPY tools/verify-backend.mjs /srv/HDLBoard/tools/verify-backend.mjs
@@ -99,6 +104,14 @@ echo 'module probe(input a, output y); assign y = a; initial $display("hdlboard-
 test -s probe.stub
 "$IVERILOG_EXE" -Wall -Wno-timescale -I. -s probe -o probe.vvp probe.v
 "$VVP_EXE" -n -i probe.vvp | grep -q hdlboard-probe-ok
+# The plugin library, as batch mode builds it, and the UART example through it.
+p=/srv/HDLBoard/server/plugins/vhdl f=/srv/HDLBoard/tests/fixtures/plugins
+"$GHDL_EXE" -a --std=08 --work=hdlboard "$p/hdlb_pkg.vhd" "$p/uart_monitor.vhd"
+"$GHDL_EXE" -a --std=08 "$f/uart_tx.vhd" "$f/uart_tx_tb.vhd"
+"$GHDL_EXE" -e --std=08 uart_tx_tb
+# tr: a context sent from a Windows checkout has CRLF line endings.
+tr -d '\r' < "$f/uart_tx_tb.expected.txt" > expected.txt
+"$GHDL_EXE" -r --std=08 uart_tx_tb | grep '^@@HDLB' | diff - expected.txt
 cd /; rm -rf "$d"
 "$GHDL_EXE" --version | head -1
 "$IVERILOG_EXE" -V 2>/dev/null | head -1

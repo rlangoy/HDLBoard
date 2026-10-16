@@ -26,11 +26,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchHandle, RunHandle } from './runtime.js';
 import { createOutputLimiter, type OutputLimiter } from './outputLimiter.js';
+import { defaultPluginIds, disabledKinds } from './pluginCatalog.js';
+import { splitRunFiles } from './pluginFiles.js';
+import { createPluginOutput, type OutputDecision, type PluginOutput } from './pluginOutput.js';
 import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
-import type { BoardFiles, RunPlan, SimEngine } from './engines/types.js';
+import type { BoardFiles, PluginRequest, RunPlan, SimEngine } from './engines/types.js';
 import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput } from './protocol.js';
 
 /** The files a board testbench exchanges data through, in the session directory. */
@@ -119,6 +122,28 @@ function refusalBeforeCompile(files: readonly VhdlFileInput[], topFile: string |
   return undefined;
 }
 
+/** What a run may compile: the student's files apart from the plugin files sent with them. */
+interface AdmittedRun {
+  readonly studentFiles: VhdlFileInput[];
+  readonly plugins: PluginRequest;
+}
+
+interface RunRequest {
+  readonly files: readonly VhdlFileInput[];
+  readonly topFile: string | undefined;
+  readonly engine: SimEngine;
+  readonly enabledIds: readonly string[];
+}
+
+/** The run's files split into student and plugin files, or why it cannot be compiled. */
+function admitRun({ files, topFile, engine, enabledIds }: RunRequest): AdmittedRun | { stage: ErrorStage; text: string } {
+  const runFiles = splitRunFiles(files, enabledIds);
+  if ('message' in runFiles) return { stage: 'protocol', text: runFiles.message };
+  const refusal = refusalBeforeCompile(runFiles.studentFiles, topFile, engine);
+  if (refusal !== undefined) return { stage: 'analyze', text: refusal };
+  return { studentFiles: runFiles.studentFiles, plugins: { enabledIds, editedFiles: runFiles.pluginFiles } };
+}
+
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 
 export class Session {
@@ -154,6 +179,22 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
+  /** The plugin lines of the current run and their budget (`pluginOutput.ts`). */
+  private pluginOutput: PluginOutput | null = null;
+  /**
+   * The plugins the client enabled with `PLUGINS`, for the next `RUN`; null until it
+   * sends one, which means the catalog defaults. Captured when a run starts, so a
+   * change during a run applies from the next one.
+   */
+  private requestedPluginIds: readonly string[] | null = null;
+  /** Kinds of the plugins switched off for the current run: their lines are console output. */
+  private runDisabledKinds: ReadonlySet<string> = new Set();
+  /**
+   * Bumped whenever a run's output stops belonging to the session — a new run starts, or
+   * Stop, Reset or the socket ends one — so a line the old process still delivers is
+   * never shown as the new run's (docs/plugin_batch_implementation_plan.md § 6.1).
+   */
+  private outputGeneration = 0;
   private destroyed = false;
   /**
    * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
@@ -205,19 +246,26 @@ export class Session {
     };
   }
 
+  /** `PLUGINS <id>,...`: the plugins enabled for the next run (§ 3.6). */
+  handlePlugins(ids: readonly string[]): void {
+    this.requestedPluginIds = ids;
+  }
+
   async handleRun(files: VhdlFileInput[], topFile?: string, runTarget?: string): Promise<void> {
     this.stopActive('stopped');
     this.state = 'compiling';
     const request = ++this.runRequest;
 
+    const enabledIds = this.requestedPluginIds ?? defaultPluginIds();
     const engine = this.chooseEngine(topFile);
-    const refusal = refusalBeforeCompile(files, topFile, engine);
-    if (refusal !== undefined) {
-      this.failRun('analyze', refusal);
+    const admitted = admitRun({ files, topFile, engine, enabledIds });
+    if ('stage' in admitted) {
+      this.failRun(admitted.stage, admitted.text);
       return;
     }
 
-    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget });
+    const { studentFiles, plugins } = admitted;
+    const prepared = await engine.prepare({ dir: this.dir, files: studentFiles, topFile, runTarget, plugins });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (this.destroyed || request !== this.runRequest) return;
@@ -228,6 +276,7 @@ export class Session {
 
     this.engine = engine;
     this.plan = prepared.plan;
+    this.runDisabledKinds = disabledKinds(enabledIds);
     for (const message of prepared.plan.messages) this.send({ verb: 'LOG', text: message });
     if (prepared.plan.mode === 'batch') this.startBatchRun(engine, prepared.plan);
     else this.startRun(engine, prepared.plan);
@@ -295,8 +344,8 @@ export class Session {
     // (the generated testbench itself never writes to stdout, so
     // everything that arrives here is the student's own `report`/
     // `assert`, never internal plumbing).
-    this.beginOutput();
-    handle.onOutput((line) => this.forwardOutputLine(line));
+    const generation = this.beginOutput();
+    handle.onOutput((line) => this.forwardOutputLineOf(generation, line));
     this.state = 'running';
     this.send({ verb: 'READY' });
     this.startOutputPolling();
@@ -305,23 +354,45 @@ export class Session {
   /**
    * The simulator's own output — a design's `$display`/`report` text — goes through a
    * per-run line budget so a design that prints on every clock edge cannot flood the
-   * socket and the console (`outputLimiter.ts`). Both run kinds share these three.
+   * socket and the console (`outputLimiter.ts`). Plugin lines take their own path with
+   * their own budget (`pluginOutput.ts`). Both run kinds share these.
+   *
+   * Returns the run's output generation, which the caller's output callback checks.
    */
-  private beginOutput(): void {
+  private beginOutput(): number {
     this.endOutput();
     this.limiter = createOutputLimiter(Date.now);
-    this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
+    this.pluginOutput = createPluginOutput({ now: Date.now, disabledKinds: this.runDisabledKinds });
+    this.limiterTimer = setInterval(() => this.flushOutputSummaries(), LIMITER_FLUSH_MS);
+    return this.outputGeneration;
+  }
+
+  /** Forwards `line` only while the run that printed it still owns the output. */
+  private forwardOutputLineOf(generation: number, line: string): void {
+    if (generation === this.outputGeneration && !this.destroyed) this.forwardOutputLine(line);
   }
 
   private forwardOutputLine(line: string): void {
-    if (/\S/.test(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+    if (!/\S/.test(line)) return;
+    const decision: OutputDecision = this.pluginOutput?.accept(line) ?? { to: 'log', text: line };
+    if (decision.to === 'plugin') this.send({ verb: 'PLUGIN', ...decision.line });
+    else if (decision.to === 'log') this.sendLogLines(this.limiter?.accept(decision.text) ?? []);
   }
 
-  /** Reports what the budget dropped in the last window, then stops budgeting. */
+  /** Summaries go straight out, not through `limiter.accept`: the console budget must not drop them. */
+  private flushOutputSummaries(): void {
+    this.sendLogLines(this.limiter?.flush() ?? []);
+    this.sendLogLines(this.pluginOutput?.flush() ?? []);
+  }
+
+  /** Reports what the budgets dropped, then stops budgeting; later output of this run is not forwarded. */
   private endOutput(): void {
+    this.outputGeneration++;
     this.stopLimiterTimer();
     if (this.limiter) this.sendLogLines(this.limiter.finish());
+    if (this.pluginOutput) this.sendLogLines(this.pluginOutput.finish());
     this.limiter = null;
+    this.pluginOutput = null;
   }
 
   private stopLimiterTimer(): void {
@@ -464,8 +535,8 @@ export class Session {
   }
 
   private startBatchRun(engine: SimEngine, plan: RunPlan): void {
-    this.beginOutput();
-    const handle = engine.startBatchRun(plan, (line) => this.forwardOutputLine(line), BATCH_TIMEOUT_MS);
+    const generation = this.beginOutput();
+    const handle = engine.startBatchRun(plan, (line) => this.forwardOutputLineOf(generation, line), BATCH_TIMEOUT_MS);
     this.batchRun = handle;
     this.state = 'running';
     this.send({ verb: 'READY' });
@@ -577,6 +648,7 @@ export class Session {
 
   destroy(): void {
     this.destroyed = true;
+    this.outputGeneration++;
     this.stopOutputPolling();
     this.stopPacing();
     this.stopLimiterTimer();

@@ -154,6 +154,15 @@ if (-not (Test-Path (Join-Path $ResDir "iverilog\COPYING"))) {
   throw "resources\iverilog\COPYING is missing - the license page references it, so the installer must not ship without it."
 }
 
+Write-Host "  plugins/vhdl/ (library hdlboard, analysed in place)"
+$pluginDir = Join-Path $ResDir "plugins\vhdl"
+New-Item -ItemType Directory -Force $pluginDir | Out-Null
+Copy-Item (Join-Path $RepoRoot "server\plugins\vhdl\*.vhd") $pluginDir
+
+if (-not (Test-Path (Join-Path $pluginDir "hdlb_pkg.vhd"))) {
+  throw "resources\plugins\vhdl\hdlb_pkg.vhd is missing - every testbench using library hdlboard would fail."
+}
+
 # --- 6. Package ----------------------------------------------------------
 Step "Running electron-builder (NSIS)"
 Push-Location $ElectronDir

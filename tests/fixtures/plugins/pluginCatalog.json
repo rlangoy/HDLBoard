@@ -1,0 +1,22 @@
+{
+  "_comment": "The plugin catalog as both copies must have it (server/src/pluginCatalog.ts, src/components/workbench/plugins/pluginCatalog.ts). docs/plugin_batch_implementation_plan.md 3.6.",
+  "sharedFiles": [
+    "hdlb_pkg.vhd"
+  ],
+  "plugins": [
+    {
+      "id": "rs232",
+      "title": "RS232 (UART)",
+      "kinds": [
+        "uart"
+      ],
+      "entities": [
+        "uart_monitor"
+      ],
+      "files": [
+        "uart_monitor.vhd"
+      ],
+      "defaultEnabled": true
+    }
+  ]
+}

@@ -135,7 +135,7 @@
   cursor: default;
 }
 
-/* The way into the examples: a light pill at the right of the panel's title. */
+/* The way into the examples (and the Plugins page, when on): light pills at the right of the panel's title. */
 .wb-files__examples {
   display: flex;
   align-items: center;
@@ -152,6 +152,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-files__examples + .wb-files__examples {
+  margin-left: 6px;
 }
 
 .wb-files__examples:hover {

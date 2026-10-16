@@ -50,6 +50,8 @@ function resolvePaths() {
       ghdlDir: path.join(res, 'ghdl'),
       // The flat Icarus tree; the backend runs it with -B/-M.
       iverilogDir: path.join(res, 'iverilog'),
+      // The plugin library's VHDL; the bundled backend cannot find it relative to itself.
+      pluginDir: path.join(res, 'plugins', 'vhdl'),
     };
   }
   const repo = path.join(__dirname, '..', '..');
@@ -61,6 +63,8 @@ function resolvePaths() {
     // resolved by the backend itself.
     ghdlDir: undefined,
     iverilogDir: undefined,
+    // Dev: server/plugins/vhdl/, found by the backend beside server/dist/.
+    pluginDir: undefined,
   };
 }
 
@@ -671,6 +675,7 @@ async function startBackendOrDie(paths) {
     ghdlDir: paths.ghdlDir,
     ghdlExe: paths.ghdlExe,
     iverilogDir: paths.iverilogDir,
+    pluginDir: paths.pluginDir,
     // One window, one user, one machine: the multi-student bound that
     // matters on a shared LAN server is irrelevant here.
     maxSessions: 4,

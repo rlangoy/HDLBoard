@@ -46,6 +46,9 @@ import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type Refu
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { ConsoleArea } from './plugins/ConsoleArea';
+import { PluginsPage } from './plugins/PluginsPage';
+import { usePlugins } from './plugins/usePlugins';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
@@ -289,7 +292,7 @@ export function Workbench() {
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
-  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | null>(null);
+  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'plugins' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(() => defaultProject(STARTER_FILES));
@@ -461,11 +464,17 @@ export function Workbench() {
     [revealLocation],
   );
 
+  // Plugins (docs/plugin_batch_implementation_plan.md): settings, edited files, and the run's plugin output.
+  const plugins = usePlugins();
+  const { clearOutput: clearPluginOutput, addOutput: addPluginOutput, recordError: recordPluginError } = plugins;
+
   const clientRef = useRef<HdlClient | null>(null);
   const getClient = useCallback((): HdlClient => {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
         onReady: () => {
+          // A new run: its plugin output starts empty (frames are ordered, so nothing of the last run follows).
+          clearPluginOutput();
           // A quiet end asked for while it compiled: the server takes Stop only now.
           if (quietEnd.current) {
             clientRef.current?.stop();
@@ -489,7 +498,9 @@ export function Workbench() {
           appendLog(text);
           recordDiagnostics(text, filesRef.current);
         },
+        onPlugin: addPluginOutput,
         onError: (stage, text) => {
+          recordPluginError(stage, text);
           if (!takeFlag(quietEnd)) {
             appendLog(`${stage} error:\n${text}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
@@ -520,7 +531,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError]);
+  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError, clearPluginOutput, addPluginOutput, recordPluginError]);
 
   useEffect(
     () => () => {
@@ -1336,6 +1347,9 @@ export function Workbench() {
   const startRun = (fileId: string | null, runTarget: string | null = null, unitName: string | null = null) => {
     quietEnd.current = false;
     setLogLines([]);
+    // Also cleared on READY. Clearing here too means a run that fails to compile shows no stale
+    // plugin output; frames of the old run still in flight are dropped by HdlClient until READY.
+    clearPluginOutput();
     stopElapsedTimer();
     setElapsedSeconds(0);
     setStatus('compiling');
@@ -1345,7 +1359,9 @@ export function Workbench() {
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
-    getClient().run(files, topFile?.name, runTarget);
+    getClient().run(files, topFile?.name, runTarget, plugins.runPlugins());
+    const pluginNotice = plugins.runNotice();
+    if (pluginNotice !== undefined) appendLog(pluginNotice);
   };
 
   /**
@@ -1549,6 +1565,8 @@ export function Workbench() {
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
         splitPreference={tb.split.prefs.preference}
         onSplitPreferenceChange={tb.split.setPreference}
+        pluginPrefs={plugins.prefs}
+        onPluginPrefsChange={plugins.setPrefs}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
@@ -1695,6 +1713,8 @@ export function Workbench() {
               onDownloadAll={handleDownloadAll}
               onToggleExamples={() => setOverlay((shown) => (shown === 'examples' ? null : 'examples'))}
               examplesOpen={overlay === 'examples'}
+              onTogglePlugins={plugins.prefs.showPage ? () => setOverlay((shown) => (shown === 'plugins' ? null : 'plugins')) : undefined}
+              pluginsOpen={overlay === 'plugins'}
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
               topLocked={isSimulating}
@@ -1786,6 +1806,16 @@ export function Workbench() {
             {overlay === 'examples' && (
             <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
           )}
+            {overlay === 'plugins' && plugins.prefs.showPage && (
+              <PluginsPage
+                prefs={plugins.prefs}
+                onPrefsChange={plugins.setPrefs}
+                edits={plugins.edits}
+                onEditsChange={plugins.setEdits}
+                lastPluginError={plugins.lastPluginError}
+                onClose={() => setOverlay(null)}
+              />
+            )}
           </div>
 
           <div
@@ -1845,11 +1875,17 @@ export function Workbench() {
         onPointerDown={layout.onConsoleDividerPointerDown}
       />
 
-      <ConsoleOutput
-        lines={logLines}
-        onClear={handleClearConsole}
-        locate={(line) => diagnostics.locateText(line, filesRef.current)}
-        onOpenLocation={openConsoleDiagnostic}
+      <ConsoleArea
+        console={
+          <ConsoleOutput
+            lines={logLines}
+            onClear={handleClearConsole}
+            locate={(line) => diagnostics.locateText(line, filesRef.current)}
+            onOpenLocation={openConsoleDiagnostic}
+          />
+        }
+        output={plugins.output}
+        onCloseOutput={plugins.closeOutput}
       />
 
       {/* Outside the Explorer, so Upload still opens it while that pane is shut. */}

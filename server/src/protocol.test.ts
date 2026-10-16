@@ -3,7 +3,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { decodeClientFrame, encodeClientFrame, parseRunHeader } from './protocol.js';
+import { decodeClientFrame, decodeServerFrame, encodeClientFrame, encodeServerFrame, parseRunHeader } from './protocol.js';
+import { readFixture } from './testSupport/fixture.js';
 
 /** docs/impl_split_screen.md D20: `RUN <topFile> [@<unit>]`. */
 
@@ -34,4 +35,53 @@ describe('the RUN header', () => {
   test('a frame without a target carries no runTarget key', () => {
     assert.equal('runTarget' in (decodeClientFrame(`RUN alu.vhd\n${BODY}`) as object), false);
   });
+});
+
+interface FrameFixture {
+  valid: Array<{ why: string; frame: string; line: { kind: string; instance: string; timeNs: number; payload: string } }>;
+  invalid: Array<{ why: string; frame: string }>;
+}
+
+/** Shared with the frontend's decoder (docs/plugin_batch_implementation_plan.md § 6.3). */
+const PLUGIN_FRAMES = JSON.parse(readFixture('plugins', 'pluginFrames.json')) as FrameFixture;
+
+describe('the PLUGIN frame', () => {
+  for (const { why, frame, line } of PLUGIN_FRAMES.valid) {
+    test(`decodes ${why}`, () => {
+      assert.deepEqual(decodeServerFrame(frame), { verb: 'PLUGIN', ...line });
+    });
+  }
+
+  for (const { why, frame } of PLUGIN_FRAMES.invalid) {
+    test(`rejects ${why}`, () => {
+      assert.ok('message' in decodeServerFrame(frame));
+    });
+  }
+
+  test('encodes as it decodes', () => {
+    const frame = { verb: 'PLUGIN', kind: 'uart', instance: 'TX', timeNs: 83495, payload: '48 FE' } as const;
+    assert.deepEqual(decodeServerFrame(encodeServerFrame(frame)), frame);
+  });
+});
+
+describe('the PLUGINS verb', () => {
+  test('carries the enabled ids', () => {
+    assert.deepEqual(decodeClientFrame('PLUGINS rs232,i2c'), { verb: 'PLUGINS', ids: ['rs232', 'i2c'] });
+  });
+
+  test('with no argument enables none', () => {
+    assert.deepEqual(decodeClientFrame('PLUGINS'), { verb: 'PLUGINS', ids: [] });
+  });
+
+  test('rejects an id that is not lower case', () => {
+    assert.ok('message' in decodeClientFrame('PLUGINS RS232'));
+  });
+
+  test('round-trips', () => {
+    assert.equal(encodeClientFrame({ verb: 'PLUGINS', ids: ['rs232'] }), 'PLUGINS rs232');
+  });
+});
+
+test('an ERROR of the plugin stage decodes', () => {
+  assert.deepEqual(decodeServerFrame('ERROR plugin\nbad'), { verb: 'ERROR', stage: 'plugin', text: 'bad' });
 });

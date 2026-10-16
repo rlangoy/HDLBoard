@@ -60,6 +60,16 @@ export interface PrepareRequest {
   readonly topFile?: string;
   /** The unit of the top file to elaborate (`RUN <file> @<unit>`); omitted, the engine chooses. */
   readonly runTarget?: string;
+  /** The plugins of this run (docs/plugin_batch_implementation_plan.md § 3.6); omitted, none are used. */
+  readonly plugins?: PluginRequest;
+}
+
+/** What a run asks of the plugin library `hdlboard`. */
+export interface PluginRequest {
+  /** Ids of the plugins switched on for this run. */
+  readonly enabledIds: readonly string[];
+  /** Edited copies sent with the run, by plain file name; each replaces the installed file of that name. */
+  readonly editedFiles: readonly VhdlFileInput[];
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */

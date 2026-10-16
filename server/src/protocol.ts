@@ -16,12 +16,17 @@
  *   body      = everything after the first LF, verbatim, never escaped
  */
 
+import { decodePluginFrame, encodePluginFrame, parsePluginIds, type PluginLine } from './pluginLine.js';
+
 export interface VhdlFileInput {
   name: string;
   content: string;
 }
 
-export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal';
+// 'plugin': an edited plugin file sent with the run (docs/plugin_batch_implementation_plan.md
+// § 6.4) failed to analyse — neither the student's code nor an installation fault.
+export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal' | 'plugin';
+const ERROR_STAGES: readonly ErrorStage[] = ['analyze', 'elaborate', 'runtime', 'protocol', 'internal', 'plugin'];
 // 'completed': a batch-mode (portless-entity) run reached its own natural
 // end on its own — distinct from 'stopped' (the user clicked Stop) so the
 // frontend can tell "your design finished" from "you ended the session".
@@ -38,6 +43,8 @@ export type ClientFrame =
   // design. Omitted, the backend picks the unit as it always has.
   | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string; runTarget?: string }
   | { verb: 'STIM'; bits: string }
+  // The plugins enabled for the next RUN (docs/plugin_batch_implementation_plan.md § 3.6).
+  | { verb: 'PLUGINS'; ids: string[] }
   | { verb: 'RESET' }
   | { verb: 'STOP' }
   | { verb: 'PING' };
@@ -47,6 +54,8 @@ export type ServerFrame =
   | { verb: 'READY' }
   | { verb: 'STATE'; bits: string }
   | { verb: 'LOG'; text: string }
+  // One `@@HDLB` line of the simulator's stdout (docs/plugin_batch_implementation_plan.md § 6.3).
+  | ({ verb: 'PLUGIN' } & PluginLine)
   | { verb: 'ERROR'; stage: ErrorStage; text: string }
   | { verb: 'DONE'; reason: DoneReason }
   | { verb: 'PONG' };
@@ -147,6 +156,10 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       }
       return { verb: 'STIM', bits: inline };
     }
+    case 'PLUGINS': {
+      const ids = parsePluginIds(inline);
+      return 'message' in ids ? ids : { verb: 'PLUGINS', ids };
+    }
     case 'RESET':
       return { verb: 'RESET' };
     case 'STOP':
@@ -172,6 +185,8 @@ export function encodeClientFrame(frame: ClientFrame): string {
     }
     case 'STIM':
       return `STIM ${frame.bits}`;
+    case 'PLUGINS':
+      return `PLUGINS ${frame.ids.join(',')}`;
     case 'RESET':
       return 'RESET';
     case 'STOP':
@@ -204,9 +219,13 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
       return { verb: 'STATE', bits: inline };
     case 'LOG':
       return { verb: 'LOG', text: body };
+    case 'PLUGIN': {
+      const line = decodePluginFrame(inline, body);
+      return 'message' in line ? line : { verb: 'PLUGIN', ...line };
+    }
     case 'ERROR': {
       const stage = inline as ErrorStage;
-      if (!['analyze', 'elaborate', 'runtime', 'protocol', 'internal'].includes(stage)) {
+      if (!ERROR_STAGES.includes(stage)) {
         return { message: `ERROR has an unknown stage: ${JSON.stringify(inline)}` };
       }
       return { verb: 'ERROR', stage, text: body };
@@ -235,6 +254,8 @@ export function encodeServerFrame(frame: ServerFrame): string {
       return `STATE ${frame.bits}`;
     case 'LOG':
       return `LOG\n${frame.text}`;
+    case 'PLUGIN':
+      return encodePluginFrame(frame);
     case 'ERROR':
       return `ERROR ${frame.stage}\n${frame.text}`;
     case 'DONE':

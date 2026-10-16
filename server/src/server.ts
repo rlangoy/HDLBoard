@@ -30,6 +30,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
 import { resolveGhdlExe } from './ghdlPath.js';
+import { resolvePluginRoot, setPluginRoot } from './pluginRoot.js';
 import { setToolPaths } from './verilog/tools.js';
 import { resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
 import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
@@ -60,6 +61,11 @@ export interface BackendOptions {
   ghdlDir?: string;
   /** Absolute path to the GHDL executable. Defaults to `GHDL_EXE`, then `'ghdl'`. */
   ghdlExe?: string;
+  /**
+   * The shipped plugin VHDL files (the packaged app's `resources/plugins/vhdl`).
+   * `HDLBOARD_PLUGIN_DIR` wins over it; unset, `server/plugins/vhdl/` is used.
+   */
+  pluginDir?: string;
   /**
    * The flat Icarus Verilog tree the packaged app ships (`resources/iverilog`). Set, it
    * wins over the executables below and over the environment. Defaults to `IVERILOG_DIR`.
@@ -195,6 +201,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   // Before anything can spawn.
   const ghdlExe = resolveGhdlExe(process.env, opts);
   setGhdlExe(ghdlExe);
+  const pluginRoot = resolvePluginRoot(process.env, opts.pluginDir);
+  setPluginRoot(pluginRoot);
   const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), windowsShortPath);
   setToolPaths(iverilogTools);
   if (process.platform === 'win32' && iverilogTools.bundledDir !== undefined && hasSpace(iverilogTools.bundledDir)) {
@@ -302,6 +310,9 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
         case 'STIM':
           session.handleStim(frame.bits);
           break;
+        case 'PLUGINS':
+          session.handlePlugins(frame.ids);
+          break;
         case 'RESET':
           session.handleReset();
           break;
@@ -338,6 +349,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   httpServer.listen(port, host, () => {
     console.log(`hdl-board simulation backend listening on ws://${host}:${port}${WSPATH}`);
     console.log(`hdl-board GHDL: ${ghdlExe}`);
+    console.log(`hdl-board plugins: ${pluginRoot}`);
     console.log(`hdl-board Icarus Verilog: ${iverilogTools.iverilog}${iverilogTools.bundledDir ? ' (bundled tree)' : ''}`);
     if (serveDir) console.log(`hdl-board serving frontend from ${serveDir} on http://${host}:${port}/`);
   });

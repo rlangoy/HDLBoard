@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { HdlClient } from './hdlClient';
+import { HdlClient, type RunPlugins } from './hdlClient';
 import type { VhdlFile } from './files';
 
 /** Just enough of a WebSocket to see what `run` puts on the wire. */
@@ -16,7 +16,7 @@ class FakeSocket {
   readonly sent: string[] = [];
   private readonly openListeners: Array<() => void> = [];
   onopen: (() => void) | null = null;
-  onmessage: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
@@ -33,6 +33,11 @@ class FakeSocket {
   }
 
   close(): void {}
+
+  /** A frame from the server. */
+  receive(text: string): void {
+    this.onmessage?.({ data: text });
+  }
 
   /** Completes the connection the way a browser does: the `onopen` handler, then the listeners. */
   open(): void {
@@ -62,16 +67,21 @@ const sentNames = (): string[] =>
     .filter((line) => line.startsWith('@@FILE '))
     .map((line) => line.slice('@@FILE '.length, -'@@'.length));
 
-function runWith(topFileName?: string, runTarget?: string | null): string {
-  const client = new HdlClient('ws://test', {
+function recordingHandlers() {
+  return {
     onReady: vi.fn(),
     onState: vi.fn(),
     onLog: vi.fn(),
+    onPlugin: vi.fn(),
     onError: vi.fn(),
     onDone: vi.fn(),
     onClosed: vi.fn(),
-  });
-  client.run(PROJECT, topFileName, runTarget);
+  };
+}
+
+function runWith(topFileName?: string, runTarget?: string | null, plugins?: RunPlugins): string {
+  const client = new HdlClient('ws://test', recordingHandlers());
+  client.run(PROJECT, topFileName, runTarget, plugins);
   return lastFrame();
 }
 
@@ -122,5 +132,66 @@ describe('HdlClient.run', () => {
   test('R-4 / D21: a work/ testbench as top is sent with the vhdl/ files, and no other work/ file', () => {
     expect(runWith('tb_top.vhd', 'top_tb').split('\n')[0]).toBe('RUN tb_top.vhd @top_tb');
     expect(sentNames()).toEqual(['top.vhd', 'tb_top.vhd']);
+  });
+});
+
+describe('HdlClient plugins', () => {
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const PLUGINS: RunPlugins = { enabledIds: ['rs232'], files: [{ name: 'hdlboard/uart_monitor.vhd', content: '-- edited' }] };
+
+  test('PLUGINS goes out before RUN, and the plugin files after the project files', () => {
+    runWith('top.vhd', null, PLUGINS);
+    const sent = FakeSocket.last?.sent ?? [];
+    expect(sent[sent.length - 2]).toBe('PLUGINS rs232');
+    expect(sentNames()).toEqual(['top.vhd', 'hdlboard/uart_monitor.vhd']);
+  });
+
+  test('no plugins given: no PLUGINS, and only the project files', () => {
+    runWith('top.vhd');
+    expect((FakeSocket.last?.sent ?? []).some((frame) => frame.startsWith('PLUGINS'))).toBe(false);
+    expect(sentNames()).toEqual(['top.vhd']);
+  });
+
+  test('an empty plugin set is sent as PLUGINS with no ids', () => {
+    runWith('top.vhd', null, { enabledIds: [], files: [] });
+    const sent = FakeSocket.last?.sent ?? [];
+    expect(sent[sent.length - 2]).toBe('PLUGINS ');
+  });
+
+  test('a PLUGIN frame after READY reaches onPlugin', () => {
+    const handlers = recordingHandlers();
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd');
+    FakeSocket.last?.receive('READY');
+    FakeSocket.last?.receive('PLUGIN uart TX 83495\n48');
+    expect(handlers.onPlugin).toHaveBeenCalledWith({ kind: 'uart', instance: 'TX', timeNs: 83495, payload: '48' });
+  });
+
+  test('a PLUGIN frame before READY is dropped with a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const handlers = recordingHandlers();
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd');
+    FakeSocket.last?.receive('PLUGIN uart TX 1\n48');
+    expect(handlers.onPlugin).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  test('a malformed PLUGIN frame is dropped with a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const handlers = recordingHandlers();
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd');
+    FakeSocket.last?.receive('READY');
+    FakeSocket.last?.receive('PLUGIN uart TX\n48');
+    expect(handlers.onPlugin).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledOnce();
   });
 });

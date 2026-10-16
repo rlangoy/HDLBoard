@@ -8,6 +8,8 @@ import { GearIcon } from './icons';
 import type { SplitPreference } from './editorView';
 import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL, type ExampleLanguage } from './examples';
 import type { PreferredLanguages } from './languagePrefs';
+import { PluginSettings } from './plugins/PluginSettings';
+import type { PluginPrefs } from './plugins/pluginPrefs';
 import { APP_NAME, ISSUES_URL } from './project';
 import { TEXT } from './testbenchText';
 import './SettingsDialog.css';
@@ -21,6 +23,9 @@ export interface SettingsDialogProps {
   /** Editor → Testbench split view (docs/impl_split_screen.md § 4.2). */
   splitPreference: SplitPreference;
   onSplitPreferenceChange: (preference: SplitPreference) => void;
+  /** Plugins: which are enabled, and whether the Plugins page shows (plugins/pluginPrefs.ts). */
+  pluginPrefs: PluginPrefs;
+  onPluginPrefsChange: (prefs: PluginPrefs) => void;
 }
 
 /**
@@ -93,6 +98,8 @@ export function SettingsDialog({
   onPreferredLanguagesChange,
   splitPreference,
   onSplitPreferenceChange,
+  pluginPrefs,
+  onPluginPrefsChange,
 }: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
@@ -119,6 +126,7 @@ export function SettingsDialog({
     >
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
+      <PluginSettings value={pluginPrefs} onChange={onPluginPrefsChange} />
       {bridge && (
         <div className="wb-settings__empty">
           <label className="wb-settings__option">

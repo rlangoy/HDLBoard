@@ -3,6 +3,11 @@
 Reference code for the plugin design. The documents explain the method;
 this folder holds the code they refer to.
 
+> **Implemented (stage 1, 2026-10-16).** The VHDL, `pluginLine.ts`, `pluginCatalog.ts`
+> and `uartPayload.ts` now live at their intended homes (see the table and section 14 of
+> the batch plan). The copies here are the reviewed reference and are not kept in step;
+> the code in `server/` and `src/` is authoritative.
+
 - Overview: [`../plugin_structure.md`](../plugin_structure.md)
 - Testbench-driven (batch) plugins: [`../plugin_batch_implementation_plan.md`](../plugin_batch_implementation_plan.md)
 - Real-time (board) plugins, draft: [`../plugin_board_implementation_draft.md`](../plugin_board_implementation_draft.md)

@@ -1,0 +1,139 @@
+{
+  "_comment": "PLUGIN frames for both test suites (server/src/protocol.test.ts and src/components/workbench/plugins/pluginFrame.test.ts), so the two decoders cannot drift. docs/plugin_batch_implementation_plan.md 3.3 and 6.3.",
+  "valid": [
+    {
+      "why": "a uart byte",
+      "frame": "PLUGIN uart TX 83495\n48",
+      "line": {
+        "kind": "uart",
+        "instance": "TX",
+        "timeNs": 83495,
+        "payload": "48"
+      }
+    },
+    {
+      "why": "a payload with spaces",
+      "frame": "PLUGIN uart RX 92465\n00 FE",
+      "line": {
+        "kind": "uart",
+        "instance": "RX",
+        "timeNs": 92465,
+        "payload": "00 FE"
+      }
+    },
+    {
+      "why": "an empty payload",
+      "frame": "PLUGIN uart RX 0\n",
+      "line": {
+        "kind": "uart",
+        "instance": "RX",
+        "timeNs": 0,
+        "payload": ""
+      }
+    },
+    {
+      "why": "no body at all is an empty payload",
+      "frame": "PLUGIN uart RX 7",
+      "line": {
+        "kind": "uart",
+        "instance": "RX",
+        "timeNs": 7,
+        "payload": ""
+      }
+    },
+    {
+      "why": "a time past 2^31 ns",
+      "frame": "PLUGIN uart RX 3000179270\nFF",
+      "line": {
+        "kind": "uart",
+        "instance": "RX",
+        "timeNs": 3000179270,
+        "payload": "FF"
+      }
+    },
+    {
+      "why": "the largest safe integer",
+      "frame": "PLUGIN uart RX 9007199254740991\n00",
+      "line": {
+        "kind": "uart",
+        "instance": "RX",
+        "timeNs": 9007199254740991,
+        "payload": "00"
+      }
+    },
+    {
+      "why": "a payload of exactly the maximum length",
+      "frame": "PLUGIN probe _p1 5\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()",
+      "line": {
+        "kind": "probe",
+        "instance": "_p1",
+        "timeNs": 5,
+        "payload": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()"
+      }
+    },
+    {
+      "why": "a kind no catalog row knows",
+      "frame": "PLUGIN myplug A 1\nhello world",
+      "line": {
+        "kind": "myplug",
+        "instance": "A",
+        "timeNs": 1,
+        "payload": "hello world"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "why": "no time",
+      "frame": "PLUGIN uart TX\n48"
+    },
+    {
+      "why": "a kind that starts with a digit",
+      "frame": "PLUGIN 1uart TX 5\n48"
+    },
+    {
+      "why": "an instance with a dash",
+      "frame": "PLUGIN uart T-X 5\n48"
+    },
+    {
+      "why": "two spaces in the header",
+      "frame": "PLUGIN uart  TX 5\n48"
+    },
+    {
+      "why": "a negative time",
+      "frame": "PLUGIN uart TX -5\n48"
+    },
+    {
+      "why": "a time with 17 digits",
+      "frame": "PLUGIN uart TX 12345678901234567\n48"
+    },
+    {
+      "why": "a time past the largest safe integer",
+      "frame": "PLUGIN uart TX 9007199254740993\n48"
+    },
+    {
+      "why": "a tab in the payload",
+      "frame": "PLUGIN uart TX 5\n4\t8"
+    },
+    {
+      "why": "a newline in the payload",
+      "frame": "PLUGIN uart TX 5\n48\n49"
+    },
+    {
+      "why": "a carriage return in the payload",
+      "frame": "PLUGIN uart TX 5\n48\r"
+    },
+    {
+      "why": "a NUL in the payload",
+      "frame": "PLUGIN uart TX 5\n4\u00008"
+    },
+    {
+      "why": "non-ASCII in the payload",
+      "frame": "PLUGIN uart TX 5\nbl\u00e5"
+    },
+    {
+      "why": "a payload one character over the maximum",
+      "frame": "PLUGIN uart TX 5\n !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ !\"#$%&'()x"
+    }
+  ]
+}

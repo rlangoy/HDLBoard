@@ -17,6 +17,7 @@ import { bitsToString, type BitVector } from '../board';
 import { patternToSegments, type SegmentVector } from '../SevenSegment';
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
+import { decodePluginFrame, type PluginLine } from './plugins/pluginFrame';
 
 const PROTOCOL_VERSION = '1';
 const STATE_LENGTH = 10 + 6 * 7;
@@ -25,6 +26,8 @@ export interface HdlClientHandlers {
   onReady(): void;
   onState(ledr: BitVector, hex: SegmentVector[]): void;
   onLog(text: string): void;
+  /** One `@@HDLB` line of the run's simulator output (docs/plugin_batch_implementation_plan.md § 7.1). */
+  onPlugin(line: PluginLine): void;
   onError(stage: string, text: string): void;
   onDone(reason: string): void;
   onClosed(): void;
@@ -80,6 +83,16 @@ export function runHeader(topFileName?: string, runTarget?: string | null): stri
   return runTarget ? `RUN ${topFileName} @${runTarget}` : `RUN ${topFileName}`;
 }
 
+/** The plugins of one run: sent as `PLUGINS` before `RUN`, and their files in its body. */
+export interface RunPlugins {
+  readonly enabledIds: Iterable<string>;
+  /** Plugin files under `hdlboard/`, while the Plugins page is on; otherwise none. */
+  readonly files: ReadonlyArray<{ readonly name: string; readonly content: string }>;
+}
+
+/** `PLUGINS <id>,<id>,...`; keep in step with server/src/protocol.ts. */
+export const pluginsFrame = (enabledIds: Iterable<string>): string => `PLUGINS ${[...enabledIds].join(',')}`;
+
 export class HdlClient {
   private ws: WebSocket | null = null;
   private readonly url: string;
@@ -92,6 +105,9 @@ export class HdlClient {
   // the failure is a same-tick connection refusal, not a slow timeout —
   // near-instant on localhost, and silent without this).
   private everReady = false;
+  // Whether the current run has sent READY. The server sends it before any output, so a
+  // PLUGIN frame before it is a bug, not a line of this run (plan § 7.2).
+  private runReady = false;
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -137,6 +153,7 @@ export class HdlClient {
         break; // nothing to do — HELLO/WELCOME just confirms the version
       case 'READY':
         this.everReady = true;
+        this.runReady = true;
         this.handlers.onReady();
         break;
       case 'STATE':
@@ -147,6 +164,9 @@ export class HdlClient {
         break;
       case 'LOG':
         this.handlers.onLog(body);
+        break;
+      case 'PLUGIN':
+        this.handlePluginFrame(inline, body);
         break;
       case 'ERROR':
         this.handlers.onError(inline, body);
@@ -162,6 +182,13 @@ export class HdlClient {
     }
   }
 
+  private handlePluginFrame(inline: string, body: string): void {
+    const line = decodePluginFrame(inline, body);
+    if (line === undefined) console.warn(`HdlClient: dropped a malformed PLUGIN frame: ${JSON.stringify(inline)}`);
+    else if (!this.runReady) console.warn('HdlClient: dropped a PLUGIN frame that arrived before READY');
+    else this.handlers.onPlugin(line);
+  }
+
   /**
    * Sends the files of one design folder — the folder of the top file
    * (`sourceFolderFor`: `verilog/` for a Verilog top, `vhdl/` otherwise) —
@@ -170,14 +197,19 @@ export class HdlClient {
    * (the file currently marked as top in the Files panel), is sent as
    * `RUN`'s inline arg so the backend elaborates that file's design
    * rather than guessing from board-port matches — see `portDetect.ts`'s
-   * `findTopEntity`.
+   * `findTopEntity`. `plugins`, when given, goes first as `PLUGINS`, and its files
+   * travel in the body after the project's own.
    */
-  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null): void {
+  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null, plugins?: RunPlugins): void {
     const ws = this.ensureSocket();
-    const sourceFiles = filesForRun(files, topFileName);
+    this.runReady = false;
+    const sourceFiles = [...filesForRun(files, topFileName), ...(plugins?.files ?? [])];
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = runHeader(topFileName, runTarget);
-    const send = () => ws.send(`${head}\n${body}`);
+    const send = () => {
+      if (plugins) ws.send(pluginsFrame(plugins.enabledIds));
+      ws.send(`${head}\n${body}`);
+    };
     // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.
     if (ws.readyState === WebSocket.OPEN) send();
     else ws.addEventListener('open', send, { once: true });

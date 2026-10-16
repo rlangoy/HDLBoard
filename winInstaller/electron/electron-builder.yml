@@ -39,6 +39,10 @@ extraResources:
   # Icarus Verilog: one flat directory, run with -B/-M (plan 5.8).
   - from: resources/iverilog
     to: iverilog
+  # The plugin library's VHDL (docs/plugin_batch_implementation_plan.md § 5, § 8.1):
+  # analysed in place, so it must be real files; main.js passes the directory.
+  - from: resources/plugins
+    to: plugins
 
 # HDLBoard's own GPL-2.0 text, installed so license.txt's reference
 # to it is true.

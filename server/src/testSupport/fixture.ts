@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 export type FixtureLanguage = 'vhdl' | 'verilog';
 
-/** A subdirectory of `tests/fixtures/`: the two languages, plus captured `iverilog -tstub` output. */
-export type FixtureDirectory = FixtureLanguage | 'stub';
+/** A subdirectory of `tests/fixtures/`: the two languages, captured `iverilog -tstub` output, and the plugin examples. */
+export type FixtureDirectory = FixtureLanguage | 'stub' | 'plugins';
 
 /** From `server/dist/testSupport/` up to the repository root, then into the fixtures. */
 const FIXTURE_ROOT = fileURLToPath(new URL('../../../tests/fixtures/', import.meta.url));

@@ -25,6 +25,8 @@ const NEW_CODE = [
   'src/testSupport/**/*.ts',
   'src/githubAuth.ts',
   'src/githubAuth.test.ts',
+  'src/plugin*.ts',
+  'src/integration/plugins.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

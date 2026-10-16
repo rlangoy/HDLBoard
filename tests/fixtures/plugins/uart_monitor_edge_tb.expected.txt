@@ -1,0 +1,6 @@
+@@HDLB uart A 113996 55
+@@HDLB uart A 200802 AA
+@@HDLB uart A 287607 0F
+@@HDLB uart A 417815 XX
+@@HDLB uart B 1455142 48
+@@HDLB uart B 2496809 69
