@@ -24,6 +24,10 @@ export interface ViewSetup {
   readonly showAs: ReadonlyMap<SignalPath, ShowAs>;
   readonly window: Window;
   readonly cursor: Ticks;
+  /** The femtoseconds in one tick of the waveform `window` and `cursor` count in. */
+  readonly tickFs: number;
+  /** The run's end, in the same ticks. */
+  readonly runEnd: Ticks;
 }
 
 /** What is kept between runs and openings (FR-17), as plain data. */
@@ -34,6 +38,10 @@ export interface ViewMemory {
   readonly showAs: ReadonlyArray<readonly [SignalPath, ShowAs]>;
   readonly window: Window;
   readonly cursor: Ticks;
+  /** The tick `window` and `cursor` count in: the next run may count in another (Icarus ps, GHDL fs). */
+  readonly tickFs: number;
+  /** That run's end: a window showing all of it shows all of the next run too, which may be longer or shorter. */
+  readonly runEnd: Ticks;
 }
 
 /** The limits a window must stay inside. */
@@ -44,10 +52,6 @@ export interface WindowBounds {
   readonly minSpan: Ticks;
 }
 
-/** How far the window may be zoomed out, in run lengths, and scrolled past either end, in windows. */
-const MAX_SPAN_RUNS = 4;
-const OVERSCROLL = 0.25;
-
 export function toMemory(setup: ViewSetup): ViewMemory {
   return {
     shown: setup.list.shown,
@@ -56,6 +60,8 @@ export function toMemory(setup: ViewSetup): ViewMemory {
     showAs: [...setup.showAs],
     window: setup.window,
     cursor: setup.cursor,
+    tickFs: setup.tickFs,
+    runEnd: setup.runEnd,
   };
 }
 
@@ -65,7 +71,7 @@ const isShowAs = (value: string): value is ShowAs => SHOW_AS_LABELS.some(([known
 function firstSetup(data: WaveformData, moments: RunMoments, fittingRows: number): ViewSetup {
   const { start, end, cursor } = firstWindow(data, moments);
   const list: ListState = { shown: firstShown(data, fittingRows), open: new Set(), expanded: new Set() };
-  return { list, showAs: new Map(), window: { start, end }, cursor };
+  return { list, showAs: new Map(), window: { start, end }, cursor, tickFs: data.tickFs, runEnd: data.endTime };
 }
 
 export interface SetupContext {
@@ -81,19 +87,43 @@ export function setupFor(data: WaveformData, memory: ViewMemory | null, context:
   if (memory === null || shown.length === 0) return firstSetup(data, context.moments, context.fittingRows);
   const first = firstWindow(data, context.moments);
   // A run with an error still opens at it: start where the problem is (W11).
-  const window = first.error === undefined ? memory.window : { start: first.start, end: first.end };
+  const place = first.error === undefined ? rememberedPlace(memory, data) : { window: { start: first.start, end: first.end }, cursor: first.cursor };
   return {
     list: { shown, open: new Set(memory.open), expanded: new Set(memory.expanded.filter((path) => known.has(path))) },
     showAs: new Map(memory.showAs.filter(([path, showAs]) => known.has(path) && isShowAs(showAs))),
-    window,
-    cursor: first.error === undefined ? memory.cursor : first.cursor,
+    ...place,
+    tickFs: data.tickFs,
+    runEnd: data.endTime,
   };
 }
 
-/** `window`, kept inside the bounds: not narrower than `minSpan`, not much wider or further than the run. */
+/**
+ * The remembered window and cursor in a new run (FR-17): the same times, in this
+ * waveform's ticks – a Verilog run (ps) after a VHDL one (fs) would otherwise open on a
+ * sliver near 0 – and inside it. A window that showed the whole run shows the whole new
+ * one, and a cursor at the run's end goes to the new end: a VHDL run of 480 ns and a
+ * Verilog one of 231 ns of the same testbench each open whole.
+ */
+function rememberedPlace(memory: ViewMemory, data: WaveformData): { window: Window; cursor: Ticks } {
+  const end = data.endTime;
+  const scale = memory.tickFs / data.tickFs;
+  const ticks = (time: Ticks) => Math.round(time * scale);
+  const wasWhole = memory.window.start <= 0 && memory.window.end >= memory.runEnd;
+  const window = wasWhole
+    ? { start: 0, end }
+    : clampWindow({ start: ticks(memory.window.start), end: ticks(memory.window.end) }, { end, minSpan: 1 });
+  const cursor = memory.cursor >= memory.runEnd ? end : Math.min(Math.max(ticks(memory.cursor), 0), end);
+  return { window, cursor };
+}
+
+/**
+ * `window`, kept inside the run: not narrower than `minSpan`, never before 0 nor past
+ * the run's end – zoomed all the way out it shows exactly the whole run.
+ */
 export function clampWindow(window: Window, bounds: WindowBounds): Window {
-  const span = Math.min(Math.max(window.end - window.start, bounds.minSpan), bounds.end * MAX_SPAN_RUNS);
-  const start = Math.min(Math.max(window.start, -span * OVERSCROLL), bounds.end - span * OVERSCROLL);
+  const runEnd = Math.max(bounds.end, bounds.minSpan);
+  const span = Math.min(Math.max(window.end - window.start, bounds.minSpan), runEnd);
+  const start = Math.min(Math.max(window.start, 0), runEnd - span);
   return { start, end: start + span };
 }
 

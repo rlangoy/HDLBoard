@@ -30,10 +30,17 @@ describe('the view window', () => {
     expect(zoomWindow({ start: 0, end: 100 }, 2, 0)).toEqual({ start: 0, end: 200 });
   });
 
-  test('never narrower than the minimum, nor much wider or further than the run', () => {
+  test('never narrower than the minimum, never before 0 nor past the end of the run', () => {
     expect(clampWindow({ start: 100, end: 101 }, bounds)).toEqual({ start: 100, end: 110 });
-    expect(clampWindow({ start: 0, end: 100_000 }, bounds)).toEqual({ start: 0, end: 4000 });
-    expect(clampWindow({ start: 5000, end: 5100 }, bounds)).toEqual({ start: 975, end: 1075 });
+    expect(clampWindow({ start: 0, end: 100_000 }, bounds)).toEqual({ start: 0, end: 1000 });
+    expect(clampWindow({ start: 5000, end: 5100 }, bounds)).toEqual({ start: 900, end: 1000 });
+    expect(clampWindow({ start: -50, end: 50 }, bounds)).toEqual({ start: 0, end: 100 });
+  });
+
+  test('zooming out stops at the whole run, from anywhere in it', () => {
+    let window = { start: 800, end: 900 };
+    for (let i = 0; i < 10; i++) window = clampWindow(zoomWindow(window, 2, 850), bounds);
+    expect(window).toEqual({ start: 0, end: 1000 });
   });
 
   test('a console time outside the window centres it; inside, the window stays', () => {
@@ -66,6 +73,44 @@ describe('the view setup', () => {
     expect(again.list.shown).toEqual(['wave_types_tb/clk', 'wave_types_tb/rst']);
     expect(again.window).toEqual({ start: 10, end: 20 });
     expect(again.cursor).toBe(15);
+  });
+
+  test('…at the same times when the next run counts in another tick (Icarus ps, then GHDL fs)', () => {
+    const icarus = { ...data, tickFs: 1000, endTime: 100_000 };
+    const own: ViewSetup = { ...setupFor(icarus, null, context), window: { start: 10_000, end: 40_000 }, cursor: 20_000 };
+    const ghdl = { ...data, tickFs: 1, endTime: 100_000_000 };
+    const again = setupFor(ghdl, toMemory(own), context);
+    expect(again.window).toEqual({ start: 10_000_000, end: 40_000_000 });
+    expect(again.cursor).toBe(20_000_000);
+    expect(again.tickFs).toBe(1);
+  });
+
+  test('…in whole ticks when the next run counts in coarser ones (GHDL fs, then Icarus ps)', () => {
+    const ghdl = { ...data, tickFs: 1, endTime: 100_000_000 };
+    const own: ViewSetup = { ...setupFor(ghdl, null, context), window: { start: 10_000_400, end: 40_000_600 }, cursor: 1_500 };
+    const again = setupFor({ ...data, tickFs: 1000, endTime: 100_000 }, toMemory(own), context);
+    expect(again.window).toEqual({ start: 10_000, end: 40_001 });
+    expect(again.cursor).toBe(2);
+  });
+
+  test('…the whole run when the whole run was shown, longer or shorter (VHDL 480 ns, then Verilog 231 ns)', () => {
+    const vhdl = { ...data, tickFs: 1, endTime: 480_000_000 };
+    const whole = setupFor(vhdl, null, context);
+    const verilog = { ...data, tickFs: 1000, endTime: 231_000 };
+    const shorter = setupFor(verilog, toMemory({ ...whole, cursor: 480_000_000 }), context);
+    expect(shorter.window).toEqual({ start: 0, end: 231_000 });
+    expect(shorter.cursor).toBe(231_000);
+    const longer = setupFor(vhdl, toMemory(shorter), context);
+    expect(longer.window).toEqual({ start: 0, end: 480_000_000 });
+    expect(longer.cursor).toBe(480_000_000);
+  });
+
+  test('…and a zoomed window inside the run when the next run is shorter', () => {
+    const long = { ...data, tickFs: 1, endTime: 1000 };
+    const own: ViewSetup = { ...setupFor(long, null, context), window: { start: 800, end: 900 }, cursor: 850 };
+    const again = setupFor({ ...long, endTime: 500 }, toMemory(own), context);
+    expect(again.window).toEqual({ start: 400, end: 500 });
+    expect(again.cursor).toBe(500);
   });
 
   test('…but a run with an error opens at the error (W11)', () => {

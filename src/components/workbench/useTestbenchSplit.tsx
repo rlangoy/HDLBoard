@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { PaneRun } from './EditorPaneHeader';
-import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, type EditorView, type PairEvent, type PaneRole } from './editorView';
+import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type PaneRole } from './editorView';
 import type { VhdlFile } from './files';
 import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
 import { RoleConflictDialog } from './RoleConflictDialog';
@@ -46,6 +46,8 @@ export interface TestbenchSplit {
   readonly restoreOverrides: (overrides: TestbenchOverrides) => void;
   /** Pair a design with a testbench without re-pairing now: the file may not be in state yet. */
   readonly setPairOverride: (designId: string, tbId: string) => void;
+  /** The testbench in the TB pane while that pane is on screen (the Waveform button runs it), else null. */
+  readonly shownTestbench: PaneTarget | null;
   /** The files in the editor's panes now, as the panes show them. */
   readonly shownFileIds: readonly string[];
   /** A file's role from the current analysis, with its override applied; for the file lists. */
@@ -202,6 +204,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     split,
     overrides: overrides.value,
     restoreOverrides: overrides.set,
+    shownTestbench: shownTestbenchOf(display, split.canSplit, analysis.current, overrides.value),
     shownFileIds: display ? shownFileIds(display, narrowView(display.view, display.focusedPane, split.canSplit)) : [],
     roleOf: (fileId) => effectiveFile(analysis.current, overrides.value, fileId)?.role,
     setPairOverride: (designId, tbId) => overrides.set(withPair(overrides.ref.current, designId, tbId)),
@@ -380,4 +383,15 @@ function useSuggestionChip(
       onDismiss={() => setDismissed(new Set([...dismissed, key]))}
     />
   );
+}
+
+function shownTestbenchOf(
+  display: EditorDisplay | null,
+  canSplit: boolean,
+  project: ProjectAnalysis,
+  overrides: TestbenchOverrides,
+): PaneTarget | null {
+  const target = display?.pair.tb;
+  if (!display || !target || narrowView(display.view, display.focusedPane, canSplit) === 'rtl') return null;
+  return withCurrentUnit(target, effectiveFile(project, overrides, target.fileId), 'tb');
 }

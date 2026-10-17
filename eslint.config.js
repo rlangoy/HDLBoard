@@ -38,6 +38,9 @@ export default tseslint.config(
   {
     // A test suite's `describe` callback is a list of cases, and its expected values are the test data.
     files: ['**/*.test.ts', '**/*.testSupport.ts'],
+    // TypeScript, wherever the test is: without the parser, `eslint src` fails on every
+    // test file outside NEW_CODE (no rules apply to those; this block only turns rules off).
+    languageOptions: { parser: tseslint.parser },
     rules: { 'max-lines-per-function': 'off', 'no-magic-numbers': 'off' },
   },
 );

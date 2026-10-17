@@ -117,8 +117,10 @@ export function usePaneLayout(): PaneLayoutState {
   //
   // Everything starts from wherever it was last left (paneLayout.ts), and is
   // stored again at the end of every drag and every open or close — except
-  // that the Board I/O pane always starts open: the board is what the app is
-  // for, and a board shut in an earlier session looks like a broken page.
+  // that both side panes always start open: the board is what the app is
+  // for, and the Explorer (Simulation, Files) is how a student finds their
+  // way in. Either shut in an earlier session — the waveform viewer folds the
+  // Explorer away while it is open — looks like a broken page.
   const [initialLayout] = useState(() => ({
     ...loadPaneLayout({
       sidebarWidth: SIDEBAR_DEFAULT_W,
@@ -127,6 +129,7 @@ export function usePaneLayout(): PaneLayoutState {
       sidebarCollapsed: false,
       boardCollapsed: false,
     }),
+    sidebarCollapsed: false,
     boardCollapsed: false,
   }));
   const desiredWidth = useRef<Record<SidePane, number>>({

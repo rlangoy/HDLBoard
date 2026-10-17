@@ -47,7 +47,10 @@ export interface WaveformView {
   readonly waveform: Waveform;
   /** The client's waveform handlers, which also note that this run offered one. */
   readonly clientHandlers: WaveClientHandlers;
-  runStarted(info: RunInfo & { readonly title: string }): void;
+  /** `source`: which testbench runs (its file and unit), to tell whose waveform is shown. */
+  runStarted(info: RunInfo & { readonly title: string; readonly source: string }): void;
+  /** The `source` of the run whose waveform the view has now, or null. */
+  readonly source: string | null;
   /** A board state arrived: the run is a board run (W1). */
   boardStateSeen(): void;
   runEnded(): void;
@@ -60,6 +63,12 @@ export interface WaveformView {
     readonly fileOfScope: (scopes: readonly string[]) => string | undefined;
   };
   readonly button: { readonly state: ButtonState; readonly onToggle: () => void };
+  /**
+   * Opens the view as soon as the run just started offers its waveform (the Waveform
+   * button pressed with nothing to show yet, which ran the testbench); forgotten if
+   * the run ends without one.
+   */
+  openWhenReady(): void;
   /** The console's links into the view; absent while there is nothing to show. */
   readonly links: { readonly onOpenTime?: (fs: number) => void; readonly onOpenWaveform?: () => void };
   readonly dialog: { readonly open: boolean; readonly afterBoardRun: boolean; readonly onClose: () => void };
@@ -67,14 +76,26 @@ export interface WaveformView {
 
 const LINK_LINE = '✓ Testbench finished – ';
 
-/** Per run: whether it offered a waveform (WAVE-READY comes before DONE), and whether it is a board run. */
-function useRunTracking(waveform: Waveform, log: WaveformViewInput['log']) {
+/**
+ * Per run: whether it offered a waveform (WAVE-READY comes before DONE), and whether it
+ * is a board run. `onOffered` runs right after a WAVE-READY has been handled.
+ */
+function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOffered: () => void) {
   const offered = useRef(false);
   const board = useRef(false);
   const latest = useRef(waveform);
   latest.current = waveform;
+  const offeredRef = useRef(onOffered);
+  offeredRef.current = onOffered;
   const clientHandlers = useMemo<WaveClientHandlers>(
-    () => ({ ...waveform.handlers, onReady: (ready) => ((offered.current = true), waveform.handlers.onReady(ready)) }),
+    () => ({
+      ...waveform.handlers,
+      onReady: (ready) => {
+        offered.current = true;
+        waveform.handlers.onReady(ready);
+        offeredRef.current();
+      },
+    }),
     [waveform.handlers],
   );
   const boardStateSeen = useCallback(() => {
@@ -103,8 +124,17 @@ function useExplorerFold(explorer: ExplorerPane, viewOpen: boolean) {
     explorer.show(false);
   };
   const { show } = explorer;
+  // Only a view that was open and has closed brings the Explorer back: an effect left
+  // over from a render before the view opened (a run's WAVE-READY opens it, not a click)
+  // still sees it closed, and must not undo the fold.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (viewOpen) return;
+    if (viewOpen) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
     if (before.current) show(true);
     before.current = null;
   }, [viewOpen, show]);
@@ -149,29 +179,66 @@ function useDeclarations(input: WaveformViewInput) {
   );
 }
 
+/**
+ * Showing the view (with the Explorer folded away), and the runs it follows. Also
+ * openWhenReady: the run just started opens the view with its WAVE-READY (by then the
+ * button is not 'empty' any more); a new run, or one ending without a waveform, forgets it.
+ */
+function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
+  const pending = useRef(false);
+  // The testbench of the run going on, and of the waveform the view has: set when its run offers one.
+  const running = useRef<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const fold = useExplorerFold(input.explorer, waveform.state.open);
+  const showView = () => {
+    fold();
+    waveform.open();
+    input.overlay.show();
+  };
+  const runs = useRunTracking(waveform, input.log, () => {
+    setSource(running.current);
+    if (pending.current) showView();
+    pending.current = false;
+  });
+  const { runEnded: endRun, reset } = runs;
+  const runEnded = useCallback(() => {
+    pending.current = false;
+    endRun();
+  }, [endRun]);
+  const runReset = useCallback(
+    (runSource: string) => {
+      pending.current = false;
+      running.current = runSource;
+      reset();
+    },
+    [reset],
+  );
+  const openWhenReady = useCallback(() => {
+    pending.current = true;
+  }, []);
+  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, source };
+}
+
 export function useWaveformView(input: WaveformViewInput): WaveformView {
   const waveform = useWaveform(input.waveGet);
-  const runs = useRunTracking(waveform, input.log);
+  const runs = useViewRuns(waveform, input);
   const [title, setTitle] = useState('testbench');
   const [focus, setFocus] = useState<WaveFocus | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const memory = useRef<ViewMemory | null>(null);
-  const fold = useExplorerFold(input.explorer, waveform.state.open);
   useOverlaySync(waveform, input.overlay);
   useProjectReset(input.projectKey, waveform.reset, memory);
   const state = buttonState(waveform.state);
   const open = () => {
     if (state === 'empty') return setDialogOpen(true);
-    fold();
-    waveform.open();
-    input.overlay.show();
+    runs.showView();
   };
   const openAt = (fs: number) => {
     setFocus((previous) => ({ fs, id: (previous?.id ?? 0) + 1 }));
     open();
   };
-  const runStarted = (info: RunInfo & { readonly title: string }) => {
-    runs.reset();
+  const runStarted = (info: RunInfo & { readonly title: string; readonly source: string }) => {
+    runs.reset(info.source);
     setTitle(info.title);
     waveform.runStarted(info);
   };
@@ -179,8 +246,10 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     waveform,
     clientHandlers: runs.clientHandlers,
     runStarted,
+    source: runs.source,
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
+    openWhenReady: runs.openWhenReady,
     pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input), fileOfScope: (scopes) => scopeFileName(input.files(), scopes) },
     button: { state, onToggle: () => (waveform.state.open ? waveform.close() : open()) },
     links: state === 'empty' ? {} : { onOpenTime: openAt, onOpenWaveform: open },

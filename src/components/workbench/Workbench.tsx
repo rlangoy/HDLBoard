@@ -32,6 +32,7 @@ import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { ExamplesPane } from './ExamplesPane';
+import { PickerWaitNotice, usePickerWait } from './PickerWait';
 import { copyExample, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
@@ -148,6 +149,9 @@ const DEFAULT_WS_PORT = 9010;
 const HDL_WS_PORT =
   Number(import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT) || undefined;
 
+/** Which testbench a run runs, as the waveform view keeps it: its file and unit. */
+const runSource = (fileId: string | null, unitName: string | null): string => `${fileId ?? ''}|${unitName ?? ''}`;
+
 /** Whether `flag` was set; reading it clears it. */
 function takeFlag(flag: MutableRefObject<boolean>): boolean {
   const wasSet = flag.current;
@@ -194,8 +198,9 @@ const nextFileId = () => `file-${nextFileSeq++}`;
 // How long typing has to pause before the desktop app stores the workspace.
 /**
  * An `ERROR` frame of these stages is a failed compile: open the first error.
- * Runtime messages mark lines but never move the view (a failing assertion can
- * arrive every clock cycle).
+ * Runtime messages mark lines but never move the view while the run goes on (a
+ * failing assertion can arrive every clock cycle); a run that dies at runtime
+ * opens its last located error once, after it has ended (`lastRunError`).
  */
 const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
@@ -473,6 +478,11 @@ export function Workbench() {
     [revealLocation],
   );
 
+  // The last error a run's output located (GHDL's "bound check failure at counter.vhd:48"):
+  // where a run that dies at runtime takes the student, since its ERROR frame often only
+  // says "Simulation exited unexpectedly." Cleared when a run starts.
+  const lastRunError = useRef<AdvisedDiagnostic | null>(null);
+
   const clientRef = useRef<HdlClient | null>(null);
   // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
   const waveView = useWaveformView({
@@ -516,13 +526,15 @@ export function Workbench() {
         },
         onLog: (text) => {
           appendLog(text);
-          recordDiagnostics(text, filesRef.current);
+          const located = recordDiagnostics(text, filesRef.current).filter((d) => d.severity === 'error');
+          if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
         onError: (stage, text) => {
           if (!takeFlag(quietEnd)) {
             appendLog(`${stage} error:\n${text}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
+            else if (stage === 'runtime') revealFirstError(advised.length > 0 ? advised : lastRunError.current ? [lastRunError.current] : []);
           }
           stopElapsedTimer();
           setStatus('stopped');
@@ -726,6 +738,9 @@ export function Workbench() {
   };
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
+  // The browser's file and folder windows can take seconds to hand over what was chosen: a notice shows meanwhile.
+  const pickerWait = usePickerWait();
+
   // Upload File: the Open project or files dialog, whose Select files is the picker below.
   const showOpenDialog = () => {
     setOpenProjectError(null);
@@ -740,8 +755,11 @@ export function Workbench() {
       uploadInputRef.current?.click();
       return;
     }
-    pickFilesWithHandles(UPLOAD_ACCEPT.split(','))
-      .then((picked) => picked && readAndAddFiles(picked.files, picked.handles))
+    pickerWait
+      .wait(async () => {
+        const picked = await pickFilesWithHandles(UPLOAD_ACCEPT.split(','));
+        if (picked) await readAndAddFiles(picked.files, picked.handles);
+      })
       .catch((err: unknown) => appendLog(`Upload File: ${errorText(err)}`, 'error'));
   };
 
@@ -963,9 +981,11 @@ export function Workbench() {
   /** Open project folder in Chrome and Edge: the folder itself, kept as the projects folder with access to save into it. */
   const handleChooseProjectFolder = async () => {
     try {
-      const folder = await pickProjectFolder();
-      if (!folder) return;
-      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
+      await pickerWait.wait(async () => {
+        const folder = await pickProjectFolder();
+        if (!folder) return;
+        await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
+      });
     } catch (err) {
       setOpenProjectError(errorText(err));
     }
@@ -1330,11 +1350,12 @@ export function Workbench() {
   /** The folder dialog's button: in Chrome and Edge the picker opens in the project file's folder. */
   const chooseProjectFolderNextTo = (handle: FileSystemFileHandle) => {
     setFolderNeeded(null);
-    pickFolderOf(handle, sourceFolderOf(project))
-      .then((picked) => {
+    pickerWait
+      .wait(async () => {
+        const picked = await pickFolderOf(handle, sourceFolderOf(project));
         if (!picked) return;
         localProjects.adoptFolder(picked.folder as unknown as FolderHandle);
-        return handleProjectFolderChosen(picked.files);
+        await handleProjectFolderChosen(picked.files);
       })
       .catch((err: unknown) => appendLog(`Choose project folder: ${errorText(err)}`, 'error'));
   };
@@ -1377,10 +1398,12 @@ export function Workbench() {
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
+    lastRunError.current = null;
     waveView.runStarted({
       sources: filesForRun(files, topFile?.name).map((f) => f.content),
       topFileName: topFile?.name,
       title: runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench',
+      source: runSource(fileId, unitName),
     });
     getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording);
   };
@@ -1471,6 +1494,23 @@ export function Workbench() {
       else if (view === 'rtl') showPane('board', true);
     },
   });
+
+  // The Waveform button with a testbench on screen whose waveform the view does not have –
+  // none run yet, or another testbench's (the student switched): run it, then open its
+  // waveform as soon as the run offers one. Otherwise the button does what it always did.
+  const shownTb = waveView.waveform.recording && !isSimulating ? tb.shownTestbench : null;
+  const waveRunTarget =
+    shownTb && (waveView.button.state === 'empty' || waveView.source !== runSource(shownTb.fileId, shownTb.unitName)) ? shownTb : null;
+  const waveButton = {
+    ...waveView.button,
+    runsTestbench: waveRunTarget !== null,
+    onToggle: () => {
+      if (waveView.button.state === 'pressed' || waveRunTarget === null) return waveView.button.onToggle();
+      handleRunPane('tb', waveRunTarget);
+      waveView.openWhenReady();
+    },
+  };
+
   restoreOverridesRef.current = tb.restoreOverrides;
 
   useEffect(() => {
@@ -1593,6 +1633,7 @@ export function Workbench() {
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <NoWaveformDialog {...waveView.dialog} />
+      <PickerWaitNotice phase={pickerWait.phase} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
       {overwriteAsk && (
         <OverwriteDialog
@@ -1895,7 +1936,7 @@ export function Workbench() {
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
         onOpenLocation={openConsoleDiagnostic}
-        waveButton={<WaveformButton {...waveView.button} />}
+        waveButton={<WaveformButton {...waveButton} />}
         onOpenTime={waveView.links.onOpenTime}
         onOpenWaveform={waveView.links.onOpenWaveform}
       />

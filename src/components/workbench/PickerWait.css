@@ -1,0 +1,74 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* ------------------------------------------------------------------ *
+ * PickerWait.tsx: the notice shown while a file or folder chosen in the
+ * browser's own window is on its way. It takes the clicks too, so nothing
+ * else is started meanwhile, and the cursor says the page is busy.
+ * ------------------------------------------------------------------ */
+
+.wb-picker-wait {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 96px 16px 16px;
+  cursor: progress;
+}
+
+.wb-picker-wait.is-reading {
+  background: rgba(15, 23, 42, 0.25);
+  animation: wb-picker-wait-fade 160ms ease-out;
+}
+
+.wb-picker-wait__card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  padding: 14px 20px;
+  background: #ffffff;
+  color: var(--wb-text);
+  font-size: 14px;
+  border-radius: 12px;
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.25),
+    0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.wb-picker-wait__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--wb-text-muted);
+}
+
+.wb-picker-wait__spinner {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--wb-accent-soft);
+  border-top-color: var(--wb-accent);
+  border-radius: 50%;
+  animation: wb-picker-wait-spin 0.8s linear infinite;
+}
+
+@keyframes wb-picker-wait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes wb-picker-wait-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-picker-wait__spinner {
+    animation-duration: 2.4s;
+  }
+}
