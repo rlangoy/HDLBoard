@@ -9,7 +9,7 @@
  */
 
 import type { Ticks } from './model';
-import { formatFs, timeToX, type TimeView } from './timeAxis';
+import { formatFs, pixelResolutionFs, timeToX, type TimeView } from './timeAxis';
 import { AXIS_HEIGHT, type Painter } from './waveDraw';
 
 /** How far from the cursor line, in pixels, a press still takes the cursor. */
@@ -37,7 +37,7 @@ export interface HandleScene {
 export function paintCursorHandle({ ctx, colors }: Painter, scene: HandleScene): void {
   const x = timeToX(scene.view, scene.cursor);
   if (x < 0 || x > scene.width) return;
-  const text = formatFs(scene.cursor * scene.tickFs);
+  const text = formatFs(scene.cursor * scene.tickFs, pixelResolutionFs(scene.view, scene.tickFs));
   ctx.font = FONT;
   const width = ctx.measureText(text).width + 2 * LABEL_PAD_X;
   const left = Math.min(Math.max(x - width / 2, 0), scene.width - width);

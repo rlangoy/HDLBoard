@@ -100,6 +100,18 @@ describe('timeAxis', () => {
     expect(formatCursorFs(1.23e9)).toBe('1.230 µs');
   });
 
+  test('zoomed far in, the labels keep the decimals their steps need', () => {
+    expect(formatFs(20e6 + 100, 100)).toBe('20.0001 ns');
+    expect(formatFs(20e6 + 200, 100)).toBe('20.0002 ns');
+    expect(formatFs(20e6, 100)).toBe('20 ns');
+    expect(formatFs(20e6 + 5000, 5000)).toBe('20.005 ns'); // a coarse step: three decimals, as before
+    expect(formatCursorFs(20e6 + 30, 10)).toBe('20.00003 ns');
+    // GHDL ticks are 1 fs: 0.1 ps steps around 20 ns read apart.
+    const labels = tickMarks(viewOf(20e6, 20e6 + 2000, 1800), 1800, 1).map((m) => m.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels[1]).toBe('20.0001 ns');
+  });
+
   test('GHDL times', () => {
     expect(parseSimTime('1230ns')).toBe(1.23e9);
     expect(parseSimTime('0ms')).toBe(0);

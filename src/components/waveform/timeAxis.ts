@@ -35,6 +35,8 @@ const STEP_MULTIPLIERS = [1, 2, DECADE / 2];
 /** Labels need about this much room; ticks are never closer. */
 export const MIN_TICK_SPACING_PX = 90;
 const MAX_DECIMALS = 3;
+/** More would only show the noise of floating point. */
+const MOST_DECIMALS = 9;
 
 export const timeToX = (view: TimeView, time: Ticks): number => (time - view.start) / view.ticksPerPx;
 export const xToTime = (view: TimeView, x: number): Ticks => view.start + x * view.ticksPerPx;
@@ -55,19 +57,36 @@ function trimmed(value: number, decimals: number): string {
   return value.toFixed(decimals).replace(/\.?0+$/, '') || '0';
 }
 
-/** A time for display: "0", "850 ns", "1.23 µs" – up to three decimals, trailing zeros dropped. */
-export function formatFs(fs: number): string {
-  if (fs === 0) return '0';
-  const [unit, size] = unitFor(fs);
-  return `${trimmed(fs / size, MAX_DECIMALS)} ${unit}`;
+/**
+ * The decimals a time in a unit of `size` fs needs so that times `resolutionFs` apart
+ * read differently: zoomed in to 0.1 ps steps near 20 ns, `20.0001 ns`, not `20 ns`.
+ * Never fewer than three.
+ */
+function decimalsFor(size: number, resolutionFs: number | undefined): number {
+  if (resolutionFs === undefined || resolutionFs <= 0) return MAX_DECIMALS;
+  const needed = Math.ceil(-Math.log10(resolutionFs / size) - Number.EPSILON * DECADE);
+  return Math.min(MOST_DECIMALS, Math.max(MAX_DECIMALS, needed));
 }
 
-/** The cursor's time, always with three decimals so it does not jump while it moves: "1.230 µs". */
-export function formatCursorFs(fs: number): string {
+/**
+ * A time for display: "0", "850 ns", "1.23 µs" – trailing zeros dropped, and as many
+ * decimals as it takes to tell apart times `resolutionFs` apart (three at least).
+ */
+export function formatFs(fs: number, resolutionFs?: number): string {
+  if (fs === 0) return '0';
+  const [unit, size] = unitFor(fs);
+  return `${trimmed(fs / size, decimalsFor(size, resolutionFs))} ${unit}`;
+}
+
+/** The cursor's time with a fixed number of decimals, so it does not jump while it moves: "1.230 µs". */
+export function formatCursorFs(fs: number, resolutionFs?: number): string {
   if (fs === 0) return '0 ns';
   const [unit, size] = unitFor(fs);
-  return `${(fs / size).toFixed(MAX_DECIMALS)} ${unit}`;
+  return `${(fs / size).toFixed(decimalsFor(size, resolutionFs))} ${unit}`;
 }
+
+/** The time one pixel shows, or one tick of the file when that is longer: how finely the cursor can stand. */
+export const pixelResolutionFs = (view: TimeView, tickFs: number): number => Math.max(tickFs, view.ticksPerPx * tickFs);
 
 /** The smallest 1-2-5 step, in femtoseconds, whose marks are at least `minPx` apart. */
 export function tickStepFs(ticksPerPx: number, tickFs: number, minPx = MIN_TICK_SPACING_PX): number {
@@ -98,7 +117,7 @@ export function tickMarks(view: TimeView, widthPx: number, tickFs: number): Tick
     const t = k * stepTicks;
     const x = timeToX(view, t);
     if (x > widthPx) break;
-    marks.push({ x, label: formatFs(t * tickFs) });
+    marks.push({ x, label: formatFs(t * tickFs, stepFs) });
   }
   return marks;
 }

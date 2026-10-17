@@ -50,6 +50,8 @@ export interface WaveformPaneProps {
 const ZOOM_STEP = 2;
 /** The narrowest window, in ticks of the file: 20 fs for GHDL, 20 ps for Icarus. */
 const MIN_WINDOW_TICKS = 20;
+/** The toolbar does not know the canvas's width; its cursor time is rounded as if it were this wide. */
+const TYPICAL_TRACES_WIDTH_PX = 1000;
 const DEFAULT_FITTING_ROWS = 14;
 const LOADING_NOTE_DELAY_MS = 500;
 const MENU_WIDTH = 220;
@@ -267,9 +269,15 @@ function usePane(props: WaveformPaneProps) {
   return { data, setBody, bodyHeight, menu, setMenu, view, signals, error };
 }
 
-/** The time at the cursor as the toolbar reads it, or undefined while there is no waveform. */
+/**
+ * The time at the cursor as the toolbar reads it, or undefined while there is no waveform;
+ * zoomed far in, with the decimals that tell its steps apart.
+ */
 function cursorText(view: WaveView, data: WaveformData | null): string | undefined {
-  return view.setup === null || data === null ? undefined : formatCursorFs(view.setup.cursor * data.tickFs);
+  if (view.setup === null || data === null) return undefined;
+  const { window, cursor } = view.setup;
+  const resolution = Math.max(data.tickFs, ((window.end - window.start) * data.tickFs) / TYPICAL_TRACES_WIDTH_PX);
+  return formatCursorFs(cursor * data.tickFs, resolution);
 }
 
 function rowContext(view: WaveView, data: WaveformData | null, signals: Signals): RowContext {
