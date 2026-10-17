@@ -16,7 +16,7 @@ class FakeSocket {
   readonly sent: string[] = [];
   private readonly openListeners: Array<() => void> = [];
   onopen: (() => void) | null = null;
-  onmessage: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
@@ -33,6 +33,11 @@ class FakeSocket {
   }
 
   close(): void {}
+
+  /** A text frame from the server. */
+  receive(text: string): void {
+    this.onmessage?.({ data: text });
+  }
 
   /** Completes the connection the way a browser does: the `onopen` handler, then the listeners. */
   open(): void {
@@ -62,15 +67,19 @@ const sentNames = (): string[] =>
     .filter((line) => line.startsWith('@@FILE '))
     .map((line) => line.slice('@@FILE '.length, -'@@'.length));
 
-function runWith(topFileName?: string, runTarget?: string | null): string {
-  const client = new HdlClient('ws://test', {
+function recordingHandlers() {
+  return {
     onReady: vi.fn(),
     onState: vi.fn(),
     onLog: vi.fn(),
     onError: vi.fn(),
     onDone: vi.fn(),
     onClosed: vi.fn(),
-  });
+  };
+}
+
+function runWith(topFileName?: string, runTarget?: string | null): string {
+  const client = new HdlClient('ws://test', recordingHandlers());
   client.run(PROJECT, topFileName, runTarget);
   return lastFrame();
 }
@@ -122,5 +131,57 @@ describe('HdlClient.run', () => {
   test('R-4 / D21: a work/ testbench as top is sent with the vhdl/ files, and no other work/ file', () => {
     expect(runWith('tb_top.vhd', 'top_tb').split('\n')[0]).toBe('RUN tb_top.vhd @top_tb');
     expect(sentNames()).toEqual(['top.vhd', 'tb_top.vhd']);
+  });
+});
+
+describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => {
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const waveHandlers = () => ({ onReady: vi.fn(), onBegin: vi.fn(), onChunk: vi.fn(), onEnd: vi.fn(), onNone: vi.fn() });
+
+  test('WAVE on/off goes right before RUN; without a choice, nothing is sent', () => {
+    const client = new HdlClient('ws://test', recordingHandlers());
+    client.run(PROJECT, 'top.vhd', null, true);
+    const sent = FakeSocket.last?.sent ?? [];
+    expect(sent[sent.length - 2]).toBe('WAVE on');
+    client.run(PROJECT, 'top.vhd', null, false);
+    expect(sent[sent.length - 2]).toBe('WAVE off');
+    client.run(PROJECT, 'top.vhd');
+    expect(sent.filter((frame) => frame.startsWith('WAVE'))).toHaveLength(2);
+  });
+
+  test('the WAVE frames reach their handlers; binary frames only inside a transfer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wave = waveHandlers();
+    const client = new HdlClient('ws://test', { ...recordingHandlers(), wave });
+    client.run(PROJECT, 'top.vhd');
+    const socket = FakeSocket.last;
+    if (socket === undefined) throw new Error('no socket was opened');
+    socket.receive('WAVE-READY 3 ghw 2420 complete');
+    expect(wave.onReady).toHaveBeenCalledWith({ run: 3, format: 'ghw', bytes: 2420, status: 'complete' });
+    socket.onmessage?.({ data: new ArrayBuffer(4) });
+    expect(wave.onChunk).not.toHaveBeenCalled();
+    socket.receive('WAVE-BEGIN 3 2420');
+    socket.onmessage?.({ data: new ArrayBuffer(4) });
+    socket.receive('WAVE-END 3');
+    socket.onmessage?.({ data: new ArrayBuffer(4) });
+    expect(wave.onBegin).toHaveBeenCalledWith(3, 2420);
+    expect(wave.onChunk).toHaveBeenCalledOnce();
+    expect(wave.onEnd).toHaveBeenCalledWith(3);
+    socket.receive('WAVE-NONE 2');
+    expect(wave.onNone).toHaveBeenCalledWith(2);
+    socket.receive('WAVE-READY 3 fst 1 complete');
+    expect(wave.onReady).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledTimes(3);
+    client.waveGet(3);
+    expect(socket.sent[socket.sent.length - 1]).toBe('WAVE-GET 3');
   });
 });

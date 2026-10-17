@@ -21,6 +21,27 @@ export interface SettingsDialogProps {
   /** Editor → Testbench split view (docs/impl_split_screen.md § 4.2). */
   splitPreference: SplitPreference;
   onSplitPreferenceChange: (preference: SplitPreference) => void;
+  /** Waveforms are recorded for testbench runs (docs/waveform_viewer_spec.md FR-1). */
+  recordWaves: boolean;
+  onRecordWavesChange: (on: boolean) => void;
+}
+
+/** One switch, on by default (FR-1): a typical testbench writes kilobytes, sent only when opened. */
+function WaveformSetting({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">Waveforms</legend>
+      <label className="wb-settings__option">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span>
+          <strong>Record waveforms for testbench runs</strong>
+          <span className="wb-settings__note">
+            After a testbench run, Waveform beside Clear shows what every signal did. Board simulations do not record waveforms.
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  );
 }
 
 /**
@@ -93,6 +114,8 @@ export function SettingsDialog({
   onPreferredLanguagesChange,
   splitPreference,
   onSplitPreferenceChange,
+  recordWaves,
+  onRecordWavesChange,
 }: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
@@ -119,6 +142,7 @@ export function SettingsDialog({
     >
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
+      <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />
       {bridge && (
         <div className="wb-settings__empty">
           <label className="wb-settings__option">

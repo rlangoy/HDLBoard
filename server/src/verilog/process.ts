@@ -31,6 +31,8 @@ export interface CompileRequest {
   readonly target: string;
   /** Compile units in order, without the timescale file, which is always passed first. */
   readonly files: readonly string[];
+  /** Further root modules beside `target`: HDLBoard's waveform helper (docs/waveform_viewer_spec.md § 7.3). */
+  readonly extraRoots?: readonly string[];
 }
 
 export type PortsOutcome =
@@ -42,6 +44,7 @@ export type CompileOutcome =
   | { readonly ok: false; readonly failure: CompileFailure };
 
 const sourcesOf = (request: CompileRequest): string[] => [TIMESCALE_FILE_NAME, ...request.files];
+const rootsOf = (request: CompileRequest): string[] => [request.target, ...(request.extraRoots ?? [])].flatMap((root) => ['-s', root]);
 
 /** Step 1: elaborate the top and dump it, so its ports can be read from Icarus's own view of it. */
 export function stubArguments(tools: ToolPaths, request: CompileRequest): string[] {
@@ -65,8 +68,7 @@ export function compileArguments(tools: ToolPaths, request: CompileRequest): str
     '-Wall',
     '-Wno-timescale',
     '-I.',
-    '-s',
-    request.target,
+    ...rootsOf(request),
     '-o',
     SIMULATION_FILE_NAME,
     ...sourcesOf(request),

@@ -62,6 +62,11 @@ export interface LocalProjects {
   /** The same for browsers without folder handles: every file a folder input chose. */
   openFolderFiles(files: readonly File[]): Promise<ScanOutcome>;
   /**
+   * The same in the Windows app: its own folder dialog, so the projects keep their full paths.
+   * Resolves to null when the dialog is cancelled.
+   */
+  openDesktopFolder(): Promise<{ outcome: ScanOutcome; folder: string } | null>;
+  /**
    * A folder Save project just wrote to, with access granted by its picker: it becomes the
    * projects folder unless the known one can be read and already holds it (adoptsSavedFolder),
    * so Open Project lists it without asking for access again.
@@ -199,6 +204,15 @@ export function useLocalProjects(active: boolean): LocalProjects {
     return next.outcome ?? emptyOutcome();
   };
 
+  const openDesktopFolder = async () => {
+    const bridge = desktopBridge();
+    if (!bridge?.listLocalProjects || !(await bridge.chooseProjectsFolder?.())) return null;
+    const next = await readDesktopFolder(bridge.listLocalProjects);
+    ++newestScan.current;
+    setReading(next);
+    return { outcome: next.outcome ?? emptyOutcome(), folder: next.folderLabel };
+  };
+
   const adoptFolderFiles = (files: readonly File[]) => {
     if (backend !== 'files' || chosenFiles.current !== null) return;
     chosenFiles.current = [...files];
@@ -223,6 +237,7 @@ export function useLocalProjects(active: boolean): LocalProjects {
     adoptSavedFolder,
     openFolder,
     openFolderFiles,
+    openDesktopFolder,
   };
 }
 

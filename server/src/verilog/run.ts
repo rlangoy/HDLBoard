@@ -33,6 +33,8 @@ export interface BatchRunRequest {
   readonly dir: string;
   /** A batch run is expected to reach its own end; this stops one that does not. */
   readonly timeoutMs: number;
+  /** `+name=value` arguments for the simulation: the waveform helper's file name. */
+  readonly plusargs?: readonly string[];
 }
 
 /**
@@ -52,8 +54,8 @@ export function boardRunArguments(tools: ToolPaths, files: BoardFiles, timing: B
   ];
 }
 
-export function batchRunArguments(tools: ToolPaths): string[] {
-  return [...runtimeFlags(tools), ...NON_INTERACTIVE_UNBUFFERED, SIMULATION_FILE_NAME];
+export function batchRunArguments(tools: ToolPaths, plusargs: readonly string[] = []): string[] {
+  return [...runtimeFlags(tools), ...NON_INTERACTIVE_UNBUFFERED, SIMULATION_FILE_NAME, ...plusargs];
 }
 
 /**
@@ -68,6 +70,6 @@ export function startVerilogBoardRun(tools: ToolPaths, request: BoardRunRequest)
 
 /** Starts a standalone testbench, forwarding each line it prints to `onOutput`. */
 export function startVerilogBatchRun(tools: ToolPaths, request: BatchRunRequest, onOutput: (line: string) => void): BatchHandle {
-  const child = spawn(tools.vvp, batchRunArguments(tools), { cwd: request.dir });
+  const child = spawn(tools.vvp, batchRunArguments(tools, request.plusargs), { cwd: request.dir });
   return createBatchHandle(child, onOutput, request.timeoutMs);
 }

@@ -1,0 +1,560 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The waveform viewer (docs/waveform_viewer_spec.md § 8.5, § 8.6). Trace colours are
+   tokens here, read once per draw by the canvas (waveDraw.ts readColors). */
+
+.wv-pane {
+  --wv-bg: #ffffff;
+  --wv-grid: #e2e8f0;
+  --wv-axis-text: #64748b;
+  --wv-trace-high: #15803d;
+  --wv-trace-low: #15803d;
+  --wv-trace-bus: #1d4ed8;
+  --wv-trace-bus-text: #0f172a;
+  --wv-trace-undefined: #dc2626;
+  --wv-trace-z: #b45309;
+  --wv-trace-dont-care: #94a3b8;
+  --wv-cursor: #f59e0b;
+  /* Dark on the amber handle: white on it would be hard to read. */
+  --wv-cursor-text: #1f2937;
+  --wv-error-marker: #dc2626;
+  --wv-selection: #2563eb;
+  --wv-tool-bg: #eef1f6;
+  --wv-tool-bg-hover: #dfe6f1;
+  --wv-tool-ink: #1a56db;
+  --wv-row-hover: #f1f5f9;
+  --wv-row-selected: #e8f0fe;
+  /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
+  --wv-tb-ink: #1d4ed8;
+  --wv-tb-head: var(--hdl-tb-head);
+  --wv-tb-tint: #f3f7fe;
+  --wv-tb-head-ink: #1e3a8a;
+  --wv-rtl-ink: #15803d;
+  --wv-rtl-head: var(--hdl-rtl-head);
+  --wv-rtl-tint: #f1faf4;
+  --wv-rtl-head-ink: #14532d;
+  --wv-enum-ink: #7c3aed;
+  --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
+
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--wv-bg);
+  color: var(--wb-text, #0f172a);
+  outline: none;
+}
+
+.wv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+  height: var(--wb-pane-header-h, 39px);
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--wb-border, #e2e8f0);
+  background: var(--wb-sidebar-bg, #f8fafc);
+}
+
+.wv-toolbar__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wv-toolbar__time {
+  font-size: 13px;
+  color: var(--wb-text-muted, #64748b);
+  white-space: nowrap;
+}
+
+.wv-toolbar__time strong {
+  font-family: var(--wv-value-font);
+  font-weight: 600;
+  color: var(--wb-text, #0f172a);
+}
+
+.wv-toolbar__buttons {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* The round icon buttons of the toolbar (docs/images/head_moc1.png). */
+.wv-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wv-tool-bg);
+  color: var(--wv-tool-ink);
+  cursor: pointer;
+}
+
+.wv-tool:hover:not(:disabled) {
+  background: var(--wv-tool-bg-hover);
+}
+
+.wv-tool:focus-visible {
+  outline: 2px solid var(--wv-tool-ink);
+  outline-offset: 2px;
+}
+
+.wv-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wv-tool__icon {
+  width: 20px;
+  height: 20px;
+}
+
+.wv-button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--wb-border, #e2e8f0);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wv-button--text {
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.wv-button:hover:not(:disabled) {
+  background: var(--wb-hover, #eef2f7);
+}
+
+.wv-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wv-note {
+  flex: none;
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  background: #fff7ed;
+  color: #9a3412;
+  border-bottom: 1px solid #fed7aa;
+}
+
+.wv-help {
+  flex: none;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  background: var(--wb-accent-soft, #e5efff);
+  border-bottom: 1px solid var(--wb-border, #e2e8f0);
+}
+
+.wv-help p {
+  margin: 0 0 6px;
+}
+
+.wv-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--wb-text-muted, #64748b);
+  font-size: 14px;
+  text-align: center;
+}
+
+.wv-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.wv-grid {
+  display: flex;
+  min-height: 100%;
+}
+
+.wv-names {
+  position: relative;
+  flex: none;
+  border-right: 1px solid var(--wb-border, #e2e8f0);
+  background: var(--wv-bg);
+}
+
+/* The divider to the traces: a strip over the list's right edge, blue while dragged or focused. */
+.wv-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 3;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.wv-resizer:hover,
+.wv-resizer.is-dragging,
+.wv-resizer:focus-visible {
+  outline: none;
+  background: linear-gradient(to right, transparent 2px, var(--wv-selection) 2px, var(--wv-selection) 5px, transparent 5px);
+}
+
+.wv-names__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 30px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wv-axis-text);
+  background: var(--wv-bg);
+  border-bottom: 1px solid var(--wv-grid);
+  box-sizing: border-box;
+}
+
+.wv-traces {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.wv-canvas {
+  position: sticky;
+  top: 0;
+}
+
+.wv-canvas__surface {
+  display: block;
+  cursor: crosshair;
+  outline: none;
+}
+
+/* Over the cursor line or the ruler: the cursor can be picked up and dragged. */
+.wv-canvas__surface.is-over-cursor {
+  cursor: ew-resize;
+}
+
+.wv-list__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding-right: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: default;
+  outline: none;
+}
+
+.wv-list__row:hover {
+  background: var(--wv-row-hover);
+}
+
+.wv-list__row.tone-testbench {
+  background: var(--wv-tb-tint);
+}
+
+.wv-list__row.tone-rtl {
+  background: var(--wv-rtl-tint);
+}
+
+.wv-list__row.tone-testbench:hover,
+.wv-list__row.tone-rtl:hover {
+  background: var(--wv-row-hover);
+}
+
+.wv-list__row.is-section {
+  font-weight: 600;
+  gap: 4px;
+}
+
+.wv-list__row.is-section.tone-testbench {
+  background: var(--wv-tb-head);
+  color: var(--wv-tb-head-ink);
+}
+
+.wv-list__row.is-section.tone-rtl {
+  background: var(--wv-rtl-head);
+  color: var(--wv-rtl-head-ink);
+}
+
+.wv-list__row.is-section .wv-list__count {
+  font-weight: 400;
+}
+
+.wv-list__section-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* The section head's tooltip, with the file name in bold. */
+.wv-sectiontip {
+  position: fixed;
+  z-index: 40;
+  max-width: 360px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.25);
+  pointer-events: none;
+}
+
+.wv-sectiontip strong {
+  font-weight: 700;
+}
+
+.wv-sectiontip__hint {
+  color: #cbd5e1;
+}
+
+/* In the colours of the editor's TB and RTL badges. */
+.wv-list__row.tone-testbench .wv-list__section-icon {
+  color: var(--wb-role-tb-ink);
+}
+
+.wv-list__row.tone-rtl .wv-list__section-icon {
+  color: var(--wb-role-rtl-ink);
+}
+
+.wv-list__row.is-selected {
+  background: var(--wv-row-selected);
+}
+
+.wv-list__row.is-selected:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--wb-accent, #2f6fed);
+}
+
+.wv-list__row.is-folder,
+.wv-list__row.is-more {
+  cursor: pointer;
+}
+
+.wv-list__row.is-hidden .wv-list__name,
+.wv-list__row.is-hidden .wv-list__value,
+.wv-list__row.is-unavailable {
+  color: var(--wb-text-muted, #94a3b8);
+}
+
+.wv-list__row.is-unavailable .wv-list__value {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.wv-list__chevron {
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: center;
+  color: var(--wv-axis-text);
+  cursor: pointer;
+}
+
+.wv-list__chevron-space,
+.wv-list__spacer {
+  flex: none;
+  width: 16px;
+}
+
+.wv-list__row.is-bit .wv-list__name {
+  color: var(--wb-text-muted, #64748b);
+}
+
+.wv-list__row.is-folder .wv-list__name {
+  flex: none;
+  font-weight: 600;
+}
+
+.wv-list__count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--wb-text-muted, #64748b);
+}
+
+.wv-list__check {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px 0 0;
+  flex: none;
+}
+
+.wv-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wv-list__value {
+  flex: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--wv-value-font);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.wv-list__value.is-undefined {
+  color: var(--wv-trace-undefined);
+}
+
+.wv-list__more {
+  color: var(--wb-accent-dark, #1d4ed8);
+  font-size: 12.5px;
+}
+
+.wv-tooltip {
+  position: absolute;
+  z-index: 3;
+  max-width: 320px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+}
+
+.wv-tooltip__value {
+  font-family: var(--wv-value-font);
+  font-weight: 600;
+  color: #fff;
+}
+
+.wv-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--wb-border, #e2e8f0);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.wv-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.wv-menu button:hover:not(:disabled) {
+  background: var(--wb-hover, #eef2f7);
+}
+
+.wv-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wv-menu__group {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--wb-border, #e2e8f0);
+  border-bottom: 1px solid var(--wb-border, #e2e8f0);
+  margin: 4px 0;
+  padding: 4px 0;
+}
+
+.wv-menu__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--wv-axis-text);
+  padding: 2px 10px;
+}
+
+/* The launch button in the console header, styled like Clear beside it. */
+.wv-launch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #334155;
+  background: transparent;
+  color: #cbd5e1;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wv-launch:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.wv-launch.is-empty {
+  opacity: 0.6;
+}
+
+.wv-launch.is-new {
+  border-color: #60a5fa;
+  color: #e0f2fe;
+}
+
+.wv-launch.is-pressed {
+  background: #1e3a8a;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.wv-launch__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.wv-launch__dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 0 2px var(--wb-console-bg, #0f172a);
+}

@@ -17,6 +17,7 @@ import { bitsToString, type BitVector } from '../board';
 import { patternToSegments, type SegmentVector } from '../SevenSegment';
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
+import type { RunWaveStatus, WaveFormat } from '../waveform/model';
 
 const PROTOCOL_VERSION = '1';
 const STATE_LENGTH = 10 + 6 * 7;
@@ -28,6 +29,39 @@ export interface HdlClientHandlers {
   onError(stage: string, text: string): void;
   onDone(reason: string): void;
   onClosed(): void;
+  /** The waveform frames (docs/waveform_viewer_spec.md § 7.4); omitted, they are ignored. */
+  wave?: WaveClientHandlers;
+}
+
+/** `WAVE-READY <run> <format> <bytes> <status>`: a run wrote a waveform. */
+export interface WaveReady {
+  readonly run: number;
+  readonly format: WaveFormat;
+  readonly bytes: number;
+  readonly status: RunWaveStatus;
+}
+
+export interface WaveClientHandlers {
+  onReady(ready: WaveReady): void;
+  /** The transfer of `run` starts; `bytes` is the file's uncompressed size. */
+  onBegin(run: number, bytes: number): void;
+  /** One binary frame of gzip data, between `onBegin` and `onEnd`. */
+  onChunk(chunk: ArrayBuffer): void;
+  onEnd(run: number): void;
+  /** That run's waveform is not available, or its transfer stopped. */
+  onNone(run: number): void;
+}
+
+const WAVE_FORMATS: readonly string[] = ['ghw', 'vcd'];
+const WAVE_STATUSES: readonly string[] = ['complete', 'stopped', 'timeout', 'size-limit'];
+const RUN_NUMBER = /^\d{1,15}$/;
+
+/** `WAVE-READY`'s inline arguments, or undefined when they are malformed. */
+export function parseWaveReady(inline: string): WaveReady | undefined {
+  const [run = '', format = '', bytes = '', status = ''] = inline.split(' ');
+  if (!RUN_NUMBER.test(run) || !RUN_NUMBER.test(bytes)) return undefined;
+  if (!WAVE_FORMATS.includes(format) || !WAVE_STATUSES.includes(status)) return undefined;
+  return { run: Number(run), format: format as WaveFormat, bytes: Number(bytes), status: status as RunWaveStatus };
 }
 
 /**
@@ -105,6 +139,8 @@ export class HdlClient {
   // the failure is a same-tick connection refusal, not a slow timeout —
   // near-instant on localhost, and silent without this).
   private everReady = false;
+  // Binary frames are only valid between WAVE-BEGIN and WAVE-END (waveform spec § 7.4).
+  private waveTransfer = false;
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -117,12 +153,14 @@ export class HdlClient {
     }
     this.everReady = false;
     const ws = new WebSocket(this.url);
+    // Waveform content arrives as binary frames; an ArrayBuffer goes straight to the worker.
+    ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       ws.send(`HELLO ${PROTOCOL_VERSION}`);
     };
     ws.onmessage = (event) => {
-      if (typeof event.data !== 'string') return; // no binary payloads (§ 6.2)
-      this.handleFrame(event.data);
+      if (typeof event.data === 'string') this.handleFrame(event.data);
+      else this.handleBinary(event.data);
     };
     ws.onclose = () => {
       if (!this.everReady) {
@@ -167,12 +205,43 @@ export class HdlClient {
       case 'DONE':
         this.handlers.onDone(inline);
         break;
+      case 'WAVE-READY':
+      case 'WAVE-BEGIN':
+      case 'WAVE-END':
+      case 'WAVE-NONE':
+        this.handleWaveFrame(verb, inline);
+        break;
       case 'PONG':
         break;
       default:
         // Unknown verb: ignore, per § 6.2 — never disconnect on this.
         break;
     }
+  }
+
+  private handleBinary(data: unknown): void {
+    if (!(data instanceof ArrayBuffer) || !this.waveTransfer) {
+      console.warn('HdlClient: dropped a binary frame outside a waveform transfer');
+      return;
+    }
+    this.handlers.wave?.onChunk(data);
+  }
+
+  private handleWaveFrame(verb: string, inline: string): void {
+    const wave = this.handlers.wave;
+    if (verb === 'WAVE-READY') {
+      const ready = parseWaveReady(inline);
+      if (ready === undefined) console.warn(`HdlClient: dropped a malformed WAVE-READY: ${JSON.stringify(inline)}`);
+      else wave?.onReady(ready);
+      return;
+    }
+    const [runText = '', bytesText = '0'] = inline.split(' ');
+    if (!RUN_NUMBER.test(runText)) return;
+    const run = Number(runText);
+    this.waveTransfer = verb === 'WAVE-BEGIN';
+    if (verb === 'WAVE-BEGIN') wave?.onBegin(run, Number(bytesText));
+    else if (verb === 'WAVE-END') wave?.onEnd(run);
+    else wave?.onNone(run);
   }
 
   /**
@@ -185,12 +254,16 @@ export class HdlClient {
    * rather than guessing from board-port matches — see `portDetect.ts`'s
    * `findTopEntity`.
    */
-  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null): void {
+  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null, recordWave?: boolean): void {
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = runHeader(topFileName, runTarget);
-    const send = () => ws.send(`${head}\n${body}`);
+    const send = () => {
+      // WAVE goes right before the RUN it is for (docs/waveform_viewer_spec.md § 7.1).
+      if (recordWave !== undefined) ws.send(`WAVE ${recordWave ? 'on' : 'off'}`);
+      ws.send(`${head}\n${body}`);
+    };
     // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.
     if (ws.readyState === WebSocket.OPEN) send();
     else ws.addEventListener('open', send, { once: true });
@@ -199,6 +272,11 @@ export class HdlClient {
   stim(sw: BitVector, key: BitVector): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(`STIM ${bitsToString(sw)}${bitsToString(key)}`);
+  }
+
+  /** Asks for the waveform of `run` (`WAVE-GET`); it arrives through `handlers.wave`. */
+  waveGet(run: number): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(`WAVE-GET ${run}`);
   }
 
   reset(): void {

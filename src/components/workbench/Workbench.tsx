@@ -46,6 +46,10 @@ import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type Refu
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
+import { useWaveformView } from '../waveform/useWaveformView';
+import { WaveformButton } from '../waveform/WaveformButton';
+import { WaveformPane } from '../waveform/WaveformPane';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
@@ -173,6 +177,17 @@ function errorText(err: unknown): string {
   return message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
 }
 
+/** A path with `/` only and no `/` at the end: Windows paths and browser paths compare alike. */
+function withSlashes(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/** The folder a listed project file is in: `folder` of `folder/name.hdlboard.json`, or of `C:\…\folder\name.hdlboard.json`. */
+function parentFolder(location: string): string {
+  const path = withSlashes(location);
+  return path.slice(0, path.lastIndexOf('/'));
+}
+
 let nextFileSeq = 1;
 const nextFileId = () => `file-${nextFileSeq++}`;
 
@@ -279,10 +294,17 @@ export function Workbench() {
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
-  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | null>(null);
+  // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
+  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(() => defaultProject(STARTER_FILES));
+  // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
+  const [projectGeneration, setProjectGeneration] = useState(0);
+  const replaceProject = useCallback((next: OpenProject) => {
+    setProject(next);
+    setProjectGeneration((n) => n + 1);
+  }, []);
   // What the project is busy with, e.g. downloading a file; shown on the project settings.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
   // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
@@ -385,11 +407,11 @@ export function Workbench() {
   // opened and the console now belongs to it (handleOpenExample).
   const quietEnd = useRef(false);
 
-  const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
+  const appendLog = useCallback((text: string, tone?: ConsoleLine['tone'], action?: ConsoleLine['action']) => {
     // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
     logSeq.current += 1;
     const id = logSeq.current;
-    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone }));
+    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone, ...(action ? { action } : {}) }));
   }, []);
 
   // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
@@ -430,10 +452,10 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>) => {
+  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>, highlight?: string) => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId() });
+    setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId(), highlight });
   }, []);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
   const openConsoleDiagnostic = useCallback(
@@ -452,6 +474,21 @@ export function Workbench() {
   );
 
   const clientRef = useRef<HdlClient | null>(null);
+  // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
+  const waveView = useWaveformView({
+    waveGet: (run) => clientRef.current?.waveGet(run),
+    overlay: {
+      shown: overlay === 'waveform',
+      show: useCallback(() => setOverlay('waveform'), []),
+      hide: useCallback(() => setOverlay((shown) => (shown === 'waveform' ? null : shown)), []),
+    },
+    explorer: { collapsed: collapsed.sidebar, show: useCallback((open: boolean) => showPane('sidebar', open), [showPane]) },
+    files: useCallback(() => filesRef.current, []),
+    reveal: (target) => revealLocation(target, target.symbolId),
+    log: useCallback((text: string, link?: boolean) => appendLog(text, link ? 'success' : undefined, link ? 'open-waveform' : undefined), [appendLog]),
+    projectKey: String(projectGeneration),
+  });
+  const { clientHandlers: waveHandlers, boardStateSeen, runEnded: endRunWaveform } = waveView;
   const getClient = useCallback((): HdlClient => {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
@@ -474,6 +511,8 @@ export function Workbench() {
         onState: (ledr, hex) => {
           setLedState(ledr);
           setHexState(hex);
+          // A board run records no waveform (W1): the view closes.
+          boardStateSeen();
         },
         onLog: (text) => {
           appendLog(text);
@@ -488,6 +527,7 @@ export function Workbench() {
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
+          endRunWaveform();
         },
         onDone: (reason) => {
           stopElapsedTimer();
@@ -501,16 +541,18 @@ export function Workbench() {
           const completed = reason === 'completed';
           if (!takeFlag(quietEnd)) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
           blankBoard();
+          endRunWaveform();
         },
         onClosed: () => {
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
         },
+        wave: waveHandlers,
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError]);
+  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
 
   useEffect(
     () => () => {
@@ -882,26 +924,40 @@ export function Workbench() {
    * directly inside it). A folder with exactly one project file of its own opens that project
    * too; with several, the student picks one from the list.
    */
-  const showOpenedFolder = async (outcome: ScanOutcome) => {
+  const showOpenedFolder = async (outcome: ScanOutcome, folder: string) => {
     if (outcome.items.length === 0) {
       setOpenProjectError(NO_PROJECT_FILE_MESSAGE);
       return;
     }
     setOpenProjectError(null);
     setDialog(null);
-    // `folder/name.hdlboard.json`: a project file in the folder itself, not one folder down.
-    const own = outcome.items.filter((item) => item.location.split('/').length === 2);
-    const source = own.length === 1 ? outcome.sources.get(own[0].key) : undefined;
-    if (source) {
-      const error = await openLocalProject(await openRequestFor(own[0], source)).catch((err: unknown) => errorText(err));
-      if (error) appendLog(`Project not opened: ${own[0].name}: ${error}`, 'error');
+    // A project file in the folder itself, not one folder down.
+    const own = outcome.items.filter((item) => parentFolder(item.location) === withSlashes(folder));
+    if (own.length === 1) {
+      const item = own[0];
+      const source = outcome.sources.get(item.key);
+      // The Windows app lists full paths and opens them as such; browsers read their source.
+      const error = await (source ? openRequestFor(item, source) : Promise.resolve<LocalOpenRequest>({ kind: 'path', path: item.location }))
+        .then(openLocalProject)
+        .catch((err: unknown) => errorText(err));
+      if (error) appendLog(`Project not opened: ${item.name}: ${error}`, 'error');
     }
     setOverlay('projects');
   };
 
+  /** Open project folder in the Windows app: its own folder dialog, which also sets the projects folder. */
+  const handleChooseDesktopFolder = async () => {
+    try {
+      const opened = await localProjects.openDesktopFolder();
+      if (opened) await showOpenedFolder(opened.outcome, opened.folder);
+    } catch (err) {
+      setOpenProjectError(errorText(err));
+    }
+  };
+
   /** Open project folder with a browser folder input (Firefox, Safari): every file of the folder. */
   const handleProjectFolderOpened = async (chosen: File[]) => {
-    await showOpenedFolder(await localProjects.openFolderFiles(chosen));
+    await showOpenedFolder(await localProjects.openFolderFiles(chosen), chosen[0]?.webkitRelativePath.split('/')[0] ?? '');
   };
 
   /** Open project folder in Chrome and Edge: the folder itself, kept as the projects folder with access to save into it. */
@@ -909,7 +965,7 @@ export function Workbench() {
     try {
       const folder = await pickProjectFolder();
       if (!folder) return;
-      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle));
+      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
     } catch (err) {
       setOpenProjectError(errorText(err));
     }
@@ -995,7 +1051,7 @@ export function Workbench() {
     setTopUnit(null);
     // The first file of the project's list (`added` keeps its order).
     setActiveFileId(added[0]?.id ?? null);
-    setProject(opened);
+    replaceProject(opened);
     const clean = Object.keys(opened.unloaded).length === 0 && opened.warnings.length === 0;
     const showPage = page === 'always' || (page === 'onProblems' ? !clean : opened.entries.length === 0);
     setOverlay(showPage ? 'project' : null);
@@ -1231,7 +1287,7 @@ export function Workbench() {
     appendLog(`Closed project ${project.name}; Files keeps its files, in the ${DEFAULT_PROJECT_NAME} project.`);
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
-    setProject(defaultProject(filesRef.current, descriptions));
+    replaceProject(defaultProject(filesRef.current, descriptions));
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
@@ -1247,7 +1303,7 @@ export function Workbench() {
     setDialog(null);
     const created = newProject(name, fileNames);
     saveFolderRef.current = null;
-    setProject(created);
+    replaceProject(created);
     setOverlay('project');
     appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project settings.`, 'success');
   };
@@ -1256,7 +1312,7 @@ export function Workbench() {
   const handleStartProject = () => {
     const started = startProject(fileNames);
     saveFolderRef.current = null;
-    setProject(started);
+    replaceProject(started);
     setOverlay('project');
     appendLog('New project: give it a name, and add the files that belong to it.', 'success');
   };
@@ -1321,7 +1377,12 @@ export function Workbench() {
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
-    getClient().run(files, topFile?.name, runTarget);
+    waveView.runStarted({
+      sources: filesForRun(files, topFile?.name).map((f) => f.content),
+      topFileName: topFile?.name,
+      title: runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench',
+    });
+    getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording);
   };
 
   /**
@@ -1393,6 +1454,8 @@ export function Workbench() {
   };
 
   const handleClearConsole = () => setLogLines([]);
+
+  const consoleTexts = useMemo(() => logLines.map((line) => line.text), [logLines]);
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1525,8 +1588,11 @@ export function Workbench() {
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
         splitPreference={tb.split.prefs.preference}
         onSplitPreferenceChange={tb.split.setPreference}
+        recordWaves={waveView.waveform.recording}
+        onRecordWavesChange={waveView.waveform.setRecording}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
+      <NoWaveformDialog {...waveView.dialog} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
       {overwriteAsk && (
         <OverwriteDialog
@@ -1568,7 +1634,13 @@ export function Workbench() {
           error={openProjectError}
           onOpen={(location) => void handleOpenProjectFrom(location)}
           onFolderChosen={(chosen) => void handleProjectFolderOpened(chosen)}
-          onChooseFolder={canPickFolder() && !desktopBridge()?.listLocalProjects ? () => void handleChooseProjectFolder() : undefined}
+          onChooseFolder={
+            desktopBridge()?.listLocalProjects && desktopBridge()?.chooseProjectsFolder
+              ? () => void handleChooseDesktopFolder()
+              : canPickFolder()
+                ? () => void handleChooseProjectFolder()
+                : undefined
+          }
           onSelectFiles={() => {
             setDialog(null);
             handleUploadClick();
@@ -1753,6 +1825,9 @@ export function Workbench() {
                 onClose={() => setOverlay(null)}
               />
             )}
+            {overlay === 'waveform' && (
+              <WaveformPane waveform={waveView.waveform} consoleLines={consoleTexts} {...waveView.pane} />
+            )}
             {overlay === 'examples' && (
             <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
           )}
@@ -1820,6 +1895,9 @@ export function Workbench() {
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
         onOpenLocation={openConsoleDiagnostic}
+        waveButton={<WaveformButton {...waveView.button} />}
+        onOpenTime={waveView.links.onOpenTime}
+        onOpenWaveform={waveView.links.onOpenWaveform}
       />
 
       {/* Outside the Explorer, so Upload still opens it while that pane is shut. */}

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
+import { MAX_SESSIONS, MAX_WAVE_BYTES, WAVE_CHECK_MS, WS_PORT, readIntSetting, readVhdlWaveFormat } from './settings.js';
 
 describe('readIntSetting', () => {
   test('reads the HDL_* name', () => {
@@ -21,5 +21,19 @@ describe('readIntSetting', () => {
   test('uses the default when neither is set', () => {
     assert.equal(readIntSetting(WS_PORT, {}), 9010);
     assert.equal(readIntSetting(MAX_SESSIONS, {}), 32);
+  });
+});
+
+describe('waveform settings', () => {
+  test('defaults: 16 MiB, checked every 250 ms, GHW for VHDL', () => {
+    assert.equal(readIntSetting(MAX_WAVE_BYTES, {}), 16 * 1024 * 1024);
+    assert.equal(readIntSetting(WAVE_CHECK_MS, {}), 250);
+    assert.equal(readVhdlWaveFormat({}), 'ghw');
+  });
+
+  test('can be changed', () => {
+    assert.equal(readIntSetting(MAX_WAVE_BYTES, { HDL_MAX_WAVE_BYTES: '1000' }), 1000);
+    assert.equal(readVhdlWaveFormat({ HDL_WAVE_VHDL_FORMAT: 'VCD' }), 'vcd');
+    assert.equal(readVhdlWaveFormat({ HDL_WAVE_VHDL_FORMAT: 'fst' }), 'ghw');
   });
 });

@@ -16,6 +16,7 @@ import type { FileSymbols } from './symbols/fileSymbols';
 import type { HdlSymbol, Occurrence, OccurrenceKind } from './symbols/types';
 import { useCaretSymbol } from './symbols/useCaretSymbol';
 import { useHoveredSymbol } from './symbols/useHoveredSymbol';
+import { usePinnedSymbol } from './symbols/usePinnedSymbol';
 
 /** The file a surface edits. */
 export interface EditorTab {
@@ -205,7 +206,9 @@ export function EditorSurface({
   // The pointer wins while it rests on a name.
   const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
   const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
-  const highlighted = hovered.symbol ?? (highlightsCursor ? atCaret.symbol : undefined);
+  // A declaration that Go to declaration jumped to stays highlighted until the next click.
+  const pinned = usePinnedSymbol(file.id, symbolIndex, reveal, hovered.symbol);
+  const highlighted = hovered.symbol ?? pinned ?? (highlightsCursor ? atCaret.symbol : undefined);
   // Before paint: the other pane's link follows in the same frame, without a flash of the old one.
   useLayoutEffect(() => onHighlightChange?.(highlighted), [highlighted, onHighlightChange]);
   const ownOccurrences = useMemo(() => occurrencesByLine(highlighted), [highlighted]);
