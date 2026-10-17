@@ -46,6 +46,11 @@ import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type Refu
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { findDeclaration } from '../waveform/declarations';
+import { useWaveform } from '../waveform/useWaveform';
+import { WaveformButton } from '../waveform/WaveformButton';
+import { WaveformPane, type WaveFocus, type WaveViewMemory } from '../waveform/WaveformPane';
+import { buttonState } from '../waveform/waveState';
 import { useDiagnostics } from './useDiagnostics';
 import { countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
@@ -289,7 +294,8 @@ export function Workbench() {
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
-  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | null>(null);
+  // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
+  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(() => defaultProject(STARTER_FILES));
@@ -395,11 +401,11 @@ export function Workbench() {
   // opened and the console now belongs to it (handleOpenExample).
   const quietEnd = useRef(false);
 
-  const appendLog = useCallback((text: string, tone?: ConsoleLine['tone']) => {
+  const appendLog = useCallback((text: string, tone?: ConsoleLine['tone'], action?: ConsoleLine['action']) => {
     // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
     logSeq.current += 1;
     const id = logSeq.current;
-    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone }));
+    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone, ...(action ? { action } : {}) }));
   }, []);
 
   // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
@@ -462,6 +468,30 @@ export function Workbench() {
   );
 
   const clientRef = useRef<HdlClient | null>(null);
+  // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
+  const waveform = useWaveform((run) => clientRef.current?.waveGet(run));
+  const waveformRef = useRef(waveform);
+  waveformRef.current = waveform;
+  // Per run: whether it offered a waveform (WAVE-READY comes before DONE), and whether it is a board run.
+  const runOfferedWave = useRef(false);
+  const runIsBoard = useRef(false);
+  const waveHandlers = useMemo(
+    () => ({
+      ...waveform.handlers,
+      onReady: (ready: Parameters<typeof waveform.handlers.onReady>[0]) => {
+        runOfferedWave.current = true;
+        waveform.handlers.onReady(ready);
+      },
+    }),
+    [waveform.handlers],
+  );
+  /** The end of a run: its waveform's link line, until the student has opened a waveform once (FR-25). */
+  const endRunWaveform = useCallback(() => {
+    const current = waveformRef.current;
+    current.runEnded();
+    if (runOfferedWave.current && !current.openedOnce) appendLog('✓ Testbench finished – ', 'success', 'open-waveform');
+    runOfferedWave.current = false;
+  }, [appendLog]);
   const getClient = useCallback((): HdlClient => {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
@@ -484,6 +514,11 @@ export function Workbench() {
         onState: (ledr, hex) => {
           setLedState(ledr);
           setHexState(hex);
+          // A board run records no waveform (W1): the view closes, the button is disabled.
+          if (!runIsBoard.current) {
+            runIsBoard.current = true;
+            waveformRef.current.boardRunSeen();
+          }
         },
         onLog: (text) => {
           appendLog(text);
@@ -498,6 +533,7 @@ export function Workbench() {
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
+          endRunWaveform();
         },
         onDone: (reason) => {
           stopElapsedTimer();
@@ -511,16 +547,18 @@ export function Workbench() {
           const completed = reason === 'completed';
           if (!takeFlag(quietEnd)) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
           blankBoard();
+          endRunWaveform();
         },
         onClosed: () => {
           stopElapsedTimer();
           setStatus('stopped');
           blankBoard();
         },
+        wave: waveHandlers,
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError]);
+  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform]);
 
   useEffect(
     () => () => {
@@ -1345,7 +1383,11 @@ export function Workbench() {
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
-    getClient().run(files, topFile?.name, runTarget);
+    runOfferedWave.current = false;
+    runIsBoard.current = false;
+    waveform.runStarted({ sources: filesForRun(files, topFile?.name).map((f) => f.content), topFileName: topFile?.name });
+    setWaveTitle(runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench');
+    getClient().run(files, topFile?.name, runTarget, waveform.recording);
   };
 
   /**
@@ -1417,6 +1459,59 @@ export function Workbench() {
   };
 
   const handleClearConsole = () => setLogLines([]);
+
+  // The waveform view (docs/waveform_viewer_spec.md § 8.6): the hook's `open` and the overlay move together.
+  const [waveTitle, setWaveTitle] = useState('testbench');
+  const [waveFocus, setWaveFocus] = useState<WaveFocus | null>(null);
+  const waveFocusSeq = useRef(0);
+  const waveMemory = useRef<WaveViewMemory | null>(null);
+  const consoleTexts = useMemo(() => logLines.map((line) => line.text), [logLines]);
+  const waveButton = buttonState(waveform.state);
+  // The waveform needs the width: the Explorer folds away while it is shown, and comes back after.
+  const explorerBeforeWave = useRef<boolean | null>(null);
+  const openWaveform = () => {
+    if (!waveform.state.open && explorerBeforeWave.current === null) {
+      explorerBeforeWave.current = !collapsed.sidebar;
+      showPane('sidebar', false);
+    }
+    waveform.open();
+    setOverlay('waveform');
+  };
+  const closeWaveform = () => {
+    waveform.close();
+    setOverlay((shown) => (shown === 'waveform' ? null : shown));
+  };
+  const toggleWaveform = () => (waveform.state.open ? closeWaveform() : openWaveform());
+  const openWaveformAt = (fs: number) => {
+    waveFocusSeq.current += 1;
+    setWaveFocus({ fs, id: waveFocusSeq.current });
+    openWaveform();
+  };
+  // Another page over the editor, or a board run, ends the waveform view.
+  const waveOpen = waveform.state.open;
+  const closeWaveformView = waveform.close;
+  useEffect(() => {
+    if (overlay !== 'waveform' && waveOpen) closeWaveformView();
+  }, [overlay, waveOpen, closeWaveformView]);
+  useEffect(() => {
+    if (waveOpen) return;
+    setOverlay((shown) => (shown === 'waveform' ? null : shown));
+    if (explorerBeforeWave.current) showPane('sidebar', true);
+    explorerBeforeWave.current = null;
+  }, [waveOpen, showPane]);
+  // A different project starts with the first view again (FR-17).
+  useEffect(() => {
+    waveMemory.current = null;
+  }, [project.fileName]);
+  /** Go to declaration (FR-18): closes the view and shows the line in the split view. */
+  const goToWaveDeclaration = (scopes: readonly string[], name: string) => {
+    const target = findDeclaration(filesRef.current, scopes, name);
+    if (target === undefined) {
+      appendLog(`The declaration of ${name} was not found in the project's files.`);
+      return;
+    }
+    revealLocation(target);
+  };
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1549,6 +1644,8 @@ export function Workbench() {
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
         splitPreference={tb.split.prefs.preference}
         onSplitPreferenceChange={tb.split.setPreference}
+        recordWaves={waveform.recording}
+        onRecordWavesChange={waveform.setRecording}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
@@ -1783,6 +1880,16 @@ export function Workbench() {
                 onClose={() => setOverlay(null)}
               />
             )}
+            {overlay === 'waveform' && (
+              <WaveformPane
+                waveform={waveform}
+                title={waveTitle}
+                consoleLines={consoleTexts}
+                memory={waveMemory}
+                focus={waveFocus}
+                onGoToDeclaration={goToWaveDeclaration}
+              />
+            )}
             {overlay === 'examples' && (
             <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
           )}
@@ -1850,6 +1957,9 @@ export function Workbench() {
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
         onOpenLocation={openConsoleDiagnostic}
+        waveButton={<WaveformButton state={waveButton} onToggle={toggleWaveform} />}
+        onOpenTime={waveButton === 'disabled' ? undefined : openWaveformAt}
+        onOpenWaveform={waveButton === 'disabled' ? undefined : openWaveform}
       />
 
       {/* Outside the Explorer, so Upload still opens it while that pane is shut. */}

@@ -10,7 +10,9 @@
  * independently — it is a separate npm package, in the browser, and
  * cannot import this file).
  *
- * Framing (§ 6.2): one command = one WebSocket text frame.
+ * Framing (§ 6.2): one command = one WebSocket text frame. The one exception is a
+ * waveform's content, sent as binary frames between WAVE-BEGIN and WAVE-END
+ * (docs/waveform_viewer_spec.md § 7.4); a binary frame anywhere else is a protocol error.
  *   frame     = head-line [ LF body ]
  *   head-line = verb [ SP inline-args ]
  *   body      = everything after the first LF, verbatim, never escaped
@@ -27,6 +29,13 @@ export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'int
 // frontend can tell "your design finished" from "you ended the session".
 export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed';
 
+/** The waveform formats (docs/waveform_viewer_spec.md W2): GHW for VHDL, VCD for Verilog. */
+export type WaveFormat = 'ghw' | 'vcd';
+const WAVE_FORMATS: readonly WaveFormat[] = ['ghw', 'vcd'];
+/** How the run that wrote a waveform ended (§ 7.4). */
+export type WaveStatus = 'complete' | 'stopped' | 'timeout' | 'size-limit';
+const WAVE_STATUSES: readonly WaveStatus[] = ['complete', 'stopped', 'timeout', 'size-limit'];
+
 export type ClientFrame =
   | { verb: 'HELLO'; version: string }
   // `topFile`: the submitted file whose declared entity should be
@@ -38,6 +47,10 @@ export type ClientFrame =
   // design. Omitted, the backend picks the unit as it always has.
   | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string; runTarget?: string }
   | { verb: 'STIM'; bits: string }
+  // Whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1).
+  | { verb: 'WAVE'; on: boolean }
+  // Asks for the waveform of run `run`; answered with WAVE-BEGIN … WAVE-END, or WAVE-NONE (§ 7.4).
+  | { verb: 'WAVE-GET'; run: number }
   | { verb: 'RESET' }
   | { verb: 'STOP' }
   | { verb: 'PING' };
@@ -49,6 +62,13 @@ export type ServerFrame =
   | { verb: 'LOG'; text: string }
   | { verb: 'ERROR'; stage: ErrorStage; text: string }
   | { verb: 'DONE'; reason: DoneReason }
+  // A run wrote a waveform; sent before its DONE/ERROR (§ 7.4). `bytes`: its size on disk.
+  | { verb: 'WAVE-READY'; run: number; format: WaveFormat; bytes: number; status: WaveStatus }
+  // The waveform follows as gzip in binary frames; `bytes` is its uncompressed size, for progress.
+  | { verb: 'WAVE-BEGIN'; run: number; bytes: number }
+  | { verb: 'WAVE-END'; run: number }
+  // That run's waveform is not available (a newer run replaced it, or it was never written).
+  | { verb: 'WAVE-NONE'; run: number }
   | { verb: 'PONG' };
 
 export interface ProtocolError {
@@ -147,6 +167,14 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       }
       return { verb: 'STIM', bits: inline };
     }
+    case 'WAVE': {
+      if (inline !== 'on' && inline !== 'off') return { message: `WAVE requires on or off, got: ${JSON.stringify(inline)}` };
+      return { verb: 'WAVE', on: inline === 'on' };
+    }
+    case 'WAVE-GET': {
+      const run = runNumber(inline);
+      return run === undefined ? { message: `WAVE-GET requires a run number, got: ${JSON.stringify(inline)}` } : { verb: 'WAVE-GET', run };
+    }
     case 'RESET':
       return { verb: 'RESET' };
     case 'STOP':
@@ -156,6 +184,22 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
     default:
       return { message: `Unknown verb: ${JSON.stringify(verb)}` };
   }
+}
+
+const RUN_NUMBER = /^\d{1,15}$/;
+
+function runNumber(text: string): number | undefined {
+  return RUN_NUMBER.test(text) ? Number(text) : undefined;
+}
+
+function decodeWaveReady(inline: string): ServerFrame | ProtocolError {
+  const [runText = '', format = '', bytesText = '', status = ''] = inline.split(' ');
+  const run = runNumber(runText);
+  const bytes = runNumber(bytesText);
+  if (run === undefined || bytes === undefined) return { message: `WAVE-READY has a bad run or size: ${JSON.stringify(inline)}` };
+  if (!WAVE_FORMATS.includes(format as WaveFormat)) return { message: `WAVE-READY has an unknown format: ${JSON.stringify(format)}` };
+  if (!WAVE_STATUSES.includes(status as WaveStatus)) return { message: `WAVE-READY has an unknown status: ${JSON.stringify(status)}` };
+  return { verb: 'WAVE-READY', run, format: format as WaveFormat, bytes, status: status as WaveStatus };
 }
 
 export function encodeClientFrame(frame: ClientFrame): string {
@@ -172,6 +216,10 @@ export function encodeClientFrame(frame: ClientFrame): string {
     }
     case 'STIM':
       return `STIM ${frame.bits}`;
+    case 'WAVE':
+      return `WAVE ${frame.on ? 'on' : 'off'}`;
+    case 'WAVE-GET':
+      return `WAVE-GET ${frame.run}`;
     case 'RESET':
       return 'RESET';
     case 'STOP':
@@ -218,6 +266,21 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
       }
       return { verb: 'DONE', reason };
     }
+    case 'WAVE-READY':
+      return decodeWaveReady(inline);
+    case 'WAVE-BEGIN': {
+      const [runText = '', bytesText = ''] = inline.split(' ');
+      const run = runNumber(runText);
+      const bytes = runNumber(bytesText);
+      if (run === undefined || bytes === undefined) return { message: `WAVE-BEGIN has a bad run or size: ${JSON.stringify(inline)}` };
+      return { verb: 'WAVE-BEGIN', run, bytes };
+    }
+    case 'WAVE-END':
+    case 'WAVE-NONE': {
+      const run = runNumber(inline);
+      if (run === undefined) return { message: `${verb} requires a run number, got: ${JSON.stringify(inline)}` };
+      return { verb, run };
+    }
     case 'PONG':
       return { verb: 'PONG' };
     default:
@@ -239,6 +302,14 @@ export function encodeServerFrame(frame: ServerFrame): string {
       return `ERROR ${frame.stage}\n${frame.text}`;
     case 'DONE':
       return `DONE ${frame.reason}`;
+    case 'WAVE-READY':
+      return `WAVE-READY ${frame.run} ${frame.format} ${frame.bytes} ${frame.status}`;
+    case 'WAVE-BEGIN':
+      return `WAVE-BEGIN ${frame.run} ${frame.bytes}`;
+    case 'WAVE-END':
+      return `WAVE-END ${frame.run}`;
+    case 'WAVE-NONE':
+      return `WAVE-NONE ${frame.run}`;
     case 'PONG':
       return 'PONG';
   }

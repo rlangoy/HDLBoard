@@ -8,7 +8,7 @@
  * behind `SimEngine`.
  */
 
-import type { ErrorStage, VhdlFileInput } from '../protocol.js';
+import type { ErrorStage, VhdlFileInput, WaveFormat } from '../protocol.js';
 import type { BatchHandle, RunHandle } from '../runtime.js';
 
 export type Language = 'vhdl' | 'verilog';
@@ -51,6 +51,30 @@ export interface RunPlan {
   readonly pacing: 'fifo' | 'stdin';
   /** Simulator messages to show before the run starts: a version banner, compile warnings. */
   readonly messages: readonly string[];
+  /**
+   * The waveform this run records (docs/waveform_viewer_spec.md § 7.2); absent when none
+   * was asked for or the mode does not record (board runs, W1).
+   */
+  readonly wave?: PlannedWave;
+}
+
+/**
+ * How a batch run records its waveform. The session names the file for each start of the
+ * run (a Reset starts it again, while the killed process may still hold the old file), so
+ * the plan carries only the format – unless the student's own Verilog `$dumpfile` decides.
+ */
+export interface PlannedWave {
+  readonly format: WaveFormat;
+  /** The file the student's own `$dumpfile`/`$dumpvars` writes, relative to `dir`; the session's name is then unused. */
+  readonly ownFile?: string;
+  /** The student's code asks for a dump, but not into a file HDLBoard can offer (a path, not `.vcd`). */
+  readonly unusableOwnDump?: boolean;
+}
+
+/** What a run asks of the waveform recorder; omitted, nothing is recorded. */
+export interface WaveRequest {
+  /** The format of VHDL runs (`HDL_WAVE_VHDL_FORMAT`); Verilog always writes VCD. */
+  readonly vhdlFormat: WaveFormat;
 }
 
 export interface PrepareRequest {
@@ -60,6 +84,8 @@ export interface PrepareRequest {
   readonly topFile?: string;
   /** The unit of the top file to elaborate (`RUN <file> @<unit>`); omitted, the engine chooses. */
   readonly runTarget?: string;
+  /** Record a waveform when the design runs as a batch run (§ 7.1); omitted, none is recorded. */
+  readonly wave?: WaveRequest;
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */
@@ -72,5 +98,13 @@ export interface SimEngine {
   /** Writes the files, compiles, and decides how the design will run. */
   prepare(request: PrepareRequest): Promise<PrepareResult>;
   startBoardRun(plan: RunPlan, files: BoardFiles): RunHandle;
-  startBatchRun(plan: RunPlan, onOutput: (line: string) => void, timeoutMs: number): BatchHandle;
+  startBatchRun(plan: RunPlan, run: BatchRunOptions): BatchHandle;
+}
+
+/** How one start of a batch run is wired. */
+export interface BatchRunOptions {
+  readonly onOutput: (line: string) => void;
+  readonly timeoutMs: number;
+  /** Where the run records its waveform, relative to `plan.dir`, when `plan.wave` is set. */
+  readonly waveFile?: string;
 }

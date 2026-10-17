@@ -162,8 +162,11 @@ Then:
    some margin) ÷ `HDL_MAX_SESSIONS`. Anything from 16 MB up runs every
    normal lab design. GHDL needs about **350 bytes per `std_logic` bit** of a
    signal; Icarus Verilog stores memories far more compactly.
-4. **Disk.** Sessions write small files under the system temp directory; a
-   few hundred MB free is plenty.
+4. **Disk.** Sessions write small files under the system temp directory. The
+   waveform of a testbench run is the largest: at most `HDL_MAX_WAVE_BYTES`
+   (16 MiB) per session, so the worst case is `HDL_MAX_SESSIONS` × 16 MiB –
+   512 MiB with the defaults (docs/waveform_viewer_spec.md § 7.5). Most
+   testbenches write a few kilobytes.
 
 For a CPU that is not a server-class core, compare its single-core speed with
 a ~2.8 GHz Xeon, or ask for a quick benchmark run.

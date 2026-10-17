@@ -269,12 +269,16 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     const send = (frame: ServerFrame) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(encodeServerFrame(frame));
     };
-    const session = new Session(send);
+    const sendBinary = (chunk: Buffer) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(chunk, { binary: true });
+    };
+    const session = new Session(send, undefined, { sendBinary });
     sessions.add(session);
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
-        send({ verb: 'ERROR', stage: 'protocol', text: 'This protocol has no binary payloads.' });
+        // Binary frames only ever go to the client, with a waveform (docs/waveform_viewer_spec.md § 7.4).
+        send({ verb: 'ERROR', stage: 'protocol', text: 'A client sends no binary frames.' });
         ws.close();
         return;
       }
@@ -301,6 +305,12 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
           break;
         case 'STIM':
           session.handleStim(frame.bits);
+          break;
+        case 'WAVE':
+          session.handleWave(frame.on);
+          break;
+        case 'WAVE-GET':
+          void session.handleWaveGet(frame.run);
           break;
         case 'RESET':
           session.handleReset();

@@ -149,3 +149,21 @@
 .wb-console__link:focus-visible {
   outline: 2px solid #93c5fd;
 }
+
+.wb-console__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A simulated time in a report: opens the waveform there (docs/waveform_viewer_spec.md FR-16). */
+.wb-console__time-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.wb-console__wave-link {
+  margin-left: 2px;
+  color: #93c5fd;
+  text-decoration: underline;
+}
