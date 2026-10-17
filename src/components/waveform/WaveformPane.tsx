@@ -16,7 +16,7 @@ import { useDelayed, useElementSize } from './domHooks';
 import { CLOCK_NAME, firstWindow, runEnd, type RunMoments } from './initialView';
 import type { Ticks, Trace, WaveformData } from './model';
 import { defaultShowAs, hasShowAs, type ShowAs } from './radix';
-import { declarationOf, signalsByPath, testbenchScope, type SignalPath, type TraceRow } from './signalRows';
+import { declarationOf, signalsByPath, testbenchScope, traceRows, type SignalPath } from './signalRows';
 import { SignalList } from './SignalList';
 import type { RowCallbacks, RowContext } from './SignalRow';
 import { formatCursorFs, viewOf } from './timeAxis';
@@ -73,7 +73,7 @@ function useMoments(consoleLines: readonly string[]): RunMoments {
  * signal but the clocks, whose edges would make each step tiny.
  */
 function stepTraces(view: WaveView, selected: string | null): Trace[] {
-  const shown = view.list.rows.slice(0, view.list.activeCount).filter((row): row is TraceRow => row.kind === 'trace');
+  const shown = traceRows(view.list);
   const chosen = shown.filter((row) => row.path === selected);
   const others = shown.filter((row) => !CLOCK_NAME.test(row.signal.name));
   return (chosen.length > 0 ? chosen : others).map((row) => row.trace);
@@ -188,7 +188,7 @@ function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: 
   const width = useElementSize(traces).width;
   const { setup, list } = view;
   if (setup === null) return null;
-  const listHeight = AXIS_HEIGHT + list.rows.length * ROW_HEIGHT;
+  const listHeight = AXIS_HEIGHT + list.height;
   const scene = {
     ...list,
     view: viewOf(setup.window.start, setup.window.end, width),
@@ -210,7 +210,7 @@ function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: 
             <span>Signal</span>
             <span>Value</span>
           </div>
-          <SignalList rows={list.rows} context={{ ...context, cursor: setup.cursor }} />
+          <SignalList list={list} context={{ ...context, cursor: setup.cursor }} />
         </div>
         <div className="wv-traces" ref={setTraces}>
           <WaveCanvas scene={scene} error={error} handlers={handlers} />

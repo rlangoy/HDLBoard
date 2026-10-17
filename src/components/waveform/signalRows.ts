@@ -2,24 +2,33 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The signal list as rows (docs/waveform_viewer_spec.md § 8.6). The shown signals come
- * first, together, in the student's order, so their traces lie directly below each
- * other; a shown vector can unfold into its bits. Below them, folded, the signals not
- * shown: one folder for the testbench and one for the RTL design, with a folder per
- * instance (FR-4, FR-5, FR-11). A signal is named by its hierarchical path, so the
- * student's choices survive a rerun for every signal that still exists (FR-17). Pure.
+ * The signal list as rows (docs/waveform_viewer_spec.md § 8.6). The list has one section
+ * for the testbench and one for each design instance it holds, `tb (Testbench)` and
+ * `dut (RTL)`, set apart by a small gap and a colour of their own. In a section the
+ * shown signals come first, together, in the student's order, so their traces lie
+ * directly below each other; a shown vector can unfold into its bits. The section's
+ * chevron shows or hides the signals that are not shown, to tick them (FR-4, FR-5,
+ * FR-11). A signal is named by its hierarchical path, so the student's choices survive
+ * a rerun for every signal that still exists (FR-17). Pure.
  */
 
 import { bitSignal, bitTrace } from './bitTraces';
 import { NO_TRACE, type Scope, type SignalRef, type Trace, type UnavailableReason, type WaveformData } from './model';
+import { ROW_HEIGHT } from './waveDraw';
 
 /** `counter_tb/dut/state`; a record field adds its name: `counter_tb/pair/a`. */
 export type SignalPath = string;
 
 const SEPARATOR = '/';
-/** Folder paths: not names VHDL or Verilog allow, so they never collide with a scope. */
-export const TESTBENCH_FOLDER = '#testbench';
-export const RTL_FOLDER = '#rtl';
+/** A section's path: `#` and its scope's path, never a name VHDL or Verilog allow. */
+const SECTION_MARK = '#';
+/** The space above every section but the first. */
+export const SECTION_GAP_PX = 8;
+
+export const sectionPath = (scopePath: string): string => `${SECTION_MARK}${scopePath}`;
+
+/** Which part of the design a row belongs to; it sets the row's colour. */
+export type Tone = 'testbench' | 'rtl';
 
 export const childPath = (parent: string, name: string): string => (parent === '' ? name : `${parent}${SEPARATOR}${name}`);
 
@@ -53,11 +62,12 @@ export function signalsByPath(data: WaveformData): Map<SignalPath, SignalRef> {
 export interface TraceRow {
   readonly kind: 'trace';
   readonly path: SignalPath;
-  /** The name as listed: `count`, `dut.state`, `pair.a`, `count[3]`. */
+  /** The name as listed, inside its section: `count`, `state`, `u1.q`, `pair.a`, `count[3]`. */
   readonly label: string;
   readonly signal: SignalRef;
   readonly trace: Trace;
   readonly depth: number;
+  readonly tone: Tone;
   /** A vector's row can unfold into its bits (FR-6). */
   readonly expandable: boolean;
   readonly expanded: boolean;
@@ -65,17 +75,35 @@ export interface TraceRow {
   readonly parent?: SignalPath;
 }
 
+/** The head of a section: `tb (Testbench)`; open, it also lists the signals not shown. */
+export interface SectionRow {
+  readonly kind: 'section';
+  readonly path: string;
+  readonly label: string;
+  readonly depth: number;
+  readonly tone: Tone;
+  readonly open: boolean;
+  /** How many of its signals are not shown. */
+  readonly count: number;
+}
+
+interface Placed {
+  readonly depth: number;
+  readonly tone: Tone;
+}
+
 export type Row =
   | TraceRow
-  | { readonly kind: 'hidden'; readonly path: SignalPath; readonly signal: SignalRef; readonly depth: number }
-  | { readonly kind: 'group'; readonly path: SignalPath; readonly signal: SignalRef; readonly depth: number; readonly open: boolean }
-  | { readonly kind: 'folder'; readonly path: string; readonly label: string; readonly depth: number; readonly open: boolean; readonly count: number }
-  | { readonly kind: 'unavailable'; readonly path: string; readonly name: string; readonly reason: UnavailableReason; readonly depth: number };
+  | SectionRow
+  | (Placed & { readonly kind: 'hidden'; readonly path: SignalPath; readonly signal: SignalRef })
+  | (Placed & { readonly kind: 'group'; readonly path: SignalPath; readonly signal: SignalRef; readonly open: boolean })
+  | (Placed & { readonly kind: 'folder'; readonly path: string; readonly label: string; readonly open: boolean; readonly count: number })
+  | (Placed & { readonly kind: 'unavailable'; readonly path: string; readonly name: string; readonly reason: UnavailableReason });
 
 export interface ListState {
-  /** The signals drawn, in the order they are listed. */
+  /** The signals drawn, in the order they are listed in their section. */
   readonly shown: readonly SignalPath[];
-  /** Folders and records unfolded by the student. */
+  /** Sections, folders and records unfolded by the student. */
   readonly open: ReadonlySet<string>;
   /** Shown vectors unfolded into their bits. */
   readonly expanded: ReadonlySet<SignalPath>;
@@ -83,8 +111,10 @@ export interface ListState {
 
 export interface ListModel {
   readonly rows: readonly Row[];
-  /** The first `activeCount` rows are the trace rows. */
-  readonly activeCount: number;
+  /** The top of each row, from the top of the list: a section after the first has a gap above it. */
+  readonly tops: readonly number[];
+  /** The height of the whole list. */
+  readonly height: number;
 }
 
 /** Where the walk adds rows and what it reads to decide them. */
@@ -92,6 +122,7 @@ interface Walk {
   readonly state: ListState;
   readonly shown: ReadonlySet<SignalPath>;
   readonly rows: Row[];
+  readonly tone: Tone;
 }
 
 /** A place in the tree: the path of a scope or record, and the depth of its rows. */
@@ -100,10 +131,20 @@ interface At {
   readonly depth: number;
 }
 
-/** `dut.state` for a signal in an instance; just `count` in the testbench itself. */
-function labelOf(path: SignalPath, testbench: string): string {
-  const inside = path.startsWith(`${testbench}${SEPARATOR}`) ? path.slice(testbench.length + 1) : path;
-  return inside.split(SEPARATOR).join('.');
+/** A design section: the testbench, or an instance in it. */
+interface Section {
+  readonly path: string;
+  readonly scope: Scope;
+  readonly tone: Tone;
+  /** The testbench section holds only its own signals; an instance's holds its instances' too. */
+  readonly owns: (path: SignalPath) => boolean;
+}
+
+const SIGNAL_DEPTH = 1;
+
+/** `state` in the section's own scope, `u1.q` in an instance below it. */
+function labelOf(path: SignalPath, section: string): string {
+  return path.slice(section.length + 1).split(SEPARATOR).join('.');
 }
 
 function bitRows(row: TraceRow): TraceRow[] {
@@ -115,7 +156,8 @@ function bitRows(row: TraceRow): TraceRow[] {
       label: signal.name,
       signal,
       trace: bitTrace(row.trace, position),
-      depth: 1,
+      depth: row.depth + 1,
+      tone: row.tone,
       expandable: false,
       expanded: false,
       parent: row.path,
@@ -123,16 +165,17 @@ function bitRows(row: TraceRow): TraceRow[] {
   });
 }
 
-/** The shown signals that still exist, with the bits of every unfolded vector after it. */
-function activeRows(data: WaveformData, state: ListState, testbench: string): TraceRow[] {
+/** The section's shown signals that still exist, with the bits of every unfolded vector after it. */
+function shownRows(data: WaveformData, state: ListState, section: Section): TraceRow[] {
   const known = signalsByPath(data);
-  return state.shown.flatMap((path) => {
+  return state.shown.filter(section.owns).flatMap((path) => {
     const signal = known.get(path);
     const trace = signal === undefined ? undefined : data.traces.get(signal.trace);
     if (signal === undefined || trace === undefined) return [];
     const expandable = signal.kind === 'vector';
     const expanded = expandable && state.expanded.has(path);
-    const row: TraceRow = { kind: 'trace', path, label: labelOf(path, testbench), signal, trace, depth: 0, expandable, expanded };
+    const label = labelOf(path, section.path);
+    const row: TraceRow = { kind: 'trace', path, label, signal, trace, depth: SIGNAL_DEPTH, tone: section.tone, expandable, expanded };
     return expanded ? [row, ...bitRows(row)] : [row];
   });
 }
@@ -148,13 +191,14 @@ function hiddenCount(walk: Walk, at: string, signals: readonly SignalRef[]): num
 
 function hiddenSignal(walk: Walk, at: At, signal: SignalRef): void {
   const path = childPath(at.path, signal.name);
+  const { tone } = walk;
   if (signal.trace !== NO_TRACE) {
-    if (!walk.shown.has(path)) walk.rows.push({ kind: 'hidden', path, signal, depth: at.depth });
+    if (!walk.shown.has(path)) walk.rows.push({ kind: 'hidden', path, signal, depth: at.depth, tone });
     return;
   }
   if (hiddenCount(walk, path, signal.fields ?? []) === 0) return;
   const open = walk.state.open.has(path);
-  walk.rows.push({ kind: 'group', path, signal, depth: at.depth, open });
+  walk.rows.push({ kind: 'group', path, signal, depth: at.depth, tone, open });
   if (open) for (const field of signal.fields ?? []) hiddenSignal(walk, { path, depth: at.depth + 1 }, field);
 }
 
@@ -162,7 +206,8 @@ function hiddenSignal(walk: Walk, at: At, signal: SignalRef): void {
 function hiddenContents(walk: Walk, at: At, scope: Scope): void {
   for (const signal of scope.signals) hiddenSignal(walk, at, signal);
   for (const entry of scope.unavailable) {
-    walk.rows.push({ kind: 'unavailable', path: childPath(at.path, entry.name), name: entry.name, reason: entry.reason, depth: at.depth });
+    const path = childPath(at.path, entry.name);
+    walk.rows.push({ kind: 'unavailable', path, name: entry.name, reason: entry.reason, depth: at.depth, tone: walk.tone });
   }
 }
 
@@ -172,43 +217,82 @@ function scopeHiddenCount(walk: Walk, path: string, scope: Scope): number {
   return scope.scopes.reduce((sum, child) => sum + scopeHiddenCount(walk, childPath(path, child.name), child), own);
 }
 
-function folder(walk: Walk, at: At & { readonly label: string; readonly count: number }): boolean {
-  const open = walk.state.open.has(at.path);
-  walk.rows.push({ kind: 'folder', path: at.path, label: at.label, depth: at.depth, open, count: at.count });
-  return open;
-}
-
-/** An instance as a folder: its own not-shown signals, then its instances. */
+/** An instance inside a design section, as a folder: its own not-shown signals, then its instances. */
 function instanceFolder(walk: Walk, at: At, scope: Scope): void {
   const count = scopeHiddenCount(walk, at.path, scope);
-  if (count === 0 || !folder(walk, { ...at, label: scope.name, count })) return;
+  if (count === 0) return;
+  const open = walk.state.open.has(at.path);
+  walk.rows.push({ kind: 'folder', path: at.path, label: scope.name, depth: at.depth, tone: walk.tone, open, count });
+  if (!open) return;
   hiddenContents(walk, { path: at.path, depth: at.depth + 1 }, scope);
   for (const child of scope.scopes) instanceFolder(walk, { path: childPath(at.path, child.name), depth: at.depth + 1 }, child);
 }
 
-function testbenchFolder(walk: Walk, testbench: Scope): void {
-  const count = hiddenCount(walk, testbench.name, testbench.signals) + testbench.unavailable.length;
-  if (count > 0 && folder(walk, { path: TESTBENCH_FOLDER, label: 'Testbench', depth: 0, count })) {
-    hiddenContents(walk, { path: testbench.name, depth: 1 }, testbench);
-  }
+function sectionCount(walk: Walk, section: Section): number {
+  if (section.tone === 'rtl') return scopeHiddenCount(walk, section.path, section.scope);
+  return hiddenCount(walk, section.path, section.scope.signals) + section.scope.unavailable.length;
 }
 
-function rtlFolder(walk: Walk, testbench: Scope): void {
-  const count = testbench.scopes.reduce((sum, child) => sum + scopeHiddenCount(walk, childPath(testbench.name, child.name), child), 0);
-  if (count === 0 || !folder(walk, { path: RTL_FOLDER, label: 'RTL', depth: 0, count })) return;
-  for (const child of testbench.scopes) instanceFolder(walk, { path: childPath(testbench.name, child.name), depth: 1 }, child);
+/** A section: its head, its shown signals, and, open, the ones not shown. */
+function addSection(data: WaveformData, walk: Walk, section: Section): void {
+  const path = sectionPath(section.path);
+  const open = walk.state.open.has(path);
+  const label = `${section.scope.name} (${section.tone === 'testbench' ? 'Testbench' : 'RTL'})`;
+  walk.rows.push({ kind: 'section', path, label, depth: 0, tone: section.tone, open, count: sectionCount(walk, section) });
+  walk.rows.push(...shownRows(data, walk.state, section));
+  if (!open) return;
+  hiddenContents(walk, { path: section.path, depth: SIGNAL_DEPTH }, section.scope);
+  if (section.tone === 'testbench') return;
+  for (const child of section.scope.scopes) instanceFolder(walk, { path: childPath(section.path, child.name), depth: SIGNAL_DEPTH }, child);
 }
 
-/** The rows of the list: the shown signals first, then the folders of the ones not shown. */
+/** The testbench, then each instance it holds. */
+function sectionsOf(testbench: Scope): Section[] {
+  const instances = testbench.scopes.map((scope): Section => {
+    const path = childPath(testbench.name, scope.name);
+    return { path, scope, tone: 'rtl', owns: (signal) => signal.startsWith(`${path}${SEPARATOR}`) };
+  });
+  const inInstance = (signal: SignalPath) => instances.some((instance) => instance.owns(signal));
+  const own = (signal: SignalPath) => signal.startsWith(`${testbench.name}${SEPARATOR}`) && !inInstance(signal);
+  return [{ path: testbench.name, scope: testbench, tone: 'testbench', owns: own }, ...instances];
+}
+
+/** Each row's top: rows are `ROW_HEIGHT` high, and a section after the first has a gap above it. */
+function layOut(rows: readonly Row[]): ListModel {
+  const tops: number[] = [];
+  let y = 0;
+  rows.forEach((row, index) => {
+    if (row.kind === 'section' && index > 0) y += SECTION_GAP_PX;
+    tops.push(y);
+    y += ROW_HEIGHT;
+  });
+  return { rows, tops, height: y };
+}
+
+/** The rows of the list, section by section. */
 export function listRows(data: WaveformData, state: ListState): ListModel {
   const testbench = testbenchScope(data);
-  if (testbench === undefined) return { rows: [], activeCount: 0 };
-  const active = activeRows(data, state, testbench.name);
-  const walk: Walk = { state, shown: new Set(state.shown), rows: [...active] };
-  testbenchFolder(walk, testbench);
-  rtlFolder(walk, testbench);
-  return { rows: walk.rows, activeCount: active.length };
+  if (testbench === undefined) return layOut([]);
+  const rows: Row[] = [];
+  const shown = new Set(state.shown);
+  for (const section of sectionsOf(testbench)) addSection(data, { state, shown, rows, tone: section.tone }, section);
+  return layOut(rows);
 }
+
+/** The index of the row at `y` from the top of the list, or undefined in a gap or below the list. */
+export function rowIndexAtY(model: Pick<ListModel, 'tops'>, y: number): number | undefined {
+  let low = 0;
+  let high = model.tops.length - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (model.tops[middle] > y) high = middle - 1;
+    else low = middle + 1;
+  }
+  return high >= 0 && y < model.tops[high] + ROW_HEIGHT ? high : undefined;
+}
+
+/** The shown traces, in list order. */
+export const traceRows = (model: Pick<ListModel, 'rows'>): TraceRow[] => model.rows.filter((row): row is TraceRow => row.kind === 'trace');
 
 /**
  * Where a path's signal is declared: a record field or array element is declared with

@@ -8,21 +8,24 @@
  * (`role="tree"`). Each row is drawn by `SignalRow`.
  */
 
-import type { Row } from './signalRows';
+import type { ListModel } from './signalRows';
+import { ROW_HEIGHT } from './waveDraw';
 import { SignalRow, type RowContext } from './SignalRow';
 
 export interface SignalListProps {
-  readonly rows: readonly Row[];
+  readonly list: ListModel;
   readonly context: RowContext;
 }
 
-export function SignalList({ rows, context }: SignalListProps) {
+export function SignalList({ list, context }: SignalListProps) {
+  const { rows, tops } = list;
   // The first row takes the keyboard until the student selects another.
   const selected = context.selected ?? rows[0]?.path ?? null;
   return (
     <div className="wv-list" role="tree" aria-label="Signals">
-      {rows.map((row) => (
-        <SignalRow key={row.path} row={row} context={{ ...context, selected }} />
+      {rows.map((row, index) => (
+        // The gap above a section, as on the canvas.
+        <SignalRow key={row.path} row={row} context={{ ...context, selected }} gapAbove={index === 0 ? 0 : tops[index] - tops[index - 1] - ROW_HEIGHT} />
       ))}
     </div>
   );

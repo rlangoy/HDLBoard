@@ -23,6 +23,16 @@
   --wv-tool-ink: #1a56db;
   --wv-row-hover: #f1f5f9;
   --wv-row-selected: #e8f0fe;
+  /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
+  --wv-tb-ink: #1d4ed8;
+  --wv-tb-head: #dbe7fb;
+  --wv-tb-tint: #f3f7fe;
+  --wv-tb-head-ink: #1e3a8a;
+  --wv-rtl-ink: #15803d;
+  --wv-rtl-head: #d5f0dd;
+  --wv-rtl-tint: #f1faf4;
+  --wv-rtl-head-ink: #14532d;
+  --wv-enum-ink: #7c3aed;
   --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
 
   position: absolute;
@@ -236,6 +246,45 @@
 
 .wv-list__row:hover {
   background: var(--wv-row-hover);
+}
+
+.wv-list__row.tone-testbench {
+  background: var(--wv-tb-tint);
+}
+
+.wv-list__row.tone-rtl {
+  background: var(--wv-rtl-tint);
+}
+
+.wv-list__row.tone-testbench:hover,
+.wv-list__row.tone-rtl:hover {
+  background: var(--wv-row-hover);
+}
+
+.wv-list__row.is-section {
+  font-weight: 600;
+  gap: 4px;
+}
+
+.wv-list__row.is-section.tone-testbench {
+  background: var(--wv-tb-head);
+  color: var(--wv-tb-head-ink);
+}
+
+.wv-list__row.is-section.tone-rtl {
+  background: var(--wv-rtl-head);
+  color: var(--wv-rtl-head-ink);
+}
+
+.wv-list__row.is-section .wv-list__count {
+  font-weight: 400;
+}
+
+.wv-list__section-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: currentColor;
 }
 
 .wv-list__row.is-selected {

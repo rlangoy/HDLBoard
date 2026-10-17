@@ -67,7 +67,7 @@ export interface WaveView {
   readonly actions: WaveViewActions;
 }
 
-const NO_ROWS: ListModel = { rows: [], activeCount: 0 };
+const NO_ROWS: ListModel = { rows: [], tops: [], height: 0 };
 
 interface FocusInput {
   readonly focus: WaveFocus | null;

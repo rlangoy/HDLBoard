@@ -3,7 +3,8 @@
 
 /**
  * Paints the whole waveform canvas for one frame (docs/waveform_viewer_spec.md § 8.5):
- * background, the shown rows that are on screen, the axis, the part after the run, the
+ * background, the section heads and shown rows that are on screen, each section's traces
+ * in its own colour, the axis, the part after the run, the
  * error marker, the cursor and a drag selection. Only the visible rows and time window
  * are drawn, so the cost follows the screen, not the file (NFR-1).
  */
@@ -11,9 +12,9 @@
 import { visibleSpans } from './levelOfDetail';
 import type { Ticks } from './model';
 import type { ShowAs } from './radix';
-import type { Row, SignalPath, TraceRow } from './signalRows';
+import { rowIndexAtY, type Row, type SignalPath, type Tone, type TraceRow } from './signalRows';
 import { formatFs, timeToX, xToTime, type TimeView } from './timeAxis';
-import { AXIS_HEIGHT, drawAxis, drawRow, drawVerticalLine, readColors, ROW_HEIGHT, type Painter } from './waveDraw';
+import { AXIS_HEIGHT, drawAxis, drawRow, drawVerticalLine, readColors, ROW_HEIGHT, type Painter, type WaveColors } from './waveDraw';
 
 /** A shown waveform from an earlier run is drawn faded while the new one is on its way (§ 8.7). */
 const STALE_ALPHA = 0.45;
@@ -30,8 +31,8 @@ export interface CanvasSize {
 
 export interface Scene {
   readonly rows: readonly Row[];
-  /** The rows with traces are the first `activeCount`. */
-  readonly activeCount: number;
+  /** Each row's top from the top of the list (`ListModel.tops`). */
+  readonly tops: readonly number[];
   readonly view: TimeView;
   readonly size: CanvasSize;
   readonly scrollTop: number;
@@ -57,24 +58,37 @@ function prepare(canvas: HTMLCanvasElement, size: CanvasSize): CanvasRenderingCo
   return ctx;
 }
 
-/** The y of the top of row `index` on the canvas. */
-export const rowTop = (index: number, scrollTop: number): number => AXIS_HEIGHT + index * ROW_HEIGHT - scrollTop;
+type Layout = Pick<Scene, 'tops' | 'scrollTop'>;
 
-/** The index of the row at canvas `y`, or undefined over the axis. */
-export function rowIndexAt(y: number, scrollTop: number): number | undefined {
-  return y < AXIS_HEIGHT ? undefined : Math.floor((y - AXIS_HEIGHT + scrollTop) / ROW_HEIGHT);
+/** The y of the top of row `index` on the canvas. */
+export const rowTop = (scene: Layout, index: number): number => AXIS_HEIGHT + (scene.tops[index] ?? 0) - scene.scrollTop;
+
+/** The index of the row at canvas `y`, or undefined over the axis, in a gap or below the list. */
+export function rowIndexAt(scene: Layout, y: number): number | undefined {
+  return y < AXIS_HEIGHT ? undefined : rowIndexAtY(scene, y - AXIS_HEIGHT + scene.scrollTop);
 }
 
-/** The shown rows inside the visible part of the list. */
-function visibleTraceRows(scene: Scene): Array<{ readonly row: TraceRow; readonly index: number }> {
-  const first = Math.max(0, Math.floor(scene.scrollTop / ROW_HEIGHT));
-  const last = Math.min(scene.activeCount, Math.ceil((scene.scrollTop + scene.size.height - AXIS_HEIGHT) / ROW_HEIGHT) + 1);
-  const found: Array<{ row: TraceRow; index: number }> = [];
-  for (let index = first; index < last; index++) {
-    const row = scene.rows[index];
-    if (row?.kind === 'trace') found.push({ row, index });
-  }
+/** The rows inside the visible part of the list. */
+function visibleRows(scene: Scene): Array<{ readonly row: Row; readonly top: number }> {
+  const found: Array<{ row: Row; top: number }> = [];
+  scene.rows.forEach((row, index) => {
+    const top = rowTop(scene, index);
+    if (top + ROW_HEIGHT > AXIS_HEIGHT && top < scene.size.height) found.push({ row, top });
+  });
   return found;
+}
+
+/** A section's traces in its colour; a state machine's states in their own. */
+function toned(colors: WaveColors, tone: Tone, row: TraceRow): WaveColors {
+  const ink = tone === 'testbench' ? colors.testbenchInk : colors.rtlInk;
+  return { ...colors, high: ink, low: ink, bus: row.signal.kind === 'enum' ? colors.enumInk : ink };
+}
+
+/** A section's head runs across the canvas as a band in the section's colour. */
+function paintSectionHead({ ctx, colors }: Painter, head: { readonly tone: Tone; readonly top: number }, width: number): void {
+  const { tone, top } = head;
+  ctx.fillStyle = tone === 'testbench' ? colors.testbenchHead : colors.rtlHead;
+  ctx.fillRect(0, top, width, ROW_HEIGHT);
 }
 
 function paintRows(painter: Painter, scene: Scene): void {
@@ -86,10 +100,12 @@ function paintRows(painter: Painter, scene: Scene): void {
   ctx.rect(0, AXIS_HEIGHT, size.width, size.height - AXIS_HEIGHT);
   ctx.clip();
   ctx.globalAlpha = scene.stale ? STALE_ALPHA : 1;
-  for (const { row, index } of visibleTraceRows(scene)) {
-    if (row.path === scene.selectedPath) paintSelectedRow(painter, rowTop(index, scene.scrollTop), size.width);
+  for (const { row, top } of visibleRows(scene)) {
+    if (row.kind === 'section') paintSectionHead(painter, { tone: row.tone, top }, size.width);
+    if (row.kind !== 'trace') continue;
+    if (row.path === scene.selectedPath) paintSelectedRow(painter, top, size.width);
     const spans = visibleSpans(row.trace, window, view.ticksPerPx);
-    drawRow(painter, view, { signal: row.signal, trace: row.trace, spans, showAs: scene.showAsOf(row.path), y: rowTop(index, scene.scrollTop) });
+    drawRow({ ctx, colors: toned(painter.colors, row.tone, row) }, view, { signal: row.signal, trace: row.trace, spans, showAs: scene.showAsOf(row.path), y: top });
   }
   ctx.restore();
 }
@@ -109,12 +125,18 @@ function paintAfterRun({ ctx, colors }: Painter, scene: Scene): void {
   ctx.globalAlpha = 1;
 }
 
-/** The dragged-out time range across the shown rows, to zoom into when the mouse is released. */
+/** The bottom of the last shown trace on the canvas. */
+function tracesBottom(scene: Scene): number {
+  const last = scene.rows.reduce((found, row, index) => (row.kind === 'trace' ? index : found), -1);
+  return last < 0 ? AXIS_HEIGHT : rowTop(scene, last) + ROW_HEIGHT;
+}
+
+/** The dragged-out time range down to the last shown signal, to zoom into when the mouse is released. */
 function paintSelection({ ctx, colors }: Painter, scene: Scene): void {
   if (scene.selection === undefined) return;
   const x0 = timeToX(scene.view, Math.min(scene.selection.from, scene.selection.to));
   const x1 = timeToX(scene.view, Math.max(scene.selection.from, scene.selection.to));
-  const bottom = Math.min(scene.size.height, rowTop(scene.activeCount, scene.scrollTop));
+  const bottom = Math.min(scene.size.height, tracesBottom(scene));
   ctx.fillStyle = colors.selection;
   ctx.globalAlpha = SELECTION_ALPHA;
   ctx.fillRect(x0, 0, x1 - x0, bottom);

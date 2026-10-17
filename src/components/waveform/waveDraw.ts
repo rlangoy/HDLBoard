@@ -28,6 +28,12 @@ export interface WaveColors {
   readonly errorMarker: string;
   readonly selection: string;
   readonly selectedRow: string;
+  /** Traces and heads of the testbench section and of the design (RTL) sections. */
+  readonly testbenchInk: string;
+  readonly rtlInk: string;
+  readonly enumInk: string;
+  readonly testbenchHead: string;
+  readonly rtlHead: string;
 }
 
 /** The custom properties of `Waveform.css`, read once per draw. */
@@ -49,6 +55,11 @@ export function readColors(element: Element): WaveColors {
     errorMarker: token('--wv-error-marker'),
     selection: token('--wv-selection'),
     selectedRow: token('--wv-row-selected'),
+    testbenchInk: token('--wv-tb-ink'),
+    rtlInk: token('--wv-rtl-ink'),
+    enumInk: token('--wv-enum-ink'),
+    testbenchHead: token('--wv-tb-head'),
+    rtlHead: token('--wv-rtl-head'),
   };
 }
 

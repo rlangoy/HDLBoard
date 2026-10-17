@@ -60,8 +60,8 @@ function Tooltip({ hover, width }: { readonly hover: Hover; readonly width: numb
 
 /** The shown row at canvas `y`, if any. */
 function traceRowAt(scene: WaveCanvasProps['scene'], y: number): TraceRow | undefined {
-  const index = rowIndexAt(y, scene.scrollTop);
-  const row = index === undefined || index >= scene.activeCount ? undefined : scene.rows[index];
+  const index = rowIndexAt(scene, y);
+  const row = index === undefined ? undefined : scene.rows[index];
   return row?.kind === 'trace' ? row : undefined;
 }
 

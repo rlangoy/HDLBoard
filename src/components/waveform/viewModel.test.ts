@@ -98,7 +98,7 @@ describe('the cursor keys', () => {
 });
 
 describe('the tooltip', () => {
-  const row = (signal: SignalRef, t: Trace): TraceRow => ({ kind: 'trace', path: 'tb/x', label: signal.name, signal, trace: t, depth: 0, expandable: false, expanded: false });
+  const row = (signal: SignalRef, t: Trace): TraceRow => ({ kind: 'trace', path: 'tb/x', label: signal.name, signal, trace: t, depth: 1, tone: 'testbench', expandable: false, expanded: false });
 
   test('a short vector in hex and decimal, with the time', () => {
     expect(traceLines({ row: row(vector(8), trace([[0, '00001011']])), time: 5e6, tickFs: 1 }, 'hex')).toEqual(['q = 0x0B = 11', 'at 5.000 ns']);

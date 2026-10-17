@@ -2,17 +2,17 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * One row of the signal list, by kind: a shown signal (with its trace on the canvas
- * beside it), a signal not shown, a record, a folder, and a signal the format could not
- * carry. Each row lines up with the canvas: `ROW_HEIGHT` high, values as text in the
- * DOM (NFR-10).
+ * One row of the signal list, by kind: a section's head, a shown signal (with its trace
+ * on the canvas beside it), a signal not shown, a record, a folder, and a signal the
+ * format could not carry. Each row lines up with the canvas: `ROW_HEIGHT` high, values
+ * as text in the DOM (NFR-10), tinted in its section's colour.
  */
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { cx } from '../board';
 import type { Trace } from './model';
 import { formatValue, isUndefinedValue, type ShowAs } from './radix';
-import type { Row, TraceRow } from './signalRows';
+import type { Row, SectionRow, TraceRow } from './signalRows';
 import { valueAt } from './valueAt';
 import { unavailableHelp } from './valueHelp';
 import { ROW_HEIGHT } from './waveDraw';
@@ -44,9 +44,11 @@ function Chevron({ open, label, onClick }: { readonly open: boolean; readonly la
       className="wv-list__chevron"
       tabIndex={-1}
       aria-label={label}
+      // With its own action it keeps the click from the row; without, the row's click folds it.
       onClick={(e) => {
+        if (onClick === undefined) return;
         e.stopPropagation();
-        onClick?.();
+        onClick();
       }}
     >
       {open ? '▾' : '▸'}
@@ -78,17 +80,18 @@ function ShowBox({ path, name, shown, on }: { readonly path: string; readonly na
   );
 }
 
-/** The row frame every kind shares: the tree item, its indent, selection and keys. */
+/** The row frame every kind shares: the tree item, its indent, colour, selection and keys. */
 function RowFrame(props: {
   readonly row: Row;
   readonly context: RowContext;
+  readonly gapAbove?: number;
   readonly className?: string;
   readonly title?: string;
   readonly expanded?: boolean;
   readonly onActivate?: () => void;
   readonly children: ReactNode;
 }) {
-  const { row, context, className, title, expanded, onActivate, children } = props;
+  const { row, context, className, title, expanded, onActivate, gapAbove, children } = props;
   const selected = context.selected === row.path;
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => keyOnRow(event, row, context.on);
   const onContextMenu = (event: MouseEvent) => {
@@ -102,8 +105,8 @@ function RowFrame(props: {
       aria-selected={selected}
       aria-expanded={expanded}
       tabIndex={selected ? 0 : -1}
-      className={cx('wv-list__row', className, selected && 'is-selected')}
-      style={{ paddingLeft: BASE_INDENT_PX + row.depth * INDENT_PX, height: ROW_HEIGHT }}
+      className={cx('wv-list__row', `tone-${row.tone}`, className, selected && 'is-selected')}
+      style={{ paddingLeft: BASE_INDENT_PX + row.depth * INDENT_PX, height: ROW_HEIGHT, marginTop: gapAbove }}
       title={title}
       onFocus={() => context.on.onSelect(row.path)}
       onClick={onActivate}
@@ -118,7 +121,7 @@ function RowFrame(props: {
 /** What Enter or Space does on a row: show or hide a signal, fold or unfold a folder. */
 function toggleFor(row: Row, on: RowCallbacks): (() => void) | undefined {
   if (row.kind === 'hidden' || (row.kind === 'trace' && row.parent === undefined)) return () => on.onToggleShown(row.path);
-  if (row.kind === 'folder' || row.kind === 'group') return () => on.onToggleOpen(row.path);
+  if (row.kind === 'section' || row.kind === 'folder' || row.kind === 'group') return () => on.onToggleOpen(row.path);
   return undefined;
 }
 
@@ -183,6 +186,30 @@ function FolderRowView({ row, context }: { readonly row: Extract<Row, { kind: 'f
   );
 }
 
+/** Folder icon of Material Symbols ("folder"), as the mockup's section heads. */
+function FolderIcon() {
+  return (
+    <svg className="wv-list__section-icon" viewBox="0 -960 960 960" aria-hidden="true">
+      <path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z" />
+    </svg>
+  );
+}
+
+/** A section's head: its chevron shows or hides the signals that are not shown. */
+function SectionRowView({ row, context, gapAbove }: { readonly row: SectionRow; readonly context: RowContext; readonly gapAbove?: number }) {
+  const action = row.open ? 'Hide' : 'Show';
+  const note = row.count === 0 ? 'all shown' : `${row.count} not shown`;
+  return (
+    <RowFrame row={row} context={context} gapAbove={gapAbove} className="is-section" expanded={row.open} onActivate={() => context.on.onToggleOpen(row.path)}
+      title={`${action} the signals of ${row.label} that are not shown${row.open ? '' : ', to tick them'}`}>
+      <Chevron open={row.open} label={`${action} the signals not shown`} />
+      <FolderIcon />
+      <span className="wv-list__name">{row.label}</span>
+      <span className="wv-list__count">{note}</span>
+    </RowFrame>
+  );
+}
+
 function UnavailableRowView({ row, context }: { readonly row: Extract<Row, { kind: 'unavailable' }>; readonly context: RowContext }) {
   return (
     <RowFrame row={row} context={context} className="is-unavailable" title={unavailableHelp(row.reason)}>
@@ -193,8 +220,10 @@ function UnavailableRowView({ row, context }: { readonly row: Extract<Row, { kin
   );
 }
 
-export function SignalRow({ row, context }: { readonly row: Row; readonly context: RowContext }) {
+export function SignalRow({ row, context, gapAbove }: { readonly row: Row; readonly context: RowContext; readonly gapAbove?: number }) {
   switch (row.kind) {
+    case 'section':
+      return <SectionRowView row={row} context={context} gapAbove={gapAbove} />;
     case 'trace':
       return <TraceRowView row={row} context={context} />;
     case 'hidden':
