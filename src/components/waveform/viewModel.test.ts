@@ -30,10 +30,17 @@ describe('the view window', () => {
     expect(zoomWindow({ start: 0, end: 100 }, 2, 0)).toEqual({ start: 0, end: 200 });
   });
 
-  test('never narrower than the minimum, nor much wider or further than the run', () => {
+  test('never narrower than the minimum, never before 0 nor past the end of the run', () => {
     expect(clampWindow({ start: 100, end: 101 }, bounds)).toEqual({ start: 100, end: 110 });
-    expect(clampWindow({ start: 0, end: 100_000 }, bounds)).toEqual({ start: 0, end: 4000 });
-    expect(clampWindow({ start: 5000, end: 5100 }, bounds)).toEqual({ start: 975, end: 1075 });
+    expect(clampWindow({ start: 0, end: 100_000 }, bounds)).toEqual({ start: 0, end: 1000 });
+    expect(clampWindow({ start: 5000, end: 5100 }, bounds)).toEqual({ start: 900, end: 1000 });
+    expect(clampWindow({ start: -50, end: 50 }, bounds)).toEqual({ start: 0, end: 100 });
+  });
+
+  test('zooming out stops at the whole run, from anywhere in it', () => {
+    let window = { start: 800, end: 900 };
+    for (let i = 0; i < 10; i++) window = clampWindow(zoomWindow(window, 2, 850), bounds);
+    expect(window).toEqual({ start: 0, end: 1000 });
   });
 
   test('a console time outside the window centres it; inside, the window stays', () => {

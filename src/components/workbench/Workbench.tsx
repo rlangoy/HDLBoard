@@ -1479,6 +1479,20 @@ export function Workbench() {
       else if (view === 'rtl') showPane('board', true);
     },
   });
+
+  // The Waveform button with nothing to show and a testbench on screen: run it, then open
+  // its waveform as soon as the run offers one. Otherwise the button does what it always did.
+  const waveRunTarget = waveView.waveform.recording && !isSimulating ? tb.shownTestbench : null;
+  const waveButton = {
+    ...waveView.button,
+    runsTestbench: waveRunTarget !== null,
+    onToggle: () => {
+      if (waveView.button.state !== 'empty' || waveRunTarget === null) return waveView.button.onToggle();
+      handleRunPane('tb', waveRunTarget);
+      waveView.openWhenReady();
+    },
+  };
+
   restoreOverridesRef.current = tb.restoreOverrides;
 
   useEffect(() => {
@@ -1903,7 +1917,7 @@ export function Workbench() {
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
         onOpenLocation={openConsoleDiagnostic}
-        waveButton={<WaveformButton {...waveView.button} />}
+        waveButton={<WaveformButton {...waveButton} />}
         onOpenTime={waveView.links.onOpenTime}
         onOpenWaveform={waveView.links.onOpenWaveform}
       />

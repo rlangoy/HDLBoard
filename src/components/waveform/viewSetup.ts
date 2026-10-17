@@ -48,10 +48,6 @@ export interface WindowBounds {
   readonly minSpan: Ticks;
 }
 
-/** How far the window may be zoomed out, in run lengths, and scrolled past either end, in windows. */
-const MAX_SPAN_RUNS = 4;
-const OVERSCROLL = 0.25;
-
 export function toMemory(setup: ViewSetup): ViewMemory {
   return {
     shown: setup.list.shown,
@@ -100,10 +96,14 @@ export function setupFor(data: WaveformData, memory: ViewMemory | null, context:
   };
 }
 
-/** `window`, kept inside the bounds: not narrower than `minSpan`, not much wider or further than the run. */
+/**
+ * `window`, kept inside the run: not narrower than `minSpan`, never before 0 nor past
+ * the run's end – zoomed all the way out it shows exactly the whole run.
+ */
 export function clampWindow(window: Window, bounds: WindowBounds): Window {
-  const span = Math.min(Math.max(window.end - window.start, bounds.minSpan), bounds.end * MAX_SPAN_RUNS);
-  const start = Math.min(Math.max(window.start, -span * OVERSCROLL), bounds.end - span * OVERSCROLL);
+  const runEnd = Math.max(bounds.end, bounds.minSpan);
+  const span = Math.min(Math.max(window.end - window.start, bounds.minSpan), runEnd);
+  const start = Math.min(Math.max(window.start, 0), runEnd - span);
   return { start, end: start + span };
 }
 
