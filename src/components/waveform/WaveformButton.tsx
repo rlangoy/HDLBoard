@@ -4,8 +4,9 @@
 /**
  * The Waveform button, directly to the left of Clear in the Simulator Output / Status
  * band (docs/waveform_viewer_spec.md § 8.6, FR-24): where the run's result is reported,
- * so it is always clear where to go (S2). Disabled with its reason when there is nothing
- * to show, highlighted when a new waveform is ready, pressed while the view is open.
+ * so it is always clear where to go (S2). Highlighted when a new waveform is ready,
+ * pressed while the view is open. With nothing to show it still answers: the click
+ * explains what to run first.
  */
 
 import { cx } from '../board';
@@ -28,9 +29,8 @@ export function WaveformButton({ state, onToggle }: WaveformButtonProps) {
   return (
     <button
       type="button"
-      className={cx('wv-launch', state === 'new' && 'is-new', state === 'pressed' && 'is-pressed')}
+      className={cx('wv-launch', state === 'empty' && 'is-empty', state === 'new' && 'is-new', state === 'pressed' && 'is-pressed')}
       aria-pressed={state === 'pressed'}
-      disabled={state === 'disabled'}
       title={BUTTON_TOOLTIP[state]}
       onClick={onToggle}
     >

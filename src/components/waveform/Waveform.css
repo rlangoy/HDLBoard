@@ -17,8 +17,12 @@
   --wv-trace-dont-care: #94a3b8;
   --wv-cursor: #f59e0b;
   --wv-error-marker: #dc2626;
-  --wv-stale: #94a3b8;
+  --wv-selection: #2563eb;
+  --wv-tool-bg: #eef1f6;
+  --wv-tool-bg-hover: #dfe6f1;
+  --wv-tool-ink: #1a56db;
   --wv-row-hover: #f1f5f9;
+  --wv-row-selected: #e8f0fe;
   --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
 
   position: absolute;
@@ -66,8 +70,42 @@
 
 .wv-toolbar__buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   margin-left: auto;
+}
+
+/* The round icon buttons of the toolbar (docs/images/head_moc1.png). */
+.wv-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wv-tool-bg);
+  color: var(--wv-tool-ink);
+  cursor: pointer;
+}
+
+.wv-tool:hover:not(:disabled) {
+  background: var(--wv-tool-bg-hover);
+}
+
+.wv-tool:focus-visible {
+  outline: 2px solid var(--wv-tool-ink);
+  outline-offset: 2px;
+}
+
+.wv-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wv-tool__icon {
+  width: 20px;
+  height: 20px;
 }
 
 .wv-button {
@@ -181,6 +219,7 @@
 .wv-canvas__surface {
   display: block;
   cursor: crosshair;
+  outline: none;
 }
 
 .wv-list__row {
@@ -197,6 +236,10 @@
 
 .wv-list__row:hover {
   background: var(--wv-row-hover);
+}
+
+.wv-list__row.is-selected {
+  background: var(--wv-row-selected);
 }
 
 .wv-list__row.is-selected:focus-visible {
@@ -222,8 +265,34 @@
 
 .wv-list__chevron {
   width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   text-align: center;
   color: var(--wv-axis-text);
+  cursor: pointer;
+}
+
+.wv-list__chevron-space,
+.wv-list__spacer {
+  flex: none;
+  width: 16px;
+}
+
+.wv-list__row.is-bit .wv-list__name {
+  color: var(--wb-text-muted, #64748b);
+}
+
+.wv-list__row.is-folder .wv-list__name {
+  flex: none;
+  font-weight: 600;
+}
+
+.wv-list__count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--wb-text-muted, #64748b);
 }
 
 .wv-list__check {
@@ -351,9 +420,8 @@
   background: #1e293b;
 }
 
-.wv-launch:disabled {
-  opacity: 0.45;
-  cursor: default;
+.wv-launch.is-empty {
+  opacity: 0.6;
 }
 
 .wv-launch.is-new {

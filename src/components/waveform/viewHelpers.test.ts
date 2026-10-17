@@ -9,12 +9,15 @@ import { clockPeriod, firstShown, firstWindow } from './initialView';
 import { BUSY, NO_VALUE, visibleSpans } from './levelOfDetail';
 import type { SignalRef, Trace } from './model';
 import { defaultShowAs, formatBits, formatValue, isUndefinedValue } from './radix';
-import { listRows, signalsByPath, testbenchSignalPaths } from './signalRows';
+import { listRows, RTL_FOLDER, signalsByPath, TESTBENCH_FOLDER, type ListState } from './signalRows';
 import { formatCursorFs, formatFs, parseSimTime, tickMarks, tickStepFs, viewOf } from './timeAxis';
 import { indexAt, nextChange, previousChange, spanAt, valueAt } from './valueAt';
 import { unavailableHelp, valueHelp } from './valueHelp';
 import { parseVcd } from './vcdParser';
 import { memoryNames, withVerilogMemories } from './verilogMemories';
+
+/** A trace as `[time, value]` pairs. */
+const changes = (t: Trace): Array<[number, string]> => Array.from(t.times, (time, i) => [time, t.values[t.valueIndex[i]]]);
 
 const trace = (pairs: Array<[number, string]>): Trace => {
   const values = [...new Set(pairs.map(([, v]) => v))];
@@ -126,7 +129,7 @@ describe('levelOfDetail', () => {
       [10, 'a'],
       [50, 'b'],
     ]);
-    expect(visibleSpans(t, 0, 100, 1)).toEqual([
+    expect(visibleSpans(t, { from: 0, to: 100 }, 1)).toEqual([
       { start: 0, end: 10, value: NO_VALUE },
       { start: 10, end: 50, value: 0 },
       { start: 50, end: 100, value: 1 },
@@ -135,7 +138,7 @@ describe('levelOfDetail', () => {
 
   test('changes closer than a pixel become one busy span', () => {
     const fast = trace(Array.from({ length: 1000 }, (_, i): [number, string] => [i, i % 2 ? '1' : '0']).concat([[2000, 'Z']]));
-    const spans = visibleSpans(fast, 0, 3000, 10);
+    const spans = visibleSpans(fast, { from: 0, to: 3000 }, 10);
     expect(spans).toEqual([
       { start: 0, end: 999, value: BUSY },
       { start: 999, end: 2000, value: fast.valueIndex[999] },
@@ -145,7 +148,7 @@ describe('levelOfDetail', () => {
 
   test('the number of spans follows the width, not the changes', () => {
     const clock = trace(Array.from({ length: 200_000 }, (_, i): [number, string] => [i * 5, i % 2 ? '1' : '0']));
-    expect(visibleSpans(clock, 0, 1_000_000, 1000).length).toBeLessThan(5);
+    expect(visibleSpans(clock, { from: 0, to: 1_000_000 }, 1000).length).toBeLessThan(5);
   });
 });
 
@@ -173,25 +176,49 @@ describe('consoleTimes', () => {
 describe('signal list and first view (GHW fixture)', () => {
   const data = parseGhw(fixtureBytes('wave_types.ghw'));
 
+  const state = (shown: string[], open: string[] = [], expanded: string[] = []): ListState => ({
+    shown,
+    open: new Set(open),
+    expanded: new Set(expanded),
+  });
+
   test('the testbench signals first, as many as fit', () => {
     expect(firstShown(data, 3)).toEqual(['wave_types_tb/clk', 'wave_types_tb/rst', 'wave_types_tb/q']);
-    expect(testbenchSignalPaths(data)).toContain('wave_types_tb/pair/b');
     expect(signalsByPath(data).get('wave_types_tb/dut/count')?.kind).toBe('vector');
   });
 
-  test('rows: shown signals, then "N more", then folded instances', () => {
-    const shown = new Set(firstShown(data, 3));
-    const rows = listRows(data, { shown, open: new Set(), showAll: false });
-    expect(rows.map((r) => r.kind)).toEqual(['signal', 'signal', 'signal', 'group', 'more', 'scope']);
-    expect(rows.find((r) => r.kind === 'more')).toMatchObject({ count: 9 });
-    const all = listRows(data, { shown, open: new Set(['wave_types_tb/dut', 'wave_types_tb/pair']), showAll: true });
-    expect(all.filter((r) => r.kind === 'signal' && r.depth === 1).map((r) => r.path)).toEqual([
-      'wave_types_tb/pair/a',
-      'wave_types_tb/pair/b',
-      'wave_types_tb/dut/clk',
-      'wave_types_tb/dut/rst',
-      'wave_types_tb/dut/q',
-      'wave_types_tb/dut/count',
+  test('the shown signals come first, together; the others wait in a Testbench and an RTL folder', () => {
+    const { rows, activeCount } = listRows(data, state(['wave_types_tb/clk', 'wave_types_tb/dut/count', 'wave_types_tb/q']));
+    expect(activeCount).toBe(3);
+    expect(rows.map((r) => r.kind)).toEqual(['trace', 'trace', 'trace', 'folder', 'folder']);
+    expect(rows.slice(0, 3).map((r) => (r.kind === 'trace' ? r.label : ''))).toEqual(['clk', 'dut.count', 'q']);
+    expect(rows.slice(3).map((r) => r.path)).toEqual([TESTBENCH_FOLDER, RTL_FOLDER]);
+    expect(rows[3]).toMatchObject({ label: 'Testbench', count: 12 });
+    expect(rows[4]).toMatchObject({ label: 'RTL', count: 3 });
+  });
+
+  test('unfolded, the folders list only the signals not shown', () => {
+    const { rows } = listRows(data, state(['wave_types_tb/dut/count'], [TESTBENCH_FOLDER, RTL_FOLDER, 'wave_types_tb/dut', 'wave_types_tb/pair']));
+    const dutRows = rows.filter((r) => r.path.startsWith('wave_types_tb/dut/'));
+    expect(dutRows.map((r) => [r.kind, r.path])).toEqual([
+      ['trace', 'wave_types_tb/dut/count'],
+      ['hidden', 'wave_types_tb/dut/clk'],
+      ['hidden', 'wave_types_tb/dut/rst'],
+      ['hidden', 'wave_types_tb/dut/q'],
+    ]);
+    expect(rows.filter((r) => r.path.startsWith('wave_types_tb/pair')).map((r) => r.kind)).toEqual(['group', 'hidden', 'hidden']);
+  });
+
+  test('a shown vector unfolds into its bits, most significant first', () => {
+    const { rows, activeCount } = listRows(data, state(['wave_types_tb/q'], [], ['wave_types_tb/q']));
+    expect(activeCount).toBe(5);
+    expect(rows.slice(0, 5).map((r) => (r.kind === 'trace' ? r.label : ''))).toEqual(['q', 'q[3]', 'q[2]', 'q[1]', 'q[0]']);
+    const bit0 = rows[4];
+    expect(bit0.kind === 'trace' && changes(bit0.trace).slice(0, 4)).toEqual([
+      [0, 'U'],
+      [5e6, '0'],
+      [15e6, '1'],
+      [25e6, '0'],
     ]);
   });
 
@@ -209,7 +236,7 @@ describe('signal list and first view (GHW fixture)', () => {
 describe('unavailable signals', () => {
   test('GHDL VCD: enumerations listed with the reason', () => {
     const data = parseVcd(fixtureText('ghdl_wave_types.vcd'));
-    const rows = listRows(data, { shown: new Set(), open: new Set(), showAll: true });
+    const { rows } = listRows(data, { shown: [], open: new Set([TESTBENCH_FOLDER]), expanded: new Set() });
     expect(rows.filter((r) => r.kind === 'unavailable').map((r) => r.path)).toEqual(['wave_types_tb/state', 'wave_types_tb/pair', 'wave_types_tb/ch']);
     expect(unavailableHelp('vcd-type')).toMatch(/enumeration/);
   });

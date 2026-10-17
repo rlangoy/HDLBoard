@@ -17,6 +17,8 @@ import { parseSimTime } from './timeAxis';
 const VERILOG_PRECISION_FS = 1000;
 const ICARUS_TIME = /^(\s*Time:\s*)(\d+)(\s+Scope:.*)$/;
 const ICARUS_SEVERITY = /^(ERROR|FATAL|WARNING|INFO):\s/;
+/** `ERROR: tb.v:12: ` in front of the message. */
+const ICARUS_PREFIX = /^\w+:\s*[^:]+:\d+:\s*/;
 const ERROR_SEVERITIES = ['error', 'failure'];
 
 /** A time a console line names: in femtoseconds, and where in the line it is written. */
@@ -44,19 +46,27 @@ export interface RunError {
   readonly text: string;
 }
 
+/** A GHDL `report`/`assert` line with severity error or failure. */
+function ghdlError(line: string): RunError | undefined {
+  const report = parseGhdlReport(line);
+  if (report === undefined || !ERROR_SEVERITIES.includes(report.severity)) return undefined;
+  const fs = parseSimTime(report.simTime);
+  return fs === undefined ? undefined : { fs, text: report.text };
+}
+
+/** An Icarus `ERROR:`/`FATAL:` line, whose time is on the line after it. */
+function icarusError(line: string, next: string | undefined): RunError | undefined {
+  const severity = ICARUS_SEVERITY.exec(line)?.[1];
+  if ((severity !== 'ERROR' && severity !== 'FATAL') || next === undefined) return undefined;
+  const time = icarusLineTime(next);
+  return time === undefined ? undefined : { fs: time.fs, text: line.replace(ICARUS_PREFIX, '') };
+}
+
 /** The first message of the run with severity error or failure, and its time. */
 export function firstError(lines: readonly string[]): RunError | undefined {
   for (let i = 0; i < lines.length; i++) {
-    const report = parseGhdlReport(lines[i]);
-    if (report !== undefined) {
-      const fs = parseSimTime(report.simTime);
-      if (ERROR_SEVERITIES.includes(report.severity) && fs !== undefined) return { fs, text: report.text };
-      continue;
-    }
-    const severity = ICARUS_SEVERITY.exec(lines[i])?.[1];
-    if (severity !== 'ERROR' && severity !== 'FATAL') continue;
-    const time = lines[i + 1] === undefined ? undefined : icarusLineTime(lines[i + 1]);
-    if (time !== undefined) return { fs: time.fs, text: lines[i].replace(/^\w+:\s*[^:]+:\d+:\s*/, '') };
+    const found = ghdlError(lines[i]) ?? icarusError(lines[i], lines[i + 1]);
+    if (found !== undefined) return found;
   }
   return undefined;
 }

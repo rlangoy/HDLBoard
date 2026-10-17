@@ -21,8 +21,23 @@ export interface Span {
 export const BUSY = -2;
 export const NO_VALUE = -1;
 
-/** The spans of `trace` between `from` and `to` when one pixel is `ticksPerPx`. */
-export function visibleSpans(trace: Trace, from: Ticks, to: Ticks, ticksPerPx: number): Span[] {
+/** The part of the run on screen. */
+export interface TimeWindow {
+  readonly from: Ticks;
+  readonly to: Ticks;
+}
+
+/** The first change that is followed by a full pixel of quiet, starting from change `j`. */
+function endOfBusy(trace: Trace, j: number, ticksPerPx: number): number {
+  for (;;) {
+    const k = indexAt(trace, trace.times[j] + ticksPerPx);
+    if (k === j) return j;
+    j = k;
+  }
+}
+
+/** The spans of `trace` across `window` when one pixel is `ticksPerPx`. */
+export function visibleSpans(trace: Trace, { from, to }: TimeWindow, ticksPerPx: number): Span[] {
   const { times, valueIndex } = trace;
   const n = times.length;
   const spans: Span[] = [];
@@ -36,13 +51,8 @@ export function visibleSpans(trace: Trace, from: Ticks, to: Ticks, ticksPerPx: n
       i++;
       continue;
     }
-    // Changes closer than a pixel: skip ahead to the first change that is followed by a full pixel of quiet.
-    let j = i + 1;
-    for (;;) {
-      const k = indexAt(trace, times[j] + ticksPerPx);
-      if (k === j) break;
-      j = k;
-    }
+    // Changes closer than a pixel: one busy span up to the next quiet pixel.
+    const j = endOfBusy(trace, i + 1, ticksPerPx);
     spans.push({ start: t, end: Math.min(times[j], to), value: BUSY });
     t = times[j];
     i = j;

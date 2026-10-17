@@ -35,7 +35,7 @@ describe('GHW from GHDL', () => {
       ['a', 'logic'],
       ['b', 'vector'],
     ]);
-    expect(changes(data, pair.fields![1])).toEqual([
+    expect(changes(data, (pair.fields ?? [])[1])).toEqual([
       [0, '0000'],
       [25 * NS, '0101'],
     ]);

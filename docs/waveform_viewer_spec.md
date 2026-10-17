@@ -765,6 +765,17 @@ What was built, and where it differs from the sections above.
 - **The first view zooms to the first error** even when the student's own zoom is remembered (W11 over FR-17); shown signals and Show as are still kept.
 - **Q9:** Icarus prints `$error`/`$fatal` as `ERROR: file:line: text` followed by `Time: <ps>  Scope: …`; that `Time:` is linked and used for FR-26. Works without `-g2012`.
 
+**After the first review (2026-10-17)**
+
+- **Shown signals first.** The list shows the ticked signals together at the top, in the order they were ticked; under them the folders **Testbench** and **RTL** (one folder per instance under RTL) hold the signals that are not shown, each folder with a count ("8 not shown"). Ticking a signal moves it up to the end of the shown group; unticking moves it back into its folder.
+- **Vectors unfold into bits.** A ▸ beside a vector shows its bits (`data[7]` … `data[0]`) under it, drawn as one-bit traces; folded by default.
+- **Drag to zoom.** Dragging across the traces marks a range from the top to the last shown signal, with its width written on the ruler; releasing zooms to it. Dragging on the ruler moves the cursor. A click places the cursor and selects that row's signal.
+- **Keyboard.** The view takes the focus when it opens. ← / → move the cursor to the previous / next change of the selected signal, or of every shown signal but the clocks when none is selected; Shift + ← / → move it by 1 % of the window. The window follows the cursor.
+- **Go to declaration** highlights the declaration and its uses as a hover does, until the next click or until another name is hovered (`RevealRequest.highlight`, `usePinnedSymbol`).
+- **No waveform yet.** The Waveform button is never disabled: without a recording it opens a dialog that says to run the testbench first. Opening, creating or closing a project drops the waveform and the remembered view.
+- **Toolbar.** Round grey buttons with Material Symbols icons (zoom out, zoom in, fit, more, close), each with a tooltip; the time at the cursor is shown beside the title.
+- **Clean Code.** `src/components/waveform` is linted with the server's rules (`npm run lint`: at most 40 lines per function, 3 parameters, complexity 8, depth 3). The GHW reader is split into `ghw/`; the view into `useWaveView.ts`, `viewSetup.ts`, `paintWaveform.ts`, `useCanvasGestures.ts`, `SignalRow.tsx`, `WaveToolbar.tsx`, `WaveMenus.tsx`, `useWaveformView.ts` (all the Workbench wiring).
+
 **Open**
 
 - Step 5 (mockup with students) and step 9 (usability test).

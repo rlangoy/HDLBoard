@@ -96,7 +96,7 @@ Typical uses:
 When you open a testbench, the editor splits: the testbench is on the left and the design it drives is on the right. Each pane has its own Play button.
 
 ### Waveforms of testbench runs
-After a testbench run, **Waveform** beside Clear shows what every signal did, in place of the code. The testbench's own signals are laid out already, with the value of each at the cursor beside its name. State machines show their states by name (`idle`, `start_bit`, `data_bits`), an uninitialised `U` stands out in red, and hovering a value explains it. A failing check opens the waveform zoomed in at the first error, a click on a time in the console jumps there, and Go to declaration takes you from a signal back to its line of code. VHDL is recorded as GHW, Verilog as VCD; Download waveform saves the file for GTKWave or Surfer.
+After a testbench run, **Waveform** beside Clear shows what every signal did, in place of the code. The testbench's own signals are laid out already, with the value of each at the cursor beside its name. State machines show their states by name (`idle`, `start_bit`, `data_bits`), an uninitialised `U` stands out in red, and hovering a value explains it. A failing check opens the waveform zoomed in at the first error, a click on a time in the console jumps there, and Go to declaration takes you from a signal back to its line of code. Tick a signal in the RTL folder to add it to the shown ones, unfold a vector into its bits, drag across the traces to zoom in, and step from change to change with ← and →. VHDL is recorded as GHW, Verilog as VCD; Download waveform saves the file for GTKWave or Surfer.
 
 ### A small, focused editor
 - Rest the mouse on a signal or port, or click it, to highlight its declaration and every use.

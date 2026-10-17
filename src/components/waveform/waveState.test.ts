@@ -10,8 +10,8 @@ const ready = (run: number): WaveEvent => ({ type: 'ready', ready: { run, format
 const play = (...events: WaveEvent[]): WaveState => events.reduce(waveReducer, INITIAL_WAVE_STATE);
 
 describe('the waveform life cycle', () => {
-  test('before any testbench run the button is disabled', () => {
-    expect(buttonState(INITIAL_WAVE_STATE)).toBe('disabled');
+  test('before any testbench run there is nothing to show', () => {
+    expect(buttonState(INITIAL_WAVE_STATE)).toBe('empty');
   });
 
   test('a ready waveform is highlighted, and fetched only once the view opens (W5)', () => {
@@ -44,10 +44,10 @@ describe('the waveform life cycle', () => {
     expect(waveReducer(state, { type: 'parsed', run: 1, data: DATA }).data).toBeNull();
   });
 
-  test('a board run closes the view and disables the button', () => {
+  test('a board run closes the view and leaves nothing to show', () => {
     const state = play(ready(1), { type: 'open' }, { type: 'run-started' }, { type: 'board-run' });
     expect(state.open).toBe(false);
-    expect(buttonState(state)).toBe('disabled');
+    expect(buttonState(state)).toBe('empty');
   });
 
   test('a run that ends without a waveform keeps the stale one, with a note', () => {
@@ -62,5 +62,10 @@ describe('the waveform life cycle', () => {
     expect(needsFetch(failed)).toBeNull();
     const gone = play(ready(1), { type: 'open' }, { type: 'fetching', run: 1 }, { type: 'none', run: 1 });
     expect(gone.error).toMatch(/no longer available/);
+  });
+
+  test('another project forgets the waveform', () => {
+    const state = play(ready(1), { type: 'open' }, { type: 'parsed', run: 1, data: DATA }, { type: 'reset' });
+    expect(state).toEqual(INITIAL_WAVE_STATE);
   });
 });

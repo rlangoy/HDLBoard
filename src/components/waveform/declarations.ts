@@ -21,6 +21,8 @@ export interface DeclarationTarget {
   readonly fileId: string;
   /** 1-based, as the editor's reveal and the compiler's messages count lines. */
   readonly line: number;
+  /** The declared symbol's id in that file's symbol index, for the editor to highlight. */
+  readonly symbolId: string;
 }
 
 interface Unit {
@@ -31,6 +33,12 @@ interface Unit {
 }
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** `label : entity`: the keyword is the second token after the label. */
+const ENTITY_KEYWORD_OFFSET = 2;
+/** Where the unit's name is after the label: `label : entity work . unit`, `label : component unit`. */
+const NAME_OFFSET_AFTER: Readonly<Record<string, number>> = { entity: 5, component: 3, configuration: 3 };
+/** `module #(`: the module name is two tokens before the parameter list's `(`. */
+const PARAMETER_LIST_PREFIX = 2;
 
 function findUnit(files: readonly VhdlFile[], name: string): Unit | undefined {
   for (const file of files) {
@@ -42,32 +50,41 @@ function findUnit(files: readonly VhdlFile[], name: string): Unit | undefined {
   return undefined;
 }
 
-/** The unit an instance label in `parent` instantiates: VHDL `label : [entity lib.]unit`, Verilog `unit [#(…)] label (`. */
+/** VHDL: `label : [entity lib.]unit`, `label : component unit`, `label : unit`. */
+function vhdlUnitAfterLabel(tokens: readonly SourceToken[], at: number): string | undefined {
+  const [colon, next] = tokens.slice(at + 1, at + ENTITY_KEYWORD_OFFSET + 1).map((token) => token.text);
+  if (colon !== ':' || next === undefined) return undefined;
+  const offset = NAME_OFFSET_AFTER[next.toLowerCase()];
+  return offset === undefined ? next : tokens[at + offset]?.text;
+}
+
+/** The index of the `(` that opens the parameter list ending just before `at`, or `at` when there is none. */
+function openingOfParameters(tokens: readonly SourceToken[], at: number, first: number): number {
+  if (tokens[at]?.text !== ')') return at + 1;
+  let depth = 0;
+  for (let j = at; j > first; j--) {
+    if (tokens[j].text === ')') depth++;
+    else if (tokens[j].text === '(' && --depth === 0) return j;
+  }
+  return first;
+}
+
+/** Verilog: `unit [#( … )] label (`. */
+function verilogUnitBeforeLabel(tokens: readonly SourceToken[], at: number, first: number): string | undefined {
+  if (tokens[at + 1]?.text !== '(') return undefined;
+  const open = openingOfParameters(tokens, at - 1, first);
+  // Before a parameter list come `#` and the module name; without one, the name is right before the label.
+  return open === at ? tokens[at - 1]?.text : tokens[open - PARAMETER_LIST_PREFIX]?.text;
+}
+
+/** The unit an instance label in `parent` instantiates. */
 function instantiatedUnit(parent: Unit, label: string): string | undefined {
   const { tokens, unit } = parent;
+  const verilog = parent.symbols.language === 'verilog';
   for (let i = unit.from; i < unit.to; i++) {
     if (!same(tokens[i].text, label)) continue;
-    if (parent.symbols.language === 'verilog') {
-      if (tokens[i + 1]?.text !== '(') continue;
-      // Back over a parameter list `#( … )` to the module name.
-      let j = i - 1;
-      if (tokens[j]?.text === ')') {
-        let depth = 0;
-        for (; j > unit.from; j--) {
-          if (tokens[j].text === ')') depth++;
-          else if (tokens[j].text === '(' && --depth === 0) break;
-        }
-        j -= 2; // the `(` and the `#`
-      }
-      return tokens[j]?.text;
-    }
-    if (tokens[i + 1]?.text !== ':') continue;
-    const next = tokens[i + 2];
-    if (next === undefined) return undefined;
-    // `entity work.counter`, `component counter`, or just `counter`.
-    if (same(next.text, 'entity')) return tokens[i + 5]?.text;
-    if (same(next.text, 'component') || same(next.text, 'configuration')) return tokens[i + 3]?.text;
-    return next.text;
+    const found = verilog ? verilogUnitBeforeLabel(tokens, i, unit.from) : vhdlUnitAfterLabel(tokens, i);
+    if (found !== undefined) return found;
   }
   return undefined;
 }
@@ -95,5 +112,5 @@ export function findDeclaration(files: readonly VhdlFile[], scopes: readonly str
   const symbol = unit.symbols.index.symbols.find(
     (s) => same(s.name, name) && DECLARATION_KINDS.has(s.kind) && s.declaration.line >= first && s.declaration.line <= last,
   );
-  return symbol === undefined ? undefined : { fileId: unit.file.id, line: symbol.declaration.line + 1 };
+  return symbol === undefined ? undefined : { fileId: unit.file.id, line: symbol.declaration.line + 1, symbolId: symbol.id };
 }

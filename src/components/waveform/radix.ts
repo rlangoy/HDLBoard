@@ -22,6 +22,7 @@ export const SHOW_AS_LABELS: ReadonlyArray<readonly [ShowAs, string]> = [
 ];
 
 const HEX_PREFIX = '0x';
+const HEX_BASE = 16;
 const BITS_PER_HEX_DIGIT = 4;
 const BITS_PER_CHARACTER = 8;
 const PRINTABLE_FIRST = 0x20;
@@ -49,7 +50,7 @@ function hex(bits: string): string {
   let text = '';
   for (let end = bits.length; end > 0; end -= BITS_PER_HEX_DIGIT) {
     const group = bits.slice(Math.max(0, end - BITS_PER_HEX_DIGIT), end);
-    text = (KNOWN_BITS.test(group) ? parseInt(group, 2).toString(16).toUpperCase() : unknownLetter(group)) + text;
+    text = (KNOWN_BITS.test(group) ? parseInt(group, 2).toString(HEX_BASE).toUpperCase() : unknownLetter(group)) + text;
   }
   return HEX_PREFIX + text;
 }

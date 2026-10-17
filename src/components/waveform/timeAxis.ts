@@ -15,15 +15,23 @@ export interface TimeView {
   readonly ticksPerPx: number;
 }
 
+const FS_PER_PS = 1e3;
+const FS_PER_NS = 1e6;
+const FS_PER_US = 1e9;
+const FS_PER_MS = 1e12;
+const FS_PER_S = 1e15;
+
 const UNITS: ReadonlyArray<readonly [string, number]> = [
-  ['s', 1e15],
-  ['ms', 1e12],
-  ['µs', 1e9],
-  ['ns', 1e6],
-  ['ps', 1e3],
+  ['s', FS_PER_S],
+  ['ms', FS_PER_MS],
+  ['µs', FS_PER_US],
+  ['ns', FS_PER_NS],
+  ['ps', FS_PER_PS],
   ['fs', 1],
 ];
-const STEP_MULTIPLIERS = [1, 2, 5];
+const DECADE = 10;
+/** Tick steps of 1, 2 and 5 times a power of ten. */
+const STEP_MULTIPLIERS = [1, 2, DECADE / 2];
 /** Labels need about this much room; ticks are never closer. */
 export const MIN_TICK_SPACING_PX = 90;
 const MAX_DECIMALS = 3;
@@ -64,13 +72,13 @@ export function formatCursorFs(fs: number): string {
 /** The smallest 1-2-5 step, in femtoseconds, whose marks are at least `minPx` apart. */
 export function tickStepFs(ticksPerPx: number, tickFs: number, minPx = MIN_TICK_SPACING_PX): number {
   const wanted = ticksPerPx * tickFs * minPx;
-  let decade = 10 ** Math.floor(Math.log10(Math.max(wanted, tickFs)));
+  let decade = DECADE ** Math.floor(Math.log10(Math.max(wanted, tickFs)));
   for (;;) {
     for (const m of STEP_MULTIPLIERS) {
       const step = m * decade;
       if (step >= wanted && step >= tickFs) return step;
     }
-    decade *= 10;
+    decade *= DECADE;
   }
 }
 
@@ -96,7 +104,7 @@ export function tickMarks(view: TimeView, widthPx: number, tickFs: number): Tick
 }
 
 const SIM_TIME = /^(-?\d+(?:\.\d+)?)\s*(fs|ps|ns|us|µs|ms|sec|s)$/i;
-const FS_PER: Readonly<Record<string, number>> = { fs: 1, ps: 1e3, ns: 1e6, us: 1e9, µs: 1e9, ms: 1e12, sec: 1e15, s: 1e15 };
+const FS_PER: Readonly<Record<string, number>> = { fs: 1, ps: FS_PER_PS, ns: FS_PER_NS, us: FS_PER_US, µs: FS_PER_US, ms: FS_PER_MS, sec: FS_PER_S, s: FS_PER_S };
 
 /** A time as GHDL writes it – `1230ns`, `1.5us`, `0ms` – in femtoseconds, or undefined. */
 export function parseSimTime(text: string): number | undefined {

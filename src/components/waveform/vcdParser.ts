@@ -25,10 +25,14 @@ const SAFE_TIME_DIGITS = 15;
 const MAX_TIME = BigInt(Number.MAX_SAFE_INTEGER);
 /** GHDL's `integer` and Verilog's `integer` are 32-bit two's complement. */
 const SIGNED_INTEGER_WIDTH = 32;
+const BIGINT_ONE = 1n;
 
 const SCALAR_VALUE = /^[01xzuwlh-]$/i;
-const HASH = 0x23;
-const ZERO = 0x30;
+const HASH = '#'.charCodeAt(0);
+const ZERO = '0'.charCodeAt(0);
+const MAX_DIGIT = 9;
+const DECIMAL_BASE = 10;
+const NOT_HANDLED = 'is not handled';
 /** By character code: the upper-case text of a scalar value character, e.g. `x` → `X`. */
 const SCALAR_TEXT: Array<string | undefined> = [];
 for (const c of '01xzuwlh-XZUWLH') SCALAR_TEXT[c.charCodeAt(0)] = c.toUpperCase();
@@ -56,7 +60,7 @@ export function extendVector(bits: string, width: number): string {
 export function vectorToInteger(bits: string): string {
   if (!/^[01]+$/.test(bits)) return 'X';
   const value = BigInt(`0b${bits}`);
-  const signed = bits.length === SIGNED_INTEGER_WIDTH && bits[0] === '1' ? value - (1n << BigInt(bits.length)) : value;
+  const signed = bits.length === SIGNED_INTEGER_WIDTH && bits[0] === '1' ? value - (BIGINT_ONE << BigInt(bits.length)) : value;
   return signed.toString();
 }
 
@@ -99,8 +103,8 @@ export class VcdParser {
   /** Tokens of the header command being read, from its keyword to its `$end`. */
   private command: string[] | null = null;
   private skippingComment = false;
-  private vectorValue: string | null = null;
-  private realValue: string | null = null;
+  /** A vector, real or string value was read; its identifier code comes next. */
+  private awaitingCode: ((code: string) => void) | null = null;
 
   private tickFs = 1;
   private readonly tree = new ScopeTree();
@@ -138,14 +142,11 @@ export class VcdParser {
   }
 
   private scan(text: string, end: number): void {
-    let i = 0;
-    while (i < end) {
-      while (i < end && isSpace(text.charCodeAt(i))) i++;
+    for (let i = skipSpace(text, 0, end); i < end; ) {
       const start = i;
-      while (i < end && !isSpace(text.charCodeAt(i))) i++;
-      if (i === start) continue;
-      if (this.phase === 'body' && this.fastBodyToken(text, start, i)) continue;
-      this.token(text.slice(start, i));
+      i = skipToken(text, i, end);
+      if (this.phase !== 'body' || !this.fastBodyToken(text, start, i)) this.token(text.slice(start, i));
+      i = skipSpace(text, i, end);
     }
   }
 
@@ -155,24 +156,31 @@ export class VcdParser {
    * through `bodyToken`.
    */
   private fastBodyToken(text: string, start: number, end: number): boolean {
-    if (this.skippingComment || this.vectorValue !== null || this.realValue !== null) return false;
+    if (this.skippingComment || this.awaitingCode !== null) return false;
     const first = text.charCodeAt(start);
-    if (first === HASH && end - start <= SAFE_TIME_DIGITS) {
-      let time = 0;
-      for (let i = start + 1; i < end; i++) {
-        const digit = text.charCodeAt(i) - ZERO;
-        if (digit < 0 || digit > 9) return false;
-        time = time * 10 + digit;
-      }
-      if (end === start + 1) return false;
-      this.stepTime = time;
-      this.sawTime = true;
-      return true;
-    }
+    if (first === HASH) return this.fastTime(text, start, end);
     const scalar = first < SCALAR_TEXT.length ? SCALAR_TEXT[first] : undefined;
     if (scalar === undefined) return false;
     this.setValue(text.slice(start + 1, end), scalar);
     return true;
+  }
+
+  /** `#<digits>` short enough to be exact as a number. */
+  private fastTime(text: string, start: number, end: number): boolean {
+    if (end === start + 1 || end - start > SAFE_TIME_DIGITS) return false;
+    let time = 0;
+    for (let i = start + 1; i < end; i++) {
+      const digit = text.charCodeAt(i) - ZERO;
+      if (digit < 0 || digit > MAX_DIGIT) return false;
+      time = time * DECIMAL_BASE + digit;
+    }
+    this.setTime(time);
+    return true;
+  }
+
+  private setTime(time: Ticks): void {
+    this.stepTime = time;
+    this.sawTime = true;
   }
 
   private token(token: string): void {
@@ -195,32 +203,25 @@ export class VcdParser {
     this.headerCommand(keyword, args);
   }
 
+  /** The header commands the viewer uses; `$date`, `$version` and the like are skipped. */
+  private readonly headerCommands: Readonly<Record<string, (args: readonly string[]) => void>> = {
+    $timescale: (args) => this.setTimescale(args.join('')),
+    $scope: (args) => this.tree.enter(args[1] ?? args[0] ?? '', 'instance'),
+    $upscope: () => this.tree.leave(),
+    $var: (args) => this.declare(args),
+    $comment: (args) => this.headerComment(args),
+    $enddefinitions: () => {
+      this.phase = 'body';
+    },
+  };
+
   private headerCommand(keyword: string, args: readonly string[]): void {
-    switch (keyword) {
-      case '$timescale':
-        this.setTimescale(args.join(''));
-        break;
-      case '$scope':
-        this.tree.enter(args[1] ?? args[0] ?? '', 'instance');
-        break;
-      case '$upscope':
-        this.tree.leave();
-        break;
-      case '$var':
-        this.declare(args);
-        break;
-      case '$comment':
-        // GHDL: `$comment state is not handled $end` for an enumeration, a record or `character`.
-        if (args.length === 4 && args[1] === 'is' && args[2] === 'not' && args[3] === 'handled') {
-          this.tree.addUnavailable({ name: args[0], reason: 'vcd-type' });
-        }
-        break;
-      case '$enddefinitions':
-        this.phase = 'body';
-        break;
-      default:
-        break; // $date, $version: nothing the viewer shows
-    }
+    this.headerCommands[keyword]?.(args);
+  }
+
+  /** GHDL: `$comment state is not handled $end` for an enumeration, a record or `character`. */
+  private headerComment(args: readonly string[]): void {
+    if (args.slice(1).join(' ') === NOT_HANDLED) this.tree.addUnavailable({ name: args[0], reason: 'vcd-type' });
   }
 
   private setTimescale(text: string): void {
@@ -244,38 +245,40 @@ export class VcdParser {
     this.tree.addSignal(signal);
   }
 
+  /** What a body token starting with each character is (§ 8.3 rules 6–9). */
+  private readonly bodyTokens: Readonly<Record<string, (token: string) => void>> = {
+    '#': (token) => this.setTime(parseTime(token.slice(1))),
+    b: (token) => this.awaitCode((code) => this.setValue(code, token.slice(1))),
+    r: (token) => this.awaitCode((code) => this.setReal(code, token.slice(1))),
+    // A string value (Icarus) is not shown; its code follows and is skipped.
+    s: () => this.awaitCode(() => {}),
+    $: (token) => this.bodyCommand(token),
+  };
+
+  private awaitCode(apply: (code: string) => void): void {
+    this.awaitingCode = apply;
+  }
+
   private bodyToken(token: string): void {
     if (this.skippingComment) {
-      if (token === '$end') this.skippingComment = false;
+      this.skippingComment = token !== '$end';
       return;
     }
-    if (this.vectorValue !== null) {
-      this.setValue(token, this.vectorValue);
-      this.vectorValue = null;
+    const apply = this.awaitingCode;
+    if (apply !== null) {
+      this.awaitingCode = null;
+      apply(token);
       return;
     }
-    if (this.realValue !== null) {
-      this.setReal(token, this.realValue);
-      this.realValue = null;
-      return;
-    }
-    const first = token[0];
-    if (first === '#') {
-      this.stepTime = parseTime(token.slice(1));
-      this.sawTime = true;
-    } else if (first === 'b' || first === 'B') {
-      this.vectorValue = token.slice(1);
-    } else if (first === 'r' || first === 'R') {
-      this.realValue = token.slice(1);
-    } else if (first === 's' || first === 'S') {
-      this.vectorValue = null; // a string value (Icarus): not shown; its code follows and is skipped
-      this.realValue = '';
-    } else if (first === '$') {
-      if (token === '$comment') this.skippingComment = true;
-      else if (!DUMP_KEYWORDS.has(token)) throw new WaveParseError(`The waveform has a command the viewer does not know: ${token}.`);
-    } else if (SCALAR_VALUE.test(first)) {
-      this.setValue(token.slice(1), first);
-    }
+    const lead = token[0].toLowerCase();
+    const handle = this.bodyTokens[lead];
+    if (handle !== undefined) handle(token);
+    else if (SCALAR_VALUE.test(lead)) this.setValue(token.slice(1), token[0]);
+  }
+
+  private bodyCommand(token: string): void {
+    if (token === '$comment') this.skippingComment = true;
+    else if (!DUMP_KEYWORDS.has(token)) throw new WaveParseError(`The waveform has a command the viewer does not know: ${token}.`);
   }
 
   private setValue(code: string, raw: string): void {
@@ -306,8 +309,24 @@ export class VcdParser {
   }
 }
 
+const SPACE = ' '.charCodeAt(0);
+const LINE_FEED = '\n'.charCodeAt(0);
+const CARRIAGE_RETURN = '\r'.charCodeAt(0);
+const TAB = '\t'.charCodeAt(0);
+
+/** Direct comparisons, not a set lookup: this runs for every character of the file. */
 function isSpace(code: number): boolean {
-  return code === 32 || code === 10 || code === 13 || code === 9;
+  return code === SPACE || code === LINE_FEED || code === CARRIAGE_RETURN || code === TAB;
+}
+
+function skipSpace(text: string, i: number, end: number): number {
+  while (i < end && isSpace(text.charCodeAt(i))) i++;
+  return i;
+}
+
+function skipToken(text: string, i: number, end: number): number {
+  while (i < end && !isSpace(text.charCodeAt(i))) i++;
+  return i;
 }
 
 /** Parses a whole VCD text at once; for tests and small files. */

@@ -21,21 +21,28 @@ function errorText(e: unknown): string {
   return 'The waveform could not be read: the file is damaged or incomplete.';
 }
 
+function finish(run: number): void {
+  const transfer = current;
+  if (transfer?.run !== run) return;
+  current = null;
+  transfer.decoder.finish().then(
+    (data) => reply({ type: 'done', run, data }, transferables(data)),
+    (e: unknown) => reply({ type: 'error', run, message: errorText(e) }),
+  );
+}
+
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const message = event.data;
-  if (message.type === 'begin') {
-    current = { run: message.run, decoder: createWaveDecoder(message.format, message.status) };
-  } else if (message.type === 'chunk') {
-    if (current?.run === message.run) current.decoder.push(new Uint8Array(message.chunk));
-  } else if (message.type === 'end') {
-    const transfer = current;
-    if (transfer?.run !== message.run) return;
-    current = null;
-    transfer.decoder.finish().then(
-      (data) => reply({ type: 'done', run: transfer.run, data }, transferables(data)),
-      (e: unknown) => reply({ type: 'error', run: transfer.run, message: errorText(e) }),
-    );
-  } else if (message.type === 'abort') {
-    current = null;
+  switch (message.type) {
+    case 'begin':
+      current = { run: message.run, decoder: createWaveDecoder(message.format, message.status) };
+      return;
+    case 'chunk':
+      if (current?.run === message.run) current.decoder.push(new Uint8Array(message.chunk));
+      return;
+    case 'end':
+      return finish(message.run);
+    case 'abort':
+      current = null;
   }
 };

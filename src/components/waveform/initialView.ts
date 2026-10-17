@@ -16,7 +16,10 @@ const ERROR_WINDOW_FRACTION = 0.1;
 const ERROR_WINDOW_MIN_PERIODS = 20;
 /** Changes looked at to decide whether a signal is a clock. */
 const CLOCK_SAMPLE_CHANGES = 9;
-const CLOCK_NAME = /cl(oc)?k/i;
+/** A clock's name: `clk`, `clock`, `CLOCK_50`. */
+export const CLOCK_NAME = /cl(oc)?k/i;
+/** The change that ends the first whole period after the start value. */
+const FIRST_FULL_PERIOD_END = 3;
 
 /** The testbench's own signals in declaration order, as many as `maxRows` (FR-5). */
 export function firstShown(data: WaveformData, maxRows: number): SignalPath[] {
@@ -28,6 +31,16 @@ export function firstShown(data: WaveformData, maxRows: number): SignalPath[] {
     .map((signal) => childPath(tb.name, signal.name));
 }
 
+/** The period of a signal that toggles at a fixed rate, or undefined. */
+function regularPeriod(times: Float64Array | undefined): Ticks | undefined {
+  if (times === undefined || times.length < CLOCK_SAMPLE_CHANGES) return undefined;
+  // Skip the first change: a clock usually starts at its initial value at time 0.
+  const period = times[FIRST_FULL_PERIOD_END] - times[1];
+  if (period <= 0) return undefined;
+  for (let i = 1; i + 2 < CLOCK_SAMPLE_CHANGES; i++) if (times[i + 2] - times[i] !== period) return undefined;
+  return period;
+}
+
 /** The period of the testbench's clock in ticks: a one-bit signal that toggles at a fixed rate. */
 export function clockPeriod(data: WaveformData): Ticks | undefined {
   const tb = testbenchScope(data);
@@ -35,13 +48,8 @@ export function clockPeriod(data: WaveformData): Ticks | undefined {
   const candidates = tb.signals.filter((s) => s.kind === 'logic');
   candidates.sort((a, b) => Number(CLOCK_NAME.test(b.name)) - Number(CLOCK_NAME.test(a.name)));
   for (const signal of candidates) {
-    const times = data.traces.get(signal.trace)?.times;
-    if (times === undefined || times.length < CLOCK_SAMPLE_CHANGES) continue;
-    // Skip the first change: a clock usually starts at its initial value at time 0.
-    const period = times[3] - times[1];
-    let regular = period > 0;
-    for (let i = 1; regular && i + 2 < CLOCK_SAMPLE_CHANGES; i++) regular = times[i + 2] - times[i] === period;
-    if (regular) return period;
+    const period = regularPeriod(data.traces.get(signal.trace)?.times);
+    if (period !== undefined) return period;
   }
   return undefined;
 }

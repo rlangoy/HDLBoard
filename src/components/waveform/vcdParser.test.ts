@@ -97,7 +97,7 @@ describe('a file cut off by a stopped run', () => {
     const data = parseVcd(text, 'stopped');
     expect(data.source.truncated).toBe(true);
     // The last time step whose `#` line is complete: its changes may be cut, so it is dropped.
-    const lastStep = Number([...text.matchAll(/#(\d+)\s/g)].pop()![1]);
+    const lastStep = Number([...text.matchAll(/#(\d+)\s/g)].pop()?.[1]);
     expect(data.endTime).toBe(lastStep);
     for (const trace of data.traces.values()) expect(trace.times[trace.times.length - 1]).toBeLessThan(lastStep);
   });

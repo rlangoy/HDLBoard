@@ -3,430 +3,314 @@
 
 /**
  * The waveform view, shown in the editor area in place of the testbench/RTL split view
- * (docs/waveform_viewer_spec.md § 8.6, W8). Few controls on screen (S3): the time at the
- * cursor, Zoom out, Zoom in, Fit, ⋯ and Close; everything else is in a right-click menu.
- * The way back to the code is always one click: Close, or Go to declaration.
+ * (docs/waveform_viewer_spec.md § 8.6, W8). Few controls on screen (S3); the way back to
+ * the code is always one click: Close, or Go to declaration. This component only puts
+ * the parts together – toolbar, notes, the signal list beside the canvas, the menus –
+ * and the state lives in `useWaveView`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react';
 import { firstError, lastReportFs } from './consoleTimes';
-import { firstShown, firstWindow, runEnd, type RunMoments } from './initialView';
-import type { RunWaveStatus, Ticks, WaveformData } from './model';
-import { defaultShowAs, hasShowAs, SHOW_AS_LABELS, type ShowAs } from './radix';
-import { listRows, signalsByPath, splitPath, testbenchScope, type SignalPath } from './signalRows';
+import { changeFrom, fineStep, type Direction } from './cursorSteps';
+import { useDelayed, useElementSize } from './domHooks';
+import { CLOCK_NAME, firstWindow, runEnd, type RunMoments } from './initialView';
+import type { Ticks, Trace, WaveformData } from './model';
+import { defaultShowAs, hasShowAs, type ShowAs } from './radix';
+import { declarationOf, signalsByPath, testbenchScope, type SignalPath, type TraceRow } from './signalRows';
 import { SignalList } from './SignalList';
+import type { RowCallbacks, RowContext } from './SignalRow';
 import { formatCursorFs, viewOf } from './timeAxis';
-import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
-import { WaveCanvas } from './WaveCanvas';
 import type { Waveform } from './useWaveform';
+import { useWaveView, type WaveFocus, type WaveView } from './useWaveView';
+import type { ViewMemory } from './viewSetup';
+import { WaveCanvas } from './WaveCanvas';
+import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
+import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
+import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
+import { WaveToolbar } from './WaveToolbar';
 import './Waveform.css';
 
-/** What the student set up in the view, kept across reruns and reopening (FR-17). */
-export interface WaveViewMemory {
-  readonly shown: readonly SignalPath[];
-  readonly open: readonly string[];
-  readonly showAll: boolean;
-  readonly showAs: ReadonlyArray<readonly [SignalPath, ShowAs]>;
-  readonly window: { readonly start: Ticks; readonly end: Ticks };
-  readonly cursor: Ticks;
-}
-
-/** A console link asked for this time (FR-16); `id` makes the same time twice two requests. */
-export interface WaveFocus {
-  readonly fs: number;
-  readonly id: number;
-}
+export type { WaveFocus } from './useWaveView';
+export type { ViewMemory as WaveViewMemory } from './viewSetup';
 
 export interface WaveformPaneProps {
   readonly waveform: Waveform;
-  /** The testbench the waveform is of, for the title. */
+  /** The testbench the waveform is of, for the title until the waveform names it. */
   readonly title: string;
   /** The run's console lines: where its first error and last report are (FR-26). */
   readonly consoleLines: readonly string[];
-  readonly memory: MutableRefObject<WaveViewMemory | null>;
+  readonly memory: MutableRefObject<ViewMemory | null>;
   readonly focus: WaveFocus | null;
   onGoToDeclaration(scopes: readonly string[], name: string): void;
 }
 
 const NAMES_WIDTH = 260;
 const ZOOM_STEP = 2;
-/** Never zoomed in further than this many pixels per tick of the file. */
-const MAX_PX_PER_TICK = 50;
+/** The narrowest window, in ticks of the file: 20 fs for GHDL, 20 ps for Icarus. */
+const MIN_WINDOW_TICKS = 20;
 const DEFAULT_FITTING_ROWS = 14;
 const LOADING_NOTE_DELAY_MS = 500;
+const MENU_WIDTH = 220;
+const MENU_GAP = 4;
 
-const STATUS_NOTE: Readonly<Record<Exclude<RunWaveStatus, 'complete'>, string>> = {
-  stopped: 'You stopped this run: the waveform shows it up to that point.',
-  timeout: 'This run took too long and was stopped: the waveform shows it up to there.',
-  'size-limit': 'The waveform got too large, so the simulation was stopped: it shows the run up to there. End the testbench when the test is done.',
-};
+type SignalMenuState = { readonly kind: 'signal'; readonly place: MenuPlace; readonly path: SignalPath };
+type Menu = { readonly kind: 'more'; readonly place: MenuPlace } | SignalMenuState;
 
-interface ViewSetup {
-  readonly shown: ReadonlySet<SignalPath>;
-  readonly open: ReadonlySet<string>;
-  readonly showAll: boolean;
-  readonly showAs: ReadonlyMap<SignalPath, ShowAs>;
-  readonly start: Ticks;
-  readonly end: Ticks;
-  readonly cursor: Ticks;
+/** What the signal list and the menus need to know and do. */
+interface Signals {
+  readonly selected: string | null;
+  readonly showAsOf: (path: SignalPath) => ShowAs;
+  readonly goTo: (path: SignalPath) => void;
+  readonly on: RowCallbacks;
 }
 
-/** The first view of a waveform, or the student's own setup for every signal that still exists (FR-5, FR-17, FR-26). */
-function setupFor(data: WaveformData, memory: WaveViewMemory | null, moments: RunMoments, fittingRows: number): ViewSetup {
-  const first = firstWindow(data, moments);
-  const known = signalsByPath(data);
-  const kept = memory?.shown.filter((path) => known.has(path)) ?? [];
-  if (memory === null || kept.length === 0) {
-    return { shown: new Set(firstShown(data, fittingRows)), open: new Set(), showAll: false, showAs: new Map(), ...first };
-  }
-  // A run with an error still opens at it: start where the problem is (W11).
-  const window = first.error !== undefined ? first : { ...memory.window, cursor: memory.cursor };
-  return {
-    shown: new Set(kept),
-    open: new Set(memory.open),
-    showAll: memory.showAll,
-    showAs: new Map(memory.showAs.filter(([path, showAs]) => known.has(path) && SHOW_AS_LABELS.some(([value]) => value === showAs))),
-    start: window.start,
-    end: window.end,
-    cursor: window.cursor,
+function useMoments(consoleLines: readonly string[]): RunMoments {
+  return useMemo(() => ({ firstError: firstError(consoleLines), lastReportFs: lastReportFs(consoleLines) }), [consoleLines]);
+}
+
+/**
+ * The traces the arrow keys step through: the selected shown signal, or else every shown
+ * signal but the clocks, whose edges would make each step tiny.
+ */
+function stepTraces(view: WaveView, selected: string | null): Trace[] {
+  const shown = view.list.rows.slice(0, view.list.activeCount).filter((row): row is TraceRow => row.kind === 'trace');
+  const chosen = shown.filter((row) => row.path === selected);
+  const others = shown.filter((row) => !CLOCK_NAME.test(row.signal.name));
+  return (chosen.length > 0 ? chosen : others).map((row) => row.trace);
+}
+
+interface KeyTargets {
+  readonly view: WaveView;
+  readonly selected: string | null;
+  readonly closeMenu: () => boolean;
+  readonly close: () => void;
+}
+
+function moveCursor({ view, selected }: KeyTargets, direction: Direction, fine: boolean): void {
+  const { setup } = view;
+  if (setup === null) return;
+  const span = setup.window.end - setup.window.start;
+  const to = fine ? fineStep(setup.cursor, span, direction) : changeFrom(stepTraces(view, selected), setup.cursor, direction);
+  if (to !== undefined) view.actions.showCursor(to);
+}
+
+/** The keys of the view (S9: never required): Esc, + / −, F, and the arrows for the cursor. */
+function keyAction(event: KeyboardEvent<HTMLElement>, targets: KeyTargets): (() => void) | undefined {
+  const { actions } = targets.view;
+  const keys: Readonly<Record<string, () => void>> = {
+    Escape: () => targets.closeMenu() || targets.close(),
+    '+': () => actions.zoom(1 / ZOOM_STEP),
+    '=': () => actions.zoom(1 / ZOOM_STEP),
+    '-': () => actions.zoom(ZOOM_STEP),
+    f: () => actions.fit(),
+    F: () => actions.fit(),
+    ArrowLeft: () => moveCursor(targets, 'previous', event.shiftKey),
+    ArrowRight: () => moveCursor(targets, 'next', event.shiftKey),
   };
+  return event.ctrlKey || event.metaKey || event.altKey ? undefined : keys[event.key];
 }
 
-function useSize(element: HTMLElement | null): { width: number; height: number } {
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    if (element === null) return;
-    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [element]);
-  return size;
-}
-
-function useDelayed(on: boolean, delayMs: number): boolean {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (!on) {
-      setShown(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setShown(true), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [on, delayMs]);
-  return shown;
-}
-
-interface Menu {
-  readonly kind: 'signal' | 'more';
-  readonly path?: SignalPath;
-  readonly x: number;
-  readonly y: number;
-}
-
-export function WaveformPane({ waveform, title, consoleLines, memory, focus, onGoToDeclaration }: WaveformPaneProps) {
-  const { state } = waveform;
-  const data = state.data;
-  const [body, setBody] = useState<HTMLDivElement | null>(null);
-  const [traces, setTraces] = useState<HTMLDivElement | null>(null);
-  const bodySize = useSize(body);
-  const tracesSize = useSize(traces);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [setup, setSetup] = useState<ViewSetup | null>(null);
-  const [menu, setMenu] = useState<Menu | null>(null);
+function useSignals(props: WaveformPaneProps, view: WaveView, openMenu: (menu: Menu) => void): Signals {
   const [selected, setSelected] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const paneRef = useRef<HTMLElement>(null);
-  const showLoading = useDelayed(state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
-
-  const moments = useMemo<RunMoments>(() => ({ firstError: firstError(consoleLines), lastReportFs: lastReportFs(consoleLines) }), [consoleLines]);
-  const errorMarker = useMemo(() => (data === null ? undefined : firstWindow(data, moments).error), [data, moments]);
-  const end = data === null ? 1 : runEnd(data, moments);
-
-  // A new waveform: the first view, or what the student had (FR-17).
-  const fittingRows = bodySize.height > 0 ? Math.max(1, Math.floor((bodySize.height - AXIS_HEIGHT) / ROW_HEIGHT) - 1) : DEFAULT_FITTING_ROWS;
-  const fittingRowsRef = useRef(fittingRows);
-  fittingRowsRef.current = fittingRows;
-  useEffect(() => {
-    if (data !== null) setSetup(setupFor(data, memory.current, moments, fittingRowsRef.current));
-    // Only a new waveform starts a new setup; the console growing during a run does not.
-  }, [data]);
-
-  // Kept for the next run and the next opening.
-  useEffect(() => {
-    if (setup === null) return;
-    memory.current = {
-      shown: [...setup.shown],
-      open: [...setup.open],
-      showAll: setup.showAll,
-      showAs: [...setup.showAs],
-      window: { start: setup.start, end: setup.end },
-      cursor: setup.cursor,
-    };
-  }, [setup, memory]);
-
-  const update = useCallback((change: (s: ViewSetup) => ViewSetup) => setSetup((s) => (s === null ? s : change(s))), []);
-
-  const minSpan = Math.max(tracesSize.width, 1) / MAX_PX_PER_TICK;
-  const setWindow = useCallback(
-    (start: Ticks, stop: Ticks) =>
-      update((s) => {
-        let span = Math.max(stop - start, minSpan);
-        span = Math.min(span, end * 4);
-        const from = Math.min(Math.max(start, -span * 0.25), end - span * 0.25);
-        return { ...s, start: from, end: from + span };
-      }),
-    [update, minSpan, end],
-  );
-
-  const zoom = useCallback(
-    (factor: number, at?: Ticks) =>
-      update((s) => {
-        const center = at ?? (s.cursor >= s.start && s.cursor <= s.end ? s.cursor : (s.start + s.end) / 2);
-        const span = Math.min(Math.max((s.end - s.start) * factor, minSpan), end * 4);
-        const ratio = s.end === s.start ? 0.5 : (center - s.start) / (s.end - s.start);
-        const start = center - span * ratio;
-        return { ...s, start, end: start + span };
-      }),
-    [update, minSpan, end],
-  );
-
-  const fit = useCallback(() => update((s) => ({ ...s, start: 0, end })), [update, end]);
-
-  // A console time link: the cursor goes there, and the view follows when it is outside (FR-16).
-  const appliedFocus = useRef<number | null>(null);
-  useEffect(() => {
-    // Each request once: a new waveform arriving later must not move the cursor back to it.
-    if (focus === null || data === null || setup === null || appliedFocus.current === focus.id) return;
-    appliedFocus.current = focus.id;
-    const time = focus.fs / data.tickFs;
-    update((s) => {
-      const span = s.end - s.start;
-      const inside = time >= s.start && time <= s.end;
-      return inside ? { ...s, cursor: time } : { ...s, cursor: time, start: time - span / 2, end: time + span / 2 };
-    });
-  }, [focus, data, setup, update]);
-
-  const rows = useMemo(() => (data === null || setup === null ? [] : listRows(data, setup)), [data, setup]);
-  const showAsOf = useCallback(
-    (path: SignalPath) => {
-      const signal = data === null ? undefined : signalsByPath(data).get(path);
-      return setup?.showAs.get(path) ?? (signal === undefined ? 'hex' : defaultShowAs(signal));
-    },
-    [data, setup],
-  );
-
+  const data = props.waveform.state.data;
+  const known = useMemo(() => (data === null ? new Map() : signalsByPath(data)), [data]);
+  const showAsOf = (path: SignalPath): ShowAs => {
+    const signal = known.get(path);
+    return view.setup?.showAs.get(path) ?? (signal === undefined ? 'hex' : defaultShowAs(signal));
+  };
   const goTo = (path: SignalPath) => {
     if (data === null) return;
-    // Record fields go to the record's own declaration.
-    const { scopes, name } = splitPath(path);
-    const known = signalsByPath(data);
-    let scopeParts = scopes;
-    let signalName = name;
-    while (scopeParts.length > 1 && known.has(scopeParts.join('/'))) {
-      signalName = scopeParts[scopeParts.length - 1];
-      scopeParts = scopeParts.slice(0, -1);
-    }
-    onGoToDeclaration(scopeParts, signalName);
+    const { scopes, name } = declarationOf(data, path);
+    props.onGoToDeclaration(scopes, name);
   };
-
-  const toggle = (set: ReadonlySet<string>, item: string): Set<string> => {
-    const next = new Set(set);
-    if (!next.delete(item)) next.add(item);
-    return next;
+  const on: RowCallbacks = {
+    onSelect: setSelected,
+    onToggleShown: view.actions.toggleShown,
+    onToggleOpen: view.actions.toggleOpen,
+    onToggleExpanded: view.actions.toggleExpanded,
+    onContextMenu: (path, x, y) => openMenu({ kind: 'signal', place: { x, y }, path }),
+    onGoToDeclaration: goTo,
   };
+  return { selected, showAsOf, goTo, on };
+}
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.target instanceof HTMLInputElement) return;
-    if (event.key === 'Escape') {
-      if (menu !== null) setMenu(null);
-      else waveform.close();
-    } else if (event.key === '+' || event.key === '=') zoom(1 / ZOOM_STEP);
-    else if (event.key === '-' || event.key === '−') zoom(ZOOM_STEP);
-    else if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey) fit();
-    else return;
-    event.preventDefault();
+interface SignalMenuForProps {
+  readonly menu: SignalMenuState;
+  readonly view: WaveView;
+  readonly data: WaveformData;
+  readonly signals: Signals;
+  readonly closeMenu: () => void;
+}
+
+function SignalMenuFor({ menu, view, data, signals, closeMenu }: SignalMenuForProps) {
+  const signal = signalsByPath(data).get(menu.path);
+  const then = (action: () => void) => {
+    action();
+    closeMenu();
   };
-
-  useEffect(() => paneRef.current?.focus(), []);
-
-  const view = setup === null ? viewOf(0, 1, 1) : viewOf(setup.start, setup.end, tracesSize.width);
-  const source = data?.source;
-  const notes = [
-    state.stale && 'From the previous run – the new run’s waveform appears when it is ready.',
-    state.noWaveNote,
-    source && source.status !== 'complete' && STATUS_NOTE[source.status],
-    source?.truncated && source.status === 'complete' && 'The waveform file ended early: it is shown up to there.',
-  ].filter((note): note is string => typeof note === 'string');
-  const listHeight = AXIS_HEIGHT + rows.length * ROW_HEIGHT;
-  const menuSignal = menu?.path === undefined || data === null ? undefined : signalsByPath(data).get(menu.path);
-
   return (
-    <section
-      ref={paneRef}
-      className="wv-pane"
-      aria-label="Waveform"
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
-      onClick={() => menu !== null && setMenu(null)}
-    >
-      <header className="wv-toolbar">
-        {/* Named after the waveform shown, which may be the previous run's (§ 8.7). */}
-        <h2 className="wv-toolbar__title">Waveform – {(data && testbenchScope(data)?.name) ?? title}</h2>
-        <span className="wv-toolbar__time" aria-live="polite">
-          Time <strong>{setup === null || data === null ? '–' : formatCursorFs(setup.cursor * data.tickFs)}</strong>
-        </span>
-        <div className="wv-toolbar__buttons">
-          <button type="button" className="wv-button" onClick={() => zoom(ZOOM_STEP)} disabled={setup === null} aria-label="Zoom out" title="Zoom out (−)">
-            −
-          </button>
-          <button type="button" className="wv-button" onClick={() => zoom(1 / ZOOM_STEP)} disabled={setup === null} aria-label="Zoom in" title="Zoom in (+)">
-            +
-          </button>
-          <button type="button" className="wv-button wv-button--text" onClick={fit} disabled={setup === null} title="Show the whole run (F)">
-            Fit
-          </button>
-          <button
-            type="button"
-            className="wv-button"
-            aria-label="More"
-            aria-haspopup="menu"
-            title="More"
-            onClick={(e) => {
-              e.stopPropagation();
-              const box = e.currentTarget.getBoundingClientRect();
-              setMenu({ kind: 'more', x: box.right - 200, y: box.bottom + 4 });
-            }}
-          >
-            ⋯
-          </button>
-          <button type="button" className="wv-button" onClick={waveform.close} aria-label="Close the waveform" title="Close the waveform and show the code (Esc)">
-            ✕
-          </button>
-        </div>
-      </header>
+    <SignalMenu
+      place={menu.place}
+      showAs={signal !== undefined && hasShowAs(signal) ? signals.showAsOf(menu.path) : undefined}
+      shown={view.setup?.list.shown.includes(menu.path) ?? false}
+      onGoToDeclaration={() => then(() => signals.goTo(menu.path))}
+      onShowAs={(showAs) => then(() => view.actions.setShowAs(menu.path, showAs))}
+      onToggleShown={() => then(() => view.actions.toggleShown(menu.path))}
+    />
+  );
+}
 
-      {notes.map((note) => (
-        <p key={note} className="wv-note">
-          {note}
-        </p>
-      ))}
-      {helpOpen && (
-        <div className="wv-help">
-          <p>
-            Click to place the cursor; the values at the cursor are listed beside the names. The mouse wheel scrolls in time, Ctrl + wheel zooms,
-            a double-click on a bus zooms to that value. Right-click a signal for “Show as” and Go to declaration.
-          </p>
-          <p>The waveform shows each signal’s value at the end of every time step; delta cycles are not shown.</p>
-          <button type="button" className="wv-button wv-button--text" onClick={() => setHelpOpen(false)}>
-            Close help
-          </button>
-        </div>
-      )}
+/** What the canvas's mouse gestures do to the view. */
+function gestureHandlers({ actions }: WaveView, context: RowContext) {
+  return {
+    onCursor: actions.setCursor,
+    onZoomTo: (start: Ticks, end: Ticks) => actions.setWindow({ start, end }),
+    onScroll: actions.scroll,
+    onZoom: actions.zoom,
+    onSelectRow: context.on.onSelect,
+  };
+}
 
-      {data === null ? (
-        <div className="wv-empty">
-          {state.error ?? (showLoading ? 'Loading the waveform …' : state.loading !== null ? '' : 'Run a testbench to see its waveform.')}
-        </div>
-      ) : (
-        <div className="wv-body" ref={setBody} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
-          <div className="wv-grid" style={{ height: listHeight }}>
-            <div className="wv-names" style={{ width: NAMES_WIDTH }}>
-              <div className="wv-names__header" style={{ height: AXIS_HEIGHT }}>
-                <span>Signal</span>
-                <span>Value</span>
-              </div>
-              {setup !== null && (
-                <SignalList
-                  rows={rows}
-                  traces={data.traces}
-                  cursor={setup.cursor}
-                  showAsOf={showAsOf}
-                  selected={selected ?? rows[0]?.path ?? null}
-                  onSelect={setSelected}
-                  onToggleShown={(path) => update((s) => ({ ...s, shown: toggle(s.shown, path) }))}
-                  onToggleOpen={(path) => update((s) => ({ ...s, open: toggle(s.open, path) }))}
-                  onShowAll={() => update((s) => ({ ...s, showAll: true }))}
-                  onContextMenu={(path, x, y) => setMenu({ kind: 'signal', path, x, y })}
-                  onGoToDeclaration={goTo}
-                />
-              )}
-            </div>
-            <div className="wv-traces" ref={setTraces}>
-              {setup !== null && (
-                <WaveCanvas
-                  data={data}
-                  rows={rows}
-                  view={view}
-                  width={tracesSize.width}
-                  height={Math.max(0, Math.min(bodySize.height, listHeight + ROW_HEIGHT))}
-                  scrollTop={scrollTop}
-                  cursor={setup.cursor}
-                  error={errorMarker}
-                  stale={state.stale}
-                  showAsOf={showAsOf}
-                  onCursor={(cursor) => update((s) => ({ ...s, cursor }))}
-                  onScroll={(ticks) => setWindow(setup.start + ticks, setup.end + ticks)}
-                  onZoom={zoom}
-                  onZoomTo={setWindow}
-                />
-              )}
-            </div>
+interface BodyProps {
+  readonly data: WaveformData;
+  readonly view: WaveView;
+  readonly context: RowContext;
+  readonly error: { readonly time: Ticks; readonly text: string } | undefined;
+  readonly stale: boolean;
+  readonly bodyHeight: number;
+  readonly onBodyElement: (element: HTMLDivElement | null) => void;
+}
+
+/** The scrolling part: names and values on the left, the canvas on the right, one row each. */
+function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: BodyProps) {
+  const [traces, setTraces] = useState<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const width = useElementSize(traces).width;
+  const { setup, list } = view;
+  if (setup === null) return null;
+  const listHeight = AXIS_HEIGHT + list.rows.length * ROW_HEIGHT;
+  const scene = {
+    ...list,
+    view: viewOf(setup.window.start, setup.window.end, width),
+    size: { width, height: Math.max(0, Math.min(bodyHeight, listHeight + ROW_HEIGHT)) },
+    scrollTop,
+    endTime: data.endTime,
+    tickFs: data.tickFs,
+    cursor: setup.cursor,
+    stale,
+    showAsOf: context.showAsOf,
+    selectedPath: context.selected ?? undefined,
+  };
+  const handlers = gestureHandlers(view, context);
+  return (
+    <div className="wv-body" ref={onBodyElement} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+      <div className="wv-grid" style={{ height: listHeight }}>
+        <div className="wv-names" style={{ width: NAMES_WIDTH }}>
+          <div className="wv-names__header" style={{ height: AXIS_HEIGHT }}>
+            <span>Signal</span>
+            <span>Value</span>
           </div>
+          <SignalList rows={list.rows} context={{ ...context, cursor: setup.cursor }} />
         </div>
-      )}
+        <div className="wv-traces" ref={setTraces}>
+          <WaveCanvas scene={scene} error={error} handlers={handlers} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      {menu !== null && (
-        <div className="wv-menu" role="menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
-          {menu.kind === 'more' ? (
-            <>
-              <button type="button" role="menuitem" disabled={state.ready === null} onClick={() => { waveform.download(); setMenu(null); }}>
-                Download waveform (.{state.ready?.format ?? 'vcd'})
-              </button>
-              <button type="button" role="menuitem" onClick={() => { setHelpOpen(true); setMenu(null); }}>
-                Help
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" role="menuitem" onClick={() => { if (menu.path) goTo(menu.path); setMenu(null); }}>
-                Go to declaration
-              </button>
-              {menuSignal !== undefined && hasShowAs(menuSignal) && (
-                <div role="group" aria-label="Show as" className="wv-menu__group">
-                  <span className="wv-menu__label">Show as</span>
-                  {SHOW_AS_LABELS.map(([showAs, label]) => (
-                    <button
-                      key={showAs}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={showAsOf(menu.path!) === showAs}
-                      onClick={() => {
-                        const path = menu.path!;
-                        update((s) => ({ ...s, showAs: new Map(s.showAs).set(path, showAs) }));
-                        setMenu(null);
-                      }}
-                    >
-                      {showAsOf(menu.path!) === showAs ? '● ' : ''}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  const path = menu.path!;
-                  update((s) => ({ ...s, shown: toggle(s.shown, path) }));
-                  setMenu(null);
-                }}
-              >
-                {setup?.shown.has(menu.path!) ? 'Remove' : 'Show'}
-              </button>
-            </>
-          )}
-        </div>
+function emptyText(waveform: Waveform, showLoading: boolean): string {
+  const { error, loading } = waveform.state;
+  if (error !== null) return error;
+  if (showLoading) return 'Loading the waveform …';
+  return loading !== null ? '' : 'Run a testbench to see its waveform.';
+}
+
+interface MenusProps {
+  readonly menu: Menu | null;
+  readonly waveform: Waveform;
+  readonly view: WaveView;
+  readonly signals: Signals;
+  readonly setMenu: (menu: Menu | null) => void;
+  readonly openHelp: () => void;
+}
+
+function Menus({ menu, waveform, view, signals, setMenu, openHelp }: MenusProps) {
+  const data = waveform.state.data;
+  if (menu?.kind === 'signal' && data !== null) return <SignalMenuFor menu={menu} view={view} data={data} signals={signals} closeMenu={() => setMenu(null)} />;
+  if (menu?.kind !== 'more') return null;
+  const close = (action: () => void) => () => {
+    action();
+    setMenu(null);
+  };
+  return <MoreMenu place={menu.place} format={waveform.state.ready?.format} onDownload={close(waveform.download)} onHelp={close(openHelp)} />;
+}
+
+/** The pane's state: the view, the menus, the sizes that decide the first view. */
+function usePane(props: WaveformPaneProps) {
+  const data = props.waveform.state.data;
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
+  const bodyHeight = useElementSize(body).height;
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const moments = useMoments(props.consoleLines);
+  const fittingRows = bodyHeight > 0 ? Math.max(1, Math.floor((bodyHeight - AXIS_HEIGHT) / ROW_HEIGHT) - 1) : DEFAULT_FITTING_ROWS;
+  const end = data === null ? 1 : runEnd(data, moments);
+  const view = useWaveView({ data, moments, memory: props.memory, focus: props.focus, fittingRows, minSpan: MIN_WINDOW_TICKS, end });
+  const signals = useSignals(props, view, setMenu);
+  const error = useMemo(() => (data === null ? undefined : firstWindow(data, moments).error), [data, moments]);
+  return { data, setBody, bodyHeight, menu, setMenu, view, signals, error };
+}
+
+/** The time at the cursor as the toolbar reads it, or undefined while there is no waveform. */
+function cursorText(view: WaveView, data: WaveformData | null): string | undefined {
+  return view.setup === null || data === null ? undefined : formatCursorFs(view.setup.cursor * data.tickFs);
+}
+
+function rowContext(view: WaveView, data: WaveformData | null, signals: Signals): RowContext {
+  return { cursor: view.setup?.cursor ?? 0, traces: data?.traces ?? new Map(), showAsOf: signals.showAsOf, selected: signals.selected, on: signals.on };
+}
+
+/** The pane's keys, unless the student is typing in a field. */
+function usePaneKeys(targets: KeyTargets) {
+  return (event: KeyboardEvent<HTMLElement>) => {
+    const action = event.target instanceof HTMLInputElement ? undefined : keyAction(event, targets);
+    if (action === undefined) return;
+    event.preventDefault();
+    action();
+  };
+}
+
+export function WaveformPane(props: WaveformPaneProps) {
+  const { waveform } = props;
+  const { data, setBody, bodyHeight, menu, setMenu, view, signals, error } = usePane(props);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
+  const closeMenu = () => menu !== null && (setMenu(null), true);
+  const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, close: waveform.close });
+  const title = data === null ? props.title : (testbenchScope(data)?.name ?? props.title);
+  // The view takes the keyboard when it opens, so Esc and the arrows work at once.
+  const paneRef = useRef<HTMLElement>(null);
+  useEffect(() => paneRef.current?.focus(), []);
+  return (
+    <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
+      <WaveToolbar
+        title={title}
+        time={cursorText(view, data)}
+        onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
+        onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
+        onFit={view.actions.fit}
+        onMore={(anchor) => setMenu({ kind: 'more', place: { x: anchor.right - MENU_WIDTH, y: anchor.bottom + MENU_GAP } })}
+        onClose={waveform.close}
+      />
+      <WaveNotes notes={notesFor(waveform.state, data)} />
+      {helpOpen && <WaveHelp onClose={() => setHelpOpen(false)} />}
+      {data === null ? (
+        <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
+      ) : (
+        <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight} onBodyElement={setBody} />
       )}
+      <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} />
     </section>
   );
 }

@@ -15,21 +15,19 @@ const MODULE = /\bmodule\s+(\w+)[\s\S]*?\bendmodule\b/g;
 const MEMORY_DECLARATION = /\b(?:reg|wire|logic|integer)\b(?:\s*signed)?\s*(?:\[[^\]]*\])?\s*([^;]*);/g;
 const UNPACKED_NAME = /^\s*(\w+)\s*\[[^\]]*\]/;
 
+/** The memories one module's text declares. */
+function memoriesIn(moduleText: string): string[] {
+  return [...moduleText.matchAll(MEMORY_DECLARATION)]
+    .flatMap((declaration) => declaration[1].split(','))
+    .map((part) => UNPACKED_NAME.exec(part)?.[1])
+    .filter((name): name is string => name !== undefined);
+}
+
 /** The memories `moduleName` declares in `source`. */
 export function memoryNames(source: string, moduleName: string): string[] {
   const code = source.replace(COMMENTS, '');
-  for (const module of code.matchAll(MODULE)) {
-    if (module[1] !== moduleName) continue;
-    const names: string[] = [];
-    for (const declaration of module[0].matchAll(MEMORY_DECLARATION)) {
-      for (const part of declaration[1].split(',')) {
-        const name = UNPACKED_NAME.exec(part)?.[1];
-        if (name !== undefined) names.push(name);
-      }
-    }
-    return names;
-  }
-  return [];
+  const module = [...code.matchAll(MODULE)].find((match) => match[1] === moduleName);
+  return module === undefined ? [] : memoriesIn(module[0]);
 }
 
 /** The waveform with the testbench's memories listed as unavailable in its top scope. */

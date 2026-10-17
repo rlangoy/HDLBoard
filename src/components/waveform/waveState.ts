@@ -56,38 +56,36 @@ export type WaveEvent =
   | { readonly type: 'failed'; readonly run: number; readonly message: string }
   | { readonly type: 'none'; readonly run: number }
   | { readonly type: 'open' }
-  | { readonly type: 'close' };
+  | { readonly type: 'close' }
+  | { readonly type: 'reset' };
 
 const NO_WAVE_NOTE = 'The last run did not record a waveform – it ended before the simulation started. This is the run before it.';
 const GONE_NOTE = 'This waveform is no longer available. Run the testbench again.';
 
+type EventOf<T extends WaveEvent['type']> = Extract<WaveEvent, { type: T }>;
+type Handlers = { readonly [T in WaveEvent['type']]: (state: WaveState, event: EventOf<T>) => WaveState };
+
+/** One small function per event: what it does to the state. */
+const HANDLERS: Handlers = {
+  // The old waveform stays, dimmed, until the new one arrives, so the layout does not jump.
+  'run-started': (state) => ({ ...state, ready: null, loading: null, error: null, noWaveNote: null, boardRun: false, stale: state.data !== null }),
+  'board-run': (state) => ({ ...state, boardRun: true, open: false }),
+  ready: (state, event) => ({ ...state, ready: event.ready, unseen: !state.open, error: null, noWaveNote: null }),
+  'run-ended': (state) => (state.ready === null && !state.boardRun && state.data !== null ? { ...state, noWaveNote: NO_WAVE_NOTE } : state),
+  fetching: (state, event) => ({ ...state, loading: event.run, error: null }),
+  // A stopped or replaced run's waveform is never shown (W10).
+  parsed: (state, event) => (event.run !== state.ready?.run ? state : { ...state, data: event.data, dataRun: event.run, loading: null, stale: false }),
+  failed: (state, event) => (event.run !== state.ready?.run ? state : { ...state, loading: null, error: event.message }),
+  none: (state, event) => (event.run !== state.loading ? state : { ...state, loading: null, error: GONE_NOTE }),
+  open: (state) => ({ ...state, open: true, unseen: false }),
+  close: (state) => ({ ...state, open: false }),
+  // Another project: its waveform, if any, comes from its own run.
+  reset: () => INITIAL_WAVE_STATE,
+};
+
 export function waveReducer(state: WaveState, event: WaveEvent): WaveState {
-  switch (event.type) {
-    case 'run-started':
-      // The old waveform stays, dimmed, until the new one arrives, so the layout does not jump.
-      return { ...state, ready: null, loading: null, error: null, noWaveNote: null, boardRun: false, stale: state.data !== null };
-    case 'board-run':
-      return { ...state, boardRun: true, open: false };
-    case 'ready':
-      return { ...state, ready: event.ready, unseen: !state.open, error: null, noWaveNote: null };
-    case 'run-ended':
-      return state.ready === null && !state.boardRun && state.data !== null ? { ...state, noWaveNote: NO_WAVE_NOTE } : state;
-    case 'fetching':
-      return { ...state, loading: event.run, error: null };
-    case 'parsed':
-      if (event.run !== state.ready?.run) return state; // a stopped or replaced run's waveform is never shown (W10)
-      return { ...state, data: event.data, dataRun: event.run, loading: null, stale: false };
-    case 'failed':
-      if (event.run !== state.ready?.run) return state;
-      return { ...state, loading: null, error: event.message };
-    case 'none':
-      if (event.run !== state.loading) return state;
-      return { ...state, loading: null, error: GONE_NOTE };
-    case 'open':
-      return { ...state, open: true, unseen: false };
-    case 'close':
-      return { ...state, open: false };
-  }
+  const handle = HANDLERS[event.type] as (state: WaveState, event: WaveEvent) => WaveState;
+  return handle(state, event);
 }
 
 /** Whether the newest waveform must be fetched now: the view is open and does not show it yet. */
@@ -97,17 +95,18 @@ export function needsFetch(state: WaveState): number | null {
   return run;
 }
 
-export type ButtonState = 'disabled' | 'new' | 'enabled' | 'pressed';
+/** `empty`: nothing to show yet – the button still answers, with a note on what to do first. */
+export type ButtonState = 'empty' | 'new' | 'enabled' | 'pressed';
 
 /** The Waveform button's state (§ 8.6). */
 export function buttonState(state: WaveState): ButtonState {
   if (state.open) return 'pressed';
-  if (state.boardRun || (state.ready === null && state.data === null)) return 'disabled';
+  if (state.boardRun || (state.ready === null && state.data === null)) return 'empty';
   return state.unseen ? 'new' : 'enabled';
 }
 
 export const BUTTON_TOOLTIP: Readonly<Record<ButtonState, string>> = {
-  disabled: 'Run a testbench to see its waveform. Board simulations do not record waveforms.',
+  empty: 'Show the waveform – run a testbench first. Board simulations do not record waveforms.',
   new: 'Show the waveform of the last testbench run',
   enabled: 'Show the waveform of the last testbench run',
   pressed: 'Close the waveform and show the code',

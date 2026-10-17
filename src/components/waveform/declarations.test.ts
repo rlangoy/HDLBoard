@@ -45,17 +45,17 @@ const VERILOG = [
 
 describe('findDeclaration', () => {
   test('a testbench signal, in the testbench file', () => {
-    expect(findDeclaration([COUNTER, TB], ['counter_tb'], 'count')).toEqual({ fileId: 'counter_tb.vhd', line: 8 });
+    expect(findDeclaration([COUNTER, TB], ['counter_tb'], 'count')).toMatchObject({ fileId: 'counter_tb.vhd', line: 8 });
   });
 
   test('a signal inside dut, through the instance label, in the design file', () => {
-    expect(findDeclaration([COUNTER, TB], ['counter_tb', 'dut'], 'state')).toEqual({ fileId: 'counter.vhd', line: 8 });
-    expect(findDeclaration([COUNTER, TB], ['counter_tb', 'dut'], 'clk')).toEqual({ fileId: 'counter.vhd', line: 4 });
+    expect(findDeclaration([COUNTER, TB], ['counter_tb', 'dut'], 'state')).toMatchObject({ fileId: 'counter.vhd', line: 8 });
+    expect(findDeclaration([COUNTER, TB], ['counter_tb', 'dut'], 'clk')).toMatchObject({ fileId: 'counter.vhd', line: 4 });
   });
 
   test('Verilog, past a parameter list', () => {
-    expect(findDeclaration(VERILOG, ['tb'], 'q')).toEqual({ fileId: 'tb.v', line: 3 });
-    expect(findDeclaration(VERILOG, ['tb', 'dut'], 'state')).toEqual({ fileId: 'counter.v', line: 2 });
+    expect(findDeclaration(VERILOG, ['tb'], 'q')).toMatchObject({ fileId: 'tb.v', line: 3 });
+    expect(findDeclaration(VERILOG, ['tb', 'dut'], 'state')).toMatchObject({ fileId: 'counter.v', line: 2 });
   });
 
   test('unknown instance or name', () => {
