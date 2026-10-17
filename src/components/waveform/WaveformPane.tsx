@@ -19,7 +19,7 @@ import { defaultShowAs, hasShowAs, type ShowAs } from './radix';
 import { declarationOf, signalsByPath, testbenchScope, traceRows, type SignalPath } from './signalRows';
 import { SignalList } from './SignalList';
 import type { RowCallbacks, RowContext } from './SignalRow';
-import { formatCursorFs, viewOf } from './timeAxis';
+import { formatCursorFs, pixelResolutionFs, viewOf } from './timeAxis';
 import type { Waveform } from './useWaveform';
 import { useWaveView, type WaveFocus, type WaveView } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
@@ -50,8 +50,6 @@ export interface WaveformPaneProps {
 const ZOOM_STEP = 2;
 /** The narrowest window, in ticks of the file: 20 fs for GHDL, 20 ps for Icarus. */
 const MIN_WINDOW_TICKS = 20;
-/** The toolbar does not know the canvas's width; its cursor time is rounded as if it were this wide. */
-const TYPICAL_TRACES_WIDTH_PX = 1000;
 const DEFAULT_FITTING_ROWS = 14;
 const LOADING_NOTE_DELAY_MS = 500;
 const MENU_WIDTH = 220;
@@ -184,14 +182,17 @@ interface BodyProps {
   readonly stale: boolean;
   readonly bodyHeight: number;
   readonly onBodyElement: (element: HTMLDivElement | null) => void;
+  /** The canvas's width, for the toolbar's cursor time. */
+  readonly onTracesWidth: (width: number) => void;
 }
 
 /** The scrolling part: names and values on the left, the canvas on the right, one row each. */
-function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: BodyProps) {
+function Body({ data, view, context, error, stale, bodyHeight, onBodyElement, onTracesWidth }: BodyProps) {
   const [traces, setTraces] = useState<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [namesWidth, setNamesWidth] = useNamesWidth();
   const width = useElementSize(traces).width;
+  useEffect(() => onTracesWidth(width), [width, onTracesWidth]);
   const { setup, list } = view;
   if (setup === null) return null;
   const listHeight = AXIS_HEIGHT + list.height;
@@ -270,13 +271,13 @@ function usePane(props: WaveformPaneProps) {
 }
 
 /**
- * The time at the cursor as the toolbar reads it, or undefined while there is no waveform;
- * zoomed far in, with the decimals that tell its steps apart.
+ * The time at the cursor as the toolbar reads it, or undefined while there is no waveform:
+ * with the decimals one pixel of the traces, at the screen's pixel ratio, can point at.
  */
-function cursorText(view: WaveView, data: WaveformData | null): string | undefined {
-  if (view.setup === null || data === null) return undefined;
-  const { window, cursor } = view.setup;
-  const resolution = Math.max(data.tickFs, ((window.end - window.start) * data.tickFs) / TYPICAL_TRACES_WIDTH_PX);
+function cursorText(view: WaveView, data: WaveformData | null, tracesWidth: number): string | undefined {
+  if (view.setup === null || data === null || tracesWidth <= 0) return undefined;
+  const { window: shown, cursor } = view.setup;
+  const resolution = pixelResolutionFs(viewOf(shown.start, shown.end, tracesWidth), data.tickFs, window.devicePixelRatio);
   return formatCursorFs(cursor * data.tickFs, resolution);
 }
 
@@ -299,6 +300,7 @@ export function WaveformPane(props: WaveformPaneProps) {
   const { waveform } = props;
   const { data, setBody, bodyHeight, menu, setMenu, view, signals, error } = usePane(props);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [tracesWidth, setTracesWidth] = useState(0);
   const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
   const closeMenu = () => menu !== null && (setMenu(null), true);
   const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, close: waveform.close });
@@ -310,7 +312,7 @@ export function WaveformPane(props: WaveformPaneProps) {
     <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
       <WaveToolbar
         title={title}
-        time={cursorText(view, data)}
+        time={cursorText(view, data, tracesWidth)}
         onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
         onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
         onFit={view.actions.fit}
@@ -322,7 +324,8 @@ export function WaveformPane(props: WaveformPaneProps) {
       {data === null ? (
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
-        <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight} onBodyElement={setBody} />
+        <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight}
+          onBodyElement={setBody} onTracesWidth={setTracesWidth} />
       )}
       <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} />
     </section>

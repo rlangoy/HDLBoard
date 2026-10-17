@@ -14,7 +14,7 @@ import { errorMarkerLines, traceLines, type HoverPoint } from './hoverInfo';
 import type { Ticks } from './model';
 import { paintWaveform, rowIndexAt, type Scene } from './paintWaveform';
 import type { TraceRow } from './signalRows';
-import { timeToX, xToTime } from './timeAxis';
+import { pixelResolutionFs, timeToX, xToTime } from './timeAxis';
 import { takesCursor, useCanvasGestures, type GestureHandlers, type PointerGestures } from './useCanvasGestures';
 import { spanAt } from './valueAt';
 
@@ -66,7 +66,8 @@ function traceRowAt(scene: WaveCanvasProps['scene'], y: number): TraceRow | unde
 }
 
 function hoverLines({ scene, error }: WaveCanvasProps, x: number, y: number): string[] {
-  const at: HoverPoint = { row: traceRowAt(scene, y), time: xToTime(scene.view, x), tickFs: scene.tickFs };
+  const resolutionFs = pixelResolutionFs(scene.view, scene.tickFs, window.devicePixelRatio);
+  const at: HoverPoint = { row: traceRowAt(scene, y), time: xToTime(scene.view, x), tickFs: scene.tickFs, resolutionFs };
   if (error !== undefined && Math.abs(timeToX(scene.view, error.time) - x) <= MARKER_HOVER_PX) return errorMarkerLines(error.text, at);
   return at.row === undefined ? [] : traceLines(at, scene.showAsOf(at.row.path));
 }

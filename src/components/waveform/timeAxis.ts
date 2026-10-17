@@ -53,40 +53,60 @@ function unitFor(fs: number): readonly [string, number] {
   return UNITS.find(([, size]) => magnitude >= size) ?? UNITS[UNITS.length - 1];
 }
 
+/** `value` with `decimals` decimals, trailing zeros of the fraction dropped: never those of a whole number (30, not 3). */
 function trimmed(value: number, decimals: number): string {
-  return value.toFixed(decimals).replace(/\.?0+$/, '') || '0';
+  const text = value.toFixed(decimals);
+  return text.includes('.') ? text.replace(/\.?0+$/, '') : text;
+}
+
+const clampDecimals = (decimals: number): number => Math.min(MOST_DECIMALS, Math.max(0, decimals));
+
+/**
+ * The decimals that tell tick marks `stepFs` apart in a unit of `size` fs: zoomed in to
+ * 0.1 ps steps near 20 ns, `20.0001 ns`, not `20 ns`. Three when no step is given.
+ */
+function stepDecimals(size: number, stepFs: number | undefined): number {
+  if (stepFs === undefined || stepFs <= 0) return MAX_DECIMALS;
+  return clampDecimals(Math.ceil(-Math.log10(stepFs / size) - Number.EPSILON * DECADE));
 }
 
 /**
- * The decimals a time in a unit of `size` fs needs so that times `resolutionFs` apart
- * read differently: zoomed in to 0.1 ps steps near 20 ns, `20.0001 ns`, not `20 ns`.
- * Never fewer than three.
+ * The decimals a position known to `resolutionFs` deserves: the last digit is never finer
+ * than half the resolution, so the cursor's time does not claim more than the screen can
+ * point at. One pixel of 100 ns at 96 µs reads `96.9 µs`, not `96.930 µs`.
  */
-function decimalsFor(size: number, resolutionFs: number | undefined): number {
+function resolutionDecimals(size: number, resolutionFs: number | undefined): number {
   if (resolutionFs === undefined || resolutionFs <= 0) return MAX_DECIMALS;
-  const needed = Math.ceil(-Math.log10(resolutionFs / size) - Number.EPSILON * DECADE);
-  return Math.min(MOST_DECIMALS, Math.max(MAX_DECIMALS, needed));
+  return clampDecimals(Math.floor(-Math.log10(resolutionFs / 2 / size) + Number.EPSILON * DECADE));
 }
 
 /**
- * A time for display: "0", "850 ns", "1.23 µs" – trailing zeros dropped, and as many
- * decimals as it takes to tell apart times `resolutionFs` apart (three at least).
+ * A time for display: "0", "850 ns", "1.23 µs" – trailing zeros dropped, with the decimals
+ * it takes to tell apart marks `stepFs` apart (three when no step is given).
  */
-export function formatFs(fs: number, resolutionFs?: number): string {
+export function formatFs(fs: number, stepFs?: number): string {
   if (fs === 0) return '0';
   const [unit, size] = unitFor(fs);
-  return `${trimmed(fs / size, decimalsFor(size, resolutionFs))} ${unit}`;
+  return `${trimmed(fs / size, stepDecimals(size, stepFs))} ${unit}`;
 }
 
-/** The cursor's time with a fixed number of decimals, so it does not jump while it moves: "1.230 µs". */
+/**
+ * The cursor's time with a fixed number of decimals, so it does not jump while it moves:
+ * as many as a position known to `resolutionFs` deserves (three when none is given).
+ */
 export function formatCursorFs(fs: number, resolutionFs?: number): string {
-  if (fs === 0) return '0 ns';
-  const [unit, size] = unitFor(fs);
-  return `${(fs / size).toFixed(decimalsFor(size, resolutionFs))} ${unit}`;
+  const [unit, size] = fs === 0 ? (['ns', FS_PER_NS] as const) : unitFor(fs);
+  return `${(fs / size).toFixed(resolutionDecimals(size, resolutionFs))} ${unit}`;
 }
 
-/** The time one pixel shows, or one tick of the file when that is longer: how finely the cursor can stand. */
-export const pixelResolutionFs = (view: TimeView, tickFs: number): number => Math.max(tickFs, view.ticksPerPx * tickFs);
+/**
+ * How finely the cursor can be placed: the time of one device pixel (a CSS pixel over
+ * the screen's pixel ratio, which is below 1 when the browser is zoomed out), but never
+ * finer than one tick of the file.
+ */
+export function pixelResolutionFs(view: TimeView, tickFs: number, pixelRatio = 1): number {
+  return Math.max(tickFs, (view.ticksPerPx * tickFs) / (pixelRatio > 0 ? pixelRatio : 1));
+}
 
 /** The smallest 1-2-5 step, in femtoseconds, whose marks are at least `minPx` apart. */
 export function tickStepFs(ticksPerPx: number, tickFs: number, minPx = MIN_TICK_SPACING_PX): number {

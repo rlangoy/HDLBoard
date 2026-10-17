@@ -11,7 +11,7 @@ import type { SignalRef, Trace } from './model';
 import { defaultShowAs, formatBits, formatValue, isUndefinedValue } from './radix';
 import { listRows, rowIndexAtY, SECTION_GAP_PX, sectionPath, signalsByPath, traceRows, type ListState } from './signalRows';
 import { ROW_HEIGHT } from './waveDraw';
-import { formatCursorFs, formatFs, parseSimTime, tickMarks, tickStepFs, viewOf } from './timeAxis';
+import { formatCursorFs, formatFs, parseSimTime, pixelResolutionFs, tickMarks, tickStepFs, viewOf } from './timeAxis';
 import { indexAt, nextChange, previousChange, spanAt, valueAt } from './valueAt';
 import { unavailableHelp, valueHelp } from './valueHelp';
 import { parseVcd } from './vcdParser';
@@ -100,12 +100,33 @@ describe('timeAxis', () => {
     expect(formatCursorFs(1.23e9)).toBe('1.230 µs');
   });
 
+  test("the cursor's time claims no more than one screen pixel can point at", () => {
+    // 100 µs over 1000 px: one pixel is 100 ns, so 96.930 µs reads 96.9 µs.
+    const wide = viewOf(0, 1e11, 1000);
+    expect(formatCursorFs(96.93e9, pixelResolutionFs(wide, 1))).toBe('96.9 µs');
+    // A pixel ratio of 2 halves a pixel (50 ns): still not enough for the next digit (10 ns).
+    expect(formatCursorFs(96.93e9, pixelResolutionFs(wide, 1, 2))).toBe('96.9 µs');
+    // At a ratio of 5 a device pixel is 20 ns: the 10 ns digit is shown.
+    expect(formatCursorFs(96.93e9, pixelResolutionFs(wide, 1, 5))).toBe('96.93 µs');
+    // Zoomed out in the browser (ratio below 1), a screen pixel holds more time.
+    expect(pixelResolutionFs(wide, 1, 0.5)).toBe(2e8);
+    // 2 ps over 1800 px: about 1 fs a pixel, but a GHDL tick is 1 fs and nothing is finer.
+    const deep = viewOf(20e6, 20e6 + 2000, 1800);
+    expect(formatCursorFs(20e6 + 30, pixelResolutionFs(deep, 1, 2))).toBe('20.000030 ns');
+    // Never a digit finer than half the resolution, at any zoom.
+    for (const resolution of [1, 7, 23, 1e3, 4.5e4, 1e6, 2.3e7, 1e9]) {
+      const [number] = formatCursorFs(123456789012, resolution).split(' ');
+      const decimals = number.split('.')[1]?.length ?? 0;
+      expect(10 ** -decimals * 1e9).toBeGreaterThanOrEqual(resolution / 2 - 1e-9); // 123 µs: the unit is 1e9 fs
+    }
+  });
+
   test('zoomed far in, the labels keep the decimals their steps need', () => {
     expect(formatFs(20e6 + 100, 100)).toBe('20.0001 ns');
     expect(formatFs(20e6 + 200, 100)).toBe('20.0002 ns');
     expect(formatFs(20e6, 100)).toBe('20 ns');
-    expect(formatFs(20e6 + 5000, 5000)).toBe('20.005 ns'); // a coarse step: three decimals, as before
-    expect(formatCursorFs(20e6 + 30, 10)).toBe('20.00003 ns');
+    expect(formatFs(20e6 + 5000, 5000)).toBe('20.005 ns');
+    expect(formatFs(30e6, 5e6)).toBe('30 ns'); // a coarse step: no decimals to spare
     // GHDL ticks are 1 fs: 0.1 ps steps around 20 ns read apart.
     const labels = tickMarks(viewOf(20e6, 20e6 + 2000, 1800), 1800, 1).map((m) => m.label);
     expect(new Set(labels).size).toBe(labels.length);

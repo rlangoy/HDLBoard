@@ -22,12 +22,14 @@ export interface HoverPoint {
   readonly row: TraceRow | undefined;
   readonly time: number;
   readonly tickFs: number;
+  /** How finely the mouse can point (`pixelResolutionFs`): the time gets no more decimals than that. */
+  readonly resolutionFs?: number;
 }
 
-export const timeLine = (time: number, tickFs: number): string => `at ${formatCursorFs(time * tickFs)}`;
+export const timeLine = (at: HoverPoint): string => `at ${formatCursorFs(at.time * at.tickFs, at.resolutionFs)}`;
 
 export function errorMarkerLines(text: string, at: HoverPoint): string[] {
-  return ['First error', text, timeLine(at.time, at.tickFs)];
+  return ['First error', text, timeLine(at)];
 }
 
 /** The value of `row` at the mouse, as the tooltip words it. */
@@ -44,7 +46,7 @@ export function traceLines(at: HoverPoint, showAs: ShowAs): string[] {
   const { row } = at;
   if (row === undefined) return [];
   const raw = valueAt(row.trace, at.time);
-  const when = timeLine(at.time, at.tickFs);
+  const when = timeLine(at);
   if (raw === undefined) return [`${row.label}: no value yet`, when];
   const help = row.signal.kind === 'logic' || row.signal.kind === 'vector' ? valueHelp(raw) : undefined;
   return [`${row.label} = ${valueText(row, raw, showAs)}`, when, ...(help === undefined ? [] : [help])];
