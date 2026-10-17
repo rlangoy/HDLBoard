@@ -15,6 +15,8 @@ import tseslint from 'typescript-eslint';
 const NEW_CODE = [
   'src/verilog/**/*.ts',
   'src/engines/**/*.ts',
+  'src/wave/**/*.ts',
+  'src/integration/waveform.test.ts',
   'src/runtime.ts',
   'src/session.ts',
   'src/session.test.ts',

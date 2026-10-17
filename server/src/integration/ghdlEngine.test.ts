@@ -242,7 +242,7 @@ end architecture;
 /** Everything a batch run prints. */
 async function batchOutput(plan: RunPlan): Promise<string> {
   const lines: string[] = [];
-  await ghdlEngine.startBatchRun(plan, (line) => lines.push(line), 20_000).done;
+  await ghdlEngine.startBatchRun(plan, { onOutput: (line) => lines.push(line), timeoutMs: 20_000 }).done;
   return lines.join('\n');
 }
 

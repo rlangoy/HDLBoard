@@ -90,7 +90,14 @@ export function startPersistentRun(
  * infinite polling loop keeping it alive, a design bug (an unconditional
  * loop with no `wait`) has nothing else to save it from a hang.
  */
-export function runBatch(cwd: string, entityName: string, onOutput: (line: string) => void, timeoutMs: number): BatchHandle {
-  const child = spawn(ghdlExe, ['-r', '--std=08', entityName], { cwd });
+export function runBatch(
+  cwd: string,
+  entityName: string,
+  onOutput: (line: string) => void,
+  timeoutMs: number,
+  runOptions: readonly string[] = [],
+): BatchHandle {
+  // Run options such as `--wave=` follow the entity name: they belong to the simulation, not to GHDL.
+  const child = spawn(ghdlExe, ['-r', '--std=08', entityName, ...runOptions], { cwd });
   return createBatchHandle(child, onOutput, timeoutMs);
 }

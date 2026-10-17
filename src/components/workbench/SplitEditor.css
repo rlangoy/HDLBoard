@@ -54,7 +54,7 @@
   padding: 0 8px 0 10px;
   border-top: var(--wb-role-accent-w) solid var(--wb-role-ink);
   border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-role-tint);
+  background: var(--wb-role-head);
   font-size: 12px;
   color: var(--wb-text);
 }
@@ -139,6 +139,7 @@
 .wb-roleicon.is-tb {
   --wb-role-ink: var(--wb-role-tb-ink);
   --wb-role-tint: var(--wb-role-tb-tint);
+  --wb-role-head: var(--hdl-tb-head);
 }
 
 .wb-panehead.is-rtl,
@@ -147,11 +148,12 @@
 .wb-roleicon.is-rtl {
   --wb-role-ink: var(--wb-role-rtl-ink);
   --wb-role-tint: var(--wb-role-rtl-tint);
+  --wb-role-head: var(--hdl-rtl-head);
 }
 
 /* An unfocused pane's header is quieter, so the focused one (what runs) stands out. */
 .wb-split.is-both .wb-split__pane:not(.is-focused) .wb-panehead {
-  background: color-mix(in srgb, var(--wb-role-tint) 45%, #ffffff);
+  background: color-mix(in srgb, var(--wb-role-head) 45%, #ffffff);
 }
 
 .wb-panehead__badge-wrap {

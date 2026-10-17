@@ -19,6 +19,8 @@ export interface RevealRequest {
   readonly id: number;
   /** Move the caret and focus there (default); false only scrolls, for the pane the student did not click. */
   readonly focus?: boolean;
+  /** The id of a symbol to highlight there until the next click (Go to declaration). */
+  readonly highlight?: string;
 }
 
 /**

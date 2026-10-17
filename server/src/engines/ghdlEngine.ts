@@ -20,7 +20,8 @@ import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
 import { sameNameNotes } from './sameNameNotes.js';
-import type { BoardFiles, BoardTiming, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
+import type { BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './types.js';
+import type { WaveFormat } from '../protocol.js';
 
 const TB_ENTITY = 'hdl_board_tb';
 const GHDL_STANDARD = '--std=08';
@@ -78,6 +79,20 @@ function batchPlan(dir: string, entityName: string, messages: readonly string[])
   return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
 }
 
+/** A batch run records a waveform when one was asked for (docs/waveform_viewer_spec.md § 7.3). */
+function withWave(result: PrepareResult, wave: WaveRequest | undefined): PrepareResult {
+  if (!result.ok || wave === undefined || result.plan.mode !== 'batch') return result;
+  return { ok: true, plan: { ...result.plan, wave: { format: wave.vhdlFormat } } };
+}
+
+/** GHDL's option per waveform format (docs/waveform_viewer_spec.md § 7.3). Never `--vcd-4states`: U, W, L, H, - stay. */
+const WAVE_OPTION: Readonly<Record<WaveFormat, string>> = { ghw: '--wave=', vcd: '--vcd=' };
+
+/** The run options that record the waveform into `waveFile`, relative to the session directory. */
+export function waveArguments(wave: PlannedWave | undefined, waveFile: string | undefined): string[] {
+  return wave === undefined || waveFile === undefined ? [] : [`${WAVE_OPTION[wave.format]}${waveFile}`];
+}
+
 /** `messages`: the GHDL banner, a note on a same-named entity, then the warnings about extra ports. */
 function boardPlan(dir: string, timing: BoardTiming, messages: readonly string[]): RunPlan {
   return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages };
@@ -110,8 +125,15 @@ async function prepareBatch(dir: string, entityName: string, notes: readonly str
   return { ok: true, plan: batchPlan(dir, entityName, notes) };
 }
 
+/** The top entity of a board run, with its file's text, where the testbench is built. */
+interface BoardTop {
+  readonly dir: string;
+  readonly top: TopEntity;
+  readonly topContent: string;
+}
+
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
-async function prepareBoard(dir: string, top: TopEntity, topContent: string, notes: readonly string[]): Promise<PrepareResult> {
+async function prepareBoard({ dir, top, topContent }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
   // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
   // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
   const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
@@ -173,10 +195,19 @@ function clearWorkLibrary(dir: string): void {
   }
 }
 
-async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Promise<PrepareResult> {
+/** A fresh session directory: no library of an earlier run, then this run's files. */
+function writeSources(dir: string, files: readonly VhdlFileInput[]): void {
   clearWorkLibrary(dir);
   for (const file of files) writeFileSync(join(dir, file.name), file.content);
+}
 
+async function prepare(request: PrepareRequest): Promise<PrepareResult> {
+  writeSources(request.dir, request.files);
+  return prepareAnalysed(request);
+}
+
+/** Analyses the student's files, then decides how the top runs. */
+async function prepareAnalysed({ dir, files, topFile, runTarget, wave }: PrepareRequest): Promise<PrepareResult> {
   // Every file is analysed before our own port scan, so a genuine syntax error gets
   // GHDL's real diagnosis under `analyze` instead of being intercepted early by
   // `findTopEntity`'s regex heuristic, which runs on source not yet known to be VHDL.
@@ -193,9 +224,9 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
   if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
   const notes = sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others });
 
-  if (top.ports.size === 0) return prepareBatch(dir, top.name, notes);
+  if (top.ports.size === 0) return withWave(await prepareBatch(dir, top.name, notes), wave);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
-  return prepareBoard(dir, top, topContent, notes);
+  return prepareBoard({ dir, top, topContent }, notes);
 }
 
 /** File names arrive relative to the session directory; GHDL has always been given absolute paths. */
@@ -218,5 +249,6 @@ export const ghdlEngine: SimEngine = {
   language: 'vhdl',
   prepare,
   startBoardRun,
-  startBatchRun: (plan, onOutput, timeoutMs) => runBatch(plan.dir, plan.runTarget, onOutput, timeoutMs),
+  startBatchRun: (plan, { onOutput, timeoutMs, waveFile }) =>
+    runBatch(plan.dir, plan.runTarget, onOutput, timeoutMs, waveArguments(plan.wave, waveFile)),
 };

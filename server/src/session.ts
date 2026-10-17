@@ -18,20 +18,24 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchHandle, RunHandle } from './runtime.js';
+import type { BatchHandle, BatchResult, RunHandle } from './runtime.js';
 import { createOutputLimiter, type OutputLimiter } from './outputLimiter.js';
 import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
-import type { BoardFiles, RunPlan, SimEngine } from './engines/types.js';
-import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput } from './protocol.js';
+import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
+import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
+import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
+import { sendWaveFile } from './wave/waveTransfer.js';
 
 /** The files a board testbench exchanges data through, in the session directory. */
 const INPUT_FILE_NAME = 'input.txt';
@@ -121,6 +125,28 @@ function refusalBeforeCompile(files: readonly VhdlFileInput[], topFile: string |
 
 type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 
+/** What a session needs besides its text frames; every field has a production default. */
+export interface SessionOptions {
+  /** Binary frames: a waveform's gzip content between WAVE-BEGIN and WAVE-END. */
+  readonly sendBinary?: (chunk: Buffer) => void;
+  readonly maxWaveBytes?: number;
+  readonly waveCheckMs?: number;
+  readonly vhdlWaveFormat?: WaveFormat;
+}
+
+/** The waveform of the newest batch run (docs/waveform_viewer_spec.md § 7.4). */
+interface RunWave {
+  /** The run's number in `WAVE-READY`/`WAVE-GET`. */
+  readonly run: number;
+  readonly format: WaveFormat;
+  /** Relative to the session directory. */
+  readonly fileName: string;
+  /** The student's own `$dumpfile` wrote it, not HDLBoard. */
+  readonly own: boolean;
+  /** Set once the run has ended; only then is the file offered. */
+  status?: WaveStatus;
+}
+
 export class Session {
   private readonly send: (frame: ServerFrame) => void;
   private readonly dir: string;
@@ -162,12 +188,33 @@ export class Session {
    */
   private runRequest = 0;
   private readonly chooseEngine: (topFile: string | undefined) => SimEngine;
+  /** Whether the client asked for waveforms (`WAVE on`); off for a client that never says. */
+  private waveRequested = false;
+  /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
+  private wave: RunWave | null = null;
+  /** Numbers each batch start's waveform; never reused within a session (W10). */
+  private waveSeq = 0;
+  private waveWatchdog: NodeJS.Timeout | null = null;
+  /** The size guard stopped the current run (§ 7.5). */
+  private waveLimitHit = false;
+  private readonly sendBinary: (chunk: Buffer) => void;
+  private readonly maxWaveBytes: number;
+  private readonly waveCheckMs: number;
+  private readonly vhdlWaveFormat: WaveFormat;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
-  constructor(send: (frame: ServerFrame) => void, chooseEngine: (topFile: string | undefined) => SimEngine = selectEngine) {
+  constructor(
+    send: (frame: ServerFrame) => void,
+    chooseEngine: (topFile: string | undefined) => SimEngine = selectEngine,
+    options: SessionOptions = {},
+  ) {
     this.send = send;
     this.chooseEngine = chooseEngine;
     this.dir = mkdtempSync(join(tmpdir(), 'hdl-board-'));
+    this.sendBinary = options.sendBinary ?? (() => {});
+    this.maxWaveBytes = options.maxWaveBytes ?? readIntSetting(MAX_WAVE_BYTES);
+    this.waveCheckMs = options.waveCheckMs ?? readIntSetting(WAVE_CHECK_MS);
+    this.vhdlWaveFormat = options.vhdlWaveFormat ?? readVhdlWaveFormat();
   }
 
   private inputPath(): string {
@@ -205,7 +252,110 @@ export class Session {
     };
   }
 
+  /** `WAVE on|off`: whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1). */
+  handleWave(on: boolean): void {
+    this.waveRequested = on;
+  }
+
+  /**
+   * `WAVE-GET <run>`: the newest finished run's waveform, or `WAVE-NONE` – for an older
+   * run, one still running, or one whose file is gone (§ 7.4).
+   */
+  handleWaveGet(run: number): Promise<void> {
+    const wave = this.wave;
+    if (wave === null || wave.run !== run || wave.status === undefined) {
+      this.send({ verb: 'WAVE-NONE', run });
+      return Promise.resolve();
+    }
+    return sendWaveFile({
+      path: join(this.dir, wave.fileName),
+      run,
+      sink: { send: this.send, sendBinary: this.sendBinary },
+      isCurrent: () => !this.destroyed && this.wave === wave,
+    });
+  }
+
+  private waveRequest(): WaveRequest | undefined {
+    return this.waveRequested ? { vhdlFormat: this.vhdlWaveFormat } : undefined;
+  }
+
+  /** Icarus's "dumpfile opened" notice for HDLBoard's own recording is not shown (§ 7.6). */
+  private isHiddenWaveNotice(line: string): boolean {
+    return this.wave !== null && !this.wave.own && isOwnDumpNotice(line, this.wave.fileName);
+  }
+
+  /** Deletes the last run's waveform: a new run, Reset and teardown each make it obsolete. */
+  private clearWave(): void {
+    this.stopWaveWatchdog();
+    const wave = this.wave;
+    this.wave = null;
+    if (wave === null) return;
+    try {
+      rmSync(join(this.dir, wave.fileName), { force: true });
+    } catch {
+      // Windows: a just-stopped simulator may still hold it. It goes with the session directory.
+    }
+  }
+
+  /** The waveform this batch start records, named for this start (W10), or null. */
+  private beginWave(plan: RunPlan): RunWave | null {
+    this.clearWave();
+    this.waveLimitHit = false;
+    const planned = plan.wave;
+    if (planned === undefined || planned.unusableOwnDump) return null;
+    const run = ++this.waveSeq;
+    const own = planned.ownFile !== undefined;
+    const fileName = planned.ownFile ?? `wave-${run}.${planned.format}`;
+    this.wave = { run, format: planned.format, fileName, own };
+    return this.wave;
+  }
+
+  private waveBytes(wave: RunWave): number | undefined {
+    try {
+      return statSync(join(this.dir, wave.fileName)).size;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The size guard (§ 7.5, W6): stops a run whose waveform passes the limit, keeping what it wrote. */
+  private startWaveWatchdog(wave: RunWave, handle: BatchHandle): void {
+    this.stopWaveWatchdog();
+    this.waveWatchdog = setInterval(() => {
+      if (this.wave !== wave || this.batchRun !== handle) return this.stopWaveWatchdog();
+      if ((this.waveBytes(wave) ?? 0) <= this.maxWaveBytes) return;
+      this.stopWaveWatchdog();
+      this.waveLimitHit = true;
+      handle.kill();
+    }, this.waveCheckMs);
+  }
+
+  private stopWaveWatchdog(): void {
+    if (this.waveWatchdog) {
+      clearInterval(this.waveWatchdog);
+      this.waveWatchdog = null;
+    }
+  }
+
+  /** Offers the ended run's waveform with `WAVE-READY`, sent before its `DONE`/`ERROR` (§ 7.4). */
+  private announceWave(status: WaveStatus): void {
+    this.stopWaveWatchdog();
+    const wave = this.wave;
+    if (wave === null) return;
+    const bytes = this.waveBytes(wave);
+    if (bytes === undefined) {
+      // A run that wrote nothing has no waveform to offer; the student's own dump says why.
+      if (wave.own) this.send({ verb: 'LOG', text: OWN_DUMP_MISSING_MESSAGE });
+      this.wave = null;
+      return;
+    }
+    wave.status = status;
+    this.send({ verb: 'WAVE-READY', run: wave.run, format: wave.format, bytes, status });
+  }
+
   async handleRun(files: VhdlFileInput[], topFile?: string, runTarget?: string): Promise<void> {
+    // Cleared first: the run being replaced is not offered, its waveform is obsolete (W10).
+    this.clearWave();
     this.stopActive('stopped');
     this.state = 'compiling';
     const request = ++this.runRequest;
@@ -217,7 +367,7 @@ export class Session {
       return;
     }
 
-    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget });
+    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget, wave: this.waveRequest() });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (this.destroyed || request !== this.runRequest) return;
@@ -314,7 +464,7 @@ export class Session {
   }
 
   private forwardOutputLine(line: string): void {
-    if (/\S/.test(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+    if (/\S/.test(line) && !this.isHiddenWaveNotice(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
@@ -465,30 +615,42 @@ export class Session {
 
   private startBatchRun(engine: SimEngine, plan: RunPlan): void {
     this.beginOutput();
-    const handle = engine.startBatchRun(plan, (line) => this.forwardOutputLine(line), BATCH_TIMEOUT_MS);
+    const wave = this.beginWave(plan);
+    const onOutput = (line: string) => this.forwardOutputLine(line);
+    const handle = engine.startBatchRun(plan, { onOutput, timeoutMs: BATCH_TIMEOUT_MS, waveFile: wave?.fileName });
     this.batchRun = handle;
     this.state = 'running';
     this.send({ verb: 'READY' });
+    if (wave !== null) this.startWaveWatchdog(wave, handle);
 
-    handle.done.then(({ code, timedOut, stderr }) => {
+    handle.done.then((result) => {
       if (this.destroyed || this.batchRun !== handle) return; // superseded by Stop/Reset/a new RUN
       this.batchRun = null;
       const wasRunning = this.state === 'running';
       this.state = 'stopped';
       this.endOutput();
-      if (!wasRunning) return; // already reported via handleStop's own DONE
-      if (timedOut) {
-        this.send({
-          verb: 'ERROR',
-          stage: 'runtime',
-          text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
-        });
-      } else if (code !== 0) {
-        this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
-      } else {
-        this.send({ verb: 'DONE', reason: 'completed' });
-      }
+      if (wasRunning) this.reportBatchEnd(result); // otherwise already reported via handleStop's own DONE
     });
+  }
+
+  /** How a batch run that ended on its own – or was ended by the size guard – is reported. */
+  private reportBatchEnd({ code, timedOut, stderr }: BatchResult): void {
+    // A run that ended by itself – passing or failing – closed its waveform normally.
+    this.announceWave(this.waveLimitHit ? 'size-limit' : timedOut ? 'timeout' : 'complete');
+    if (this.waveLimitHit) {
+      this.send({ verb: 'LOG', text: sizeLimitMessage(this.maxWaveBytes) });
+      this.send({ verb: 'DONE', reason: 'stopped' });
+    } else if (timedOut) {
+      this.send({
+        verb: 'ERROR',
+        stage: 'runtime',
+        text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
+      });
+    } else if (code !== 0) {
+      this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
+    } else {
+      this.send({ verb: 'DONE', reason: 'completed' });
+    }
   }
 
   handleStim(bits: string): void {
@@ -548,6 +710,7 @@ export class Session {
   handleReset(): void {
     if (this.state !== 'running' || !this.engine || !this.plan) return;
     this.stopActive(null);
+    this.clearWave();
     if (this.plan.mode === 'board') this.startRun(this.engine, this.plan);
     else this.startBatchRun(this.engine, this.plan);
   }
@@ -571,12 +734,15 @@ export class Session {
     }
     if (reason && this.state === 'running') {
       this.state = 'stopped';
+      // What the stopped run recorded is kept and offered (§ 7.4: status `stopped`).
+      this.announceWave('stopped');
       this.send({ verb: 'DONE', reason });
     }
   }
 
   destroy(): void {
     this.destroyed = true;
+    this.stopWaveWatchdog();
     this.stopOutputPolling();
     this.stopPacing();
     this.stopLimiterTimer();

@@ -170,6 +170,6 @@ endmodule
 /** Everything a batch run prints. */
 async function batchOutput(plan: RunPlan): Promise<string> {
   const lines: string[] = [];
-  await verilogEngine.startBatchRun(plan, (line) => lines.push(line), 20_000).done;
+  await verilogEngine.startBatchRun(plan, { onOutput: (line) => lines.push(line), timeoutMs: 20_000 }).done;
   return lines.join('\n');
 }

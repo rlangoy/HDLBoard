@@ -13,6 +13,7 @@
  */
 
 import { firstProblem, PLAIN_NAME_RULES, type NameRule } from '../engines/sourceNames.js';
+import { WAVE_MODULE_FILE_NAME } from './waveModule.js';
 
 /** The files the backend writes into a session directory, named once so nothing can drift. */
 export const TIMESCALE_FILE_NAME = '_hdlboard_ts.v';
@@ -28,6 +29,7 @@ export const RESERVED_FILE_NAMES: readonly string[] = [
   TESTBENCH_FILE_NAME,
   STUB_FILE_NAME,
   SIMULATION_FILE_NAME,
+  WAVE_MODULE_FILE_NAME,
 ];
 
 export type SourceKind = 'source' | 'header';

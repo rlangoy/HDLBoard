@@ -29,12 +29,17 @@ type FramePredicate = (frame: ServerFrame) => boolean;
 
 export class WsTestClient {
   readonly frames: ServerFrame[] = [];
+  /** Binary frames: a waveform's gzip content (docs/waveform_viewer_spec.md § 7.4). */
+  readonly binary: Buffer[] = [];
   private readonly violations: string[] = [];
   private cursor = 0;
   private wake: (() => void) | null = null;
 
   private constructor(private readonly socket: WebSocket) {
-    socket.on('message', (data) => this.receive(data.toString()));
+    socket.on('message', (data, isBinary) => {
+      if (isBinary) this.binary.push(Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer));
+      else this.receive(data.toString());
+    });
   }
 
   static async connect(port: number): Promise<WsTestClient> {

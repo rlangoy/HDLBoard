@@ -19,10 +19,13 @@ import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '.
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
 import { getToolPaths } from '../verilog/tools.js';
+import { findOwnDump } from '../verilog/dumpDetection.js';
+import { OWN_DUMP_MISSING_MESSAGE } from '../wave/waveConsole.js';
+import { WAVE_MODULE_FILE_NAME, WAVE_MODULE_NAME, waveModuleSource, wavePlusarg } from '../verilog/waveModule.js';
 import type { ToolPaths } from '../verilog/toolPaths.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { sameNameNotes, type SameNameDeclarations } from './sameNameNotes.js';
-import type { PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
+import type { PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 const CLOCK_BOARD_NAME = 'clock_50';
 /** Every platform paces through stdin: Verilog can block in `$fgets` on it, and there is no `mkfifo` on Windows. */
@@ -87,19 +90,49 @@ function sameNamedElsewhere(files: readonly VhdlFileInput[], checked: Extract<Ch
   };
 }
 
+/** The sources that are compiled – those left out for a same-named module are not – and every header. */
+function compiledFiles(files: readonly VhdlFileInput[], allSources: readonly string[], compiled: readonly string[]): VhdlFileInput[] {
+  return files.filter((file) => compiled.includes(file.name) || !allSources.includes(file.name));
+}
+
 function writeProject(dir: string, files: readonly VhdlFileInput[]): void {
   writeFileSync(join(dir, TIMESCALE_FILE_NAME), TIMESCALE_SOURCE);
   for (const file of files) writeFileSync(join(dir, file.name), file.content);
 }
 
-const compileRequest = (build: Build, target: string, extraFiles: readonly string[] = []): CompileRequest => ({
+/** Generated files compiled before the student's, and further root modules. */
+interface Extras {
+  readonly files?: readonly string[];
+  readonly roots?: readonly string[];
+}
+
+const compileRequest = (build: Build, target: string, extras: Extras = {}): CompileRequest => ({
   dir: build.dir,
   target,
-  files: [...extraFiles, ...build.sources],
+  files: [...(extras.files ?? []), ...build.sources],
+  extraRoots: extras.roots ?? [],
 });
 
-function batchPlan(build: Build, messages: readonly string[]): RunPlan {
-  return { mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
+function batchPlan(build: Build, messages: readonly string[], wave: PlannedWave | undefined): RunPlan {
+  const plan: RunPlan = { mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
+  return wave === undefined ? plan : { ...plan, wave };
+}
+
+const OWN_DUMP_NOTE =
+  'Your testbench sets up its own waveform ($dumpfile/$dumpvars), so the waveform shown is the file it writes.';
+
+/** How a waveform is recorded for a batch run, and whether it needs the helper module (§ 7.3). */
+interface Recording {
+  readonly wave: PlannedWave;
+  readonly helper: boolean;
+  readonly note?: string;
+}
+
+function planWave(files: readonly VhdlFileInput[]): Recording {
+  const own = findOwnDump(files.map((file) => file.content));
+  if (!own.present) return { wave: { format: 'vcd' }, helper: true };
+  if (own.file === undefined) return { wave: { format: 'vcd', unusableOwnDump: true }, helper: false, note: OWN_DUMP_MISSING_MESSAGE };
+  return { wave: { format: 'vcd', ownFile: own.file }, helper: false, note: OWN_DUMP_NOTE };
 }
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
@@ -107,13 +140,25 @@ function boardPlan(build: Build, ports: readonly Port[], messages: readonly stri
   return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
 }
 
-/** A standalone testbench supplies its own stimuli: compile the student's top directly and run it. */
-async function prepareBatch(build: Build, ports: readonly Port[]): Promise<PrepareResult> {
-  const compiled = await compileVerilog(build.tools, compileRequest(build, build.top));
+/**
+ * A standalone testbench supplies its own stimuli: compile the student's top directly and
+ * run it. With a waveform asked for, HDLBoard's helper module is compiled beside it as a
+ * second root – unless the student's code dumps a waveform itself.
+ */
+async function prepareBatch(build: Build, ports: readonly Port[], recording: Recording | undefined): Promise<PrepareResult> {
+  const compiled = await compileVerilog(build.tools, compileRequest(build, build.top, helperExtras(build, recording)));
   if (!compiled.ok) return failure(compiled.failure.stage, compiled.failure.text);
   // A top with ports of its own but none of the board's is told why it is not a board design.
   const hint = ports.length > 0 ? [standaloneHint(build.top)] : [];
-  return { ok: true, plan: batchPlan(build, [...build.notes, ...hint, ...compiled.messages]) };
+  const note = recording?.note === undefined ? [] : [recording.note];
+  return { ok: true, plan: batchPlan(build, [...build.notes, ...hint, ...compiled.messages, ...note], recording?.wave) };
+}
+
+/** Writes the helper module when the recording needs it, and names it for the compile. */
+function helperExtras(build: Build, recording: Recording | undefined): Extras {
+  if (!recording?.helper) return {};
+  writeFileSync(join(build.dir, WAVE_MODULE_FILE_NAME), waveModuleSource(build.top));
+  return { files: [WAVE_MODULE_FILE_NAME], roots: [WAVE_MODULE_NAME] };
 }
 
 /**
@@ -123,7 +168,7 @@ async function prepareBatch(build: Build, ports: readonly Port[]): Promise<Prepa
  */
 async function prepareBoard(build: Build, ports: readonly Port[]): Promise<PrepareResult> {
   writeFileSync(join(build.dir, TESTBENCH_FILE_NAME), buildBoardTestbench(build.top, boardPortSpellings(ports)));
-  const compiled = await compileVerilog(build.tools, compileRequest(build, TESTBENCH_MODULE_NAME, [TESTBENCH_FILE_NAME]));
+  const compiled = await compileVerilog(build.tools, compileRequest(build, TESTBENCH_MODULE_NAME, { files: [TESTBENCH_FILE_NAME] }));
   if (compiled.ok) return { ok: true, plan: boardPlan(build, ports, [...build.notes, ...compiled.messages]) };
   const { stage, text } = compiled.failure;
   return stage === 'analyze' ? failure('internal', `Internal testbench build error:\n${text}`) : failure(stage, text);
@@ -141,7 +186,7 @@ async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
   return notes;
 }
 
-async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Promise<PrepareResult> {
+async function prepare({ dir, files, topFile, runTarget, wave }: PrepareRequest): Promise<PrepareResult> {
   const checked = checkProject(files, topFile, runTarget);
   if (!checked.ok) return failure(checked.stage, checked.text);
   writeProject(dir, files);
@@ -153,12 +198,21 @@ async function prepare({ dir, files, topFile, runTarget }: PrepareRequest): Prom
   const build: Build = { tools, dir, top: checked.top, sources, notes };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
-  return isBoardDesign(ports.ports) ? prepareBoard(build, ports.ports) : prepareBatch(build, ports.ports);
+  if (isBoardDesign(ports.ports)) return prepareBoard(build, ports.ports);
+  return prepareBatch(build, ports.ports, wave === undefined ? undefined : planWave(compiledFiles(files, checked.sources, sources)));
+}
+
+/** The helper module reads its file name from a plusarg; a student's own dump names its file itself. */
+function usesHelper(wave: PlannedWave | undefined): boolean {
+  return wave !== undefined && wave.ownFile === undefined && !wave.unusableOwnDump;
 }
 
 export const verilogEngine: SimEngine = {
   language: 'verilog',
   prepare,
   startBoardRun: (plan, files) => startVerilogBoardRun(getToolPaths(), { dir: plan.dir, files, timing: plan.timing }),
-  startBatchRun: (plan, onOutput, timeoutMs) => startVerilogBatchRun(getToolPaths(), { dir: plan.dir, timeoutMs }, onOutput),
+  startBatchRun: (plan, { onOutput, timeoutMs, waveFile }) => {
+    const plusargs = usesHelper(plan.wave) && waveFile !== undefined ? [wavePlusarg(waveFile)] : [];
+    return startVerilogBatchRun(getToolPaths(), { dir: plan.dir, timeoutMs, plusargs }, onOutput);
+  },
 };
