@@ -24,6 +24,8 @@ export interface ViewSetup {
   readonly showAs: ReadonlyMap<SignalPath, ShowAs>;
   readonly window: Window;
   readonly cursor: Ticks;
+  /** The femtoseconds in one tick of the waveform `window` and `cursor` count in. */
+  readonly tickFs: number;
 }
 
 /** What is kept between runs and openings (FR-17), as plain data. */
@@ -34,6 +36,8 @@ export interface ViewMemory {
   readonly showAs: ReadonlyArray<readonly [SignalPath, ShowAs]>;
   readonly window: Window;
   readonly cursor: Ticks;
+  /** The tick `window` and `cursor` count in: the next run may count in another (Icarus ps, GHDL fs). */
+  readonly tickFs: number;
 }
 
 /** The limits a window must stay inside. */
@@ -56,6 +60,7 @@ export function toMemory(setup: ViewSetup): ViewMemory {
     showAs: [...setup.showAs],
     window: setup.window,
     cursor: setup.cursor,
+    tickFs: setup.tickFs,
   };
 }
 
@@ -65,7 +70,7 @@ const isShowAs = (value: string): value is ShowAs => SHOW_AS_LABELS.some(([known
 function firstSetup(data: WaveformData, moments: RunMoments, fittingRows: number): ViewSetup {
   const { start, end, cursor } = firstWindow(data, moments);
   const list: ListState = { shown: firstShown(data, fittingRows), open: new Set(), expanded: new Set() };
-  return { list, showAs: new Map(), window: { start, end }, cursor };
+  return { list, showAs: new Map(), window: { start, end }, cursor, tickFs: data.tickFs };
 }
 
 export interface SetupContext {
@@ -80,13 +85,18 @@ export function setupFor(data: WaveformData, memory: ViewMemory | null, context:
   const shown = memory?.shown.filter((path) => known.has(path)) ?? [];
   if (memory === null || shown.length === 0) return firstSetup(data, context.moments, context.fittingRows);
   const first = firstWindow(data, context.moments);
+  // The same times in this waveform's ticks: a Verilog run (ps) followed by a VHDL one
+  // (fs) would otherwise open on a sliver near 0.
+  const scale = memory.tickFs / data.tickFs;
+  const remembered = { start: memory.window.start * scale, end: memory.window.end * scale };
   // A run with an error still opens at it: start where the problem is (W11).
-  const window = first.error === undefined ? memory.window : { start: first.start, end: first.end };
+  const window = first.error === undefined ? remembered : { start: first.start, end: first.end };
   return {
     list: { shown, open: new Set(memory.open), expanded: new Set(memory.expanded.filter((path) => known.has(path))) },
     showAs: new Map(memory.showAs.filter(([path, showAs]) => known.has(path) && isShowAs(showAs))),
     window,
-    cursor: first.error === undefined ? memory.cursor : first.cursor,
+    cursor: first.error === undefined ? memory.cursor * scale : first.cursor,
+    tickFs: data.tickFs,
   };
 }
 

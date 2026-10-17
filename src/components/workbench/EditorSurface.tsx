@@ -7,6 +7,8 @@ import { describeHint, describeLine, inlineText, summarize } from './diagnosticT
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
+import { applyEdit } from './find/applyEdit';
+import { unwrapCodeFence } from './pasteFence';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import type { CharRange, Token } from './vhdlHighlight';
 import type { FindDecor } from './find/useFind';
@@ -275,6 +277,14 @@ export function EditorSurface({
           wrap="off"
           onScroll={handleScroll}
           onChange={(e) => onChange(file.id, e.target.value)}
+          onPaste={(e) => {
+            // A Markdown code block (```vhdl … ```) goes in without its fence lines.
+            const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
+            if (code === null) return;
+            e.preventDefault();
+            const ta = e.currentTarget;
+            applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
+          }}
           {...hovered.handlers}
           onSelect={atCaret.onSelect}
           onPointerDown={onFindDismiss}

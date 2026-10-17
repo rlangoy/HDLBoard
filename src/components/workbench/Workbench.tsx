@@ -193,8 +193,9 @@ const nextFileId = () => `file-${nextFileSeq++}`;
 // How long typing has to pause before the desktop app stores the workspace.
 /**
  * An `ERROR` frame of these stages is a failed compile: open the first error.
- * Runtime messages mark lines but never move the view (a failing assertion can
- * arrive every clock cycle).
+ * Runtime messages mark lines but never move the view while the run goes on (a
+ * failing assertion can arrive every clock cycle); a run that dies at runtime
+ * opens its last located error once, after it has ended (`lastRunError`).
  */
 const REVEALING_STAGES: readonly string[] = ['analyze', 'elaborate'];
 
@@ -472,6 +473,11 @@ export function Workbench() {
     [revealLocation],
   );
 
+  // The last error a run's output located (GHDL's "bound check failure at counter.vhd:48"):
+  // where a run that dies at runtime takes the student, since its ERROR frame often only
+  // says "Simulation exited unexpectedly." Cleared when a run starts.
+  const lastRunError = useRef<AdvisedDiagnostic | null>(null);
+
   const clientRef = useRef<HdlClient | null>(null);
   // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
   const waveView = useWaveformView({
@@ -515,13 +521,15 @@ export function Workbench() {
         },
         onLog: (text) => {
           appendLog(text);
-          recordDiagnostics(text, filesRef.current);
+          const located = recordDiagnostics(text, filesRef.current).filter((d) => d.severity === 'error');
+          if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
         onError: (stage, text) => {
           if (!takeFlag(quietEnd)) {
             appendLog(`${stage} error:\n${text}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
+            else if (stage === 'runtime') revealFirstError(advised.length > 0 ? advised : lastRunError.current ? [lastRunError.current] : []);
           }
           stopElapsedTimer();
           setStatus('stopped');
@@ -1376,6 +1384,7 @@ export function Workbench() {
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
+    lastRunError.current = null;
     waveView.runStarted({
       sources: filesForRun(files, topFile?.name).map((f) => f.content),
       topFileName: topFile?.name,

@@ -68,6 +68,16 @@ describe('the view setup', () => {
     expect(again.cursor).toBe(15);
   });
 
+  test('…at the same times when the next run counts in another tick (Icarus ps, then GHDL fs)', () => {
+    const icarus = { ...data, tickFs: 1000 };
+    const own: ViewSetup = { ...setupFor(icarus, null, context), window: { start: 10_000, end: 40_000 }, cursor: 20_000 };
+    const ghdl = { ...data, tickFs: 1 };
+    const again = setupFor(ghdl, toMemory(own), context);
+    expect(again.window).toEqual({ start: 10_000_000, end: 40_000_000 });
+    expect(again.cursor).toBe(20_000_000);
+    expect(again.tickFs).toBe(1);
+  });
+
   test('…but a run with an error opens at the error (W11)', () => {
     const memory = toMemory({ ...setupFor(data, null, context), window: { start: 10, end: 20 } });
     const again = setupFor(data, memory, { ...context, moments: { firstError: { fs: 100e6, text: 'bad' } } });
