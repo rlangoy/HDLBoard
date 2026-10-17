@@ -9,6 +9,7 @@
  * are drawn, so the cost follows the screen, not the file (NFR-1).
  */
 
+import { paintCursorHandle } from './cursorHandle';
 import { visibleSpans } from './levelOfDetail';
 import type { Ticks } from './model';
 import type { ShowAs } from './radix';
@@ -166,5 +167,6 @@ export function paintWaveform(canvas: HTMLCanvasElement, scene: Scene): void {
     drawVerticalLine(painter, timeToX(scene.view, scene.error), { height: size.height, color: painter.colors.errorMarker, width: ERROR_MARKER_WIDTH });
   }
   drawVerticalLine(painter, timeToX(scene.view, scene.cursor), { height: size.height, color: painter.colors.cursor });
+  paintCursorHandle(painter, { view: scene.view, cursor: scene.cursor, tickFs: scene.tickFs, width: size.width });
   paintSelection(painter, scene);
 }

@@ -3,12 +3,16 @@
 
 import { describe, expect, test } from 'vitest';
 import { bitIndex, bitSignal } from './bitTraces';
+import { CURSOR_GRAB_PX } from './cursorHandle';
 import { changeFrom, fineStep } from './cursorSteps';
 import { fixtureBytes } from './fixtures.testSupport';
 import { parseGhw } from './ghwParser';
 import { traceLines } from './hoverInfo';
 import type { SignalRef, Trace } from './model';
 import { declarationOf, type TraceRow } from './signalRows';
+import { viewOf } from './timeAxis';
+import { takesCursor } from './useCanvasGestures';
+import { AXIS_HEIGHT } from './waveDraw';
 import { clampWindow, setupFor, toggleShown, toMemory, windowShowing, zoomWindow, type ViewSetup } from './viewSetup';
 
 const trace = (pairs: Array<[number, string]>): Trace => {
@@ -117,5 +121,17 @@ describe('where a signal is declared', () => {
   test('a record field is declared with its record', () => {
     expect(declarationOf(data, 'wave_types_tb/pair/a')).toEqual({ scopes: ['wave_types_tb'], name: 'pair' });
     expect(declarationOf(data, 'wave_types_tb/dut/count')).toEqual({ scopes: ['wave_types_tb', 'dut'], name: 'count' });
+  });
+});
+
+describe('picking up the cursor', () => {
+  // 1000 ticks over 1000 px: the cursor at tick 400 stands at x = 400.
+  const at = { view: viewOf(0, 1000, 1000), cursor: 400 };
+
+  test('on the ruler anywhere, and on or beside the line in the traces', () => {
+    expect(takesCursor(at, 900, AXIS_HEIGHT - 1)).toBe(true);
+    expect(takesCursor(at, 400, 200)).toBe(true);
+    expect(takesCursor(at, 400 + CURSOR_GRAB_PX, 200)).toBe(true);
+    expect(takesCursor(at, 400 - CURSOR_GRAB_PX - 1, 200)).toBe(false);
   });
 });

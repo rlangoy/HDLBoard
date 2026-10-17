@@ -16,6 +16,8 @@
   --wv-trace-z: #b45309;
   --wv-trace-dont-care: #94a3b8;
   --wv-cursor: #f59e0b;
+  /* Dark on the amber handle: white on it would be hard to read. */
+  --wv-cursor-text: #1f2937;
   --wv-error-marker: #dc2626;
   --wv-selection: #2563eb;
   --wv-tool-bg: #eef1f6;
@@ -250,6 +252,11 @@
   display: block;
   cursor: crosshair;
   outline: none;
+}
+
+/* Over the cursor line or the ruler: the cursor can be picked up and dragged. */
+.wv-canvas__surface.is-over-cursor {
+  cursor: ew-resize;
 }
 
 .wv-list__row {

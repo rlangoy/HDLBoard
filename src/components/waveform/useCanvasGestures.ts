@@ -3,7 +3,8 @@
 
 /**
  * The mouse on the waveform canvas (docs/waveform_viewer_spec.md S9):
- *  - a click places the cursor; dragging on the time ruler moves it;
+ *  - a click places the cursor; dragging on the time ruler, the cursor's handle or the
+ *    cursor line itself moves it;
  *  - dragging across the traces marks a time range, which is zoomed into on release;
  *  - the wheel scrolls in time, Ctrl + wheel zooms around the mouse.
  * The wheel listener is a native one: React's are passive, and Ctrl + wheel must not
@@ -12,6 +13,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { Ticks } from './model';
+import { nearCursor } from './cursorHandle';
 import { xToTime, type TimeView } from './timeAxis';
 import { AXIS_HEIGHT } from './waveDraw';
 
@@ -35,8 +37,20 @@ export interface Selection {
 
 interface Press {
   readonly x: number;
-  readonly onRuler: boolean;
+  /** On the ruler or the cursor line: the press moves the cursor instead of marking a range. */
+  readonly movesCursor: boolean;
   dragging: boolean;
+}
+
+/** Where the view is and where its cursor stands. */
+export interface CanvasView {
+  readonly view: TimeView;
+  readonly cursor: Ticks;
+}
+
+/** Whether a press at (`x`, `y`) takes the cursor: on the ruler, or on or beside its line. */
+export function takesCursor({ view, cursor }: CanvasView, x: number, y: number): boolean {
+  return y < AXIS_HEIGHT || nearCursor(view, cursor, x);
 }
 
 const localX = (event: { clientX: number; currentTarget: Element }) => event.clientX - event.currentTarget.getBoundingClientRect().left;
@@ -69,7 +83,7 @@ export interface PointerGestures {
   readonly onPointerUp: (event: ReactPointerEvent<HTMLCanvasElement>) => void;
 }
 
-function usePointer(view: TimeView, handlers: GestureHandlers): PointerGestures {
+function usePointer({ view, cursor }: CanvasView, handlers: GestureHandlers): PointerGestures {
   const press = useRef<Press | null>(null);
   const [selection, setSelection] = useState<Selection | undefined>(undefined);
   const timeAt = (event: ReactPointerEvent<HTMLCanvasElement>) => xToTime(view, localX(event));
@@ -77,14 +91,16 @@ function usePointer(view: TimeView, handlers: GestureHandlers): PointerGestures 
   const onPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    press.current = { x: localX(event), onRuler: localY(event) < AXIS_HEIGHT, dragging: false };
-    if (press.current.onRuler) handlers.onCursor(timeAt(event));
+    const onRuler = localY(event) < AXIS_HEIGHT;
+    press.current = { x: localX(event), movesCursor: takesCursor({ view, cursor }, localX(event), localY(event)), dragging: false };
+    // A press on the line itself leaves the cursor where it is until the mouse moves.
+    if (onRuler) handlers.onCursor(timeAt(event));
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const current = press.current;
     if (current === null) return;
-    if (current.onRuler) return handlers.onCursor(timeAt(event));
+    if (current.movesCursor) return handlers.onCursor(timeAt(event));
     current.dragging ||= Math.abs(localX(event) - current.x) >= DRAG_THRESHOLD_PX;
     if (current.dragging) setSelection({ from: xToTime(view, current.x), to: timeAt(event) });
   };
@@ -93,7 +109,7 @@ function usePointer(view: TimeView, handlers: GestureHandlers): PointerGestures 
     const current = press.current;
     press.current = null;
     setSelection(undefined);
-    if (current === null || current.onRuler) return;
+    if (current === null || current.movesCursor) return;
     if (!current.dragging) return handlers.onCursor(timeAt(event));
     const [start, end] = [xToTime(view, current.x), timeAt(event)].sort((a, b) => a - b);
     handlers.onZoomTo(start, end);
@@ -102,7 +118,7 @@ function usePointer(view: TimeView, handlers: GestureHandlers): PointerGestures 
   return { selection, onPointerDown, onPointerMove, onPointerUp };
 }
 
-export function useCanvasGestures(canvasRef: RefObject<HTMLCanvasElement>, view: TimeView, handlers: GestureHandlers): PointerGestures {
-  useWheel(canvasRef, view, handlers);
-  return usePointer(view, handlers);
+export function useCanvasGestures(canvasRef: RefObject<HTMLCanvasElement>, at: CanvasView, handlers: GestureHandlers): PointerGestures {
+  useWheel(canvasRef, at.view, handlers);
+  return usePointer(at, handlers);
 }

@@ -25,6 +25,8 @@ export interface WaveColors {
   readonly highZ: string;
   readonly dontCare: string;
   readonly cursor: string;
+  /** The text on the cursor's handle. */
+  readonly cursorText: string;
   readonly errorMarker: string;
   readonly selection: string;
   readonly selectedRow: string;
@@ -52,6 +54,7 @@ export function readColors(element: Element): WaveColors {
     highZ: token('--wv-trace-z'),
     dontCare: token('--wv-trace-dont-care'),
     cursor: token('--wv-cursor'),
+    cursorText: token('--wv-cursor-text'),
     errorMarker: token('--wv-error-marker'),
     selection: token('--wv-selection'),
     selectedRow: token('--wv-row-selected'),

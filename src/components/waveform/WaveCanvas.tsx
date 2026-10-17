@@ -15,7 +15,7 @@ import type { Ticks } from './model';
 import { paintWaveform, rowIndexAt, type Scene } from './paintWaveform';
 import type { TraceRow } from './signalRows';
 import { timeToX, xToTime } from './timeAxis';
-import { useCanvasGestures, type GestureHandlers, type PointerGestures } from './useCanvasGestures';
+import { takesCursor, useCanvasGestures, type GestureHandlers, type PointerGestures } from './useCanvasGestures';
 import { spanAt } from './valueAt';
 
 /** How close to the error marker the mouse must be to show its message. */
@@ -80,8 +80,10 @@ const local = (event: ReactMouseEvent) => {
 function useCanvasMouse(props: WaveCanvasProps, gestures: PointerGestures) {
   const { scene, handlers } = props;
   const [hover, setHover] = useState<Hover | null>(null);
+  const [overCursor, setOverCursor] = useState(false);
   const onMouseMove = (event: ReactMouseEvent<HTMLCanvasElement>) => {
     const { x, y } = local(event);
+    setOverCursor(takesCursor(scene, x, y));
     const lines = gestures.selection === undefined ? hoverLines(props, x, y) : [];
     setHover(lines.length === 0 ? null : { x, y, lines });
   };
@@ -99,20 +101,20 @@ function useCanvasMouse(props: WaveCanvasProps, gestures: PointerGestures) {
     const span = spanAt(row.trace, xToTime(scene.view, x), scene.endTime);
     if (span !== undefined) handlers.onZoomTo(span.start, span.end);
   };
-  return { hover, onMouseMove, onMouseLeave: () => setHover(null), onPointerDown, onDoubleClick };
+  return { hover, overCursor, onMouseMove, onMouseLeave: () => setHover(null), onPointerDown, onDoubleClick };
 }
 
 export function WaveCanvas(props: WaveCanvasProps) {
   const { scene, error, handlers } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gestures = useCanvasGestures(canvasRef, scene.view, handlers);
+  const gestures = useCanvasGestures(canvasRef, scene, handlers);
   const mouse = useCanvasMouse(props, gestures);
   usePaint(canvasRef, { ...scene, error: error?.time, selection: gestures.selection });
   return (
     <div className="wv-canvas" style={{ height: scene.size.height }}>
       <canvas
         ref={canvasRef}
-        className="wv-canvas__surface"
+        className={mouse.overCursor ? 'wv-canvas__surface is-over-cursor' : 'wv-canvas__surface'}
         style={{ width: scene.size.width, height: scene.size.height }}
         aria-label="Waveform traces. The values at the cursor are listed beside the signal names."
         tabIndex={0}
