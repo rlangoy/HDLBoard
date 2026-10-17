@@ -148,6 +148,9 @@ const HDL_WS_PORT = Number(
   import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT,
 );
 
+/** Which testbench a run runs, as the waveform view keeps it: its file and unit. */
+const runSource = (fileId: string | null, unitName: string | null): string => `${fileId ?? ''}|${unitName ?? ''}`;
+
 /** Whether `flag` was set; reading it clears it. */
 function takeFlag(flag: MutableRefObject<boolean>): boolean {
   const wasSet = flag.current;
@@ -1399,6 +1402,7 @@ export function Workbench() {
       sources: filesForRun(files, topFile?.name).map((f) => f.content),
       topFileName: topFile?.name,
       title: runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench',
+      source: runSource(fileId, unitName),
     });
     getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording);
   };
@@ -1490,14 +1494,17 @@ export function Workbench() {
     },
   });
 
-  // The Waveform button with nothing to show and a testbench on screen: run it, then open
-  // its waveform as soon as the run offers one. Otherwise the button does what it always did.
-  const waveRunTarget = waveView.waveform.recording && !isSimulating ? tb.shownTestbench : null;
+  // The Waveform button with a testbench on screen whose waveform the view does not have –
+  // none run yet, or another testbench's (the student switched): run it, then open its
+  // waveform as soon as the run offers one. Otherwise the button does what it always did.
+  const shownTb = waveView.waveform.recording && !isSimulating ? tb.shownTestbench : null;
+  const waveRunTarget =
+    shownTb && (waveView.button.state === 'empty' || waveView.source !== runSource(shownTb.fileId, shownTb.unitName)) ? shownTb : null;
   const waveButton = {
     ...waveView.button,
     runsTestbench: waveRunTarget !== null,
     onToggle: () => {
-      if (waveView.button.state !== 'empty' || waveRunTarget === null) return waveView.button.onToggle();
+      if (waveView.button.state === 'pressed' || waveRunTarget === null) return waveView.button.onToggle();
       handleRunPane('tb', waveRunTarget);
       waveView.openWhenReady();
     },

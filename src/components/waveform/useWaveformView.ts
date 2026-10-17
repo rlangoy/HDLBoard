@@ -47,7 +47,10 @@ export interface WaveformView {
   readonly waveform: Waveform;
   /** The client's waveform handlers, which also note that this run offered one. */
   readonly clientHandlers: WaveClientHandlers;
-  runStarted(info: RunInfo & { readonly title: string }): void;
+  /** `source`: which testbench runs (its file and unit), to tell whose waveform is shown. */
+  runStarted(info: RunInfo & { readonly title: string; readonly source: string }): void;
+  /** The `source` of the run whose waveform the view has now, or null. */
+  readonly source: string | null;
   /** A board state arrived: the run is a board run (W1). */
   boardStateSeen(): void;
   runEnded(): void;
@@ -183,6 +186,9 @@ function useDeclarations(input: WaveformViewInput) {
  */
 function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   const pending = useRef(false);
+  // The testbench of the run going on, and of the waveform the view has: set when its run offers one.
+  const running = useRef<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
   const fold = useExplorerFold(input.explorer, waveform.state.open);
   const showView = () => {
     fold();
@@ -190,6 +196,7 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
     input.overlay.show();
   };
   const runs = useRunTracking(waveform, input.log, () => {
+    setSource(running.current);
     if (pending.current) showView();
     pending.current = false;
   });
@@ -198,14 +205,18 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
     pending.current = false;
     endRun();
   }, [endRun]);
-  const runReset = useCallback(() => {
-    pending.current = false;
-    reset();
-  }, [reset]);
+  const runReset = useCallback(
+    (runSource: string) => {
+      pending.current = false;
+      running.current = runSource;
+      reset();
+    },
+    [reset],
+  );
   const openWhenReady = useCallback(() => {
     pending.current = true;
   }, []);
-  return { ...runs, showView, runEnded, reset: runReset, openWhenReady };
+  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, source };
 }
 
 export function useWaveformView(input: WaveformViewInput): WaveformView {
@@ -226,8 +237,8 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     setFocus((previous) => ({ fs, id: (previous?.id ?? 0) + 1 }));
     open();
   };
-  const runStarted = (info: RunInfo & { readonly title: string }) => {
-    runs.reset();
+  const runStarted = (info: RunInfo & { readonly title: string; readonly source: string }) => {
+    runs.reset(info.source);
     setTitle(info.title);
     waveform.runStarted(info);
   };
@@ -235,6 +246,7 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     waveform,
     clientHandlers: runs.clientHandlers,
     runStarted,
+    source: runs.source,
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
     openWhenReady: runs.openWhenReady,
