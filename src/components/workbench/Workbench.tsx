@@ -32,6 +32,7 @@ import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { ExamplesPane } from './ExamplesPane';
+import { PickerWaitNotice, usePickerWait } from './PickerWait';
 import { copyExample, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
@@ -733,6 +734,9 @@ export function Workbench() {
   };
   const testbenchDesign = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
 
+  // The browser's file and folder windows can take seconds to hand over what was chosen: a notice shows meanwhile.
+  const pickerWait = usePickerWait();
+
   // Upload File: the Open project or files dialog, whose Select files is the picker below.
   const showOpenDialog = () => {
     setOpenProjectError(null);
@@ -747,8 +751,11 @@ export function Workbench() {
       uploadInputRef.current?.click();
       return;
     }
-    pickFilesWithHandles(UPLOAD_ACCEPT.split(','))
-      .then((picked) => picked && readAndAddFiles(picked.files, picked.handles))
+    pickerWait
+      .wait(async () => {
+        const picked = await pickFilesWithHandles(UPLOAD_ACCEPT.split(','));
+        if (picked) await readAndAddFiles(picked.files, picked.handles);
+      })
       .catch((err: unknown) => appendLog(`Upload File: ${errorText(err)}`, 'error'));
   };
 
@@ -970,9 +977,11 @@ export function Workbench() {
   /** Open project folder in Chrome and Edge: the folder itself, kept as the projects folder with access to save into it. */
   const handleChooseProjectFolder = async () => {
     try {
-      const folder = await pickProjectFolder();
-      if (!folder) return;
-      await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
+      await pickerWait.wait(async () => {
+        const folder = await pickProjectFolder();
+        if (!folder) return;
+        await showOpenedFolder(await localProjects.openFolder(folder as unknown as FolderHandle), folder.name);
+      });
     } catch (err) {
       setOpenProjectError(errorText(err));
     }
@@ -1337,11 +1346,12 @@ export function Workbench() {
   /** The folder dialog's button: in Chrome and Edge the picker opens in the project file's folder. */
   const chooseProjectFolderNextTo = (handle: FileSystemFileHandle) => {
     setFolderNeeded(null);
-    pickFolderOf(handle, sourceFolderOf(project))
-      .then((picked) => {
+    pickerWait
+      .wait(async () => {
+        const picked = await pickFolderOf(handle, sourceFolderOf(project));
         if (!picked) return;
         localProjects.adoptFolder(picked.folder as unknown as FolderHandle);
-        return handleProjectFolderChosen(picked.files);
+        await handleProjectFolderChosen(picked.files);
       })
       .catch((err: unknown) => appendLog(`Choose project folder: ${errorText(err)}`, 'error'));
   };
@@ -1615,6 +1625,7 @@ export function Workbench() {
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <NoWaveformDialog {...waveView.dialog} />
+      <PickerWaitNotice phase={pickerWait.phase} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
       {overwriteAsk && (
         <OverwriteDialog
