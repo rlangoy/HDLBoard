@@ -94,11 +94,8 @@ function lineRange(unit: Unit): { first: number; last: number } {
   return { first: tokens[unit.unit.from]?.line ?? 0, last: tokens[unit.unit.to - 1]?.line ?? Number.MAX_SAFE_INTEGER };
 }
 
-/**
- * The declaration of signal `name` in the scope `scopes` (from the testbench down), or
- * undefined when it cannot be found – a generated name, a library unit.
- */
-export function findDeclaration(files: readonly VhdlFile[], scopes: readonly string[], name: string): DeclarationTarget | undefined {
+/** The unit a scope path runs: the testbench, then the unit of each instance label down. */
+function unitOfScope(files: readonly VhdlFile[], scopes: readonly string[]): Unit | undefined {
   const [top, ...instances] = scopes;
   if (top === undefined) return undefined;
   let unit = findUnit(files, top);
@@ -107,6 +104,20 @@ export function findDeclaration(files: readonly VhdlFile[], scopes: readonly str
     const child = instantiatedUnit(unit, label);
     unit = child === undefined ? undefined : findUnit(files, child);
   }
+  return unit;
+}
+
+/** The name of the file whose unit a scope path runs (`rs232_tx.vhd` for `rs232_tx_tb/dut`), if it is in the project. */
+export function scopeFileName(files: readonly VhdlFile[], scopes: readonly string[]): string | undefined {
+  return unitOfScope(files, scopes)?.file.name;
+}
+
+/**
+ * The declaration of signal `name` in the scope `scopes` (from the testbench down), or
+ * undefined when it cannot be found – a generated name, a library unit.
+ */
+export function findDeclaration(files: readonly VhdlFile[], scopes: readonly string[], name: string): DeclarationTarget | undefined {
+  const unit = unitOfScope(files, scopes);
   if (unit === undefined) return undefined;
   const { first, last } = lineRange(unit);
   const symbol = unit.symbols.index.symbols.find(

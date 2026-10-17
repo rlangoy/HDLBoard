@@ -75,11 +75,13 @@ export interface TraceRow {
   readonly parent?: SignalPath;
 }
 
-/** The head of a section: `tb (Testbench)`; open, it also lists the signals not shown. */
+/** The head of a section, `TB` or `RTL`; open, it also lists the signals not shown. */
 export interface SectionRow {
   readonly kind: 'section';
   readonly path: string;
   readonly label: string;
+  /** The scope's path, from the testbench down: what the head's tooltip names. */
+  readonly scopes: readonly string[];
   readonly depth: number;
   readonly tone: Tone;
   readonly open: boolean;
@@ -237,8 +239,9 @@ function sectionCount(walk: Walk, section: Section): number {
 function addSection(data: WaveformData, walk: Walk, section: Section): void {
   const path = sectionPath(section.path);
   const open = walk.state.open.has(path);
-  const label = `${section.scope.name} (${section.tone === 'testbench' ? 'Testbench' : 'RTL'})`;
-  walk.rows.push({ kind: 'section', path, label, depth: 0, tone: section.tone, open, count: sectionCount(walk, section) });
+  const label = section.tone === 'testbench' ? 'TB' : 'RTL';
+  const scopes = section.path.split(SEPARATOR);
+  walk.rows.push({ kind: 'section', path, label, scopes, depth: 0, tone: section.tone, open, count: sectionCount(walk, section) });
   walk.rows.push(...shownRows(data, walk.state, section));
   if (!open) return;
   hiddenContents(walk, { path: section.path, depth: SIGNAL_DEPTH }, section.scope);

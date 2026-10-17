@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VhdlFile } from '../workbench/files';
 import type { WaveClientHandlers } from '../workbench/hdlClient';
-import { findDeclaration, type DeclarationTarget } from './declarations';
+import { findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
 import type { WaveFocus } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
@@ -56,6 +56,8 @@ export interface WaveformView {
     readonly memory: React.MutableRefObject<ViewMemory | null>;
     readonly focus: WaveFocus | null;
     readonly onGoToDeclaration: (scopes: readonly string[], name: string) => void;
+    /** The file a scope's unit is in, for the section heads' tooltips. */
+    readonly fileOfScope: (scopes: readonly string[]) => string | undefined;
   };
   readonly button: { readonly state: ButtonState; readonly onToggle: () => void };
   /** The console's links into the view; absent while there is nothing to show. */
@@ -179,7 +181,7 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     runStarted,
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
-    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input) },
+    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input), fileOfScope: (scopes) => scopeFileName(input.files(), scopes) },
     button: { state, onToggle: () => (waveform.state.open ? waveform.close() : open()) },
     links: state === 'empty' ? {} : { onOpenTime: openAt, onOpenWaveform: open },
     dialog: { open: dialogOpen, afterBoardRun: waveform.state.boardRun, onClose: () => setDialogOpen(false) },

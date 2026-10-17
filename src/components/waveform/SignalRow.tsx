@@ -8,7 +8,7 @@
  * as text in the DOM (NFR-10), tinted in its section's colour.
  */
 
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { cx } from '../board';
 import { ChipIcon, FlaskIcon } from '../workbench/icons';
 import type { Trace } from './model';
@@ -19,6 +19,8 @@ import { unavailableHelp } from './valueHelp';
 import { ROW_HEIGHT } from './waveDraw';
 
 const INDENT_PX = 14;
+const TIP_INSET_PX = 24;
+const TIP_GAP_PX = 2;
 const BASE_INDENT_PX = 8;
 
 export interface RowCallbacks {
@@ -36,6 +38,8 @@ export interface RowContext {
   readonly showAsOf: (path: string) => ShowAs;
   readonly selected: string | null;
   readonly on: RowCallbacks;
+  /** The file a scope's unit is in, named in a section head's tooltip. */
+  readonly fileOfScope?: (scopes: readonly string[]) => string | undefined;
 }
 
 function Chevron({ open, label, onClick }: { readonly open: boolean; readonly label: string; readonly onClick?: () => void }) {
@@ -86,13 +90,15 @@ function RowFrame(props: {
   readonly row: Row;
   readonly context: RowContext;
   readonly gapAbove?: number;
+  /** The row's box when the mouse comes onto it, null when it leaves. */
+  readonly onHover?: (box: DOMRect | null) => void;
   readonly className?: string;
   readonly title?: string;
   readonly expanded?: boolean;
   readonly onActivate?: () => void;
   readonly children: ReactNode;
 }) {
-  const { row, context, className, title, expanded, onActivate, gapAbove, children } = props;
+  const { row, context, className, title, expanded, onActivate, gapAbove, onHover, children } = props;
   const selected = context.selected === row.path;
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => keyOnRow(event, row, context.on);
   const onContextMenu = (event: MouseEvent) => {
@@ -113,6 +119,8 @@ function RowFrame(props: {
       onClick={onActivate}
       onKeyDown={onKeyDown}
       onContextMenu={onContextMenu}
+      onMouseEnter={onHover && ((event) => onHover(event.currentTarget.getBoundingClientRect()))}
+      onMouseLeave={onHover && (() => onHover(null))}
     >
       {children}
     </div>
@@ -187,18 +195,36 @@ function FolderRowView({ row, context }: { readonly row: Extract<Row, { kind: 'f
   );
 }
 
+/** A section head's tooltip: the file in bold, `– the design instance dut`, then what a click does. */
+function SectionTip({ row, file, at }: { readonly row: SectionRow; readonly file: string | undefined; readonly at: { readonly x: number; readonly y: number } }) {
+  const name = row.scopes[row.scopes.length - 1];
+  const what = row.tone === 'testbench' ? `the testbench ${name}` : `the design instance ${name}`;
+  return (
+    <div className="wv-sectiontip" role="tooltip" style={{ left: at.x, top: at.y }}>
+      <div>
+        {file !== undefined && <strong>{file}</strong>}
+        {file !== undefined ? ` – ${what}` : what}
+      </div>
+      <div className="wv-sectiontip__hint">{row.open ? 'Click to hide the signals not shown.' : 'Click to show the signals not shown, to tick them.'}</div>
+    </div>
+  );
+}
+
 /** A section's head: its chevron shows or hides the signals that are not shown. */
 function SectionRowView({ row, context, gapAbove }: { readonly row: SectionRow; readonly context: RowContext; readonly gapAbove?: number }) {
-  const action = row.open ? 'Hide' : 'Show';
   const note = row.count === 0 ? 'all shown' : `${row.count} not shown`;
+  // Under the head while the mouse is on it; fixed, so the list's scrolling box does not clip it.
+  const [tipAt, setTipAt] = useState<{ x: number; y: number } | null>(null);
+  const onHover = (box: DOMRect | null) => setTipAt(box === null ? null : { x: box.left + TIP_INSET_PX, y: box.bottom + TIP_GAP_PX });
   return (
-    <RowFrame row={row} context={context} gapAbove={gapAbove} className="is-section" expanded={row.open} onActivate={() => context.on.onToggleOpen(row.path)}
-      title={`${action} the signals of ${row.label} that are not shown${row.open ? '' : ', to tick them'}`}>
-      <Chevron open={row.open} label={`${action} the signals not shown`} />
+    <RowFrame row={row} context={context} gapAbove={gapAbove} onHover={onHover} className="is-section" expanded={row.open}
+      onActivate={() => context.on.onToggleOpen(row.path)}>
+      <Chevron open={row.open} label={`${row.open ? 'Hide' : 'Show'} the signals not shown`} />
       {/* The editor's role icons: the flask for the testbench, the chip for a design. */}
       {row.tone === 'testbench' ? <FlaskIcon className="wv-list__section-icon" aria-hidden="true" /> : <ChipIcon className="wv-list__section-icon" aria-hidden="true" />}
       <span className="wv-list__name">{row.label}</span>
       <span className="wv-list__count">{note}</span>
+      {tipAt !== null && <SectionTip row={row} file={context.fileOfScope?.(row.scopes)} at={tipAt} />}
     </RowFrame>
   );
 }

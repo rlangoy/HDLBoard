@@ -192,9 +192,29 @@
 }
 
 .wv-names {
+  position: relative;
   flex: none;
   border-right: 1px solid var(--wb-border, #e2e8f0);
   background: var(--wv-bg);
+}
+
+/* The divider to the traces: a strip over the list's right edge, blue while dragged or focused. */
+.wv-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 3;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.wv-resizer:hover,
+.wv-resizer.is-dragging,
+.wv-resizer:focus-visible {
+  outline: none;
+  background: linear-gradient(to right, transparent 2px, var(--wv-selection) 2px, var(--wv-selection) 5px, transparent 5px);
 }
 
 .wv-names__header {
@@ -284,6 +304,30 @@
   width: 15px;
   height: 15px;
   flex: none;
+}
+
+/* The section head's tooltip, with the file name in bold. */
+.wv-sectiontip {
+  position: fixed;
+  z-index: 40;
+  max-width: 360px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.25);
+  pointer-events: none;
+}
+
+.wv-sectiontip strong {
+  font-weight: 700;
+}
+
+.wv-sectiontip__hint {
+  color: #cbd5e1;
 }
 
 /* In the colours of the editor's TB and RTL badges. */

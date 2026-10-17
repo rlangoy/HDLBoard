@@ -25,6 +25,7 @@ import { useWaveView, type WaveFocus, type WaveView } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
+import { ColumnResizer, useNamesWidth } from './ColumnResizer';
 import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
 import { WaveToolbar } from './WaveToolbar';
@@ -42,9 +43,10 @@ export interface WaveformPaneProps {
   readonly memory: MutableRefObject<ViewMemory | null>;
   readonly focus: WaveFocus | null;
   onGoToDeclaration(scopes: readonly string[], name: string): void;
+  /** The file a scope's unit is in, for the section heads' tooltips. */
+  fileOfScope?(scopes: readonly string[]): string | undefined;
 }
 
-const NAMES_WIDTH = 260;
 const ZOOM_STEP = 2;
 /** The narrowest window, in ticks of the file: 20 fs for GHDL, 20 ps for Icarus. */
 const MIN_WINDOW_TICKS = 20;
@@ -62,6 +64,7 @@ interface Signals {
   readonly showAsOf: (path: SignalPath) => ShowAs;
   readonly goTo: (path: SignalPath) => void;
   readonly on: RowCallbacks;
+  readonly fileOfScope?: (scopes: readonly string[]) => string | undefined;
 }
 
 function useMoments(consoleLines: readonly string[]): RunMoments {
@@ -131,7 +134,7 @@ function useSignals(props: WaveformPaneProps, view: WaveView, openMenu: (menu: M
     onContextMenu: (path, x, y) => openMenu({ kind: 'signal', place: { x, y }, path }),
     onGoToDeclaration: goTo,
   };
-  return { selected, showAsOf, goTo, on };
+  return { selected, showAsOf, goTo, on, fileOfScope: props.fileOfScope };
 }
 
 interface SignalMenuForProps {
@@ -185,6 +188,7 @@ interface BodyProps {
 function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: BodyProps) {
   const [traces, setTraces] = useState<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [namesWidth, setNamesWidth] = useNamesWidth();
   const width = useElementSize(traces).width;
   const { setup, list } = view;
   if (setup === null) return null;
@@ -205,7 +209,8 @@ function Body({ data, view, context, error, stale, bodyHeight, onBodyElement }: 
   return (
     <div className="wv-body" ref={onBodyElement} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
       <div className="wv-grid" style={{ height: listHeight }}>
-        <div className="wv-names" style={{ width: NAMES_WIDTH }}>
+        <div className="wv-names" style={{ width: namesWidth }}>
+          <ColumnResizer width={namesWidth} onWidth={setNamesWidth} />
           <div className="wv-names__header" style={{ height: AXIS_HEIGHT }}>
             <span>Signal</span>
             <span>Value</span>
@@ -268,7 +273,8 @@ function cursorText(view: WaveView, data: WaveformData | null): string | undefin
 }
 
 function rowContext(view: WaveView, data: WaveformData | null, signals: Signals): RowContext {
-  return { cursor: view.setup?.cursor ?? 0, traces: data?.traces ?? new Map(), showAsOf: signals.showAsOf, selected: signals.selected, on: signals.on };
+  const { showAsOf, selected, on, fileOfScope } = signals;
+  return { cursor: view.setup?.cursor ?? 0, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
 }
 
 /** The pane's keys, unless the student is typing in a field. */

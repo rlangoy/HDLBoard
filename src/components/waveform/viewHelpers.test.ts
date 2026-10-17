@@ -200,8 +200,8 @@ describe('signal list and first view (GHW fixture)', () => {
       ['section', 'rtl'],
       ['trace', 'rtl'],
     ]);
-    expect(rows[0]).toMatchObject({ path: TB, label: 'wave_types_tb (Testbench)', count: 12, open: false });
-    expect(rows[3]).toMatchObject({ path: DUT, label: 'dut (RTL)', count: 3, open: false });
+    expect(rows[0]).toMatchObject({ path: TB, label: 'TB', scopes: ['wave_types_tb'], count: 12, open: false });
+    expect(rows[3]).toMatchObject({ path: DUT, label: 'RTL', scopes: ['wave_types_tb', 'dut'], count: 3, open: false });
     expect(traceRows({ rows }).map((r) => r.label)).toEqual(['clk', 'q', 'count']);
   });
 

@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { VhdlFile } from '../workbench/files';
-import { findDeclaration } from './declarations';
+import { findDeclaration, scopeFileName } from './declarations';
 
 const file = (name: string, content: string): VhdlFile => ({ id: name, name, folder: name.endsWith('.v') ? 'verilog' : 'vhdl', content });
 
@@ -42,6 +42,15 @@ const VERILOG = [
   file('counter.v', 'module counter #(parameter W = 4) (input clk, output reg [W-1:0] q);\n  reg [1:0] state;\nendmodule\n'),
   file('tb.v', 'module tb;\n  reg clk;\n  wire [3:0] q;\n  counter #(.W(4)) dut (.clk(clk), .q(q));\nendmodule\n'),
 ];
+
+describe('scopeFileName', () => {
+  test("the testbench's file, and the design file through the instance label", () => {
+    expect(scopeFileName([COUNTER, TB], ['counter_tb'])).toBe('counter_tb.vhd');
+    expect(scopeFileName([COUNTER, TB], ['counter_tb', 'dut'])).toBe('counter.vhd');
+    expect(scopeFileName(VERILOG, ['tb', 'dut'])).toBe('counter.v');
+    expect(scopeFileName([COUNTER, TB], ['counter_tb', 'nope'])).toBeUndefined();
+  });
+});
 
 describe('findDeclaration', () => {
   test('a testbench signal, in the testbench file', () => {
