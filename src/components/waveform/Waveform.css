@@ -25,11 +25,11 @@
   --wv-row-selected: #e8f0fe;
   /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
   --wv-tb-ink: #1d4ed8;
-  --wv-tb-head: #dbe7fb;
+  --wv-tb-head: var(--hdl-tb-head);
   --wv-tb-tint: #f3f7fe;
   --wv-tb-head-ink: #1e3a8a;
   --wv-rtl-ink: #15803d;
-  --wv-rtl-head: #d5f0dd;
+  --wv-rtl-head: var(--hdl-rtl-head);
   --wv-rtl-tint: #f1faf4;
   --wv-rtl-head-ink: #14532d;
   --wv-enum-ink: #7c3aed;

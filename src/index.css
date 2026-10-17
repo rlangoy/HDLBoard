@@ -3,6 +3,10 @@
 
 :root {
   color-scheme: light;
+  /* The head colour of the testbench and of a design (RTL), shared by the editor's
+     pane headers and the waveform's sections, so the two read as the same thing. */
+  --hdl-tb-head: #dbe7fb;
+  --hdl-rtl-head: #d5f0dd;
   font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
