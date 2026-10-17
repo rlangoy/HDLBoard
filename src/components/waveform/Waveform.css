@@ -281,10 +281,18 @@
 }
 
 .wv-list__section-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   flex: none;
-  fill: currentColor;
+}
+
+/* In the colours of the editor's TB and RTL badges. */
+.wv-list__row.tone-testbench .wv-list__section-icon {
+  color: var(--wb-role-tb-ink);
+}
+
+.wv-list__row.tone-rtl .wv-list__section-icon {
+  color: var(--wb-role-rtl-ink);
 }
 
 .wv-list__row.is-selected {

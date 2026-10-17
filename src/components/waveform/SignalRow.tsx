@@ -10,6 +10,7 @@
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { cx } from '../board';
+import { ChipIcon, FlaskIcon } from '../workbench/icons';
 import type { Trace } from './model';
 import { formatValue, isUndefinedValue, type ShowAs } from './radix';
 import type { Row, SectionRow, TraceRow } from './signalRows';
@@ -186,15 +187,6 @@ function FolderRowView({ row, context }: { readonly row: Extract<Row, { kind: 'f
   );
 }
 
-/** Folder icon of Material Symbols ("folder"), as the mockup's section heads. */
-function FolderIcon() {
-  return (
-    <svg className="wv-list__section-icon" viewBox="0 -960 960 960" aria-hidden="true">
-      <path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z" />
-    </svg>
-  );
-}
-
 /** A section's head: its chevron shows or hides the signals that are not shown. */
 function SectionRowView({ row, context, gapAbove }: { readonly row: SectionRow; readonly context: RowContext; readonly gapAbove?: number }) {
   const action = row.open ? 'Hide' : 'Show';
@@ -203,7 +195,8 @@ function SectionRowView({ row, context, gapAbove }: { readonly row: SectionRow; 
     <RowFrame row={row} context={context} gapAbove={gapAbove} className="is-section" expanded={row.open} onActivate={() => context.on.onToggleOpen(row.path)}
       title={`${action} the signals of ${row.label} that are not shown${row.open ? '' : ', to tick them'}`}>
       <Chevron open={row.open} label={`${action} the signals not shown`} />
-      <FolderIcon />
+      {/* The editor's role icons: the flask for the testbench, the chip for a design. */}
+      {row.tone === 'testbench' ? <FlaskIcon className="wv-list__section-icon" aria-hidden="true" /> : <ChipIcon className="wv-list__section-icon" aria-hidden="true" />}
       <span className="wv-list__name">{row.label}</span>
       <span className="wv-list__count">{note}</span>
     </RowFrame>
