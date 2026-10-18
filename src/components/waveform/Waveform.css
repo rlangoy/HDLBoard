@@ -23,10 +23,6 @@
   --wv-tool-bg: #eef1f6;
   --wv-tool-bg-hover: #dfe6f1;
   --wv-tool-ink: #1a56db;
-  --wv-close-bg: #e1e6ee;
-  --wv-close-bg-hover: #d0d7e2;
-  --wv-close-border: #c9d1dd;
-  --wv-close-ink: #0f172a;
   --wv-row-hover: #f1f5f9;
   --wv-row-selected: #e8f0fe;
   /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
@@ -232,23 +228,6 @@
   height: 20px;
 }
 
-/* Close stands out from the other controls: a stronger circle, a dark X and a larger target. */
-.wv-tool--close {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--wv-close-border);
-  background: var(--wv-close-bg);
-  color: var(--wv-close-ink);
-}
-
-.wv-tool--close:hover:not(:disabled) {
-  background: var(--wv-close-bg-hover);
-}
-
-.wv-tool--close .wv-tool__icon {
-  width: 22px;
-  height: 22px;
-}
 
 .wv-button {
   min-width: 28px;
