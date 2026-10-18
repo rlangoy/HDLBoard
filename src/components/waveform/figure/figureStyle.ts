@@ -5,11 +5,17 @@
  * How a waveform figure looks (docs/waveform_viewer_spec.md § 8.9). One drawing serves
  * two looks: the report look, sized in points at the final printed size and black on
  * white by default, and the screen look of `screenLook.ts`, a copy of the view as it is
- * on screen. The report look's colour palette tells values apart by shape as well, so
- * it still reads in grayscale.
+ * on screen. A look is made of small parts – colours, fonts, sizes, line weights, the
+ * output's size, what is shown and the time axis – so each can be read on its own. The
+ * report look's colour palette tells values apart by shape as well, so it still reads in
+ * grayscale.
  */
 
 import type { Tone } from '../signalRows';
+import { REPORT_AXIS, type FigureAxis } from './figureAxes';
+import type { FigureFont } from './typography';
+
+export type { FigureFont } from './typography';
 
 export const PT_PER_INCH = 72;
 export const MM_PER_INCH = 25.4;
@@ -31,12 +37,6 @@ export interface ReportOptions {
 
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = { width: 'column', colouring: 'mono', showCursor: false };
 
-export interface FigureFont {
-  readonly family: string;
-  /** In the figure's drawing units. */
-  readonly size: number;
-}
-
 export interface FigurePalette {
   readonly background: string;
   readonly text: string;
@@ -51,50 +51,66 @@ export interface FigurePalette {
   readonly highZ: string;
 }
 
-/** Where the time axis goes and how it is labelled. */
-export type AxisStyle =
-  /** Below the traces, bare numbers, the unit in a title: `Time (ns)`. */
-  | 'report'
-  /** Above the traces, each label with its unit, as on screen. */
-  | 'screen';
+export interface FigureFonts {
+  readonly name: FigureFont;
+  readonly value: FigureFont;
+  readonly axis: FigureFont;
+}
 
-export interface FigureLook {
-  readonly palette: FigurePalette;
-  readonly nameFont: FigureFont;
-  readonly valueFont: FigureFont;
-  readonly axisFont: FigureFont;
-  /** The figure's width in drawing units. */
+/** Sizes in the figure's drawing units. */
+export interface FigureSizes {
+  /** The figure's width. */
   readonly width: number;
-  /** A length in drawing units as the SVG's width and height: `88.9mm`, `640px`. */
-  readonly cssLength: (units: number) => string;
-  /** The PNG's pixels per drawing unit. */
-  readonly pixelsPerUnit: number;
+  readonly margin: number;
+  /** How far the names start from the left edge, and the values end from the traces. */
+  readonly textInset: number;
   /** The width of the names column; undefined fits it to the longest name. */
   readonly namesWidth: number | undefined;
-  /** Whether the names column also shows each value at the cursor. */
-  readonly showValues: boolean;
-  readonly showCursor: boolean;
-  readonly axis: AxisStyle;
-  readonly margin: number;
   /** Every row is as tall as the others, so the traces line up. */
   readonly rowHeight: number;
   /** The trace's top and bottom inside its row. */
   readonly tracePad: number;
-  readonly traceLine: number;
-  /** The axis, its ticks and the cursor. */
-  readonly markerLine: number;
-  /** Grid lines and hatching. */
-  readonly gridLine: number;
   readonly busSlope: number;
   readonly hatchStep: number;
   readonly minTickSpacing: number;
+}
+
+/** Line weights and dashes, in drawing units. */
+export interface FigureStrokes {
+  /** Traces and bus outlines. */
+  readonly trace: number;
+  /** The axis, its ticks and the cursor. */
+  readonly marker: number;
+  /** Grid lines and hatching. */
+  readonly grid: number;
   readonly weakDash: string;
   readonly cursorDash: string | undefined;
 }
 
-/** Arial's capital height and descent, as shares of the font size: for placing baselines. */
-export const CAP_HEIGHT_EM = 0.72;
-export const DESCENT_EM = 0.21;
+/** How large the figure comes out. */
+export interface FigureOutput {
+  /** A length in drawing units as the SVG's width and height: `88.9mm`, `640px`. */
+  readonly cssLength: (units: number) => string;
+  /** The PNG's pixels per drawing unit. */
+  readonly pixelsPerUnit: number;
+}
+
+export interface FigureShows {
+  /** Each value at the cursor, in the names column. */
+  readonly values: boolean;
+  readonly cursor: boolean;
+}
+
+export interface FigureLook {
+  readonly palette: FigurePalette;
+  readonly fonts: FigureFonts;
+  readonly sizes: FigureSizes;
+  readonly strokes: FigureStrokes;
+  readonly output: FigureOutput;
+  readonly shows: FigureShows;
+  readonly axis: FigureAxis;
+}
+
 /** A U value and a busy stretch are shaded rather than hatched, so they stay apart from X. */
 export const SHADE_OPACITY = 0.25;
 /** How finely changes are drawn: closer than a quarter unit, they merge into a busy stretch. */
@@ -128,34 +144,35 @@ const COLOUR: FigurePalette = {
   highZ: '#92400e',
 };
 
-/**
- * The report look: 9 pt text (inside the 9–10 pt asked for, well above the 6 pt floor),
- * 1 pt traces, 0.75 pt markers and 0.5 pt grid lines – never thinner, or they vanish in print.
- */
+const REPORT_SIZES: Omit<FigureSizes, 'width'> = {
+  margin: 2,
+  textInset: 2,
+  namesWidth: undefined,
+  rowHeight: 20,
+  tracePad: 4,
+  busSlope: 2.5,
+  hatchStep: 3,
+  // About ten labels across a full page, never more than fit.
+  minTickSpacing: 48,
+};
+
+/** 1 pt traces, 0.75 pt markers and 0.5 pt grid lines – never thinner, or they vanish in print. */
+const REPORT_STROKES: FigureStrokes = { trace: 1, marker: 0.75, grid: 0.5, weakDash: '2 2', cursorDash: '3 2' };
+
+const REPORT_OUTPUT: FigureOutput = {
+  cssLength: (pt) => `${mmFromPt(pt).toFixed(2)}mm`,
+  pixelsPerUnit: REPORT_DPI / PT_PER_INCH,
+};
+
+/** The report look: 9 pt text, inside the 9–10 pt asked for and well above the 6 pt floor. */
 export function reportLook(options: ReportOptions): FigureLook {
   return {
     palette: options.colouring === 'colour' ? COLOUR : MONO,
-    nameFont: REPORT_FONT,
-    valueFont: REPORT_FONT,
-    axisFont: REPORT_FONT,
-    width: ptFromMm(FIGURE_WIDTH_MM[options.width]),
-    cssLength: (pt) => `${mmFromPt(pt).toFixed(2)}mm`,
-    pixelsPerUnit: REPORT_DPI / PT_PER_INCH,
-    namesWidth: undefined,
-    showValues: false,
-    showCursor: options.showCursor,
-    axis: 'report',
-    margin: 2,
-    rowHeight: 20,
-    tracePad: 4,
-    traceLine: 1,
-    markerLine: 0.75,
-    gridLine: 0.5,
-    busSlope: 2.5,
-    hatchStep: 3,
-    // About ten labels across a full page, never more than fit.
-    minTickSpacing: 48,
-    weakDash: '2 2',
-    cursorDash: '3 2',
+    fonts: { name: REPORT_FONT, value: REPORT_FONT, axis: REPORT_FONT },
+    sizes: { ...REPORT_SIZES, width: ptFromMm(FIGURE_WIDTH_MM[options.width]) },
+    strokes: REPORT_STROKES,
+    output: REPORT_OUTPUT,
+    shows: { values: false, cursor: options.showCursor },
+    axis: REPORT_AXIS,
   };
 }

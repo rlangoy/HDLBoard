@@ -3,6 +3,8 @@
 
 /** Writing SVG as text: elements, attributes and numbers, with names and values escaped. Pure. */
 
+import type { FigureFont } from './typography';
+
 export type Attributes = Readonly<Record<string, string | number | undefined>>;
 
 const DECIMALS = 2;
@@ -26,6 +28,9 @@ export function element(name: string, attributes: Attributes, content = ''): str
   const open = `<${name}${attributeText(attributes)}`;
   return content === '' ? `${open}/>` : `${open}>${content}</${name}>`;
 }
+
+/** The attributes that set a text element's font. */
+export const fontAttributes = (font: FigureFont): Attributes => ({ 'font-family': font.family, 'font-size': font.size });
 
 /** A text element: the text is escaped here. */
 export const textElement = (attributes: Attributes, text: string): string => element('text', attributes, escapeXml(text));
@@ -69,4 +74,6 @@ export class PathData {
 }
 
 /** A path element for `data`, or nothing when it is empty. */
-export const pathElement = (data: PathData, attributes: Attributes): string => (data.isEmpty ? '' : element('path', { d: data.toString(), ...attributes }));
+export function pathElement(data: PathData, attributes: Attributes): string {
+  return data.isEmpty ? '' : element('path', { d: data.toString(), ...attributes });
+}

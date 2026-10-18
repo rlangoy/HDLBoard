@@ -23,6 +23,9 @@ function MenuFrame({ place, children }: { readonly place: MenuPlace; readonly ch
   );
 }
 
+const COPY_HINT = 'Copy the waveform as it is on screen, as PNG and SVG';
+const REPORT_HINT = 'Make a figure sized for print: copy it, or save it as SVG or PNG';
+
 export interface MoreMenuProps {
   readonly place: MenuPlace;
   /** Whether there are traces on screen to copy or make a figure of. */
@@ -38,10 +41,10 @@ export interface MoreMenuProps {
 export function MoreMenu({ place, hasTraces, format, onCopyWaveform, onReportFigure, onDownload, onHelp }: MoreMenuProps) {
   return (
     <MenuFrame place={place}>
-      <button type="button" role="menuitem" disabled={!hasTraces} title="Copy the waveform as it is on screen, as PNG and SVG" onClick={onCopyWaveform}>
+      <button type="button" role="menuitem" disabled={!hasTraces} title={COPY_HINT} onClick={onCopyWaveform}>
         Copy waveform
       </button>
-      <button type="button" role="menuitem" disabled={!hasTraces} title="Make a figure sized for print: copy it, or save it as SVG or PNG" onClick={onReportFigure}>
+      <button type="button" role="menuitem" disabled={!hasTraces} title={REPORT_HINT} onClick={onReportFigure}>
         Figure for a report…
       </button>
       <button type="button" role="menuitem" disabled={format === undefined} onClick={onDownload}>

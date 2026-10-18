@@ -40,6 +40,8 @@
   --wv-rtl-head-ink: #14532d;
   --wv-enum-ink: #7c3aed;
   --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
+  /* The signal names' size; a copy of the view as on screen reads it from here. */
+  --wv-name-font-size: 13px;
 
   position: absolute;
   inset: 0;
@@ -102,7 +104,6 @@
 }
 
 .wv-cursor-field__input {
-  width: 10ch;
   padding: 0 4px 0 8px;
   border: 0;
   outline: none;
@@ -445,7 +446,7 @@
   gap: 6px;
   box-sizing: border-box;
   padding-right: 12px;
-  font-size: 13px;
+  font-size: var(--wv-name-font-size);
   white-space: nowrap;
   cursor: default;
   outline: none;

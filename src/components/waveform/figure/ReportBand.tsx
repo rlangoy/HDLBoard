@@ -57,7 +57,13 @@ function ReportOptionsForm({ options, onChange, cursorField }: OptionsFormProps)
   return (
     <>
       <ChoiceGroup legend="Width" name="wv-report-width" choices={WIDTH_CHOICES} value={options.width} onChange={(width) => onChange({ width })} />
-      <ChoiceGroup legend="Style" name="wv-report-colouring" choices={COLOURING_CHOICES} value={options.colouring} onChange={(colouring) => onChange({ colouring })} />
+      <ChoiceGroup
+        legend="Style"
+        name="wv-report-colouring"
+        choices={COLOURING_CHOICES}
+        value={options.colouring}
+        onChange={(colouring) => onChange({ colouring })}
+      />
       <fieldset className="wv-report-band__group">
         <legend>Cursor</legend>
         <label>
@@ -108,8 +114,9 @@ export function ReportBand({ report, cursorField }: ReportBandProps) {
       <div className="wv-report-band__options">
         <ReportOptionsForm options={report.options} onChange={report.change} cursorField={cursorField} />
         <p className="wv-report-band__hint">
-          Text is 9 pt and traces 1 pt when the figure is {widthCm} cm wide. Insert it without resizing; if your editor changes the size, set the
-          width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi. Scroll to move in time and drag across the figure to zoom into that part.
+          Text is 9 pt and traces 1 pt when the figure is {widthCm} cm wide. Insert it without resizing; if your editor
+          changes the size, set the width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi.
+          Scroll to move in time and drag across the figure to zoom into that part.
         </p>
       </div>
     </section>

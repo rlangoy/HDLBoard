@@ -19,9 +19,10 @@ import { BUSY, NO_VALUE, visibleSpans, type Span } from '../levelOfDetail';
 import { formatValue, isUndefinedValue } from '../radix';
 import { timeToX } from '../timeAxis';
 import type { FigureRow, MeasureText } from './figureContent';
-import { centredBaseline, type FigureLayout } from './figureLayout';
+import type { FigureLayout } from './figureLayout';
 import { DETAIL_PER_UNIT, SHADE_OPACITY, type FigureLook } from './figureStyle';
-import { PathData, element, pathElement, textElement } from './svgMarkup';
+import { PathData, element, fontAttributes, pathElement, textElement } from './svgMarkup';
+import { centredBaseline } from './typography';
 
 export interface TraceContext {
   readonly layout: FigureLayout;
@@ -114,21 +115,21 @@ function addBoxValue(paths: BitPaths, { value, box }: Stretch, hatchStep: number
 }
 
 function shadeMarkup(boxes: readonly Box[], color: string): string {
-  return boxes
-    .map((box) => element('rect', { x: box.x0, y: box.top, width: box.x1 - box.x0, height: box.bottom - box.top, fill: color, 'fill-opacity': SHADE_OPACITY }))
-    .join('');
+  const shade = (box: Box) =>
+    element('rect', { x: box.x0, y: box.top, width: box.x1 - box.x0, height: box.bottom - box.top, fill: color, 'fill-opacity': SHADE_OPACITY });
+  return boxes.map(shade).join('');
 }
 
 function bitPathsMarkup(paths: BitPaths, look: FigureLook, ink: string): string {
-  const { palette } = look;
-  const line = { fill: 'none', 'stroke-width': look.traceLine, 'stroke-linecap': 'square' };
+  const { palette, strokes } = look;
+  const line = { fill: 'none', 'stroke-width': strokes.trace, 'stroke-linecap': 'square' };
   return [
     shadeMarkup(paths.busyShades, ink),
     shadeMarkup(paths.undefinedShades, palette.undefined),
-    pathElement(paths.hatch, { fill: 'none', stroke: palette.undefined, 'stroke-width': look.gridLine }),
+    pathElement(paths.hatch, { fill: 'none', stroke: palette.undefined, 'stroke-width': strokes.grid }),
     pathElement(paths.undefinedOutline, { ...line, stroke: palette.undefined, 'stroke-linejoin': 'miter' }),
     pathElement(paths.highZ, { ...line, stroke: palette.highZ }),
-    pathElement(paths.weak, { ...line, stroke: ink, 'stroke-dasharray': look.weakDash, 'stroke-linecap': 'butt' }),
+    pathElement(paths.weak, { ...line, stroke: ink, 'stroke-dasharray': strokes.weakDash, 'stroke-linecap': 'butt' }),
     pathElement(paths.strong, { ...line, stroke: ink }),
   ].join('');
 }
@@ -145,7 +146,7 @@ function bitMarkup(row: FigureRow, boxes: ReadonlyArray<readonly [Span, Box]>, s
     const value = row.trace.values[span.value];
     const y = levelY(value, box);
     if (y === undefined) {
-      addBoxValue(paths, { value, box }, style.look.hatchStep);
+      addBoxValue(paths, { value, box }, style.look.sizes.hatchStep);
     } else {
       if (previousY !== undefined && previousY !== y) paths.strong.moveTo(box.x0, previousY).verticalTo(y);
       addLevel(paths, { value, box }, y);
@@ -171,11 +172,11 @@ function addBusOutline(path: PathData, box: Box, busSlope: number): void {
 /** The value centred between the crossings, or nothing when it would touch them. */
 function busLabel(text: string, box: Box, context: TraceContext): string {
   const { look, measure } = context;
-  const font = look.valueFont;
-  const room = box.x1 - box.x0 - 2 * (look.busSlope + BUS_TEXT_PAD_EM * font.size);
+  const font = look.fonts.value;
+  const room = box.x1 - box.x0 - 2 * (look.sizes.busSlope + BUS_TEXT_PAD_EM * font.size);
   if (measure(text, font) > room) return '';
-  const attributes = { x: (box.x0 + box.x1) / 2, y: centredBaseline(middle(box), font), 'text-anchor': 'middle', fill: look.palette.text };
-  return textElement({ ...attributes, 'font-family': font.family, 'font-size': font.size }, text);
+  const centre = { x: (box.x0 + box.x1) / 2, y: centredBaseline(middle(box), font), 'text-anchor': 'middle' };
+  return textElement({ ...centre, fill: look.palette.text, ...fontAttributes(font) }, text);
 }
 
 function busMarkup(row: FigureRow, boxes: ReadonlyArray<readonly [Span, Box]>, style: RowStyle): string {
@@ -189,10 +190,10 @@ function busMarkup(row: FigureRow, boxes: ReadonlyArray<readonly [Span, Box]>, s
     if (span.value === BUSY) busy.push(box);
     if (span.value === NO_VALUE || span.value === BUSY) continue;
     const value = row.trace.values[span.value];
-    addBusOutline(isUndefinedValue(row.signal, value) ? unknown : known, box, look.busSlope);
+    addBusOutline(isUndefinedValue(row.signal, value) ? unknown : known, box, look.sizes.busSlope);
     labels.push(busLabel(formatValue(row.signal, value, row.showAs), box, style));
   }
-  const outline = { 'stroke-width': look.traceLine, 'stroke-linejoin': 'miter' };
+  const outline = { 'stroke-width': look.strokes.trace, 'stroke-linejoin': 'miter' };
   const { undefined: undefinedColor } = look.palette;
   return [
     shadeMarkup(busy, bus),
@@ -212,8 +213,9 @@ export function traceMarkup(row: FigureRow, rowTop: number, context: TraceContex
   const { layout, look } = context;
   const { view } = layout;
   const spans = visibleSpans(row.trace, { from: view.start, to: context.end }, view.ticksPerPx / DETAIL_PER_UNIT);
-  const top = rowTop + look.tracePad;
-  const bottom = rowTop + look.rowHeight - look.tracePad;
+  const { tracePad, rowHeight } = look.sizes;
+  const top = rowTop + tracePad;
+  const bottom = rowTop + rowHeight - tracePad;
   const xOf = (time: number) => layout.tracesLeft + timeToX(view, time);
   const boxes = spans.map((span) => [span, { x0: xOf(span.start), x1: xOf(span.end), top, bottom }] as const);
   const style: RowStyle = { ...context, colors: rowInk(row, look) };

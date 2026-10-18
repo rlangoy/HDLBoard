@@ -12,11 +12,13 @@
 import { formatValue, isUndefinedValue } from '../radix';
 import { timeToX } from '../timeAxis';
 import { valueAt } from '../valueAt';
+import type { Drawing } from './figureAxes';
 import type { FigureContent, FigureRow, MeasureText } from './figureContent';
-import { centredBaseline, figureLayout, reportTickLength, screenLabelX, type FigureLayout } from './figureLayout';
-import type { FigureFont, FigureLook } from './figureStyle';
+import { figureLayout, type FigureLayout } from './figureLayout';
+import type { FigureLook } from './figureStyle';
 import { traceMarkup } from './figureTraces';
-import { PathData, element, pathElement, textElement, type Attributes } from './svgMarkup';
+import { PathData, element, fontAttributes, pathElement, textElement } from './svgMarkup';
+import { centredBaseline } from './typography';
 
 export interface Figure {
   readonly svg: string;
@@ -27,36 +29,28 @@ export interface Figure {
   readonly pixelHeight: number;
 }
 
-/** Where the screen look writes the names, and how far the values keep from the traces. */
-const SCREEN_TEXT_INSET = 12;
-
-interface Drawing {
-  readonly content: FigureContent;
-  readonly look: FigureLook;
-  readonly layout: FigureLayout;
-}
-
-const fontAttributes = (font: FigureFont): Attributes => ({ 'font-family': font.family, 'font-size': font.size });
-
-const rowMiddle = ({ look, layout }: Drawing, index: number): number => layout.rowTops[index] + look.rowHeight / 2;
+const rowMiddle = ({ look, layout }: Drawing, index: number): number => layout.rowTops[index] + look.sizes.rowHeight / 2;
 
 function namesMarkup(drawing: Drawing): string {
   const { content, look } = drawing;
-  const x = look.axis === 'screen' ? SCREEN_TEXT_INSET : look.margin;
-  return content.rows
-    .map((row, index) => textElement({ x, y: centredBaseline(rowMiddle(drawing, index), look.nameFont), fill: look.palette.text, ...fontAttributes(look.nameFont) }, row.label))
-    .join('');
+  const font = look.fonts.name;
+  const name = (row: FigureRow, index: number) => {
+    const place = { x: look.sizes.textInset, y: centredBaseline(rowMiddle(drawing, index), font) };
+    return textElement({ ...place, fill: look.palette.text, ...fontAttributes(font) }, row.label);
+  };
+  return content.rows.map(name).join('');
 }
 
 /** Each value at the cursor, right-aligned in the names column, red when it holds U, X or W. */
 function valuesMarkup(drawing: Drawing): string {
   const { content, look, layout } = drawing;
+  const font = look.fonts.value;
   const valueText = (row: FigureRow, index: number): string => {
     const raw = valueAt(row.trace, content.cursor);
     if (raw === undefined) return '';
     const fill = isUndefinedValue(row.signal, raw) ? look.palette.undefined : look.palette.text;
-    const attributes = { x: layout.namesRight - SCREEN_TEXT_INSET, y: centredBaseline(rowMiddle(drawing, index), look.valueFont), 'text-anchor': 'end', fill };
-    return textElement({ ...attributes, ...fontAttributes(look.valueFont) }, formatValue(row.signal, raw, row.showAs));
+    const place = { x: layout.namesRight - look.sizes.textInset, y: centredBaseline(rowMiddle(drawing, index), font), 'text-anchor': 'end' };
+    return textElement({ ...place, fill, ...fontAttributes(font) }, formatValue(row.signal, raw, row.showAs));
   };
   return content.rows.map(valueText).join('');
 }
@@ -65,39 +59,16 @@ function valuesMarkup(drawing: Drawing): string {
 function gridMarkup({ look, layout }: Drawing): string {
   const lines = new PathData();
   for (const tick of layout.ticks) lines.moveTo(tick.x, layout.gridTop).verticalTo(layout.gridBottom);
-  return pathElement(lines, { fill: 'none', stroke: look.palette.grid, 'stroke-width': look.gridLine });
+  return pathElement(lines, { fill: 'none', stroke: look.palette.grid, 'stroke-width': look.strokes.grid });
 }
 
-/** Below the traces: the axis line, ticks, bare numbers and the title with the unit. */
-function reportAxisMarkup({ look, layout }: Drawing): string {
-  const { palette, axisFont } = look;
-  const lines = new PathData().moveTo(layout.tracesLeft, layout.axisY).horizontalTo(layout.tracesRight);
-  for (const tick of layout.ticks) lines.moveTo(tick.x, layout.axisY).verticalTo(layout.axisY + reportTickLength(look));
-  const centred = { 'text-anchor': 'middle', fill: palette.text, ...fontAttributes(axisFont) };
-  const labels = layout.ticks.map((tick) => textElement({ ...centred, x: tick.x, y: layout.tickLabelBaseline }, tick.label));
-  const title = layout.axisTitle === undefined ? '' : textElement({ ...centred, x: (layout.tracesLeft + layout.tracesRight) / 2, y: layout.axisTitle.baseline }, layout.axisTitle.text);
-  return [pathElement(lines, { fill: 'none', stroke: palette.axis, 'stroke-width': look.markerLine }), ...labels, title].join('');
-}
-
-/** Above the traces, as on screen: the column heads, labels with units, the axis line and the column divider. */
-function screenAxisMarkup({ look, layout }: Drawing): string {
-  const { palette, axisFont } = look;
-  const muted = { fill: palette.axis, ...fontAttributes(axisFont) };
-  const heads = [
-    textElement({ ...muted, x: SCREEN_TEXT_INSET, y: layout.tickLabelBaseline, 'font-weight': 600 }, 'SIGNAL'),
-    textElement({ ...muted, x: layout.namesRight - SCREEN_TEXT_INSET, y: layout.tickLabelBaseline, 'text-anchor': 'end', 'font-weight': 600 }, 'VALUE'),
-  ];
-  const labels = layout.ticks.map((tick) => textElement({ ...muted, x: screenLabelX(tick), y: layout.tickLabelBaseline }, tick.label));
-  const lines = new PathData().moveTo(0, layout.axisY).horizontalTo(layout.width).moveTo(layout.namesRight, 0).verticalTo(layout.height);
-  return [pathElement(lines, { fill: 'none', stroke: palette.grid, 'stroke-width': look.gridLine }), ...heads, ...labels].join('');
-}
-
-/** The cursor, when it is inside the time shown. */
+/** The cursor, when it is shown and inside the time shown. */
 function cursorMarkup({ content, look, layout }: Drawing): string {
-  if (!look.showCursor || content.cursor < content.start || content.cursor > content.end) return '';
+  if (!look.shows.cursor || content.cursor < content.start || content.cursor > content.end) return '';
   const x = layout.tracesLeft + timeToX(layout.view, content.cursor);
   const line = new PathData().moveTo(x, layout.gridTop).verticalTo(layout.gridBottom);
-  return pathElement(line, { fill: 'none', stroke: look.palette.cursor, 'stroke-width': look.markerLine, 'stroke-dasharray': look.cursorDash });
+  const { strokes } = look;
+  return pathElement(line, { fill: 'none', stroke: look.palette.cursor, 'stroke-width': strokes.marker, 'stroke-dasharray': strokes.cursorDash });
 }
 
 function tracesMarkup(drawing: Drawing, measure: MeasureText): string {
@@ -106,29 +77,25 @@ function tracesMarkup(drawing: Drawing, measure: MeasureText): string {
   return content.rows.map((row, index) => traceMarkup(row, layout.rowTops[index], context)).join('');
 }
 
+function svgDocument({ look, layout }: Drawing, body: string): string {
+  const { cssLength } = look.output;
+  const size = { width: cssLength(layout.width), height: cssLength(layout.height) };
+  const viewBox = `0 0 ${layout.width.toFixed(2)} ${layout.height.toFixed(2)}`;
+  return element('svg', { xmlns: 'http://www.w3.org/2000/svg', ...size, viewBox, ...fontAttributes(look.fonts.name) }, body);
+}
+
 export function waveformFigure(content: FigureContent, look: FigureLook, measure: MeasureText): Figure {
   const layout = figureLayout(content, look, measure);
   const drawing: Drawing = { content, look, layout };
-  const screen = look.axis === 'screen';
   const body = [
     element('rect', { width: layout.width, height: layout.height, fill: look.palette.background }),
     gridMarkup(drawing),
     namesMarkup(drawing),
-    look.showValues ? valuesMarkup(drawing) : '',
+    look.shows.values ? valuesMarkup(drawing) : '',
     tracesMarkup(drawing, measure),
     cursorMarkup(drawing),
-    screen ? screenAxisMarkup(drawing) : reportAxisMarkup(drawing),
+    look.axis.markup(drawing),
   ].join('');
-  const svg = element(
-    'svg',
-    {
-      xmlns: 'http://www.w3.org/2000/svg',
-      width: look.cssLength(layout.width),
-      height: look.cssLength(layout.height),
-      viewBox: `0 0 ${layout.width.toFixed(2)} ${layout.height.toFixed(2)}`,
-      ...fontAttributes(look.nameFont),
-    },
-    body,
-  );
-  return { svg, layout, pixelWidth: Math.round(layout.width * look.pixelsPerUnit), pixelHeight: Math.round(layout.height * look.pixelsPerUnit) };
+  const pixels = (units: number) => Math.round(units * look.output.pixelsPerUnit);
+  return { svg: svgDocument(drawing, body), layout, pixelWidth: pixels(layout.width), pixelHeight: pixels(layout.height) };
 }

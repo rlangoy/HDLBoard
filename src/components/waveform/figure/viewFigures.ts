@@ -14,6 +14,7 @@ import { figureRows, type FigureContent } from './figureContent';
 import { copyFigure, measureText, type CopyResult } from './figureOutput';
 import { waveformFigure } from './figureSvg';
 import { screenLook, type ScreenSize } from './screenLook';
+import type { FigureFont } from './typography';
 
 export interface ViewState {
   readonly setup: ViewSetup;
@@ -27,9 +28,14 @@ export function viewContent({ setup, list, showAsOf }: ViewState): FigureContent
   return { rows: figureRows(traceRows(list), showAsOf), start: window.start, end: window.end, runEnd, tickFs, cursor };
 }
 
+/** The signal names' font as the list draws it: the pane's family at `--wv-name-font-size`. */
+function listNameFont(pane: HTMLElement): FigureFont {
+  const style = getComputedStyle(pane);
+  return { family: style.fontFamily, size: parseFloat(style.getPropertyValue('--wv-name-font-size')) };
+}
+
 /** Copies the view as on screen, in the colours and fonts of the pane it is in. */
 export function copyScreenFigure(pane: HTMLElement, state: ViewState, size: ScreenSize): Promise<CopyResult> {
-  const valueFont = getComputedStyle(pane).getPropertyValue('--wv-value-font').trim();
-  const look = screenLook(readColors(pane), size, valueFont);
+  const look = screenLook(readColors(pane), size, listNameFont(pane));
   return copyFigure(waveformFigure(viewContent(state), look, measureText));
 }

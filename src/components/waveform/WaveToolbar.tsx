@@ -74,7 +74,13 @@ export function WaveToolbar(props: WaveToolbarProps) {
             props.onMore(event.currentTarget.getBoundingClientRect());
           }}
         />
-        <ToolButton icon={CloseIcon} label="Close the waveform" hint="Close the waveform and show the code again (Esc)" emphasis onClick={props.onClose} />
+        <ToolButton
+          icon={CloseIcon}
+          label="Close the waveform"
+          hint="Close the waveform and show the code again (Esc)"
+          emphasis
+          onClick={props.onClose}
+        />
       </div>
     </header>
   );

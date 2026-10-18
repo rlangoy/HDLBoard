@@ -14,6 +14,7 @@ const PNG_SIGNATURE_LENGTH = 8;
 /** The IHDR chunk – length, type, 13 bytes of data, CRC – always comes first. */
 const IHDR_CHUNK_LENGTH = 25;
 const METRES_PER_INCH = 0.0254;
+const NOT_DRAWN = 'The figure could not be drawn.';
 
 /** A chunk is its data's length, its type, the data, and a CRC of type and data. */
 const TYPE_AT = 4;
@@ -35,9 +36,11 @@ export async function figurePng(figure: Figure): Promise<Blob> {
   canvas.width = figure.pixelWidth;
   canvas.height = figure.pixelHeight;
   const ctx = canvas.getContext('2d');
-  if (ctx === null) throw new Error('The figure could not be drawn.');
+  if (ctx === null) throw new Error(NOT_DRAWN);
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob === null ? reject(new Error('The figure could not be drawn.')) : resolve(blob)), 'image/png'));
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob === null ? reject(new Error(NOT_DRAWN)) : resolve(blob)), 'image/png');
+  });
 }
 
 function loadSvg(svg: string): Promise<HTMLImageElement> {
@@ -45,7 +48,7 @@ function loadSvg(svg: string): Promise<HTMLImageElement> {
   const image = new Image();
   return new Promise<HTMLImageElement>((resolve, reject) => {
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('The figure could not be drawn.'));
+    image.onerror = () => reject(new Error(NOT_DRAWN));
     image.src = url;
   }).finally(() => URL.revokeObjectURL(url));
 }

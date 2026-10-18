@@ -82,21 +82,35 @@ interface Box {
 
 export const AXIS_HEIGHT = 28;
 export const ROW_HEIGHT = 28;
+/** A font as a size in CSS pixels and a family: the canvas's, and a copy as on screen. */
+export interface CanvasFont {
+  readonly size: number;
+  readonly family: string;
+}
+
+/*
+ * The canvas's sizes and fonts. A copy of the view as on screen (figure/screenLook.ts)
+ * draws with these too, so the two always match.
+ */
 /** The trace's top and bottom inside its row. */
-const PAD = 6;
-const BUS_SLOPE = 3;
-const FONT = '12px "Cascadia Mono", Consolas, ui-monospace, monospace';
-const AXIS_FONT = '11px system-ui, sans-serif';
+export const TRACE_PAD = 6;
+export const BUS_SLOPE = 3;
+export const HATCH_STEP = 6;
+export const WEAK_DASH_LENGTH = 3;
+export const TRACE_WIDTH = 1.5;
+/** Ticks are this long above the axis line, and the grid lines start there. */
+export const TICK_LENGTH = 6;
+/** A tick's label starts this far after its line. */
+export const LABEL_OFFSET = 3;
+export const VALUE_FONT: CanvasFont = { size: 12, family: '"Cascadia Mono", Consolas, ui-monospace, monospace' };
+export const AXIS_FONT: CanvasFont = { size: 11, family: 'system-ui, sans-serif' };
+
+const cssFont = (font: CanvasFont): string => `${font.size}px ${font.family}`;
 const TEXT_PAD = 4;
-const HATCH_STEP = 6;
-const TICK_LENGTH = 6;
-const LABEL_OFFSET = 3;
-const WEAK_DASH_LENGTH = 3;
 const WEAK_DASH = [WEAK_DASH_LENGTH, WEAK_DASH_LENGTH];
 const BAND_ALPHA = 0.35;
 const BAD_BUS_ALPHA = 0.18;
 const BUSY_ALPHA = 0.5;
-const TRACE_WIDTH = 1.5;
 /** Keeps a one-pixel line on whole device pixels. */
 const HALF_PIXEL = 0.5;
 
@@ -118,7 +132,7 @@ function line(ctx: CanvasRenderingContext2D, from: readonly [number, number], to
 export function drawAxis({ ctx, colors }: Painter, view: TimeView, size: AxisSize): void {
   ctx.fillStyle = colors.background;
   ctx.fillRect(0, 0, size.width, AXIS_HEIGHT);
-  ctx.font = AXIS_FONT;
+  ctx.font = cssFont(AXIS_FONT);
   ctx.textBaseline = 'middle';
   for (const mark of tickMarks(view, size.width, size.tickFs)) {
     const x = Math.round(mark.x) + HALF_PIXEL;
@@ -257,9 +271,9 @@ function drawBusy({ ctx, colors }: Painter, box: Box, bit: boolean): void {
 
 export function drawRow(painter: Painter, view: TimeView, row: RowDrawing): void {
   const { ctx } = painter;
-  const top = row.y + PAD;
-  const bottom = row.y + ROW_HEIGHT - PAD;
-  ctx.font = FONT;
+  const top = row.y + TRACE_PAD;
+  const bottom = row.y + ROW_HEIGHT - TRACE_PAD;
+  ctx.font = cssFont(VALUE_FONT);
   ctx.textBaseline = 'middle';
   ctx.lineWidth = TRACE_WIDTH;
   const bit = row.signal.kind === 'logic';
