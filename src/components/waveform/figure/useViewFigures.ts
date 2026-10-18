@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState, type RefObject } from 'react';
+import type { Ticks } from '../model';
 import type { ShowAs } from '../radix';
 import { traceRows, type SignalPath } from '../signalRows';
 import { useStatusLine } from '../useStatusLine';
@@ -34,6 +35,9 @@ export interface ViewFiguresInput {
 export interface ReportMode {
   readonly figure: Figure;
   readonly options: ReportOptions;
+  /** The cursor, in ticks of `tickFs` femtoseconds. */
+  readonly cursor: Ticks;
+  readonly tickFs: number;
   change(patch: Partial<ReportOptions>): void;
   copy(): void;
   saveSvg(): void;
@@ -77,11 +81,13 @@ export function useViewFigures({ view, showAsOf, pane, size, baseName }: ViewFig
     if (state !== null && hasTraces && pane.current !== null) void copyScreenFigure(pane.current, state, size).then((result) => setStatus(COPY_MESSAGES[result]));
   };
   const report: ReportMode | null =
-    figure === null
+    figure === null || state === null
       ? null
       : {
           figure,
           options,
+          cursor: state.setup.cursor,
+          tickFs: state.setup.tickFs,
           change,
           copy: () => void copyFigure(figure).then((result) => setStatus(COPY_MESSAGES[result])),
           saveSvg: () => saveFigureSvg(figure, baseName),

@@ -47,7 +47,13 @@ function ChoiceGroup<T extends string>({ legend, name, choices, value, onChange 
   );
 }
 
-function ReportOptionsForm({ options, onChange }: { readonly options: ReportOptions; readonly onChange: (patch: Partial<ReportOptions>) => void }) {
+interface OptionsFormProps {
+  readonly options: ReportOptions;
+  readonly onChange: (patch: Partial<ReportOptions>) => void;
+  readonly cursorField: ReactNode;
+}
+
+function ReportOptionsForm({ options, onChange, cursorField }: OptionsFormProps) {
   return (
     <>
       <ChoiceGroup legend="Width" name="wv-report-width" choices={WIDTH_CHOICES} value={options.width} onChange={(width) => onChange({ width })} />
@@ -58,6 +64,7 @@ function ReportOptionsForm({ options, onChange }: { readonly options: ReportOpti
           <input type="checkbox" checked={options.showCursor} onChange={(event) => onChange({ showCursor: event.target.checked })} />
           Show the cursor
         </label>
+        {cursorField}
       </fieldset>
     </>
   );
@@ -71,7 +78,13 @@ function BandButton({ primary, onClick, children }: { readonly primary?: boolean
   );
 }
 
-export function ReportBand({ report }: { readonly report: ReportMode }) {
+export interface ReportBandProps {
+  readonly report: ReportMode;
+  /** The cursor's time field, to read or type the cursor's time. */
+  readonly cursorField: ReactNode;
+}
+
+export function ReportBand({ report, cursorField }: ReportBandProps) {
   const widthCm = FIGURE_WIDTH_MM[report.options.width] / MM_PER_CM;
   return (
     <section className="wv-report-band" aria-label="Figure for a report">
@@ -93,10 +106,10 @@ export function ReportBand({ report }: { readonly report: ReportMode }) {
         </div>
       </div>
       <div className="wv-report-band__options">
-        <ReportOptionsForm options={report.options} onChange={report.change} />
+        <ReportOptionsForm options={report.options} onChange={report.change} cursorField={cursorField} />
         <p className="wv-report-band__hint">
           Text is 9 pt and traces 1 pt when the figure is {widthCm} cm wide. Insert it without resizing; if your editor changes the size, set the
-          width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi. Scroll or drag the figure to choose what it shows.
+          width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi. Scroll to move in time and drag across the figure to zoom into that part.
         </p>
       </div>
     </section>

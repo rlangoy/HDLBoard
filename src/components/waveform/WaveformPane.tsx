@@ -19,16 +19,17 @@ import { defaultShowAs, hasShowAs, type ShowAs } from './radix';
 import { declarationOf, signalsByPath, testbenchScope, traceRows, type SignalPath } from './signalRows';
 import { SignalList } from './SignalList';
 import type { RowCallbacks, RowContext } from './SignalRow';
-import { formatCursorFs, pixelResolutionFs, viewOf } from './timeAxis';
+import { pixelResolutionFs, viewOf } from './timeAxis';
 import type { Waveform } from './useWaveform';
 import { useWaveView, type WaveFocus, type WaveView } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
 import { ColumnResizer, useNamesWidth } from './ColumnResizer';
+import { CursorTimeField } from './CursorTimeField';
 import { ReportBand } from './figure/ReportBand';
 import { ReportPreview } from './figure/ReportPreview';
-import { useViewFigures, type ViewFigures } from './figure/useViewFigures';
+import { useViewFigures, type ReportMode, type ViewFigures } from './figure/useViewFigures';
 import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
 import { WaveToolbar } from './WaveToolbar';
@@ -274,23 +275,36 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: Me
 
 interface PaneToolbarProps {
   readonly title: string;
-  readonly time: string | undefined;
+  readonly hasWaveform: boolean;
+  readonly cursorField: ReactNode;
   readonly view: WaveView;
   readonly onMenu: (menu: Menu) => void;
   readonly onClose: () => void;
 }
 
-function PaneToolbar({ title, time, view, onMenu, onClose }: PaneToolbarProps) {
+function PaneToolbar({ title, hasWaveform, cursorField, view, onMenu, onClose }: PaneToolbarProps) {
   return (
     <WaveToolbar
       title={title}
-      time={time}
+      hasWaveform={hasWaveform}
+      cursorField={cursorField}
       onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
       onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
       onFit={view.actions.fit}
       onMore={(anchor) => onMenu({ kind: 'more', place: { x: anchor.right - MENU_WIDTH, y: anchor.bottom + MENU_GAP } })}
       onClose={onClose}
     />
+  );
+}
+
+/** Report mode's band above the toolbar; the cursor's field is in the band then, not in the toolbar. */
+function PaneHeader({ report, toolbar }: { readonly report: ReportMode | null; readonly toolbar: PaneToolbarProps }) {
+  if (report === null) return <PaneToolbar {...toolbar} />;
+  return (
+    <>
+      <ReportBand report={report} cursorField={toolbar.cursorField} />
+      <PaneToolbar {...toolbar} cursorField={null} />
+    </>
   );
 }
 
@@ -313,7 +327,12 @@ function Stage({ figures, view, children }: { readonly figures: ViewFigures; rea
     <div className="wv-stage">
       {children}
       {figures.report !== null && (
-        <ReportPreview figure={figures.report.figure} handlers={{ onScroll: actions.scroll, onZoom: actions.zoom, onCursor: actions.setCursor }} />
+        <ReportPreview
+          figure={figures.report.figure}
+          cursor={figures.report.options.showCursor ? figures.report.cursor : undefined}
+          tickFs={figures.report.tickFs}
+          handlers={{ onScroll: actions.scroll, onZoom: actions.zoom, onCursor: actions.setCursor, onZoomTo: (start, end) => actions.setWindow({ start, end }) }}
+        />
       )}
     </div>
   );
@@ -335,14 +354,16 @@ function usePane(props: WaveformPaneProps) {
 }
 
 /**
- * The time at the cursor as the toolbar reads it, or undefined while there is no waveform:
- * with the decimals one pixel of the traces, at the screen's pixel ratio, can point at.
+ * The cursor's time field, or null while there is no waveform: with the decimals one
+ * pixel of the traces, at the screen's pixel ratio, can point at. A typed time moves the
+ * cursor there, into view, never past the run's end.
  */
-function cursorText(view: WaveView, data: WaveformData | null, tracesWidth: number): string | undefined {
-  if (view.setup === null || data === null || tracesWidth <= 0) return undefined;
-  const { window: shown, cursor } = view.setup;
+function cursorField(view: WaveView, data: WaveformData | null, tracesWidth: number): ReactNode {
+  if (view.setup === null || data === null || tracesWidth <= 0) return null;
+  const { window: shown, cursor, runEnd } = view.setup;
   const resolution = pixelResolutionFs(viewOf(shown.start, shown.end, tracesWidth), data.tickFs, window.devicePixelRatio);
-  return formatCursorFs(cursor * data.tickFs, resolution);
+  const moveTo = (fs: number) => view.actions.showCursor(Math.min(runEnd, Math.round(fs / data.tickFs)));
+  return <CursorTimeField fs={cursor * data.tickFs} resolutionFs={resolution} onChange={moveTo} />;
 }
 
 function rowContext(view: WaveView, data: WaveformData | null, signals: Signals): RowContext {
@@ -379,10 +400,10 @@ export function WaveformPane(props: WaveformPaneProps) {
   const figures = useViewFigures({ view, showAsOf: signals.showAsOf, pane: paneRef, size: { namesWidth, tracesWidth }, baseName: `${title}_waveform` });
   const closeReport = () => figures.report !== null && (figures.report.close(), true);
   const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, closeReport, close: waveform.close });
+  const field = cursorField(view, data, tracesWidth);
   return (
     <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
-      {figures.report !== null && <ReportBand report={figures.report} />}
-      <PaneToolbar title={title} time={cursorText(view, data, tracesWidth)} view={view} onMenu={setMenu} onClose={waveform.close} />
+      <PaneHeader report={figures.report} toolbar={{ title, hasWaveform: field !== null, cursorField: field, view, onMenu: setMenu, onClose: waveform.close }} />
       <WaveNotes notes={notesFor(waveform.state, data)} />
       {helpOpen && <WaveHelp onClose={() => setHelpOpen(false)} />}
       {data === null ? (

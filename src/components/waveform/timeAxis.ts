@@ -103,8 +103,35 @@ export function formatFsIn(fs: number, [, size]: TimeUnit, stepFs?: number): str
  * as many as a position known to `resolutionFs` deserves (three when none is given).
  */
 export function formatCursorFs(fs: number, resolutionFs?: number): string {
-  const [unit, size] = fs === 0 ? (['ns', FS_PER_NS] as const) : unitFor(fs);
-  return `${(fs / size).toFixed(resolutionDecimals(size, resolutionFs))} ${unit}`;
+  const unit = cursorUnitFor(fs);
+  return `${formatCursorIn(fs, unit, resolutionFs)} ${unit[0]}`;
+}
+
+/** The units the cursor's time can be read and typed in, largest first. */
+export const CURSOR_UNITS: readonly TimeUnit[] = UNITS.filter(([, size]) => size >= FS_PER_PS);
+
+/** The cursor unit a time reads best in: as `unitFor`, but nanoseconds for 0 and never below picoseconds. */
+export function cursorUnitFor(fs: number): TimeUnit {
+  if (fs === 0) return ['ns', FS_PER_NS];
+  return CURSOR_UNITS.find(([, size]) => Math.abs(fs) >= size) ?? CURSOR_UNITS[CURSOR_UNITS.length - 1];
+}
+
+/** The cursor's time as a bare number in `unit`, with the decimals a position known to `resolutionFs` deserves. */
+export function formatCursorIn(fs: number, [, size]: TimeUnit, resolutionFs?: number): string {
+  return (fs / size).toFixed(resolutionDecimals(size, resolutionFs));
+}
+
+/**
+ * A time typed into the cursor field, in femtoseconds: a bare number in `unit`
+ * (`24.5`, or `24,5` with a decimal comma), or a number with its own unit (`3 us`).
+ * Undefined when it is not a time of zero or more.
+ */
+export function parseTimeIn(text: string, [, size]: TimeUnit): number | undefined {
+  const trimmed = text.trim().replace(',', '.');
+  const withUnit = parseSimTime(trimmed);
+  if (withUnit !== undefined) return withUnit >= 0 ? withUnit : undefined;
+  const value = Number(trimmed);
+  return trimmed !== '' && Number.isFinite(value) && value >= 0 ? value * size : undefined;
 }
 
 /**
