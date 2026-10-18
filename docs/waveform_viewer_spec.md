@@ -488,6 +488,37 @@ Colours are tokens in `Waveform.css` (`--wv-trace-high`, `--wv-trace-undefined`,
 | `DONE` without `WAVE-READY` | The stale waveform stays dimmed with a note why there is no new one. |
 | Parse error | One-sentence message; Download still offers the raw file. |
 
+### 8.8 Copy waveform and Figure for a report
+
+Two entries in the ⋯ menu put the traces in view into a document. Both draw one SVG (`figure/figureSvg.ts`); the PNG is drawn from that SVG, so the two never differ.
+
+- **Copy waveform** copies the view as it looks on screen: the screen's colours, fonts and sizes, the Signal and Value columns at their width, the time axis on top and the cursor. It goes onto the clipboard as PNG (at twice the screen's pixels) and SVG together, so each program pastes the format it reads. The section heads (TB, RTL) are left out.
+- **Figure for a report…** turns the view into report mode. A wide band across the top of the view, in the dialogs' blue, reads *Figure for a report – The traces in view, sized for print*. It holds the buttons Close, Save SVG, Save PNG and Copy, the choices (width, black and white or colour, the cursor) and how to insert the figure. Below it, in place of the list and the canvas, is the figure itself, drawn live from the view, so every choice shows at once. Both widths are drawn at one scale (the one that fits two columns in the pane), so choosing two columns visibly widens the figure, with more room for the same time span. The mouse works as in the viewer: the wheel scrolls in time, Ctrl + wheel and the toolbar zoom, dragging across the figure marks a range (with its length written in it) that is zoomed into on release, and a click places the cursor. With *Show the cursor* on, the cursor's amber handle sits on a strip above the figure, outside it; pressing or dragging anywhere on the strip moves the cursor, and the handle is hidden while the cursor is outside the time shown. Close or Esc returns to the view. Report mode always opens at two columns; the style is remembered in this browser, and *Show the cursor* is the view's own cursor checkbox. While the figure covers the list and the canvas, they are inert: neither Tab nor the mouse reaches them.
+
+**Cursor checkbox.** A *Cursor* checkbox beside the time field shows or hides the cursor; the choice is remembered in this browser (on by default). Shown again, the cursor starts in the middle of the time on screen. While it is hidden, its line, its handle, its time field and the values beside the names are left out, and neither the mouse nor the arrow keys move it; a click on the traces still selects the row, and a drag still zooms. Report mode's *Show the cursor* is the same setting, so the figure and the view always agree.
+
+**Cursor time field.** The cursor's time is a field, not a readout: in the toolbar of the view, and in the band's Cursor group in report mode. It follows the cursor. Typing a time and pressing Enter, or leaving the field, moves the cursor there and scrolls it into view, never past the run's end. Esc puts the field back. The field takes a bare number in its unit (`24.5`, or `24,5`) or a number with a unit of its own (`3 us`). The unit is a flat dropdown (s, ms, µs, ns, ps) that follows the time until one is picked, and it works from the keyboard as a listbox (↓ / Enter opens it, ↑ / ↓ move, Enter picks, Esc closes).
+
+### 8.9 Report figure style
+
+The report figure follows the IEEE Author Center's graphics guidance [IEEE-G, IEEE-RS, IEEE-FF] and what IEEE timing diagrams usually look like. Every size is set in points at the final printed size (`figure/figureStyle.ts`), so nothing changes when the figure goes into the report unscaled.
+
+| Rule | Value |
+|---|---|
+| Width | Two columns, 182 mm (report mode always opens at this width), or one column, 88.9 mm [IEEE-RS]. |
+| Colour | Black traces on white by default. Colour is optional, and every colour is dark enough to print as a clear line in grayscale. A test checks this. Values are told apart by shape, never by colour alone [IEEE-G]. |
+| Text | 9 pt Arial/Helvetica, one family for the whole figure [IEEE-FF]. The preferred range is 9–10 pt; text never goes below 8 pt, and the absolute floor is 6 pt. |
+| Lines | Traces and bus outlines 1 pt; axis, ticks and the cursor 0.75 pt; grid lines and hatching 0.5 pt. No line is thinner than 0.5 pt. |
+| Values | 0 and 1 are solid low and high lines, and the weak L and H are dashed. Z runs at mid-level, as timing diagrams draw high impedance. X and W are a hatched box, U a shaded box, and `-` an empty box. None of them looks like 0 or 1. |
+| Buses | The crossing outline. The value is centred between the crossings and left out when it would touch an edge, so labels never overlap. |
+| Rows | Every row is the same height, and changes line up across rows. |
+| Time axis | Below the traces, with the unit in the axis title, for example `Time (ns)`. Ticks fall on 1-2-5 steps and are spaced so that no two labels touch, which gives about ten labels across two columns. |
+| Time span | The window on screen; the traces stop where the run ended, and the axis keeps going across the window. |
+| Formats | Copy puts PNG and SVG on the clipboard. The SVG is sized in mm with its drawing in points, so it opens at its printed size. The PNG is 600 dpi at the final size (IEEE asks for over 600 dpi for line art and over 300 dpi for colour [IEEE-RS]), and the saved file records its resolution in a `pHYs` chunk. Making a PNG larger after export does not add detail. |
+| Not yet | PDF and EPS, which are IEEE's submission formats [IEEE-FF]. They must embed their fonts or convert text to outlines, which needs a font file in the app (for example Liberation Sans, which has Arial's letter widths). SVG is for editing and is not an IEEE submission format; for submission, save the SVG as PDF from Word or Inkscape, which embeds the fonts. |
+
+Pasting a PNG from the clipboard loses its resolution (the browser writes it again without the `pHYs` chunk), so Word may resize the picture. The band says which width to set it back to.
+
 ---
 
 ## 9. Requirements
@@ -515,7 +546,7 @@ Stage: **1** first release to students · **2** next · **3** later.
 | FR-15 | A search box above the signal list when the design has more than 30 signals. | 2 |
 | FR-16 | Every `@<time>` in a console report line and every plugin-output time stamp is a link that opens the waveform with the cursor at that time. | 1 |
 | FR-17 | Shown signals, "Show as" choices and zoom are kept across reruns for signals that still exist. | 1 |
-| FR-18 | **Go to declaration** on a signal closes the waveform and shows the declaration in the split view, in the testbench or the RTL pane (uses the existing symbol index). | 1 |
+| FR-18 | **Go to declaration** on a signal closes the waveform and shows the declaration in the split view, in the testbench or the RTL pane (uses the existing symbol index). Only the files the waveform's run compiled are searched (its design folder, `vhdl/` or `verilog/`), so a VHDL and a Verilog testbench of the same name never mix; the section heads' tooltips name files the same way. | 1 |
 | FR-19 | Optional "Stop at" simulated time in the **⋯** menu (7.1). It applies to **one run only** and the console names it on that run, so a forgotten value cannot silently cut later runs. | 2 |
 | FR-20 | Download the waveform file (`<testbench>.ghw` / `.vcd`) from the **⋯** menu – for GTKWave or Surfer, or to send to the teacher. | 1 |
 | FR-21 | Save the shown signals and their "Show as" in the project file, so a shared example opens with the teacher's view. | 3 |
@@ -789,6 +820,9 @@ What was built, and where it differs from the sections above.
 
 ## Sources
 
+- [IEEE-G] IEEE Author Center, *Create Graphics for Your Article* (accessibility, grayscale check): <https://journals.ieeeauthorcenter.ieee.org/create-your-ieee-journal-article/create-graphics-for-your-article/>
+- [IEEE-RS] IEEE Author Center, *Resolution and Size* (600 dpi line art, 300 dpi colour, 88.9 mm and 182 mm): <https://journals.ieeeauthorcenter.ieee.org/create-your-ieee-journal-article/create-graphics-for-your-article/resolution-and-size/>
+- [IEEE-FF] IEEE Author Center, *File Formatting* (PS, EPS, PDF, PNG, TIFF; embedded or outlined fonts; Helvetica, Times New Roman, Arial, Cambria, Symbol): <https://journals.ieeeauthorcenter.ieee.org/create-your-ieee-journal-article/create-graphics-for-your-article/file-formatting/>
 - GHDL documentation, *Simulation and runtime – export waveforms*: <https://ghdl.github.io/ghdl/using/Simulation.html>
 - Surfer waveform viewer (formats, WASM build, iframe/`postMessage` embedding, EUPL-1.2): <https://codeberg.org/whitequark/surfer>
 - ChatGPT conversation "GHDL Waveform Viewer Requirements"; reviews by Mistral ("HDLWaveViewer feedback"), Microsoft Copilot and Grok ("Vurdering av waveform viewer for HDLBoard"), all 2026-10-17.

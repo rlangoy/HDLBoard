@@ -3,18 +3,19 @@
 
 /**
  * The waveform's toolbar (docs/waveform_viewer_spec.md § 8.6, S3): the title, the
- * time at the cursor as a live readout, and few controls – Zoom out, Zoom in, Fit, ⋯
+ * cursor's controls – show or hide it, and its time to read or type in – and few controls – Zoom out, Zoom in, Fit, ⋯
  * and Close – as round icon buttons, each with a tooltip that says what it does and
  * its key (docs/images/head_moc1.png).
  */
 
-import type { ComponentType, MouseEvent, SVGProps } from 'react';
-import { CloseCircleIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIcons';
+import type { ComponentType, MouseEvent, ReactNode, SVGProps } from 'react';
+import { CloseIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIcons';
 
 export interface WaveToolbarProps {
   readonly title: string;
-  /** The time at the cursor as text, or undefined while there is no waveform. */
-  readonly time: string | undefined;
+  readonly hasWaveform: boolean;
+  /** The cursor's controls; none while there is no waveform, or while report mode shows them in its band. */
+  readonly cursorControls: ReactNode;
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
   readonly onFit: () => void;
@@ -29,13 +30,15 @@ interface ToolButtonProps {
   readonly disabled?: boolean;
   readonly onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   readonly popup?: boolean;
+  /** The close button stands out from the others (docs/images/head_moc1.png). */
+  readonly emphasis?: boolean;
 }
 
-function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup }: ToolButtonProps) {
+function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup, emphasis }: ToolButtonProps) {
   return (
     <button
       type="button"
-      className="wv-tool"
+      className={emphasis ? 'wv-tool wv-tool--close' : 'wv-tool'}
       aria-label={label}
       aria-haspopup={popup ? 'menu' : undefined}
       title={hint}
@@ -48,13 +51,11 @@ function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup
 }
 
 export function WaveToolbar(props: WaveToolbarProps) {
-  const noWaveform = props.time === undefined;
+  const noWaveform = !props.hasWaveform;
   return (
     <header className="wv-toolbar">
       <h2 className="wv-toolbar__title">Waveform – {props.title}</h2>
-      <span className="wv-toolbar__time" aria-live="polite" title="The time at the cursor. Click in the waveform or drag on the time ruler to move it.">
-        Cursor <strong>{props.time ?? '–'}</strong>
-      </span>
+      {props.cursorControls}
       <div className="wv-toolbar__buttons">
         <ToolButton icon={ZoomOutIcon} label="Zoom out" hint="Zoom out (−)" disabled={noWaveform} onClick={props.onZoomOut} />
         <ToolButton icon={ZoomInIcon} label="Zoom in" hint="Zoom in (+). Or drag across the waveform to zoom into that part." disabled={noWaveform} onClick={props.onZoomIn} />
@@ -62,14 +63,20 @@ export function WaveToolbar(props: WaveToolbarProps) {
         <ToolButton
           icon={MoreIcon}
           label="More"
-          hint="More: download the waveform file, help"
+          hint="More: copy the waveform, figure for a report, download the waveform file, help"
           popup
           onClick={(event) => {
             event.stopPropagation();
             props.onMore(event.currentTarget.getBoundingClientRect());
           }}
         />
-        <ToolButton icon={CloseCircleIcon} label="Close the waveform" hint="Close the waveform and show the code again (Esc)" onClick={props.onClose} />
+        <ToolButton
+          icon={CloseIcon}
+          label="Close the waveform"
+          hint="Close the waveform and show the code again (Esc)"
+          emphasis
+          onClick={props.onClose}
+        />
       </div>
     </header>
   );

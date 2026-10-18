@@ -33,7 +33,8 @@ export interface RowCallbacks {
 }
 
 export interface RowContext {
-  readonly cursor: number;
+  /** The cursor, while it is shown; the values beside the names are left out without it. */
+  readonly cursor: number | undefined;
   readonly traces: ReadonlyMap<number, Trace>;
   readonly showAsOf: (path: string) => ShowAs;
   readonly selected: string | null;
@@ -41,6 +42,9 @@ export interface RowContext {
   /** The file a scope's unit is in, named in a section head's tooltip. */
   readonly fileOfScope?: (scopes: readonly string[]) => string | undefined;
 }
+
+/** The value at the cursor, or none while the cursor is hidden. */
+const valueAtCursor = (trace: Trace, cursor: number | undefined): string | undefined => (cursor === undefined ? undefined : valueAt(trace, cursor));
 
 function Chevron({ open, label, onClick }: { readonly open: boolean; readonly label: string; readonly onClick?: () => void }) {
   return (
@@ -148,7 +152,7 @@ function keyOnRow(event: KeyboardEvent<HTMLDivElement>, row: Row, on: RowCallbac
 }
 
 function TraceRowView({ row, context }: { readonly row: TraceRow; readonly context: RowContext }) {
-  const raw = valueAt(row.trace, context.cursor);
+  const raw = valueAtCursor(row.trace, context.cursor);
   const text = raw === undefined ? '' : formatValue(row.signal, raw, context.showAsOf(row.path));
   const isBit = row.parent !== undefined;
   return (
@@ -170,7 +174,7 @@ function TraceRowView({ row, context }: { readonly row: TraceRow; readonly conte
 
 function HiddenRowView({ row, context }: { readonly row: Extract<Row, { kind: 'hidden' }>; readonly context: RowContext }) {
   const trace = context.traces.get(row.signal.trace);
-  const raw = trace === undefined ? undefined : valueAt(trace, context.cursor);
+  const raw = trace === undefined ? undefined : valueAtCursor(trace, context.cursor);
   return (
     <RowFrame row={row} context={context} className="is-hidden" title={`${row.signal.name} – tick to show its trace. Double-click to go to its declaration.`}>
       <ShowBox path={row.path} name={row.signal.name} shown={false} on={context.on} />

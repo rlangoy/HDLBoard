@@ -12,7 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VhdlFile } from '../workbench/files';
 import type { WaveClientHandlers } from '../workbench/hdlClient';
-import { findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
+import { filesOfRun, findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
+import { filesOf, newestOrigin, originOf, withOrigin, type RunOrigin, type RunOrigins } from './runOrigins';
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
 import type { WaveFocus } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
@@ -78,9 +79,9 @@ const LINK_LINE = '✓ Testbench finished – ';
 
 /**
  * Per run: whether it offered a waveform (WAVE-READY comes before DONE), and whether it
- * is a board run. `onOffered` runs right after a WAVE-READY has been handled.
+ * is a board run. `onOffered` runs right after a WAVE-READY has been handled, with its run.
  */
-function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOffered: () => void) {
+function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOffered: (run: number) => void) {
   const offered = useRef(false);
   const board = useRef(false);
   const latest = useRef(waveform);
@@ -93,7 +94,7 @@ function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOff
       onReady: (ready) => {
         offered.current = true;
         waveform.handlers.onReady(ready);
-        offeredRef.current();
+        offeredRef.current(ready.run);
       },
     }),
     [waveform.handlers],
@@ -167,12 +168,13 @@ function useProjectReset(projectKey: string, reset: () => void, memory: React.Mu
   }, [projectKey, memory]);
 }
 
-function useDeclarations(input: WaveformViewInput) {
-  const { files, reveal, log } = input;
+/** Go to declaration, searching only `files` – the shown waveform's run's files. */
+function useDeclarations(input: WaveformViewInput, files: () => readonly VhdlFile[]) {
+  const { reveal, log } = input;
   return useCallback(
     (scopes: readonly string[], name: string) => {
       const target = findDeclaration(files(), scopes, name);
-      if (target === undefined) log(`The declaration of ${name} was not found in the project's files.`);
+      if (target === undefined) log(`The declaration of ${name} was not found in the testbench's design files.`);
       else reveal(target);
     },
     [files, reveal, log],
@@ -186,17 +188,18 @@ function useDeclarations(input: WaveformViewInput) {
  */
 function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   const pending = useRef(false);
-  // The testbench of the run going on, and of the waveform the view has: set when its run offers one.
-  const running = useRef<string | null>(null);
-  const [source, setSource] = useState<string | null>(null);
+  // The run going on, and the origin of every recent run that offered a waveform.
+  const running = useRef<RunOrigin | null>(null);
+  const [origins, setOrigins] = useState<RunOrigins>([]);
   const fold = useExplorerFold(input.explorer, waveform.state.open);
   const showView = () => {
     fold();
     waveform.open();
     input.overlay.show();
   };
-  const runs = useRunTracking(waveform, input.log, () => {
-    setSource(running.current);
+  const runs = useRunTracking(waveform, input.log, (run) => {
+    const origin = running.current;
+    if (origin !== null) setOrigins((kept) => withOrigin(kept, run, origin));
     if (pending.current) showView();
     pending.current = false;
   });
@@ -206,9 +209,9 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
     endRun();
   }, [endRun]);
   const runReset = useCallback(
-    (runSource: string) => {
+    (run: RunOrigin) => {
       pending.current = false;
-      running.current = runSource;
+      running.current = run;
       reset();
     },
     [reset],
@@ -216,7 +219,7 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   const openWhenReady = useCallback(() => {
     pending.current = true;
   }, []);
-  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, source };
+  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, origins };
 }
 
 export function useWaveformView(input: WaveformViewInput): WaveformView {
@@ -229,6 +232,10 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
   useOverlaySync(waveform, input.overlay);
   useProjectReset(input.projectKey, waveform.reset, memory);
   const state = buttonState(waveform.state);
+  const { files } = input;
+  // The files of the run whose waveform is on screen – not the newest run's, which may still be loading.
+  const shownOrigin = originOf(runs.origins, waveform.state.dataRun);
+  const runFiles = useCallback(() => filesOf(shownOrigin, files()), [shownOrigin, files]);
   const open = () => {
     if (state === 'empty') return setDialogOpen(true);
     runs.showView();
@@ -238,7 +245,7 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     open();
   };
   const runStarted = (info: RunInfo & { readonly title: string; readonly source: string }) => {
-    runs.reset(info.source);
+    runs.reset({ source: info.source, fileIds: filesOfRun(input.files(), info.topFileName).map((file) => file.id) });
     setTitle(info.title);
     waveform.runStarted(info);
   };
@@ -246,11 +253,11 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     waveform,
     clientHandlers: runs.clientHandlers,
     runStarted,
-    source: runs.source,
+    source: newestOrigin(runs.origins)?.source ?? null,
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
     openWhenReady: runs.openWhenReady,
-    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input), fileOfScope: (scopes) => scopeFileName(input.files(), scopes) },
+    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input, runFiles), fileOfScope: (scopes) => scopeFileName(runFiles(), scopes) },
     button: { state, onToggle: () => (waveform.state.open ? waveform.close() : open()) },
     links: state === 'empty' ? {} : { onOpenTime: openAt, onOpenWaveform: open },
     dialog: { open: dialogOpen, afterBoardRun: waveform.state.boardRun, onClose: () => setDialogOpen(false) },

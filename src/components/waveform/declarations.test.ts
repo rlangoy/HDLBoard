@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { VhdlFile } from '../workbench/files';
-import { findDeclaration, scopeFileName } from './declarations';
+import { filesOfRun, findDeclaration, scopeFileName } from './declarations';
 
 const file = (name: string, content: string): VhdlFile => ({ id: name, name, folder: name.endsWith('.v') ? 'verilog' : 'vhdl', content });
 
@@ -70,5 +70,33 @@ describe('findDeclaration', () => {
   test('unknown instance or name', () => {
     expect(findDeclaration([COUNTER, TB], ['counter_tb', 'nope'], 'state')).toBeUndefined();
     expect(findDeclaration([COUNTER, TB], ['counter_tb'], 'nope')).toBeUndefined();
+  });
+});
+
+describe('a VHDL and a Verilog testbench of the same name', () => {
+  const VERILOG_TB = file(
+    'counter_tb.v',
+    `module counter_tb;
+  reg clk = 0;
+  wire [3:0] count;
+endmodule
+`,
+  );
+  const files = [COUNTER, TB, VERILOG_TB];
+
+  test('the Verilog run finds its declaration in the Verilog testbench', () => {
+    expect(findDeclaration(filesOfRun(files, 'counter_tb.v'), ['counter_tb'], 'count')?.fileId).toBe('counter_tb.v');
+  });
+
+  test('the VHDL run finds its declaration in the VHDL testbench', () => {
+    expect(findDeclaration(filesOfRun(files, 'counter_tb.vhd'), ['counter_tb'], 'count')?.fileId).toBe('counter_tb.vhd');
+  });
+
+  test('every file is searched while the run is not known', () => {
+    expect(filesOfRun(files, undefined)).toEqual(files);
+  });
+
+  test("every file is searched when the run's top file is gone", () => {
+    expect(filesOfRun(files, 'removed_tb.v')).toEqual(files);
   });
 });

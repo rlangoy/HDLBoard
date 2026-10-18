@@ -86,13 +86,15 @@ export function ColumnResizer({ width, onWidth }: { readonly width: number; read
       aria-valuemax={MAX_WIDTH}
       aria-valuenow={width}
       tabIndex={0}
-      title="Drag to make the Signal and Value columns wider or narrower"
+      title="Drag to resize (double-click to reset)"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={() => onWidth(DEFAULT_NAMES_WIDTH)}
       onKeyDown={onKeyDown}
-    />
+    >
+      <span className="wv-resizer__grip" aria-hidden="true" />
+    </div>
   );
 }
