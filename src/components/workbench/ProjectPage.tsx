@@ -3,9 +3,9 @@
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../board';
+import { CloseButton } from './CloseButton';
 import {
   AlertIcon,
-  CloseIcon,
   DeleteIcon,
   FileIcon,
   FolderOpenIcon,
@@ -179,9 +179,7 @@ export function ProjectPage(props: ProjectPageProps) {
                     Save project
                   </button>
                 )}
-                <button type="button" className="wb-project__close" onClick={onClose} aria-label="Close the project settings" title="Back to the code (Esc)">
-                  <CloseIcon aria-hidden="true" />
-                </button>
+                <CloseButton label="Close the project settings" hint="Back to the code (Esc)" onClick={onClose} />
               </div>
             </div>
 

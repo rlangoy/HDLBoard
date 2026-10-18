@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The close button of a full view (CloseButton.tsx): a dark X on a stronger grey circle. */
+.hdl-close-button {
+  --hdl-close-bg: #e1e6ee;
+  --hdl-close-bg-hover: #d0d7e2;
+  --hdl-close-border: #c9d1dd;
+  --hdl-close-ink: #0f172a;
+
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--hdl-close-border);
+  border-radius: 50%;
+  background: var(--hdl-close-bg);
+  color: var(--hdl-close-ink);
+  cursor: pointer;
+}
+
+.hdl-close-button:hover {
+  background: var(--hdl-close-bg-hover);
+}
+
+.hdl-close-button:focus-visible {
+  outline: 2px solid var(--hdl-close-ink);
+  outline-offset: 2px;
+}
+
+.hdl-close-button svg {
+  width: 22px;
+  height: 22px;
+}

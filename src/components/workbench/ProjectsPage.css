@@ -151,10 +151,6 @@
   background: #ffffff;
 }
 
-.wb-projects__icon-btn.is-close {
-  background: #eef2f7;
-}
-
 .wb-projects__icon-btn.is-spinning svg {
   animation: wb-projects-spin 0.9s linear infinite;
 }

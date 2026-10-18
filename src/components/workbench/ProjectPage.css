@@ -181,29 +181,6 @@
   cursor: not-allowed;
 }
 
-.wb-project__close {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--wb-text-muted);
-  cursor: pointer;
-}
-
-.wb-project__close svg {
-  width: 22px;
-  height: 22px;
-}
-
-.wb-project__close:hover {
-  background: var(--wb-hover);
-  color: var(--wb-text);
-}
-
 /* --- facts: version, board, project file, description --------------- */
 
 .wb-project__facts {

@@ -3,12 +3,12 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
+import { CloseButton } from './CloseButton';
 import { copyText } from './clipboard';
 import { Activity } from './GitHubStatus';
 import {
   AlertIcon,
   ChevronDownIcon,
-  CloseIcon,
   CopyIcon,
   DeleteIcon,
   FolderOpenIcon,
@@ -131,9 +131,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
               <PlusIcon aria-hidden="true" />
               <span className="wb-projects__new-label">New project</span>
             </button>
-            <button type="button" className="wb-projects__icon-btn is-close" onClick={onClose} aria-label="Close the projects page" title="Back to the code (Esc)">
-              <CloseIcon aria-hidden="true" />
-            </button>
+            <CloseButton label="Close the projects page" hint="Back to the code (Esc)" onClick={onClose} />
           </div>
 
           {openProject && (
