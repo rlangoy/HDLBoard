@@ -52,6 +52,7 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 - **Real-time pacing:** an LED meant to blink once a second blinks once a second.
 - **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
 - **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
+- **Waveforms ready for a report:** see what every signal did after a testbench run, jump straight to the first error, and save the traces as a print-ready figure for a lab report.
 
 ## Where it fits
 
@@ -76,6 +77,7 @@ Typical uses:
 - **Homework and self-study**, without needing a board at home.
 - **Classroom demonstrations:** change a line, press Start, and flip a switch while the class watches.
 - **Self-checking testbenches** that students run next to their own design.
+- **Lab reports** with waveform figures that are sized and styled for print.
 
 ## Features
 
@@ -96,7 +98,14 @@ Typical uses:
 When you open a testbench, the editor splits: the testbench is on the left and the design it drives is on the right. Each pane has its own Play button.
 
 ### Waveforms of testbench runs
-After a testbench run, **Waveform** beside Clear shows what every signal did, in place of the code. The testbench's own signals are laid out already, with the value of each at the cursor beside its name. State machines show their states by name (`idle`, `start_bit`, `data_bits`), an uninitialised `U` stands out in red, and hovering a value explains it. A failing check opens the waveform zoomed in at the first error, a click on a time in the console jumps there, and Go to declaration takes you from a signal back to its line of code. Tick a signal in the RTL folder to add it to the shown ones, unfold a vector into its bits, drag across the traces to zoom in, and step from change to change with ← and →. VHDL is recorded as GHW, Verilog as VCD; Download waveform saves the file for GTKWave or Surfer.
+**Waveform** beside Clear shows what every signal did, in place of the code. If the testbench on screen has not been run yet, the button runs it first and opens the waveform when it is ready.
+
+- **Testbench and RTL, side by side in colour.** The testbench's own signals are laid out already, with the value of each at the cursor beside its name. Tick a signal in the RTL section to add your design's internal signals.
+- **Readable values.** State machines show their states by name (`idle`, `start_bit`, `data_bits`), an uninitialised `U` stands out in red, and hovering a value explains it.
+- **Start where it went wrong.** A failing check opens the waveform zoomed in at the first error. A click on a time in the console jumps there, and Go to declaration takes you from a signal back to its line of code.
+- **Move around quickly.** Drag across the traces to zoom in, unfold a vector into its bits, step from change to change with ← and →, or type a time (`24.5`, `3 us`) into the cursor field to jump there.
+- **Put it in your lab report.** Copy waveform puts the view on the clipboard as it looks on screen. **Figure for a report** turns the traces into a print-ready figure sized for one or two columns (IEEE style, 9 pt text), in black and white or colour, with or without the cursor. Pan and zoom in the figure itself, then copy it or save it as SVG or a 600 dpi PNG.
+- **Use other tools too.** VHDL is recorded as GHW, Verilog as VCD; Download waveform saves the file for GTKWave or Surfer.
 
 ### A small, focused editor
 - Rest the mouse on a signal or port, or click it, to highlight its declaration and every use.
