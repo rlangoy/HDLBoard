@@ -3,13 +3,14 @@
 
 /**
  * The mouse on anything that shows time across its width – the canvas, and the figure in
- * report mode (docs/waveform_viewer_spec.md S9, § 8.8):
- *  - the wheel scrolls in time, Ctrl + wheel zooms around the mouse;
- *  - dragging marks a time range, which is zoomed into on release;
- *  - a click places the cursor;
- *  - a press where the user says the cursor is taken moves the cursor instead.
- * The wheel listener is a native one: React's are passive, and Ctrl + wheel must not
- * zoom the whole page.
+ * report mode (docs/waveform_viewer_spec.md S9, § 8.8). Each gesture is its own hook:
+ *  - `useWheelGestures`: the wheel scrolls in time, Ctrl + wheel zooms around the mouse;
+ *  - `useRangeDrag`: dragging marks a time range, zoomed into on release; a click places
+ *    the cursor;
+ *  - `useCursorDrag`: the cursor follows the mouse from its first move;
+ *  - `useCursorGrab`: the cursor jumps to the press and follows the mouse.
+ * `useRoutedPointer` hands each press to the gesture for where it began. A cancelled
+ * press (a lost pointer, a system gesture) ends a gesture without acting on it.
  */
 
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
@@ -18,6 +19,7 @@ import type { Ticks } from './model';
 /** A press that moves less than this is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 4;
 const WHEEL_ZOOM_RATE = 0.002;
+const MAIN_BUTTON = 0;
 
 /** Pixels across the element ↔ time. */
 export interface TimeMapping {
@@ -37,32 +39,52 @@ export interface DragHandlers {
   onZoomTo(start: Ticks, end: Ticks): void;
 }
 
-/**
- * What a press does: mark a range, or take the cursor – moving it with the mouse from the
- * first move (`cursor`), or at once (`cursor-now`).
- */
-export type PressKind = 'range' | 'cursor' | 'cursor-now';
+export type TimeHandlers = WheelHandlers & DragHandlers;
+
+/** The view's actions as the gestures call them. */
+export function timeHandlersOf(actions: {
+  setCursor(time: Ticks): void;
+  setWindow(window: { start: Ticks; end: Ticks }): void;
+  scroll(ticks: number): void;
+  zoom(factor: number, at?: Ticks): void;
+}): TimeHandlers {
+  return {
+    onCursor: actions.setCursor,
+    onZoomTo: (start, end) => actions.setWindow({ start, end }),
+    onScroll: actions.scroll,
+    onZoom: actions.zoom,
+  };
+}
 
 export interface Selection {
   readonly from: Ticks;
   readonly to: Ticks;
 }
 
-export interface PointerGestures {
-  readonly selection: Selection | undefined;
-  readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
-  readonly onPointerMove: (event: PointerEvent<HTMLElement>) => void;
-  readonly onPointerUp: (event: PointerEvent<HTMLElement>) => void;
+type PointerHandler = (event: PointerEvent<HTMLElement>) => void;
+
+export interface PointerHandlers {
+  readonly onPointerDown: PointerHandler;
+  readonly onPointerMove: PointerHandler;
+  readonly onPointerUp: PointerHandler;
+  readonly onPointerCancel: PointerHandler;
 }
 
-interface Press {
-  readonly x: number;
-  readonly kind: PressKind;
-  dragging: boolean;
+export interface RangeGestures extends PointerHandlers {
+  /** The range being marked, while a drag is under way. */
+  readonly selection: Selection | undefined;
 }
 
 const localX = (event: { clientX: number }, element: Element): number => event.clientX - element.getBoundingClientRect().left;
 const localY = (event: { clientY: number }, element: Element): number => event.clientY - element.getBoundingClientRect().top;
+const timeAtEvent = (mapping: TimeMapping, event: PointerEvent<HTMLElement>): Ticks => mapping.timeAt(localX(event, event.currentTarget));
+
+/** Starts a press: the element keeps the pointer until it is released. False for any button but the main one. */
+function capture(event: PointerEvent<HTMLElement>): boolean {
+  if (event.button !== MAIN_BUTTON) return false;
+  event.currentTarget.setPointerCapture(event.pointerId);
+  return true;
+}
 
 export function useWheelGestures(ref: RefObject<HTMLElement>, mapping: TimeMapping, handlers: WheelHandlers): void {
   const latest = useRef({ mapping, handlers });
@@ -84,44 +106,86 @@ export function useWheelGestures(ref: RefObject<HTMLElement>, mapping: TimeMappi
   }, [ref]);
 }
 
-const marksRange = (kind: PressKind): boolean => kind === 'range';
-
-/** The press's end: a click places the cursor, a drag zooms into the range it marked. */
-function release(press: Press, time: Ticks, context: { readonly mapping: TimeMapping; readonly handlers: DragHandlers }): void {
-  if (!marksRange(press.kind)) return;
-  if (!press.dragging) return context.handlers.onCursor(time);
-  const [start, end] = [context.mapping.timeAt(press.x), time].sort((a, b) => a - b);
-  if (end > start) context.handlers.onZoomTo(start, end);
-}
-
-export function useDragGestures(mapping: TimeMapping, handlers: DragHandlers, pressKind: (x: number, y: number) => PressKind): PointerGestures {
-  const press = useRef<Press | null>(null);
+export function useRangeDrag(mapping: TimeMapping, handlers: DragHandlers): RangeGestures {
+  const press = useRef<{ readonly x: number; dragging: boolean } | null>(null);
   const [selection, setSelection] = useState<Selection | undefined>(undefined);
-  const timeAt = (event: PointerEvent<HTMLElement>) => mapping.timeAt(localX(event, event.currentTarget));
-
-  const onPointerDown = (event: PointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const x = localX(event, event.currentTarget);
-    const kind = pressKind(x, localY(event, event.currentTarget));
-    press.current = { x, kind, dragging: false };
-    if (kind === 'cursor-now') handlers.onCursor(timeAt(event));
-  };
-
-  const onPointerMove = (event: PointerEvent<HTMLElement>) => {
-    const current = press.current;
-    if (current === null) return;
-    if (!marksRange(current.kind)) return handlers.onCursor(timeAt(event));
-    current.dragging ||= Math.abs(localX(event, event.currentTarget) - current.x) >= DRAG_THRESHOLD_PX;
-    if (current.dragging) setSelection({ from: mapping.timeAt(current.x), to: timeAt(event) });
-  };
-
-  const onPointerUp = (event: PointerEvent<HTMLElement>) => {
-    const current = press.current;
+  const end = () => {
+    const ended = press.current;
     press.current = null;
     setSelection(undefined);
-    if (current !== null) release(current, timeAt(event), { mapping, handlers });
+    return ended;
   };
+  const onPointerDown: PointerHandler = (event) => {
+    if (capture(event)) press.current = { x: localX(event, event.currentTarget), dragging: false };
+  };
+  const onPointerMove: PointerHandler = (event) => {
+    const current = press.current;
+    if (current === null) return;
+    current.dragging ||= Math.abs(localX(event, event.currentTarget) - current.x) >= DRAG_THRESHOLD_PX;
+    if (current.dragging) setSelection({ from: mapping.timeAt(current.x), to: timeAtEvent(mapping, event) });
+  };
+  const onPointerUp: PointerHandler = (event) => {
+    const ended = end();
+    if (ended === null) return;
+    const time = timeAtEvent(mapping, event);
+    if (!ended.dragging) return handlers.onCursor(time);
+    const [start, stop] = [mapping.timeAt(ended.x), time].sort((a, b) => a - b);
+    if (stop > start) handlers.onZoomTo(start, stop);
+  };
+  return { selection, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: end };
+}
 
-  return { selection, onPointerDown, onPointerMove, onPointerUp };
+export function useCursorDrag(mapping: TimeMapping, onCursor: (time: Ticks) => void): PointerHandlers {
+  const pressed = useRef(false);
+  const release = () => {
+    pressed.current = false;
+  };
+  return {
+    onPointerDown: (event) => {
+      pressed.current = capture(event);
+    },
+    onPointerMove: (event) => {
+      if (pressed.current) onCursor(timeAtEvent(mapping, event));
+    },
+    onPointerUp: release,
+    onPointerCancel: release,
+  };
+}
+
+export function useCursorGrab(mapping: TimeMapping, onCursor: (time: Ticks) => void): PointerHandlers {
+  const drag = useCursorDrag(mapping, onCursor);
+  return {
+    ...drag,
+    onPointerDown: (event) => {
+      drag.onPointerDown(event);
+      if (event.button === MAIN_BUTTON) onCursor(timeAtEvent(mapping, event));
+    },
+  };
+}
+
+/**
+ * Hands each press, and the moves and release that follow it, to the route `choose`
+ * names for where the press began (x and y from the element's top left).
+ */
+export function useRoutedPointer<K extends string>(
+  routes: Readonly<Record<K, PointerHandlers>>,
+  choose: (x: number, y: number) => K,
+): PointerHandlers {
+  const active = useRef<K | null>(null);
+  const forward = (event: PointerEvent<HTMLElement>, pick: (route: PointerHandlers) => PointerHandler) => {
+    if (active.current !== null) pick(routes[active.current])(event);
+  };
+  const finish = (pick: (route: PointerHandlers) => PointerHandler) => (event: PointerEvent<HTMLElement>) => {
+    forward(event, pick);
+    active.current = null;
+  };
+  return {
+    onPointerDown: (event) => {
+      active.current = choose(localX(event, event.currentTarget), localY(event, event.currentTarget));
+      forward(event, (route) => route.onPointerDown);
+    },
+    onPointerMove: (event) => forward(event, (route) => route.onPointerMove),
+    onPointerUp: finish((route) => route.onPointerUp),
+    onPointerCancel: finish((route) => route.onPointerCancel),
+  };
 }

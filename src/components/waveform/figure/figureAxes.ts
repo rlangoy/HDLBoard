@@ -125,10 +125,10 @@ function screenMarkup({ look, layout }: Drawing): string {
   const muted = { fill: palette.axis, y: layout.tickLabelBaseline, ...fontAttributes(fonts.axis) };
   const heads = [
     textElement({ ...muted, x: sizes.textInset, 'font-weight': HEAD_WEIGHT }, 'SIGNAL'),
-    textElement({ ...muted, x: layout.namesRight - sizes.textInset, 'text-anchor': 'end', 'font-weight': HEAD_WEIGHT }, 'VALUE'),
+    textElement({ ...muted, x: layout.tracesLeft - sizes.textInset, 'text-anchor': 'end', 'font-weight': HEAD_WEIGHT }, 'VALUE'),
   ];
   const labels = layout.ticks.map((tick) => textElement({ ...muted, x: tick.x + LABEL_OFFSET }, tick.label));
-  const lines = new PathData().moveTo(0, layout.axisY).horizontalTo(layout.width).moveTo(layout.namesRight, 0).verticalTo(layout.height);
+  const lines = new PathData().moveTo(0, layout.axisY).horizontalTo(layout.width).moveTo(layout.tracesLeft, 0).verticalTo(layout.height);
   return [pathElement(lines, { fill: 'none', stroke: palette.grid, 'stroke-width': look.strokes.grid }), ...heads, ...labels].join('');
 }
 

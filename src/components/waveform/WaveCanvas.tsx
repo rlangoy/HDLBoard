@@ -15,7 +15,8 @@ import type { Ticks } from './model';
 import { paintWaveform, rowIndexAt, type Scene } from './paintWaveform';
 import type { TraceRow } from './signalRows';
 import { pixelResolutionFs, timeToX, xToTime } from './timeAxis';
-import { takesCursor, useCanvasGestures, type GestureHandlers, type PointerGestures } from './useCanvasGestures';
+import { takesCursor, useCanvasGestures, type GestureHandlers } from './useCanvasGestures';
+import type { RangeGestures } from './useTimeGestures';
 import { spanAt } from './valueAt';
 
 /** How close to the error marker the mouse must be to show its message. */
@@ -78,7 +79,7 @@ const local = (event: ReactMouseEvent) => {
 };
 
 /** The canvas's own mouse handling: the tooltip, selecting a row, zooming to a bus value. */
-function useCanvasMouse(props: WaveCanvasProps, gestures: PointerGestures) {
+function useCanvasMouse(props: WaveCanvasProps, gestures: RangeGestures) {
   const { scene, handlers } = props;
   const [hover, setHover] = useState<Hover | null>(null);
   const [overCursor, setOverCursor] = useState(false);
@@ -122,6 +123,7 @@ export function WaveCanvas(props: WaveCanvasProps) {
         onPointerDown={mouse.onPointerDown}
         onPointerMove={gestures.onPointerMove}
         onPointerUp={gestures.onPointerUp}
+        onPointerCancel={gestures.onPointerCancel}
         onDoubleClick={mouse.onDoubleClick}
         onMouseMove={mouse.onMouseMove}
         onMouseLeave={mouse.onMouseLeave}

@@ -37,16 +37,26 @@ export const saveRecordWaves = (on: boolean): void => write(RECORD_KEY, on ? 'on
 export const loadWaveOpenedOnce = (): boolean => read(OPENED_KEY) === 'yes';
 export const saveWaveOpenedOnce = (): void => write(OPENED_KEY, 'yes');
 
-/** The stored report choices, each one checked: anything unknown falls back to its default. */
-export function loadReportOptions(): ReportOptions {
-  let stored: Partial<Record<keyof ReportOptions, unknown>> = {};
+type StoredReportOptions = Partial<Record<keyof ReportOptions, unknown>>;
+
+/** What is stored under `key` as an object, or an empty one: never throws, whatever is stored. */
+function readObject(key: string): StoredReportOptions {
   try {
-    stored = JSON.parse(read(REPORT_KEY) ?? '{}') as typeof stored;
+    const parsed: unknown = JSON.parse(read(key) ?? '{}');
+    return typeof parsed === 'object' && parsed !== null ? (parsed as StoredReportOptions) : {};
   } catch {
-    // Not JSON: the defaults.
+    return {};
   }
+}
+
+/**
+ * The stored report choices, each one checked: anything unknown falls back to its
+ * default. The width is not read: report mode always opens at two columns.
+ */
+export function loadReportOptions(): ReportOptions {
+  const stored = readObject(REPORT_KEY);
   return {
-    width: stored.width === 'page' ? 'page' : DEFAULT_REPORT_OPTIONS.width,
+    width: DEFAULT_REPORT_OPTIONS.width,
     colouring: stored.colouring === 'colour' ? 'colour' : DEFAULT_REPORT_OPTIONS.colouring,
     showCursor: typeof stored.showCursor === 'boolean' ? stored.showCursor : DEFAULT_REPORT_OPTIONS.showCursor,
   };

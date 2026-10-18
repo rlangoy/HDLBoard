@@ -11,6 +11,7 @@
 import type { ReactNode } from 'react';
 import { WaveformIcon } from '../WaveformButton';
 import { FIGURE_WIDTH_MM, REPORT_DPI, type FigureColouring, type FigureWidth, type ReportOptions } from './figureStyle';
+import { FIGURE_MOUSE_HINT } from './ReportPreview';
 import type { ReportMode } from './useViewFigures';
 
 const MM_PER_CM = 10;
@@ -115,8 +116,8 @@ export function ReportBand({ report, cursorField }: ReportBandProps) {
         <ReportOptionsForm options={report.options} onChange={report.change} cursorField={cursorField} />
         <p className="wv-report-band__hint">
           Text is 9 pt and traces 1 pt when the figure is {widthCm} cm wide. Insert it without resizing; if your editor
-          changes the size, set the width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi.
-          Scroll to move in time and drag across the figure to zoom into that part.
+          changes the size, set the width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi.{' '}
+          {FIGURE_MOUSE_HINT}
         </p>
       </div>
     </section>

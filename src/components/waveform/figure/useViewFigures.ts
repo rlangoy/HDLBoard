@@ -16,7 +16,7 @@ import { useStatusLine } from '../useStatusLine';
 import type { WaveView } from '../useWaveView';
 import { loadReportOptions, saveReportOptions } from '../wavePrefs';
 import { COPY_MESSAGES, copyFigure, measureText, saveFigurePng, saveFigureSvg } from './figureOutput';
-import { REPORT_DPI, reportLook, type ReportOptions } from './figureStyle';
+import { OPENING_WIDTH, REPORT_DPI, reportLook, type ReportOptions } from './figureStyle';
 import { waveformFigure, type Figure } from './figureSvg';
 import type { ScreenSize } from './screenLook';
 import { copyScreenFigure, viewContent, type ViewState } from './viewFigures';
@@ -68,16 +68,20 @@ function useReportOptions(): [ReportOptions, (patch: Partial<ReportOptions>) => 
   return [options, change];
 }
 
+/** The view's state for a figure, the same object while nothing in it changes. */
+function useViewState({ setup, list }: WaveView, showAsOf: (path: SignalPath) => ShowAs): ViewState | null {
+  return useMemo(() => (setup === null ? null : { setup, list, showAsOf }), [setup, list, showAsOf]);
+}
+
 export function useViewFigures({ view, showAsOf, pane, size, baseName }: ViewFiguresInput): ViewFigures {
   const [reportOn, setReportOn] = useState(false);
   const [options, change] = useReportOptions();
   const [status, setStatus] = useStatusLine();
-  const state: ViewState | null = view.setup === null ? null : { setup: view.setup, list: view.list, showAsOf };
-  const hasTraces = state !== null && traceRows(view.list).length > 0;
-  const { setup, list } = view;
+  const state = useViewState(view, showAsOf);
+  const hasTraces = state !== null && traceRows(state.list).length > 0;
   const figure = useMemo(
-    () => (reportOn && setup !== null && hasTraces ? waveformFigure(viewContent({ setup, list, showAsOf }), reportLook(options), measureText) : null),
-    [reportOn, hasTraces, setup, list, showAsOf, options],
+    () => (reportOn && state !== null && hasTraces ? waveformFigure(viewContent(state), reportLook(options), measureText) : null),
+    [reportOn, state, hasTraces, options],
   );
   const copyWaveform = () => {
     if (state === null || !hasTraces || pane.current === null) return;
@@ -97,5 +101,10 @@ export function useViewFigures({ view, showAsOf, pane, size, baseName }: ViewFig
           savePng: () => void saveFigurePng(figure, baseName, REPORT_DPI).catch(() => setStatus(SAVE_PNG_FAILED)),
           close: () => setReportOn(false),
         };
-  return { hasTraces, status, copyWaveform, report, openReport: () => setReportOn(hasTraces) };
+  const openReport = () => {
+    if (!hasTraces) return;
+    change({ width: OPENING_WIDTH });
+    setReportOn(true);
+  };
+  return { hasTraces, status, copyWaveform, report, openReport };
 }

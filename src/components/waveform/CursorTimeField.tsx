@@ -5,13 +5,15 @@
  * The cursor's time as a field (docs/waveform_viewer_spec.md § 8.6): it follows the
  * cursor, and typing a time and pressing Enter – or leaving the field – moves the cursor
  * there. Esc puts the field back as it was. The unit beside it is a flat dropdown (s, ms,
- * µs, ns, ps); until one is picked it follows the time. The pane keeps the picked unit,
- * so the toolbar's field and report mode's field read alike.
+ * µs, ns, ps); until one is picked it follows the time. `useCursorField` keeps the
+ * picked unit, so the toolbar's field and report mode's field read alike.
  */
 
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { FlatSelect } from './FlatSelect';
-import { CURSOR_UNITS, cursorUnitFor, formatCursorIn, parseTimeIn, type TimeUnit } from './timeAxis';
+import type { WaveformData } from './model';
+import { CURSOR_UNITS, cursorUnitFor, formatCursorIn, parseTimeIn, pixelResolutionFs, viewOf, type TimeUnit } from './timeAxis';
+import type { WaveView } from './useWaveView';
 
 export interface CursorTimeFieldProps {
   /** The cursor's time. */
@@ -74,4 +76,26 @@ export function CursorTimeField({ fs, resolutionFs, unit: picked, onUnit, onChan
       <FlatSelect value={unit[0]} options={UNIT_SYMBOLS} label="Cursor time unit" onChange={onUnit} />
     </span>
   );
+}
+
+export interface CursorFieldInput {
+  readonly view: WaveView;
+  readonly data: WaveformData | null;
+  /** The traces' width on screen, for how finely the cursor can be placed. */
+  readonly tracesWidth: number;
+}
+
+/**
+ * The cursor's time field for the view, or null while there is no waveform: with the
+ * decimals one pixel of the traces can point at. A typed time moves the cursor there,
+ * into view, never past the run's end. The picked unit is kept here, so wherever the
+ * field is shown – toolbar or report mode – it reads alike.
+ */
+export function useCursorField({ view, data, tracesWidth }: CursorFieldInput): ReactNode {
+  const [unit, setUnit] = useState<string | null>(null);
+  if (view.setup === null || data === null || tracesWidth <= 0) return null;
+  const { window: shown, cursor, runEnd } = view.setup;
+  const resolution = pixelResolutionFs(viewOf(shown.start, shown.end, tracesWidth), data.tickFs, window.devicePixelRatio);
+  const moveTo = (fs: number) => view.actions.showCursor(Math.min(runEnd, Math.round(fs / data.tickFs)));
+  return <CursorTimeField fs={cursor * data.tickFs} resolutionFs={resolution} unit={unit} onUnit={setUnit} onChange={moveTo} />;
 }

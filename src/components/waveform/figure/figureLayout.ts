@@ -20,9 +20,7 @@ export interface Tick {
 
 export interface FigureLayout extends AxisVertical {
   readonly width: number;
-  /** The right edge of the names column, where the traces start. */
-  readonly namesRight: number;
-  /** Where the traces start and end, left to right. */
+  /** Where the traces start – the right edge of the names column – and where they end. */
   readonly tracesLeft: number;
   readonly tracesRight: number;
   /** Time across the traces, with x counted from `tracesLeft`. */
@@ -82,6 +80,12 @@ function namesRight(content: FigureContent, look: FigureLook, measure: MeasureTe
   return sizes.textInset + longest + LABEL_GAP_EM * fonts.name.size;
 }
 
+/** Whether `time` is inside the time the figure shows. */
+export function isInView({ view, tracesLeft, tracesRight }: FigureLayout, time: number): boolean {
+  const x = timeToX(view, time);
+  return x >= 0 && x <= tracesRight - tracesLeft;
+}
+
 export function figureLayout(content: FigureContent, look: FigureLook, measure: MeasureText): FigureLayout {
   const tracesLeft = namesRight(content, look, measure);
   const tracesRight = look.sizes.width - look.axis.rightMargin(content, look, measure);
@@ -89,7 +93,6 @@ export function figureLayout(content: FigureContent, look: FigureLook, measure: 
   const view = viewOf(content.start, content.end, tracesWidth);
   return {
     width: look.sizes.width,
-    namesRight: tracesLeft,
     tracesLeft,
     tracesRight,
     view,

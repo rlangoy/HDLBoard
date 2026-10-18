@@ -14,11 +14,10 @@ import { useRef, useState } from 'react';
 import { useElementSize } from '../domHooks';
 import type { Ticks } from '../model';
 import { formatCursorFs, formatFs, timeToX } from '../timeAxis';
-import { useDragGestures, useWheelGestures, type DragHandlers, type Selection, type TimeMapping, type WheelHandlers } from '../useTimeGestures';
+import { useCursorGrab, useRangeDrag, useWheelGestures, type Selection, type TimeHandlers, type TimeMapping } from '../useTimeGestures';
 import { FIGURE_WIDTH_MM, ptFromMm } from './figureStyle';
+import { isInView } from './figureLayout';
 import type { Figure } from './figureSvg';
-
-export interface PreviewHandlers extends WheelHandlers, DragHandlers {}
 
 export interface ReportPreviewProps {
   readonly figure: Figure;
@@ -26,7 +25,7 @@ export interface ReportPreviewProps {
   readonly cursor: Ticks | undefined;
   /** The femtoseconds in one tick, for the times written on the handle and a marked range. */
   readonly tickFs: number;
-  readonly handlers: PreviewHandlers;
+  readonly handlers: TimeHandlers;
 }
 
 /** The space around the figure. */
@@ -55,18 +54,16 @@ function screenMapping(figure: Figure, scale: number): ScreenMapping {
 
 const xOf = ({ scale, figure }: ScreenMapping, time: Ticks): number => (figure.layout.tracesLeft + timeToX(figure.layout.view, time)) * scale;
 
-const FIGURE_HINT = 'Scroll to move in time, Ctrl + scroll to zoom, drag across to zoom into that part';
+/** What the mouse does on the figure; the band says it too. */
+export const FIGURE_MOUSE_HINT = 'Scroll to move in time, Ctrl + scroll to zoom, and drag across the figure to zoom into that part.';
 
-const marksRange = () => 'range' as const;
-const takesCursorAtOnce = () => 'cursor-now' as const;
-
-/** The marked range over the figure, with how long it is: what the view will show. */
 interface SelectionBandProps {
   readonly selection: Selection;
   readonly mapping: ScreenMapping;
   readonly tickFs: number;
 }
 
+/** The marked range over the figure, with how long it is: what the view will show. */
 function SelectionBand({ selection, mapping, tickFs }: SelectionBandProps) {
   const [x0, x1] = [xOf(mapping, selection.from), xOf(mapping, selection.to)].sort((a, b) => a - b);
   return (
@@ -74,13 +71,6 @@ function SelectionBand({ selection, mapping, tickFs }: SelectionBandProps) {
       <span>{formatFs(Math.abs(selection.to - selection.from) * tickFs)}</span>
     </div>
   );
-}
-
-/** Whether `time` is inside the time the figure shows. */
-function inView({ figure }: ScreenMapping, time: Ticks): boolean {
-  const { view, tracesLeft, tracesRight } = figure.layout;
-  const x = timeToX(view, time);
-  return x >= 0 && x <= tracesRight - tracesLeft;
 }
 
 interface CursorRulerProps {
@@ -95,18 +85,11 @@ interface CursorRulerProps {
  * move the cursor. The handle is left out while the cursor is outside the time shown.
  */
 function CursorRuler({ time, tickFs, mapping, onCursor }: CursorRulerProps) {
-  // Every press here takes the cursor, so nothing is ever zoomed into.
-  const { onPointerDown, onPointerMove, onPointerUp } = useDragGestures(mapping, { onCursor, onZoomTo: () => undefined }, takesCursorAtOnce);
+  const grab = useCursorGrab(mapping, onCursor);
   const label = formatCursorFs(time * tickFs, mapping.ticksPerPx * tickFs);
   return (
-    <div
-      className="wv-report__ruler"
-      title="Drag the cursor to move it"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      {inView(mapping, time) && (
+    <div className="wv-report__ruler" title="Drag the cursor to move it" {...grab}>
+      {isInView(mapping.figure.layout, time) && (
         <span className="wv-report__handle" style={{ left: xOf(mapping, time) }}>
           {label}
         </span>
@@ -121,12 +104,12 @@ export function ReportPreview({ figure, cursor, tickFs, handlers }: ReportPrevie
   const room = Math.max(0, useElementSize(area).width - 2 * PREVIEW_PAD_PX);
   const mapping = screenMapping(figure, Math.min(MAX_PX_PER_PT, room / WIDEST_FIGURE_PT) || 1);
   useWheelGestures(figureRef, mapping, handlers);
-  const { selection, ...pointer } = useDragGestures(mapping, handlers, marksRange);
+  const { selection, ...pointer } = useRangeDrag(mapping, handlers);
   return (
     <div className="wv-report" ref={setArea}>
       <div className="wv-report__sheet" style={{ width: figure.layout.width * mapping.scale }}>
         {cursor !== undefined && <CursorRuler time={cursor} tickFs={tickFs} mapping={mapping} onCursor={handlers.onCursor} />}
-        <div ref={figureRef} className="wv-report__figure" title={FIGURE_HINT} {...pointer}>
+        <div ref={figureRef} className="wv-report__figure" title={FIGURE_MOUSE_HINT} {...pointer}>
           {/* The figure is SVG this app wrote itself, with every name escaped. */}
           <div className="wv-report__page" dangerouslySetInnerHTML={{ __html: figure.svg }} />
           {selection !== undefined && <SelectionBand selection={selection} mapping={mapping} tickFs={tickFs} />}

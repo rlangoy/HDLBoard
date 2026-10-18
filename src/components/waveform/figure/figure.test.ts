@@ -39,7 +39,7 @@ function content(rows: readonly FigureRow[], end = 40): FigureContent {
   return { rows, start: 0, end, runEnd: end, tickFs: NS, cursor: 20 };
 }
 
-const report = (options = {}): FigureLook => reportLook({ ...DEFAULT_REPORT_OPTIONS, ...options });
+const report = (options = {}): FigureLook => reportLook({ ...DEFAULT_REPORT_OPTIONS, width: 'column', ...options });
 const svgOf = (rows: readonly FigureRow[], look = report()): string => waveformFigure(content(rows), look, measure).svg;
 
 const clk = row('clk', 'logic', [
@@ -69,7 +69,11 @@ function grayLevel(hex: string): number {
 }
 
 describe('report figure size', () => {
-  it('is one IEEE column wide by default', () => {
+  it('opens two IEEE columns wide', () => {
+    expect(svgOf([clk], reportLook(DEFAULT_REPORT_OPTIONS))).toContain('width="182.00mm"');
+  });
+
+  it('is one IEEE column wide when chosen', () => {
     expect(svgOf([clk])).toContain('width="88.90mm"');
   });
 

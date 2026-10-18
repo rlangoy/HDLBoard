@@ -756,12 +756,16 @@
 }
 
 /* The list and the canvas, with the report figure laid over them in report mode. */
-.wv-stage {
-  position: relative;
+.wv-stage,
+.wv-stage__covered {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.wv-stage {
+  position: relative;
 }
 
 /* Report mode (§ 8.8): a band across the top, in the dialogs' blue, with the choices below it. */

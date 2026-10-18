@@ -35,7 +35,9 @@ export interface ReportOptions {
   readonly showCursor: boolean;
 }
 
-export const DEFAULT_REPORT_OPTIONS: ReportOptions = { width: 'column', colouring: 'mono', showCursor: false };
+/** Report mode always opens at two columns; the other choices are remembered. */
+export const OPENING_WIDTH: FigureWidth = 'page';
+export const DEFAULT_REPORT_OPTIONS: ReportOptions = { width: OPENING_WIDTH, colouring: 'mono', showCursor: false };
 
 export interface FigurePalette {
   readonly background: string;

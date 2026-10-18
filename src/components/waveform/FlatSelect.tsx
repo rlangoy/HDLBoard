@@ -7,7 +7,7 @@
  * opens it, ↑ / ↓ move, Enter picks, Esc closes; a click outside closes it too.
  */
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 
 export interface FlatSelectProps<T extends string> {
   readonly value: T;
@@ -33,7 +33,7 @@ const OPEN_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Enter', ' ']);
 const listAction = (key: string, open: boolean): ListAction | undefined => (open ? LIST_KEYS[key] : OPEN_KEYS.has(key) ? 'open' : undefined);
 
 /** Closes the list on a press anywhere outside `root`. */
-function useClickOutside(root: React.RefObject<HTMLElement>, open: boolean, close: () => void): void {
+function useClickOutside(root: RefObject<HTMLElement>, open: boolean, close: () => void): void {
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (event: MouseEvent) => {
@@ -47,6 +47,8 @@ function useClickOutside(root: React.RefObject<HTMLElement>, open: boolean, clos
 function useListbox<T extends string>({ value, options, onChange }: FlatSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  // One function for the whole life of the list, so the outside-click listener stays put.
+  const close = useCallback(() => setOpen(false), []);
   const openList = () => {
     setActive(Math.max(0, options.indexOf(value)));
     setOpen(true);
@@ -61,7 +63,7 @@ function useListbox<T extends string>({ value, options, onChange }: FlatSelectPr
     up: () => move(-1),
     down: () => move(1),
     pick: () => pick(active),
-    close: () => setOpen(false),
+    close,
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const action = listAction(event.key, open);
@@ -71,7 +73,7 @@ function useListbox<T extends string>({ value, options, onChange }: FlatSelectPr
     if (event.key !== 'Tab') event.preventDefault();
     actions[action]();
   };
-  return { open, active, setOpen, openList, pick, onKeyDown };
+  return { open, active, close, openList, pick, onKeyDown };
 }
 
 interface OptionListProps<T extends string> {
@@ -108,8 +110,8 @@ export function FlatSelect<T extends string>(props: FlatSelectProps<T>) {
   const { value, options, label } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
-  const { open, active, setOpen, openList, pick, onKeyDown } = useListbox(props);
-  useClickOutside(rootRef, open, () => setOpen(false));
+  const { open, active, close, openList, pick, onKeyDown } = useListbox(props);
+  useClickOutside(rootRef, open, close);
   return (
     <div className="wv-flat-select" ref={rootRef} onKeyDown={onKeyDown}>
       <button
@@ -120,7 +122,7 @@ export function FlatSelect<T extends string>(props: FlatSelectProps<T>) {
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
-        onClick={() => (open ? setOpen(false) : openList())}
+        onClick={() => (open ? close() : openList())}
       >
         {value}
         <svg className="wv-flat-select__chevron" viewBox="0 0 10 6" aria-hidden="true">

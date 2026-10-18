@@ -14,7 +14,7 @@ import { timeToX } from '../timeAxis';
 import { valueAt } from '../valueAt';
 import type { Drawing } from './figureAxes';
 import type { FigureContent, FigureRow, MeasureText } from './figureContent';
-import { figureLayout, type FigureLayout } from './figureLayout';
+import { figureLayout, isInView, type FigureLayout } from './figureLayout';
 import type { FigureLook } from './figureStyle';
 import { traceMarkup } from './figureTraces';
 import { PathData, element, fontAttributes, pathElement, textElement } from './svgMarkup';
@@ -49,7 +49,7 @@ function valuesMarkup(drawing: Drawing): string {
     const raw = valueAt(row.trace, content.cursor);
     if (raw === undefined) return '';
     const fill = isUndefinedValue(row.signal, raw) ? look.palette.undefined : look.palette.text;
-    const place = { x: layout.namesRight - look.sizes.textInset, y: centredBaseline(rowMiddle(drawing, index), font), 'text-anchor': 'end' };
+    const place = { x: layout.tracesLeft - look.sizes.textInset, y: centredBaseline(rowMiddle(drawing, index), font), 'text-anchor': 'end' };
     return textElement({ ...place, fill, ...fontAttributes(font) }, formatValue(row.signal, raw, row.showAs));
   };
   return content.rows.map(valueText).join('');
@@ -64,7 +64,7 @@ function gridMarkup({ look, layout }: Drawing): string {
 
 /** The cursor, when it is shown and inside the time shown. */
 function cursorMarkup({ content, look, layout }: Drawing): string {
-  if (!look.shows.cursor || content.cursor < content.start || content.cursor > content.end) return '';
+  if (!look.shows.cursor || !isInView(layout, content.cursor)) return '';
   const x = layout.tracesLeft + timeToX(layout.view, content.cursor);
   const line = new PathData().moveTo(x, layout.gridTop).verticalTo(layout.gridBottom);
   const { strokes } = look;
