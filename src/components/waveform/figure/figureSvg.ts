@@ -20,6 +20,8 @@ import { PathData, element, pathElement, textElement, type Attributes } from './
 
 export interface Figure {
   readonly svg: string;
+  /** Where everything is, in drawing units: for mapping the mouse onto time. */
+  readonly layout: FigureLayout;
   /** The PNG's size in pixels. */
   readonly pixelWidth: number;
   readonly pixelHeight: number;
@@ -100,7 +102,7 @@ function cursorMarkup({ content, look, layout }: Drawing): string {
 
 function tracesMarkup(drawing: Drawing, measure: MeasureText): string {
   const { content, look, layout } = drawing;
-  const context = { layout, look, measure, end: content.end };
+  const context = { layout, look, measure, end: Math.min(content.end, content.runEnd) };
   return content.rows.map((row, index) => traceMarkup(row, layout.rowTops[index], context)).join('');
 }
 
@@ -128,5 +130,5 @@ export function waveformFigure(content: FigureContent, look: FigureLook, measure
     },
     body,
   );
-  return { svg, pixelWidth: Math.round(layout.width * look.pixelsPerUnit), pixelHeight: Math.round(layout.height * look.pixelsPerUnit) };
+  return { svg, layout, pixelWidth: Math.round(layout.width * look.pixelsPerUnit), pixelHeight: Math.round(layout.height * look.pixelsPerUnit) };
 }

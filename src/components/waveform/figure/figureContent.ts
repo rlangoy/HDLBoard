@@ -3,8 +3,8 @@
 
 /**
  * What a figure shows (docs/waveform_viewer_spec.md § 8.9): the shown signals in list
- * order and the time window on screen, cut off where the run ended. Section heads and
- * the hidden signals stay out. Pure.
+ * order across the time window on screen; the traces stop where the run ended, since
+ * nothing is known after it. Section heads and the hidden signals stay out. Pure.
  */
 
 import type { SignalRef, Ticks, Trace } from '../model';
@@ -24,7 +24,9 @@ export interface FigureContent {
   readonly rows: readonly FigureRow[];
   readonly start: Ticks;
   readonly end: Ticks;
-  /** The femtoseconds in one tick of `start`, `end` and `cursor`. */
+  /** Where the recording ends: the traces stop there. */
+  readonly runEnd: Ticks;
+  /** The femtoseconds in one tick of `start`, `end`, `runEnd` and `cursor`. */
   readonly tickFs: number;
   readonly cursor: Ticks;
 }
@@ -51,9 +53,4 @@ function uniqueLabels(rows: readonly TraceRow[]): string[] {
 export function figureRows(rows: readonly TraceRow[], showAsOf: (path: SignalPath) => ShowAs): FigureRow[] {
   const labels = uniqueLabels(rows);
   return rows.map((row, index) => ({ label: labels[index], signal: row.signal, trace: row.trace, showAs: showAsOf(row.path), tone: row.tone }));
-}
-
-/** The window on screen, without the part after the run, where nothing is known. */
-export function figureSpan(window: { readonly start: Ticks; readonly end: Ticks }, runEnd: Ticks): { start: Ticks; end: Ticks } {
-  return { start: window.start, end: Math.max(window.start + 1, Math.min(window.end, runEnd)) };
 }

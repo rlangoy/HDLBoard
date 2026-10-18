@@ -3,15 +3,14 @@
 
 /**
  * The view's two figures (docs/waveform_viewer_spec.md § 8.8): Copy waveform, the view
- * as it is on screen, and Figure for a report, the same traces sized for print and cut
- * off where the run ended.
+ * as it is on screen, and Figure for a report, the same traces in the report look.
  */
 
 import type { ShowAs } from '../radix';
 import { traceRows, type ListModel, type SignalPath } from '../signalRows';
 import type { ViewSetup } from '../viewSetup';
 import { readColors } from '../waveDraw';
-import { figureRows, figureSpan, type FigureContent } from './figureContent';
+import { figureRows, type FigureContent } from './figureContent';
 import { copyFigure, measureText, type CopyResult } from './figureOutput';
 import { waveformFigure } from './figureSvg';
 import { screenLook, type ScreenSize } from './screenLook';
@@ -22,19 +21,15 @@ export interface ViewState {
   readonly showAsOf: (path: SignalPath) => ShowAs;
 }
 
-function contentOf({ setup, list, showAsOf }: ViewState, span: { readonly start: number; readonly end: number }): FigureContent {
-  return { rows: figureRows(traceRows(list), showAsOf), ...span, tickFs: setup.tickFs, cursor: setup.cursor };
+/** The shown traces across the window on screen. */
+export function viewContent({ setup, list, showAsOf }: ViewState): FigureContent {
+  const { window, runEnd, tickFs, cursor } = setup;
+  return { rows: figureRows(traceRows(list), showAsOf), start: window.start, end: window.end, runEnd, tickFs, cursor };
 }
-
-/** The window on screen, as it is. */
-export const screenContent = (state: ViewState): FigureContent => contentOf(state, state.setup.window);
-
-/** The window on screen without the part after the run: a report shows only what is known. */
-export const reportContent = (state: ViewState): FigureContent => contentOf(state, figureSpan(state.setup.window, state.setup.runEnd));
 
 /** Copies the view as on screen, in the colours and fonts of the pane it is in. */
 export function copyScreenFigure(pane: HTMLElement, state: ViewState, size: ScreenSize): Promise<CopyResult> {
   const valueFont = getComputedStyle(pane).getPropertyValue('--wv-value-font').trim();
   const look = screenLook(readColors(pane), size, valueFont);
-  return copyFigure(waveformFigure(screenContent(state), look, measureText));
+  return copyFigure(waveformFigure(viewContent(state), look, measureText));
 }

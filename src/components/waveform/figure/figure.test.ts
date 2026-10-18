@@ -6,7 +6,7 @@ import { crc32 } from '../../workbench/zip';
 import type { SignalKind, SignalRef, Trace } from '../model';
 import type { TraceRow } from '../signalRows';
 import { WHITE_BACKGROUND_COLORS } from './figure.testSupport';
-import { figureRows, figureSpan, type FigureContent, type FigureRow, type MeasureText } from './figureContent';
+import { figureRows, type FigureContent, type FigureRow, type MeasureText } from './figureContent';
 import { figureLayout } from './figureLayout';
 import { withResolution } from './figurePng';
 import { DEFAULT_REPORT_OPTIONS, reportLook, type FigureLook } from './figureStyle';
@@ -33,7 +33,7 @@ function row(label: string, kind: SignalKind, changes: ReadonlyArray<readonly [n
 }
 
 function content(rows: readonly FigureRow[], end = 40): FigureContent {
-  return { rows, start: 0, end, tickFs: NS, cursor: 20 };
+  return { rows, start: 0, end, runEnd: end, tickFs: NS, cursor: 20 };
 }
 
 const report = (options = {}): FigureLook => reportLook({ ...DEFAULT_REPORT_OPTIONS, ...options });
@@ -158,8 +158,15 @@ describe('screen copy', () => {
 });
 
 describe('figure content', () => {
-  it('stops where the run ended', () => {
-    expect(figureSpan({ start: 0, end: 100 }, 60)).toEqual({ start: 0, end: 60 });
+  it('stops the traces where the run ended, keeping the axis across the window', () => {
+    const look = report();
+    const figure = waveformFigure({ ...content([clk], 80), runEnd: 40 }, look, measure);
+    const { tracesLeft, tracesRight } = figure.layout;
+    const runEndX = tracesLeft + (tracesRight - tracesLeft) / 2;
+    const xs = [...figure.svg.matchAll(/H([\d.]+)/g)].map((m) => Number(m[1]));
+    const traceEnds = xs.filter((x) => x < tracesRight - 1);
+    expect(Math.max(...traceEnds)).toBeCloseTo(runEndX, 1);
+    expect(figure.layout.ticks[figure.layout.ticks.length - 1].label).toBe('80');
   });
 
   it('names a signal by its place in the design when two rows share a name', () => {

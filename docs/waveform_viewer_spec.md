@@ -493,7 +493,7 @@ Colours are tokens in `Waveform.css` (`--wv-trace-high`, `--wv-trace-undefined`,
 Two entries in the ⋯ menu put the traces in view into a document. Both draw one SVG (`figure/figureSvg.ts`); the PNG is drawn from that SVG, so the two never differ.
 
 - **Copy waveform** copies the view as it looks on screen: the screen's colours, fonts and sizes, the Signal and Value columns at their width, the time axis on top and the cursor. It goes onto the clipboard as PNG (at twice the screen's pixels) and SVG together, so each program pastes the format it reads. The section heads (TB, RTL) are left out.
-- **Figure for a report…** opens a dialog with a preview, three choices (width, black and white or colour, the cursor) and Copy, Save SVG and Save PNG. The choices are remembered in this browser.
+- **Figure for a report…** turns the view into report mode. A wide band across the top of the view, in the dialogs' blue, reads *Figure for a report – The traces in view, sized for print*. It holds the buttons Close, Save SVG, Save PNG and Copy, the choices (width, black and white or colour, the cursor) and how to insert the figure. Below it, in place of the list and the canvas, is the figure itself, drawn live from the view, so every choice shows at once. Both widths are drawn at one scale (the one that fits two columns in the pane), so choosing two columns visibly widens the figure, with more room for the same time span. The mouse chooses what the figure shows: the wheel scrolls in time, Ctrl + wheel and the toolbar zoom, dragging pans, and a click places the cursor. Close or Esc returns to the view. The choices are remembered in this browser.
 
 ### 8.9 Report figure style
 
@@ -509,11 +509,11 @@ The report figure follows the IEEE Author Center's graphics guidance [IEEE-G, IE
 | Buses | The crossing outline. The value is centred between the crossings and left out when it would touch an edge, so labels never overlap. |
 | Rows | Every row is the same height, and changes line up across rows. |
 | Time axis | Below the traces, with the unit in the axis title, for example `Time (ns)`. Ticks fall on 1-2-5 steps and are spaced so that no two labels touch, which gives about ten labels across two columns. |
-| Time span | The window on screen, cut off where the run ended. |
+| Time span | The window on screen; the traces stop where the run ended, and the axis keeps going across the window. |
 | Formats | Copy puts PNG and SVG on the clipboard. The SVG is sized in mm with its drawing in points, so it opens at its printed size. The PNG is 600 dpi at the final size (IEEE asks for over 600 dpi for line art and over 300 dpi for colour [IEEE-RS]), and the saved file records its resolution in a `pHYs` chunk. Making a PNG larger after export does not add detail. |
 | Not yet | PDF and EPS, which are IEEE's submission formats [IEEE-FF]. They must embed their fonts or convert text to outlines, which needs a font file in the app (for example Liberation Sans, which has Arial's letter widths). SVG is for editing and is not an IEEE submission format; for submission, save the SVG as PDF from Word or Inkscape, which embeds the fonts. |
 
-Pasting a PNG from the clipboard loses its resolution (the browser writes it again without the `pHYs` chunk), so Word may resize the picture. The dialog says which width to set it back to.
+Pasting a PNG from the clipboard loses its resolution (the browser writes it again without the `pHYs` chunk), so Word may resize the picture. The band says which width to set it back to.
 
 ---
 

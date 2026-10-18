@@ -9,7 +9,7 @@
  * and the state lives in `useWaveView`.
  */
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from 'react';
 import { firstError, lastReportFs } from './consoleTimes';
 import { changeFrom, fineStep, type Direction } from './cursorSteps';
 import { useDelayed, useElementSize } from './domHooks';
@@ -26,7 +26,8 @@ import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
 import { ColumnResizer, useNamesWidth } from './ColumnResizer';
-import { ReportFigureDialog } from './figure/ReportFigureDialog';
+import { ReportBand } from './figure/ReportBand';
+import { ReportPreview } from './figure/ReportPreview';
 import { useViewFigures, type ViewFigures } from './figure/useViewFigures';
 import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
@@ -88,6 +89,8 @@ interface KeyTargets {
   readonly view: WaveView;
   readonly selected: string | null;
   readonly closeMenu: () => boolean;
+  /** Leaves report mode; false when it was not on. */
+  readonly closeReport: () => boolean;
   readonly close: () => void;
 }
 
@@ -103,7 +106,7 @@ function moveCursor({ view, selected }: KeyTargets, direction: Direction, fine: 
 function keyAction(event: KeyboardEvent<HTMLElement>, targets: KeyTargets): (() => void) | undefined {
   const { actions } = targets.view;
   const keys: Readonly<Record<string, () => void>> = {
-    Escape: () => targets.closeMenu() || targets.close(),
+    Escape: () => targets.closeMenu() || targets.closeReport() || targets.close(),
     '+': () => actions.zoom(1 / ZOOM_STEP),
     '=': () => actions.zoom(1 / ZOOM_STEP),
     '-': () => actions.zoom(ZOOM_STEP),
@@ -269,17 +272,50 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: Me
   );
 }
 
-/** How the last copy went, and the report figure's dialog while it is open. */
-function FigureParts({ figures, title }: { readonly figures: ViewFigures; readonly title: string }) {
+interface PaneToolbarProps {
+  readonly title: string;
+  readonly time: string | undefined;
+  readonly view: WaveView;
+  readonly onMenu: (menu: Menu) => void;
+  readonly onClose: () => void;
+}
+
+function PaneToolbar({ title, time, view, onMenu, onClose }: PaneToolbarProps) {
   return (
-    <>
-      {figures.status !== '' && (
-        <p className="wv-status" role="status">
-          {figures.status}
-        </p>
+    <WaveToolbar
+      title={title}
+      time={time}
+      onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
+      onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
+      onFit={view.actions.fit}
+      onMore={(anchor) => onMenu({ kind: 'more', place: { x: anchor.right - MENU_WIDTH, y: anchor.bottom + MENU_GAP } })}
+      onClose={onClose}
+    />
+  );
+}
+
+/** How the last copy went, at the bottom of the pane. */
+function CopyStatus({ status }: { readonly status: string }) {
+  return status === '' ? null : (
+    <p className="wv-status" role="status">
+      {status}
+    </p>
+  );
+}
+
+/**
+ * The list and the canvas, and in report mode the figure over them: they stay laid out
+ * underneath, so the toolbar's cursor time and the zoom keep working.
+ */
+function Stage({ figures, view, children }: { readonly figures: ViewFigures; readonly view: WaveView; readonly children: ReactNode }) {
+  const { actions } = view;
+  return (
+    <div className="wv-stage">
+      {children}
+      {figures.report !== null && (
+        <ReportPreview figure={figures.report.figure} handlers={{ onScroll: actions.scroll, onZoom: actions.zoom, onCursor: actions.setCursor }} />
       )}
-      {figures.report !== null && <ReportFigureDialog content={figures.report} baseName={`${title}_waveform`} onClose={figures.closeReport} />}
-    </>
+    </div>
   );
 }
 
@@ -336,33 +372,29 @@ export function WaveformPane(props: WaveformPaneProps) {
   const [namesWidth, setNamesWidth] = useNamesWidth();
   const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
   const closeMenu = () => menu !== null && (setMenu(null), true);
-  const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, close: waveform.close });
   const title = data === null ? props.title : (testbenchScope(data)?.name ?? props.title);
   // The view takes the keyboard when it opens, so Esc and the arrows work at once.
   const paneRef = useRef<HTMLElement>(null);
   useEffect(() => paneRef.current?.focus(), []);
-  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, pane: paneRef, size: { namesWidth, tracesWidth } });
+  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, pane: paneRef, size: { namesWidth, tracesWidth }, baseName: `${title}_waveform` });
+  const closeReport = () => figures.report !== null && (figures.report.close(), true);
+  const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, closeReport, close: waveform.close });
   return (
     <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
-      <WaveToolbar
-        title={title}
-        time={cursorText(view, data, tracesWidth)}
-        onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
-        onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
-        onFit={view.actions.fit}
-        onMore={(anchor) => setMenu({ kind: 'more', place: { x: anchor.right - MENU_WIDTH, y: anchor.bottom + MENU_GAP } })}
-        onClose={waveform.close}
-      />
+      {figures.report !== null && <ReportBand report={figures.report} />}
+      <PaneToolbar title={title} time={cursorText(view, data, tracesWidth)} view={view} onMenu={setMenu} onClose={waveform.close} />
       <WaveNotes notes={notesFor(waveform.state, data)} />
       {helpOpen && <WaveHelp onClose={() => setHelpOpen(false)} />}
       {data === null ? (
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
-        <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight}
-          namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
+        <Stage figures={figures} view={view}>
+          <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight}
+            namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
+        </Stage>
       )}
       <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} figures={figures} />
-      <FigureParts figures={figures} title={title} />
+      <CopyStatus status={figures.status} />
     </section>
   );
 }
