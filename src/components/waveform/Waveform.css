@@ -200,23 +200,82 @@
   background: var(--wv-bg);
 }
 
-/* The divider to the traces: a strip over the list's right edge, blue while dragged or focused. */
+/* The divider to the traces: an invisible grab strip over the list's 1 px right border.
+   On hover the line grows to 4 px and a grip shows in the middle of the visible part;
+   it turns solid blue while dragged or focused. The short delay keeps it from flashing
+   when the mouse only passes over. */
 .wv-resizer {
   position: absolute;
   top: 0;
-  right: -4px;
+  right: -5px;
   bottom: 0;
   z-index: 3;
-  width: 7px;
+  width: 9px;
   cursor: col-resize;
   touch-action: none;
+  outline: none;
 }
 
-.wv-resizer:hover,
-.wv-resizer.is-dragging,
-.wv-resizer:focus-visible {
-  outline: none;
-  background: linear-gradient(to right, transparent 2px, var(--wv-selection) 2px, var(--wv-selection) 5px, transparent 5px);
+.wv-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%) scaleX(0.25);
+  background: var(--wv-selection);
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.wv-resizer__grip {
+  position: sticky;
+  top: calc(50% - 14px);
+  display: block;
+  width: 8px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 4px;
+  background: var(--wv-selection) radial-gradient(circle, #fff 0.9px, transparent 1.3px) center / 8px 5px repeat-y;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.wv-resizer:hover::before,
+.wv-resizer:hover .wv-resizer__grip {
+  transition-delay: 150ms;
+}
+
+.wv-resizer:hover::before {
+  opacity: 0.45;
+  transform: translateX(-50%);
+}
+
+.wv-resizer.is-dragging::before,
+.wv-resizer:focus-visible::before {
+  opacity: 1;
+  transform: translateX(-50%);
+  transition-delay: 0ms;
+}
+
+.wv-resizer:hover .wv-resizer__grip,
+.wv-resizer.is-dragging .wv-resizer__grip,
+.wv-resizer:focus-visible .wv-resizer__grip {
+  opacity: 1;
+}
+
+.wv-resizer.is-dragging .wv-resizer__grip,
+.wv-resizer:focus-visible .wv-resizer__grip {
+  transition-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wv-resizer::before,
+  .wv-resizer__grip {
+    transition: none;
+  }
 }
 
 .wv-names__header {
