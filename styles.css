@@ -176,6 +176,8 @@ p { margin: 0; }
   .live-dot::after { animation: none; }
   .compare-shot { transition: none; }
   .compare-shot:hover { transform: none; }
+  .wave-shot { transition: none; }
+  .wave-shot:hover { transform: none; }
 }
 
 /* ---------- Hero ---------- */
@@ -272,6 +274,72 @@ p { margin: 0; }
 .split-text .split-note { font-size: 1.0625rem; }
 .split-text .text-link { font-size: 1.0625rem; }
 
+/* ---------- Waveform: viewer screenshot, then the report figure on a page ---------- */
+.waveform { background: var(--surface); }  /* sets it apart from the testbench section above */
+.waveform-intro { gap: 24px; }
+.waveform-intro h2 span { display: inline-block; }  /* wrap between the sentences, not inside one */
+.waveform-intro .h2-soft { font-weight: 600; color: var(--ink-2); }
+.waveform-intro p { max-width: 820px; font-size: 1.25rem; line-height: 1.6; color: var(--muted); }
+.waveform strong { color: var(--ink); font-weight: 600; }
+.wave-row { margin-top: 72px; }
+
+/* The app's own Waveform button, drawn in the sentence that says to click it */
+.app-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  margin: 0 2px;
+  border: 1px solid #4C6FD8;
+  border-radius: 6px;
+  background: #1E3A8A;
+  color: #fff;
+  font-size: 0.9em;
+  font-weight: 600;
+  vertical-align: 0.08em;
+  white-space: nowrap;
+}
+.app-btn svg { width: 1em; height: 1em; }
+
+/* First row: the screenshot at its own size */
+.wave-view { display: flex; justify-content: center; margin-top: 56px; }
+.wave-shot { display: block; width: 100%; max-width: 944px; cursor: zoom-in; transition: transform 0.2s ease, box-shadow 0.2s ease; }  /* the screenshot's own width plus the frame: never scaled up */
+.wave-shot:hover { transform: translateY(-3px); box-shadow: 0 40px 80px -36px rgba(15, 23, 42, 0.45); }
+
+/* Second row: the figure on a two-column page gets the room, the text stays light */
+.wave-report { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 56px; align-items: center; }
+.paper {
+  margin: 0;
+  padding: 24px 28px 18px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 1px 0 var(--line), 0 30px 70px -35px rgba(15, 23, 42, 0.35);
+}
+.paper-head {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #D4D4D8;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: #71717A;
+}
+.paper-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); column-gap: 24px; }  /* the figure takes one column, as in an IEEE paper; that column is a little wider so the figure reads well on screen */
+.paper-col { display: flex; flex-direction: column; }
+.paper-lines { display: flex; flex-direction: column; gap: 8px; }
+.paper-lines i { display: block; height: 6px; border-radius: 2px; background: #EDEDF0; }
+.paper-lines i.short { width: 62%; }
+.paper img { display: block; width: 100%; margin: 16px 0 6px; }
+.paper figcaption { margin-bottom: 14px; font-family: "Times New Roman", Times, serif; font-size: 0.8125rem; line-height: 1.35; color: #27272A; }
+.fig-no { font-variant: small-caps; }
+
+.wave-report .split-text { gap: 20px; }
+.wave-report h3 { font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.02em; }  /* the key message of the section */
+.wave-report .split-text p { font-size: 1.25rem; line-height: 1.6; }
+
 /* ---------- Cloud: save + share, text left, two-step card right ---------- */
 .projects { background: var(--surface); }  /* sets it apart from the highlight section above */
 .cloud h2 { margin-bottom: 24px; }  /* heading spans the row, so the text and the card start level */
@@ -359,7 +427,6 @@ p { margin: 0; }
 .testbench-note { max-width: 720px; margin: 40px auto 0; text-align: center; font-size: 1.0625rem; line-height: 1.6; color: var(--muted); }
 
 /* ---------- Highlight: the testbench section's layout, for a wider screenshot ---------- */
-.split.highlight { padding-top: 0; }  /* continues the testbench section above, on the same background (also on small screens) */
 .highlight-shot { max-width: 1225px; }  /* the screenshot's own width plus the frame: never scaled up */
 
 /* "New in v1.4.1": marks a section about a new release's feature */
@@ -632,6 +699,13 @@ p { margin: 0; }
   .cloud .split-text p, .projects .split-text p { order: 1; }
   .projects .split-media, .cloud .flow { order: 2; margin: 24px 0; }
   .cloud .checks, .projects .checks { order: 3; }
+  /* Waveform rows: heading and text, then the picture, then the list */
+  .wave-report { grid-template-columns: 1fr; gap: 24px; }
+  .wave-report .split-text { display: contents; }
+  .wave-report h3 { order: 0; font-size: 1.75rem; }
+  .wave-report .split-text p { order: 1; }
+  .wave-report .paper { order: 2; margin: 16px 0; }
+  .paper { padding: 18px 18px 14px; }
   .band-grid { gap: 40px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 48px; }
   .paths { grid-template-columns: repeat(2, minmax(0, 1fr)); }
