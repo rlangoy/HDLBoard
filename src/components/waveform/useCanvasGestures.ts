@@ -28,22 +28,23 @@ export interface GestureHandlers extends TimeHandlers {
   onSelectRow(path: string): void;
 }
 
-/** Where the view is and where its cursor stands. */
+/** Where the view is and where its cursor stands, while it is shown. */
 export interface CanvasView {
   readonly view: TimeView;
-  readonly cursor: Ticks;
+  readonly cursor: Ticks | undefined;
 }
 
-type CanvasRoute = 'ruler' | 'cursorLine' | 'traces';
+export type CanvasRoute = 'ruler' | 'cursorLine' | 'traces';
 
-/** Whether a press at (`x`, `y`) takes the cursor: on the ruler, or on or beside its line. */
+/** Whether a press at (`x`, `y`) takes the shown cursor: on the ruler, or on or beside its line. */
 export function takesCursor({ view, cursor }: CanvasView, x: number, y: number): boolean {
-  return y < AXIS_HEIGHT || nearCursor(view, cursor, x);
+  return cursor !== undefined && (y < AXIS_HEIGHT || nearCursor(view, cursor, x));
 }
 
-function canvasRoute(at: CanvasView, x: number, y: number): CanvasRoute {
-  if (y < AXIS_HEIGHT) return 'ruler';
-  return takesCursor(at, x, y) ? 'cursorLine' : 'traces';
+/** Which gesture a press at (`x`, `y`) starts; with the cursor hidden, every press is on the traces. */
+export function canvasRoute(at: CanvasView, x: number, y: number): CanvasRoute {
+  if (!takesCursor(at, x, y)) return 'traces';
+  return y < AXIS_HEIGHT ? 'ruler' : 'cursorLine';
 }
 
 export function useCanvasGestures(canvasRef: RefObject<HTMLCanvasElement>, at: CanvasView, handlers: GestureHandlers): RangeGestures {

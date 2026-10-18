@@ -17,10 +17,10 @@ import type { FigureFont } from './typography';
 
 export type { FigureFont } from './typography';
 
-export const PT_PER_INCH = 72;
-export const MM_PER_INCH = 25.4;
+const PT_PER_INCH = 72;
+const MM_PER_INCH = 25.4;
 export const ptFromMm = (mm: number): number => (mm / MM_PER_INCH) * PT_PER_INCH;
-export const mmFromPt = (pt: number): number => (pt / PT_PER_INCH) * MM_PER_INCH;
+const mmFromPt = (pt: number): number => (pt / PT_PER_INCH) * MM_PER_INCH;
 
 /** The two IEEE figure widths: one column and the full two-column page. */
 export type FigureWidth = 'column' | 'page';
@@ -28,16 +28,20 @@ export const FIGURE_WIDTH_MM: Readonly<Record<FigureWidth, number>> = { column: 
 
 export type FigureColouring = 'mono' | 'colour';
 
-/** What the student picks for a report figure. */
-export interface ReportOptions {
+/** What the student picks in report mode's band. */
+export interface ReportChoices {
   readonly width: FigureWidth;
   readonly colouring: FigureColouring;
+}
+
+/** What a report figure is drawn with: the band's choices, and whether the view shows its cursor. */
+export interface ReportOptions extends ReportChoices {
   readonly showCursor: boolean;
 }
 
-/** Report mode always opens at two columns; the other choices are remembered. */
+/** Report mode always opens at two columns; the colouring is remembered. */
 export const OPENING_WIDTH: FigureWidth = 'page';
-export const DEFAULT_REPORT_OPTIONS: ReportOptions = { width: OPENING_WIDTH, colouring: 'mono', showCursor: false };
+export const DEFAULT_COLOURING: FigureColouring = 'mono';
 
 export interface FigurePalette {
   readonly background: string;

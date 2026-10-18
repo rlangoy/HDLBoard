@@ -11,7 +11,7 @@ import { traceLines } from './hoverInfo';
 import type { SignalRef, Trace } from './model';
 import { declarationOf, type TraceRow } from './signalRows';
 import { viewOf } from './timeAxis';
-import { takesCursor } from './useCanvasGestures';
+import { canvasRoute, takesCursor } from './useCanvasGestures';
 import { AXIS_HEIGHT } from './waveDraw';
 import { clampWindow, setupFor, toggleShown, toMemory, windowShowing, zoomWindow, type ViewSetup } from './viewSetup';
 
@@ -178,5 +178,28 @@ describe('picking up the cursor', () => {
     expect(takesCursor(at, 400, 200)).toBe(true);
     expect(takesCursor(at, 400 + CURSOR_GRAB_PX, 200)).toBe(true);
     expect(takesCursor(at, 400 - CURSOR_GRAB_PX - 1, 200)).toBe(false);
+  });
+
+  test('never while the cursor is hidden', () => {
+    expect(takesCursor({ ...at, cursor: undefined }, 900, AXIS_HEIGHT - 1)).toBe(false);
+  });
+});
+
+describe('a press on the canvas', () => {
+  const at = { view: viewOf(0, 1000, 1000), cursor: 400 };
+
+  test.each([
+    [900, AXIS_HEIGHT - 1, 'ruler'],
+    [400, 200, 'cursorLine'],
+    [700, 200, 'traces'],
+  ] as const)('at (%d, %d) starts the %s gesture', (x, y, route) => {
+    expect(canvasRoute(at, x, y)).toBe(route);
+  });
+
+  test.each([
+    [900, AXIS_HEIGHT - 1],
+    [400, 200],
+  ])('at (%d, %d) is on the traces while the cursor is hidden', (x, y) => {
+    expect(canvasRoute({ ...at, cursor: undefined }, x, y)).toBe('traces');
   });
 });

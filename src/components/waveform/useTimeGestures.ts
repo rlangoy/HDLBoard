@@ -135,32 +135,33 @@ export function useRangeDrag(mapping: TimeMapping, handlers: DragHandlers): Rang
   return { selection, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: end };
 }
 
-export function useCursorDrag(mapping: TimeMapping, onCursor: (time: Ticks) => void): PointerHandlers {
+/** A press that the cursor follows: `press` starts it and says whether it took the pointer. */
+function useCursorFollow(mapping: TimeMapping, onCursor: (time: Ticks) => void) {
   const pressed = useRef(false);
   const release = () => {
     pressed.current = false;
   };
-  return {
-    onPointerDown: (event) => {
-      pressed.current = capture(event);
-    },
-    onPointerMove: (event) => {
-      if (pressed.current) onCursor(timeAtEvent(mapping, event));
-    },
-    onPointerUp: release,
-    onPointerCancel: release,
+  const press = (event: PointerEvent<HTMLElement>): boolean => {
+    pressed.current = capture(event);
+    return pressed.current;
   };
+  const follow: PointerHandler = (event) => {
+    if (pressed.current) onCursor(timeAtEvent(mapping, event));
+  };
+  return { press, follow, release };
+}
+
+export function useCursorDrag(mapping: TimeMapping, onCursor: (time: Ticks) => void): PointerHandlers {
+  const { press, follow, release } = useCursorFollow(mapping, onCursor);
+  return { onPointerDown: press, onPointerMove: follow, onPointerUp: release, onPointerCancel: release };
 }
 
 export function useCursorGrab(mapping: TimeMapping, onCursor: (time: Ticks) => void): PointerHandlers {
-  const drag = useCursorDrag(mapping, onCursor);
-  return {
-    ...drag,
-    onPointerDown: (event) => {
-      drag.onPointerDown(event);
-      if (event.button === MAIN_BUTTON) onCursor(timeAtEvent(mapping, event));
-    },
+  const { press, follow, release } = useCursorFollow(mapping, onCursor);
+  const grab: PointerHandler = (event) => {
+    if (press(event)) onCursor(timeAtEvent(mapping, event));
   };
+  return { onPointerDown: grab, onPointerMove: follow, onPointerUp: release, onPointerCancel: release };
 }
 
 /**

@@ -10,7 +10,7 @@ import { WHITE_BACKGROUND_COLORS } from './figure.testSupport';
 import { figureRows, type FigureContent, type FigureRow, type MeasureText } from './figureContent';
 import { figureLayout } from './figureLayout';
 import { withResolution } from './figurePng';
-import { DEFAULT_REPORT_OPTIONS, reportLook, type FigureLook } from './figureStyle';
+import { DEFAULT_COLOURING, OPENING_WIDTH, reportLook, type FigureLook } from './figureStyle';
 import { waveformFigure } from './figureSvg';
 import { screenLook } from './screenLook';
 
@@ -39,7 +39,7 @@ function content(rows: readonly FigureRow[], end = 40): FigureContent {
   return { rows, start: 0, end, runEnd: end, tickFs: NS, cursor: 20 };
 }
 
-const report = (options = {}): FigureLook => reportLook({ ...DEFAULT_REPORT_OPTIONS, width: 'column', ...options });
+const report = (options = {}): FigureLook => reportLook({ width: 'column', colouring: DEFAULT_COLOURING, showCursor: false, ...options });
 const svgOf = (rows: readonly FigureRow[], look = report()): string => waveformFigure(content(rows), look, measure).svg;
 
 const clk = row('clk', 'logic', [
@@ -70,7 +70,7 @@ function grayLevel(hex: string): number {
 
 describe('report figure size', () => {
   it('opens two IEEE columns wide', () => {
-    expect(svgOf([clk], reportLook(DEFAULT_REPORT_OPTIONS))).toContain('width="182.00mm"');
+    expect(svgOf([clk], report({ width: OPENING_WIDTH }))).toContain('width="182.00mm"');
   });
 
   it('is one IEEE column wide when chosen', () => {

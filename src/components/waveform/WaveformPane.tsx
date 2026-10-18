@@ -26,7 +26,7 @@ import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
 import { ColumnResizer, useNamesWidth } from './ColumnResizer';
-import { useCursorField } from './CursorTimeField';
+import { CursorControls, useCursorField, useCursorShown } from './CursorTimeField';
 import { ReportBand } from './figure/ReportBand';
 import { CopyStatus, ReportStage } from './figure/ReportStage';
 import { useViewFigures, type ReportMode, type ViewFigures } from './figure/useViewFigures';
@@ -93,12 +93,14 @@ interface KeyTargets {
   readonly closeMenu: () => boolean;
   /** Leaves report mode; false when it was not on. */
   readonly closeReport: () => boolean;
+  /** The arrow keys move the cursor only while it is shown. */
+  readonly cursorShown: boolean;
   readonly close: () => void;
 }
 
-function moveCursor({ view, selected }: KeyTargets, direction: Direction, fine: boolean): void {
+function moveCursor({ view, selected, cursorShown }: KeyTargets, direction: Direction, fine: boolean): void {
   const { setup } = view;
-  if (setup === null) return;
+  if (setup === null || !cursorShown) return;
   const span = setup.window.end - setup.window.start;
   const to = fine ? fineStep(setup.cursor, span, direction) : changeFrom(stepTraces(view, selected), setup.cursor, direction);
   if (to !== undefined) view.actions.showCursor(to);
@@ -175,9 +177,11 @@ function SignalMenuFor({ menu, view, data, signals, closeMenu }: SignalMenuForPr
   );
 }
 
-/** What the canvas's mouse gestures do to the view. */
+/** What the canvas's mouse gestures do to the view: a hidden cursor stays where it is. */
 function gestureHandlers(view: WaveView, context: RowContext) {
-  return { ...timeHandlersOf(view.actions), onSelectRow: context.on.onSelect };
+  const handlers = timeHandlersOf(view.actions);
+  const onCursor = context.cursor === undefined ? () => undefined : handlers.onCursor;
+  return { ...handlers, onCursor, onSelectRow: context.on.onSelect };
 }
 
 interface BodyProps {
@@ -210,7 +214,7 @@ function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNam
     scrollTop,
     endTime: data.endTime,
     tickFs: data.tickFs,
-    cursor: setup.cursor,
+    cursor: context.cursor,
     stale,
     showAsOf: context.showAsOf,
     selectedPath: context.selected ?? undefined,
@@ -225,7 +229,7 @@ function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNam
             <span>Signal</span>
             <span>Value</span>
           </div>
-          <SignalList list={list} context={{ ...context, cursor: setup.cursor }} />
+          <SignalList list={list} context={context} />
         </div>
         <div className="wv-traces" ref={setTraces}>
           <WaveCanvas scene={scene} error={error} handlers={handlers} />
@@ -276,18 +280,18 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: Me
 interface PaneToolbarProps {
   readonly title: string;
   readonly hasWaveform: boolean;
-  readonly cursorField: ReactNode;
+  readonly cursorControls: ReactNode;
   readonly view: WaveView;
   readonly onMenu: (menu: Menu) => void;
   readonly onClose: () => void;
 }
 
-function PaneToolbar({ title, hasWaveform, cursorField, view, onMenu, onClose }: PaneToolbarProps) {
+function PaneToolbar({ title, hasWaveform, cursorControls, view, onMenu, onClose }: PaneToolbarProps) {
   return (
     <WaveToolbar
       title={title}
       hasWaveform={hasWaveform}
-      cursorField={cursorField}
+      cursorControls={cursorControls}
       onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
       onZoomIn={() => view.actions.zoom(1 / ZOOM_STEP)}
       onFit={view.actions.fit}
@@ -297,13 +301,20 @@ function PaneToolbar({ title, hasWaveform, cursorField, view, onMenu, onClose }:
   );
 }
 
-/** Report mode's band above the toolbar; the cursor's field is in the band then, not in the toolbar. */
-function PaneHeader({ report, toolbar }: { readonly report: ReportMode | null; readonly toolbar: PaneToolbarProps }) {
-  if (report === null) return <PaneToolbar {...toolbar} />;
+interface PaneHeaderProps {
+  readonly report: ReportMode | null;
+  readonly toolbar: Omit<PaneToolbarProps, 'cursorControls'>;
+  /** The cursor's controls, with the words their checkbox says. */
+  readonly cursorControls: (label: string) => ReactNode;
+}
+
+/** Report mode's band above the toolbar; the cursor's controls are in the band then, not in the toolbar. */
+function PaneHeader({ report, toolbar, cursorControls }: PaneHeaderProps) {
+  if (report === null) return <PaneToolbar {...toolbar} cursorControls={toolbar.hasWaveform ? cursorControls('Cursor') : null} />;
   return (
     <>
-      <ReportBand report={report} cursorField={toolbar.cursorField} />
-      <PaneToolbar {...toolbar} cursorField={null} />
+      <ReportBand report={report} cursorControls={cursorControls('Show the cursor')} />
+      <PaneToolbar {...toolbar} cursorControls={null} />
     </>
   );
 }
@@ -320,12 +331,26 @@ function usePane(props: WaveformPaneProps) {
   const view = useWaveView({ data, moments, memory: props.memory, focus: props.focus, fittingRows, minSpan: MIN_WINDOW_TICKS, end });
   const signals = useSignals(props, view, setMenu);
   const error = useMemo(() => (data === null ? undefined : firstWindow(data, moments).error), [data, moments]);
-  return { data, setBody, bodyHeight, menu, setMenu, view, signals, error };
+  /** Closes the open menu; false when none was open. */
+  const closeMenu = () => {
+    if (menu === null) return false;
+    setMenu(null);
+    return true;
+  };
+  return { data, setBody, bodyHeight, menu, setMenu, closeMenu, view, signals, error };
 }
 
-function rowContext(view: WaveView, data: WaveformData | null, signals: Signals): RowContext {
+interface RowContextInput {
+  readonly view: WaveView;
+  readonly data: WaveformData | null;
+  readonly signals: Signals;
+  readonly cursorShown: boolean;
+}
+
+function rowContext({ view, data, signals, cursorShown }: RowContextInput): RowContext {
   const { showAsOf, selected, on, fileOfScope } = signals;
-  return { cursor: view.setup?.cursor ?? 0, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
+  const cursor = cursorShown ? view.setup?.cursor : undefined;
+  return { cursor, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
 }
 
 /** Whether a key is meant for something else: a field the student types in, or a dialog over the pane. */
@@ -344,35 +369,33 @@ function usePaneKeys(targets: KeyTargets) {
 
 export function WaveformPane(props: WaveformPaneProps) {
   const { waveform } = props;
-  const { data, setBody, bodyHeight, menu, setMenu, view, signals, error } = usePane(props);
+  const { data, setBody, bodyHeight, menu, setMenu, closeMenu, view, signals, error } = usePane(props);
   const [helpOpen, setHelpOpen] = useState(false);
   const [tracesWidth, setTracesWidth] = useState(0);
   const [namesWidth, setNamesWidth] = useNamesWidth();
+  const [cursorShown, showCursor] = useCursorShown(view);
   const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
-  const closeMenu = () => menu !== null && (setMenu(null), true);
   const title = data === null ? props.title : (testbenchScope(data)?.name ?? props.title);
   // The view takes the keyboard when it opens, so Esc and the arrows work at once.
   const paneRef = useRef<HTMLElement>(null);
   useEffect(() => paneRef.current?.focus(), []);
-  const figureSize = { namesWidth, tracesWidth };
-  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, pane: paneRef, size: figureSize, baseName: `${title}_waveform` });
-  const closeReport = () => figures.report !== null && (figures.report.close(), true);
-  const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, closeReport, close: waveform.close });
+  const size = { namesWidth, tracesWidth };
+  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, cursorShown, pane: paneRef, size, baseName: `${title}_waveform` });
+  const keyTargets = { view, selected: signals.selected, cursorShown, closeMenu, closeReport: figures.closeReport, close: waveform.close };
   const field = useCursorField({ view, data, tracesWidth });
+  const cursorControls = (label: string) => <CursorControls label={label} shown={cursorShown} onShown={showCursor} field={field} />;
+  const toolbar = { title, hasWaveform: field !== null, view, onMenu: setMenu, onClose: waveform.close };
   return (
-    <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
-      <PaneHeader
-        report={figures.report}
-        toolbar={{ title, hasWaveform: field !== null, cursorField: field, view, onMenu: setMenu, onClose: waveform.close }}
-      />
+    <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={usePaneKeys(keyTargets)} onClick={() => closeMenu()}>
+      <PaneHeader report={figures.report} toolbar={toolbar} cursorControls={cursorControls} />
       <WaveNotes notes={notesFor(waveform.state, data)} />
       {helpOpen && <WaveHelp onClose={() => setHelpOpen(false)} />}
       {data === null ? (
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
         <ReportStage report={figures.report} handlers={timeHandlersOf(view.actions)}>
-          <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight}
-            namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
+          <Body data={data} view={view} context={rowContext({ view, data, signals, cursorShown })} error={error} stale={waveform.state.stale}
+            bodyHeight={bodyHeight} namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
         </ReportStage>
       )}
       <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} figures={figures} />

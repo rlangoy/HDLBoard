@@ -3,7 +3,7 @@
 
 /**
  * The waveform's toolbar (docs/waveform_viewer_spec.md § 8.6, S3): the title, the
- * time at the cursor as a field to read or type in, and few controls – Zoom out, Zoom in, Fit, ⋯
+ * cursor's controls – show or hide it, and its time to read or type in – and few controls – Zoom out, Zoom in, Fit, ⋯
  * and Close – as round icon buttons, each with a tooltip that says what it does and
  * its key (docs/images/head_moc1.png).
  */
@@ -14,8 +14,8 @@ import { CloseIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIco
 export interface WaveToolbarProps {
   readonly title: string;
   readonly hasWaveform: boolean;
-  /** The cursor's time field; none while there is no waveform, or while report mode shows it in its band. */
-  readonly cursorField: ReactNode;
+  /** The cursor's controls; none while there is no waveform, or while report mode shows them in its band. */
+  readonly cursorControls: ReactNode;
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
   readonly onFit: () => void;
@@ -55,11 +55,7 @@ export function WaveToolbar(props: WaveToolbarProps) {
   return (
     <header className="wv-toolbar">
       <h2 className="wv-toolbar__title">Waveform – {props.title}</h2>
-      {props.cursorField !== null && (
-        <span className="wv-toolbar__time">
-          Cursor {props.cursorField}
-        </span>
-      )}
+      {props.cursorControls}
       <div className="wv-toolbar__buttons">
         <ToolButton icon={ZoomOutIcon} label="Zoom out" hint="Zoom out (−)" disabled={noWaveform} onClick={props.onZoomOut} />
         <ToolButton icon={ZoomInIcon} label="Zoom in" hint="Zoom in (+). Or drag across the waveform to zoom into that part." disabled={noWaveform} onClick={props.onZoomIn} />

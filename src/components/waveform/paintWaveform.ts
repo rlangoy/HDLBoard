@@ -39,7 +39,8 @@ export interface Scene {
   readonly scrollTop: number;
   readonly endTime: Ticks;
   readonly tickFs: number;
-  readonly cursor: Ticks;
+  /** The cursor, while it is shown. */
+  readonly cursor: Ticks | undefined;
   readonly error?: Ticks;
   readonly stale: boolean;
   readonly showAsOf: (path: SignalPath) => ShowAs;
@@ -153,6 +154,14 @@ function paintSelection({ ctx, colors }: Painter, scene: Scene): void {
   ctx.textAlign = 'start';
 }
 
+/** The cursor's line and its handle on the ruler, while it is shown. */
+function paintCursor(painter: Painter, scene: Scene): void {
+  const { cursor, view, size } = scene;
+  if (cursor === undefined) return;
+  drawVerticalLine(painter, timeToX(view, cursor), { height: size.height, color: painter.colors.cursor });
+  paintCursorHandle(painter, { view, cursor, tickFs: scene.tickFs, width: size.width });
+}
+
 export function paintWaveform(canvas: HTMLCanvasElement, scene: Scene): void {
   const ctx = prepare(canvas, scene.size);
   if (ctx === null) return;
@@ -166,7 +175,6 @@ export function paintWaveform(canvas: HTMLCanvasElement, scene: Scene): void {
   if (scene.error !== undefined) {
     drawVerticalLine(painter, timeToX(scene.view, scene.error), { height: size.height, color: painter.colors.errorMarker, width: ERROR_MARKER_WIDTH });
   }
-  drawVerticalLine(painter, timeToX(scene.view, scene.cursor), { height: size.height, color: painter.colors.cursor });
-  paintCursorHandle(painter, { view: scene.view, cursor: scene.cursor, tickFs: scene.tickFs, width: size.width });
+  paintCursor(painter, scene);
   paintSelection(painter, scene);
 }

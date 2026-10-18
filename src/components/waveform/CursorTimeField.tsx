@@ -2,11 +2,13 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The cursor's time as a field (docs/waveform_viewer_spec.md § 8.6): it follows the
- * cursor, and typing a time and pressing Enter – or leaving the field – moves the cursor
- * there. Esc puts the field back as it was. The unit beside it is a flat dropdown (s, ms,
- * µs, ns, ps); until one is picked it follows the time. `useCursorField` keeps the
- * picked unit, so the toolbar's field and report mode's field read alike.
+ * The cursor's controls (docs/waveform_viewer_spec.md § 8.6): a checkbox that shows or
+ * hides the cursor – shown again, it starts in the middle of the view – and its time as
+ * a field. The field follows the cursor, and typing a time and pressing Enter – or
+ * leaving the field – moves the cursor there. Esc puts the field back as it was. The
+ * unit beside it is a flat dropdown (s, ms, µs, ns, ps); until one is picked it follows
+ * the time. `useCursorField` keeps the picked unit, so the toolbar's field and report
+ * mode's field read alike.
  */
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
@@ -14,6 +16,7 @@ import { FlatSelect } from './FlatSelect';
 import type { WaveformData } from './model';
 import { CURSOR_UNITS, cursorUnitFor, formatCursorIn, parseTimeIn, pixelResolutionFs, viewOf, type TimeUnit } from './timeAxis';
 import type { WaveView } from './useWaveView';
+import { loadCursorShown, saveCursorShown } from './wavePrefs';
 
 export interface CursorTimeFieldProps {
   /** The cursor's time. */
@@ -98,4 +101,39 @@ export function useCursorField({ view, data, tracesWidth }: CursorFieldInput): R
   const resolution = pixelResolutionFs(viewOf(shown.start, shown.end, tracesWidth), data.tickFs, window.devicePixelRatio);
   const moveTo = (fs: number) => view.actions.showCursor(Math.min(runEnd, Math.round(fs / data.tickFs)));
   return <CursorTimeField fs={cursor * data.tickFs} resolutionFs={resolution} unit={unit} onUnit={setUnit} onChange={moveTo} />;
+}
+
+/**
+ * Whether the view shows its cursor, remembered in this browser. Shown again, the cursor
+ * starts in the middle of the time on screen, where it is easy to find.
+ */
+export function useCursorShown({ setup, actions }: WaveView): readonly [boolean, (shown: boolean) => void] {
+  const [shown, setShown] = useState(loadCursorShown);
+  const show = (next: boolean) => {
+    setShown(next);
+    saveCursorShown(next);
+    if (next && setup !== null) actions.setCursor(Math.round((setup.window.start + setup.window.end) / 2));
+  };
+  return [shown, show];
+}
+
+export interface CursorControlsProps {
+  /** The checkbox's words: `Cursor` in the toolbar, `Show the cursor` in report mode. */
+  readonly label: string;
+  readonly shown: boolean;
+  readonly onShown: (shown: boolean) => void;
+  /** The time field, shown with the cursor. */
+  readonly field: ReactNode;
+}
+
+export function CursorControls({ label, shown, onShown, field }: CursorControlsProps) {
+  return (
+    <span className="wv-cursor-controls">
+      <label className="wv-cursor-controls__toggle" title={shown ? 'Hide the cursor' : 'Show the cursor in the middle of the view'}>
+        <input type="checkbox" checked={shown} onChange={(event) => onShown(event.target.checked)} />
+        {label}
+      </label>
+      {shown && field}
+    </span>
+  );
 }

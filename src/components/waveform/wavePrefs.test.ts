@@ -2,8 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_REPORT_OPTIONS } from './figure/figureStyle';
-import { loadReportOptions } from './wavePrefs';
+import { loadCursorShown, loadReportColouring } from './wavePrefs';
 
 /** A browser whose storage holds `text` for every key. */
 function storing(text: string | null): void {
@@ -14,19 +13,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('stored report options', () => {
-  it.each(['null', '42', '"text"', 'not json', '[]'])('fall back to the defaults when %j is stored', (text) => {
+describe('stored report colouring', () => {
+  it.each(['null', '42', '"text"', 'not json', '[]', '{"colouring":"rainbow"}'])('is black and white when %j is stored', (text) => {
     storing(text);
-    expect(loadReportOptions()).toEqual(DEFAULT_REPORT_OPTIONS);
+    expect(loadReportColouring()).toBe('mono');
   });
 
-  it('keep the colour and the cursor', () => {
-    storing('{"colouring":"colour","showCursor":true}');
-    expect(loadReportOptions()).toEqual({ ...DEFAULT_REPORT_OPTIONS, colouring: 'colour', showCursor: true });
+  it('is colour when colour was picked', () => {
+    storing('{"colouring":"colour"}');
+    expect(loadReportColouring()).toBe('colour');
+  });
+});
+
+describe('stored cursor', () => {
+  it('is shown when nothing is stored', () => {
+    storing(null);
+    expect(loadCursorShown()).toBe(true);
   });
 
-  it('always open at two columns, whatever width was stored', () => {
-    storing('{"width":"column"}');
-    expect(loadReportOptions().width).toBe('page');
+  it('is hidden once switched off', () => {
+    storing('off');
+    expect(loadCursorShown()).toBe(false);
   });
 });

@@ -5,13 +5,13 @@
  * The band across the top of report mode (docs/waveform_viewer_spec.md § 8.8): what the
  * mode is, the few choices that matter – width, black and white or colour, the cursor –
  * how to insert the figure, and Close, Save SVG, Save PNG and Copy. Every choice shows
- * at once in the figure below.
+ * at once in the figure below. The cursor's controls are the view's own, handed in.
  */
 
 import type { ReactNode } from 'react';
 import { WaveformIcon } from '../WaveformButton';
-import { FIGURE_WIDTH_MM, REPORT_DPI, type FigureColouring, type FigureWidth, type ReportOptions } from './figureStyle';
-import { FIGURE_MOUSE_HINT } from './ReportPreview';
+import { FIGURE_WIDTH_MM, REPORT_DPI, type FigureColouring, type FigureWidth, type ReportChoices } from './figureStyle';
+import { FIGURE_MOUSE_HINT } from './reportText';
 import type { ReportMode } from './useViewFigures';
 
 const MM_PER_CM = 10;
@@ -48,30 +48,26 @@ function ChoiceGroup<T extends string>({ legend, name, choices, value, onChange 
   );
 }
 
-interface OptionsFormProps {
-  readonly options: ReportOptions;
-  readonly onChange: (patch: Partial<ReportOptions>) => void;
-  readonly cursorField: ReactNode;
+interface ChoicesFormProps {
+  readonly choices: ReportChoices;
+  readonly onChange: (patch: Partial<ReportChoices>) => void;
+  readonly cursorControls: ReactNode;
 }
 
-function ReportOptionsForm({ options, onChange, cursorField }: OptionsFormProps) {
+function ReportChoicesForm({ choices, onChange, cursorControls }: ChoicesFormProps) {
   return (
     <>
-      <ChoiceGroup legend="Width" name="wv-report-width" choices={WIDTH_CHOICES} value={options.width} onChange={(width) => onChange({ width })} />
+      <ChoiceGroup legend="Width" name="wv-report-width" choices={WIDTH_CHOICES} value={choices.width} onChange={(width) => onChange({ width })} />
       <ChoiceGroup
         legend="Style"
         name="wv-report-colouring"
         choices={COLOURING_CHOICES}
-        value={options.colouring}
+        value={choices.colouring}
         onChange={(colouring) => onChange({ colouring })}
       />
       <fieldset className="wv-report-band__group">
         <legend>Cursor</legend>
-        <label>
-          <input type="checkbox" checked={options.showCursor} onChange={(event) => onChange({ showCursor: event.target.checked })} />
-          Show the cursor
-        </label>
-        {cursorField}
+        {cursorControls}
       </fieldset>
     </>
   );
@@ -87,12 +83,12 @@ function BandButton({ primary, onClick, children }: { readonly primary?: boolean
 
 export interface ReportBandProps {
   readonly report: ReportMode;
-  /** The cursor's time field, to read or type the cursor's time. */
-  readonly cursorField: ReactNode;
+  /** The view's cursor controls: show or hide it, and its time. */
+  readonly cursorControls: ReactNode;
 }
 
-export function ReportBand({ report, cursorField }: ReportBandProps) {
-  const widthCm = FIGURE_WIDTH_MM[report.options.width] / MM_PER_CM;
+export function ReportBand({ report, cursorControls }: ReportBandProps) {
+  const widthCm = FIGURE_WIDTH_MM[report.choices.width] / MM_PER_CM;
   return (
     <section className="wv-report-band" aria-label="Figure for a report">
       <div className="wv-report-band__hero">
@@ -113,7 +109,7 @@ export function ReportBand({ report, cursorField }: ReportBandProps) {
         </div>
       </div>
       <div className="wv-report-band__options">
-        <ReportOptionsForm options={report.options} onChange={report.change} cursorField={cursorField} />
+        <ReportChoicesForm choices={report.choices} onChange={report.choose} cursorControls={cursorControls} />
         <p className="wv-report-band__hint">
           Text is 9 pt and traces 1 pt when the figure is {widthCm} cm wide. Insert it without resizing; if your editor
           changes the size, set the width back to {widthCm} cm. SVG stays sharp at any size; PNG is {REPORT_DPI} dpi.{' '}

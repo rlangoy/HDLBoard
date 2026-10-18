@@ -18,6 +18,7 @@ import { useCursorGrab, useRangeDrag, useWheelGestures, type Selection, type Tim
 import { FIGURE_WIDTH_MM, ptFromMm } from './figureStyle';
 import { isInView } from './figureLayout';
 import type { Figure } from './figureSvg';
+import { FIGURE_MOUSE_HINT } from './reportText';
 
 export interface ReportPreviewProps {
   readonly figure: Figure;
@@ -53,9 +54,6 @@ function screenMapping(figure: Figure, scale: number): ScreenMapping {
 }
 
 const xOf = ({ scale, figure }: ScreenMapping, time: Ticks): number => (figure.layout.tracesLeft + timeToX(figure.layout.view, time)) * scale;
-
-/** What the mouse does on the figure; the band says it too. */
-export const FIGURE_MOUSE_HINT = 'Scroll to move in time, Ctrl + scroll to zoom, and drag across the figure to zoom into that part.';
 
 interface SelectionBandProps {
   readonly selection: Selection;

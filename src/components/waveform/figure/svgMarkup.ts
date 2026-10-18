@@ -10,11 +10,11 @@ export type Attributes = Readonly<Record<string, string | number | undefined>>;
 const DECIMALS = 2;
 
 /** A coordinate with two decimals, trailing zeros dropped: a hundredth of a point is plenty. */
-export const num = (value: number): string => String(Number(value.toFixed(DECIMALS)));
+const num = (value: number): string => String(Number(value.toFixed(DECIMALS)));
 
 const ESCAPES: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 
-export const escapeXml = (text: string): string => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
+const escapeXml = (text: string): string => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
 
 function attributeText(attributes: Attributes): string {
   return Object.entries(attributes)

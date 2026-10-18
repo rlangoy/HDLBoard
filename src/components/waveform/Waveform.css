@@ -74,13 +74,21 @@
   text-overflow: ellipsis;
 }
 
-.wv-toolbar__time {
+/* The cursor's checkbox and its time field, in the toolbar and in report mode's band. */
+.wv-cursor-controls {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   color: var(--wb-text-muted, #64748b);
   white-space: nowrap;
+}
+
+.wv-cursor-controls__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
 }
 
 /* The cursor's time: a quiet field until hovered or typed in, with its unit beside it. */
@@ -613,11 +621,6 @@
   color: var(--wv-trace-undefined);
 }
 
-.wv-list__more {
-  color: var(--wb-accent-dark, #1d4ed8);
-  font-size: 12.5px;
-}
-
 .wv-tooltip {
   position: absolute;
   z-index: 3;
@@ -887,9 +890,10 @@
   color: var(--wb-text-muted, #64748b);
 }
 
-.wv-report-band__group label,
-.wv-report-band__group .wv-cursor-field {
-  align-self: flex-start;
+.wv-report-band__group .wv-cursor-controls {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .wv-report-band__group label {
