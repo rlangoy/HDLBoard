@@ -31,9 +31,9 @@ import { ReportBand } from './figure/ReportBand';
 import { CopyStatus, ReportStage } from './figure/ReportStage';
 import { useViewFigures, type ReportMode, type ViewFigures } from './figure/useViewFigures';
 import { timeHandlersOf } from './useTimeGestures';
-import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
+import { MoreMenu, ReportMenu, SignalMenu, type MenuPlace } from './WaveMenus';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
-import { WaveToolbar } from './WaveToolbar';
+import { WaveToolbar, type ToolbarMode } from './WaveToolbar';
 import './Waveform.css';
 
 export type { WaveFocus } from './useWaveView';
@@ -264,6 +264,10 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: Me
     action();
     setMenu(null);
   };
+  const { report } = figures;
+  if (report !== null) {
+    return <ReportMenu place={menu.place} onCopy={close(report.copy)} onSaveSvg={close(report.saveSvg)} onSavePng={close(report.savePng)} />;
+  }
   return (
     <MoreMenu
       place={menu.place}
@@ -279,6 +283,7 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: Me
 
 interface PaneToolbarProps {
   readonly title: string;
+  readonly mode: ToolbarMode;
   readonly hasWaveform: boolean;
   readonly cursorControls: ReactNode;
   readonly view: WaveView;
@@ -286,10 +291,11 @@ interface PaneToolbarProps {
   readonly onClose: () => void;
 }
 
-function PaneToolbar({ title, hasWaveform, cursorControls, view, onMenu, onClose }: PaneToolbarProps) {
+function PaneToolbar({ title, mode, hasWaveform, cursorControls, view, onMenu, onClose }: PaneToolbarProps) {
   return (
     <WaveToolbar
       title={title}
+      mode={mode}
       hasWaveform={hasWaveform}
       cursorControls={cursorControls}
       onZoomOut={() => view.actions.zoom(ZOOM_STEP)}
@@ -303,18 +309,23 @@ function PaneToolbar({ title, hasWaveform, cursorControls, view, onMenu, onClose
 
 interface PaneHeaderProps {
   readonly report: ReportMode | null;
-  readonly toolbar: Omit<PaneToolbarProps, 'cursorControls'>;
+  readonly toolbar: Omit<PaneToolbarProps, 'cursorControls' | 'mode'>;
   /** The cursor's controls, with the words their checkbox says. */
   readonly cursorControls: (label: string) => ReactNode;
 }
 
-/** Report mode's band above the toolbar; the cursor's controls are in the band then, not in the toolbar. */
+/**
+ * Report mode's band above the toolbar. In report mode the cursor's controls are in the
+ * band, not in the toolbar, and the toolbar's Close leaves report mode, as the band's does.
+ */
 function PaneHeader({ report, toolbar, cursorControls }: PaneHeaderProps) {
-  if (report === null) return <PaneToolbar {...toolbar} cursorControls={toolbar.hasWaveform ? cursorControls('Cursor') : null} />;
+  if (report === null) {
+    return <PaneToolbar {...toolbar} mode="view" cursorControls={toolbar.hasWaveform ? cursorControls('Cursor') : null} />;
+  }
   return (
     <>
       <ReportBand report={report} cursorControls={cursorControls('Show the cursor')} />
-      <PaneToolbar {...toolbar} cursorControls={null} />
+      <PaneToolbar {...toolbar} mode="report" cursorControls={null} onClose={report.close} />
     </>
   );
 }
