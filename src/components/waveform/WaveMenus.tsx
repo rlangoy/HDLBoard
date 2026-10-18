@@ -2,11 +2,13 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The two small menus of the waveform view (§ 8.6, S3): the ⋯ menu (Copy waveform,
- * Figure for a report, Download, Help)
+ * The small menus of the waveform view (§ 8.6, S3): the ⋯ menu (Copy waveform, Figure
+ * for a report, Download, Help), report mode's ⋯ menu (Copy to clipboard, Save SVG,
+ * Save PNG – the band's own buttons, § 8.8)
  * and the right-click menu of a signal (Go to declaration, Show as, Show/Remove).
  */
 
+import { REPORT_DPI } from './figure/figureStyle';
 import { SHOW_AS_LABELS, type ShowAs } from './radix';
 
 /** Where a menu opens, in window coordinates. */
@@ -52,6 +54,30 @@ export function MoreMenu({ place, hasTraces, format, onCopyWaveform, onReportFig
       </button>
       <button type="button" role="menuitem" onClick={onHelp}>
         Help
+      </button>
+    </MenuFrame>
+  );
+}
+
+export interface ReportMenuProps {
+  readonly place: MenuPlace;
+  readonly onCopy: () => void;
+  readonly onSaveSvg: () => void;
+  readonly onSavePng: () => void;
+}
+
+/** Report mode's ⋯ menu: the same three actions as the band's Copy, Save SVG and Save PNG. */
+export function ReportMenu({ place, onCopy, onSaveSvg, onSavePng }: ReportMenuProps) {
+  return (
+    <MenuFrame place={place}>
+      <button type="button" role="menuitem" title="Copy the figure to the clipboard, as PNG and SVG" onClick={onCopy}>
+        Copy to clipboard
+      </button>
+      <button type="button" role="menuitem" title="Save the figure as an SVG file, sharp at any size" onClick={onSaveSvg}>
+        Save SVG
+      </button>
+      <button type="button" role="menuitem" title={`Save the figure as a ${REPORT_DPI} dpi PNG file`} onClick={onSavePng}>
+        Save PNG
       </button>
     </MenuFrame>
   );

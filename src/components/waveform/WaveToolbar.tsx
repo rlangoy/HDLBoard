@@ -3,16 +3,35 @@
 
 /**
  * The waveform's toolbar (docs/waveform_viewer_spec.md § 8.6, S3): the title, the
- * cursor's controls – show or hide it, and its time to read or type in – and few controls – Zoom out, Zoom in, Fit, ⋯
- * and Close – as round icon buttons, each with a tooltip that says what it does and
- * its key (docs/images/head_moc1.png).
+ * cursor's controls – show or hide it, and its time to read or type in – and few
+ * controls – Zoom out, Zoom in, Fit, ⋯ and Close – as round icon buttons, each with a
+ * tooltip that says what it does and its key (docs/images/head_moc1.png). In report
+ * mode (§ 8.8) ⋯ offers the figure's copy and saves, and Close leaves report mode.
  */
 
 import type { ComponentType, MouseEvent, ReactNode, SVGProps } from 'react';
 import { CloseIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIcons';
 
+/** What ⋯ and Close say in the waveform view, and in report mode. */
+const MODE_TEXTS = {
+  view: {
+    moreHint: 'More: copy the waveform, figure for a report, download the waveform file, help',
+    closeLabel: 'Close the waveform',
+    closeHint: 'Close the waveform and show the code again (Esc)',
+  },
+  report: {
+    moreHint: 'More: copy the figure to the clipboard, save it as SVG or PNG',
+    closeLabel: 'Close the figure for a report',
+    closeHint: 'Close the figure for a report and show the waveform again (Esc)',
+  },
+} as const;
+
+export type ToolbarMode = keyof typeof MODE_TEXTS;
+
 export interface WaveToolbarProps {
   readonly title: string;
+  /** The waveform view, or report mode: what ⋯ offers and what Close closes. */
+  readonly mode: ToolbarMode;
   readonly hasWaveform: boolean;
   /** The cursor's controls; none while there is no waveform, or while report mode shows them in its band. */
   readonly cursorControls: ReactNode;
@@ -20,6 +39,7 @@ export interface WaveToolbarProps {
   readonly onZoomIn: () => void;
   readonly onFit: () => void;
   readonly onMore: (anchor: DOMRect) => void;
+  /** Closes the waveform – or, in report mode, report mode only. */
   readonly onClose: () => void;
 }
 
@@ -52,6 +72,7 @@ function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup
 
 export function WaveToolbar(props: WaveToolbarProps) {
   const noWaveform = !props.hasWaveform;
+  const texts = MODE_TEXTS[props.mode];
   return (
     <header className="wv-toolbar">
       <h2 className="wv-toolbar__title">Waveform – {props.title}</h2>
@@ -63,7 +84,7 @@ export function WaveToolbar(props: WaveToolbarProps) {
         <ToolButton
           icon={MoreIcon}
           label="More"
-          hint="More: copy the waveform, figure for a report, download the waveform file, help"
+          hint={texts.moreHint}
           popup
           onClick={(event) => {
             event.stopPropagation();
@@ -72,8 +93,8 @@ export function WaveToolbar(props: WaveToolbarProps) {
         />
         <ToolButton
           icon={CloseIcon}
-          label="Close the waveform"
-          hint="Close the waveform and show the code again (Esc)"
+          label={texts.closeLabel}
+          hint={texts.closeHint}
           emphasis
           onClick={props.onClose}
         />
