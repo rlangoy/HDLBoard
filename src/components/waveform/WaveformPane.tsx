@@ -26,6 +26,8 @@ import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
 import { ColumnResizer, useNamesWidth } from './ColumnResizer';
+import { ReportFigureDialog } from './figure/ReportFigureDialog';
+import { useViewFigures, type ViewFigures } from './figure/useViewFigures';
 import { MoreMenu, SignalMenu, type MenuPlace } from './WaveMenus';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
 import { WaveToolbar } from './WaveToolbar';
@@ -181,16 +183,17 @@ interface BodyProps {
   readonly error: { readonly time: Ticks; readonly text: string } | undefined;
   readonly stale: boolean;
   readonly bodyHeight: number;
+  readonly namesWidth: number;
+  readonly onNamesWidth: (width: number) => void;
   readonly onBodyElement: (element: HTMLDivElement | null) => void;
   /** The canvas's width, for the toolbar's cursor time. */
   readonly onTracesWidth: (width: number) => void;
 }
 
 /** The scrolling part: names and values on the left, the canvas on the right, one row each. */
-function Body({ data, view, context, error, stale, bodyHeight, onBodyElement, onTracesWidth }: BodyProps) {
+function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNamesWidth, onBodyElement, onTracesWidth }: BodyProps) {
   const [traces, setTraces] = useState<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [namesWidth, setNamesWidth] = useNamesWidth();
   const width = useElementSize(traces).width;
   useEffect(() => onTracesWidth(width), [width, onTracesWidth]);
   const { setup, list } = view;
@@ -213,7 +216,7 @@ function Body({ data, view, context, error, stale, bodyHeight, onBodyElement, on
     <div className="wv-body" ref={onBodyElement} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
       <div className="wv-grid" style={{ height: listHeight }}>
         <div className="wv-names" style={{ width: namesWidth }}>
-          <ColumnResizer width={namesWidth} onWidth={setNamesWidth} />
+          <ColumnResizer width={namesWidth} onWidth={onNamesWidth} />
           <div className="wv-names__header" style={{ height: AXIS_HEIGHT }}>
             <span>Signal</span>
             <span>Value</span>
@@ -242,9 +245,10 @@ interface MenusProps {
   readonly signals: Signals;
   readonly setMenu: (menu: Menu | null) => void;
   readonly openHelp: () => void;
+  readonly figures: ViewFigures;
 }
 
-function Menus({ menu, waveform, view, signals, setMenu, openHelp }: MenusProps) {
+function Menus({ menu, waveform, view, signals, setMenu, openHelp, figures }: MenusProps) {
   const data = waveform.state.data;
   if (menu?.kind === 'signal' && data !== null) return <SignalMenuFor menu={menu} view={view} data={data} signals={signals} closeMenu={() => setMenu(null)} />;
   if (menu?.kind !== 'more') return null;
@@ -252,7 +256,31 @@ function Menus({ menu, waveform, view, signals, setMenu, openHelp }: MenusProps)
     action();
     setMenu(null);
   };
-  return <MoreMenu place={menu.place} format={waveform.state.ready?.format} onDownload={close(waveform.download)} onHelp={close(openHelp)} />;
+  return (
+    <MoreMenu
+      place={menu.place}
+      hasTraces={figures.hasTraces}
+      format={waveform.state.ready?.format}
+      onCopyWaveform={close(figures.copyWaveform)}
+      onReportFigure={close(figures.openReport)}
+      onDownload={close(waveform.download)}
+      onHelp={close(openHelp)}
+    />
+  );
+}
+
+/** How the last copy went, and the report figure's dialog while it is open. */
+function FigureParts({ figures, title }: { readonly figures: ViewFigures; readonly title: string }) {
+  return (
+    <>
+      {figures.status !== '' && (
+        <p className="wv-status" role="status">
+          {figures.status}
+        </p>
+      )}
+      {figures.report !== null && <ReportFigureDialog content={figures.report} baseName={`${title}_waveform`} onClose={figures.closeReport} />}
+    </>
+  );
 }
 
 /** The pane's state: the view, the menus, the sizes that decide the first view. */
@@ -286,10 +314,14 @@ function rowContext(view: WaveView, data: WaveformData | null, signals: Signals)
   return { cursor: view.setup?.cursor ?? 0, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
 }
 
-/** The pane's keys, unless the student is typing in a field. */
+/** Whether a key is meant for something else: a field the student types in, or a dialog over the pane. */
+const keyIsForOther = (target: EventTarget): boolean =>
+  target instanceof HTMLInputElement || (target instanceof Element && target.closest('[role="dialog"]') !== null);
+
+/** The pane's keys, unless they are meant for a field or a dialog. */
 function usePaneKeys(targets: KeyTargets) {
   return (event: KeyboardEvent<HTMLElement>) => {
-    const action = event.target instanceof HTMLInputElement ? undefined : keyAction(event, targets);
+    const action = keyIsForOther(event.target) ? undefined : keyAction(event, targets);
     if (action === undefined) return;
     event.preventDefault();
     action();
@@ -301,6 +333,7 @@ export function WaveformPane(props: WaveformPaneProps) {
   const { data, setBody, bodyHeight, menu, setMenu, view, signals, error } = usePane(props);
   const [helpOpen, setHelpOpen] = useState(false);
   const [tracesWidth, setTracesWidth] = useState(0);
+  const [namesWidth, setNamesWidth] = useNamesWidth();
   const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
   const closeMenu = () => menu !== null && (setMenu(null), true);
   const onKeyDown = usePaneKeys({ view, selected: signals.selected, closeMenu, close: waveform.close });
@@ -308,6 +341,7 @@ export function WaveformPane(props: WaveformPaneProps) {
   // The view takes the keyboard when it opens, so Esc and the arrows work at once.
   const paneRef = useRef<HTMLElement>(null);
   useEffect(() => paneRef.current?.focus(), []);
+  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, pane: paneRef, size: { namesWidth, tracesWidth } });
   return (
     <section ref={paneRef} className="wv-pane" aria-label="Waveform" tabIndex={-1} onKeyDown={onKeyDown} onClick={() => closeMenu()}>
       <WaveToolbar
@@ -325,9 +359,10 @@ export function WaveformPane(props: WaveformPaneProps) {
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
         <Body data={data} view={view} context={rowContext(view, data, signals)} error={error} stale={waveform.state.stale} bodyHeight={bodyHeight}
-          onBodyElement={setBody} onTracesWidth={setTracesWidth} />
+          namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
       )}
-      <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} />
+      <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} figures={figures} />
+      <FigureParts figures={figures} title={title} />
     </section>
   );
 }

@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The two small menus of the waveform view (§ 8.6, S3): the ⋯ menu (Download, Help)
+ * The two small menus of the waveform view (§ 8.6, S3): the ⋯ menu (Copy waveform,
+ * Figure for a report, Download, Help)
  * and the right-click menu of a signal (Go to declaration, Show as, Show/Remove).
  */
 
@@ -24,15 +25,25 @@ function MenuFrame({ place, children }: { readonly place: MenuPlace; readonly ch
 
 export interface MoreMenuProps {
   readonly place: MenuPlace;
+  /** Whether there are traces on screen to copy or make a figure of. */
+  readonly hasTraces: boolean;
   /** The format of the file Download saves, or undefined when there is none. */
   readonly format: string | undefined;
+  readonly onCopyWaveform: () => void;
+  readonly onReportFigure: () => void;
   readonly onDownload: () => void;
   readonly onHelp: () => void;
 }
 
-export function MoreMenu({ place, format, onDownload, onHelp }: MoreMenuProps) {
+export function MoreMenu({ place, hasTraces, format, onCopyWaveform, onReportFigure, onDownload, onHelp }: MoreMenuProps) {
   return (
     <MenuFrame place={place}>
+      <button type="button" role="menuitem" disabled={!hasTraces} title="Copy the waveform as it is on screen, as PNG and SVG" onClick={onCopyWaveform}>
+        Copy waveform
+      </button>
+      <button type="button" role="menuitem" disabled={!hasTraces} title="Make a figure sized for print: copy it, or save it as SVG or PNG" onClick={onReportFigure}>
+        Figure for a report…
+      </button>
       <button type="button" role="menuitem" disabled={format === undefined} onClick={onDownload}>
         Download waveform (.{format ?? 'vcd'})
       </button>

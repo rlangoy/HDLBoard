@@ -47,8 +47,11 @@ export function viewOf(start: Ticks, end: Ticks, widthPx: number): TimeView {
   return { start, ticksPerPx: span / Math.max(widthPx, 1) };
 }
 
+/** A time unit: its symbol and how many femtoseconds it holds. */
+export type TimeUnit = readonly [symbol: string, fs: number];
+
 /** The unit a time of `fs` femtoseconds reads best in: the largest that keeps it at 1 or more. */
-function unitFor(fs: number): readonly [string, number] {
+export function unitFor(fs: number): TimeUnit {
   const magnitude = Math.abs(fs);
   return UNITS.find(([, size]) => magnitude >= size) ?? UNITS[UNITS.length - 1];
 }
@@ -86,8 +89,13 @@ function resolutionDecimals(size: number, resolutionFs: number | undefined): num
  */
 export function formatFs(fs: number, stepFs?: number): string {
   if (fs === 0) return '0';
-  const [unit, size] = unitFor(fs);
-  return `${trimmed(fs / size, stepDecimals(size, stepFs))} ${unit}`;
+  const unit = unitFor(fs);
+  return `${formatFsIn(fs, unit, stepFs)} ${unit[0]}`;
+}
+
+/** A time as a bare number in `unit`, with the decimals marks `stepFs` apart need: `12.5` for 12.5 ns. */
+export function formatFsIn(fs: number, [, size]: TimeUnit, stepFs?: number): string {
+  return trimmed(fs / size, stepDecimals(size, stepFs));
 }
 
 /**

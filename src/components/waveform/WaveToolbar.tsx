@@ -62,7 +62,7 @@ export function WaveToolbar(props: WaveToolbarProps) {
         <ToolButton
           icon={MoreIcon}
           label="More"
-          hint="More: download the waveform file, help"
+          hint="More: copy the waveform, figure for a report, download the waveform file, help"
           popup
           onClick={(event) => {
             event.stopPropagation();

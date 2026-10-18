@@ -617,3 +617,101 @@
   background: #60a5fa;
   box-shadow: 0 0 0 2px var(--wb-console-bg, #0f172a);
 }
+
+/* "Copied as PNG and SVG.": a short line at the bottom of the pane after Copy waveform. */
+.wv-status {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #ffffff;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+}
+
+/* Figure for a report (§ 8.9): the preview at its printed size above the few choices. */
+.wv-figure {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 12px 28px;
+  align-items: start;
+  font-size: 13.5px;
+}
+
+.wv-figure__preview {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  border: 1px solid var(--wb-border, #e2e8f0);
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+/* At its printed size, or smaller when the dialog is narrower than the figure. */
+.wv-figure__preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+
+.wv-figure__options {
+  display: contents;
+}
+
+.wv-figure__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.wv-figure__group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wb-text-muted, #64748b);
+}
+
+.wv-figure__group label,
+.wv-figure__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.wv-figure__check {
+  align-self: end;
+}
+
+.wv-figure__hint,
+.wv-figure__status {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--wb-text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.wv-figure__status {
+  min-height: 1.5em;
+  color: var(--wb-text, #0f172a);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .wv-figure {
+    grid-template-columns: 1fr;
+  }
+}
