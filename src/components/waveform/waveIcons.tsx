@@ -3,7 +3,7 @@
 
 /*
  * Material Symbols Outlined – "do_not_disturb_on", "add_circle", "zoom_out_map",
- * "more_horiz" and "cancel", wght 400 / GRAD 0 / opsz 24 / FILL 0 – for the waveform
+ * "more_horiz" and "close", wght 400 / GRAD 0 / opsz 24 / FILL 0 – for the waveform
  * toolbar (docs/images/head_moc1.png). Inlined as plain SVG like the rest of the app's
  * icons (workbench/icons.tsx); `fill="currentColor"` takes the button's colour.
  */
@@ -39,6 +39,7 @@ export const MoreIcon = (props: SVGProps<SVGSVGElement>) => (
   />
 );
 
-export const CloseCircleIcon = (props: SVGProps<SVGSVGElement>) => (
-  <Icon d={`m336-280 144-144 144 144 56-56-144-144 144-144-56-56-144 144-144-144-56 56 144 144-144 144 56 56Z${CIRCLE}`} {...props} />
+/** A plain X: the close button's circle is its background, as in the mockup. */
+export const CloseIcon = (props: SVGProps<SVGSVGElement>) => (
+  <Icon d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" {...props} />
 );

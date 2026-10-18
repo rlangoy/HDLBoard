@@ -9,7 +9,7 @@
  */
 
 import type { ComponentType, MouseEvent, ReactNode, SVGProps } from 'react';
-import { CloseCircleIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIcons';
+import { CloseIcon, FitIcon, MoreIcon, ZoomInIcon, ZoomOutIcon } from './waveIcons';
 
 export interface WaveToolbarProps {
   readonly title: string;
@@ -30,13 +30,15 @@ interface ToolButtonProps {
   readonly disabled?: boolean;
   readonly onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   readonly popup?: boolean;
+  /** The close button stands out from the others (docs/images/head_moc1.png). */
+  readonly emphasis?: boolean;
 }
 
-function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup }: ToolButtonProps) {
+function ToolButton({ icon: IconComponent, label, hint, disabled, onClick, popup, emphasis }: ToolButtonProps) {
   return (
     <button
       type="button"
-      className="wv-tool"
+      className={emphasis ? 'wv-tool wv-tool--close' : 'wv-tool'}
       aria-label={label}
       aria-haspopup={popup ? 'menu' : undefined}
       title={hint}
@@ -72,7 +74,7 @@ export function WaveToolbar(props: WaveToolbarProps) {
             props.onMore(event.currentTarget.getBoundingClientRect());
           }}
         />
-        <ToolButton icon={CloseCircleIcon} label="Close the waveform" hint="Close the waveform and show the code again (Esc)" onClick={props.onClose} />
+        <ToolButton icon={CloseIcon} label="Close the waveform" hint="Close the waveform and show the code again (Esc)" emphasis onClick={props.onClose} />
       </div>
     </header>
   );
