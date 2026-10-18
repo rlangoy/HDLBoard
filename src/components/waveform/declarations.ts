@@ -6,10 +6,12 @@
  * FR-18): the one-click way from "why is this U?" to the line that needs a reset. The
  * hierarchy is walked from the testbench down through its instance labels – `dut :
  * entity work.counter` in VHDL, `counter dut (…)` in Verilog – using the editor's own
- * symbol index for the declaration itself. Pure.
+ * symbol index for the declaration itself. Only the files the waveform's run compiled
+ * are searched, so a VHDL and a Verilog testbench of the same name never mix. Pure.
  */
 
 import type { VhdlFile } from '../workbench/files';
+import { filesForRun } from '../workbench/hdlClient';
 import { analyzeFile, type FileSymbols } from '../workbench/symbols/fileSymbols';
 import { declaredUnits, type DeclaredUnit } from '../workbench/symbols/instances';
 import { sourceTokens, type SourceToken } from '../workbench/symbols/sourceTokens';
@@ -39,6 +41,14 @@ const ENTITY_KEYWORD_OFFSET = 2;
 const NAME_OFFSET_AFTER: Readonly<Record<string, number>> = { entity: 5, component: 3, configuration: 3 };
 /** `module #(`: the module name is two tokens before the parameter list's `(`. */
 const PARAMETER_LIST_PREFIX = 2;
+
+/**
+ * The files the run with top file `topFileName` compiled – its design folder, `vhdl/`
+ * or `verilog/` – or every file while the run is not known.
+ */
+export function filesOfRun(files: readonly VhdlFile[], topFileName: string | undefined): readonly VhdlFile[] {
+  return topFileName === undefined || !files.some((file) => file.name === topFileName) ? files : filesForRun(files, topFileName);
+}
 
 function findUnit(files: readonly VhdlFile[], name: string): Unit | undefined {
   for (const file of files) {

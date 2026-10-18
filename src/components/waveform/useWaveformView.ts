@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VhdlFile } from '../workbench/files';
 import type { WaveClientHandlers } from '../workbench/hdlClient';
-import { findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
+import { filesOfRun, findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
 import type { WaveFocus } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
@@ -167,8 +167,15 @@ function useProjectReset(projectKey: string, reset: () => void, memory: React.Mu
   }, [projectKey, memory]);
 }
 
-function useDeclarations(input: WaveformViewInput) {
-  const { files, reveal, log } = input;
+/** Which run a waveform came from: its source (file and unit) and its top file. */
+interface RunOrigin {
+  readonly source: string;
+  readonly topFileName: string | undefined;
+}
+
+/** Go to declaration, searching only `files` – the shown waveform's run's files. */
+function useDeclarations(input: WaveformViewInput, files: () => readonly VhdlFile[]) {
+  const { reveal, log } = input;
   return useCallback(
     (scopes: readonly string[], name: string) => {
       const target = findDeclaration(files(), scopes, name);
@@ -186,9 +193,9 @@ function useDeclarations(input: WaveformViewInput) {
  */
 function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   const pending = useRef(false);
-  // The testbench of the run going on, and of the waveform the view has: set when its run offers one.
-  const running = useRef<string | null>(null);
-  const [source, setSource] = useState<string | null>(null);
+  // The run going on, and the run of the waveform the view has: set when its run offers one.
+  const running = useRef<RunOrigin | null>(null);
+  const [origin, setOrigin] = useState<RunOrigin | null>(null);
   const fold = useExplorerFold(input.explorer, waveform.state.open);
   const showView = () => {
     fold();
@@ -196,7 +203,7 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
     input.overlay.show();
   };
   const runs = useRunTracking(waveform, input.log, () => {
-    setSource(running.current);
+    setOrigin(running.current);
     if (pending.current) showView();
     pending.current = false;
   });
@@ -206,9 +213,9 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
     endRun();
   }, [endRun]);
   const runReset = useCallback(
-    (runSource: string) => {
+    (run: RunOrigin) => {
       pending.current = false;
-      running.current = runSource;
+      running.current = run;
       reset();
     },
     [reset],
@@ -216,7 +223,7 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   const openWhenReady = useCallback(() => {
     pending.current = true;
   }, []);
-  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, source };
+  return { ...runs, showView, runEnded, reset: runReset, openWhenReady, origin };
 }
 
 export function useWaveformView(input: WaveformViewInput): WaveformView {
@@ -229,6 +236,10 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
   useOverlaySync(waveform, input.overlay);
   useProjectReset(input.projectKey, waveform.reset, memory);
   const state = buttonState(waveform.state);
+  const { files } = input;
+  const topFileName = runs.origin?.topFileName;
+  // The shown waveform's run's files: declarations are looked up in these only.
+  const runFiles = useCallback(() => filesOfRun(files(), topFileName), [files, topFileName]);
   const open = () => {
     if (state === 'empty') return setDialogOpen(true);
     runs.showView();
@@ -238,7 +249,7 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     open();
   };
   const runStarted = (info: RunInfo & { readonly title: string; readonly source: string }) => {
-    runs.reset(info.source);
+    runs.reset({ source: info.source, topFileName: info.topFileName });
     setTitle(info.title);
     waveform.runStarted(info);
   };
@@ -246,11 +257,11 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     waveform,
     clientHandlers: runs.clientHandlers,
     runStarted,
-    source: runs.source,
+    source: runs.origin?.source ?? null,
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
     openWhenReady: runs.openWhenReady,
-    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input), fileOfScope: (scopes) => scopeFileName(input.files(), scopes) },
+    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input, runFiles), fileOfScope: (scopes) => scopeFileName(runFiles(), scopes) },
     button: { state, onToggle: () => (waveform.state.open ? waveform.close() : open()) },
     links: state === 'empty' ? {} : { onOpenTime: openAt, onOpenWaveform: open },
     dialog: { open: dialogOpen, afterBoardRun: waveform.state.boardRun, onClose: () => setDialogOpen(false) },

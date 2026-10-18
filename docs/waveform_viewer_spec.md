@@ -546,7 +546,7 @@ Stage: **1** first release to students · **2** next · **3** later.
 | FR-15 | A search box above the signal list when the design has more than 30 signals. | 2 |
 | FR-16 | Every `@<time>` in a console report line and every plugin-output time stamp is a link that opens the waveform with the cursor at that time. | 1 |
 | FR-17 | Shown signals, "Show as" choices and zoom are kept across reruns for signals that still exist. | 1 |
-| FR-18 | **Go to declaration** on a signal closes the waveform and shows the declaration in the split view, in the testbench or the RTL pane (uses the existing symbol index). | 1 |
+| FR-18 | **Go to declaration** on a signal closes the waveform and shows the declaration in the split view, in the testbench or the RTL pane (uses the existing symbol index). Only the files the waveform's run compiled are searched (its design folder, `vhdl/` or `verilog/`), so a VHDL and a Verilog testbench of the same name never mix; the section heads' tooltips name files the same way. | 1 |
 | FR-19 | Optional "Stop at" simulated time in the **⋯** menu (7.1). It applies to **one run only** and the console names it on that run, so a forgotten value cannot silently cut later runs. | 2 |
 | FR-20 | Download the waveform file (`<testbench>.ghw` / `.vcd`) from the **⋯** menu – for GTKWave or Surfer, or to send to the teacher. | 1 |
 | FR-21 | Save the shown signals and their "Show as" in the project file, so a shared example opens with the teacher's view. | 3 |
