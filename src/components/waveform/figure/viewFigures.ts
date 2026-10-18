@@ -13,7 +13,7 @@ import { readColors } from '../waveDraw';
 import { figureRows, type FigureContent } from './figureContent';
 import { copyFigure, measureText, type CopyResult } from './figureOutput';
 import { waveformFigure } from './figureSvg';
-import { screenLook, type ScreenSize } from './screenLook';
+import { screenLook, type ScreenLayout } from './screenLook';
 import type { FigureFont } from './typography';
 
 export interface ViewState {
@@ -34,8 +34,8 @@ function listNameFont(pane: HTMLElement): FigureFont {
   return { family: style.fontFamily, size: parseFloat(style.getPropertyValue('--wv-name-font-size')) };
 }
 
-/** Copies the view as on screen, in the colours and fonts of the pane it is in. */
-export function copyScreenFigure(pane: HTMLElement, state: ViewState, size: ScreenSize): Promise<CopyResult> {
-  const look = screenLook(readColors(pane), size, listNameFont(pane));
+/** Copies the view as on screen – with its cursor only while it shows it – in the colours and fonts of the pane it is in. */
+export function copyScreenFigure(pane: HTMLElement, state: ViewState, layout: ScreenLayout): Promise<CopyResult> {
+  const look = screenLook(readColors(pane), layout, listNameFont(pane));
   return copyFigure(waveformFigure(viewContent(state), look, measureText));
 }

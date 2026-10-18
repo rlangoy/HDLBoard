@@ -200,7 +200,8 @@ describe('report style', () => {
 });
 
 describe('screen copy', () => {
-  const look = screenLook(WHITE_BACKGROUND_COLORS, { namesWidth: 260, tracesWidth: 600 }, LIST_NAME_FONT);
+  const look = screenLook(WHITE_BACKGROUND_COLORS, { namesWidth: 260, tracesWidth: 600, cursorShown: true }, LIST_NAME_FONT);
+  const withoutCursor = screenLook(WHITE_BACKGROUND_COLORS, { namesWidth: 260, tracesWidth: 600, cursorShown: false }, LIST_NAME_FONT);
 
   it('is the on-screen size in pixels', () => {
     expect(svgOf([clk], look)).toContain('width="860px"');
@@ -221,6 +222,18 @@ describe('screen copy', () => {
 
   it('lists each value at the cursor beside its name', () => {
     expect(svgOf([clk], look)).toContain('text-anchor="end"');
+  });
+
+  it('draws the cursor while the view shows it', () => {
+    expect(svgOf([clk], look)).toContain(`stroke="${WHITE_BACKGROUND_COLORS.cursor}"`);
+  });
+
+  it('leaves out the cursor when the view hides it', () => {
+    expect(svgOf([clk], withoutCursor)).not.toContain(`stroke="${WHITE_BACKGROUND_COLORS.cursor}"`);
+  });
+
+  it('leaves out the values at the cursor when the view hides it, keeping the Value head', () => {
+    expect(svgOf([clk], withoutCursor).match(/text-anchor="end"/g)?.length).toBe(1);
   });
 
   it("draws with the canvas's own sizes", () => {

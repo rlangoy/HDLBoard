@@ -93,16 +93,16 @@ interface KeyTargets {
   readonly closeMenu: () => boolean;
   /** Leaves report mode; false when it was not on. */
   readonly closeReport: () => boolean;
-  /** The arrow keys move the cursor only while it is shown. */
-  readonly cursorShown: boolean;
+  /** The cursor while it is shown; the arrow keys move it only then. */
+  readonly shownCursor: Ticks | undefined;
   readonly close: () => void;
 }
 
-function moveCursor({ view, selected, cursorShown }: KeyTargets, direction: Direction, fine: boolean): void {
+function moveCursor({ view, selected, shownCursor }: KeyTargets, direction: Direction, fine: boolean): void {
   const { setup } = view;
-  if (setup === null || !cursorShown) return;
+  if (setup === null || shownCursor === undefined) return;
   const span = setup.window.end - setup.window.start;
-  const to = fine ? fineStep(setup.cursor, span, direction) : changeFrom(stepTraces(view, selected), setup.cursor, direction);
+  const to = fine ? fineStep(shownCursor, span, direction) : changeFrom(stepTraces(view, selected), shownCursor, direction);
   if (to !== undefined) view.actions.showCursor(to);
 }
 
@@ -341,16 +341,14 @@ function usePane(props: WaveformPaneProps) {
 }
 
 interface RowContextInput {
-  readonly view: WaveView;
   readonly data: WaveformData | null;
   readonly signals: Signals;
-  readonly cursorShown: boolean;
+  readonly shownCursor: Ticks | undefined;
 }
 
-function rowContext({ view, data, signals, cursorShown }: RowContextInput): RowContext {
+function rowContext({ data, signals, shownCursor }: RowContextInput): RowContext {
   const { showAsOf, selected, on, fileOfScope } = signals;
-  const cursor = cursorShown ? view.setup?.cursor : undefined;
-  return { cursor, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
+  return { cursor: shownCursor, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
 }
 
 /** Whether a key is meant for something else: a field the student types in, or a dialog over the pane. */
@@ -373,15 +371,15 @@ export function WaveformPane(props: WaveformPaneProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [tracesWidth, setTracesWidth] = useState(0);
   const [namesWidth, setNamesWidth] = useNamesWidth();
-  const [cursorShown, showCursor] = useCursorShown(view);
+  const { shown: cursorShown, show: showCursor, shownCursor } = useCursorShown(view);
   const showLoading = useDelayed(waveform.state.loading !== null && data === null, LOADING_NOTE_DELAY_MS);
   const title = data === null ? props.title : (testbenchScope(data)?.name ?? props.title);
   // The view takes the keyboard when it opens, so Esc and the arrows work at once.
   const paneRef = useRef<HTMLElement>(null);
   useEffect(() => paneRef.current?.focus(), []);
   const size = { namesWidth, tracesWidth };
-  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, cursorShown, pane: paneRef, size, baseName: `${title}_waveform` });
-  const keyTargets = { view, selected: signals.selected, cursorShown, closeMenu, closeReport: figures.closeReport, close: waveform.close };
+  const figures = useViewFigures({ view, showAsOf: signals.showAsOf, shownCursor, pane: paneRef, size, baseName: `${title}_waveform` });
+  const keyTargets = { view, selected: signals.selected, shownCursor, closeMenu, closeReport: figures.closeReport, close: waveform.close };
   const field = useCursorField({ view, data, tracesWidth });
   const cursorControls = (label: string) => <CursorControls label={label} shown={cursorShown} onShown={showCursor} field={field} />;
   const toolbar = { title, hasWaveform: field !== null, view, onMenu: setMenu, onClose: waveform.close };
@@ -394,7 +392,7 @@ export function WaveformPane(props: WaveformPaneProps) {
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
         <ReportStage report={figures.report} handlers={timeHandlersOf(view.actions)}>
-          <Body data={data} view={view} context={rowContext({ view, data, signals, cursorShown })} error={error} stale={waveform.state.stale}
+          <Body data={data} view={view} context={rowContext({ data, signals, shownCursor })} error={error} stale={waveform.state.stale}
             bodyHeight={bodyHeight} namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
         </ReportStage>
       )}

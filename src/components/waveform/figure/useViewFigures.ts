@@ -19,17 +19,18 @@ import { loadReportColouring, saveReportColouring } from '../wavePrefs';
 import { COPY_MESSAGES, copyFigure, measureText, saveFigurePng, saveFigureSvg } from './figureOutput';
 import { OPENING_WIDTH, REPORT_DPI, reportLook, type ReportChoices } from './figureStyle';
 import { waveformFigure, type Figure } from './figureSvg';
-import type { ScreenSize } from './screenLook';
+import type { ScreenLayout } from './screenLook';
 import { copyScreenFigure, viewContent, type ViewState } from './viewFigures';
 
 export interface ViewFiguresInput {
   readonly view: WaveView;
   readonly showAsOf: (path: SignalPath) => ShowAs;
-  /** Whether the view shows its cursor; a report figure shows it then too. */
-  readonly cursorShown: boolean;
+  /** The cursor while the view shows it; copies and report figures show it then too. */
+  readonly shownCursor: Ticks | undefined;
   /** The pane, whose colours and fonts a copy as on screen takes. */
   readonly pane: RefObject<HTMLElement>;
-  readonly size: ScreenSize;
+  /** The columns' widths on screen, for a copy as on screen. */
+  readonly size: Omit<ScreenLayout, 'cursorShown'>;
   /** The saved files' name without extension: `counter_tb_waveform`. */
   readonly baseName: string;
 }
@@ -78,28 +79,48 @@ function useViewState({ setup, list }: WaveView, showAsOf: (path: SignalPath) =>
   return useMemo(() => (setup === null ? null : { setup, list, showAsOf }), [setup, list, showAsOf]);
 }
 
-/** Report mode is on while asked for and while there are traces: it never comes back by itself. */
-function useReportOn(hasTraces: boolean) {
-  const [reportOn, setReportOn] = useState(false);
-  useEffect(() => {
-    if (!hasTraces) setReportOn(false);
-  }, [hasTraces]);
-  return [reportOn && hasTraces, setReportOn] as const;
+/** The report figure of the view as it stands. */
+function reportFigure(state: ViewState, choices: ReportChoices, showCursor: boolean): Figure {
+  return waveformFigure(viewContent(state), reportLook({ ...choices, showCursor }), measureText);
 }
 
-export function useViewFigures({ view, showAsOf, cursorShown, pane, size, baseName }: ViewFiguresInput): ViewFigures {
+/**
+ * Report mode: on while asked for and while there are traces, so it never comes back by
+ * itself. `onOpen` runs on every opening; `close` says whether it was on.
+ */
+function useReportOn(hasTraces: boolean, onOpen: () => void) {
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (!hasTraces) setAsked(false);
+  }, [hasTraces]);
+  const reportOn = asked && hasTraces;
+  const open = () => {
+    if (!hasTraces) return;
+    onOpen();
+    setAsked(true);
+  };
+  const close = () => {
+    if (!reportOn) return false;
+    setAsked(false);
+    return true;
+  };
+  return { reportOn, open, close };
+}
+
+export function useViewFigures({ view, showAsOf, shownCursor, pane, size, baseName }: ViewFiguresInput): ViewFigures {
   const { choices, choose, startAtOpeningWidth } = useReportChoices();
   const [status, setStatus] = useStatusLine();
   const state = useViewState(view, showAsOf);
   const hasTraces = state !== null && traceRows(state.list).length > 0;
-  const [reportOn, setReportOn] = useReportOn(hasTraces);
+  const { reportOn, open: openReport, close: closeReport } = useReportOn(hasTraces, startAtOpeningWidth);
+  const cursorShown = shownCursor !== undefined;
   const figure = useMemo(
-    () => (reportOn && state !== null ? waveformFigure(viewContent(state), reportLook({ ...choices, showCursor: cursorShown }), measureText) : null),
+    () => (reportOn && state !== null ? reportFigure(state, choices, cursorShown) : null),
     [reportOn, state, choices, cursorShown],
   );
   const copyWaveform = () => {
     if (state === null || !hasTraces || pane.current === null) return;
-    void copyScreenFigure(pane.current, state, size).then((result) => setStatus(COPY_MESSAGES[result]));
+    void copyScreenFigure(pane.current, state, { ...size, cursorShown }).then((result) => setStatus(COPY_MESSAGES[result]));
   };
   const report: ReportMode | null =
     figure === null || state === null
@@ -107,23 +128,13 @@ export function useViewFigures({ view, showAsOf, cursorShown, pane, size, baseNa
       : {
           figure,
           choices,
-          shownCursor: cursorShown ? state.setup.cursor : undefined,
+          shownCursor,
           tickFs: state.setup.tickFs,
           choose,
           copy: () => void copyFigure(figure).then((result) => setStatus(COPY_MESSAGES[result])),
           saveSvg: () => saveFigureSvg(figure, baseName),
           savePng: () => void saveFigurePng(figure, baseName, REPORT_DPI).catch(() => setStatus(SAVE_PNG_FAILED)),
-          close: () => setReportOn(false),
+          close: closeReport,
         };
-  const openReport = () => {
-    if (!hasTraces) return;
-    startAtOpeningWidth();
-    setReportOn(true);
-  };
-  const closeReport = () => {
-    if (!reportOn) return false;
-    setReportOn(false);
-    return true;
-  };
   return { hasTraces, status, copyWaveform, report, openReport, closeReport };
 }

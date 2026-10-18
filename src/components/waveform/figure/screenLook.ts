@@ -21,9 +21,11 @@ const LIST_TEXT_INSET = 12;
 /** The canvas draws its grid lines, the axis and the cursor one pixel wide. */
 const HAIRLINE_PX = 1;
 
-export interface ScreenSize {
+/** The view's columns as on screen, and whether it shows its cursor (and with it the values at the cursor). */
+export interface ScreenLayout {
   readonly namesWidth: number;
   readonly tracesWidth: number;
+  readonly cursorShown: boolean;
 }
 
 function screenPalette(colors: WaveColors): FigurePalette {
@@ -40,16 +42,17 @@ function screenPalette(colors: WaveColors): FigurePalette {
   };
 }
 
-/** The look of the view on screen: its `colors`, its columns' `size`, and the list's `nameFont`. */
-export function screenLook(colors: WaveColors, size: ScreenSize, nameFont: FigureFont): FigureLook {
+/** The look of the view on screen: its `colors`, its `layout`, and the list's `nameFont`. */
+export function screenLook(colors: WaveColors, layout: ScreenLayout, nameFont: FigureFont): FigureLook {
+  const { namesWidth, tracesWidth, cursorShown } = layout;
   return {
     palette: screenPalette(colors),
     fonts: { name: nameFont, value: VALUE_FONT, axis: AXIS_FONT },
     sizes: {
-      width: size.namesWidth + size.tracesWidth,
+      width: namesWidth + tracesWidth,
       margin: 0,
       textInset: LIST_TEXT_INSET,
-      namesWidth: size.namesWidth,
+      namesWidth,
       rowHeight: ROW_HEIGHT,
       tracePad: TRACE_PAD,
       busSlope: BUS_SLOPE,
@@ -64,7 +67,7 @@ export function screenLook(colors: WaveColors, size: ScreenSize, nameFont: Figur
       cursorDash: undefined,
     },
     output: { cssLength: (px) => `${Math.round(px)}px`, pixelsPerUnit: SCREEN_PIXELS_PER_PX },
-    shows: { values: true, cursor: true },
+    shows: { values: cursorShown, cursor: cursorShown },
     axis: SCREEN_AXIS,
   };
 }

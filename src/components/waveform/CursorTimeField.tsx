@@ -103,18 +103,25 @@ export function useCursorField({ view, data, tracesWidth }: CursorFieldInput): R
   return <CursorTimeField fs={cursor * data.tickFs} resolutionFs={resolution} unit={unit} onUnit={setUnit} onChange={moveTo} />;
 }
 
+export interface CursorShown {
+  readonly shown: boolean;
+  show(shown: boolean): void;
+  /** The cursor while it is shown, else undefined: what everything that draws or moves it is handed. */
+  readonly shownCursor: number | undefined;
+}
+
 /**
  * Whether the view shows its cursor, remembered in this browser. Shown again, the cursor
  * starts in the middle of the time on screen, where it is easy to find.
  */
-export function useCursorShown({ setup, actions }: WaveView): readonly [boolean, (shown: boolean) => void] {
+export function useCursorShown({ setup, actions }: WaveView): CursorShown {
   const [shown, setShown] = useState(loadCursorShown);
   const show = (next: boolean) => {
     setShown(next);
     saveCursorShown(next);
     if (next && setup !== null) actions.setCursor(Math.round((setup.window.start + setup.window.end) / 2));
   };
-  return [shown, show];
+  return { shown, show, shownCursor: shown ? setup?.cursor : undefined };
 }
 
 export interface CursorControlsProps {
