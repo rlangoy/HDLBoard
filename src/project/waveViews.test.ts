@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { parseProject, serializeProject } from './parseProject';
 import { projectJson } from './testHelpers';
 import type { Diagnostic, SavedWaveView } from './types';
-import { parseWaveViews, sameWaveView, withWaveViewOf } from './waveViews';
+import { parseWaveViews, sameWaveView, waveViewOf, withWaveViewOf } from './waveViews';
 
 const view: SavedWaveView = { signals: [{ path: 'clk' }, { path: 'dut/count', showAs: 'decimal', expanded: true }] };
 
@@ -28,6 +28,44 @@ describe('saved waveform views in the project file', () => {
     const text = serializeProject(project);
     expect(text.indexOf('"waveViews"')).toBeGreaterThan(text.indexOf('"files"'));
     expect(text).toMatch(/"path": "q",\s+"showAs": "hex",\s+"expanded": true/);
+  });
+});
+
+describe('signals not shown that keep a choice', () => {
+  const withNotShown: SavedWaveView = { signals: [{ path: 'clk' }], notShown: [{ path: 'dut/count', showAs: 'hex' }] };
+
+  it('are read and written with the view, after the shown ones', () => {
+    const { project } = parseProject(projectJson([], { waveViews: { counter_tb: withNotShown } }));
+    expect(project.waveViews).toEqual({ counter_tb: withNotShown });
+    const text = serializeProject(project);
+    expect(text.indexOf('"notShown"')).toBeGreaterThan(text.indexOf('"signals"'));
+    expect(parseProject(text).project.waveViews).toEqual({ counter_tb: withNotShown });
+  });
+
+  it('are left out of the file when there are none', () => {
+    const { project } = parseProject(projectJson([], { waveViews: { counter_tb: { signals: [{ path: 'clk' }], notShown: [] } } }));
+    expect(serializeProject(project)).not.toMatch(/notShown/);
+  });
+
+  it('a list that is not usable is left out, with a warning', () => {
+    const warnings: Diagnostic[] = [];
+    expect(parseWaveViews({ a_tb: { signals: [{ path: 'clk' }], notShown: 'x' } }, warnings)).toEqual({ a_tb: { signals: [{ path: 'clk' }] } });
+    expect(warnings).toHaveLength(1);
+  });
+});
+
+describe('finding the view of a testbench', () => {
+  it('finds only saved views, never a built-in of the same name', () => {
+    const views = { counter_tb: view };
+    expect(waveViewOf(views, 'counter_tb')).toBe(view);
+    for (const name of ['constructor', 'toString', 'valueOf', 'hasOwnProperty']) expect(waveViewOf(views, name)).toBeUndefined();
+    expect(waveViewOf(undefined, 'counter_tb')).toBeUndefined();
+  });
+
+  it('a testbench named like a built-in can be saved and changed', () => {
+    const saved = withWaveViewOf(undefined, 'constructor', view);
+    expect(waveViewOf(saved, 'constructor')).toEqual(view);
+    expect(withWaveViewOf({ counter_tb: view }, 'toString', view)).toEqual({ counter_tb: view, toString: view });
   });
 });
 

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { fileNameProblem, folderNameProblem, nameKey } from './fileName';
+import { isObject } from './jsonValue';
 import {
   DEFAULT_SOURCE_DIRECTORY,
   SUPPORTED_PROJECT_VERSION,
@@ -163,10 +164,6 @@ function toEntry(rawEntry: Record<string, unknown>, warnings: Diagnostic[]): Pro
 function entryLabel(rawEntry: unknown, index: number): string {
   if (isObject(rawEntry) && typeof rawEntry.name === 'string' && rawEntry.name !== '') return rawEntry.name;
   return `entry #${index + 1}`;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Serializes a project the way it is written to disk. */

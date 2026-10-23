@@ -409,6 +409,7 @@ A new optional field of the project file, after `files`:
 | `….signals[].path` | string | yes | The signal below the testbench: `sum`, `dut/sum`, `pair/a` (a record field). |
 | `….signals[].showAs` | string | no | `hex`, `decimal`, `ascii` or `binary`, when chosen; left out means the default (hex for vectors). |
 | `….signals[].expanded` | boolean | no | `true` when a vector is shown with its bits unfolded. |
+| `waveViews.<tb>.notShown` | array | no | Signals **not shown** that keep a "Show as" or an unfolded vector, so the choice comes back when the signal is ticked again. Same fields as `signals`. Left out when empty. |
 
 ```json
 {
@@ -432,6 +433,8 @@ A new optional field of the project file, after `files`:
 
 The order of signals within one section (TB, or one RTL instance) is the order in the view. Signals of different sections may be interleaved in the array; each section takes its own in array order. The file format version stays `1`: an older HDLBoard ignores the field (and drops it when it saves).
 
+A save keeps what the run cannot see. A saved signal the current run does not have – one of the other language's testbench of the same name (`counter_tb.vhd` and `counter_tb.v` share `counter_tb`), or one commented out for this run – stays in `signals`, after the signal it followed before, and in `notShown`. Only signals the run has are added, moved or dropped.
+
 ### 11.3 Code
 
 | Layer | Function | What it does |
@@ -440,12 +443,15 @@ The order of signals within one section (TB, or one RTL instance) is the order i
 | | `serializableWaveViews(views)` | Fixed field order, so an unchanged view saves as the same text and does not read as a change. |
 | | `withWaveViewOf(views, tb, view)` | One testbench's view replaced; the same object back when nothing changed; an empty view removed. |
 | `workbench/projectFile.ts` | `withWaveView(project, tb, view)` | The project with it; `projectFileText` writes it, `openProject` and `parseStoredProject` read it (the Windows app's stored workspace keeps it too). |
-| `waveform/savedView.ts` | `savedViewOf(tb, setup)` / `layoutOf(tb, saved)` | View setup ↔ saved view: full paths ↔ paths below the testbench; unknown "Show as" dropped. |
-| `waveform/useSavedView.ts` | `savedLayoutFor(data, saved)`, `useSavedView(…)` | Read for a new waveform; write after a signal action (D20). |
+| | `waveViewOf(views, tb)` | One testbench's view; only own entries, so a testbench named `constructor` finds nothing. |
+| `waveform/savedView.ts` | `savedViewOf(tb, setup, { known, previous })` / `layoutOf(tb, saved)` | View setup ↔ saved view: full paths ↔ paths below the testbench; signals the run does not have kept from `previous`; unknown "Show as" dropped. |
+| `waveform/useSavedView.ts` | `savedLayoutFor(data, saved)`, `useSavedView(view, saved)` | Read for a new waveform; write after a signal action (D20). The view state counts the student's edits, so only an edit that was applied is saved, under the testbench of the waveform it was made on. |
 | `waveform/viewSetup.ts` | `setupFor(data, memory, { saved })` | Restore order (D21). |
 | `workbench/useProjectWaveViews.ts` | `useProjectWaveViews(project, setProject)` | The port the Workbench hands to the viewer. |
 
-The waveform viewer does not know about projects: it gets a `SavedViews` port (`of(testbench)`, `save(testbench, view)`), and the Workbench implements it on the project state.
+The waveform viewer does not know about projects: it gets a `SavedViews` port (`of(testbench)`, `save(testbench, next)`, where `next` makes the new view from the one saved now), and the Workbench implements it on the project state.
+
+A move is checked against the order the list has when it lands (`fitsOrder`): a drag that a new waveform outlives does nothing if the section's signals changed under it.
 
 ## 12. As built
 

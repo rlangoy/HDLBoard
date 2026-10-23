@@ -10,6 +10,7 @@
 
 import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { SavedViews } from '../waveform/useSavedView';
+import { waveViewOf } from '../../project/waveViews';
 import { withWaveView, type OpenProject } from './projectFile';
 
 export function useProjectWaveViews(project: OpenProject, setProject: Dispatch<SetStateAction<OpenProject>>): SavedViews {
@@ -17,8 +18,8 @@ export function useProjectWaveViews(project: OpenProject, setProject: Dispatch<S
   latest.current = project;
   return useMemo(
     () => ({
-      of: (testbench) => latest.current.waveViews?.[testbench],
-      save: (testbench, view) => setProject((open) => withWaveView(open, testbench, view)),
+      of: (testbench) => waveViewOf(latest.current.waveViews, testbench),
+      save: (testbench, next) => setProject((open) => withWaveView(open, testbench, next(waveViewOf(open.waveViews, testbench)))),
     }),
     [setProject],
   );

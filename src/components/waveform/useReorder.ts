@@ -11,7 +11,7 @@
 import { useCallback, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { createDragStore, type DragStore } from './dragStore';
 import { startRowDrag, startsDrag, type DragFrame } from './rowDragGesture';
-import { blockOf, movablePaths, placeOf, sectionsOf, stepMove, type Move, type MoveStep, type Section } from './signalOrder';
+import { blockOf, fitsOrder, movablePaths, placeOf, sectionsOf, stepMove, type Move, type MoveStep, type Section } from './signalOrder';
 import type { SignalPath } from './signalRows';
 import type { WaveView } from './useWaveView';
 
@@ -41,9 +41,13 @@ export interface ReorderInput {
 function useApplyMove({ view, select }: ReorderInput, store: DragStore) {
   const [announcement, setAnnouncement] = useState('');
   const landings = useRef(0);
+  // The order as it is now: a drop may come after a new waveform changed it.
+  const shown = useRef(view.setup?.list.shown ?? []);
+  shown.current = view.setup?.list.shown ?? [];
   const { move: moveAction } = view.actions;
   const apply = useCallback(
     (move: Move) => {
+      if (!fitsOrder(shown.current, move)) return;
       const { path, label } = move.section.blocks[move.from];
       const { place, of } = placeOf(move);
       moveAction(move);

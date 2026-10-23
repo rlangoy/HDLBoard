@@ -32,6 +32,12 @@ export type Tone = 'testbench' | 'rtl';
 
 export const childPath = (parent: string, name: string): string => (parent === '' ? name : `${parent}${SEPARATOR}${name}`);
 
+/** Whether `path` lies below the scope or signal `parent`: `tb/dut/q` is below `tb/dut`. */
+export const isBelow = (parent: string, path: string): boolean => path.startsWith(`${parent}${SEPARATOR}`);
+
+/** `path` named from below `parent`: `dut/q` for `tb/dut/q` below `tb`. */
+export const pathBelow = (parent: string, path: string): string => path.slice(parent.length + SEPARATOR.length);
+
 /** The declaration a path names, split into its scope path and the signal's own name. */
 export function splitPath(path: SignalPath): { scopes: string[]; name: string } {
   const parts = path.split(SEPARATOR);
@@ -146,7 +152,7 @@ const SIGNAL_DEPTH = 1;
 
 /** `state` in the section's own scope, `u1.q` in an instance below it. */
 function labelOf(path: SignalPath, section: string): string {
-  return path.slice(section.length + 1).split(SEPARATOR).join('.');
+  return pathBelow(section, path).split(SEPARATOR).join('.');
 }
 
 function bitRows(row: TraceRow): TraceRow[] {
@@ -253,10 +259,10 @@ function addSection(data: WaveformData, walk: Walk, section: Section): void {
 function sectionsOf(testbench: Scope): Section[] {
   const instances = testbench.scopes.map((scope): Section => {
     const path = childPath(testbench.name, scope.name);
-    return { path, scope, tone: 'rtl', owns: (signal) => signal.startsWith(`${path}${SEPARATOR}`) };
+    return { path, scope, tone: 'rtl', owns: (signal) => isBelow(path, signal) };
   });
   const inInstance = (signal: SignalPath) => instances.some((instance) => instance.owns(signal));
-  const own = (signal: SignalPath) => signal.startsWith(`${testbench.name}${SEPARATOR}`) && !inInstance(signal);
+  const own = (signal: SignalPath) => isBelow(testbench.name, signal) && !inInstance(signal);
   return [{ path: testbench.name, scope: testbench, tone: 'testbench', owns: own }, ...instances];
 }
 

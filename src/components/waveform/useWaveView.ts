@@ -16,7 +16,7 @@ import type { Ticks, WaveformData } from './model';
 import type { ShowAs } from './radix';
 import type { Move } from './signalOrder';
 import { listRows, type ListModel, type SignalPath } from './signalRows';
-import { savedLayoutFor, useSavedView, type SavedViews } from './useSavedView';
+import { savedLayoutFor, useSavedView, type EditedView, type SavedViews } from './useSavedView';
 import {
   clampWindow,
   setupFor,
@@ -95,17 +95,14 @@ function useFocus({ focus, data, ready }: FocusInput, apply: (time: Ticks) => vo
   }, [focus, data, apply, ready]);
 }
 
-type Update = (change: (setup: ViewSetup) => ViewSetup) => void;
+/** A change to the setup; `edit` when it changes the signals, so it is saved with the project. */
+type Update = (change: (setup: ViewSetup) => ViewSetup, edit?: boolean) => void;
 
-/** `changed` is told of every change to the signals, so it is saved with the project. */
-function useActions(update: Update, input: WaveViewInput, changed: () => void): WaveViewActions {
+function useActions(update: Update, input: WaveViewInput): WaveViewActions {
   const { minSpan, end } = input;
   return useMemo(() => {
     const setWindow = (window: Window) => update((s) => ({ ...s, window: clampWindow(window, { end, minSpan }) }));
-    const updateSignals: Update = (change) => {
-      changed();
-      update(change);
-    };
+    const updateSignals: Update = (change) => update(change, true);
     return {
       toggleShown: (path) => updateSignals((s) => toggleShown(s, path)),
       move: (move) => updateSignals((s) => withMove(s, move)),
@@ -119,12 +116,13 @@ function useActions(update: Update, input: WaveViewInput, changed: () => void): 
       scroll: (ticks) => update((s) => ({ ...s, window: clampWindow({ start: s.window.start + ticks, end: s.window.end + ticks }, { end, minSpan }) })),
       fit: () => update((s) => ({ ...s, window: { start: 0, end } })),
     };
-  }, [update, minSpan, end, changed]);
+  }, [update, minSpan, end]);
 }
 
 export function useWaveView(input: WaveViewInput): WaveView {
   const { data, moments, memory, focus, saved } = input;
-  const [setup, setSetup] = useState<ViewSetup | null>(null);
+  const [view, setView] = useState<EditedView | null>(null);
+  const setup = view?.setup ?? null;
   const fittingRows = useRef(input.fittingRows);
   fittingRows.current = input.fittingRows;
 
@@ -136,16 +134,26 @@ export function useWaveView(input: WaveViewInput): WaveView {
   useEffect(() => {
     if (data === null) return;
     const context = { moments: momentsRef.current, fittingRows: fittingRows.current, saved: savedLayoutFor(data, savedRef.current) };
-    setSetup(setupFor(data, memory.current, context));
+    const next = setupFor(data, memory.current, context);
+    setView((old) => ({ data, setup: next, edits: old?.edits ?? 0 }));
   }, [data, memory]);
 
   useEffect(() => {
     if (setup !== null) memory.current = toMemory(setup);
   }, [setup, memory]);
 
-  const update = useCallback((change: (s: ViewSetup) => ViewSetup) => setSetup((s) => (s === null ? s : change(s))), []);
-  const { changed } = useSavedView(data, setup, saved);
-  const actions = useActions(update, input, changed);
+  // An edit counts only when there is a setup to change: one before it is never saved later.
+  const update: Update = useCallback(
+    (change, edit = false) =>
+      setView((old) => {
+        if (old === null) return old;
+        const next = change(old.setup);
+        return next === old.setup && !edit ? old : { ...old, setup: next, edits: old.edits + (edit ? 1 : 0) };
+      }),
+    [],
+  );
+  useSavedView(view, saved);
+  const actions = useActions(update, input);
   useFocus({ focus, data, ready: setup !== null }, actions.showCursor);
 
   const list = useMemo(() => (data === null || setup === null ? NO_ROWS : listRows(data, setup.list)), [data, setup]);

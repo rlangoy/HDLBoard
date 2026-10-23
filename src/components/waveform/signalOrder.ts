@@ -52,8 +52,8 @@ export type MoveStep = 'up' | 'down' | 'top' | 'bottom';
 
 const bottomOf = (list: ListModel, index: number): number => list.tops[index] + ROW_HEIGHT;
 
-/** A shown signal of its own, not a bit of an unfolded vector. */
-const isSignalRow = (row: Row): row is TraceRow => row.kind === 'trace' && row.parent === undefined;
+/** A shown signal of its own, not a bit of an unfolded vector: what a move moves. */
+export const isSignalRow = (row: Row): row is TraceRow => row.kind === 'trace' && row.parent === undefined;
 const isBitRow = (row: Row): boolean => row.kind === 'trace' && row.parent !== undefined;
 
 interface OpenSection {
@@ -143,6 +143,18 @@ export function stepMove(sections: readonly Section[], path: SignalPath, step: M
   const to = SLOT_OF_STEP[step](found.index, count);
   const move = { section: found.section, from: found.index, to };
   return to < 0 || to > count || changesNothing(move) ? null : move;
+}
+
+/**
+ * Whether `move` was made on the order `shown` still has. A drag outlives the list it
+ * started on when a new waveform arrives during it; a signal renamed or gone then must
+ * not be put back, nor another lost.
+ */
+export function fitsOrder(shown: readonly SignalPath[], move: Move): boolean {
+  const blocks = move.section.blocks.map((block) => block.path);
+  const inSection = new Set(blocks);
+  const now = shown.filter((path) => inSection.has(path));
+  return now.length === blocks.length && now.every((path, index) => path === blocks[index]);
 }
 
 /** The section's signals in their order after `move`. */
