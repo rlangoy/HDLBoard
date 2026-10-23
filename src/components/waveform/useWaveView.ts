@@ -3,16 +3,20 @@
 
 /**
  * The view's state for one waveform (docs/waveform_viewer_spec.md § 8.6, § 8.7): the
- * first view or the student's remembered one when a waveform arrives, every action the
- * pane offers, and the memory kept for the next run (FR-17). The rules live in
- * `viewSetup.ts`; this hook only holds the state.
+ * first view, the student's remembered one or the one saved with the project when a
+ * waveform arrives, every action the pane offers, the memory kept for the next run
+ * (FR-17), and the view saved with the project after the student changes its signals
+ * (docs/imp_wave_rearange.md § 11). The rules live in `viewSetup.ts`; this hook only
+ * holds the state.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import type { RunMoments } from './initialView';
 import type { Ticks, WaveformData } from './model';
 import type { ShowAs } from './radix';
+import type { Move } from './signalOrder';
 import { listRows, type ListModel, type SignalPath } from './signalRows';
+import { savedLayoutFor, useSavedView, type SavedViews } from './useSavedView';
 import {
   clampWindow,
   setupFor,
@@ -21,6 +25,7 @@ import {
   toggleShown,
   toMemory,
   windowShowing,
+  withMove,
   withShowAs,
   zoomCentre,
   zoomWindow,
@@ -44,10 +49,14 @@ export interface WaveViewInput {
   readonly fittingRows: number;
   readonly minSpan: Ticks;
   readonly end: Ticks;
+  /** The views saved with the project: read for a new waveform, written when the student changes its signals. */
+  readonly saved: SavedViews;
 }
 
 export interface WaveViewActions {
   toggleShown(path: SignalPath): void;
+  /** A shown signal to another place in its section (docs/imp_wave_rearange.md). */
+  move(move: Move): void;
   toggleOpen(path: string): void;
   toggleExpanded(path: SignalPath): void;
   setShowAs(path: SignalPath, showAs: ShowAs): void;
@@ -86,15 +95,23 @@ function useFocus({ focus, data, ready }: FocusInput, apply: (time: Ticks) => vo
   }, [focus, data, apply, ready]);
 }
 
-function useActions(update: (change: (setup: ViewSetup) => ViewSetup) => void, input: WaveViewInput): WaveViewActions {
+type Update = (change: (setup: ViewSetup) => ViewSetup) => void;
+
+/** `changed` is told of every change to the signals, so it is saved with the project. */
+function useActions(update: Update, input: WaveViewInput, changed: () => void): WaveViewActions {
   const { minSpan, end } = input;
   return useMemo(() => {
     const setWindow = (window: Window) => update((s) => ({ ...s, window: clampWindow(window, { end, minSpan }) }));
+    const updateSignals: Update = (change) => {
+      changed();
+      update(change);
+    };
     return {
-      toggleShown: (path) => update((s) => toggleShown(s, path)),
+      toggleShown: (path) => updateSignals((s) => toggleShown(s, path)),
+      move: (move) => updateSignals((s) => withMove(s, move)),
       toggleOpen: (path) => update((s) => toggleOpen(s, path)),
-      toggleExpanded: (path) => update((s) => toggleExpanded(s, path)),
-      setShowAs: (path, showAs) => update((s) => withShowAs(s, path, showAs)),
+      toggleExpanded: (path) => updateSignals((s) => toggleExpanded(s, path)),
+      setShowAs: (path, showAs) => updateSignals((s) => withShowAs(s, path, showAs)),
       setCursor: (cursor) => update((s) => ({ ...s, cursor })),
       showCursor: (cursor) => update((s) => ({ ...s, cursor, window: windowShowing(s.window, cursor) })),
       setWindow,
@@ -102,11 +119,11 @@ function useActions(update: (change: (setup: ViewSetup) => ViewSetup) => void, i
       scroll: (ticks) => update((s) => ({ ...s, window: clampWindow({ start: s.window.start + ticks, end: s.window.end + ticks }, { end, minSpan }) })),
       fit: () => update((s) => ({ ...s, window: { start: 0, end } })),
     };
-  }, [update, minSpan, end]);
+  }, [update, minSpan, end, changed]);
 }
 
 export function useWaveView(input: WaveViewInput): WaveView {
-  const { data, moments, memory, focus } = input;
+  const { data, moments, memory, focus, saved } = input;
   const [setup, setSetup] = useState<ViewSetup | null>(null);
   const fittingRows = useRef(input.fittingRows);
   fittingRows.current = input.fittingRows;
@@ -114,8 +131,12 @@ export function useWaveView(input: WaveViewInput): WaveView {
   // Only a new waveform starts a new setup; the console growing during a run does not.
   const momentsRef = useRef(moments);
   momentsRef.current = moments;
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   useEffect(() => {
-    if (data !== null) setSetup(setupFor(data, memory.current, { moments: momentsRef.current, fittingRows: fittingRows.current }));
+    if (data === null) return;
+    const context = { moments: momentsRef.current, fittingRows: fittingRows.current, saved: savedLayoutFor(data, savedRef.current) };
+    setSetup(setupFor(data, memory.current, context));
   }, [data, memory]);
 
   useEffect(() => {
@@ -123,7 +144,8 @@ export function useWaveView(input: WaveViewInput): WaveView {
   }, [setup, memory]);
 
   const update = useCallback((change: (s: ViewSetup) => ViewSetup) => setSetup((s) => (s === null ? s : change(s))), []);
-  const actions = useActions(update, input);
+  const { changed } = useSavedView(data, setup, saved);
+  const actions = useActions(update, input, changed);
   useFocus({ focus, data, ready: setup !== null }, actions.showCursor);
 
   const list = useMemo(() => (data === null || setup === null ? NO_ROWS : listRows(data, setup.list)), [data, setup]);

@@ -38,6 +38,14 @@
   --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
   /* The signal names' size; a copy of the view as on screen reads it from here. */
   --wv-name-font-size: 13px;
+  /* Reordering signals (docs/imp_wave_rearange.md § 4.5). */
+  --wv-drag-accent: var(--wb-accent, #2f6fed);
+  --wv-drag-grip: #94a3b8;
+  --wv-drag-veil: rgb(255 255 255 / 0.65);
+  --wv-drag-ghost-bg: #ffffff;
+  --wv-drag-ghost-shadow: 0 8px 24px rgb(15 23 42 / 0.18), 0 1px 3px rgb(15 23 42 / 0.12);
+  --wv-drag-flash: rgb(47 111 237 / 0.18);
+  --wv-drag-muted: #cbd5e1;
 
   position: absolute;
   inset: 0;
@@ -298,6 +306,7 @@
 }
 
 .wv-grid {
+  position: relative;
   display: flex;
   min-height: 100%;
 }
@@ -428,6 +437,7 @@
 }
 
 .wv-list__row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -661,6 +671,22 @@
   border-bottom: 1px solid var(--wb-border, #e2e8f0);
   margin: 4px 0;
   padding: 4px 0;
+}
+
+.wv-menu__group + .wv-menu__group {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.wv-menu button:has(.wv-menu__keys) {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wv-menu__keys {
+  color: var(--wv-axis-text);
+  font-size: 12px;
 }
 
 .wv-menu__label {
@@ -981,4 +1007,210 @@
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* ---- Reordering signals (docs/imp_wave_rearange.md § 4) ---------------------------- */
+
+/* The grip sits in the row's left indent, so showing it moves nothing. */
+.wv-list__grip {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  display: flex;
+  padding: 2px;
+  border-radius: 3px;
+  color: var(--wv-drag-grip);
+  cursor: grab;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+  touch-action: none;
+}
+
+.wv-list__row.is-movable:hover .wv-list__grip,
+.wv-list__row.is-movable.is-selected .wv-list__grip {
+  opacity: 0.55;
+}
+
+.wv-list__row.is-movable .wv-list__grip:hover {
+  color: var(--wv-drag-accent);
+  opacity: 1;
+}
+
+.wv-list__row.is-movable .wv-list__name {
+  cursor: grab;
+}
+
+/* Touch screens have no hover: the grip is always there, a little faint. */
+@media (hover: none) {
+  .wv-list__row.is-movable .wv-list__grip {
+    opacity: 0.55;
+  }
+}
+
+/* While a signal is dragged: the cursor everywhere, and no text selection. */
+:root[data-wv-reordering] *,
+:root[data-wv-reordering] {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+:root[data-wv-reordering='refused'] *,
+:root[data-wv-reordering='refused'] {
+  cursor: not-allowed !important;
+}
+
+/* The layer over the list and the canvas: in list coordinates, never in the mouse's way. */
+.wv-drag {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wv-drag__veil,
+.wv-drag__flash {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+
+.wv-drag__veil {
+  background: var(--wv-drag-veil);
+}
+
+.wv-drag__veil-names {
+  box-sizing: border-box;
+  height: 100%;
+  border: 1px dashed var(--wv-drag-accent);
+  border-radius: 4px;
+  opacity: 0.6;
+}
+
+/* The insertion line, across names, values and traces, with a ring at its left end. */
+.wv-drag__line {
+  position: absolute;
+  right: 0;
+  left: 6px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--wv-drag-accent);
+}
+
+.wv-drag__line::before {
+  content: '';
+  position: absolute;
+  top: -3.5px;
+  left: -6px;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--wv-drag-accent);
+  border-radius: 50%;
+  background: var(--wv-bg);
+}
+
+/* The ghost: the signal lifted off the list, following the pointer. */
+.wv-drag__ghost {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 6px;
+  border: 1px solid var(--wv-drag-accent);
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: var(--wv-drag-ghost-bg);
+  box-shadow: var(--wv-drag-ghost-shadow);
+  font-size: var(--wv-name-font-size);
+  font-weight: 600;
+  opacity: 0.97;
+  transition: top 160ms ease-out, opacity 160ms ease-out;
+}
+
+.wv-drag__ghost.tone-testbench {
+  border-left-color: var(--wv-tb-ink);
+}
+
+.wv-drag__ghost.tone-rtl {
+  border-left-color: var(--wv-rtl-ink);
+}
+
+/* Only the glide back is animated: while dragged, the ghost keeps up with the pointer. */
+.wv-drag .wv-drag__veil ~ .wv-drag__ghost {
+  transition: none;
+}
+
+.wv-drag__ghost-grip {
+  flex: none;
+  color: var(--wv-drag-accent);
+}
+
+.wv-drag__ghost-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wv-drag__ghost-bits {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--wv-tool-bg);
+  color: var(--wv-axis-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Over another section: muted, with the rule in words below it. */
+.wv-drag__ghost.is-refused {
+  border-color: var(--wv-drag-muted);
+  color: var(--wv-axis-text);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 0.1);
+}
+
+.wv-drag__hint {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.wv-drag__hint::before {
+  content: '⦸ ';
+}
+
+/* A signal that has just moved: its rows, list and traces alike, flash once. */
+.wv-drag__flash {
+  background: var(--wv-drag-flash);
+  animation: wv-drag-flash 700ms ease-out forwards;
+}
+
+@keyframes wv-drag-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wv-list__grip,
+  .wv-drag__ghost {
+    transition: none;
+  }
+
+  .wv-drag__flash {
+    animation-timing-function: steps(1, end);
+  }
 }

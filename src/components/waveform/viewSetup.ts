@@ -10,7 +10,8 @@
 
 import { firstShown, firstWindow, type RunMoments } from './initialView';
 import type { Ticks, WaveformData } from './model';
-import { SHOW_AS_LABELS, type ShowAs } from './radix';
+import { isShowAs, type ShowAs } from './radix';
+import { orderAfter, type Move } from './signalOrder';
 import { signalsByPath, type ListState, type SignalPath } from './signalRows';
 
 /** The time window on screen. */
@@ -30,12 +31,20 @@ export interface ViewSetup {
   readonly runEnd: Ticks;
 }
 
-/** What is kept between runs and openings (FR-17), as plain data. */
-export interface ViewMemory {
+/**
+ * The signals part of a view, as plain data: which signals are shown, in their order,
+ * which vectors are unfolded and the "Show as" chosen. What the project file keeps
+ * (savedView.ts), and part of what is kept between runs.
+ */
+export interface ViewLayout {
   readonly shown: readonly SignalPath[];
-  readonly open: readonly string[];
   readonly expanded: readonly SignalPath[];
   readonly showAs: ReadonlyArray<readonly [SignalPath, ShowAs]>;
+}
+
+/** What is kept between runs and openings (FR-17), as plain data. */
+export interface ViewMemory extends ViewLayout {
+  readonly open: readonly string[];
   readonly window: Window;
   readonly cursor: Ticks;
   /** The tick `window` and `cursor` count in: the next run may count in another (Icarus ps, GHDL fs). */
@@ -65,8 +74,6 @@ export function toMemory(setup: ViewSetup): ViewMemory {
   };
 }
 
-const isShowAs = (value: string): value is ShowAs => SHOW_AS_LABELS.some(([known]) => known === value);
-
 /** The first view of a waveform (FR-5, FR-26). */
 function firstSetup(data: WaveformData, moments: RunMoments, fittingRows: number): ViewSetup {
   const { start, end, cursor } = firstWindow(data, moments);
@@ -78,23 +85,43 @@ export interface SetupContext {
   readonly moments: RunMoments;
   /** How many rows fit the view's height: as many signals are shown at first (FR-5). */
   readonly fittingRows: number;
+  /** The view saved with the project for this waveform's testbench (savedView.ts), if there is one. */
+  readonly saved?: ViewLayout;
 }
 
-/** The first view, or the student's own setup for every signal that still exists (FR-17). */
+/** Whether a layout shows any signal of this waveform: one of another testbench does not. */
+const showsAny = (layout: ViewLayout, known: ReadonlyMap<SignalPath, unknown>): boolean => layout.shown.some((path) => known.has(path));
+
+/** The window and cursor of a first view: the whole run, or the first error (FR-26). */
+function firstPlace(data: WaveformData, moments: RunMoments): { window: Window; cursor: Ticks } {
+  const { start, end, cursor } = firstWindow(data, moments);
+  return { window: { start, end }, cursor };
+}
+
+/** The layout's signals that still exist, ready for the view (FR-17). */
+function listFrom(layout: ViewLayout, open: readonly string[], known: ReadonlyMap<SignalPath, unknown>): Pick<ViewSetup, 'list' | 'showAs'> {
+  return {
+    list: { shown: layout.shown.filter((path) => known.has(path)), open: new Set(open), expanded: new Set(layout.expanded.filter((path) => known.has(path))) },
+    showAs: new Map(layout.showAs.filter(([path, showAs]) => known.has(path) && isShowAs(showAs))),
+  };
+}
+
+/**
+ * What a new waveform's view starts from, the newest first: the student's own setup from
+ * this session (FR-17), else the view saved with the project, else the first view.
+ */
 export function setupFor(data: WaveformData, memory: ViewMemory | null, context: SetupContext): ViewSetup {
   const known = signalsByPath(data);
-  const shown = memory?.shown.filter((path) => known.has(path)) ?? [];
-  if (memory === null || shown.length === 0) return firstSetup(data, context.moments, context.fittingRows);
-  const first = firstWindow(data, context.moments);
-  // A run with an error still opens at it: start where the problem is (W11).
-  const place = first.error === undefined ? rememberedPlace(memory, data) : { window: { start: first.start, end: first.end }, cursor: first.cursor };
-  return {
-    list: { shown, open: new Set(memory.open), expanded: new Set(memory.expanded.filter((path) => known.has(path))) },
-    showAs: new Map(memory.showAs.filter(([path, showAs]) => known.has(path) && isShowAs(showAs))),
-    ...place,
-    tickFs: data.tickFs,
-    runEnd: data.endTime,
-  };
+  const run = { tickFs: data.tickFs, runEnd: data.endTime };
+  if (memory !== null && showsAny(memory, known)) {
+    // A run with an error still opens at it: start where the problem is (W11).
+    const first = firstWindow(data, context.moments);
+    const place = first.error === undefined ? rememberedPlace(memory, data) : firstPlace(data, context.moments);
+    return { ...listFrom(memory, memory.open, known), ...place, ...run };
+  }
+  const { saved } = context;
+  if (saved !== undefined && showsAny(saved, known)) return { ...listFrom(saved, [], known), ...firstPlace(data, context.moments), ...run };
+  return firstSetup(data, context.moments, context.fittingRows);
 }
 
 /**
@@ -160,6 +187,12 @@ export function toggleShown(setup: ViewSetup, path: SignalPath): ViewSetup {
   const next = shown.includes(path) ? shown.filter((p) => p !== path) : [...shown, path];
   return { ...setup, list: { ...setup.list, shown: next } };
 }
+
+/** The shown signals in a new order (docs/imp_wave_rearange.md); nothing else changes. */
+export const withMove = (setup: ViewSetup, move: Move): ViewSetup => ({
+  ...setup,
+  list: { ...setup.list, shown: orderAfter(setup.list.shown, move) },
+});
 
 export const toggleOpen = (setup: ViewSetup, path: string): ViewSetup => ({ ...setup, list: { ...setup.list, open: toggled(setup.list.open, path) } });
 

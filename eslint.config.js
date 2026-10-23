@@ -13,7 +13,13 @@
 
 import tseslint from 'typescript-eslint';
 
-const NEW_CODE = ['src/components/waveform/**/*.ts', 'src/components/waveform/**/*.tsx'];
+const NEW_CODE = [
+  'src/components/waveform/**/*.ts',
+  'src/components/waveform/**/*.tsx',
+  // The waveform view saved in the project file (docs/imp_wave_rearange.md § 11).
+  'src/project/waveViews.ts',
+  'src/components/workbench/useProjectWaveViews.ts',
+];
 
 const MAX_FUNCTION_LINES = 40;
 const MAX_PARAMETERS = 3;

@@ -13,7 +13,7 @@
     "demo": "npm run build && node tools/bundle.mjs Examples/board_demo.html",
     "test": "vitest run",
     "version:bump": "node tools/bump-version.mjs",
-    "lint": "eslint src/components/waveform"
+    "lint": "eslint src/components/waveform src/project/waveViews.ts src/components/workbench/useProjectWaveViews.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -5,11 +5,12 @@
  * The small menus of the waveform view (§ 8.6, S3): the ⋯ menu (Copy waveform, Figure
  * for a report, Download, Help), report mode's ⋯ menu (Copy to clipboard, Save SVG,
  * Save PNG – the band's own buttons, § 8.8)
- * and the right-click menu of a signal (Go to declaration, Show as, Show/Remove).
+ * and the right-click menu of a signal (Go to declaration, Show as, Move, Show/Remove).
  */
 
 import { REPORT_DPI } from './figure/figureStyle';
 import { SHOW_AS_LABELS, type ShowAs } from './radix';
+import type { MoveStep } from './signalOrder';
 
 /** Where a menu opens, in window coordinates. */
 export interface MenuPlace {
@@ -91,6 +92,43 @@ export interface SignalMenuProps {
   readonly onGoToDeclaration: () => void;
   readonly onShowAs: (showAs: ShowAs) => void;
   readonly onToggleShown: () => void;
+  /** The Move items, for a shown signal that can be reordered (docs/imp_wave_rearange.md D13). */
+  readonly move?: MoveChoices;
+}
+
+export interface MoveChoices {
+  /** Whether the step would move the signal: not at the edge it is already at. */
+  can(step: MoveStep): boolean;
+  onMove(step: MoveStep): void;
+}
+
+interface MoveItem {
+  readonly step: MoveStep;
+  readonly label: string;
+  /** The key that does the same, as shown and as `aria-keyshortcuts` names it. */
+  readonly keys?: { readonly shown: string; readonly aria: string };
+}
+
+/** The Move items in their order. */
+const MOVE_ITEMS: readonly MoveItem[] = [
+  { step: 'up', label: 'Move up', keys: { shown: 'Alt+↑', aria: 'Alt+ArrowUp' } },
+  { step: 'down', label: 'Move down', keys: { shown: 'Alt+↓', aria: 'Alt+ArrowDown' } },
+  { step: 'top', label: 'Move to top' },
+  { step: 'bottom', label: 'Move to bottom' },
+];
+
+function MoveGroup({ move }: { readonly move: MoveChoices }) {
+  return (
+    <div role="group" aria-label="Move" className="wv-menu__group">
+      <span className="wv-menu__label">Move</span>
+      {MOVE_ITEMS.map(({ step, label, keys }) => (
+        <button key={step} type="button" role="menuitem" disabled={!move.can(step)} aria-keyshortcuts={keys?.aria} onClick={() => move.onMove(step)}>
+          {label}
+          {keys !== undefined && <span className="wv-menu__keys">{keys.shown}</span>}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function ShowAsGroup({ current, onShowAs }: { readonly current: ShowAs; readonly onShowAs: (showAs: ShowAs) => void }) {
@@ -114,6 +152,7 @@ export function SignalMenu(props: SignalMenuProps) {
         Go to declaration
       </button>
       {props.showAs !== undefined && <ShowAsGroup current={props.showAs} onShowAs={props.onShowAs} />}
+      {props.move !== undefined && <MoveGroup move={props.move} />}
       <button type="button" role="menuitem" onClick={props.onToggleShown}>
         {props.shown ? 'Remove from the shown signals' : 'Show'}
       </button>

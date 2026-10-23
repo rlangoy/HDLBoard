@@ -53,6 +53,10 @@ export function WaveHelp({ onClose }: { readonly onClose: () => void }) {
         Tick a signal in the folders below to show its trace; untick it to hide it again. ▸ beside a vector shows its bits. Right-click a
         signal for “Show as” and Go to declaration.
       </p>
+      <p>
+        Drag a signal by its name to change the order, or select it and press Alt + ↑ or ↓. Signals move within their own section, TB or
+        RTL. The order and the signals shown are saved with the project.
+      </p>
       <p>The waveform shows each signal’s value at the end of every time step; delta cycles are not shown.</p>
       <button type="button" className="wv-button wv-button--text" onClick={onClose}>
         Close help

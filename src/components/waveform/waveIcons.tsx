@@ -39,3 +39,12 @@ export const MoreIcon = (props: SVGProps<SVGSVGElement>) => (
   />
 );
 
+
+/** Two columns of three dots: "this row can be picked up and moved" (docs/imp_wave_rearange.md D2). */
+const GRIP_DOTS = 'M2.5 1.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3ZM7.5 1.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3ZM2.5 6.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3ZM7.5 6.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3ZM2.5 11.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3ZM7.5 11.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3Z';
+
+export const GripIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true" {...props}>
+    <path d={GRIP_DOTS} />
+  </svg>
+);

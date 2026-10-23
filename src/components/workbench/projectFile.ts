@@ -16,7 +16,8 @@
 import { fetchText, type FetchFn } from '../../project/fetchText';
 import { fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
 import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../project/parseProject';
-import { DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry } from '../../project/types';
+import { DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
+import { parseWaveViews, withWaveViewOf } from '../../project/waveViews';
 import { diskPath } from '../../project/resolveSource';
 import { projectDirectoryOf } from './projectLayout';
 import { isHttpUrl } from '../../project/url';
@@ -80,6 +81,8 @@ export interface OpenProject {
    * with "Leave the project". Missing reads as none.
    */
   excluded?: string[];
+  /** How the waveform view of each testbench was set up, saved in the project file (docs/imp_wave_rearange.md § 11). */
+  waveViews?: SavedWaveViews;
 }
 
 /** One row of the project settings' file table. */
@@ -146,6 +149,7 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
     projectDirectory: projectDirectoryOf(project),
     sourceDirectory: project.sourceDirectory,
     files: projectEntries(project, fileNames).map(({ name, url, description }) => ({ name, url, description })),
+    waveViews: project.waveViews,
   });
 }
 
@@ -310,6 +314,17 @@ export function withDetails(project: OpenProject, details: ProjectDetails): Open
   const followsName =
     details.name !== undefined && details.fileName === undefined && project.location === '' && project.fileName === projectFileNameFor(project.name);
   return { ...project, ...details, ...(followsName ? { fileName: projectFileNameFor(details.name ?? '') } : {}) };
+}
+
+/**
+ * The waveform view of `testbench` as the student set it up; it is saved with the project
+ * file, so it counts as a change. The same project comes back when nothing changes.
+ */
+export function withWaveView(project: OpenProject, testbench: string, view: SavedWaveView): OpenProject {
+  const waveViews = withWaveViewOf(project.waveViews, testbench, view);
+  if (waveViews === project.waveViews) return project;
+  const { waveViews: _old, ...rest } = project;
+  return waveViews === undefined ? rest : { ...rest, waveViews };
 }
 
 /** Files offered on the project settings join the project. */
@@ -562,6 +577,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     ],
     savedText: '',
     ...(source.gist ? { gist: source.gist } : {}),
+    ...(project.waveViews ? { waveViews: project.waveViews } : {}),
   };
   // Saved state is the project as it reads opened, so an untouched project shows no changes.
   return { project: withSaved(opened, files), files };
@@ -616,6 +632,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
       ? (r.onDisk as Record<string, string>)
       : undefined;
   const onDiskFileName = typeof r.onDiskFileName === 'string' ? r.onDiskFileName : undefined;
+  const waveViews = parseWaveViews(r.waveViews, []);
   return {
     version: r.version,
     name: r.name as string,
@@ -633,6 +650,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     ...(gist ? { gist } : {}),
     ...(excluded.length > 0 ? { excluded } : {}),
     ...(savedFiles ? { savedFiles } : {}),
+    ...(waveViews ? { waveViews } : {}),
   };
 }
 

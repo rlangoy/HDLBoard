@@ -49,6 +49,7 @@ import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } fr
 import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
 import { useWaveformView } from '../waveform/useWaveformView';
+import { useProjectWaveViews } from './useProjectWaveViews';
 import { WaveformButton } from '../waveform/WaveformButton';
 import { WaveformPane } from '../waveform/WaveformPane';
 import { useDiagnostics } from './useDiagnostics';
@@ -496,6 +497,7 @@ export function Workbench() {
     reveal: (target) => revealLocation(target, target.symbolId),
     log: useCallback((text: string, link?: boolean) => appendLog(text, link ? 'success' : undefined, link ? 'open-waveform' : undefined), [appendLog]),
     projectKey: String(projectGeneration),
+    savedViews: useProjectWaveViews(project, setProject),
   });
   const { clientHandlers: waveHandlers, boardStateSeen, runEnded: endRunWaveform } = waveView;
   const getClient = useCallback((): HdlClient => {

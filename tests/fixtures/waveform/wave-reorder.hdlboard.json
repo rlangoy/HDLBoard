@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "name": "Wave reorder check",
+  "board": "DE1-SoC",
+  "description": "The 4-bit adder with a saved waveform view (tests/e2e/wave-reorder.md).",
+  "files": [
+    { "name": "adder4.vhd", "url": "", "description": "Design: 4-bit unsigned adder" },
+    { "name": "adder4_tb.vhdl", "url": "", "description": "Self-checking testbench for adder4" }
+  ],
+  "waveViews": {
+    "adder4_tb": {
+      "signals": [
+        { "path": "sum", "showAs": "decimal" },
+        { "path": "a" },
+        { "path": "dut/sum", "expanded": true },
+        { "path": "dut/a" }
+      ]
+    }
+  }
+}
