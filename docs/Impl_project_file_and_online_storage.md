@@ -38,6 +38,7 @@ JSON, with the extension `.hdlboard.json` (e.g. `counter.hdlboard.json`).
 | `projectDirectory` | string | no | The folder next to the project file that holds the project's files **on local disk**: always the project file name without `.hdlboard.json`. Missing or invalid → that name. See [`impl_project_structure.md`](impl_project_structure.md). |
 | `sourceDirectory` | string | no | The folder inside `projectDirectory` for the HDL files on local disk. Missing or invalid → `src`. One folder name only. |
 | `files` | array | yes | List of project files (see 4.3). |
+| `waveViews` | object | no | The waveform view saved for each testbench: the signals shown, in their order, with "Show as" and unfolded vectors. Read forgivingly – a broken entry is left out with a warning. See [`imp_wave_rearange.md`](imp_wave_rearange.md) § 11. |
 
 ### 4.2 Board name
 

@@ -21,6 +21,7 @@ import { SignalList } from './SignalList';
 import type { RowCallbacks, RowContext } from './SignalRow';
 import { viewOf } from './timeAxis';
 import type { Waveform } from './useWaveform';
+import type { SavedViews } from './useSavedView';
 import { useWaveView, type WaveFocus, type WaveView } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
 import { WaveCanvas } from './WaveCanvas';
@@ -31,7 +32,9 @@ import { ReportBand } from './figure/ReportBand';
 import { CopyStatus, ReportStage } from './figure/ReportStage';
 import { useViewFigures, type ReportMode, type ViewFigures } from './figure/useViewFigures';
 import { timeHandlersOf } from './useTimeGestures';
-import { MoreMenu, ReportMenu, SignalMenu, type MenuPlace } from './WaveMenus';
+import { MoreMenu, ReportMenu, SignalMenu, type MenuPlace, type MoveChoices } from './WaveMenus';
+import { RowDragLayer } from './RowDragLayer';
+import { useReorder, type Reorder } from './useReorder';
 import { notesFor, WaveHelp, WaveNotes } from './WaveNotes';
 import { WaveToolbar, type ToolbarMode } from './WaveToolbar';
 import './Waveform.css';
@@ -46,6 +49,8 @@ export interface WaveformPaneProps {
   /** The run's console lines: where its first error and last report are (FR-26). */
   readonly consoleLines: readonly string[];
   readonly memory: MutableRefObject<ViewMemory | null>;
+  /** The views saved with the project (docs/imp_wave_rearange.md § 11). */
+  readonly saved: SavedViews;
   readonly focus: WaveFocus | null;
   onGoToDeclaration(scopes: readonly string[], name: string): void;
   /** The file a scope's unit is in, for the section heads' tooltips. */
@@ -69,7 +74,16 @@ interface Signals {
   readonly showAsOf: (path: SignalPath) => ShowAs;
   readonly goTo: (path: SignalPath) => void;
   readonly on: RowCallbacks;
+  readonly reorder: Reorder;
   readonly fileOfScope?: (scopes: readonly string[]) => string | undefined;
+}
+
+interface SignalsInput {
+  readonly props: WaveformPaneProps;
+  readonly view: WaveView;
+  readonly openMenu: (menu: Menu) => void;
+  /** The scrolling body, which a drag near its edge scrolls. */
+  readonly body: HTMLDivElement | null;
 }
 
 function useMoments(consoleLines: readonly string[]): RunMoments {
@@ -122,8 +136,9 @@ function keyAction(event: KeyboardEvent<HTMLElement>, targets: KeyTargets): (() 
   return event.ctrlKey || event.metaKey || event.altKey ? undefined : keys[event.key];
 }
 
-function useSignals(props: WaveformPaneProps, view: WaveView, openMenu: (menu: Menu) => void): Signals {
+function useSignals({ props, view, openMenu, body }: SignalsInput): Signals {
   const [selected, setSelected] = useState<string | null>(null);
+  const reorder = useReorder({ view, body, select: setSelected });
   const data = props.waveform.state.data;
   const known = useMemo(() => (data === null ? new Map() : signalsByPath(data)), [data]);
   const chosen = view.setup?.showAs;
@@ -147,8 +162,10 @@ function useSignals(props: WaveformPaneProps, view: WaveView, openMenu: (menu: M
     onToggleExpanded: view.actions.toggleExpanded,
     onContextMenu: (path, x, y) => openMenu({ kind: 'signal', place: { x, y }, path }),
     onGoToDeclaration: goTo,
+    onMove: reorder.step,
+    onPressMove: reorder.press,
   };
-  return { selected, showAsOf, goTo, on, fileOfScope: props.fileOfScope };
+  return { selected, showAsOf, goTo, on, reorder, fileOfScope: props.fileOfScope };
 }
 
 interface SignalMenuForProps {
@@ -173,8 +190,15 @@ function SignalMenuFor({ menu, view, data, signals, closeMenu }: SignalMenuForPr
       onGoToDeclaration={() => then(() => signals.goTo(menu.path))}
       onShowAs={(showAs) => then(() => view.actions.setShowAs(menu.path, showAs))}
       onToggleShown={() => then(() => view.actions.toggleShown(menu.path))}
+      move={moveChoices(signals.reorder, menu.path, then)}
     />
   );
+}
+
+/** The Move items of a signal's menu, or none for a signal that cannot move. */
+function moveChoices(reorder: Reorder, path: SignalPath, then: (action: () => void) => void): MoveChoices | undefined {
+  if (!reorder.canMove(path)) return undefined;
+  return { can: (step) => reorder.canStep(path, step), onMove: (step) => then(() => reorder.step(path, step)) };
 }
 
 /** What the canvas's mouse gestures do to the view: a hidden cursor stays where it is. */
@@ -188,6 +212,7 @@ interface BodyProps {
   readonly data: WaveformData;
   readonly view: WaveView;
   readonly context: RowContext;
+  readonly reorder: Reorder;
   readonly error: { readonly time: Ticks; readonly text: string } | undefined;
   readonly stale: boolean;
   readonly bodyHeight: number;
@@ -199,7 +224,7 @@ interface BodyProps {
 }
 
 /** The scrolling part: names and values on the left, the canvas on the right, one row each. */
-function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNamesWidth, onBodyElement, onTracesWidth }: BodyProps) {
+function Body({ data, view, context, reorder, error, stale, bodyHeight, namesWidth, onNamesWidth, onBodyElement, onTracesWidth }: BodyProps) {
   const [traces, setTraces] = useState<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const width = useElementSize(traces).width;
@@ -222,7 +247,7 @@ function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNam
   const handlers = gestureHandlers(view, context);
   return (
     <div className="wv-body" ref={onBodyElement} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
-      <div className="wv-grid" style={{ height: listHeight }}>
+      <div className="wv-grid" ref={reorder.onGridElement} style={{ height: listHeight }}>
         <div className="wv-names" style={{ width: namesWidth }}>
           <ColumnResizer width={namesWidth} onWidth={onNamesWidth} />
           <div className="wv-names__header" style={{ height: AXIS_HEIGHT }}>
@@ -234,6 +259,7 @@ function Body({ data, view, context, error, stale, bodyHeight, namesWidth, onNam
         <div className="wv-traces" ref={setTraces}>
           <WaveCanvas scene={scene} error={error} handlers={handlers} />
         </div>
+        <RowDragLayer store={reorder.store} sections={reorder.sections} namesWidth={namesWidth} />
       </div>
     </div>
   );
@@ -339,8 +365,8 @@ function usePane(props: WaveformPaneProps) {
   const moments = useMoments(props.consoleLines);
   const fittingRows = bodyHeight > 0 ? Math.max(1, Math.floor((bodyHeight - AXIS_HEIGHT) / ROW_HEIGHT) - 1) : DEFAULT_FITTING_ROWS;
   const end = data === null ? 1 : runEnd(data, moments);
-  const view = useWaveView({ data, moments, memory: props.memory, focus: props.focus, fittingRows, minSpan: MIN_WINDOW_TICKS, end });
-  const signals = useSignals(props, view, setMenu);
+  const view = useWaveView({ data, moments, memory: props.memory, saved: props.saved, focus: props.focus, fittingRows, minSpan: MIN_WINDOW_TICKS, end });
+  const signals = useSignals({ props, view, openMenu: setMenu, body });
   const error = useMemo(() => (data === null ? undefined : firstWindow(data, moments).error), [data, moments]);
   /** Closes the open menu; false when none was open. */
   const closeMenu = () => {
@@ -358,8 +384,8 @@ interface RowContextInput {
 }
 
 function rowContext({ data, signals, shownCursor }: RowContextInput): RowContext {
-  const { showAsOf, selected, on, fileOfScope } = signals;
-  return { cursor: shownCursor, traces: data?.traces ?? new Map(), showAsOf, selected, on, fileOfScope };
+  const { showAsOf, selected, on, fileOfScope, reorder } = signals;
+  return { cursor: shownCursor, traces: data?.traces ?? new Map(), showAsOf, selected, movable: reorder.canMove, on, fileOfScope };
 }
 
 /** Whether a key is meant for something else: a field the student types in, or a dialog over the pane. */
@@ -403,12 +429,15 @@ export function WaveformPane(props: WaveformPaneProps) {
         <div className="wv-empty">{emptyText(waveform, showLoading)}</div>
       ) : (
         <ReportStage report={figures.report} handlers={timeHandlersOf(view.actions)}>
-          <Body data={data} view={view} context={rowContext({ data, signals, shownCursor })} error={error} stale={waveform.state.stale}
+          <Body data={data} view={view} context={rowContext({ data, signals, shownCursor })} reorder={signals.reorder} error={error} stale={waveform.state.stale}
             bodyHeight={bodyHeight} namesWidth={namesWidth} onNamesWidth={setNamesWidth} onBodyElement={setBody} onTracesWidth={setTracesWidth} />
         </ReportStage>
       )}
       <Menus menu={menu} waveform={waveform} view={view} signals={signals} setMenu={setMenu} openHelp={() => setHelpOpen(true)} figures={figures} />
       <CopyStatus status={figures.status} />
+      <div className="wb-sr-only" role="status" aria-live="polite">
+        {signals.reorder.announcement}
+      </div>
     </section>
   );
 }

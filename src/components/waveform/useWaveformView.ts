@@ -15,6 +15,7 @@ import type { WaveClientHandlers } from '../workbench/hdlClient';
 import { filesOfRun, findDeclaration, scopeFileName, type DeclarationTarget } from './declarations';
 import { filesOf, newestOrigin, originOf, withOrigin, type RunOrigin, type RunOrigins } from './runOrigins';
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
+import type { SavedViews } from './useSavedView';
 import type { WaveFocus } from './useWaveView';
 import type { ViewMemory } from './viewSetup';
 import { buttonState, type ButtonState } from './waveState';
@@ -42,6 +43,8 @@ export interface WaveformViewInput {
   readonly log: (text: string, link?: boolean) => void;
   /** Changes when another project is opened. */
   readonly projectKey: string;
+  /** The open project's saved waveform views (docs/imp_wave_rearange.md § 11). */
+  readonly savedViews: SavedViews;
 }
 
 export interface WaveformView {
@@ -58,6 +61,7 @@ export interface WaveformView {
   readonly pane: {
     readonly title: string;
     readonly memory: React.MutableRefObject<ViewMemory | null>;
+    readonly saved: SavedViews;
     readonly focus: WaveFocus | null;
     readonly onGoToDeclaration: (scopes: readonly string[], name: string) => void;
     /** The file a scope's unit is in, for the section heads' tooltips. */
@@ -257,7 +261,7 @@ export function useWaveformView(input: WaveformViewInput): WaveformView {
     boardStateSeen: runs.boardStateSeen,
     runEnded: runs.runEnded,
     openWhenReady: runs.openWhenReady,
-    pane: { title, memory, focus, onGoToDeclaration: useDeclarations(input, runFiles), fileOfScope: (scopes) => scopeFileName(runFiles(), scopes) },
+    pane: { title, memory, saved: input.savedViews, focus, onGoToDeclaration: useDeclarations(input, runFiles), fileOfScope: (scopes) => scopeFileName(runFiles(), scopes) },
     button: { state, onToggle: () => (waveform.state.open ? waveform.close() : open()) },
     links: state === 'empty' ? {} : { onOpenTime: openAt, onOpenWaveform: open },
     dialog: { open: dialogOpen, afterBoardRun: waveform.state.boardRun, onClose: () => setDialogOpen(false) },

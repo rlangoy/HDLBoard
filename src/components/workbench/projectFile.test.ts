@@ -23,6 +23,7 @@ import {
   withEntryRenamed,
   withFileLeft,
   withSaved,
+  withWaveView,
   parseStoredProject,
 } from './projectFile';
 
@@ -243,5 +244,30 @@ describe('unsavedChangesQuestion', () => {
 
   it('speaks of the open project when it has no name', () => {
     expect(unsavedChangesQuestion('Open Adder?', '')).toContain('The open project has changes');
+  });
+});
+
+describe('the waveform views of a project', () => {
+  const view = { signals: [{ path: 'clk' }, { path: 'dut/count', showAs: 'decimal' }] };
+
+  it('are saved in the project file, and a change to one is an unsaved change', () => {
+    const project = withSaved(newProject('Counter', []), []);
+    const changed = withWaveView(project, 'counter_tb', view);
+    expect(projectFileText(changed, [])).toMatch(/"waveViews": \{\s+"counter_tb"/);
+    expect(hasUnsavedChanges(project, [])).toBe(false);
+    expect(hasUnsavedChanges(changed, [])).toBe(true);
+    expect(withWaveView(changed, 'counter_tb', view)).toBe(changed);
+  });
+
+  it('come back when the project is opened, and with the stored workspace', async () => {
+    const { project } = await openProject({ text: projectJson([], { waveViews: { counter_tb: view } }), location: 'counter.hdlboard.json' });
+    expect(project.waveViews).toEqual({ counter_tb: view });
+    expect(hasUnsavedChanges(project, [])).toBe(false);
+    expect(parseStoredProject(JSON.parse(JSON.stringify(project)))?.waveViews).toEqual({ counter_tb: view });
+  });
+
+  it('a view showing nothing leaves the project file', () => {
+    const project = withWaveView(newProject('Counter', []), 'counter_tb', view);
+    expect(withWaveView(project, 'counter_tb', { signals: [] }).waveViews).toBeUndefined();
   });
 });

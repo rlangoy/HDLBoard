@@ -34,7 +34,27 @@ export interface HdlBoardProject {
   /** The folder inside `projectDirectory` for the HDL files; undefined → `src`. */
   sourceDirectory?: string;
   files: ProjectFileEntry[];
+  /** How the waveform view of each testbench was set up, by testbench name (waveViews.ts); undefined → none saved. */
+  waveViews?: SavedWaveViews;
 }
+
+/** One shown signal of a saved waveform view. Its order in the list is its place in the view. */
+export interface SavedWaveSignal {
+  /** Below the testbench: `clk`, `dut/count`, `pair/a`. */
+  path: string;
+  /** "Show as", when the student chose one: `hex`, `decimal`, `ascii`, `binary`. */
+  showAs?: string;
+  /** A vector shown with its bits unfolded. */
+  expanded?: boolean;
+}
+
+/** The waveform view of one testbench: the signals shown, in their order (docs/imp_wave_rearange.md § 11). */
+export interface SavedWaveView {
+  signals: SavedWaveSignal[];
+}
+
+/** Saved waveform views by testbench name, `counter_tb`. */
+export type SavedWaveViews = Record<string, SavedWaveView>;
 
 export type Severity = 'error' | 'warning' | 'info';
 
