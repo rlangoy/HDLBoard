@@ -549,7 +549,7 @@ Stage: **1** first release to students · **2** next · **3** later.
 | FR-18 | **Go to declaration** on a signal closes the waveform and shows the declaration in the split view, in the testbench or the RTL pane (uses the existing symbol index). Only the files the waveform's run compiled are searched (its design folder, `vhdl/` or `verilog/`), so a VHDL and a Verilog testbench of the same name never mix; the section heads' tooltips name files the same way. | 1 |
 | FR-19 | Optional "Stop at" simulated time in the **⋯** menu (7.1). It applies to **one run only** and the console names it on that run, so a forgotten value cannot silently cut later runs. | 2 |
 | FR-20 | Download the waveform file (`<testbench>.ghw` / `.vcd`) from the **⋯** menu – for GTKWave or Surfer, or to send to the teacher. | 1 |
-| FR-21 | Save the shown signals and their "Show as" in the project file, so a shared example opens with the teacher's view. | 3 |
+| FR-21 | Save the shown signals and their "Show as" in the project file, so a shared example opens with the teacher's view. **Done** with the order and unfolded vectors, as `waveViews` (docs/imp_wave_rearange.md § 11). | 3 |
 | FR-22 | Board-mode capture (section 10), only if it can be kept as simple as the batch viewer. | 3 |
 | FR-23 | Hovering a trace shows its value and time; vectors up to 16 bits in both hexadecimal and decimal; for `U`, `X`, `Z`, `W` and `-` one sentence on what the value means and its most likely cause in a beginner's design (`X`: two drivers, or arithmetic on an uninitialised signal). | 1 |
 | FR-24 | The **Waveform** button left of **Clear** in the *Simulator Output / Status* band opens and closes the view, with the states of 8.6. Opening replaces the split view; closing shows the testbench/RTL split view again. | 1 |
@@ -557,6 +557,7 @@ Stage: **1** first release to students · **2** next · **3** later.
 | FR-26 | When the run reported an error, the waveform opens zoomed in at the first error, with the cursor and a red marker there; otherwise fitted to the whole run (8.6). | 1 |
 | FR-27 | Group the DUT's ports as **Inputs** and **Outputs** above the internal signals, using the existing port analysis of the design (VCD and GHW do not record port directions). | 2 |
 | FR-28 | Option to show the waveform over the testbench half only, so the RTL code stays visible beside it (Q8). | 3 |
+| FR-29 | **Reorder the shown signals** by dragging a name (or its grip), with Alt + ↑ / ↓ and from the right-click menu, within their own section; the waveform area stays reserved for zoom and cursor (docs/imp_wave_rearange.md). | 1 |
 
 ### 9.2 Non-functional
 

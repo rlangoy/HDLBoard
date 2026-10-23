@@ -21,6 +21,9 @@ export const SHOW_AS_LABELS: ReadonlyArray<readonly [ShowAs, string]> = [
   ['binary', 'Binary'],
 ];
 
+/** Whether a stored word is a "Show as" this version knows. */
+export const isShowAs = (value: string): value is ShowAs => SHOW_AS_LABELS.some(([known]) => known === value);
+
 const HEX_PREFIX = '0x';
 const HEX_BASE = 16;
 const BITS_PER_HEX_DIGIT = 4;
