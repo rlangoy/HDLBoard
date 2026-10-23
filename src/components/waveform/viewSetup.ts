@@ -11,7 +11,7 @@
 import { firstShown, firstWindow, type RunMoments } from './initialView';
 import type { Ticks, WaveformData } from './model';
 import { isShowAs, type ShowAs } from './radix';
-import { orderAfter, type Move } from './signalOrder';
+import { fitsOrder, orderAfter, type Move } from './signalOrder';
 import { signalsByPath, type ListState, type SignalPath } from './signalRows';
 
 /** The time window on screen. */
@@ -188,11 +188,12 @@ export function toggleShown(setup: ViewSetup, path: SignalPath): ViewSetup {
   return { ...setup, list: { ...setup.list, shown: next } };
 }
 
-/** The shown signals in a new order (docs/imp_wave_rearange.md); nothing else changes. */
-export const withMove = (setup: ViewSetup, move: Move): ViewSetup => ({
-  ...setup,
-  list: { ...setup.list, shown: orderAfter(setup.list.shown, move) },
-});
+/**
+ * The shown signals in a new order (docs/imp_wave_rearange.md); nothing else changes. A
+ * move made on an order the list no longer has changes nothing.
+ */
+export const withMove = (setup: ViewSetup, move: Move): ViewSetup =>
+  fitsOrder(setup.list.shown, move) ? { ...setup, list: { ...setup.list, shown: orderAfter(setup.list.shown, move) } } : setup;
 
 export const toggleOpen = (setup: ViewSetup, path: string): ViewSetup => ({ ...setup, list: { ...setup.list, open: toggled(setup.list.open, path) } });
 

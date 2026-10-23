@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { fixtureBytes } from './fixtures.testSupport';
 import { parseGhw } from './ghwParser';
-import { blockOf, dropTargetAt, movablePaths, orderAfter, placeOf, sectionsOf, stepMove, type Section } from './signalOrder';
+import { blockOf, dropTargetAt, fitsOrder, movablePaths, orderAfter, placeOf, sectionsOf, stepMove, type Section } from './signalOrder';
 import { listRows, rowIndexAtY, sectionPath, SECTION_GAP_PX, traceRows, type ListState } from './signalRows';
 import { AUTO_SCROLL_ZONE_PX, autoScrollSpeed } from './rowDragGesture';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
@@ -110,6 +110,20 @@ describe('the order after a move', () => {
   test('a move says where the signal ends up', () => {
     expect(placeOf({ section: tb, from: 0, to: 3 })).toEqual({ place: 3, of: 3 });
     expect(placeOf({ section: tb, from: 2, to: 0 })).toEqual({ place: 1, of: 3 });
+  });
+});
+
+describe('a move made on an order the list no longer has', () => {
+  const [tb] = sectionsFor([CLK, Q, RST]);
+  const move = { section: tb, from: 2, to: 0 };
+
+  test('fits while the section still shows the same signals in the same order', () => {
+    expect(fitsOrder([CLK, DUT_COUNT, Q, RST], move)).toBe(true);
+  });
+
+  test('does not fit when a signal of the section is gone or the order changed', () => {
+    expect(fitsOrder([CLK, RST], move)).toBe(false);
+    expect(fitsOrder([Q, CLK, RST], move)).toBe(false);
   });
 });
 

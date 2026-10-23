@@ -9,17 +9,26 @@
  * read as changed.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { SavedWaveView } from '../../project/types';
 import type { WaveformData } from './model';
 import { layoutOf, savedViewOf } from './savedView';
-import { testbenchScope } from './signalRows';
+import { signalsByPath, testbenchScope } from './signalRows';
 import type { ViewLayout, ViewSetup } from './viewSetup';
 
 /** Where the project keeps its waveform views, by testbench name (the Workbench gives it). */
 export interface SavedViews {
   of(testbench: string): SavedWaveView | undefined;
-  save(testbench: string, view: SavedWaveView): void;
+  /** Replaces the testbench's view with what `next` makes of the one saved now. */
+  save(testbench: string, next: (previous: SavedWaveView | undefined) => SavedWaveView): void;
+}
+
+/** A view's setup, the waveform it was made for, and how many changes to its signals the student has made. */
+export interface EditedView {
+  readonly data: WaveformData;
+  readonly setup: ViewSetup;
+  /** Counts up with each change to the signals; a new waveform keeps the count. */
+  readonly edits: number;
 }
 
 /** The view saved for this waveform's testbench, as the layout the view starts from. */
@@ -30,19 +39,17 @@ export function savedLayoutFor(data: WaveformData, saved: SavedViews): ViewLayou
 }
 
 /**
- * Saves the view after the student has changed its signals. `changed` is called by
- * every such action, before the change; the setup it leads to is saved once it is there.
+ * Saves the view after each change to its signals, for the testbench of the waveform the
+ * view was made for. A view that only arrived, zoomed or moved its cursor has no new edit.
  */
-export function useSavedView(data: WaveformData | null, setup: ViewSetup | null, saved: SavedViews): { readonly changed: () => void } {
-  const pending = useRef(false);
+export function useSavedView(view: EditedView | null, saved: SavedViews): void {
+  const savedEdits = useRef(0);
   useEffect(() => {
-    const testbench = data === null ? undefined : testbenchScope(data)?.name;
-    if (!pending.current || setup === null || testbench === undefined) return;
-    pending.current = false;
-    saved.save(testbench, savedViewOf(testbench, setup));
-  }, [data, setup, saved]);
-  const changed = useCallback(() => {
-    pending.current = true;
-  }, []);
-  return { changed };
+    if (view === null || view.edits === savedEdits.current) return;
+    savedEdits.current = view.edits;
+    const testbench = testbenchScope(view.data)?.name;
+    if (testbench === undefined) return;
+    const known = signalsByPath(view.data);
+    saved.save(testbench, (previous) => savedViewOf(testbench, view.setup, { known, previous }));
+  }, [view, saved]);
 }

@@ -14,7 +14,7 @@ import { cx } from '../board';
 import { ChipIcon, FlaskIcon } from '../workbench/icons';
 import type { Trace } from './model';
 import { formatValue, isUndefinedValue, type ShowAs } from './radix';
-import type { MoveStep } from './signalOrder';
+import { isSignalRow, type MoveStep } from './signalOrder';
 import type { Row, SectionRow, TraceRow } from './signalRows';
 import { valueAt } from './valueAt';
 import { unavailableHelp } from './valueHelp';
@@ -121,7 +121,7 @@ interface RowFrameProps {
 function RowFrame(props: RowFrameProps) {
   const { row, context, className, title, expanded, keyShortcuts, onActivate, gapAbove, onHover, children } = props;
   const selected = context.selected === row.path;
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => keyOnRow(event, row, context.on);
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => keyOnRow(event, row, context);
   const onContextMenu = (event: MouseEvent) => {
     if (row.kind !== 'trace' && row.kind !== 'hidden') return;
     event.preventDefault();
@@ -156,13 +156,13 @@ function toggleFor(row: Row, on: RowCallbacks): (() => void) | undefined {
   return undefined;
 }
 
-/** Alt + ↑ / ↓ on a shown signal moves it; false when the key is not such a move. */
-function moveOnKey(event: KeyboardEvent<HTMLDivElement>, row: Row, on: RowCallbacks): boolean {
+/** Alt + ↑ / ↓ on a signal that can move moves it; false when the key is not such a move. */
+function moveOnKey(event: KeyboardEvent<HTMLDivElement>, row: Row, context: RowContext): boolean {
   const step = event.altKey ? MOVE_KEYS[event.key] : undefined;
-  if (step === undefined || row.kind !== 'trace' || row.parent !== undefined) return false;
+  if (step === undefined || !isSignalRow(row) || !context.movable(row.path)) return false;
   event.preventDefault();
   const element = event.currentTarget;
-  on.onMove(row.path, step);
+  context.on.onMove(row.path, step);
   // React moves the row's element to its new place, which can cost it the focus: give it back, in view.
   requestAnimationFrame(() => {
     element.focus();
@@ -172,8 +172,9 @@ function moveOnKey(event: KeyboardEvent<HTMLDivElement>, row: Row, on: RowCallba
 }
 
 /** Enter/Space toggle a row, the context-menu key opens the menu, Alt + ↑ / ↓ move a signal (NFR-10). */
-function keyOnRow(event: KeyboardEvent<HTMLDivElement>, row: Row, on: RowCallbacks): void {
-  if (moveOnKey(event, row, on)) return;
+function keyOnRow(event: KeyboardEvent<HTMLDivElement>, row: Row, context: RowContext): void {
+  if (moveOnKey(event, row, context)) return;
+  const { on } = context;
   if (event.key === 'ContextMenu') {
     const box = event.currentTarget.getBoundingClientRect();
     on.onContextMenu(row.path, box.left, box.bottom);

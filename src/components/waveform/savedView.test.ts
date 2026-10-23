@@ -6,13 +6,14 @@ import { fixtureBytes } from './fixtures.testSupport';
 import { parseGhw } from './ghwParser';
 import { layoutOf, savedViewOf } from './savedView';
 import { sectionsOf, stepMove } from './signalOrder';
-import { listRows } from './signalRows';
+import { listRows, signalsByPath } from './signalRows';
 import { savedLayoutFor } from './useSavedView';
 import { setupFor, toggleExpanded, toggleShown, toMemory, withMove, withShowAs, type ViewSetup } from './viewSetup';
 
 const data = parseGhw(fixtureBytes('wave_types.ghw'));
 const TB = 'wave_types_tb';
 const context = { moments: {}, fittingRows: 3 };
+const known = signalsByPath(data);
 
 /** The first view with `dut/count` ticked and shown as decimal, and `q` moved to the top of TB and unfolded. */
 function studentSetup(): ViewSetup {
@@ -25,19 +26,41 @@ function studentSetup(): ViewSetup {
 
 describe('the view saved with the project', () => {
   test('names each shown signal below its testbench, in its order, with what the student chose', () => {
-    expect(savedViewOf(TB, studentSetup())).toEqual({
+    expect(savedViewOf(TB, studentSetup(), { known })).toEqual({
       signals: [{ path: 'q', expanded: true }, { path: 'clk' }, { path: 'rst' }, { path: 'dut/count', showAs: 'decimal' }],
     });
   });
 
   test('read back, it is the same layout', () => {
     const setup = studentSetup();
-    const layout = layoutOf(TB, savedViewOf(TB, setup));
+    const layout = layoutOf(TB, savedViewOf(TB, setup, { known }));
     expect(layout).toEqual({ shown: setup.list.shown, expanded: [...setup.list.expanded], showAs: [...setup.showAs] });
   });
 
   test('a "Show as" this version does not know is left out', () => {
     expect(layoutOf(TB, { signals: [{ path: 'q', showAs: 'octal' }] }).showAs).toEqual([]);
+  });
+
+  test('keeps the signals this run does not have, each after the one it followed', () => {
+    const previous = { signals: [{ path: 'clk_verilog' }, { path: 'clk' }, { path: 'gone', showAs: 'hex' }, { path: 'rst' }] };
+    const saved = savedViewOf(TB, setupFor(data, null, context), { known, previous });
+    expect(saved.signals.map((s) => s.path)).toEqual(['clk_verilog', 'clk', 'gone', 'rst', 'q']);
+  });
+
+  test('a signal of the run that is no longer shown is not kept', () => {
+    const first = setupFor(data, null, context);
+    const saved = savedViewOf(TB, toggleShown(first, `${TB}/rst`), { known, previous: { signals: [{ path: 'rst' }, { path: 'clk' }] } });
+    expect(saved.signals.map((s) => s.path)).toEqual(['clk', 'q']);
+  });
+
+  test('keeps the "Show as" and unfolding of a signal not shown, and it comes back when ticked again', () => {
+    const count = `${TB}/dut/count`;
+    const unticked = toggleShown(studentSetup(), count);
+    const saved = savedViewOf(TB, unticked, { known, previous: { signals: [], notShown: [{ path: 'elsewhere', showAs: 'ascii' }] } });
+    expect(saved.notShown).toEqual([{ path: 'dut/count', showAs: 'decimal' }, { path: 'elsewhere', showAs: 'ascii' }]);
+    const reopened = setupFor(data, null, { ...context, saved: layoutOf(TB, saved) });
+    expect(reopened.list.shown).not.toContain(count);
+    expect(toggleShown(reopened, count).showAs.get(count)).toBe('decimal');
   });
 
   test('is found by the testbench of the waveform', () => {

@@ -38,7 +38,7 @@ export interface HdlBoardProject {
   waveViews?: SavedWaveViews;
 }
 
-/** One shown signal of a saved waveform view. Its order in the list is its place in the view. */
+/** One signal of a saved waveform view. Among the shown, its order in the list is its place in the view. */
 export interface SavedWaveSignal {
   /** Below the testbench: `clk`, `dut/count`, `pair/a`. */
   path: string;
@@ -51,6 +51,8 @@ export interface SavedWaveSignal {
 /** The waveform view of one testbench: the signals shown, in their order (docs/imp_wave_rearange.md § 11). */
 export interface SavedWaveView {
   signals: SavedWaveSignal[];
+  /** Signals not shown that keep a "Show as" or an unfolded vector for when they are ticked again. */
+  notShown?: SavedWaveSignal[];
 }
 
 /** Saved waveform views by testbench name, `counter_tb`. */
