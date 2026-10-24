@@ -4,7 +4,7 @@
 /** The board feature's words and its board-aware sources (docs/board_io_config_spec.md § 3, § 6.7, § 6.8). */
 
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_BOARDS, DEFAULT_BOARD } from '../../boards/boardCatalog';
+import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { renamesBetween } from '../../boards/boardPorts';
 import { designUnits } from './tbDetect/designUnits';
 import { blankSource } from './tbDetect/blank';
@@ -22,15 +22,15 @@ import {
   runBoardLog,
 } from './boardText';
 import { copyExample, EXAMPLES, starterFilesFor } from './examples';
-import { languageOfName } from './fileKinds';
+import { languageOf, theOne } from '../../boards/boards.testSupport';
 import { signalRows, usesActiveLowSuffix } from './helpSignals';
 import { newFileContent } from './newFile';
 
-const DE1_SOC = BUILT_IN_BOARDS.find((board) => board.id === 'de1-soc')!;
+const DE1_SOC = builtInBoard('de1-soc');
 
 /** The ports the top unit of a source declares, as the run's mismatch check reads them. */
 function declaredPorts(name: string, content: string): readonly string[] {
-  const language = languageOfName(name)!;
+  const language = languageOf(name);
   return designUnits(language, blankSource(language, content).code, TEST_BOARD_PORTS)[0]?.portNames ?? [];
 }
 
@@ -64,7 +64,7 @@ describe('the board text', () => {
   });
 
   it('gives the mismatch hint with the names that triggered it', () => {
-    expect(mismatchHint('DE1_SoC.vhdl', ['KEY', 'HEX0', 'HEX1'], DE1_SOC, DEFAULT_BOARD)).toBe(
+    expect(mismatchHint('DE1_SoC.vhdl', { board: DE1_SOC, names: ['KEY', 'HEX0', 'HEX1'] }, DEFAULT_BOARD)).toBe(
       '⚠ DE1_SoC.vhdl uses names of the DE1-SoC board (KEY, HEX0, HEX1), but the board is Default.',
     );
   });
@@ -72,7 +72,7 @@ describe('the board text', () => {
 
 describe('examples, starter files and New File on the DE1-SoC', () => {
   it('copies an example in the active board\'s names', () => {
-    const example = EXAMPLES.find((e) => e.id === 'key_counter_7seg_vhdl')!;
+    const example = theOne(EXAMPLES, (e) => e.id === 'key_counter_7seg_vhdl', 'Key Counter to 7-Segment example');
     let id = 0;
     const [copy] = copyExample(example, [], () => `copy-${++id}`, DE1_SOC).added;
     expect(declaredPorts(copy.name, copy.content)).toEqual(['CLOCK_50', 'KEY', 'HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5']);

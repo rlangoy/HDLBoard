@@ -14,6 +14,7 @@ import type { BoardCatalog, BoardDefinition, ParsedBoards } from './types';
 export const DEFAULT_BOARD_ID = 'default';
 /** Relative to the page, so every build (dev, GitHub Pages, Docker, Windows app) finds its own copy. */
 export const USER_BOARD_FILE = 'boards/boards.json';
+const HTTP_NOT_FOUND = 404;
 
 function parseBuiltInBoards(): readonly BoardDefinition[] {
   const parsed = parseBoardFile(JSON.stringify(builtinBoardFile), { fileName: 'builtinBoards.json', origin: 'built-in' });
@@ -23,7 +24,8 @@ function parseBuiltInBoards(): readonly BoardDefinition[] {
 
 export const BUILT_IN_BOARDS: readonly BoardDefinition[] = parseBuiltInBoards();
 
-function builtInBoard(id: string): BoardDefinition {
+/** A built-in board by id; a missing one is a bug. */
+export function builtInBoard(id: string): BoardDefinition {
   const board = BUILT_IN_BOARDS.find((candidate) => candidate.id === id);
   if (board === undefined) throw new Error(`No built-in board "${id}"`);
   return board;
@@ -84,7 +86,7 @@ function couldNotLoad(reason: string): ParsedBoards {
 /** The browser's fetch, as `loadUserBoards` wants it; never cached, so an edited file is read on the next start. */
 export async function fetchBoardFile(url: string): Promise<FetchedText> {
   const response = await fetch(url, { cache: 'no-cache' });
-  if (response.status === 404) return { kind: 'missing' };
+  if (response.status === HTTP_NOT_FOUND) return { kind: 'missing' };
   if (!response.ok) return { kind: 'failed', reason: `HTTP ${response.status}` };
   return { kind: 'text', text: await response.text() };
 }

@@ -1458,7 +1458,7 @@ export function Workbench() {
     const foreign = unit && foreignBoardNames(unit.portNames, catalog, activeBoard);
     if (!foreign) return;
     const fix = { label: BOARD_TEXT.fix, onClick: () => boardChange.offerMismatchFix(topFile.name, foreign.board) };
-    logWithLink(mismatchHint(topFile.name, foreign.names, foreign.board, activeBoard), fix);
+    logWithLink(mismatchHint(topFile.name, foreign, activeBoard), fix);
   };
 
   /**

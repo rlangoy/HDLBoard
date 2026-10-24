@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { EXAMPLE_FILES, STARTER_FILES } from '../components/workbench/files';
-import { languageOfName } from '../components/workbench/fileKinds';
-import { BUILT_IN_BOARDS, DEFAULT_BOARD } from './boardCatalog';
+import { languageOf } from './boards.testSupport';
+import { BUILT_IN_BOARDS, builtInBoard, DEFAULT_BOARD } from './boardCatalog';
 import { renamesBetween, type PortRename } from './boardPorts';
 import {
   applyBoardChange,
@@ -15,7 +15,7 @@ import {
   translateFromDefault,
 } from './renamePorts';
 
-const DE1_SOC = BUILT_IN_BOARDS.find((board) => board.id === 'de1-soc')!;
+const DE1_SOC = builtInBoard('de1-soc');
 const TO_DE1 = renamesBetween(DEFAULT_BOARD, DE1_SOC);
 const TO_DEFAULT = renamesBetween(DE1_SOC, DEFAULT_BOARD);
 
@@ -163,7 +163,7 @@ describe('translateFromDefault', () => {
     'translates every built-in source to %s without a conflict, and back again exactly',
     (_name, board) => {
       for (const file of sources) {
-        const language = languageOfName(file.name)!;
+        const language = languageOf(file.name);
         const translated = translateFromDefault(file.content, language, board);
         const back = renameInSource(translated, language, renamesBetween(board, DEFAULT_BOARD));
         expect(back, file.name).toEqual(expect.objectContaining({ ok: true, text: file.content }));
@@ -173,7 +173,7 @@ describe('translateFromDefault', () => {
 
   it('leaves no Default name behind on the DE1-SoC', () => {
     for (const file of sources) {
-      const translated = translateFromDefault(file.content, languageOfName(file.name)!, DE1_SOC);
+      const translated = translateFromDefault(file.content, languageOf(file.name), DE1_SOC);
       expect(translated, file.name).not.toMatch(/\b(?:KEY_N|HEX\d_N)\b/i);
     }
   });

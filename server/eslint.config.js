@@ -27,6 +27,12 @@ const NEW_CODE = [
   'src/testSupport/**/*.ts',
   'src/githubAuth.ts',
   'src/githubAuth.test.ts',
+  // Configurable board port names (docs/board_io_config_spec.md).
+  'src/boardFrame.ts',
+  'src/boardFrame.test.ts',
+  'src/session.board.test.ts',
+  'src/tbTemplate.test.ts',
+  'src/integration/boards.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

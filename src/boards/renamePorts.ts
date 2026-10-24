@@ -77,8 +77,7 @@ function spellingsByKey(lines: readonly ReadToken[][]): Map<string, Set<string>>
   for (const { name } of lines.flat()) {
     if (name === undefined) continue;
     const key = name.toLowerCase();
-    if (!spellings.has(key)) spellings.set(key, new Set());
-    spellings.get(key)!.add(name);
+    spellings.set(key, (spellings.get(key) ?? new Set<string>()).add(name));
   }
   return spellings;
 }
@@ -123,8 +122,17 @@ interface Rewritten {
   readonly count: number;
 }
 
+/** One file's renames, as every line of it needs them. */
+interface FileRenames {
+  readonly renames: readonly PortRename[];
+  /** The renames by the old name, lower case: how a name in code is looked up. */
+  readonly byKey: ReadonlyMap<string, PortRename>;
+  /** The names the file uses in code, lower case: a comment renames only these. */
+  readonly used: ReadonlyMap<string, unknown>;
+}
+
 /** One comment with the board names the file also uses in code renamed, whole words and exact case only. */
-function renameInComment(comment: string, renames: readonly PortRename[], used: ReadonlyMap<string, unknown>): Rewritten {
+function renameInComment(comment: string, { renames, used }: FileRenames): Rewritten {
   const inCode = renames.filter((r) => used.has(r.from.toLowerCase()));
   if (inCode.length === 0) return { text: comment, count: 0 };
   const byName = new Map(inCode.map((r) => [r.from, r.to]));
@@ -139,24 +147,19 @@ function renameInComment(comment: string, renames: readonly PortRename[], used: 
 }
 
 /** One line rewritten in a single pass, so a swap (A→B, B→A) or a chain cannot cascade. */
-function renameInLine(
-  line: readonly ReadToken[],
-  byKey: ReadonlyMap<string, PortRename>,
-  renames: readonly PortRename[],
-  used: ReadonlyMap<string, unknown>,
-): Rewritten {
+function renameInLine(line: readonly ReadToken[], file: FileRenames): Rewritten {
   let count = 0;
   let lengthChange: number | undefined;
   const parts = line.map(({ token, name }) => {
     const shift = lengthChange;
     lengthChange = undefined;
     if (token.type === 'comment') {
-      const comment = renameInComment(token.text, renames, used);
+      const comment = renameInComment(token.text, file);
       count += comment.count;
       return comment.text;
     }
     if (token.type === 'whitespace') return shift === undefined ? token.text : keepColumn(token.text, shift);
-    const rename = name === undefined ? undefined : byKey.get(name.toLowerCase());
+    const rename = name === undefined ? undefined : file.byKey.get(name.toLowerCase());
     if (rename === undefined) return token.text;
     count++;
     const renamed = token.type === 'directive' ? `${MACRO_MARK}${rename.to}` : rename.to;
@@ -180,8 +183,8 @@ export function renameInSource(text: string, language: Language, renames: readon
   const reasons = conflicts(renames, used, language);
   if (reasons.length > 0) return { ok: false, reasons };
 
-  const byKey = new Map(renames.map((r) => [r.from.toLowerCase(), r]));
-  const rewritten = lines.map((line) => renameInLine(line, byKey, renames, used));
+  const file: FileRenames = { renames, byKey: new Map(renames.map((r) => [r.from.toLowerCase(), r])), used };
+  const rewritten = lines.map((line) => renameInLine(line, file));
   const count = rewritten.reduce((sum, line) => sum + line.count, 0);
   return { ok: true, text: rewritten.map((line) => line.text).join('\n'), count };
 }

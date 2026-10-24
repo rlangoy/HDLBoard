@@ -32,74 +32,79 @@ export interface BoardChangeDialogProps {
 }
 
 /** Change board? or Port names do not match the board (docs/board_io_config_spec.md § 3.3, § 3.5). */
-export function BoardChangeDialog({ pending, simulating, onUpdateFiles, onBoardOnly, onSwitchBoard, onRenameFiles, onCancel }: BoardChangeDialogProps) {
-  if (pending.kind === 'mismatch') {
-    return (
-      <Dialog
-        open
-        onClose={onCancel}
-        title={BOARD_TEXT.mismatchTitle}
-        subtitle={mismatchLead(pending.fileName, pending.other, pending.active)}
-        icon={<ChipIcon />}
-        footer={
-          <div className="wb-newfile__buttons">
-            <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
-              {BOARD_TEXT.cancel}
-            </button>
-            <button type="button" className="wb-newfile__cancel" onClick={() => onRenameFiles(pending.other)}>
-              {renameFilesTo(pending.active)}
-            </button>
-            <button type="button" className="wb-dialog__close" autoFocus onClick={() => onSwitchBoard(pending.other)}>
-              {switchBoardTo(pending.other)}
-            </button>
-          </div>
-        }
-      >
-        <MismatchChoices pending={pending} />
-      </Dialog>
-    );
-  }
-  const { plan } = pending;
-  const updatable = canApply(plan);
+export function BoardChangeDialog(props: BoardChangeDialogProps) {
+  const { pending } = props;
+  return pending.kind === 'mismatch' ? <MismatchDialog {...props} pending={pending} /> : <ChangeDialog {...props} pending={pending} />;
+}
+
+type MismatchProps = BoardChangeDialogProps & { pending: Extract<PendingBoardChange, { kind: 'mismatch' }> };
+type ChangeProps = BoardChangeDialogProps & { pending: Extract<PendingBoardChange, { kind: 'change' }> };
+
+function MismatchDialog({ pending, onSwitchBoard, onRenameFiles, onCancel }: MismatchProps) {
+  const footer = (
+    <div className="wb-newfile__buttons">
+      <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+        {BOARD_TEXT.cancel}
+      </button>
+      <button type="button" className="wb-newfile__cancel" onClick={() => onRenameFiles(pending.other)}>
+        {renameFilesTo(pending.active)}
+      </button>
+      <button type="button" className="wb-dialog__close" autoFocus onClick={() => onSwitchBoard(pending.other)}>
+        {switchBoardTo(pending.other)}
+      </button>
+    </div>
+  );
+  const subtitle = mismatchLead(pending.fileName, pending.other, pending.active);
   return (
-    <Dialog
-      open
-      onClose={onCancel}
-      title={BOARD_TEXT.changeTitle}
-      subtitle={boardChangeHeading(plan.from, plan.to)}
-      icon={<ChipIcon />}
-      footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
-            {BOARD_TEXT.cancel}
-          </button>
-          <button type="button" className="wb-newfile__cancel" autoFocus={!updatable} onClick={onBoardOnly}>
-            {BOARD_TEXT.boardOnly}
-          </button>
-          <button type="button" className="wb-dialog__close" autoFocus={updatable} disabled={!updatable} onClick={onUpdateFiles}>
-            {BOARD_TEXT.updateFiles}
-          </button>
-        </div>
-      }
-    >
+    <Dialog open onClose={onCancel} title={BOARD_TEXT.mismatchTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
+      <MismatchChoices pending={pending} />
+    </Dialog>
+  );
+}
+
+function ChangeDialog({ pending: { plan }, simulating, onUpdateFiles, onBoardOnly, onCancel }: ChangeProps) {
+  const updatable = canApply(plan);
+  const footer = (
+    <div className="wb-newfile__buttons">
+      <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+        {BOARD_TEXT.cancel}
+      </button>
+      <button type="button" className="wb-newfile__cancel" autoFocus={!updatable} onClick={onBoardOnly}>
+        {BOARD_TEXT.boardOnly}
+      </button>
+      <button type="button" className="wb-dialog__close" autoFocus={updatable} disabled={!updatable} onClick={onUpdateFiles}>
+        {BOARD_TEXT.updateFiles}
+      </button>
+    </div>
+  );
+  const subtitle = boardChangeHeading(plan.from, plan.to);
+  return (
+    <Dialog open onClose={onCancel} title={BOARD_TEXT.changeTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
       <p className="wb-dialog__lead">{filesUseNames(plan.from)}</p>
       <RenameList plan={plan} />
       {updatable ? <ChangedFiles plan={plan} /> : <Conflicts plan={plan} />}
-      <dl className="wb-boardchange__choices">
-        <div>
-          <dt>{BOARD_TEXT.updateFiles}</dt>
-          <dd>{BOARD_TEXT.updateFilesNote}</dd>
-        </div>
-        <div>
-          <dt>{BOARD_TEXT.boardOnly}</dt>
-          <dd>{BOARD_TEXT.boardOnlyNote}</dd>
-        </div>
-      </dl>
+      <ChangeChoices />
       <p className="wb-boardchange__note">
         {BOARD_TEXT.stringsNote}
         {simulating && ` ${BOARD_TEXT.stopsSimulation}`}
       </p>
     </Dialog>
+  );
+}
+
+/** What Update files and Change board only do, in the buttons' own words. */
+function ChangeChoices() {
+  return (
+    <dl className="wb-boardchange__choices">
+      <div>
+        <dt>{BOARD_TEXT.updateFiles}</dt>
+        <dd>{BOARD_TEXT.updateFilesNote}</dd>
+      </div>
+      <div>
+        <dt>{BOARD_TEXT.boardOnly}</dt>
+        <dd>{BOARD_TEXT.boardOnlyNote}</dd>
+      </div>
+    </dl>
   );
 }
 

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, DEFAULT_BOARD, mergeCatalog } from './boardCatalog';
+import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, builtInBoard, DEFAULT_BOARD, mergeCatalog } from './boardCatalog';
 import { canUndo, type BoardChangeRecord } from './boardChangeUndo';
 import { encodeBoardFrame } from './boardFrame';
 import { foreignBoardNames } from './boardMatch';
@@ -11,7 +11,7 @@ import { DEFAULT_LABELS } from './parseBoards';
 import { parsePreferredBoard, preferredBoardIn } from './preferredBoard';
 import type { BoardDefinition } from './types';
 
-const DE1_SOC = BUILT_IN_BOARDS.find((board) => board.id === 'de1-soc')!;
+const DE1_SOC = builtInBoard('de1-soc');
 
 /** A user board whose own names differ from both built-ins: `BTN`, `SEG0`…. */
 const COURSE: BoardDefinition = {

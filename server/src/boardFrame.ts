@@ -73,27 +73,42 @@ function duplicateName(board: BoardIo): string | undefined {
 
 /** The board a `BOARD` body names; every role exactly once, every name checked. */
 export function decodeBoardBody(body: string): DecodedBoard {
+  const names = namesByRole(body);
+  if (typeof names === 'string') return rejected(names);
+  const board = boardOf(names);
+  const duplicate = duplicateName(board);
+  return duplicate === undefined ? { ok: true, board } : rejected(`${JSON.stringify(duplicate)} is used twice (names ignore case)`);
+}
+
+/** Each role's names, or why the body does not give every role exactly once. */
+function namesByRole(body: string): Map<Role, string[]> | string {
   const names = new Map<Role, string[]>();
   for (const line of body.split('\n')) {
     const parsed = parseLine(line);
-    if (typeof parsed === 'string') return rejected(parsed);
-    if (names.has(parsed.role)) return rejected(`${parsed.role} is given twice`);
+    if (typeof parsed === 'string') return parsed;
+    if (names.has(parsed.role)) return `${parsed.role} is given twice`;
     names.set(parsed.role, parsed.names);
   }
   const missing = ROLES.find((role) => !names.has(role));
-  if (missing !== undefined) return rejected(`${missing} is missing`);
+  return missing === undefined ? names : `${missing} is missing`;
+}
 
-  const single = (role: Exclude<Role, 'sevenSegment'>): string => names.get(role)![0];
-  const board: BoardIo = {
+/** The board from a complete set of names (`namesByRole` checked that every role is there). */
+function boardOf(names: ReadonlyMap<Role, readonly string[]>): BoardIo {
+  const namesOf = (role: Role): readonly string[] => {
+    const found = names.get(role);
+    if (found === undefined) throw new Error(`BOARD: ${role} was checked but is missing`);
+    return found;
+  };
+  const single = (role: Exclude<Role, 'sevenSegment'>): string => namesOf(role)[0] ?? '';
+  return {
     clock50: single('clock50'),
     clock500Hz: single('clock500Hz'),
     switches: single('switches'),
     pushbuttons: single('pushbuttons'),
     leds: single('leds'),
-    sevenSegment: names.get('sevenSegment')!,
+    sevenSegment: namesOf('sevenSegment'),
   };
-  const duplicate = duplicateName(board);
-  return duplicate === undefined ? { ok: true, board } : rejected(`${JSON.stringify(duplicate)} is used twice (names ignore case)`);
 }
 
 export function encodeBoardBody(board: BoardIo): string {

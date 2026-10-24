@@ -4,10 +4,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { HdlClient } from './hdlClient';
 import type { VhdlFile } from './files';
-import { BUILT_IN_BOARDS, DEFAULT_BOARD } from '../../boards/boardCatalog';
+import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { encodeBoardFrame } from '../../boards/boardFrame';
 
-const DE1_SOC = BUILT_IN_BOARDS.find((board) => board.id === 'de1-soc')!;
+const DE1_SOC = builtInBoard('de1-soc');
 
 /** Just enough of a WebSocket to see what `run` puts on the wire. */
 class FakeSocket {

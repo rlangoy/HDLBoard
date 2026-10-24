@@ -7,6 +7,7 @@
  */
 
 import { displayRange, type PortRename } from '../../boards/boardPorts';
+import type { ForeignNames } from '../../boards/boardMatch';
 import type { BoardDefinition } from '../../boards/types';
 import { REPO_URL } from './project';
 
@@ -125,8 +126,8 @@ export function notInstalledOption(id: string, fallback: BoardDefinition): strin
 }
 
 /** `⚠ DE1_SoC.vhdl uses names of the DE1-SoC board (KEY, HEX0, HEX1), but the board is Default.` */
-export function mismatchHint(fileName: string, names: readonly string[], other: BoardDefinition, active: BoardDefinition): string {
-  return `⚠ ${fileName} uses names of the ${other.name} board (${names.join(', ')}), but the board is ${active.name}.`;
+export function mismatchHint(fileName: string, { board, names }: ForeignNames, active: BoardDefinition): string {
+  return `⚠ ${fileName} uses names of the ${board.name} board (${names.join(', ')}), but the board is ${active.name}.`;
 }
 
 /** `DE1_SoC.vhdl uses the DE1-SoC names; the board is Default.` */

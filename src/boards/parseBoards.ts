@@ -55,16 +55,30 @@ export function parseBoardFile(text: string, source: BoardFileSource): ParsedBoa
   const boards: BoardDefinition[] = [];
   const warnings: string[] = [];
   file.value.forEach((raw, index) => {
-    const board = parseBoard(raw, source.origin);
-    const problem = board.ok ? clashWithEarlier(board.value, boards) : board.problem;
-    if (problem === undefined && board.ok) boards.push(board.value);
-    else warnings.push(skippedWarning(source.fileName, index, raw, problem ?? ''));
+    const board = parseNewBoard(raw, source.origin, boards);
+    if (board.ok) boards.push(board.value);
+    else warnings.push(skippedWarning({ fileName: source.fileName, index, raw }, board.problem));
   });
   return { boards, warnings };
 }
 
+/** A board of the file, unless it breaks a rule or takes the id or name of one before it. */
+function parseNewBoard(raw: unknown, origin: BoardDefinition['origin'], earlier: readonly BoardDefinition[]): Checked<BoardDefinition> {
+  const board = parseBoard(raw, origin);
+  if (!board.ok) return board;
+  const clash = clashWithEarlier(board.value, earlier);
+  return clash === undefined ? board : invalid(clash);
+}
+
+/** Where in a board file an entry is: the file, its index in `boards`, and the entry itself. */
+export interface BoardEntry {
+  readonly fileName: string;
+  readonly index: number;
+  readonly raw: unknown;
+}
+
 /** `boards/boards.json: boards[2] "de10" was skipped: ports.sevenSegment needs exactly 6 names (found 8).` */
-export function skippedWarning(fileName: string, index: number, raw: unknown, problem: string): string {
+export function skippedWarning({ fileName, index, raw }: BoardEntry, problem: string): string {
   const id = isObject(raw) && typeof raw.id === 'string' ? ` ${quoted(raw.id)}` : '';
   return `${fileName}: boards[${index}]${id} was skipped: ${problem}.`;
 }
@@ -126,19 +140,30 @@ function parseDescription(value: unknown): Checked<string> {
 
 function parsePorts(value: unknown): Checked<BoardPorts> {
   if (!isObject(value)) return invalid('"ports" must be an object');
-  const unknownRole = Object.keys(value).find((key) => !(BOARD_ROLES as readonly string[]).includes(key));
-  if (unknownRole !== undefined) return invalid(`ports.${unknownRole} is not a role (the roles are ${BOARD_ROLES.join(', ')})`);
-  const missingRole = BOARD_ROLES.find((role) => !(role in value) && !OPTIONAL_ROLES.includes(role));
-  if (missingRole !== undefined) return invalid(`ports.${missingRole} is missing`);
-
-  const singles: Record<string, unknown> = { ...value, clock500Hz: value.clock500Hz ?? DEFAULT_CLOCK_500HZ_NAME };
-  for (const role of BOARD_ROLES) {
-    const problem = role === 'sevenSegment' ? sevenSegmentProblem(value.sevenSegment) : singleNameProblem(role, singles[role]);
-    if (problem !== undefined) return invalid(problem);
-  }
-  const ports = singles as unknown as BoardPorts;
+  const withDefaults: Record<string, unknown> = { ...value, clock500Hz: value.clock500Hz ?? DEFAULT_CLOCK_500HZ_NAME };
+  const problem = roleKeyProblem(value) ?? portNamesProblem(withDefaults);
+  if (problem !== undefined) return invalid(problem);
+  // Every role is now there, with a valid name (or six): the shape BoardPorts describes.
+  const ports = withDefaults as unknown as BoardPorts;
   const duplicate = duplicateNameProblem(ports);
   return duplicate === undefined ? valid(ports) : invalid(duplicate);
+}
+
+/** A key of `ports` that is no role, or a required role left out. */
+function roleKeyProblem(ports: Record<string, unknown>): string | undefined {
+  const unknownRole = Object.keys(ports).find((key) => !(BOARD_ROLES as readonly string[]).includes(key));
+  if (unknownRole !== undefined) return `ports.${unknownRole} is not a role (the roles are ${BOARD_ROLES.join(', ')})`;
+  const missingRole = BOARD_ROLES.find((role) => !(role in ports) && !OPTIONAL_ROLES.includes(role));
+  return missingRole === undefined ? undefined : `ports.${missingRole} is missing`;
+}
+
+/** The first role whose name (or names) breaks a rule. */
+function portNamesProblem(ports: Record<string, unknown>): string | undefined {
+  for (const role of BOARD_ROLES) {
+    const problem = role === 'sevenSegment' ? sevenSegmentProblem(ports.sevenSegment) : singleNameProblem(role, ports[role]);
+    if (problem !== undefined) return problem;
+  }
+  return undefined;
 }
 
 function singleNameProblem(role: BoardRole, name: unknown): string | undefined {
