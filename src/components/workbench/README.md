@@ -742,7 +742,7 @@ Tests: `desktop.test.ts`.
 ```ts
 export class HdlClient {
   constructor(url: string, handlers: HdlClientHandlers);
-  run(files: VhdlFile[], topFileName?: string): void;
+  run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, recordWave: boolean, board: BoardPorts): void;
   stim(sw: BitVector, key: BitVector): void;
   reset(): void;
   stop(): void;
@@ -762,6 +762,29 @@ there is no protocol library, matching the plan's design goal of a command
 grammar simple enough to need none. Mirrors `server/src/protocol.ts`'s
 grammar independently rather than importing it: this code runs in the
 browser and cannot import a Node-side file.
+
+Every `run` sends `WAVE`, then `BOARD` (the active board's port names), then `RUN`. A backend
+older than the `BOARD` frame answers it with `ERROR protocol`; the client then calls
+`onOldBackend` once and sends no more `BOARD` frames on that connection.
+
+### Boards: `useBoards`, `useBoardChange`, `BoardIoPanel`, `BoardChangeDialog`
+
+The board's port names (docs/board_io_config_spec.md, and [`docs/BOARDS.md`](../../../docs/BOARDS.md)
+for the file format). The pure work is in `src/boards/`: the board file's validator, the catalog,
+the token-aware rename, the mismatch check and the `BOARD` frame. The workbench only holds state:
+
+- `useBoards()` — the catalog: the built-in boards at once, `boards/boards.json` when it is fetched.
+- The **active board** is `findBoard(catalog, project.board)`; a board that is not installed reads as
+  Default, and its id is kept.
+- `useBoardChange()` — Settings › Board, the Project page and the mismatch hint's Fix… all go through
+  `requestBoardChange` / `requestRenameToBoard`; it plans the rename, shows `BoardChangeDialog` when
+  files would change, applies all or nothing, and logs an Undo (a console line with a `link`).
+- `BoardIoPanel` — the four board parts, headed with the active board's port names and labelled with
+  its labels.
+- `boardText.ts` — every word of the feature, for the tests; `helpSignals.ts` — Help's signal table.
+
+Examples, the starter files and New File are written in the Default names and translated with
+`translateFromDefault` when they are copied in.
 
 ## How the simulation runs
 

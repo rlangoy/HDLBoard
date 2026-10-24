@@ -15,8 +15,8 @@
 
 import { fetchText, type FetchFn } from '../../project/fetchText';
 import { fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
-import { DEFAULT_KNOWN_BOARDS, parseProject, serializeProject } from '../../project/parseProject';
-import { DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, SUPPORTED_PROJECT_VERSION, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
+import { boardIdOf, parseProject, serializeProject } from '../../project/parseProject';
+import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
 import { parseWaveViews, withWaveViewOf } from '../../project/waveViews';
 import { diskPath } from '../../project/resolveSource';
 import { projectDirectoryOf } from './projectLayout';
@@ -26,8 +26,6 @@ import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
 import { STARTER_FILES } from './files';
 import { RESERVED_PREFIX_REASON, RESERVED_PREFIX } from './fileNameRules';
-
-export { DEFAULT_KNOWN_BOARDS as KNOWN_BOARDS };
 
 export interface OpenProject {
   version: number;
@@ -228,12 +226,12 @@ export function sourceDirectoryError(name: string): string | undefined {
 }
 
 
-/** A new project listing every file now in Files (the New File dialog's Project choice). */
-export function newProject(name: string, fileNames: readonly string[]): OpenProject {
+/** A new project on `board` (an id), listing every file now in Files (the New File dialog's Project choice). */
+export function newProject(name: string, fileNames: readonly string[], board: string): OpenProject {
   const project: OpenProject = {
-    version: SUPPORTED_PROJECT_VERSION,
+    version: CURRENT_PROJECT_VERSION,
     name: name.trim(),
-    board: DEFAULT_KNOWN_BOARDS[0],
+    board,
     description: NEW_PROJECT_DESCRIPTION,
     fileName: projectFileNameFor(name),
     sourceDirectory: DEFAULT_SOURCE_DIRECTORY,
@@ -284,10 +282,14 @@ export const STARTER_FILE_DESCRIPTION = 'Displays the switch states on the LEDs'
  * before (a project just closed); the start-up files are described otherwise. It reads as
  * saved until something changes, so a fresh start shows no unsaved changes.
  */
-export function defaultProject(files: readonly ProjectSourceFile[], descriptions: Readonly<Record<string, string>> = {}): OpenProject {
+export function defaultProject(
+  files: readonly ProjectSourceFile[],
+  board: string,
+  descriptions: Readonly<Record<string, string>> = {},
+): OpenProject {
   const starters = new Set(STARTER_FILES.map((file) => nameKey(file.name)));
   const described = (name: string) => descriptions[nameKey(name)] ?? (starters.has(nameKey(name)) ? STARTER_FILE_DESCRIPTION : '');
-  const base = newProject(DEFAULT_PROJECT_NAME, []);
+  const base = newProject(DEFAULT_PROJECT_NAME, [], board);
   const project: OpenProject = {
     ...base,
     description: '',
@@ -300,8 +302,8 @@ export function defaultProject(files: readonly ProjectSourceFile[], descriptions
  * Create Project: a new, empty project. The files now in Files are offered on the
  * project settings to be added (availableFiles); files made or uploaded later join at once.
  */
-export function startProject(fileNames: readonly string[]): OpenProject {
-  return { ...newProject('', []), excluded: fileNames.map(nameKey) };
+export function startProject(fileNames: readonly string[], board: string): OpenProject {
+  return { ...newProject('', [], board), excluded: fileNames.map(nameKey) };
 }
 
 export type ProjectDetails = Partial<Pick<OpenProject, 'name' | 'board' | 'description' | 'fileName' | 'sourceDirectory'>>;
@@ -502,7 +504,7 @@ async function findLocal(
  * next to the project file second; where it was found is kept in `onDisk`.
  */
 export async function openProject(source: ProjectSource): Promise<OpenedProject> {
-  const { project, board, warnings, skipped } = parseProject(source.text);
+  const { project, warnings, skipped } = parseProject(source.text);
   const localFiles = source.localFiles ?? [];
   const byPath = new Map(localFiles.filter((file) => file.path !== undefined).map((file) => [nameKey(file.path!), file]));
   // By name: a file without a path, else the shallowest one with that name.
@@ -563,7 +565,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
   const opened: OpenProject = {
     version: project.version,
     name: project.name,
-    board,
+    board: project.board,
     description: project.description,
     fileName,
     sourceDirectory,
@@ -633,10 +635,11 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
       : undefined;
   const onDiskFileName = typeof r.onDiskFileName === 'string' ? r.onDiskFileName : undefined;
   const waveViews = parseWaveViews(r.waveViews, []);
+  // A workspace stored before boards were configurable holds a version-1 project: it is on the Default board.
   return {
-    version: r.version,
+    version: CURRENT_PROJECT_VERSION,
     name: r.name as string,
-    board: r.board as string,
+    board: boardIdOf(r.version, r.board as string),
     description: r.description as string,
     fileName: r.fileName as string,
     sourceDirectory,
@@ -646,12 +649,25 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     entries: entries.map(({ name, url, description }) => ({ name, url, description })),
     unloaded: unloaded as Record<string, string>,
     warnings,
-    savedText: r.savedText as string,
+    savedText: r.version === 1 ? savedTextInVersion2(r.savedText as string) : (r.savedText as string),
     ...(gist ? { gist } : {}),
     ...(excluded.length > 0 ? { excluded } : {}),
     ...(savedFiles ? { savedFiles } : {}),
     ...(waveViews ? { waveViews } : {}),
   };
+}
+
+/**
+ * The saved text of a version-1 project as the same project reads in version 2, so a workspace
+ * stored by HDLBoard 1.5 has nothing to save after the upgrade. Text that is not a project
+ * file (none was saved yet) is kept as it is.
+ */
+function savedTextInVersion2(savedText: string): string {
+  try {
+    return serializeProject(parseProject(savedText).project);
+  } catch {
+    return savedText;
+  }
 }
 
 /** Whether an uploaded file is a project file: `.hdlboard.json`, or any other `.json`. */

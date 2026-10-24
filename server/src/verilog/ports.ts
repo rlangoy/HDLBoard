@@ -14,7 +14,7 @@
  * Pure: no filesystem, no processes.
  */
 
-import { BOARD_PORTS } from '../engines/boardPorts.js';
+import { boardPortKeys, type BoardIo } from '../engines/boardPorts.js';
 
 /**
  * Comments and string literals, matched leftmost-first so a `//` inside a string is
@@ -102,24 +102,19 @@ export function parseStubPorts(stubText: string, top: string): PortsResult {
 }
 
 /**
- * The board's port names, lower case, from the same list the VHDL scanner uses so the
- * two languages cannot disagree about what the board has. `rst` is left out: it is
- * VHDL-only legacy tolerance (§ 5.2), and there is no legacy Verilog to accommodate.
- */
-const LEGACY_VHDL_PORT = 'rst';
-const BOARD_PORT_NAMES: ReadonlySet<string> = new Set(BOARD_PORTS.filter((name) => name !== LEGACY_VHDL_PORT));
-
-/**
  * The design's board ports, as `lower-case board name -> the spelling the design
  * declared`. Matching ignores case (Verilog identifiers are case-sensitive, VHDL's
  * are not, and `Clock_50` should not fail to connect where VHDL's would); the
  * declared spelling is kept because the generated instance must connect by it.
+ * The board's names come from the same table the VHDL side uses, without the legacy
+ * `rst`: that is VHDL-only tolerance (§ 5.2), and there is no legacy Verilog to accommodate.
  */
-export function boardPortSpellings(ports: readonly Port[]): Map<string, string> {
+export function boardPortSpellings(ports: readonly Port[], board: BoardIo): Map<string, string> {
+  const boardNames = boardPortKeys(board);
   const spellings = new Map<string, string>();
   for (const { name } of ports) {
     const boardName = name.toLowerCase();
-    if (BOARD_PORT_NAMES.has(boardName)) spellings.set(boardName, name);
+    if (boardNames.has(boardName)) spellings.set(boardName, name);
   }
   return spellings;
 }
@@ -128,8 +123,8 @@ export function boardPortSpellings(ports: readonly Port[]): Map<string, string> 
  * True when the top declares at least one board port. "Has ports" is not the test:
  * a testbench can have ports of its own (§ 5.3).
  */
-export function isBoardDesign(ports: readonly Port[]): boolean {
-  return boardPortSpellings(ports).size > 0;
+export function isBoardDesign(ports: readonly Port[], board: BoardIo): boolean {
+  return boardPortSpellings(ports, board).size > 0;
 }
 
 export type TopChoice =

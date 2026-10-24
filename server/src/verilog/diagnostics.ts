@@ -7,6 +7,7 @@
  * (docs/Verilog_implementation_plan.md § 5.5). Pure functions over text.
  */
 
+import { describeBoardPorts, type BoardIo } from '../engines/boardPorts.js';
 import type { ErrorStage } from '../protocol.js';
 
 export interface CompileFailure {
@@ -89,9 +90,9 @@ export function versionWarning(banner: string): string | undefined {
  * `output reg done` and puzzling for a board design that misspelled `LEDR` — this line
  * is what tells the two apart (§ 5.3).
  */
-export function standaloneHint(top: string): string {
+export function standaloneHint(top: string, board: BoardIo): string {
   return (
-    `Top module '${top}' declares none of the board's ports (CLOCK_50, CLOCK_500Hz, SW, KEY_N, LEDR, HEX0_N…HEX5_N), ` +
+    `Top module '${top}' declares none of the board's ports (${describeBoardPorts(board)}), ` +
     'so it runs as a standalone testbench. If it is a board design, check the port names.'
   );
 }

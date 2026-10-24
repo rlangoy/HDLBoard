@@ -20,6 +20,7 @@ import { TESTBENCH_FILE_NAME } from '../verilog/fileNames.js';
 import { boardPortSpellings } from '../verilog/ports.js';
 import { compileVerilog, readBanner, readTopPorts } from '../verilog/process.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 const { tools, skip } = icarusForTests();
 
@@ -102,7 +103,7 @@ describe('Verilog process layer (real Icarus)', { skip }, () => {
 
         const ports = await readTopPorts(tools, { dir, target: fixture.top, files: [file] });
         assert.ok(ports.ok);
-        writeFileSync(join(dir, TESTBENCH_FILE_NAME), buildBoardTestbench(fixture.top, boardPortSpellings(ports.ports)));
+        writeFileSync(join(dir, TESTBENCH_FILE_NAME), buildBoardTestbench(fixture.top, boardPortSpellings(ports.ports, DEFAULT_BOARD_IO), DEFAULT_BOARD_IO));
 
         const compiled = await compileVerilog(tools, { dir, target: TESTBENCH_MODULE_NAME, files: [TESTBENCH_FILE_NAME, file] });
         assert.deepEqual(compiled, { ok: true, messages: [] });

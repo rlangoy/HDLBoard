@@ -18,6 +18,8 @@
  *   body      = everything after the first LF, verbatim, never escaped
  */
 
+import { decodeBoardBody, encodeBoardBody, type DecodedBoard } from './boardFrame.js';
+
 export interface VhdlFileInput {
   name: string;
   content: string;
@@ -46,6 +48,9 @@ export type ClientFrame =
   // docs/impl_split_screen.md D20) — a testbench inside a file that also holds its
   // design. Omitted, the backend picks the unit as it always has.
   | { verb: 'RUN'; files: VhdlFileInput[]; topFile?: string; runTarget?: string }
+  // The board's port names for the next runs (docs/board_io_config_spec.md § 8). Always
+  // decoded to this verb, valid or not, so the session learns about an invalid board too.
+  | { verb: 'BOARD'; board: DecodedBoard }
   | { verb: 'STIM'; bits: string }
   // Whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1).
   | { verb: 'WAVE'; on: boolean }
@@ -159,6 +164,10 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       const { topFile, runTarget } = parseRunHeader(inline);
       return runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget };
     }
+    case 'BOARD': {
+      const board: DecodedBoard = inline === '' ? decodeBoardBody(body) : { ok: false, reason: 'BOARD takes no inline arguments' };
+      return { verb: 'BOARD', board };
+    }
     case 'STIM': {
       if (!new RegExp(`^[01]{${STIM_LENGTH}}$`).test(inline)) {
         return {
@@ -214,6 +223,10 @@ export function encodeClientFrame(frame: ClientFrame): string {
       const head = frame.topFile ? `RUN ${frame.topFile}${target}` : 'RUN';
       return `${head}\n${body}`;
     }
+    case 'BOARD':
+      // An invalid board is sent as raw text by the tests that need one; there is nothing to encode.
+      if (!frame.board.ok) throw new Error(`An invalid board cannot be encoded: ${frame.board.reason}`);
+      return `BOARD\n${encodeBoardBody(frame.board.board)}`;
     case 'STIM':
       return `STIM ${frame.bits}`;
     case 'WAVE':

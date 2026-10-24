@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { analyzeFile } from './analyzeProject';
 import { RULES } from './rules';
 import type { RuleId } from './types';
+import { TEST_BOARD_PORTS } from './fixtures.testSupport';
 
 /** docs/impl_split_screen.md § 5.4: one positive and one negative snippet per rule, and the exclusions. */
 
@@ -16,7 +17,7 @@ const PORTS_VHDL = ' port (a : in bit; y : out bit);';
 const PORTS_VLOG = ' (input a, output y)';
 
 function rulesOf(file: string, content: string): RuleId[] {
-  const analysis = analyzeFile({ id: file, name: file, folder: file.endsWith('.v') ? 'verilog' : 'vhdl', content });
+  const analysis = analyzeFile({ id: file, name: file, folder: file.endsWith('.v') ? 'verilog' : 'vhdl', content }, TEST_BOARD_PORTS);
   return [...new Set(analysis?.units.flatMap((u) => u.evidence.map((e) => e.ruleId)))];
 }
 

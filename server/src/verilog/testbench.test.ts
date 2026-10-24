@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { readFixture } from '../testSupport/fixture.js';
 import { buildBoardTestbench, instantiation, tieOffs } from './testbench.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
+import { DE1_SOC_BOARD_IO } from '../testSupport/boards.js';
 
 /** Board port names as `boardPortSpellings` returns them: lower-case board name -> declared spelling. */
 const spelled = (...names: string[]): Map<string, string> => new Map(names.map((name) => [name.toLowerCase(), name]));
@@ -14,35 +16,35 @@ const FULL_BOARD = spelled('CLOCK_50', 'SW', 'KEY_N', 'LEDR', 'HEX0_N', 'HEX1_N'
 describe('instantiation', () => {
   test('connects every board port the design declares, by name', () => {
     assert.equal(
-      instantiation('DE1_SoC', FULL_BOARD),
+      instantiation('DE1_SoC', FULL_BOARD, DEFAULT_BOARD_IO),
       '  DE1_SoC uut (.CLOCK_50(clk_sig), .SW(sw_sig), .KEY_N(key_sig), .LEDR(ledr_sig), ' +
         '.HEX0_N(hex0_sig), .HEX1_N(hex1_sig), .HEX2_N(hex2_sig), .HEX3_N(hex3_sig), .HEX4_N(hex4_sig), .HEX5_N(hex5_sig));',
     );
   });
 
   test('connects only the ports that are declared', () => {
-    const text = instantiation('top', spelled('SW', 'LEDR'));
+    const text = instantiation('top', spelled('SW', 'LEDR'), DEFAULT_BOARD_IO);
     assert.match(text, /\.SW\(sw_sig\)/);
     assert.match(text, /\.LEDR\(ledr_sig\)/);
     assert.ok(!['.KEY_N', '.CLOCK_50', '.HEX0_N'].some((absent) => text.includes(absent)));
   });
 
   test('connects by the spelling the design declared', () => {
-    assert.match(instantiation('top', spelled('Clock_50', 'key_n')), /\.Clock_50\(clk_sig\), \.key_n\(key_sig\)/);
+    assert.match(instantiation('top', spelled('Clock_50', 'key_n'), DEFAULT_BOARD_IO), /\.Clock_50\(clk_sig\), \.key_n\(key_sig\)/);
   });
 
   test('uses the top module name verbatim', () => {
-    assert.match(instantiation('Blink_Top', spelled('SW')), /^ {2}Blink_Top uut \(/);
+    assert.match(instantiation('Blink_Top', spelled('SW'), DEFAULT_BOARD_IO), /^ {2}Blink_Top uut \(/);
   });
 
   test('connects the 500 Hz clock, which only some designs declare', () => {
-    assert.match(instantiation('top', spelled('CLOCK_500Hz')), /\.CLOCK_500Hz\(clk500_sig\)/);
+    assert.match(instantiation('top', spelled('CLOCK_500Hz'), DEFAULT_BOARD_IO), /\.CLOCK_500Hz\(clk500_sig\)/);
   });
 });
 
 describe('tieOffs', () => {
   test('ties every undeclared output to its off value', () => {
-    const lines = tieOffs(spelled('SW', 'LEDR'));
+    const lines = tieOffs(spelled('SW', 'LEDR'), DEFAULT_BOARD_IO);
     assert.deepEqual(lines, [
       "assign hex0_sig = 7'h7F;",
       "assign hex1_sig = 7'h7F;",
@@ -54,30 +56,35 @@ describe('tieOffs', () => {
   });
 
   test('ties the LEDs off when the design has none', () => {
-    assert.ok(tieOffs(spelled('SW')).includes("assign ledr_sig = 10'b0;"));
+    assert.ok(tieOffs(spelled('SW'), DEFAULT_BOARD_IO).includes("assign ledr_sig = 10'b0;"));
   });
 
   test('ties nothing off when the design declares every output', () => {
-    assert.deepEqual(tieOffs(FULL_BOARD), []);
+    assert.deepEqual(tieOffs(FULL_BOARD, DEFAULT_BOARD_IO), []);
   });
 
   test('does not tie off a display the design drives', () => {
-    const lines = tieOffs(spelled('HEX2_N'));
+    const lines = tieOffs(spelled('HEX2_N'), DEFAULT_BOARD_IO);
     assert.ok(!lines.some((line) => line.includes('hex2_sig')));
     assert.ok(lines.some((line) => line.includes('hex3_sig')));
   });
 
   test('never ties off an input, which the testbench itself drives', () => {
-    assert.ok(!tieOffs(spelled('LEDR')).some((line) => /sw_sig|key_sig|clk/.test(line)));
+    assert.ok(!tieOffs(spelled('LEDR'), DEFAULT_BOARD_IO).some((line) => /sw_sig|key_sig|clk/.test(line)));
   });
 });
 
 describe('buildBoardTestbench', () => {
-  const wrapperFor = (...names: string[]) => buildBoardTestbench('DE1_SoC', spelled(...names));
-  const fullBoard = () => buildBoardTestbench('DE1_SoC', FULL_BOARD);
+  const wrapperFor = (...names: string[]) => buildBoardTestbench('DE1_SoC', spelled(...names), DEFAULT_BOARD_IO);
+  const fullBoard = () => buildBoardTestbench('DE1_SoC', FULL_BOARD, DEFAULT_BOARD_IO);
 
   test('for the full board equals the verified golden wrapper', () => {
     assert.equal(fullBoard(), readFixture('verilog', 'golden/hdl_board_tb.DE1_SoC.v'));
+  });
+
+  test('on the DE1-SoC connects KEY and HEX0…HEX5 by their own names', () => {
+    const names = spelled('CLOCK_50', 'SW', 'KEY', 'LEDR', 'HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5');
+    assert.equal(buildBoardTestbench('DE1_SoC', names, DE1_SOC_BOARD_IO), readFixture('verilog', 'golden/hdl_board_tb.de1-soc.v'));
   });
 
   test('generates the 50 MHz clock when CLOCK_50 is declared', () => {
@@ -107,7 +114,7 @@ describe('buildBoardTestbench', () => {
   });
 
   test('instantiates the top module by the name it was given', () => {
-    assert.match(buildBoardTestbench('Blink_Top', spelled('SW')), /^ {2}Blink_Top uut \(\.SW\(sw_sig\)\);$/m);
+    assert.match(buildBoardTestbench('Blink_Top', spelled('SW'), DEFAULT_BOARD_IO), /^ {2}Blink_Top uut \(\.SW\(sw_sig\)\);$/m);
   });
 
   test('reads its file settings from plusargs, so nothing is recompiled per run', () => {

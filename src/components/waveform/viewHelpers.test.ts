@@ -16,6 +16,7 @@ import { indexAt, nextChange, previousChange, spanAt, valueAt } from './valueAt'
 import { unavailableHelp, valueHelp } from './valueHelp';
 import { parseVcd } from './vcdParser';
 import { memoryNames, withVerilogMemories } from './verilogMemories';
+import { verilogModulesIn } from './verilogModules';
 
 /** A trace as `[time, value]` pairs. */
 const changes = (t: Trace): Array<[number, string]> => Array.from(t.times, (time, i) => [time, t.values[t.valueIndex[i]]]);
@@ -294,8 +295,9 @@ describe('unavailable signals', () => {
 
   test('Verilog memories from the testbench source', () => {
     const source = 'module counter_tb; reg [7:0] mem [0:3]; // reg x [1:0];\n reg [7:0] data; endmodule';
-    expect(memoryNames(source, 'counter_tb')).toEqual(['mem']);
-    const data = withVerilogMemories(parseVcd(fixtureText('icarus_counter.vcd')), [source]);
+    const modules = verilogModulesIn([source]);
+    expect(memoryNames(modules[0])).toEqual(['mem']);
+    const data = withVerilogMemories(parseVcd(fixtureText('icarus_counter.vcd')), modules);
     expect(data.root.scopes[0].unavailable).toEqual([{ name: 'mem', reason: 'memory' }]);
   });
 

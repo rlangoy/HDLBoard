@@ -48,7 +48,9 @@ const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
 // older page or proxy config keeps working. New clients use WSPATH.
 const LEGACY_WSPATH = '/ghdlsim';
-const PROTOCOL_VERSION = '1';
+// 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version stays
+// informational: any version a client names is accepted, and answered with this one.
+const PROTOCOL_VERSION = '2';
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
@@ -308,6 +310,10 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
           break;
         case 'WAVE':
           session.handleWave(frame.on);
+          break;
+        case 'BOARD':
+          // An invalid board is reported once, by the RUN that follows it (session.ts).
+          session.handleBoard(frame.board);
           break;
         case 'WAVE-GET':
           void session.handleWaveGet(frame.run);

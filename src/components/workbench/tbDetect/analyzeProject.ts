@@ -20,24 +20,28 @@ import type { AnalyzedUnit, Evidence, FileAnalysis, Language, ProjectAnalysis, U
 
 export type SourceFile = Pick<VhdlFile, 'id' | 'name' | 'folder' | 'content'>;
 
-export function analyzeProject(files: readonly SourceFile[], previous?: ProjectAnalysis): ProjectAnalysis {
+/**
+ * `boardPorts` (lower case, `boardDesignPortNames`): the names that make a unit a board
+ * design. A `previous` analysis must have been made with the same names.
+ */
+export function analyzeProject(files: readonly SourceFile[], boardPorts: ReadonlySet<string>, previous?: ProjectAnalysis): ProjectAnalysis {
   const byFile = new Map<string, FileAnalysis>();
   for (const file of files) {
     const cached = previous?.byFile.get(file.id);
     const reusable = cached && cached.content === file.content && cached.name === file.name && cached.folder === file.folder;
-    const analysis = reusable ? cached : analyzeFile(file);
+    const analysis = reusable ? cached : analyzeFile(file, boardPorts);
     if (analysis) byFile.set(file.id, analysis);
   }
   return { byFile, unitIndex: indexUnits(byFile) };
 }
 
 /** One file's units, evidence and regions; `undefined` for a file of no HDL language. */
-export function analyzeFile(file: SourceFile): FileAnalysis | undefined {
+export function analyzeFile(file: SourceFile, boardPorts: ReadonlySet<string>): FileAnalysis | undefined {
   const language = file.folder === 'work' ? 'vhdl' : languageOfName(file.name);
   if (language === undefined) return undefined;
   const blanked = blankSource(language, file.content);
   const lineOf = lineIndex(blanked.code);
-  const units = designUnits(language, blanked.code).map((unit): AnalyzedUnit => {
+  const units = designUnits(language, blanked.code, boardPorts).map((unit): AnalyzedUnit => {
     const base = Math.min(...unit.ranges.map((r) => r.from));
     const end = Math.max(...unit.ranges.map((r) => r.to));
     const slice = blanked.code.slice(base, end);

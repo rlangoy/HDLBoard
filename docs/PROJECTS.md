@@ -6,9 +6,9 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "name": "4-bit Counter",
-  "board": "DE1-SoC",
+  "board": "de1-soc",
   "description": "Introductory exercise: a 4-bit counter driven by KEY0, shown on LEDR[3:0].",
   "projectDirectory": "counter",
   "sourceDirectory": "src",
@@ -20,6 +20,8 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
 }
 ```
 
+- **`board`** is the id of the board whose port names the files use (`default`, `de1-soc`, or one from [`boards/boards.json`](BOARDS.md)). Opening the project makes it the board. A board that is not installed is kept as it is; the project then runs with the Default names until another board is chosen.
+- **Version 2** stores the board id. A version-1 file (HDLBoard 1.5 and earlier) opens on the **Default** board, whatever its `board` says, because every one of them was written with the Default names; saving it writes version 2. HDLBoard 1.5 and earlier cannot open a version-2 file.
 - A file with an **empty `url`** is stored with the project (below).
 - A file with a **`url`** is downloaded from that address (`http://` or `https://`; a GitHub gist page works too).
 

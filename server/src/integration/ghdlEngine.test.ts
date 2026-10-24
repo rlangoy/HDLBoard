@@ -29,6 +29,7 @@ import {
   SYNTAX_ERROR_VHDL,
   UNKNOWN_INPUT_PORT_VHDL,
 } from '../testSupport/vhdlSources.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 const ghdl = requireTool('ghdl');
 
@@ -43,7 +44,7 @@ function newDir(t: TestContext): string {
 }
 
 async function prepare(t: TestContext, files: Array<{ name: string; content: string }>, topFile?: string): Promise<PrepareResult> {
-  return ghdlEngine.prepare({ dir: newDir(t), files, topFile });
+  return ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile });
 }
 
 const fixtureFile = (name: string) => ({ name, content: readFixture('vhdl', name) });
@@ -92,7 +93,7 @@ describe('GhdlEngine.prepare', { skip: ghdl.skip }, () => {
 
   test('writes the project’s files into the session directory', async (t) => {
     const dir = newDir(t);
-    await ghdlEngine.prepare({ dir, files: [fixtureFile('DE1_SoC.vhdl')], topFile: 'DE1_SoC.vhdl' });
+    await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir, files: [fixtureFile('DE1_SoC.vhdl')], topFile: 'DE1_SoC.vhdl' });
     assert.ok(existsSync(join(dir, 'DE1_SoC.vhdl')));
   });
 
@@ -189,8 +190,8 @@ end architecture;
       { name: 'adder4_tb.vhd', content: ADDER4_TB_VHDL },
       { name: 'adder4.vhd', content: ADDER4_VHDL },
     ];
-    const first = await ghdlEngine.prepare({ dir, files, topFile: 'adder4_tb.vhd' });
-    const second = await ghdlEngine.prepare({ dir, files, topFile: 'adder4_tb.vhd' });
+    const first = await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir, files, topFile: 'adder4_tb.vhd' });
+    const second = await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir, files, topFile: 'adder4_tb.vhd' });
     assert.ok(first.ok);
     assert.ok(second.ok, second.ok ? '' : second.text);
   });
@@ -201,7 +202,7 @@ end architecture;
     const original = { name: 'dup_tb.vhd', content: reportingTestbench('dup_tb', 'from the original') };
     const copy = { name: 'mytest_tb.vhd', content: reportingTestbench('dup_tb', 'from my copy') };
     for (const files of [[copy, original], [original, copy]]) {
-      const result = await ghdlEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
+      const result = await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
       assert.ok(result.ok, result.ok ? '' : result.text);
       const output = await batchOutput(result.plan);
       assert.match(output, /from my copy/);
@@ -214,7 +215,7 @@ end architecture;
       { name: 'dup_tb.vhd', content: reportingTestbench('dup_tb', 'from the original') },
       { name: 'mytest_tb.vhd', content: reportingTestbench('dup_tb', 'from my copy') },
     ];
-    const result = await ghdlEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
+    const result = await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile: 'mytest_tb.vhd', runTarget: 'dup_tb' });
     assert.ok(result.ok);
     assert.deepEqual(result.plan.messages, [
       'Note: dup_tb is declared in mytest_tb.vhd and in dup_tb.vhd. This run uses the one in mytest_tb.vhd; ' +

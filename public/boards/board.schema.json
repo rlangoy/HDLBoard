@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rlangoy/HDLBoard/docs/BOARDS.md#board-file",
+  "title": "HDLBoard board file",
+  "description": "Boards with other port names for HDLBoard. Editor help only: HDLBoard checks the file itself, and its Settings › Board list shows what is wrong. See docs/BOARDS.md.",
+  "type": "object",
+  "required": ["version", "boards"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1, "description": "The board file format version." },
+    "boards": { "type": "array", "items": { "$ref": "#/$defs/board" } }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "portName": {
+      "type": "string",
+      "pattern": "^[A-Za-z](?:_?[A-Za-z0-9])*$",
+      "maxLength": 32,
+      "description": "A port name your top-level entity or module declares: a letter, then letters, digits and single underscores. Not a VHDL or Verilog reserved word, and not rst."
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^[A-Za-z](?:_?[A-Za-z0-9])*$",
+      "maxLength": 8,
+      "description": "The small text under each part on the board picture."
+    },
+    "ports": {
+      "type": "object",
+      "required": ["clock50", "switches", "pushbuttons", "leds", "sevenSegment"],
+      "properties": {
+        "clock50": { "$ref": "#/$defs/portName", "description": "The 50 MHz clock input (1 bit)." },
+        "clock500Hz": { "$ref": "#/$defs/portName", "description": "The simulator's 500 Hz clock (1 bit). Optional: CLOCK_500Hz when left out." },
+        "switches": { "$ref": "#/$defs/portName", "description": "The 10 slide switches (10 bits, input)." },
+        "pushbuttons": { "$ref": "#/$defs/portName", "description": "The 4 pushbuttons (4 bits, input, active low)." },
+        "leds": { "$ref": "#/$defs/portName", "description": "The 10 red LEDs (10 bits, output)." },
+        "sevenSegment": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/portName" },
+          "minItems": 6,
+          "maxItems": 6,
+          "description": "The 6 displays, 7 bits each, active low. The rightmost display first."
+        }
+      },
+      "additionalProperties": false
+    },
+    "board": {
+      "type": "object",
+      "required": ["id", "name", "ports"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 32,
+          "description": "Saved in project files. Choose it once and never change it."
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40, "description": "Shown in Settings › Board." },
+        "description": { "type": "string", "maxLength": 140, "description": "Shown beside the name in Settings › Board." },
+        "ports": { "$ref": "#/$defs/ports" },
+        "labels": {
+          "type": "object",
+          "properties": {
+            "switches": { "$ref": "#/$defs/label" },
+            "pushbuttons": { "$ref": "#/$defs/label" },
+            "leds": { "$ref": "#/$defs/label" },
+            "sevenSegment": { "$ref": "#/$defs/label" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -4,6 +4,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { HdlClient } from './hdlClient';
 import type { VhdlFile } from './files';
+import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
+import { encodeBoardFrame } from '../../boards/boardFrame';
+
+const DE1_SOC = builtInBoard('de1-soc');
 
 /** Just enough of a WebSocket to see what `run` puts on the wire. */
 class FakeSocket {
@@ -80,7 +84,7 @@ function recordingHandlers() {
 
 function runWith(topFileName?: string, runTarget?: string | null): string {
   const client = new HdlClient('ws://test', recordingHandlers());
-  client.run(PROJECT, topFileName, runTarget);
+  client.run(PROJECT, topFileName, runTarget ?? null, false, DEFAULT_BOARD.ports);
   return lastFrame();
 }
 
@@ -117,7 +121,7 @@ describe('HdlClient.run', () => {
     runWith('top.vhd');
     FakeSocket.last?.open();
     const verbs = (FakeSocket.last?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
-    expect(verbs).toEqual(['HELLO', 'RUN']);
+    expect(verbs).toEqual(['HELLO', 'WAVE', 'BOARD', 'RUN']);
   });
 
   test('R-1 / AC-6: no run target, the header is exactly as before', () => {
@@ -147,22 +151,20 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
 
   const waveHandlers = () => ({ onReady: vi.fn(), onBegin: vi.fn(), onChunk: vi.fn(), onEnd: vi.fn(), onNone: vi.fn() });
 
-  test('WAVE on/off goes right before RUN; without a choice, nothing is sent', () => {
+  test('WAVE on/off and the board go right before every RUN', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
-    client.run(PROJECT, 'top.vhd', null, true);
+    client.run(PROJECT, 'top.vhd', null, true, DE1_SOC.ports);
     const sent = FakeSocket.last?.sent ?? [];
-    expect(sent[sent.length - 2]).toBe('WAVE on');
-    client.run(PROJECT, 'top.vhd', null, false);
-    expect(sent[sent.length - 2]).toBe('WAVE off');
-    client.run(PROJECT, 'top.vhd');
-    expect(sent.filter((frame) => frame.startsWith('WAVE'))).toHaveLength(2);
+    expect(sent.slice(-3, -1)).toEqual(['WAVE on', encodeBoardFrame(DE1_SOC.ports)]);
+    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    expect(sent.slice(-3, -1)).toEqual(['WAVE off', encodeBoardFrame(DEFAULT_BOARD.ports)]);
   });
 
   test('the WAVE frames reach their handlers; binary frames only inside a transfer', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const wave = waveHandlers();
     const client = new HdlClient('ws://test', { ...recordingHandlers(), wave });
-    client.run(PROJECT, 'top.vhd');
+    client.run(PROJECT, 'top.vhd', null, true, DEFAULT_BOARD.ports);
     const socket = FakeSocket.last;
     if (socket === undefined) throw new Error('no socket was opened');
     socket.receive('WAVE-READY 3 ghw 2420 complete');
@@ -183,5 +185,40 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
     expect(warn).toHaveBeenCalledTimes(3);
     client.waveGet(3);
     expect(socket.sent[socket.sent.length - 1]).toBe('WAVE-GET 3');
+  });
+});
+
+describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)', () => {
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const OLD_BACKEND_ANSWER = 'ERROR protocol\nUnknown verb: "BOARD"';
+
+  test('says so once, sends no more BOARD frames, and does not report the answer as an error', () => {
+    const handlers = { ...recordingHandlers(), onOldBackend: vi.fn() };
+    const client = new HdlClient('ws://test', handlers);
+    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    const socket = FakeSocket.last!;
+    socket.receive(OLD_BACKEND_ANSWER);
+    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    socket.receive(OLD_BACKEND_ANSWER);
+
+    expect(handlers.onOldBackend).toHaveBeenCalledTimes(1);
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(socket.sent.filter((frame) => frame.startsWith('BOARD'))).toHaveLength(1);
+  });
+
+  test('still reports any other protocol error', () => {
+    const handlers = recordingHandlers();
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    FakeSocket.last!.receive('ERROR protocol\nRUN refused: the last BOARD frame was not valid.');
+    expect(handlers.onError).toHaveBeenCalledWith('protocol', 'RUN refused: the last BOARD frame was not valid.');
   });
 });

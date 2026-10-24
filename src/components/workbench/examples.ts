@@ -6,9 +6,13 @@
  * each naming the built-in files (files.ts) it copies into the project.
  * The built-in files themselves are never edited — opening an example
  * adds a copy to the Files panel, and that copy is what the student edits.
+ * The copy is in the active board's port names (translateFromDefault).
  * ------------------------------------------------------------------ */
 
-import { EXAMPLE_FILES, type VhdlFile } from './files';
+import { languageOfName } from './fileKinds';
+import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
+import { translateFromDefault, type Translation } from '../../boards/renamePorts';
+import type { BoardDefinition } from '../../boards/types';
 
 export type ExampleLanguage = 'vhdl' | 'verilog';
 
@@ -40,7 +44,7 @@ interface ExampleEntry {
 const CATALOGUE: readonly ExampleEntry[] = [
   {
     key: 'de1_soc',
-    title: 'DE1-SoC Top Level',
+    title: 'Board Top Level',
     description: "The board's top-level interface, with the switches wired to the LEDs.",
     role: 'design',
     files: { vhdl: ['de1_soc'], verilog: ['de1_soc_v'] },
@@ -65,6 +69,23 @@ const CATALOGUE: readonly ExampleEntry[] = [
     description: 'Press KEY0 to count up on the 7-segment displays (00-99); KEY1 resets.',
     role: 'design',
     files: { vhdl: ['key_counter_7seg'], verilog: ['key_counter_7seg_v'] },
+  },
+  {
+    key: 'key_uart_tx',
+    title: 'Key to UART Tx',
+    description: "Press KEY0 to send 'A' and KEY1 to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on LEDR0, Busy on LEDR1.",
+    role: 'design',
+    files: {
+      vhdl: ['key_uart_tx', 'uart_tx', 'uart_tx_tb'],
+      verilog: ['key_uart_tx_v', 'uart_tx_v', 'uart_tx_tb_v'],
+    },
+  },
+  {
+    key: 'uart_tx_tb',
+    title: 'UART Tx Testbench',
+    description: "Sends 'A' once and shows the RS-232 frame and the transmitter's states in the waveform. Copies UART_Tx too.",
+    role: 'testbench',
+    files: { vhdl: ['uart_tx_tb', 'uart_tx'], verilog: ['uart_tx_tb_v', 'uart_tx_v'] },
   },
   {
     key: 'and_gate',
@@ -135,6 +156,28 @@ export interface ExampleCopy {
    * the opened example's. Goes into the project's file list.
    */
   descriptions: Record<string, string>;
+  /** Copies still in the Default names, because the board's names clash with names they use. */
+  untranslated: UntranslatedFile[];
+}
+
+/** A copied file that could not be put in the board's names, and why. */
+export interface UntranslatedFile {
+  readonly name: string;
+  readonly reasons: readonly string[];
+}
+
+/** A built-in file in `board`'s port names, or as written when they clash with its own names. */
+function onBoard(source: VhdlFile, board: BoardDefinition): Translation {
+  const language = languageOfName(source.name);
+  return language === undefined ? { text: source.content } : translateFromDefault(source.content, language, board);
+}
+
+/**
+ * The files a fresh workspace starts with, in `board`'s port names. One whose names clash
+ * with the board's stays in the Default names; the run's mismatch hint then offers the way out.
+ */
+export function starterFilesFor(board: BoardDefinition): VhdlFile[] {
+  return STARTER_FILES.map((file) => ({ ...file, content: onBoard(file, board).text }));
 }
 
 /** The description of the example `fileId` is the first file of, else of `example`, which it came with. */
@@ -146,22 +189,26 @@ function descriptionOf(fileId: string, example: Example): string {
  * What opening `example` does to `files`: each of its files is copied in under
  * a fresh id (`newId`), unless a file of the same name (ignoring case) is already
  * there — that one is kept untouched, so a student's edits are never overwritten.
+ * Each copy is written in `board`'s port names.
  */
-export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string): ExampleCopy {
+export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string, board: BoardDefinition): ExampleCopy {
   const added: VhdlFile[] = [];
   const kept: string[] = [];
   const descriptions: Record<string, string> = {};
+  const untranslated: UntranslatedFile[] = [];
   const projectIdOf = (source: VhdlFile): string => {
     const existing = files.find((f) => f.name.toLowerCase() === source.name.toLowerCase());
     if (existing) {
       kept.push(existing.name);
       return existing.id;
     }
-    const copy = { ...source, id: newId() };
+    const translation = onBoard(source, board);
+    const copy = { ...source, id: newId(), content: translation.text };
     added.push(copy);
+    if (translation.untranslated) untranslated.push({ name: copy.name, reasons: translation.untranslated });
     descriptions[copy.name] = descriptionOf(source.id, example);
     return copy.id;
   };
   const [openId] = example.fileIds.map((id) => projectIdOf(exampleFile(id)));
-  return { added, kept, openId, descriptions };
+  return { added, kept, openId, descriptions, untranslated };
 }

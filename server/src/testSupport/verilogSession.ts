@@ -17,6 +17,7 @@ import { compileVerilog, readTopPorts } from '../verilog/process.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
 import type { ToolPaths } from '../verilog/toolPaths.js';
 import { makeTempDir, type TempDir } from './sessionDir.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 /** A space and a non-ASCII letter: the directory names that broke Icarus's file access (M11). */
 export const AWKWARD_DIRECTORY_PREFIX = 'hdlboard smoke ø ';
@@ -56,7 +57,7 @@ export async function compiledBoardSession(t: TestContext, { tools, files, top }
   const names = Object.keys(files);
   const ports = await readTopPorts(tools, { dir, target: top, files: names });
   assert.ok(ports.ok, ports.ok ? '' : ports.failure.text);
-  writeFileSync(join(dir, TESTBENCH_FILE_NAME), buildBoardTestbench(top, boardPortSpellings(ports.ports)));
+  writeFileSync(join(dir, TESTBENCH_FILE_NAME), buildBoardTestbench(top, boardPortSpellings(ports.ports, DEFAULT_BOARD_IO), DEFAULT_BOARD_IO));
   const compiled = await compileVerilog(tools, { dir, target: TESTBENCH_MODULE_NAME, files: [TESTBENCH_FILE_NAME, ...names] });
   assert.ok(compiled.ok, compiled.ok ? '' : compiled.failure.text);
   return dir;
