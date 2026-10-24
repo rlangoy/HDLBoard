@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { analyzeFile } from './tbDetect/analyzeProject';
-import { fixtureFile } from './tbDetect/fixtures.testSupport';
+import { fixtureFile, TEST_BOARD_PORTS } from './tbDetect/fixtures.testSupport';
 import type { Confidence, EditorPair } from './tbDetect/types';
 import { anchorRoleView, narrowView, pairKey, resolveView, routeRun, runTargetFor, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type SplitPreference } from './editorView';
 
@@ -80,8 +80,8 @@ test('showsSuggestion', () => {
 });
 
 describe('runTargetFor', () => {
-  const counter = analyzeFile(fixtureFile('vhdl/counter.vhd'));
-  const mixed = analyzeFile(fixtureFile('verilog/alu_tb.v'));
+  const counter = analyzeFile(fixtureFile('vhdl/counter.vhd'), TEST_BOARD_PORTS);
+  const mixed = analyzeFile(fixtureFile('verilog/alu_tb.v'), TEST_BOARD_PORTS);
 
   test('a one-unit design from the RTL pane: no target (B7)', () => {
     expect(runTargetFor({ fileId: 'c', line: 1, unitName: 'counter' }, counter, 'rtl')).toBeNull();
@@ -97,7 +97,7 @@ describe('runTargetFor', () => {
 });
 
 describe('withCurrentUnit', () => {
-  const mixed = analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'));
+  const mixed = analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'), TEST_BOARD_PORTS);
   const shown = (unitName: string | null) => ({ fileId: 'a', line: 1, unitName });
 
   test('keeps the pane’s unit while the file declares it, case-insensitively for VHDL', () => {
@@ -120,19 +120,19 @@ describe('withCurrentUnit', () => {
 
 describe('routeRun (D24)', () => {
   test('R-8: a mixed file runs its testbench unit, named', () => {
-    expect(routeRun(analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd')), null)).toEqual({ unitName: 'alu_tb', pane: 'tb', runTarget: 'alu_tb' });
+    expect(routeRun(analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'), TEST_BOARD_PORTS), null)).toEqual({ unitName: 'alu_tb', pane: 'tb', runTarget: 'alu_tb' });
   });
 
   test('R-9: a one-unit testbench runs without a target', () => {
-    expect(routeRun(analyzeFile(fixtureFile('vhdl/counter_tb.vhd')), null)).toEqual({ unitName: 'counter_tb', pane: 'tb', runTarget: null });
+    expect(routeRun(analyzeFile(fixtureFile('vhdl/counter_tb.vhd'), TEST_BOARD_PORTS), null)).toEqual({ unitName: 'counter_tb', pane: 'tb', runTarget: null });
   });
 
   test('R-10: a one-unit design runs without a target', () => {
-    expect(routeRun(analyzeFile(fixtureFile('vhdl/counter.vhd')), null)).toEqual({ unitName: 'counter', pane: 'rtl', runTarget: null });
+    expect(routeRun(analyzeFile(fixtureFile('vhdl/counter.vhd'), TEST_BOARD_PORTS), null)).toEqual({ unitName: 'counter', pane: 'rtl', runTarget: null });
   });
 
   test('a remembered topUnit wins while it exists, case-insensitively for VHDL', () => {
-    const file = analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'));
+    const file = analyzeFile(fixtureFile('vhdl/alu_with_tb.vhd'), TEST_BOARD_PORTS);
     expect(routeRun(file, 'ALU')).toEqual({ unitName: 'alu', pane: 'rtl', runTarget: 'alu' });
     expect(routeRun(file, 'gone').unitName).toBe('alu_tb');
   });

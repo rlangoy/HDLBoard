@@ -10,15 +10,34 @@
 
 import { isReservedWord } from '../vhdlWords';
 import { isVerilogReservedWord } from '../verilogWords';
-import { isBoardPort } from './boardPorts';
 import { lineIndex, type LineOf } from './lines';
 import type { CodeBlock, DesignUnit, Instance, Language } from './types';
 
 type Range = { readonly from: number; readonly to: number };
 
-export function designUnits(language: Language, code: string): DesignUnit[] {
+/** A unit as the scan finds it: its declared ports by offset, before any board is asked about them. */
+type ScannedUnit = Omit<DesignUnit, 'portNames' | 'hasBoardPorts' | 'boardPortLine'> & { readonly portOffsets: readonly Instance[] };
+
+/**
+ * The design units of `code`. `boardPorts` (lower case, from `boardDesignPortNames`) are
+ * the names that make a unit a board design (rule *-board-ports), passed in so the
+ * detector stays pure and follows the active board.
+ */
+export function designUnits(language: Language, code: string, boardPorts: ReadonlySet<string>): DesignUnit[] {
   const lineOf = lineIndex(code);
-  return language === 'vhdl' ? vhdlUnits(code, lineOf) : verilogUnits(code, lineOf);
+  const scanned = language === 'vhdl' ? vhdlUnits(code, lineOf) : verilogUnits(code, lineOf);
+  return scanned.map((unit) => withBoardPorts(unit, boardPorts, lineOf));
+}
+
+/** The unit with its declared port names, and whether (and where) it declares a board port. */
+function withBoardPorts({ portOffsets, ...unit }: ScannedUnit, boardPorts: ReadonlySet<string>, lineOf: LineOf): DesignUnit {
+  const boardPort = portOffsets.find((port) => boardPorts.has(port.name.toLowerCase()));
+  return {
+    ...unit,
+    portNames: portOffsets.map((port) => port.name),
+    hasBoardPorts: boardPort !== undefined,
+    boardPortLine: boardPort ? lineOf(boardPort.line) : undefined,
+  };
 }
 
 /** The offset just after the `)` matching the `(` at `open`. */
@@ -75,7 +94,7 @@ function lastEndBefore(code: string, from: number, to: number): number {
   return Math.min(last, to);
 }
 
-function vhdlUnits(code: string, lineOf: LineOf): DesignUnit[] {
+function vhdlUnits(code: string, lineOf: LineOf): ScannedUnit[] {
   const items = vhdlItems(code);
   const owners = architectureOwners(items);
   return items.flatMap((item, i) => {
@@ -111,10 +130,9 @@ function contextClauseStart(code: string, from: number, entityAt: number): numbe
   return found ? from + found.index : entityAt;
 }
 
-function vhdlUnit(code: string, lineOf: LineOf, entity: VhdlItem, archs: VhdlItem[], contextFrom: number): DesignUnit {
+function vhdlUnit(code: string, lineOf: LineOf, entity: VhdlItem, archs: VhdlItem[], contextFrom: number): ScannedUnit {
   const headerEnd = vhdlHeaderEnd(code, entity.from);
   const ports = vhdlPorts(code, entity.from, headerEnd);
-  const boardPort = ports?.find((p) => isBoardPort(p.name));
   const end = Math.max(entity.to, ...archs.map((a) => a.to));
   return {
     name: entity.name,
@@ -122,8 +140,7 @@ function vhdlUnit(code: string, lineOf: LineOf, entity: VhdlItem, archs: VhdlIte
     span: { start: lineOf(contextFrom), end: lineOf(Math.max(contextFrom, end - 1)) },
     declLine: lineOf(entity.from),
     hasPorts: ports !== undefined,
-    hasBoardPorts: boardPort !== undefined,
-    boardPortLine: boardPort ? lineOf(boardPort.line) : undefined,
+    portOffsets: ports ?? [],
     instances: archs.flatMap((a) => vhdlInstances(code.slice(a.from, a.to), a.from, lineOf)),
     blocks: archs.flatMap((a) => vhdlBlocks(code, a, lineOf)),
     ranges: [{ from: contextFrom, to: entity.to }, ...archs.map(({ from, to }) => ({ from, to }))],
@@ -187,8 +204,8 @@ function vhdlBlocks(code: string, arch: Range, lineOf: LineOf): CodeBlock[] {
 
 const VERILOG_UNIT = /\b(module|macromodule|program)\s+([A-Za-z_]\w*)/g;
 
-function verilogUnits(code: string, lineOf: LineOf): DesignUnit[] {
-  const units: DesignUnit[] = [];
+function verilogUnits(code: string, lineOf: LineOf): ScannedUnit[] {
+  const units: ScannedUnit[] = [];
   VERILOG_UNIT.lastIndex = 0;
   for (let m = VERILOG_UNIT.exec(code); m; m = VERILOG_UNIT.exec(code)) {
     const closer = new RegExp(`\\bend${m[1] === 'program' ? 'program' : 'module'}\\b`, 'g');
@@ -201,10 +218,9 @@ function verilogUnits(code: string, lineOf: LineOf): DesignUnit[] {
   return units;
 }
 
-function verilogUnit(code: string, lineOf: LineOf, m: RegExpExecArray, to: number): DesignUnit {
+function verilogUnit(code: string, lineOf: LineOf, m: RegExpExecArray, to: number): ScannedUnit {
   const from = m.index;
   const header = verilogHeader(code, from + m[0].length, to);
-  const boardPort = header.ports.find((p) => isBoardPort(p.name));
   const body = { from: header.end, to };
   return {
     name: m[2],
@@ -212,8 +228,7 @@ function verilogUnit(code: string, lineOf: LineOf, m: RegExpExecArray, to: numbe
     span: { start: lineOf(from), end: lineOf(to - 1) },
     declLine: lineOf(from),
     hasPorts: header.ports.length > 0,
-    hasBoardPorts: boardPort !== undefined,
-    boardPortLine: boardPort ? lineOf(boardPort.line) : undefined,
+    portOffsets: header.ports,
     instances: verilogInstances(code, body, lineOf),
     blocks: verilogBlocks(code, body, lineOf),
     ranges: [{ from, to }],

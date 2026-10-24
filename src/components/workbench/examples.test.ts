@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
 import { EXAMPLES, copyExample, filterExamples, type Example } from './examples';
+import { DEFAULT_BOARD } from '../../boards/boardCatalog';
 
 const example = (id: string): Example => {
   const found = EXAMPLES.find((e) => e.id === id);
@@ -65,11 +66,11 @@ describe('filterExamples', () => {
 describe('copyExample', () => {
   test('an example naming a file that is not built in is a bug, not a silent skip', () => {
     const broken: Example = { ...example('blink_vhdl'), fileIds: ['no_such_file'] };
-    expect(() => copyExample(broken, STARTER_FILES, idSequence())).toThrow('no_such_file');
+    expect(() => copyExample(broken, STARTER_FILES, idSequence(), DEFAULT_BOARD)).toThrow('no_such_file');
   });
 
   test('copies the file under a fresh id and opens it', () => {
-    const result = copyExample(example('blink_vhdl'), STARTER_FILES, idSequence());
+    const result = copyExample(example('blink_vhdl'), STARTER_FILES, idSequence(), DEFAULT_BOARD);
     expect(result.added).toHaveLength(1);
     expect(result.added[0]).toMatchObject({ id: 'file-1', name: 'blinkTest.vhdl', folder: 'vhdl' });
     expect(result.openId).toBe('file-1');
@@ -77,23 +78,23 @@ describe('copyExample', () => {
   });
 
   test('a testbench brings its design along, and opens the testbench', () => {
-    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence());
+    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence(), DEFAULT_BOARD);
     expect(result.added.map((f) => f.name)).toEqual(['and_gate_tb.v', 'and_gate.v']);
     expect(result.openId).toBe('file-1');
   });
 
   test('never overwrites a file the project already has: it is opened instead', () => {
     const edited: VhdlFile = { id: 'file-9', name: 'and_gate.v', folder: 'verilog', content: '// mine' };
-    const result = copyExample(example('and_gate_tb_verilog'), [...STARTER_FILES, edited], idSequence());
+    const result = copyExample(example('and_gate_tb_verilog'), [...STARTER_FILES, edited], idSequence(), DEFAULT_BOARD);
     expect(result.added.map((f) => f.name)).toEqual(['and_gate_tb.v']);
     expect(result.kept).toEqual(['and_gate.v']);
 
-    const again = copyExample(example('and_gate_verilog'), [edited], idSequence());
+    const again = copyExample(example('and_gate_verilog'), [edited], idSequence(), DEFAULT_BOARD);
     expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9', descriptions: {} });
   });
 
   test("describes each copied file for the project's file list, by the example card it opens itself", () => {
-    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence());
+    const result = copyExample(example('and_gate_tb_verilog'), STARTER_FILES, idSequence(), DEFAULT_BOARD);
     expect(result.descriptions).toEqual({
       'and_gate_tb.v': example('and_gate_tb_verilog').description,
       'and_gate.v': example('and_gate_verilog').description,
@@ -102,7 +103,7 @@ describe('copyExample', () => {
   });
 
   test('describes a single-file example by its own card', () => {
-    expect(copyExample(example('blink_vhdl'), STARTER_FILES, idSequence()).descriptions).toEqual({
+    expect(copyExample(example('blink_vhdl'), STARTER_FILES, idSequence(), DEFAULT_BOARD).descriptions).toEqual({
       'blinkTest.vhdl': 'Simple blinking LED example using a counter.',
     });
   });

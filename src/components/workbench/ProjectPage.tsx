@@ -17,8 +17,10 @@ import {
   RefreshIcon,
   SaveIcon,
 } from './icons';
+import { DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
+import type { BoardCatalog } from '../../boards/types';
+import { BOARD_TEXT, notInstalledNote, notInstalledOption } from './boardText';
 import {
-  KNOWN_BOARDS,
   MISSING_LOCAL_FILE,
   type OpenProject,
   type ProjectDetails,
@@ -40,6 +42,14 @@ export interface ProjectPageProps {
   /** Work in progress, e.g. "Downloading counter.vhd…"; the buttons wait while it runs. */
   busy: string | null;
   onDetailsChange: (details: ProjectDetails) => void;
+  /** The boards available here: the Board list (docs/board_io_config_spec.md § 3.4). */
+  boards: BoardCatalog;
+  /** Another board was chosen: asks, and renames the files, as Settings › Board does. */
+  onBoardChange: (id: string) => void;
+  /** Loading, saving or compiling: the board cannot change just now. */
+  boardLocked: boolean;
+  /** Choose a board…, for a project on a board not installed here: opens Settings. */
+  onChooseBoard: () => void;
   onEntryChange: (name: string, patch: { description?: string; url?: string }) => void;
   /** Show a file of the project in the editor. */
   onOpenFile: (name: string) => void;
@@ -74,6 +84,44 @@ export interface ProjectPageProps {
   onAddFiles: (names: readonly string[]) => void;
   /** Take a file out of the project; it stays in Files. */
   onLeaveProject: (name: string) => void;
+}
+
+interface BoardSelectProps {
+  id: string;
+  boards: BoardCatalog;
+  boardId: string;
+  locked: boolean;
+  onChange: (id: string) => void;
+  onChooseBoard: () => void;
+}
+
+/**
+ * The project's board, from the boards installed here, each described in its tooltip.
+ * A board that is not installed stays selected, with a note: the id is kept when the
+ * project is saved, until the student chooses another board.
+ */
+function BoardSelect({ id, boards, boardId, locked, onChange, onChooseBoard }: BoardSelectProps) {
+  const installed = findBoard(boards, boardId).installed;
+  return (
+    <>
+      <select id={id} className="wb-project__field wb-project__select" value={boardId} disabled={locked} onChange={(e) => onChange(e.target.value)}>
+        {boards.boards.map((board) => (
+          <option key={board.id} value={board.id} title={board.description}>
+            {board.name}
+          </option>
+        ))}
+        {!installed && <option value={boardId}>{notInstalledOption(boardId, DEFAULT_BOARD)}</option>}
+      </select>
+      {!installed && (
+        <span className="wb-project__board-note" role="note">
+          {notInstalledNote(boardId, DEFAULT_BOARD)}{' '}
+          <button type="button" className="wb-project__text-btn" onClick={onChooseBoard}>
+            {BOARD_TEXT.chooseBoard}
+          </button>
+        </span>
+      )}
+    </>
+  );
 }
 
 /**
@@ -193,18 +241,14 @@ export function ProjectPage(props: ProjectPageProps) {
                   <label htmlFor={`${ids}-board`}>Board</label>
                 </dt>
                 <dd>
-                  <select
+                  <BoardSelect
                     id={`${ids}-board`}
-                    className="wb-project__field wb-project__select"
-                    value={project.board}
-                    onChange={(e) => onDetailsChange({ board: e.target.value })}
-                  >
-                    {KNOWN_BOARDS.map((board) => (
-                      <option key={board} value={board}>
-                        {board}
-                      </option>
-                    ))}
-                  </select>
+                    boards={props.boards}
+                    boardId={project.board}
+                    locked={props.boardLocked}
+                    onChange={props.onBoardChange}
+                    onChooseBoard={props.onChooseBoard}
+                  />
                 </dd>
               </div>
               <div className="wb-project__fact wb-project__fact--grow">

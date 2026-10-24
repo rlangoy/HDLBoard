@@ -42,6 +42,8 @@ export interface DesignUnit {
   /** The line of `entity <name>` / `module <name>`. */
   readonly declLine: number;
   readonly hasPorts: boolean;
+  /** The declared port names, as written, in declaration order. */
+  readonly portNames: readonly string[];
   readonly hasBoardPorts: boolean;
   /** The line of the first board port, when there is one. */
   readonly boardPortLine: number | undefined;

@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { analyzeFile } from './analyzeProject';
-import { FIXTURES, fixtureFile } from './fixtures.testSupport';
+import { FIXTURES, fixtureFile, TEST_BOARD_PORTS } from './fixtures.testSupport';
 import type { Confidence, FileRole } from './types';
 
 /**
@@ -67,7 +67,7 @@ describe('the detector fixtures (§ 7.1)', () => {
 
   test.each(Object.entries(GOLDEN))('%s', (path, expected) => {
     const prefix = path.startsWith('vhdl/') ? 'vhdl-' : 'vlog-';
-    const analysis = analyzeFile(fixtureFile(path));
+    const analysis = analyzeFile(fixtureFile(path), TEST_BOARD_PORTS);
     expect(analysis?.role).toBe(expected.role);
     const actual = analysis?.units.map((unit) => ({
       unit: unit.name,

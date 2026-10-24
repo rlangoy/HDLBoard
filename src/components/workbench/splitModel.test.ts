@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { pairOptions, roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile } from './splitModel';
 import { analyzeProject } from './tbDetect/analyzeProject';
-import { fixtureFile, sourceFile } from './tbDetect/fixtures.testSupport';
+import { fixtureFile, sourceFile, TEST_BOARD_PORTS } from './tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES } from './tbDetect/types';
 
 /** docs/impl_split_screen.md § 4.4, § 4.10, § 5.7. */
@@ -15,7 +15,7 @@ const project = analyzeProject([
   fixtureFile('vhdl/alu_with_tb.vhd'),
   fixtureFile('vhdl/de1_soc_stray.vhd'),
   fixtureFile('verilog/alu_tb.v'),
-]);
+], TEST_BOARD_PORTS);
 
 describe('pairOptions', () => {
   test('the TB pane is offered the same-language designs', () => {
@@ -70,7 +70,7 @@ test('a role override changes what pairOptions offers', () => {
 });
 
 test('files of the other language are never offered', () => {
-  const extra = analyzeProject([fixtureFile('vhdl/counter.vhd'), sourceFile('verilog/counter_tb.v', 'module counter_tb; counter d (); initial $finish; endmodule')]);
+  const extra = analyzeProject([fixtureFile('vhdl/counter.vhd'), sourceFile('verilog/counter_tb.v', 'module counter_tb; counter d (); initial $finish; endmodule')], TEST_BOARD_PORTS);
   expect(pairOptions(extra, EMPTY_OVERRIDES, 'vhdl/counter.vhd', 'rtl')).toEqual([]);
 });
 
@@ -78,7 +78,7 @@ describe('withoutContradictedPairs', () => {
   const ADDER4 = 'entity adder4 is\n  port (a : in bit; y : out bit);\nend entity;\narchitecture rtl of adder4 is\nbegin\n  y <= a;\nend architecture;\n';
   const ADDER4_TB = 'entity adder4_tb is\nend entity;\narchitecture sim of adder4_tb is\n  signal a, y : bit;\nbegin\n  dut: entity work.adder4 port map (a => a, y => y);\n  process begin\n    a <= \'1\';\n    wait for 10 ns;\n    assert y = \'1\' report "bad" severity error;\n    wait;\n  end process;\nend architecture;\n';
   const OTHER = 'entity counter8 is\n  port (CLOCK_50 : in bit; LEDR : out bit_vector(9 downto 0));\nend entity;\narchitecture rtl of counter8 is\nbegin\nend architecture;\n';
-  const files = analyzeProject([sourceFile('vhdl/adder4.vhd', ADDER4), sourceFile('vhdl/adder4_tb.vhd', ADDER4_TB), sourceFile('vhdl/other.vhd', OTHER)]);
+  const files = analyzeProject([sourceFile('vhdl/adder4.vhd', ADDER4), sourceFile('vhdl/adder4_tb.vhd', ADDER4_TB), sourceFile('vhdl/other.vhd', OTHER)], TEST_BOARD_PORTS);
 
   test('drops a stored pairing the testbench contradicts, keeps the rest', () => {
     const stored = { roles: { 'vhdl/other.vhd': 'rtl' as const }, pairs: { 'vhdl/other.vhd': 'vhdl/adder4_tb.vhd' } };

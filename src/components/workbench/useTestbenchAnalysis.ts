@@ -18,21 +18,33 @@ export interface TestbenchAnalysis {
 /**
  * The project's testbench analysis, re-run ANALYSIS_DELAY_MS after the last edit
  * (never per keystroke, AC-18). `flush` is for pair-change events (D7).
+ *
+ * `boardPorts` (`boardDesignPortNames` of the active board, memoised) tells a board
+ * design from a testbench. When it changes — another board — every file is analysed
+ * again at once, so nothing cached under the old names is reused.
  */
-export function useTestbenchAnalysis(files: readonly SourceFile[]): TestbenchAnalysis {
-  const [current, setCurrent] = useState(() => analyzeProject(files));
+export function useTestbenchAnalysis(files: readonly SourceFile[], boardPorts: ReadonlySet<string>): TestbenchAnalysis {
+  const [current, setCurrent] = useState(() => analyzeProject(files, boardPorts));
   const latest = useRef(current);
   const filesRef = useRef(files);
   filesRef.current = files;
+  const boardPortsRef = useRef(boardPorts);
 
   const flush = useCallback(() => {
-    const next = analyzeProject(filesRef.current, latest.current);
+    const next = analyzeProject(filesRef.current, boardPortsRef.current, latest.current);
     if (!sameAnalysis(next, latest.current)) {
       latest.current = next;
       setCurrent(next);
     }
     return latest.current;
   }, []);
+
+  useEffect(() => {
+    if (boardPortsRef.current === boardPorts) return;
+    boardPortsRef.current = boardPorts;
+    latest.current = analyzeProject(filesRef.current, boardPorts);
+    setCurrent(latest.current);
+  }, [boardPorts]);
 
   useEffect(() => {
     const timer = window.setTimeout(flush, ANALYSIS_DELAY_MS);

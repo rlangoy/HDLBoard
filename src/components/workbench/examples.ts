@@ -6,9 +6,13 @@
  * each naming the built-in files (files.ts) it copies into the project.
  * The built-in files themselves are never edited — opening an example
  * adds a copy to the Files panel, and that copy is what the student edits.
+ * The copy is in the active board's port names (translateFromDefault).
  * ------------------------------------------------------------------ */
 
-import { EXAMPLE_FILES, type VhdlFile } from './files';
+import { languageOfName } from './fileKinds';
+import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
+import { translateFromDefault } from '../../boards/renamePorts';
+import type { BoardDefinition } from '../../boards/types';
 
 export type ExampleLanguage = 'vhdl' | 'verilog';
 
@@ -40,7 +44,7 @@ interface ExampleEntry {
 const CATALOGUE: readonly ExampleEntry[] = [
   {
     key: 'de1_soc',
-    title: 'DE1-SoC Top Level',
+    title: 'Board Top Level',
     description: "The board's top-level interface, with the switches wired to the LEDs.",
     role: 'design',
     files: { vhdl: ['de1_soc'], verilog: ['de1_soc_v'] },
@@ -137,6 +141,17 @@ export interface ExampleCopy {
   descriptions: Record<string, string>;
 }
 
+/** A built-in file's text in `board`'s port names. */
+function onBoard(source: VhdlFile, board: BoardDefinition): string {
+  const language = languageOfName(source.name);
+  return language === undefined ? source.content : translateFromDefault(source.content, language, board);
+}
+
+/** The files a fresh workspace starts with, in `board`'s port names. */
+export function starterFilesFor(board: BoardDefinition): VhdlFile[] {
+  return STARTER_FILES.map((file) => ({ ...file, content: onBoard(file, board) }));
+}
+
 /** The description of the example `fileId` is the first file of, else of `example`, which it came with. */
 function descriptionOf(fileId: string, example: Example): string {
   return (EXAMPLES.find((other) => other.fileIds[0] === fileId) ?? example).description;
@@ -146,8 +161,9 @@ function descriptionOf(fileId: string, example: Example): string {
  * What opening `example` does to `files`: each of its files is copied in under
  * a fresh id (`newId`), unless a file of the same name (ignoring case) is already
  * there — that one is kept untouched, so a student's edits are never overwritten.
+ * Each copy is written in `board`'s port names.
  */
-export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string): ExampleCopy {
+export function copyExample(example: Example, files: readonly VhdlFile[], newId: () => string, board: BoardDefinition): ExampleCopy {
   const added: VhdlFile[] = [];
   const kept: string[] = [];
   const descriptions: Record<string, string> = {};
@@ -157,7 +173,7 @@ export function copyExample(example: Example, files: readonly VhdlFile[], newId:
       kept.push(existing.name);
       return existing.id;
     }
-    const copy = { ...source, id: newId() };
+    const copy = { ...source, id: newId(), content: onBoard(source, board) };
     added.push(copy);
     descriptions[copy.name] = descriptionOf(source.id, example);
     return copy.id;

@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { EXAMPLE_FILES } from '../files';
 import { analyzeProject } from './analyzeProject';
-import { FIXTURES, fixtureFile } from './fixtures.testSupport';
+import { FIXTURES, fixtureFile, TEST_BOARD_PORTS } from './fixtures.testSupport';
 
 /**
  * docs/impl_split_screen.md § 7.4, AC-18: generous budgets, so a CI box does not
@@ -47,17 +47,17 @@ describe('analyzeProject budgets', () => {
     const name = language === 'vhdl' ? 'big.vhd' : 'big.v';
     const file = { id: name, name, folder: language, content: repeatedTo(5000, language) };
     // Each call starts from no previous result, so every run is cold for the cache.
-    expect(await timed(() => analyzeProject([file]), 50)).toBeLessThan(50);
+    expect(await timed(() => analyzeProject([file], TEST_BOARD_PORTS), 50)).toBeLessThan(50);
   });
 
   test('the starter project plus every fixture, cold, in under 150 ms', async () => {
     const files = [...EXAMPLE_FILES, ...[...FIXTURES.keys()].map((path) => fixtureFile(path))];
-    expect(await timed(() => analyzeProject(files), 150)).toBeLessThan(150);
+    expect(await timed(() => analyzeProject(files, TEST_BOARD_PORTS), 150)).toBeLessThan(150);
   });
 
   test('an unchanged file reuses its cached result', () => {
     const files = [fixtureFile('vhdl/counter.vhd')];
-    const first = analyzeProject(files);
-    expect(analyzeProject(files, first).byFile.get('vhdl/counter.vhd')).toBe(first.byFile.get('vhdl/counter.vhd'));
+    const first = analyzeProject(files, TEST_BOARD_PORTS);
+    expect(analyzeProject(files, TEST_BOARD_PORTS, first).byFile.get('vhdl/counter.vhd')).toBe(first.byFile.get('vhdl/counter.vhd'));
   });
 });

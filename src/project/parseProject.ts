@@ -4,8 +4,10 @@
 import { fileNameProblem, folderNameProblem, nameKey } from './fileName';
 import { isObject } from './jsonValue';
 import {
+  CURRENT_PROJECT_VERSION,
   DEFAULT_SOURCE_DIRECTORY,
-  SUPPORTED_PROJECT_VERSION,
+  SUPPORTED_PROJECT_VERSIONS,
+  VERSION_1_BOARD_ID,
   type Diagnostic,
   type HdlBoardProject,
   type ProjectFileEntry,
@@ -13,9 +15,6 @@ import {
 } from './types';
 import { isPlainHttpUrl, urlProblem } from './url';
 import { parseWaveViews, serializableWaveViews } from './waveViews';
-
-/** Boards built into HDLBoard. Stage 2 passes HDLBoard's own list instead. */
-export const DEFAULT_KNOWN_BOARDS = ['DE1-SoC'] as const;
 
 /** Thrown when a project file cannot be loaded at all (§ 7, "Error" rows). */
 export class ProjectError extends Error {
@@ -25,15 +24,9 @@ export class ProjectError extends Error {
   }
 }
 
-export interface ParseOptions {
-  knownBoards?: readonly string[];
-}
-
 export interface ParsedProject {
-  /** The project with only the accepted file entries. */
+  /** The project with only the accepted file entries, as a current-version project. */
   project: HdlBoardProject;
-  /** The board to use: the matching known board, or the default board (§ 4.2). */
-  board: string;
   warnings: Diagnostic[];
   skipped: SkippedEntry[];
 }
@@ -41,12 +34,11 @@ export interface ParsedProject {
 const REQUIRED_FIELDS = ['version', 'name', 'board', 'description', 'files'] as const;
 
 /** Parses and validates a project file (§ 7). Throws {@link ProjectError} on errors. */
-export function parseProject(json: string, options: ParseOptions = {}): ParsedProject {
+export function parseProject(json: string): ParsedProject {
   const raw = parseJsonObject(json);
   requireTopLevelFields(raw);
 
   const warnings: Diagnostic[] = [];
-  const board = resolveBoard(raw.board as string, options.knownBoards ?? DEFAULT_KNOWN_BOARDS, warnings);
   const { files, skipped } = parseFileEntries(raw.files as unknown[], warnings);
 
   const projectDirectory = folderField(raw, 'projectDirectory', warnings);
@@ -54,16 +46,26 @@ export function parseProject(json: string, options: ParseOptions = {}): ParsedPr
   const waveViews = parseWaveViews(raw.waveViews, warnings);
 
   const project: HdlBoardProject = {
-    version: raw.version as number,
+    version: CURRENT_PROJECT_VERSION,
     name: raw.name as string,
-    board: raw.board as string,
+    board: boardIdOf(raw.version as number, raw.board as string),
     description: raw.description as string,
     ...(projectDirectory !== undefined ? { projectDirectory } : {}),
     ...(sourceDirectory !== undefined ? { sourceDirectory } : {}),
     files,
     ...(waveViews !== undefined ? { waveViews } : {}),
   };
-  return { project, board, warnings, skipped };
+  return { project, warnings, skipped };
+}
+
+/**
+ * The board a project opens on (docs/board_io_config_spec.md § 10). Every version-1 file
+ * was written with the Default board's names, even though it says "DE1-SoC", so it opens
+ * on the Default board, with no question and no guessing from its sources. A version-2
+ * file names a board id, kept as written even when that board is not installed here.
+ */
+export function boardIdOf(version: number, board: string): string {
+  return version === 1 ? VERSION_1_BOARD_ID : board;
 }
 
 /**
@@ -96,24 +98,15 @@ function requireTopLevelFields(raw: Record<string, unknown>): void {
   if (missing.length > 0) throw new ProjectError(`Missing required field(s): ${missing.join(', ')}`);
 
   if (typeof raw.version !== 'number') throw new ProjectError('"version" must be a number');
-  if (raw.version !== SUPPORTED_PROJECT_VERSION) {
+  if (!SUPPORTED_PROJECT_VERSIONS.includes(raw.version)) {
     throw new ProjectError(
-      `Unsupported project file version ${raw.version}; supported version is ${SUPPORTED_PROJECT_VERSION}`,
+      `Unsupported project file version ${raw.version}; supported versions are ${SUPPORTED_PROJECT_VERSIONS.join(' and ')}`,
     );
   }
   for (const field of ['name', 'board', 'description'] as const) {
     if (typeof raw[field] !== 'string') throw new ProjectError(`"${field}" must be a string`);
   }
   if (!Array.isArray(raw.files)) throw new ProjectError('"files" must be an array');
-}
-
-function resolveBoard(board: string, knownBoards: readonly string[], warnings: Diagnostic[]): string {
-  const match = knownBoards.find((known) => nameKey(known) === nameKey(board));
-  if (match) return match;
-
-  const fallback = knownBoards[0] ?? board;
-  warnings.push({ severity: 'warning', message: `Unknown board "${board}"; using the default board "${fallback}"` });
-  return fallback;
 }
 
 function parseFileEntries(rawEntries: unknown[], warnings: Diagnostic[]) {
@@ -166,10 +159,10 @@ function entryLabel(rawEntry: unknown, index: number): string {
   return `entry #${index + 1}`;
 }
 
-/** Serializes a project the way it is written to disk. */
+/** Serializes a project the way it is written to disk: always as the current version, with the board's id. */
 export function serializeProject(project: HdlBoardProject): string {
   const ordered: HdlBoardProject = {
-    version: project.version,
+    version: CURRENT_PROJECT_VERSION,
     name: project.name,
     board: project.board,
     description: project.description,

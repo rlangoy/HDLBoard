@@ -8,6 +8,7 @@
  */
 
 import { BUILT_IN_BOARDS } from './boardCatalog';
+import { LEGACY_RESET_PORT } from './boardNames';
 import type { BoardDefinition, BoardPorts } from './types';
 
 export const SWITCH_COUNT = 10;
@@ -28,6 +29,16 @@ export function portKeysOf(board: BoardDefinition): Set<string> {
 
 /** The port names of every built-in board, lower case: a design in any of them is a board design. */
 export const BUILT_IN_PORT_NAMES: ReadonlySet<string> = new Set(BUILT_IN_BOARDS.flatMap((board) => [...portKeysOf(board)]));
+
+/**
+ * The names that make a unit a board design rather than a testbench (§ 6.9): every
+ * built-in board's, the active board's, and the legacy `rst` — so a file in `KEY_N` or
+ * `KEY` is a board design whichever built-in is active, and one in a user board's names
+ * while that board is.
+ */
+export function boardDesignPortNames(active: BoardDefinition): ReadonlySet<string> {
+  return new Set([...BUILT_IN_PORT_NAMES, ...portKeysOf(active), LEGACY_RESET_PORT]);
+}
 
 /** One port renamed: `KEY_N` → `KEY`. */
 export interface PortRename {

@@ -8,6 +8,8 @@
  */
 
 import { fileNameRefusal } from './fileNameRules';
+import { translateFromDefault } from '../../boards/renamePorts';
+import { type BoardDefinition } from '../../boards/types';
 
 export type NewFileLanguage = 'vhdl' | 'verilog';
 
@@ -55,13 +57,17 @@ export function newFileNameError(
 
 /**
  * What a new file starts with: a design named after the file — a Verilog module or a
- * VHDL entity (with an `rtl` architecture) — declaring every DE1-SoC board port, the
- * same list as the DE1_SoC starter files. The name matters for Verilog, where a run looks
+ * VHDL entity (with an `rtl` architecture) — declaring every port of `board`, the same
+ * list as the DE1_SoC starter files. The name matters for Verilog, where a run looks
  * for the module named after the top file when it holds several (server/src/verilog/ports.ts).
  * The body is left empty: the behaviour is the student's to write.
  */
-export function newFileContent(input: string, language: NewFileLanguage): string {
-  const name = baseName(input);
+export function newFileContent(input: string, language: NewFileLanguage, board: BoardDefinition): string {
+  return translateFromDefault(designTemplate(baseName(input), language), language, board);
+}
+
+/** The new design in the Default board's names; `translateFromDefault` gives it the active board's. */
+function designTemplate(name: string, language: NewFileLanguage): string {
   if (language === 'verilog') {
     return `module ${name} (
     input  wire        CLOCK_50,

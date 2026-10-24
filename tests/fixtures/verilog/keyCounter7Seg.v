@@ -1,5 +1,5 @@
 // Press KEY0 to count up, KEY1 to reset. The count (00..99) is shown in
-// decimal on HEX1 (tens) and HEX0 (ones); the other displays stay blank.
+// decimal on HEX1_N (tens) and HEX0_N (ones); the other displays stay blank.
 module keyCounter7Seg (
     input  wire        CLOCK_50,
     input  wire [3:0]  KEY_N,

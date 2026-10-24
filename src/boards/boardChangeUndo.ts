@@ -11,17 +11,18 @@
 
 import type { SavedWaveViews } from '../project/types';
 
-export interface BoardChangeState<F> {
-  readonly files: readonly F[];
+/** `Files`: the files array type; compared by identity, never by content. */
+export interface BoardChangeState<Files> {
+  readonly files: Files;
   readonly board: string;
 }
 
-export interface BoardChangeRecord<F> {
-  readonly before: BoardChangeState<F> & { readonly waveViews?: SavedWaveViews };
-  readonly after: BoardChangeState<F>;
+export interface BoardChangeRecord<Files> {
+  readonly before: BoardChangeState<Files> & { readonly waveViews?: SavedWaveViews };
+  readonly after: BoardChangeState<Files>;
 }
 
 /** Undo is possible only while the files and the board are exactly as the change left them. */
-export function canUndo<F>(record: BoardChangeRecord<F>, current: BoardChangeState<F>): boolean {
+export function canUndo<Files>(record: BoardChangeRecord<Files>, current: BoardChangeState<Files>): boolean {
   return current.files === record.after.files && current.board === record.after.board;
 }

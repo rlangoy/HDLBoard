@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useState } from 'react';
+import { DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
+import type { BoardCatalog } from '../../boards/types';
+import { BOARD_TEXT, BOARDS_DOC_URL, notInstalledOption } from './boardText';
 import { Dialog } from './Dialog';
 import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
@@ -15,6 +18,12 @@ import './SettingsDialog.css';
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Board: the boards available here, and the open project's (docs/board_io_config_spec.md § 3.2). */
+  boards: BoardCatalog;
+  boardId: string;
+  onBoardChange: (id: string) => void;
+  /** Loading or saving the project, or compiling: the board cannot change just now. */
+  boardLocked: boolean;
   /** Languages: the Examples pane opens with these ticked (languagePrefs.ts). */
   preferredLanguages: PreferredLanguages;
   onPreferredLanguagesChange: (languages: PreferredLanguages) => void;
@@ -24,6 +33,59 @@ export interface SettingsDialogProps {
   /** Waveforms are recorded for testbench runs (docs/waveform_viewer_spec.md FR-1). */
   recordWaves: boolean;
   onRecordWavesChange: (on: boolean) => void;
+}
+
+interface BoardSettingProps {
+  boards: BoardCatalog;
+  boardId: string;
+  locked: boolean;
+  onChange: (id: string) => void;
+}
+
+/**
+ * The open project's board, one radio button per board with its description. A project
+ * on a board not installed here gets an extra checked row, so it is clear what it uses.
+ */
+function BoardSetting({ boards, boardId, locked, onChange }: BoardSettingProps) {
+  const installed = findBoard(boards, boardId).installed;
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">{BOARD_TEXT.settingTitle}</legend>
+      {boards.boards.map((board) => (
+        <label key={board.id} className="wb-settings__option">
+          <input
+            type="radio"
+            name="wb-board"
+            checked={board.id === boardId}
+            disabled={locked}
+            onChange={() => onChange(board.id)}
+          />
+          <span>
+            <strong>{board.name}</strong>
+            {board.description && <span className="wb-settings__note">{board.description}</span>}
+          </span>
+        </label>
+      ))}
+      {!installed && (
+        <label className="wb-settings__option">
+          <input type="radio" name="wb-board" checked disabled readOnly />
+          <strong>{notInstalledOption(boardId, DEFAULT_BOARD)}</strong>
+        </label>
+      )}
+      <span className="wb-settings__note">
+        {BOARD_TEXT.settingNote} {BOARD_TEXT.settingMoreBoards} (
+        <a href={BOARDS_DOC_URL} target="_blank" rel="noopener noreferrer">
+          {BOARD_TEXT.settingHowTo}
+        </a>
+        ). {BOARD_TEXT.settingFixedShape}
+      </span>
+      {boards.warnings.map((warning) => (
+        <span key={warning} className="wb-settings__note wb-settings__note--error">
+          ⚠ {warning}
+        </span>
+      ))}
+    </fieldset>
+  );
 }
 
 /** One switch, on by default (FR-1): a typical testbench writes kilobytes, sent only when opened. */
@@ -110,6 +172,10 @@ const NEW_ISSUE = `${ISSUES_URL}/new`;
 export function SettingsDialog({
   open,
   onClose,
+  boards,
+  boardId,
+  onBoardChange,
+  boardLocked,
   preferredLanguages,
   onPreferredLanguagesChange,
   splitPreference,
@@ -140,6 +206,7 @@ export function SettingsDialog({
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
+      <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} />
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />

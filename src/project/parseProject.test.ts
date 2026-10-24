@@ -8,9 +8,9 @@ import { entry, projectJson } from './testHelpers';
 /** Every row of the validation table in § 7 that concerns the project file itself. */
 describe('parseProject', () => {
   it('accepts a valid project', () => {
-    const { project, board, warnings, skipped } = parseProject(projectJson([entry('counter.vhd')]));
+    const { project, warnings, skipped } = parseProject(projectJson([entry('counter.vhd')], { version: 2, board: 'de1-soc' }));
     expect(project.name).toBe('Test');
-    expect(board).toBe('DE1-SoC');
+    expect(project.board).toBe('de1-soc');
     expect(project.files).toEqual([entry('counter.vhd')]);
     expect(warnings).toEqual([]);
     expect(skipped).toEqual([]);
@@ -31,26 +31,39 @@ describe('parseProject', () => {
     expect(() => parseProject(JSON.stringify(raw))).toThrow(new RegExp(`Missing required field.*${field}`));
   });
 
-  it('rejects an unsupported version and names the supported one', () => {
-    expect(() => parseProject(projectJson([], { version: 2 }))).toThrow(/version 2; supported version is 1/);
+  it('rejects an unsupported version and names the supported ones', () => {
+    expect(() => parseProject(projectJson([], { version: 3 }))).toThrow(/version 3; supported versions are 1 and 2/);
   });
+});
 
-  it('warns about an unknown board and falls back to the default board', () => {
-    const { project, board, warnings } = parseProject(projectJson([], { board: 'Basys3' }));
-    expect(board).toBe('DE1-SoC');
-    expect(project.board).toBe('Basys3');
-    expect(warnings[0].message).toMatch(/Unknown board "Basys3"/);
-  });
-
-  it('matches the board name case-insensitively', () => {
-    const { board, warnings } = parseProject(projectJson([], { board: 'de1-soc' }));
-    expect(board).toBe('DE1-SoC');
+/** docs/board_io_config_spec.md § 10: version 2 stores a board id; version 1 always meant the Default names. */
+describe('parseProject boards', () => {
+  it('opens a version-1 "DE1-SoC" project on the Default board, with no warning', () => {
+    const { project, warnings } = parseProject(projectJson([], { version: 1, board: 'DE1-SoC' }));
+    expect(project.board).toBe('default');
+    expect(project.version).toBe(2);
     expect(warnings).toEqual([]);
   });
 
-  it('uses the known boards passed in', () => {
-    const { board } = parseProject(projectJson([], { board: 'DE10-Lite' }), { knownBoards: ['DE1-SoC', 'DE10-Lite'] });
-    expect(board).toBe('DE10-Lite');
+  it('opens any version-1 board name on the Default board: there is no guessing', () => {
+    expect(parseProject(projectJson([], { version: 1, board: 'Basys3' })).project.board).toBe('default');
+  });
+
+  it('keeps a version-2 board id as written', () => {
+    expect(parseProject(projectJson([], { version: 2, board: 'de1-soc' })).project.board).toBe('de1-soc');
+  });
+
+  it('keeps an unknown board id through parse, serialize and parse again', () => {
+    const once = parseProject(projectJson([], { version: 2, board: 'de10-lite' })).project;
+    const again = parseProject(serializeProject(once)).project;
+    expect(again.board).toBe('de10-lite');
+  });
+
+  it('writes version 2 with the board id, never a display name', () => {
+    const { project } = parseProject(projectJson([], { version: 2, board: 'de1-soc' }));
+    expect(JSON.parse(serializeProject(project))).toMatchObject({ version: 2, board: 'de1-soc' });
+    const migrated = parseProject(projectJson([])).project;
+    expect(JSON.parse(serializeProject(migrated))).toMatchObject({ version: 2, board: 'default' });
   });
 });
 

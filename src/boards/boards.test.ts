@@ -104,7 +104,7 @@ describe('foreignBoardNames', () => {
 describe('canUndo', () => {
   const before = [{ id: 'a', content: 'KEY_N' }];
   const after = [{ id: 'a', content: 'KEY' }];
-  const record: BoardChangeRecord<{ id: string; content: string }> = {
+  const record: BoardChangeRecord<Array<{ id: string; content: string }>> = {
     before: { files: before, board: 'default' },
     after: { files: after, board: 'de1-soc' },
   };

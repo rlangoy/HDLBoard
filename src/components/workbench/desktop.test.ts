@@ -74,7 +74,7 @@ describe('workspace storage format', () => {
   });
 
   it('keeps the open project', () => {
-    const project = withEntryEdited(newProject('Counter', ['a.vhd']), 'a.vhd', { description: 'the design' });
+    const project = withEntryEdited(newProject('Counter', ['a.vhd'], 'default'), 'a.vhd', { description: 'the design' });
     expect(parseWorkspace(serializeWorkspace({ ...ws, project }))?.project).toEqual(project);
   });
 

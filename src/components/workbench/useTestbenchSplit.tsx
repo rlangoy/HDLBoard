@@ -19,6 +19,8 @@ import { useTestbenchAnalysis } from './useTestbenchAnalysis';
 
 export interface TestbenchSplitOptions {
   files: readonly VhdlFile[];
+  /** The names that make a unit a board design (`boardDesignPortNames` of the active board), memoised. */
+  boardPorts: ReadonlySet<string>;
   /** The file in the focused pane. */
   activeFileId: string | null;
   setActiveFileId: (id: string | null) => void;
@@ -84,7 +86,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const { files, activeFileId, setActiveFileId } = options;
   const onViewChosen = useRef(options.onViewChosen);
   onViewChosen.current = options.onViewChosen;
-  const analysis = useTestbenchAnalysis(files);
+  const analysis = useTestbenchAnalysis(files, options.boardPorts);
   const overrides = useOverrides();
   usePruneContradictedPairs(analysis.current, overrides);
   const [display, setDisplay] = useState<EditorDisplay | null>(null);

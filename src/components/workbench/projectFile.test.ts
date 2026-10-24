@@ -94,7 +94,7 @@ const file = (name: string, content = `text of ${name}`) => ({ name, content });
 describe('the project follows Files', () => {
   const base = withSaved(
     {
-      ...newProject('Counter', ['a.vhd', 'b.vhd']),
+      ...newProject('Counter', ['a.vhd', 'b.vhd'], 'default'),
       entries: [entry('a.vhd'), entry('b.vhd'), entry('gone.vhd')],
       unloaded: { 'gone.vhd': 'missing' },
     },
@@ -134,9 +134,9 @@ describe('the project follows Files', () => {
 
   it('saves in the § 4 format', () => {
     expect(JSON.parse(projectFileText(base, ['a.vhd']))).toEqual({
-      version: 1,
+      version: 2,
       name: 'Counter',
-      board: 'DE1-SoC',
+      board: 'default',
       description: '',
       projectDirectory: 'counter',
       sourceDirectory: 'src',
@@ -190,7 +190,7 @@ describe('a project opened by its path (Windows app)', () => {
 
 describe('unsaved changes', () => {
   const files = [file('a.vhd'), file('b.v')];
-  const saved = withSaved(newProject('Counter', ['a.vhd', 'b.v']), files);
+  const saved = withSaved(newProject('Counter', ['a.vhd', 'b.v'], 'default'), files);
 
   it('has none right after a save', () => {
     expect(hasUnsavedChanges(saved, files)).toBe(false);
@@ -205,17 +205,17 @@ describe('unsaved changes', () => {
   });
 
   it('ignores a difference in line endings only', () => {
-    const crlf = withSaved(newProject('Counter', ['a.vhd']), [file('a.vhd', 'x\r\ny')]);
+    const crlf = withSaved(newProject('Counter', ['a.vhd'], 'default'), [file('a.vhd', 'x\r\ny')]);
     expect(hasUnsavedChanges(crlf, [file('a.vhd', 'x\ny')])).toBe(false);
   });
 
   it('ignores an edit to a file that is not in the project', () => {
-    const left = withSaved(withFileLeft(newProject('Counter', ['a.vhd', 'notes.vhd']), 'notes.vhd'), [file('a.vhd'), file('notes.vhd')]);
+    const left = withSaved(withFileLeft(newProject('Counter', ['a.vhd', 'notes.vhd'], 'default'), 'notes.vhd'), [file('a.vhd'), file('notes.vhd')]);
     expect(hasUnsavedChanges(left, [file('a.vhd'), file('notes.vhd', 'edited')])).toBe(false);
   });
 
   it('counts a file loaded later (from the project folder) as saved', () => {
-    const opened = withSaved({ ...newProject('Counter', ['a.vhd', 'b.v']), unloaded: { 'b.v': 'missing' } }, [file('a.vhd')]);
+    const opened = withSaved({ ...newProject('Counter', ['a.vhd', 'b.v'], 'default'), unloaded: { 'b.v': 'missing' } }, [file('a.vhd')]);
     const loaded = withEntriesLoaded(opened, [file('b.v')]);
     expect(hasUnsavedChanges(loaded, files)).toBe(false);
     expect(hasUnsavedChanges(loaded, [file('a.vhd'), file('b.v', 'edited')])).toBe(true);
@@ -251,7 +251,7 @@ describe('the waveform views of a project', () => {
   const view = { signals: [{ path: 'clk' }, { path: 'dut/count', showAs: 'decimal' }] };
 
   it('are saved in the project file, and a change to one is an unsaved change', () => {
-    const project = withSaved(newProject('Counter', []), []);
+    const project = withSaved(newProject('Counter', [], 'default'), []);
     const changed = withWaveView(project, 'counter_tb', view);
     expect(projectFileText(changed, [])).toMatch(/"waveViews": \{\s+"counter_tb"/);
     expect(hasUnsavedChanges(project, [])).toBe(false);
@@ -267,7 +267,7 @@ describe('the waveform views of a project', () => {
   });
 
   it('a view showing nothing leaves the project file', () => {
-    const project = withWaveView(newProject('Counter', []), 'counter_tb', view);
+    const project = withWaveView(newProject('Counter', [], 'default'), 'counter_tb', view);
     expect(withWaveView(project, 'counter_tb', { signals: [] }).waveViews).toBeUndefined();
   });
 });

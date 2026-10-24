@@ -29,7 +29,7 @@ const FILES = [
   { name: 'adder_tb.vhd', content: 'entity adder_tb' },
 ];
 
-const adder = () => newProject('Adder', FILES.map((file) => file.name));
+const adder = () => newProject('Adder', FILES.map((file) => file.name), 'default');
 
 describe('projectSnapshot', () => {
   it('holds the project file first, then the project files', () => {

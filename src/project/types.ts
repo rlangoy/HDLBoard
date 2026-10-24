@@ -7,7 +7,15 @@
  */
 
 export const PROJECT_FILE_EXTENSION = '.hdlboard.json';
-export const SUPPORTED_PROJECT_VERSION = 1;
+/**
+ * 1: `board` was a display name, and every version-1 file used the Default board's
+ * names, whatever it said. 2: `board` is a board id (docs/board_io_config_spec.md § 10).
+ */
+export const SUPPORTED_PROJECT_VERSIONS: readonly number[] = [1, 2];
+/** What a project file is written as. */
+export const CURRENT_PROJECT_VERSION = 2;
+/** The board a version-1 project file opens on (`src/boards`' DEFAULT_BOARD_ID; `src/project` imports no HDLBoard code). */
+export const VERSION_1_BOARD_ID = 'default';
 /** Where a project's HDL files are kept inside its project folder, unless it says otherwise (D3). */
 export const DEFAULT_SOURCE_DIRECTORY = 'src';
 
@@ -22,7 +30,7 @@ export interface ProjectFileEntry {
 export interface HdlBoardProject {
   version: number;
   name: string;
-  /** Board name only; board definitions are built into HDLBoard (§ 4.2). */
+  /** The board's id (`default`, `de1-soc`); one HDLBoard does not have here is kept as it is. */
   board: string;
   description: string;
   /**
