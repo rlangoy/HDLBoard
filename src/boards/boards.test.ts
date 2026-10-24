@@ -3,12 +3,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, builtInBoard, DEFAULT_BOARD, mergeCatalog } from './boardCatalog';
-import { canUndo, type BoardChangeRecord } from './boardChangeUndo';
+import { canUndo, undoneRenames, type BoardChangeRecord } from './boardChangeUndo';
 import { encodeBoardFrame } from './boardFrame';
 import { foreignBoardNames } from './boardMatch';
 import { BUILT_IN_PORT_NAMES, portList, sevenSegmentHeading } from './boardPorts';
 import { DEFAULT_LABELS } from './parseBoards';
 import { parsePreferredBoard, preferredBoardIn } from './preferredBoard';
+import { renameWaveViews } from './renamePorts';
 import type { BoardDefinition } from './types';
 
 const DE1_SOC = builtInBoard('de1-soc');
@@ -105,26 +106,45 @@ describe('canUndo', () => {
   const before = [{ id: 'a', content: 'KEY_N' }];
   const after = [{ id: 'a', content: 'KEY' }];
   const record: BoardChangeRecord<Array<{ id: string; content: string }>> = {
-    before: { files: before, board: 'default' },
-    after: { files: after, board: 'de1-soc' },
+    before: { files: before, board: 'default', project: '0' },
+    after: { files: after, board: 'de1-soc', project: '0' },
+    renames: [{ from: 'KEY_N', to: 'KEY' }],
   };
 
   it('is possible right after the change', () => {
-    expect(canUndo(record, { files: after, board: 'de1-soc' })).toBe(true);
+    expect(canUndo(record, { files: after, board: 'de1-soc', project: '0' })).toBe(true);
   });
 
   it('is not possible once a file changed, was added, deleted or renamed: a new array', () => {
-    expect(canUndo(record, { files: [...after], board: 'de1-soc' })).toBe(false);
-    expect(canUndo(record, { files: [{ id: 'a', content: 'KEY ' }], board: 'de1-soc' })).toBe(false);
+    expect(canUndo(record, { files: [...after], board: 'de1-soc', project: '0' })).toBe(false);
+    expect(canUndo(record, { files: [{ id: 'a', content: 'KEY ' }], board: 'de1-soc', project: '0' })).toBe(false);
   });
 
   it('is not possible once the board changed again', () => {
-    expect(canUndo(record, { files: after, board: 'default' })).toBe(false);
+    expect(canUndo(record, { files: after, board: 'default', project: '0' })).toBe(false);
+  });
+
+  it('is not possible in another project, even one with the same files and board (Close project)', () => {
+    expect(canUndo(record, { files: after, board: 'de1-soc', project: '1' })).toBe(false);
   });
 
   it('holds for a board-only change with the same files', () => {
-    const boardOnly = { before: { files: before, board: 'default' }, after: { files: before, board: 'de1-soc' } };
-    expect(canUndo(boardOnly, { files: before, board: 'de1-soc' })).toBe(true);
+    const boardOnly = { before: { files: before, board: 'default', project: '0' }, after: { files: before, board: 'de1-soc', project: '0' }, renames: [] };
+    expect(canUndo(boardOnly, { files: before, board: 'de1-soc', project: '0' })).toBe(true);
+  });
+});
+
+describe('undoneRenames', () => {
+  it('takes every name back', () => {
+    expect(undoneRenames([{ from: 'KEY_N', to: 'KEY' }])).toEqual([{ from: 'KEY', to: 'KEY_N' }]);
+  });
+
+  it('keeps a waveform view changed after the board change, only renamed back', () => {
+    const renames = [{ from: 'KEY_N', to: 'KEY' }];
+    const changedSince = { uart_tx_tb: { signals: [{ path: 'uut/KEY' }, { path: 'uut/added_after' }] } };
+    expect(renameWaveViews(changedSince, undoneRenames(renames))).toEqual({
+      uart_tx_tb: { signals: [{ path: 'uut/KEY_N' }, { path: 'uut/added_after' }] },
+    });
   });
 });
 

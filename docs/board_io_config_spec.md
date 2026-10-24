@@ -756,7 +756,7 @@ The session's board is a small state machine. All of it is in `Session` (D15):
 |---|---|---|
 | **Default** | A new session that has received no `BOARD` | Runs with `DEFAULT_BOARD_IO` |
 | **Set** (`board`) | A valid `BOARD` | Runs with that board. The board is **sticky**: later `RUN`s without a new `BOARD` use it too, exactly as `WAVE` is sticky. |
-| **Rejected** | An invalid `BOARD` (`ERROR protocol` already sent) | Is refused: `ERROR protocol` `RUN refused: the last BOARD frame was not valid.` Nothing is compiled. A later valid `BOARD` leaves this state. |
+| **Rejected** | An invalid `BOARD` (not answered on its own) | Is refused: `ERROR protocol` `RUN refused: the last BOARD frame was not valid.` followed by the frame's reason on the next line, so one problem gives one error. Nothing is compiled. A later valid `BOARD` leaves this state. |
 
 Why this way: an old client that never sends `BOARD` always gets Default, which is the compatibility promise.
 A current client sends `BOARD` before every `RUN` (`WAVE`, then `BOARD`, then `RUN`), so the sticky state is never stale for it.
@@ -842,8 +842,8 @@ A test sends such a frame directly and pins this behaviour.
 | File | Change |
 |---|---|
 | `protocol.ts` | `ClientFrame` gets `{ verb: 'BOARD'; board: BoardIo \| ProtocolError }`. A `BOARD` frame always decodes to this verb, so the session learns about an invalid board too (instead of the generic decode-error path). Plus `encodeClientFrame` for `WsTestClient`. |
-| `server.ts` | `case 'BOARD'`: if `frame.board` is an error, send `ERROR protocol` with its message; in both cases call `session.handleBoard(frame.board)`. `PROTOCOL_VERSION = '2'`. |
-| `session.ts` | `private board: BoardIo \| 'rejected' = DEFAULT_BOARD_IO`, `handleBoard(result)` (a valid board sets it; an invalid one sets `'rejected'`), and in `handleRun`: refuse when `'rejected'` (§ 8.2), else `engine.prepare({ …, board: this.board })`. |
+| `server.ts` | `case 'BOARD'`: call `session.handleBoard(frame.board)`; an invalid board is reported once, by the `RUN` that follows it. `PROTOCOL_VERSION = '2'`. |
+| `session.ts` | `private board: BoardIo \| { rejected: string } = DEFAULT_BOARD_IO`, `handleBoard(result)` (a valid board sets it; an invalid one keeps its reason), and in `handleRun`: refuse with that reason when rejected (§ 8.2), else `engine.prepare({ …, board: this.board })`. |
 | `engines/types.ts` | `PrepareRequest.board: BoardIo` (required). |
 | `tbTemplate.ts` | `generateTestbench(entity, ports, board, options)`. `buildPortMap` builds `known` from `boardBindings(board)` (formal = binding name, actual = binding signal). `buildRstDrive` checks `declaresPort(ports, board.pushbuttons)`. `hasClock50 = declaresPort(ports, board.clock50)`. The formal is the binding's lower-case `key` (`key => key_sig`), exactly as today's map writes `key_n => key_sig`. VHDL ignores case, so this is valid for any board, and with `DEFAULT_BOARD_IO` the generated text stays byte-identical, so the golden files do not change. |
 | `verilog/testbench.ts` | `BOARD_SIGNALS` becomes `boardBindings(board)` plus an off-value per role (`leds` → `10'b0`, `sevenSegment*` → `7'h7F`). `instantiation`, `tieOffs` and `buildBoardTestbench` take `board`. The clock check uses `board.clock50`. |

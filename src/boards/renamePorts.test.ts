@@ -12,6 +12,7 @@ import {
   planBoardChange,
   renameInSource,
   renameWaveViews,
+  testbenchLanguageIn,
   translateFromDefault,
 } from './renamePorts';
 
@@ -220,6 +221,26 @@ describe('planBoardChange and applyBoardChange', () => {
   it('renames a saved path in the case the simulator wrote it: GHDL lower-cases VHDL names', () => {
     const views = { counter_tb: { signals: [{ path: 'uut/key_n' }, { path: 'uut/HEX0_N' }] } };
     expect(renameWaveViews(views, TO_DE1)?.counter_tb.signals).toEqual([{ path: 'uut/key' }, { path: 'uut/HEX0' }]);
+  });
+
+  it('writes a lower-case Verilog port in the board spelling, as Icarus will after the rename', () => {
+    const verilog = [{ id: 'v', name: 'counter_tb.v', content: 'module counter_tb; counter uut (.key_n(k)); endmodule' }];
+    const views = { counter_tb: { signals: [{ path: 'uut/key_n' }] } };
+    expect(renameWaveViews(views, TO_DE1, testbenchLanguageIn(verilog))?.counter_tb.signals).toEqual([{ path: 'uut/KEY' }]);
+  });
+
+  it('writes a VHDL port in lower case, as GHDL does, whatever its old case', () => {
+    const vhdl = [{ id: 'h', name: 'counter_tb.vhd', content: 'entity Counter_TB is end entity;' }];
+    const views = { counter_tb: { signals: [{ path: 'uut/KEY_N' }] } };
+    expect(renameWaveViews(views, TO_DE1, testbenchLanguageIn(vhdl))?.counter_tb.signals).toEqual([{ path: 'uut/key' }]);
+  });
+
+  it('cannot tell the language of a testbench both languages declare', () => {
+    const both = [
+      { id: 'h', name: 'counter_tb.vhd', content: 'entity counter_tb is end entity;' },
+      { id: 'v', name: 'counter_tb.v', content: 'module counter_tb; endmodule' },
+    ];
+    expect(testbenchLanguageIn(both)('counter_tb')).toBeUndefined();
   });
 
   it('renames saved waveform paths, and back again', () => {

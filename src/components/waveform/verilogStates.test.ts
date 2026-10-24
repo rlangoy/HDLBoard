@@ -44,7 +44,8 @@ function wave(width = 2): WaveformData {
   );
 }
 
-const MODULE = (body: string) => `module m;\n  reg [1:0] state, next_state;\n${body}\nendmodule\n`;
+/** A module whose `state` is used as a state: `case (state)`. */
+const MODULE = (body: string) => `module m;\n  reg [1:0] state, next_state;\n  always @* case (state) default: ; endcase\n${body}\nendmodule\n`;
 const GROUP = "  localparam [1:0] IDLE = 2'd0, RUN = 2'd1, DONE = 2'b10;";
 
 describe('the UART Tx Testbench (Verilog)', () => {
@@ -108,6 +109,23 @@ describe('a state register', () => {
     expect(valuesOf(data, signal(data, 'state', 'm'))).toEqual(['IDLE', 'RUN', '10']);
   });
 
+  it('may have next_state = state as the default of a two-process state machine', () => {
+    const body = `${GROUP}\n  always @* begin next_state = state; if (go) next_state = RUN; end\n  always @(posedge c) state <= next_state;\n  initial state = IDLE;`;
+    const data = withVerilogStateNames(wave(), [MODULE(body)]);
+    expect([signal(data, 'state', 'm').kind, signal(data, 'next_state', 'm').kind]).toEqual(['enum', 'enum']);
+  });
+
+  it('may be used as a state in a comparison instead of a case', () => {
+    const data = withVerilogStateNames(wave(), [`module m;\n  reg [1:0] state;\n${GROUP}\n  initial state = IDLE;\n  wire idle = (state == IDLE);\nendmodule\n`]);
+    expect(signal(data, 'state', 'm').kind).toBe('enum');
+  });
+
+  it('is not one when it is never used as a state: constants loaded into a counter', () => {
+    const body = "  localparam [1:0] FULL = 2'd3, HALF = 2'd1;\n  initial state = FULL;\n  always @(posedge c) state <= HALF;";
+    const data = withVerilogStateNames(wave(), [`module m;\n  reg [1:0] state;\n${body}\nendmodule\n`]);
+    expect(signal(data, 'state', 'm').kind).toBe('vector');
+  });
+
   it('ignores a comparison and a commented-out assignment', () => {
     expect(named(`${GROUP}\n  initial state = IDLE;\n  // state = 2'b11;\n  wire w = state == 2'd3;`).kind).toBe('enum');
   });
@@ -119,7 +137,7 @@ describe('a hierarchical name', () => {
   const kindWith = (child: string) => signal(withVerilogStateNames(parseVcd(TOP_WAVE.join('\n')), [TOP, child]), 'state', 'top').kind;
 
   it("reads the instance's state register", () => {
-    expect(kindWith(`module child;\n${GROUP}\n  reg [1:0] s = RUN;\nendmodule\n`)).toBe('enum');
+    expect(kindWith(`module child;\n${GROUP}\n  reg [1:0] s = RUN;\n  always @* case (s) default: ; endcase\nendmodule\n`)).toBe('enum');
   });
 
   it("stays bits when the instance's register is not a state register", () => {

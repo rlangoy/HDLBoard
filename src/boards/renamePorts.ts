@@ -288,42 +288,80 @@ export function applyBoardChange<T extends RenameableFile>(files: readonly T[], 
   });
 }
 
+/** Which language a saved view's testbench is in, or undefined when the files cannot tell. */
+export type TestbenchLanguage = (testbench: string) => Language | undefined;
+
+const VHDL_ENTITY = /\bentity\s+([A-Za-z_]\w*)\s+is\b/gi;
+const VERILOG_MODULE = /\bmodule\s+([A-Za-z_]\w*)/g;
+
+/** The units each language's files declare: VHDL's in lower case, as GHDL names them. */
+function declaredUnitsOf(files: readonly RenameableFile[], language: Language): Set<string> {
+  const pattern = language === 'vhdl' ? VHDL_ENTITY : VERILOG_MODULE;
+  const ofLanguage = files.filter((file) => languageOfName(file.name) === language);
+  const names = ofLanguage.flatMap((file) => [...file.content.matchAll(pattern)].map((match) => match[1]));
+  return new Set(language === 'vhdl' ? names.map((name) => name.toLowerCase()) : names);
+}
+
 /**
- * The new name in the case the simulator wrote the old one in: GHDL lower-cases VHDL
- * names (`uut/key_n`), Icarus keeps Verilog's (`uut/KEY_N`), and a saved view must still
- * match the next run's paths exactly.
+ * A saved view's language, from the files: views are kept by the testbench name the
+ * simulator wrote (`uart_tx_tb` from GHDL, `UART_Tx_tb` from Icarus). Undefined when
+ * neither or both languages declare it.
  */
-function inSpellingOf(segment: string, to: string): string {
+export function testbenchLanguageIn(files: readonly RenameableFile[]): TestbenchLanguage {
+  const vhdl = declaredUnitsOf(files, 'vhdl');
+  const verilog = declaredUnitsOf(files, 'verilog');
+  return (testbench) => {
+    const inVhdl = vhdl.has(testbench.toLowerCase());
+    if (inVhdl === verilog.has(testbench)) return undefined;
+    return inVhdl ? 'vhdl' : 'verilog';
+  };
+}
+
+/**
+ * The new name as the simulator will write it: GHDL lower-cases VHDL names
+ * (`uut/key`), Icarus keeps Verilog's, which the rename wrote in the board's spelling
+ * (`uut/KEY`). When the language is not known, the old segment's case decides.
+ */
+function inSpellingOf(segment: string, to: string, language: Language | undefined): string {
+  if (language === 'verilog') return to;
+  if (language === 'vhdl') return to.toLowerCase();
   return segment === segment.toLowerCase() ? to.toLowerCase() : to;
 }
 
+/** How one testbench's saved paths are renamed: by lower-case old name, in the testbench's language. */
+interface PathRenames {
+  readonly byKey: ReadonlyMap<string, PortRename>;
+  readonly language: Language | undefined;
+}
+
 /** A saved signal path (`uut/KEY_N`) with each segment that is an old port name renamed. */
-function renamePath(path: string, byKey: ReadonlyMap<string, PortRename>): string {
+function renamePath(path: string, how: PathRenames): string {
   return path
     .split('/')
     .map((segment) => {
-      const rename = byKey.get(segment.toLowerCase());
-      return rename === undefined ? segment : inSpellingOf(segment, rename.to);
+      const rename = how.byKey.get(segment.toLowerCase());
+      return rename === undefined ? segment : inSpellingOf(segment, rename.to, how.language);
     })
     .join('/');
 }
 
-function renameSignals(signals: readonly SavedWaveSignal[], byKey: ReadonlyMap<string, PortRename>): SavedWaveSignal[] {
-  return signals.map((signal) => ({ ...signal, path: renamePath(signal.path, byKey) }));
+function renameSignals(signals: readonly SavedWaveSignal[], how: PathRenames): SavedWaveSignal[] {
+  return signals.map((signal) => ({ ...signal, path: renamePath(signal.path, how) }));
 }
 
 /** The saved waveform views with the renamed ports, so a testbench's view still finds `uut/KEY`. */
-export function renameWaveViews(views: SavedWaveViews | undefined, renames: readonly PortRename[]): SavedWaveViews | undefined {
+export function renameWaveViews(
+  views: SavedWaveViews | undefined,
+  renames: readonly PortRename[],
+  languageOf: TestbenchLanguage = () => undefined,
+): SavedWaveViews | undefined {
   if (views === undefined || renames.length === 0) return views;
   const byKey = new Map(renames.map((r) => [r.from.toLowerCase(), r]));
   return Object.fromEntries(
-    Object.entries(views).map(([testbench, view]) => [
-      testbench,
-      {
-        ...view,
-        signals: renameSignals(view.signals, byKey),
-        ...(view.notShown !== undefined ? { notShown: renameSignals(view.notShown, byKey) } : {}),
-      },
-    ]),
+    Object.entries(views).map(([testbench, view]) => {
+      const how = { byKey, language: languageOf(testbench) };
+      const notShown = view.notShown === undefined ? {} : { notShown: renameSignals(view.notShown, how) };
+      return [testbench, { ...view, signals: renameSignals(view.signals, how), ...notShown }];
+    }),
   );
 }

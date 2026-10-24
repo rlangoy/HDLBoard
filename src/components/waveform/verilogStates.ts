@@ -11,11 +11,12 @@
  *     localparam [1:0] IDLE = 2'd0, START_BIT = 2'd1, DATA_BITS = 2'd2, STOP_BIT = 2'd3;
  *     reg [1:0] State = IDLE;  …  State <= START_BIT;
  *
- * becomes an `enum` signal whose values are those names. A register is also a state
- * register when it is assigned another one: `state <= next_state`, or a testbench's
- * `assign state = uut.State;`, which follows the instance to its module. Anything else –
- * an expression, a name of a second group – leaves it as bits, so a guess never shows
- * a wrong name. Pure.
+ * becomes an `enum` signal whose values are those names – when it, or a register it
+ * is assigned from, is used as a state: `case (State)`, or `State == IDLE`. A register
+ * is also a state register when it is assigned another one: `state <= next_state`, or
+ * a testbench's `assign state = uut.State;`, which follows the instance to its module.
+ * Anything else – an expression, a name of a second group, constants never used as
+ * states – leaves it as bits, so a guess never shows a wrong name. Pure.
  */
 
 import type { Scope, SignalRef, Trace, TraceId, WaveformData } from './model';
@@ -28,11 +29,15 @@ interface StateGroup {
   readonly width: number | undefined;
 }
 
-/** One module of the sources: its text without comments, and its groups. */
+/** One module of the sources: its text without comments, its groups, and what was looked up in it. */
 interface ModuleSource {
   readonly name: string;
   readonly text: string;
   readonly groups: readonly StateGroup[];
+  /** The right-hand sides assigned to each name asked about. */
+  readonly assignments: Map<string, readonly string[]>;
+  /** The module each instance label asked about instantiates. */
+  readonly instances: Map<string, ModuleSource | undefined>;
 }
 
 const COMMENTS = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
@@ -88,7 +93,7 @@ function modulesIn(sources: readonly string[]): ModuleSource[] {
   return sources.flatMap((source) =>
     [...source.replace(COMMENTS, '').matchAll(MODULE)].map((match) => {
       const groups = [...match[0].matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
-      return { name: match[1], text: match[0], groups };
+      return { name: match[1], text: match[0], groups, assignments: new Map(), instances: new Map() };
     }),
   );
 }
@@ -96,9 +101,13 @@ function modulesIn(sources: readonly string[]): ModuleSource[] {
 const escaped = (name: string) => name.replace(/[$]/g, '\\$&');
 
 /** The right-hand sides assigned to `name` in a module: `name <= x;`, `name = x;`, `reg [1:0] name = x;`. */
-function assignedTo(text: string, name: string): string[] {
+function assignedTo(module: ModuleSource, name: string): readonly string[] {
+  const cached = module.assignments.get(name);
+  if (cached !== undefined) return cached;
   const assignment = new RegExp(`(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
-  return [...text.matchAll(assignment)].map((match) => match[1].trim());
+  const found = [...module.text.matchAll(assignment)].map((match) => match[1].trim());
+  module.assignments.set(name, found);
+  return found;
 }
 
 /** A register in one module of the sources, with every module to follow instances through. */
@@ -130,17 +139,80 @@ function sourceOf(rhs: string, register: Register): Source {
 
 const keyOf = (register: Register) => `${register.module.name}.${register.name}`;
 
-/** The one group every assignment to a register leads to, following the registers it is assigned from. */
-function groupOfRegister(register: Register, seen: ReadonlySet<string> = new Set()): StateGroup | undefined {
-  const rhs = assignedTo(register.module.text, register.name);
-  if (rhs.length === 0 || seen.has(keyOf(register))) return undefined;
-  const reached = new Set<StateGroup | undefined>();
+/** A register and every register it is assigned from, followed to the end: the groups they name. */
+interface Chain {
+  readonly groups: Set<StateGroup>;
+  readonly registers: Register[];
+  /** Some assignment is neither a group's name nor a register: the chain names no states. */
+  other: boolean;
+}
+
+/** Adds what `register`'s assignments say to the chain, and the registers they read to `pending`. */
+function visit(register: Register, chain: Chain, pending: Register[]): void {
+  const rhs = assignedTo(register.module, register.name);
+  if (rhs.length === 0) chain.other = true;
   for (const source of rhs.map((text) => sourceOf(text, register))) {
-    if (source === 'other') return undefined;
-    reached.add('group' in source ? source.group : groupOfRegister(source.register, new Set([...seen, keyOf(register)])));
+    if (source === 'other') chain.other = true;
+    else if ('group' in source) chain.groups.add(source.group);
+    else pending.push(source.register);
   }
-  const [group] = reached;
-  return reached.size === 1 ? group : undefined;
+}
+
+/**
+ * The chain from `start`. A register already in it is not followed again, so the usual
+ * `next_state = state;` default next to `state <= next_state;` does not hide the states.
+ */
+function chainOf(start: Register): Chain {
+  const chain: Chain = { groups: new Set(), registers: [], other: false };
+  const seen = new Set<string>();
+  const pending = [start];
+  for (let register = pending.pop(); register !== undefined && !chain.other; register = pending.pop()) {
+    if (seen.has(keyOf(register))) continue;
+    seen.add(keyOf(register));
+    chain.registers.push(register);
+    visit(register, chain, pending);
+  }
+  return chain;
+}
+
+const CASE_SUBJECT = /\bcase[zx]?\s*\(\s*([A-Za-z_]\w*)\s*\)/g;
+
+/** The names a module uses as states of `group`: `case (state)`, `state == IDLE`, `IDLE != state`. */
+function stateSubjects(module: ModuleSource, group: StateGroup): string[] {
+  const names = [...group.values.keys()].map(escaped).join('|');
+  const compared = [
+    new RegExp(`(?<![\\w.$])([A-Za-z_]\\w*)\\s*[!=]==?\\s*(?:${names})\\b`, 'g'),
+    new RegExp(`\\b(?:${names})\\s*[!=]==?\\s*([A-Za-z_]\\w*)\\b`, 'g'),
+  ];
+  return [CASE_SUBJECT, ...compared].flatMap((pattern) => [...module.text.matchAll(pattern)].map((match) => match[1]));
+}
+
+const namesOnly = (chain: Chain, group: StateGroup) => !chain.other && chain.groups.size === 1 && chain.groups.has(group);
+
+/** Whether each group asked about is used as states somewhere in the sources. */
+const stateGroups = new WeakMap<StateGroup, boolean>();
+
+/**
+ * Whether a register whose chain names only `group` is used as a state somewhere – so
+ * constants that are not states (`localparam FULL = 5208, HALF = 2604;` loaded into a
+ * counter) do not turn the counter into names. `next_state` counts through `state`.
+ */
+function isStateGroup(group: StateGroup, modules: readonly ModuleSource[]): boolean {
+  const known = stateGroups.get(group);
+  if (known !== undefined) return known;
+  const used = modules.some((module) =>
+    stateSubjects(module, group).some((name) => namesOnly(chainOf({ module, name, modules }), group)),
+  );
+  stateGroups.set(group, used);
+  return used;
+}
+
+/** The one group a register's chain names, when that group is used as states. */
+function groupOfRegister(register: Register): StateGroup | undefined {
+  const chain = chainOf(register);
+  const [group] = chain.groups;
+  if (group === undefined || !namesOnly(chain, group)) return undefined;
+  return isStateGroup(group, register.modules) ? group : undefined;
 }
 
 /** Skips `#( … )` from `at`, returning the index after it, or `at` when there is none. */
@@ -155,14 +227,20 @@ function afterParameters(text: string, at: number): number {
   return at;
 }
 
+/** Whether `parent` has an instance of `module` whose label `labelled` matches. */
+function instantiates(parent: ModuleSource, module: ModuleSource, labelled: RegExp): boolean {
+  return [...parent.text.matchAll(new RegExp(`\\b${escaped(module.name)}\\b`, 'g'))].some((use) =>
+    labelled.test(parent.text.slice(afterParameters(parent.text, (use.index ?? 0) + module.name.length))),
+  );
+}
+
 /** The module an instance label in `parent` instantiates: `UART_Tx #( … ) uut (`. */
 function instantiated(parent: ModuleSource, label: string, modules: readonly ModuleSource[]): ModuleSource | undefined {
-  return modules.find((module) =>
-    [...parent.text.matchAll(new RegExp(`\\b${escaped(module.name)}\\b`, 'g'))].some((use) => {
-      const rest = parent.text.slice(afterParameters(parent.text, (use.index ?? 0) + module.name.length));
-      return new RegExp(`^\\s*${escaped(label)}\\s*\\(`).test(rest);
-    }),
-  );
+  if (parent.instances.has(label)) return parent.instances.get(label);
+  const labelled = new RegExp(`^\\s*${escaped(label)}\\s*\\(`);
+  const found = modules.find((module) => instantiates(parent, module, labelled));
+  parent.instances.set(label, found);
+  return found;
 }
 
 /** The enum a signal shows, or undefined when it is not a state register of a group that fits it. */

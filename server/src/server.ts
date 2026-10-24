@@ -312,7 +312,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
           session.handleWave(frame.on);
           break;
         case 'BOARD':
-          if (!frame.board.ok) send({ verb: 'ERROR', stage: 'protocol', text: frame.board.reason });
+          // An invalid board is reported once, by the RUN that follows it (session.ts).
           session.handleBoard(frame.board);
           break;
         case 'WAVE-GET':

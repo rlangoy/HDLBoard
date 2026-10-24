@@ -200,7 +200,8 @@ export class Session {
    * until a `BOARD` frame arrives, then that board — sticky, like `WAVE` — and `rejected`
    * after an invalid one, which refuses runs until a valid one arrives.
    */
-  private board: BoardIo | 'rejected' = DEFAULT_BOARD_IO;
+  /** The board runs use; or why the last BOARD frame was rejected, which the next RUN reports. */
+  private board: BoardIo | { readonly rejected: string } = DEFAULT_BOARD_IO;
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
   private wave: RunWave | null = null;
   /** Numbers each batch start's waveform; never reused within a session (W10). */
@@ -270,7 +271,7 @@ export class Session {
 
   /** `BOARD`: the port names of the next runs. The caller has already said why an invalid one is invalid. */
   handleBoard(decoded: DecodedBoard): void {
-    this.board = decoded.ok ? decoded.board : 'rejected';
+    this.board = decoded.ok ? decoded.board : { rejected: decoded.reason };
   }
 
   /**
@@ -378,8 +379,9 @@ export class Session {
 
     // A client that sent a broken board never gets a simulation with names it did not ask for.
     const board = this.board;
-    if (board === 'rejected') {
-      this.failRun('protocol', RUN_REFUSED_FOR_BOARD);
+    if ('rejected' in board) {
+      // One error for one problem: the BOARD frame itself is not answered, so its reason comes here.
+      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${board.rejected}`);
       return;
     }
 

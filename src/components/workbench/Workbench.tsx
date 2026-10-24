@@ -1600,6 +1600,7 @@ export function Workbench() {
     reopenSettings: () => setDialog('settings'),
     log: logWithLink,
     busy: boardLocked,
+    projectKey: String(projectGeneration),
   });
   // Settings closes only for a change that happens: the question takes its place, or the board just changes.
   const handleBoardChosenInSettings = (id: string) => {
@@ -1607,11 +1608,13 @@ export function Workbench() {
   };
 
   // A fresh start on a board from boards/boards.json: that file arrives after the first
-  // render, and the untouched starter files are then put in the board's names.
+  // render, and the untouched starter files are then put in the board's names. A run
+  // started before it arrived was built with the old names, so it stops, as for any board change.
   useEffect(() => {
     const ready = freshWorkspace(catalog, preferredBoard);
     const untouched = filesRef.current === freshStart.files && project === freshStart.project;
     if (!untouched || ready.board.id === freshStart.board.id) return;
+    if (status === 'running') getClient().stop();
     setFiles(ready.files);
     setProject(ready.project);
   }, [catalog]);

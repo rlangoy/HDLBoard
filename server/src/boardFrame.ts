@@ -24,7 +24,7 @@
  * Keep in step with src/boards/boardFrame.ts; both test the same literal Default frame.
  */
 
-import { LEGACY_RESET_PORT, SEVEN_SEGMENT_COUNT, type BoardIo } from './engines/boardPorts.js';
+import { boardBindings, LEGACY_RESET_PORT, SEVEN_SEGMENT_COUNT, type BoardIo } from './engines/boardPorts.js';
 
 const PLAIN_IDENTIFIER = /^[A-Za-z](?:_?[A-Za-z0-9])*$/;
 const MAX_NAME_LENGTH = 32;
@@ -60,16 +60,12 @@ function parseLine(line: string): { role: Role; names: string[] } | string {
 
 /** One board serves both languages, and VHDL ignores case: `Key` and `KEY` would be one port. */
 function duplicateName(board: BoardIo): string | undefined {
-  const seen = new Set<string>();
-  for (const role of ROLES) {
-    const names = role === 'sevenSegment' ? board.sevenSegment : [board[role]];
-    for (const name of names) {
-      if (seen.has(name.toLowerCase())) return name;
-      seen.add(name.toLowerCase());
-    }
-  }
-  return undefined;
+  const bindings = boardBindings(board);
+  return bindings.find((binding, index) => bindings.findIndex((other) => other.key === binding.key) !== index)?.name;
 }
+
+/** A role's names as the frame lists them: the six displays, or the one port. */
+const namesOfRole = (board: BoardIo, role: Role): readonly string[] => (role === 'sevenSegment' ? board.sevenSegment : [board[role]]);
 
 /** The board a `BOARD` body names; every role exactly once, every name checked. */
 export function decodeBoardBody(body: string): DecodedBoard {
@@ -112,5 +108,5 @@ function boardOf(names: ReadonlyMap<Role, readonly string[]>): BoardIo {
 }
 
 export function encodeBoardBody(board: BoardIo): string {
-  return ROLES.map((role) => `${role} ${(role === 'sevenSegment' ? board.sevenSegment : [board[role]]).join(' ')}`).join('\n');
+  return ROLES.map((role) => `${role} ${namesOfRole(board, role).join(' ')}`).join('\n');
 }

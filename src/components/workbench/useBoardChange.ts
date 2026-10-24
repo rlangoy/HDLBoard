@@ -3,9 +3,9 @@
 
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { findBoard } from '../../boards/boardCatalog';
-import { canUndo, type BoardChangeRecord } from '../../boards/boardChangeUndo';
+import { canUndo, undoneRenames, type BoardChangeRecord } from '../../boards/boardChangeUndo';
 import type { PortRename } from '../../boards/boardPorts';
-import { applyBoardChange, canApply, planBoardChange, renameWaveViews, type BoardChangePlan } from '../../boards/renamePorts';
+import { applyBoardChange, canApply, planBoardChange, renameWaveViews, testbenchLanguageIn, type BoardChangePlan } from '../../boards/renamePorts';
 import { savePreferredBoard } from '../../boards/preferredBoard';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { BOARD_TEXT, boardOnlyLog, boardRenamedLog, boardUndoneLog } from './boardText';
@@ -33,6 +33,8 @@ export interface BoardChangeOptions {
   log: (text: string, link?: ConsoleLink) => void;
   /** Loading or saving the project, or compiling a run: requests are ignored (the selectors are disabled too). */
   busy: boolean;
+  /** Changes whenever another project replaces the open one, which ends Undo. */
+  projectKey: string;
 }
 
 export interface BoardChange {
@@ -106,29 +108,32 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   // Restores what the last board change replaced — only while nothing has changed since (`canUndo`).
   const undo = useCallback(() => {
     const done = record.current;
-    const { files, project, catalog, setFiles, setProject, stopSimulation, log } = latest.current;
-    if (done === null || !canUndo(done, { files, board: project.board })) {
+    const { files, project, projectKey, catalog, setFiles, setProject, stopSimulation, log } = latest.current;
+    if (done === null || !canUndo(done, { files, board: project.board, project: projectKey })) {
       log(BOARD_TEXT.nothingToUndo);
       return;
     }
     record.current = null;
     stopSimulation();
     setFiles(done.before.files);
-    setProject((p) => withWaveViews({ ...p, board: done.before.board }, done.before.waveViews));
+    const languageOf = testbenchLanguageIn(done.before.files);
+    setProject((p) => withWaveViews({ ...p, board: done.before.board }, renameWaveViews(p.waveViews, undoneRenames(done.renames), languageOf)));
     savePreferredBoard(done.before.board);
     log(boardUndoneLog(findBoard(catalog, done.before.board).board));
   }, [latest]);
 
   return useCallback(
     ({ files, boardId, renames, message }: BoardChangeResult) => {
-      const { project, setFiles, setProject, stopSimulation, log } = latest.current;
+      const { project, projectKey, setFiles, setProject, stopSimulation, log } = latest.current;
       record.current = {
-        before: { files: latest.current.files, board: project.board, waveViews: project.waveViews },
-        after: { files, board: boardId },
+        before: { files: latest.current.files, board: project.board, project: projectKey },
+        after: { files, board: boardId, project: projectKey },
+        renames,
       };
       stopSimulation();
       setFiles(files);
-      setProject((p) => withWaveViews({ ...p, board: boardId }, renameWaveViews(p.waveViews, renames)));
+      const languageOf = testbenchLanguageIn(files);
+      setProject((p) => withWaveViews({ ...p, board: boardId }, renameWaveViews(p.waveViews, renames, languageOf)));
       savePreferredBoard(boardId);
       log(message, { label: BOARD_TEXT.undo, onClick: undo });
     },
