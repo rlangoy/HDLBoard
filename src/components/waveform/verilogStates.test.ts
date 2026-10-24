@@ -49,27 +49,25 @@ const MODULE = (body: string) => `module m;\n  reg [1:0] state, next_state;\n  a
 const GROUP = "  localparam [1:0] IDLE = 2'd0, RUN = 2'd1, DONE = 2'b10;";
 
 describe('the UART Tx Testbench (Verilog)', () => {
-  const named = () => withVerilogStateNames(uartWave(), [uartTx, uartTxTb]);
+  // Parsed and named once: every test reads the same waveform.
+  const named = withVerilogStateNames(uartWave(), [uartTx, uartTxTb]);
+  const FRAME_STATES = ['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE'];
 
-  it('shows State by its state names, as the VHDL testbench does', () => {
-    const state = signal(named(), 'State', 'UART_Tx_tb', 'uut');
-    expect(state).toMatchObject({ kind: 'enum', enumType: { literals: ['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT'] } });
-    expect(valuesOf(named(), state)).toEqual(['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE']);
+  it('shows State as an enumeration of its four states, as the VHDL testbench does', () => {
+    expect(signal(named, 'State', 'UART_Tx_tb', 'uut')).toMatchObject({ kind: 'enum', enumType: { literals: ['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT'] } });
+  });
+
+  it('steps State through one frame by name', () => {
+    expect(valuesOf(named, signal(named, 'State', 'UART_Tx_tb', 'uut'))).toEqual(FRAME_STATES);
   });
 
   it("shows the testbench's copy of uut.State by its state names too", () => {
-    const state = signal(named(), 'state', 'UART_Tx_tb');
-    expect(valuesOf(named(), state)).toEqual(['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE']);
+    expect(valuesOf(named, signal(named, 'state', 'UART_Tx_tb'))).toEqual(FRAME_STATES);
   });
 
   it('leaves the other registers as bits', () => {
-    expect(signal(named(), 'BitIndex', 'UART_Tx_tb', 'uut').kind).toBe('vector');
-    expect(signal(named(), 'DataReg', 'UART_Tx_tb', 'uut').kind).toBe('vector');
-  });
-
-  it('leaves out the localparams, as the VHDL waveform leaves out constants', () => {
-    const names = scopeAt(named(), 'UART_Tx_tb', 'uut').signals.map((s) => s.name);
-    expect(names.filter((name) => /INDEX|^IDLE$|CLKS_PER_BIT|BAUD_RATE/.test(name))).toEqual([]);
+    const kinds = ['BitIndex', 'DataReg'].map((name) => signal(named, name, 'UART_Tx_tb', 'uut').kind);
+    expect(kinds).toEqual(['vector', 'vector']);
   });
 
   it('shows the bits without the sources', () => {
@@ -124,6 +122,10 @@ describe('a state register', () => {
     const body = "  localparam [1:0] FULL = 2'd3, HALF = 2'd1;\n  initial state = FULL;\n  always @(posedge c) state <= HALF;";
     const data = withVerilogStateNames(wave(), [`module m;\n  reg [1:0] state;\n${body}\nendmodule\n`]);
     expect(signal(data, 'state', 'm').kind).toBe('vector');
+  });
+
+  it('is not mistaken for an assignment in a <= comparison: if (state <= DONE)', () => {
+    expect(named(`${GROUP}\n  initial state = IDLE;\n  always @(posedge c) if (state <= DONE) state <= RUN;`).kind).toBe('enum');
   });
 
   it('ignores a comparison and a commented-out assignment', () => {

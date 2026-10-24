@@ -16,7 +16,8 @@
  * is also a state register when it is assigned another one: `state <= next_state`, or
  * a testbench's `assign state = uut.State;`, which follows the instance to its module.
  * Anything else – an expression, a name of a second group, constants never used as
- * states – leaves it as bits, so a guess never shows a wrong name. Pure.
+ * states – leaves it as bits, so a guess never shows a wrong name. Pure: what one call
+ * works out is kept in its own `Analysis`, which nothing outlives.
  */
 
 import type { Scope, SignalRef, Trace, TraceId, WaveformData } from './model';
@@ -29,15 +30,22 @@ interface StateGroup {
   readonly width: number | undefined;
 }
 
-/** One module of the sources: its text without comments, its groups, and what was looked up in it. */
+/** One module of the sources: its text without comments, and its groups. */
 interface ModuleSource {
   readonly name: string;
   readonly text: string;
   readonly groups: readonly StateGroup[];
-  /** The right-hand sides assigned to each name asked about. */
-  readonly assignments: Map<string, readonly string[]>;
-  /** The module each instance label asked about instantiates. */
-  readonly instances: Map<string, ModuleSource | undefined>;
+}
+
+/** One call's modules, and what it has worked out about them so far – so nothing is worked out twice. */
+interface Analysis {
+  readonly modules: readonly ModuleSource[];
+  /** By module, the right-hand sides assigned to each name asked about. */
+  readonly assignments: Map<ModuleSource, Map<string, readonly string[]>>;
+  /** By module, the module each instance label asked about instantiates. */
+  readonly instances: Map<ModuleSource, Map<string, ModuleSource | undefined>>;
+  /** Whether each group asked about is used as states. */
+  readonly stateGroups: Map<StateGroup, boolean>;
 }
 
 const COMMENTS = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
@@ -49,6 +57,13 @@ const BASED_LITERAL = /^(\d+)?\s*'\s*[sS]?([dDbBhHoO])\s*([0-9a-fA-F_]+)$/;
 const DECIMAL_LITERAL = /^\d[\d_]*$/;
 const IDENTIFIER = /^[A-Za-z_]\w*$/;
 const RADIX: Readonly<Record<string, string>> = { d: '', b: '0b', h: '0x', o: '0o' };
+/**
+ * What comes right before a name that starts an assignment statement: the end of the
+ * one before, a condition or `@*`, a case label, a delay, a declaration's type or range.
+ * Never `(`, so the comparison in `if (State <= STOP_BIT)` is not taken for an assignment.
+ */
+const STATEMENT_START = String.raw`(?<=(?:[;:)\]*\d]|\b(?:begin|else|end|default|assign|reg|wire|logic|integer|initial|always))\s*)`;
+const CASE_SUBJECT = /\bcase[zx]?\s*\(\s*([A-Za-z_]\w*)\s*\)/g;
 /** A group names at least two states. */
 const MIN_STATES = 2;
 const ONE = BigInt(1);
@@ -93,28 +108,38 @@ function modulesIn(sources: readonly string[]): ModuleSource[] {
   return sources.flatMap((source) =>
     [...source.replace(COMMENTS, '').matchAll(MODULE)].map((match) => {
       const groups = [...match[0].matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
-      return { name: match[1], text: match[0], groups, assignments: new Map(), instances: new Map() };
+      return { name: match[1], text: match[0], groups };
     }),
   );
 }
 
-const escaped = (name: string) => name.replace(/[$]/g, '\\$&');
-
-/** The right-hand sides assigned to `name` in a module: `name <= x;`, `name = x;`, `reg [1:0] name = x;`. */
-function assignedTo(module: ModuleSource, name: string): readonly string[] {
-  const cached = module.assignments.get(name);
-  if (cached !== undefined) return cached;
-  const assignment = new RegExp(`(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
-  const found = [...module.text.matchAll(assignment)].map((match) => match[1].trim());
-  module.assignments.set(name, found);
-  return found;
+/** The value kept for `key`, made by `make` the first time it is asked for. */
+function remembered<K, V>(store: Map<K, V>, key: K, make: () => V): V {
+  if (store.has(key)) return store.get(key) as V;
+  const value = make();
+  store.set(key, value);
+  return value;
 }
 
-/** A register in one module of the sources, with every module to follow instances through. */
+/** The analysis's store for one module, made empty the first time. */
+const storeOf = <V>(stores: Map<ModuleSource, Map<string, V>>, module: ModuleSource): Map<string, V> =>
+  remembered(stores, module, () => new Map<string, V>());
+
+const escaped = (name: string) => name.replace(/[$]/g, '\\$&');
+
+/** The right-hand sides of the statements that assign `name`: `name <= x;`, `name = x;`, `reg [1:0] name = x;`. */
+function assignmentsTo(module: ModuleSource, name: string, analysis: Analysis): readonly string[] {
+  return remembered(storeOf(analysis.assignments, module), name, () => {
+    const assignment = new RegExp(`${STATEMENT_START}(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
+    return [...module.text.matchAll(assignment)].map((match) => match[1].trim());
+  });
+}
+
+/** A register in one module of the sources, with the analysis to follow instances through. */
 interface Register {
   readonly module: ModuleSource;
   readonly name: string;
-  readonly modules: readonly ModuleSource[];
+  readonly analysis: Analysis;
 }
 
 /** What one right-hand side says about a register: a group it names, another register, or neither. */
@@ -124,7 +149,7 @@ type Source = { readonly group: StateGroup } | { readonly register: Register } |
 function registerAt(from: Register, path: readonly string[]): Register | undefined {
   const [label, ...rest] = path;
   if (rest.length === 0) return { ...from, name: label };
-  const child = instantiated(from.module, label, from.modules);
+  const child = instantiated(from.module, label, from.analysis);
   return child === undefined ? undefined : registerAt({ ...from, module: child }, rest);
 }
 
@@ -149,7 +174,7 @@ interface Chain {
 
 /** Adds what `register`'s assignments say to the chain, and the registers they read to `pending`. */
 function visit(register: Register, chain: Chain, pending: Register[]): void {
-  const rhs = assignedTo(register.module, register.name);
+  const rhs = assignmentsTo(register.module, register.name, register.analysis);
   if (rhs.length === 0) chain.other = true;
   for (const source of rhs.map((text) => sourceOf(text, register))) {
     if (source === 'other') chain.other = true;
@@ -175,8 +200,6 @@ function chainOf(start: Register): Chain {
   return chain;
 }
 
-const CASE_SUBJECT = /\bcase[zx]?\s*\(\s*([A-Za-z_]\w*)\s*\)/g;
-
 /** The names a module uses as states of `group`: `case (state)`, `state == IDLE`, `IDLE != state`. */
 function stateSubjects(module: ModuleSource, group: StateGroup): string[] {
   const names = [...group.values.keys()].map(escaped).join('|');
@@ -189,22 +212,17 @@ function stateSubjects(module: ModuleSource, group: StateGroup): string[] {
 
 const namesOnly = (chain: Chain, group: StateGroup) => !chain.other && chain.groups.size === 1 && chain.groups.has(group);
 
-/** Whether each group asked about is used as states somewhere in the sources. */
-const stateGroups = new WeakMap<StateGroup, boolean>();
-
 /**
  * Whether a register whose chain names only `group` is used as a state somewhere – so
  * constants that are not states (`localparam FULL = 5208, HALF = 2604;` loaded into a
  * counter) do not turn the counter into names. `next_state` counts through `state`.
  */
-function isStateGroup(group: StateGroup, modules: readonly ModuleSource[]): boolean {
-  const known = stateGroups.get(group);
-  if (known !== undefined) return known;
-  const used = modules.some((module) =>
-    stateSubjects(module, group).some((name) => namesOnly(chainOf({ module, name, modules }), group)),
+function isStateGroup(group: StateGroup, analysis: Analysis): boolean {
+  return remembered(analysis.stateGroups, group, () =>
+    analysis.modules.some((module) =>
+      stateSubjects(module, group).some((name) => namesOnly(chainOf({ module, name, analysis }), group)),
+    ),
   );
-  stateGroups.set(group, used);
-  return used;
 }
 
 /** The one group a register's chain names, when that group is used as states. */
@@ -212,7 +230,7 @@ function groupOfRegister(register: Register): StateGroup | undefined {
   const chain = chainOf(register);
   const [group] = chain.groups;
   if (group === undefined || !namesOnly(chain, group)) return undefined;
-  return isStateGroup(group, register.modules) ? group : undefined;
+  return isStateGroup(group, register.analysis) ? group : undefined;
 }
 
 /** Skips `#( … )` from `at`, returning the index after it, or `at` when there is none. */
@@ -235,12 +253,11 @@ function instantiates(parent: ModuleSource, module: ModuleSource, labelled: RegE
 }
 
 /** The module an instance label in `parent` instantiates: `UART_Tx #( … ) uut (`. */
-function instantiated(parent: ModuleSource, label: string, modules: readonly ModuleSource[]): ModuleSource | undefined {
-  if (parent.instances.has(label)) return parent.instances.get(label);
-  const labelled = new RegExp(`^\\s*${escaped(label)}\\s*\\(`);
-  const found = modules.find((module) => instantiates(parent, module, labelled));
-  parent.instances.set(label, found);
-  return found;
+function instantiated(parent: ModuleSource, label: string, analysis: Analysis): ModuleSource | undefined {
+  return remembered(storeOf(analysis.instances, parent), label, () => {
+    const labelled = new RegExp(`^\\s*${escaped(label)}\\s*\\(`);
+    return analysis.modules.find((module) => instantiates(parent, module, labelled));
+  });
 }
 
 /** The enum a signal shows, or undefined when it is not a state register of a group that fits it. */
@@ -272,8 +289,7 @@ class NamedTraces {
 
   /** The trace of `id` with its values named after `group`. */
   named(id: TraceId, group: StateGroup): TraceId {
-    if (!this.groupIds.has(group)) this.groupIds.set(group, this.groupIds.size);
-    const key = `${id}/${this.groupIds.get(group)}`;
+    const key = `${id}/${remembered(this.groupIds, group, () => this.groupIds.size)}`;
     const existing = this.made.get(key);
     const trace = this.traces.get(id);
     if (existing !== undefined || trace === undefined) return existing ?? id;
@@ -285,19 +301,19 @@ class NamedTraces {
 }
 
 interface Walk {
-  readonly modules: readonly ModuleSource[];
+  readonly analysis: Analysis;
   readonly traces: NamedTraces;
 }
 
 function namedSignal(signal: SignalRef, module: ModuleSource, walk: Walk): SignalRef {
-  const group = stateGroupOf(signal, { module, name: signal.name, modules: walk.modules });
+  const group = stateGroupOf(signal, { module, name: signal.name, analysis: walk.analysis });
   if (group === undefined) return signal;
   return { ...signal, kind: 'enum', trace: walk.traces.named(signal.trace, group), enumType: { name: signal.name, literals: [...group.values.keys()] } };
 }
 
 /** The scope with its state registers named, and its instances' below it. */
 function namedScope(scope: Scope, module: ModuleSource | undefined, walk: Walk): Scope {
-  const scopes = scope.scopes.map((child) => namedScope(child, module && instantiated(module, child.name, walk.modules), walk));
+  const scopes = scope.scopes.map((child) => namedScope(child, module && instantiated(module, child.name, walk.analysis), walk));
   const signals = module === undefined ? scope.signals : scope.signals.map((signal) => namedSignal(signal, module, walk));
   return { ...scope, scopes, signals };
 }
@@ -306,7 +322,8 @@ function namedScope(scope: Scope, module: ModuleSource | undefined, walk: Walk):
 export function withVerilogStateNames(data: WaveformData, sources: readonly string[]): WaveformData {
   const modules = modulesIn(sources);
   if (!modules.some((module) => module.groups.length > 0)) return data;
-  const walk: Walk = { modules, traces: new NamedTraces(data.traces) };
+  const analysis: Analysis = { modules, assignments: new Map(), instances: new Map(), stateGroups: new Map() };
+  const walk: Walk = { analysis, traces: new NamedTraces(data.traces) };
   const scopes = data.root.scopes.map((top) => namedScope(top, modules.find((module) => module.name === top.name), walk));
   return { ...data, root: { ...data.root, scopes }, traces: walk.traces.traces };
 }

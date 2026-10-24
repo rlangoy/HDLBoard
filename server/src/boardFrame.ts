@@ -69,42 +69,28 @@ const namesOfRole = (board: BoardIo, role: Role): readonly string[] => (role ===
 
 /** The board a `BOARD` body names; every role exactly once, every name checked. */
 export function decodeBoardBody(body: string): DecodedBoard {
-  const names = namesByRole(body);
-  if (typeof names === 'string') return rejected(names);
-  const board = boardOf(names);
+  const board = boardIn(body);
+  if (typeof board === 'string') return rejected(board);
   const duplicate = duplicateName(board);
   return duplicate === undefined ? { ok: true, board } : rejected(`${JSON.stringify(duplicate)} is used twice (names ignore case)`);
 }
 
-/** Each role's names, or why the body does not give every role exactly once. */
-function namesByRole(body: string): Map<Role, string[]> | string {
-  const names = new Map<Role, string[]>();
+type NamesByRole = Partial<Record<Role, readonly string[]>>;
+
+const givesEveryRole = (names: NamesByRole): names is Record<Role, readonly string[]> => ROLES.every((role) => names[role] !== undefined);
+
+/** The board a body names, or why it does not give every role exactly once (`parseLine` checked each count). */
+function boardIn(body: string): BoardIo | string {
+  const names: NamesByRole = {};
   for (const line of body.split('\n')) {
     const parsed = parseLine(line);
     if (typeof parsed === 'string') return parsed;
-    if (names.has(parsed.role)) return `${parsed.role} is given twice`;
-    names.set(parsed.role, parsed.names);
+    if (names[parsed.role] !== undefined) return `${parsed.role} is given twice`;
+    names[parsed.role] = parsed.names;
   }
-  const missing = ROLES.find((role) => !names.has(role));
-  return missing === undefined ? names : `${missing} is missing`;
-}
-
-/** The board from a complete set of names (`namesByRole` checked that every role is there). */
-function boardOf(names: ReadonlyMap<Role, readonly string[]>): BoardIo {
-  const namesOf = (role: Role): readonly string[] => {
-    const found = names.get(role);
-    if (found === undefined) throw new Error(`BOARD: ${role} was checked but is missing`);
-    return found;
-  };
-  const single = (role: Exclude<Role, 'sevenSegment'>): string => namesOf(role)[0] ?? '';
-  return {
-    clock50: single('clock50'),
-    clock500Hz: single('clock500Hz'),
-    switches: single('switches'),
-    pushbuttons: single('pushbuttons'),
-    leds: single('leds'),
-    sevenSegment: namesOf('sevenSegment'),
-  };
+  if (!givesEveryRole(names)) return `${ROLES.find((role) => names[role] === undefined)} is missing`;
+  const { clock50, clock500Hz, switches, pushbuttons, leds, sevenSegment } = names;
+  return { clock50: clock50[0], clock500Hz: clock500Hz[0], switches: switches[0], pushbuttons: pushbuttons[0], leds: leds[0], sevenSegment };
 }
 
 export function encodeBoardBody(board: BoardIo): string {

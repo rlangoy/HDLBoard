@@ -90,6 +90,20 @@ describe('VCD from Icarus Verilog', () => {
   });
 });
 
+describe('Icarus parameters and localparams', () => {
+  // icarus_uart_tx.vcd lists UART_Tx's eleven parameters as `$var parameter`.
+  const uut = scopeAt(parseVcd(fixtureText('icarus_uart_tx.vcd')), 'UART_Tx_tb', 'uut');
+
+  test('are left out, as GHDL leaves out VHDL constants', () => {
+    const names = uut.signals.map((s) => s.name);
+    expect(names.filter((name) => /INDEX|^IDLE$|CLKS_PER_BIT|BAUD_RATE/.test(name))).toEqual([]);
+  });
+
+  test('leave the signals in', () => {
+    expect(uut.signals.map((s) => s.name)).toContain('State');
+  });
+});
+
 describe('a file cut off by a stopped run', () => {
   const text = fixtureText('ghdl_forever_stopped.vcd');
 

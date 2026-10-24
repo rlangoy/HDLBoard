@@ -32,7 +32,7 @@ import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
-import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
+import { DEFAULT_BOARD_IO } from './engines/boardPorts.js';
 import type { DecodedBoard } from './boardFrame.js';
 import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
@@ -197,11 +197,10 @@ export class Session {
   private waveRequested = false;
   /**
    * The board the next run is for (docs/board_io_config_spec.md § 8.2): the Default names
-   * until a `BOARD` frame arrives, then that board — sticky, like `WAVE` — and `rejected`
-   * after an invalid one, which refuses runs until a valid one arrives.
+   * until a `BOARD` frame arrives, then that board — sticky, like `WAVE`. After an invalid
+   * one, runs are refused with its reason until a valid one arrives.
    */
-  /** The board runs use; or why the last BOARD frame was rejected, which the next RUN reports. */
-  private board: BoardIo | { readonly rejected: string } = DEFAULT_BOARD_IO;
+  private board: DecodedBoard = { ok: true, board: DEFAULT_BOARD_IO };
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
   private wave: RunWave | null = null;
   /** Numbers each batch start's waveform; never reused within a session (W10). */
@@ -271,7 +270,7 @@ export class Session {
 
   /** `BOARD`: the port names of the next runs. The caller has already said why an invalid one is invalid. */
   handleBoard(decoded: DecodedBoard): void {
-    this.board = decoded.ok ? decoded.board : { rejected: decoded.reason };
+    this.board = decoded;
   }
 
   /**
@@ -378,12 +377,13 @@ export class Session {
     const request = ++this.runRequest;
 
     // A client that sent a broken board never gets a simulation with names it did not ask for.
-    const board = this.board;
-    if ('rejected' in board) {
+    const decoded = this.board;
+    if (!decoded.ok) {
       // One error for one problem: the BOARD frame itself is not answered, so its reason comes here.
-      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${board.rejected}`);
+      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${decoded.reason}`);
       return;
     }
+    const { board } = decoded;
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);

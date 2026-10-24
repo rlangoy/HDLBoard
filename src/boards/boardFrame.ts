@@ -4,7 +4,7 @@
 /**
  * The `BOARD` frame (docs/board_io_config_spec.md § 8.1): the board's port names, one
  * line per role, sent before every `RUN`. Keep in step with `decodeBoardBody` in
- * server/src/protocol.ts — the two packages share no code, so both test the same
+ * server/src/boardFrame.ts — the two packages share no code, so both test the same
  * literal Default frame text.
  */
 
