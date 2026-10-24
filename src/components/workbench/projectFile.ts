@@ -649,12 +649,25 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     entries: entries.map(({ name, url, description }) => ({ name, url, description })),
     unloaded: unloaded as Record<string, string>,
     warnings,
-    savedText: r.savedText as string,
+    savedText: r.version === 1 ? savedTextInVersion2(r.savedText as string) : (r.savedText as string),
     ...(gist ? { gist } : {}),
     ...(excluded.length > 0 ? { excluded } : {}),
     ...(savedFiles ? { savedFiles } : {}),
     ...(waveViews ? { waveViews } : {}),
   };
+}
+
+/**
+ * The saved text of a version-1 project as the same project reads in version 2, so a workspace
+ * stored by HDLBoard 1.5 has nothing to save after the upgrade. Text that is not a project
+ * file (none was saved yet) is kept as it is.
+ */
+function savedTextInVersion2(savedText: string): string {
+  try {
+    return serializeProject(parseProject(savedText).project);
+  } catch {
+    return savedText;
+  }
 }
 
 /** Whether an uploaded file is a project file: `.hdlboard.json`, or any other `.json`. */

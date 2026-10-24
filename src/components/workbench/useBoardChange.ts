@@ -37,8 +37,11 @@ export interface BoardChangeOptions {
 
 export interface BoardChange {
   readonly pending: PendingBoardChange | null;
-  /** Settings › Board, the Project page, and the mismatch dialog's Switch board. */
-  readonly requestBoardChange: (toId: string, origin?: { fromSettings: boolean }) => void;
+  /**
+   * Settings › Board, the Project page, and the mismatch dialog's Switch board. False when
+   * nothing happens (busy, the same board, a board not installed), so Settings can stay open.
+   */
+  readonly requestBoardChange: (toId: string, origin?: { fromSettings: boolean }) => boolean;
   /** The mismatch dialog's Rename files: the files go from `source`'s names to the active board's; the board stays. */
   readonly requestRenameToBoard: (source: BoardDefinition) => void;
   /** The mismatch hint's Fix…. */
@@ -57,7 +60,10 @@ type Latest = MutableRefObject<BoardChangeOptions>;
 /** One board change, ready to apply: the files it leaves, the board, and what the console says. */
 interface BoardChangeResult {
   readonly files: VhdlFile[];
+  /** The board the files are now in, for the console. */
   readonly board: BoardDefinition;
+  /** What the project stores: the board's id, or a project's id that is not installed here and is kept. */
+  readonly boardId: string;
   /** The renames made, which the saved waveform views follow; none for a board-only change. */
   readonly renames: readonly PortRename[];
   readonly message: string;
@@ -84,12 +90,13 @@ const activeBoardOf = (latest: Latest): BoardDefinition => findBoard(latest.curr
 /** A change that renames the files as `plan` says. */
 function renamedBy(latest: Latest, plan: BoardChangePlan): BoardChangeResult {
   const files = applyBoardChange(latest.current.files, plan);
-  return { files, board: plan.to, renames: plan.renames, message: boardRenamedLog(plan.to, plan.totalCount, plan.changes.length) };
+  const message = boardRenamedLog(plan.to, plan.totalCount, plan.changes.length);
+  return { files, board: plan.to, boardId: plan.to.id, renames: plan.renames, message };
 }
 
 /** A change of the board alone: the files stay exactly as they are. */
 function boardOnly(latest: Latest, board: BoardDefinition): BoardChangeResult {
-  return { files: latest.current.files, board, renames: [], message: boardOnlyLog(board) };
+  return { files: latest.current.files, board, boardId: board.id, renames: [], message: boardOnlyLog(board) };
 }
 
 /** Applies a change in one batch of state updates, remembers what it replaced, and offers Undo in the console. */
@@ -113,16 +120,16 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   }, [latest]);
 
   return useCallback(
-    ({ files, board, renames, message }: BoardChangeResult) => {
+    ({ files, boardId, renames, message }: BoardChangeResult) => {
       const { project, setFiles, setProject, stopSimulation, log } = latest.current;
       record.current = {
         before: { files: latest.current.files, board: project.board, waveViews: project.waveViews },
-        after: { files, board: board.id },
+        after: { files, board: boardId },
       };
       stopSimulation();
       setFiles(files);
-      setProject((p) => withWaveViews({ ...p, board: board.id }, renameWaveViews(p.waveViews, renames)));
-      savePreferredBoard(board.id);
+      setProject((p) => withWaveViews({ ...p, board: boardId }, renameWaveViews(p.waveViews, renames)));
+      savePreferredBoard(boardId);
       log(message, { label: BOARD_TEXT.undo, onClick: undo });
     },
     [latest, undo],
@@ -137,12 +144,14 @@ function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) =>
     (toId: string, origin = { fromSettings: false }) => {
       const { busy, project, catalog, files } = latest.current;
       const target = findBoard(catalog, toId);
-      if (busy || toId === project.board || !target.installed) return;
+      if (busy || toId === project.board || !target.installed) return false;
       // A board that is not installed here runs with the Default names, so its files are renamed from those.
       const plan = planBoardChange(files, activeBoardOf(latest), target.board);
       const nothingToRename = plan.changes.length === 0 && canApply(plan);
+      // A mismatch dialog that asked for this is answered either way.
+      setPending(nothingToRename ? null : { kind: 'change', plan, fromSettings: origin.fromSettings });
       if (nothingToRename) commit(boardOnly(latest, target.board));
-      else setPending({ kind: 'change', plan, fromSettings: origin.fromSettings });
+      return true;
     },
     [latest, commit, setPending],
   );
@@ -153,7 +162,8 @@ function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) =>
       const plan = planBoardChange(latest.current.files, source, activeBoardOf(latest));
       // The student chose to rename: it is done at once, unless a conflict has to be shown first.
       setPending(canApply(plan) ? null : { kind: 'change', plan, fromSettings: false });
-      if (canApply(plan)) commit(renamedBy(latest, plan));
+      // The board stays as it is, even a project's board that is not installed here.
+      if (canApply(plan)) commit({ ...renamedBy(latest, plan), boardId: latest.current.project.board });
     },
     [latest, commit, setPending],
   );

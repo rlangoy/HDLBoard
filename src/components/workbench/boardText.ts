@@ -136,6 +136,14 @@ export function mismatchLead(fileName: string, other: BoardDefinition, active: B
   return `${fileName} uses the ${other.name} names; the board is ${active.name}.`;
 }
 
+/**
+ * A copied or new file still in the Default names: `UART_Tx.vhdl keeps the Default board's
+ * names: CLK is already a name in this file. Rename by hand to use the Course board's.`
+ */
+export function untranslatedLog(fileName: string, board: BoardDefinition, reasons: readonly string[]): string {
+  return `${fileName} keeps the Default board's names: ${reasons.join('; ')}. Rename by hand to use the ${board.name} board's.`;
+}
+
 /** `Switch board to DE1-SoC`. */
 export function switchBoardTo(board: BoardDefinition): string {
   return `Switch board to ${board.name}`;

@@ -19,7 +19,7 @@ import { LED_COUNT, PUSHBUTTON_COUNT, SEVEN_SEGMENT_COUNT, SWITCH_COUNT, boardDe
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
 import { BoardChangeDialog } from './BoardChangeDialog';
-import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog } from './boardText';
+import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog } from './boardText';
 import { useBoards } from './useBoards';
 import { useBoardChange } from './useBoardChange';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
@@ -731,9 +731,10 @@ export function Workbench() {
   const handleOpenExample = (example: Example) => {
     endRunQuietly();
     setLogLines([]);
-    const { added, kept, openId, descriptions } = copyExample(example, filesRef.current, nextFileId, activeBoard);
+    const { added, kept, openId, descriptions, untranslated } = copyExample(example, filesRef.current, nextFileId, activeBoard);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
     for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
+    for (const { name, reasons } of untranslated) appendLog(untranslatedLog(name, activeBoard, reasons), 'error');
     setFiles((prev) => [...prev, ...added]);
     // Each copied file joins the project with what its example says it is for.
     setProject((p) => added.reduce((next, f) => withEntryEdited(next, f.name, { description: descriptions[f.name] ?? '' }), p));
@@ -753,11 +754,18 @@ export function Workbench() {
     const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
     setNewTestbenchFor(null);
     const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
-    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newFileContent(name, language, activeBoard);
+    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
     // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
     if (design) tb.setPairOverride(design.id, id);
+  };
+
+  /** A new design with the board's ports; one whose name clashes with a port keeps the Default names, and says why. */
+  const newDesignContent = (name: string, language: NewFileLanguage): string => {
+    const template = newFileContent(name, language, activeBoard);
+    if (template.untranslated) appendLog(untranslatedLog(name, activeBoard, template.untranslated), 'error');
+    return template.text;
   };
 
   // "Create testbench" (§ 4.6): New File, named <stem>_tb (the tb_ prefix is reserved), in the design's language.
@@ -1593,9 +1601,9 @@ export function Workbench() {
     log: logWithLink,
     busy: boardLocked,
   });
+  // Settings closes only for a change that happens: the question takes its place, or the board just changes.
   const handleBoardChosenInSettings = (id: string) => {
-    setDialog(null);
-    boardChange.requestBoardChange(id, { fromSettings: true });
+    if (boardChange.requestBoardChange(id, { fromSettings: true })) setDialog(null);
   };
 
   // A fresh start on a board from boards/boards.json: that file arrives after the first

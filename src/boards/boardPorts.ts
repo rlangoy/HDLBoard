@@ -61,14 +61,16 @@ export function vectorHeading(name: string, width: number): string {
 }
 
 /**
- * The seven-segment ports as one heading: `HEXn_N[6:0]` when the six names are one
- * pattern with the display number in it (as on every built-in board), else the compact
- * `HEX0…HEX5[6:0]`.
+ * The six display ports as one name: `HEXn_N` when they are one pattern with the display
+ * number in it (as on every built-in board), else the compact `HEX0…HEX5`.
  */
+export function sevenSegmentPattern(names: readonly string[]): string {
+  return displayPattern(names) ?? `${names[0]}…${names[names.length - 1]}`;
+}
+
+/** The seven-segment ports as one heading: `HEXn_N[6:0]`, or `HEX0…HEX5[6:0]`. */
 export function sevenSegmentHeading(names: readonly string[]): string {
-  const pattern = displayPattern(names);
-  const shown = pattern ?? `${names[0]}…${names[names.length - 1]}`;
-  return vectorHeading(shown, SEGMENTS_PER_DISPLAY);
+  return vectorHeading(sevenSegmentPattern(names), SEGMENTS_PER_DISPLAY);
 }
 
 /** `HEXn_N` for `HEX0_N` … `HEX5_N`: one prefix, the index 0, 1, … in order, one suffix. */

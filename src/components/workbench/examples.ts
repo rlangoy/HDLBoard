@@ -11,7 +11,7 @@
 
 import { languageOfName } from './fileKinds';
 import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
-import { translateFromDefault } from '../../boards/renamePorts';
+import { translateFromDefault, type Translation } from '../../boards/renamePorts';
 import type { BoardDefinition } from '../../boards/types';
 
 export type ExampleLanguage = 'vhdl' | 'verilog';
@@ -156,17 +156,28 @@ export interface ExampleCopy {
    * the opened example's. Goes into the project's file list.
    */
   descriptions: Record<string, string>;
+  /** Copies still in the Default names, because the board's names clash with names they use. */
+  untranslated: UntranslatedFile[];
 }
 
-/** A built-in file's text in `board`'s port names. */
-function onBoard(source: VhdlFile, board: BoardDefinition): string {
+/** A copied file that could not be put in the board's names, and why. */
+export interface UntranslatedFile {
+  readonly name: string;
+  readonly reasons: readonly string[];
+}
+
+/** A built-in file in `board`'s port names, or as written when they clash with its own names. */
+function onBoard(source: VhdlFile, board: BoardDefinition): Translation {
   const language = languageOfName(source.name);
-  return language === undefined ? source.content : translateFromDefault(source.content, language, board);
+  return language === undefined ? { text: source.content } : translateFromDefault(source.content, language, board);
 }
 
-/** The files a fresh workspace starts with, in `board`'s port names. */
+/**
+ * The files a fresh workspace starts with, in `board`'s port names. One whose names clash
+ * with the board's stays in the Default names; the run's mismatch hint then offers the way out.
+ */
 export function starterFilesFor(board: BoardDefinition): VhdlFile[] {
-  return STARTER_FILES.map((file) => ({ ...file, content: onBoard(file, board) }));
+  return STARTER_FILES.map((file) => ({ ...file, content: onBoard(file, board).text }));
 }
 
 /** The description of the example `fileId` is the first file of, else of `example`, which it came with. */
@@ -184,17 +195,20 @@ export function copyExample(example: Example, files: readonly VhdlFile[], newId:
   const added: VhdlFile[] = [];
   const kept: string[] = [];
   const descriptions: Record<string, string> = {};
+  const untranslated: UntranslatedFile[] = [];
   const projectIdOf = (source: VhdlFile): string => {
     const existing = files.find((f) => f.name.toLowerCase() === source.name.toLowerCase());
     if (existing) {
       kept.push(existing.name);
       return existing.id;
     }
-    const copy = { ...source, id: newId(), content: onBoard(source, board) };
+    const translation = onBoard(source, board);
+    const copy = { ...source, id: newId(), content: translation.text };
     added.push(copy);
+    if (translation.untranslated) untranslated.push({ name: copy.name, reasons: translation.untranslated });
     descriptions[copy.name] = descriptionOf(source.id, example);
     return copy.id;
   };
   const [openId] = example.fileIds.map((id) => projectIdOf(exampleFile(id)));
-  return { added, kept, openId, descriptions };
+  return { added, kept, openId, descriptions, untranslated };
 }

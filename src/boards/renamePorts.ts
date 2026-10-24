@@ -122,26 +122,40 @@ interface Rewritten {
   readonly count: number;
 }
 
+/**
+ * The words a comment may have renamed: the old names the file also uses in code, as
+ * whole words in their exact case, with what each becomes. Built once per file.
+ */
+interface CommentWords {
+  readonly pattern: RegExp;
+  readonly byName: ReadonlyMap<string, string>;
+}
+
 /** One file's renames, as every line of it needs them. */
 interface FileRenames {
-  readonly renames: readonly PortRename[];
   /** The renames by the old name, lower case: how a name in code is looked up. */
   readonly byKey: ReadonlyMap<string, PortRename>;
-  /** The names the file uses in code, lower case: a comment renames only these. */
-  readonly used: ReadonlyMap<string, unknown>;
+  /** Undefined when the file uses none of the old names in code: its comments stay as they are. */
+  readonly commentWords?: CommentWords;
+}
+
+function commentWordsOf(renames: readonly PortRename[], used: ReadonlyMap<string, unknown>): CommentWords | undefined {
+  const inCode = renames.filter((r) => used.has(r.from.toLowerCase()));
+  if (inCode.length === 0) return undefined;
+  const alternatives = inCode.map((r) => escapeForRegExp(r.from)).join('|');
+  return {
+    pattern: new RegExp(`(?<!${WORD_CHAR})(?:${alternatives})(?!${WORD_CHAR})`, 'g'),
+    byName: new Map(inCode.map((r) => [r.from, r.to])),
+  };
 }
 
 /** One comment with the board names the file also uses in code renamed, whole words and exact case only. */
-function renameInComment(comment: string, { renames, used }: FileRenames): Rewritten {
-  const inCode = renames.filter((r) => used.has(r.from.toLowerCase()));
-  if (inCode.length === 0) return { text: comment, count: 0 };
-  const byName = new Map(inCode.map((r) => [r.from, r.to]));
-  const alternatives = inCode.map((r) => escapeForRegExp(r.from)).join('|');
-  const word = new RegExp(`(?<!${WORD_CHAR})(?:${alternatives})(?!${WORD_CHAR})`, 'g');
+function renameInComment(comment: string, words: CommentWords | undefined): Rewritten {
+  if (words === undefined) return { text: comment, count: 0 };
   let count = 0;
-  const text = comment.replace(word, (found) => {
+  const text = comment.replace(words.pattern, (found) => {
     count++;
-    return byName.get(found) ?? found;
+    return words.byName.get(found) ?? found;
   });
   return { text, count };
 }
@@ -154,7 +168,7 @@ function renameInLine(line: readonly ReadToken[], file: FileRenames): Rewritten 
     const shift = lengthChange;
     lengthChange = undefined;
     if (token.type === 'comment') {
-      const comment = renameInComment(token.text, file);
+      const comment = renameInComment(token.text, file.commentWords);
       count += comment.count;
       return comment.text;
     }
@@ -183,23 +197,31 @@ export function renameInSource(text: string, language: Language, renames: readon
   const reasons = conflicts(renames, used, language);
   if (reasons.length > 0) return { ok: false, reasons };
 
-  const file: FileRenames = { renames, byKey: new Map(renames.map((r) => [r.from.toLowerCase(), r])), used };
+  const file: FileRenames = { byKey: new Map(renames.map((r) => [r.from.toLowerCase(), r])), commentWords: commentWordsOf(renames, used) };
   const rewritten = lines.map((line) => renameInLine(line, file));
   const count = rewritten.reduce((sum, line) => sum + line.count, 0);
   return { ok: true, text: rewritten.map((line) => line.text).join('\n'), count };
 }
 
+/** A built-in source on a board: its text, and why it is still in the Default names when it could not be translated. */
+export interface Translation {
+  readonly text: string;
+  /** Set when the text is as written: the reasons the rename gave. */
+  readonly untranslated?: readonly string[];
+}
+
 /**
  * A built-in source, written in the Default board's names, as it reads on `board`.
  * A thin wrapper around renameInSource for the examples, the starter files and the New
- * File template; it has nothing to do with the interactive board change. Built-ins
- * never conflict (tested), so a conflict here is a bug and throws.
+ * File template; it has nothing to do with the interactive board change. The built-in
+ * boards never conflict (tested), but a user board or a file the student names can
+ * (`clk` already in the file, a new file called `key`): the source then comes back as
+ * written, with the reasons, and the caller says so.
  */
-export function translateFromDefault(text: string, language: Language, board: BoardDefinition): string {
-  if (board.id === DEFAULT_BOARD.id) return text;
+export function translateFromDefault(text: string, language: Language, board: BoardDefinition): Translation {
+  if (board.id === DEFAULT_BOARD.id) return { text };
   const result = renameInSource(text, language, renamesBetween(DEFAULT_BOARD, board));
-  if (!result.ok) throw new Error(`A built-in source cannot be translated to ${board.name}: ${result.reasons.join('; ')}`);
-  return result.text;
+  return result.ok ? { text: result.text } : { text, untranslated: result.reasons };
 }
 
 // --- The whole project ---------------------------------------------------------
@@ -266,11 +288,23 @@ export function applyBoardChange<T extends RenameableFile>(files: readonly T[], 
   });
 }
 
+/**
+ * The new name in the case the simulator wrote the old one in: GHDL lower-cases VHDL
+ * names (`uut/key_n`), Icarus keeps Verilog's (`uut/KEY_N`), and a saved view must still
+ * match the next run's paths exactly.
+ */
+function inSpellingOf(segment: string, to: string): string {
+  return segment === segment.toLowerCase() ? to.toLowerCase() : to;
+}
+
 /** A saved signal path (`uut/KEY_N`) with each segment that is an old port name renamed. */
 function renamePath(path: string, byKey: ReadonlyMap<string, PortRename>): string {
   return path
     .split('/')
-    .map((segment) => byKey.get(segment.toLowerCase())?.to ?? segment)
+    .map((segment) => {
+      const rename = byKey.get(segment.toLowerCase());
+      return rename === undefined ? segment : inSpellingOf(segment, rename.to);
+    })
     .join('/');
 }
 

@@ -90,7 +90,7 @@ describe('copyExample', () => {
     expect(result.kept).toEqual(['and_gate.v']);
 
     const again = copyExample(example('and_gate_verilog'), [edited], idSequence(), DEFAULT_BOARD);
-    expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9', descriptions: {} });
+    expect(again).toEqual({ added: [], kept: ['and_gate.v'], openId: 'file-9', descriptions: {}, untranslated: [] });
   });
 
   test("describes each copied file for the project's file list, by the example card it opens itself", () => {

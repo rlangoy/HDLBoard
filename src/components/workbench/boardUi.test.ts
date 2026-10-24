@@ -95,8 +95,28 @@ describe('examples, starter files and New File on the DE1-SoC', () => {
   });
 
   it('makes a new design with the board\'s ports', () => {
-    expect(newFileContent('counter.vhd', 'vhdl', DE1_SOC)).toMatch(/^\s+KEY {6}: in/m);
-    expect(newFileContent('counter.v', 'verilog', DE1_SOC)).toMatch(/input\s+wire \[3:0\]\s+KEY,/);
+    expect(newFileContent('counter.vhd', 'vhdl', DE1_SOC).text).toMatch(/^\s+KEY {6}: in/m);
+    expect(newFileContent('counter.v', 'verilog', DE1_SOC).text).toMatch(/input\s+wire \[3:0\]\s+KEY,/);
+  });
+
+  it('keeps the Default names for a new file named like a port, and says why, instead of failing', () => {
+    const template = newFileContent('key.vhd', 'vhdl', DE1_SOC);
+    expect(template.text).toMatch(/KEY_N/);
+    expect(template.untranslated).toEqual(['KEY is already a name in this file']);
+  });
+
+  it('copies an example in the Default names when a user board\'s names clash with it, and says which', () => {
+    const clk = { ...DE1_SOC, id: 'clk-board', name: 'Clk board', ports: { ...DE1_SOC.ports, clock50: 'clk' } };
+    const example = theOne(EXAMPLES, (e) => e.id === 'key_uart_tx_vhdl', 'Key to UART Tx example');
+    const copied = copyExample(example, [], () => 'x', clk);
+    expect(copied.added).toHaveLength(3);
+    expect(copied.untranslated.map((file) => file.name)).toEqual(['keyUartTx.vhdl', 'UART_Tx_tb.vhd']);
+    expect(copied.added[0].content).toMatch(/CLOCK_50/);
+  });
+
+  it('starts a workspace on such a board without failing', () => {
+    const clashing = { ...DE1_SOC, id: 'odd', name: 'Odd', ports: { ...DE1_SOC.ports, leds: 'DE1_SoC' } };
+    expect(starterFilesFor(clashing).map((file) => file.content)).toEqual(starterFilesFor(DEFAULT_BOARD).map((file) => file.content));
   });
 });
 

@@ -271,3 +271,21 @@ describe('the waveform views of a project', () => {
     expect(withWaveView(project, 'counter_tb', { signals: [] }).waveViews).toBeUndefined();
   });
 });
+
+describe('a workspace stored by HDLBoard 1.5 (project version 1)', () => {
+  const files = [file('a.vhd')];
+  const asVersion1 = (text: string) => text.replace('"version": 2', '"version": 1').replace('"board": "default"', '"board": "DE1-SoC"');
+  const stored = () => {
+    const saved = withSaved(newProject('Counter', ['a.vhd'], 'default'), files);
+    return { ...JSON.parse(JSON.stringify(saved)), version: 1, board: 'DE1-SoC', savedText: asVersion1(saved.savedText) };
+  };
+
+  it('opens on the Default board as a version-2 project', () => {
+    expect(parseStoredProject(stored())).toMatchObject({ version: 2, board: 'default' });
+  });
+
+  it('has no unsaved changes after the upgrade', () => {
+    const project = parseStoredProject(stored());
+    expect(project && hasUnsavedChanges(project, files)).toBe(false);
+  });
+});

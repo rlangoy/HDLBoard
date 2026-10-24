@@ -78,9 +78,10 @@ const OTHER_PORT_WORDING: ExtraPortWording = { kind: 'port', effect: 'the board 
 const inBackticks = (text: string): string => `\`${text}\``;
 const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** A port of the board, or the legacy `rst` the testbench wires itself. */
-function isBoardPort(port: PortDeclaration, board: BoardIo): boolean {
-  return boardPortKeys(board, { legacyReset: true }).has(port.name.toLowerCase());
+/** The entity's ports that are neither the board's nor the legacy `rst` the testbench wires itself. */
+function extraPortsOf(top: TopSource): PortDeclaration[] {
+  const boardPorts = boardPortKeys(top.board, { legacyReset: true });
+  return portDeclarations(top.content, top.entityName).filter((port) => !boardPorts.has(port.name.toLowerCase()));
 }
 
 /** The constant 0 of the port's type, or `undefined` when it is not a bit or a constrained vector of bits. */
@@ -118,7 +119,7 @@ function extraPortWarning(top: TopSource, port: PortDeclaration, wording: ExtraP
 
 /** The extra ports' values for the testbench, and a warning for each the run goes on without. */
 export function planExtraPorts(top: TopSource): ExtraPortPlan {
-  const extraPorts = portDeclarations(top.content, top.entityName).filter((port) => !isBoardPort(port, top.board));
+  const extraPorts = extraPortsOf(top);
   const tiedInputs = extraPorts.flatMap((port) => {
     const value = heldValueOf(port);
     return value === undefined ? [] : [{ name: port.name, value }];

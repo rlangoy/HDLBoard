@@ -165,7 +165,8 @@ describe('translateFromDefault', () => {
       for (const file of sources) {
         const language = languageOf(file.name);
         const translated = translateFromDefault(file.content, language, board);
-        const back = renameInSource(translated, language, renamesBetween(board, DEFAULT_BOARD));
+        expect(translated.untranslated, file.name).toBeUndefined();
+        const back = renameInSource(translated.text, language, renamesBetween(board, DEFAULT_BOARD));
         expect(back, file.name).toEqual(expect.objectContaining({ ok: true, text: file.content }));
       }
     },
@@ -174,8 +175,13 @@ describe('translateFromDefault', () => {
   it('leaves no Default name behind on the DE1-SoC', () => {
     for (const file of sources) {
       const translated = translateFromDefault(file.content, languageOf(file.name), DE1_SOC);
-      expect(translated, file.name).not.toMatch(/\b(?:KEY_N|HEX\d_N)\b/i);
+      expect(translated.text, file.name).not.toMatch(/\b(?:KEY_N|HEX\d_N)\b/i);
     }
+  });
+
+  it('gives a source back as written, with why, when the board\'s names clash with its own', () => {
+    const source = 'entity key is port (KEY_N : in bit_vector(3 downto 0)); end;';
+    expect(translateFromDefault(source, 'vhdl', DE1_SOC)).toEqual({ text: source, untranslated: ['KEY is already a name in this file'] });
   });
 });
 
@@ -211,10 +217,15 @@ describe('planBoardChange and applyBoardChange', () => {
     expect(() => applyBoardChange(clash, plan)).toThrow();
   });
 
+  it('renames a saved path in the case the simulator wrote it: GHDL lower-cases VHDL names', () => {
+    const views = { counter_tb: { signals: [{ path: 'uut/key_n' }, { path: 'uut/HEX0_N' }] } };
+    expect(renameWaveViews(views, TO_DE1)?.counter_tb.signals).toEqual([{ path: 'uut/key' }, { path: 'uut/HEX0' }]);
+  });
+
   it('renames saved waveform paths, and back again', () => {
     const views = { counter_tb: { signals: [{ path: 'uut/KEY_N', showAs: 'binary' }, { path: 'clk' }], notShown: [{ path: 'uut/hex0_n' }] } };
     const there = renameWaveViews(views, TO_DE1);
-    expect(there).toEqual({ counter_tb: { signals: [{ path: 'uut/KEY', showAs: 'binary' }, { path: 'clk' }], notShown: [{ path: 'uut/HEX0' }] } });
+    expect(there).toEqual({ counter_tb: { signals: [{ path: 'uut/KEY', showAs: 'binary' }, { path: 'clk' }], notShown: [{ path: 'uut/hex0' }] } });
     expect(renameWaveViews(there, TO_DEFAULT)?.counter_tb.signals).toEqual(views.counter_tb.signals);
     expect(renameWaveViews(undefined, TO_DE1)).toBeUndefined();
   });

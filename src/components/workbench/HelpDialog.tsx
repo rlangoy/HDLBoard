@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { sevenSegmentHeading } from '../../boards/boardPorts';
+import { sevenSegmentPattern } from '../../boards/boardPorts';
 import type { BoardDefinition } from '../../boards/types';
 import { Dialog } from './Dialog';
 import { CHEAT_SHEET, GUIDES, REFERENCES, type HelpResource } from './helpResources';
@@ -92,7 +92,7 @@ export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
   const { ports, labels } = board;
   const [firstDisplay] = ports.sevenSegment;
   const lastDisplay = ports.sevenSegment[ports.sevenSegment.length - 1];
-  const displayPattern = sevenSegmentHeading(ports.sevenSegment).replace(/\[\d+:0\]$/, '');
+  const displayPattern = sevenSegmentPattern(ports.sevenSegment);
   return (
     <Dialog
       open={open}
