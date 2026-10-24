@@ -3,7 +3,12 @@
 
 /** The detector's fixtures (tests/fixtures/tbdetect/), for the tests only. */
 
+import { DEFAULT_BOARD } from '../../../boards/boardCatalog';
+import { boardDesignPortNames } from '../../../boards/boardPorts';
 import type { SourceFile } from './analyzeProject';
+
+/** The board port names the detector's tests classify with: the Default board's, so every built-in board's. */
+export const TEST_BOARD_PORTS: ReadonlySet<string> = boardDesignPortNames(DEFAULT_BOARD);
 
 const texts = import.meta.glob<string>('../../../../tests/fixtures/tbdetect/{vhdl,verilog}/*.{vhd,v}', {
   query: '?raw',

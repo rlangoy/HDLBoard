@@ -542,7 +542,7 @@ Stage: **1** first release to students · **2** next · **3** later.
 | FR-11 | Signals the format cannot carry are listed, greyed out, with a plain explanation – e.g. Verilog memories (arrays), which Icarus does not record: *"Memories are not recorded. Show one word by copying it to a `wire` in your testbench."* | 1 |
 | FR-12 | The view says in one line how the run ended when it did not complete normally: stopped by you, took too long, waveform too large (and stage 2: stopped at "Stop at"). | 1 |
 | FR-13 | Measure: a second marker from the **⋯** menu; the toolbar shows the time between cursor and marker and, for a clock period, the frequency ("20 ns – 50 MHz"). | 2 |
-| FR-14 | **FSM states by name** (VHDL enumerations, from GHW) on the bus and in the value column; records fold open into their fields. | 1 |
+| FR-14 | **FSM states by name** (VHDL enumerations, from GHW) on the bus and in the value column; records fold open into their fields. Verilog too (added 2026-10-24): Icarus writes a state register as plain bits in every dump format, even a SystemVerilog `typedef enum`, so `verilogStates.ts` reads the names from the run's sources – a register assigned only names of one `localparam` statement (`localparam [1:0] IDLE = 2'd0, START_BIT = 2'd1, …`), directly or through another such register (`state <= next_state`), is shown by those names. Anything else stays bits. | 1 |
 | FR-15 | A search box above the signal list when the design has more than 30 signals. | 2 |
 | FR-16 | Every `@<time>` in a console report line and every plugin-output time stamp is a link that opens the waveform with the cursor at that time. | 1 |
 | FR-17 | Shown signals, "Show as" choices and zoom are kept across reruns for signals that still exist. | 1 |

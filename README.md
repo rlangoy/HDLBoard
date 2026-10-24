@@ -48,7 +48,7 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 - **Make a mistake. See why in a second.** HDLBoard compiles your design in under a second, while Altera Quartus Prime needs more than five. Mistakes are marked right in your code, with a message that says what is wrong and a hint about how to fix it.
 - **Find any signal at a glance.** Rest your mouse on a signal or port, or click it, and it lights up everywhere it appears: where it is declared and every place it is used. No more scrolling up and down to find where `sum` was declared.
 - **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
-- **Real board pin names** (`SW`, `KEY_N`, `LEDR`, `HEX0_N`, `CLOCK_50`): your design is a starting point for Quartus and the real DE1-SoC.
+- **Real board pin names:** choose the **DE1-SoC** board in Settings for Terasic's own names (`SW`, `KEY`, `LEDR`, `HEX0`, `CLOCK_50`), so your design is a starting point for Quartus and the real DE1-SoC, or keep **Default** (`KEY_N`, `HEX0_N`), which shows the active-low ports in their names. Changing the board renames the ports in your files for you, and a teacher can add a board with the course's own names in one JSON file ([docs/BOARDS.md](docs/BOARDS.md)).
 - **Real-time pacing:** an LED meant to blink once a second blinks once a second.
 - **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
 - **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
@@ -136,7 +136,7 @@ Yes. [HDLBoard](https://hdlboard.onrender.com/) runs VHDL on GHDL (VHDL-2008) an
 
 ### Can I learn VHDL, Verilog or FPGA design without an FPGA board?
 
-Write your design using the DE1-SoC port names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …) and press Start. The virtual board's switches, buttons, LEDs and 7-segment displays behave like the real ones, so you can test a design by playing with it.
+Write your design using the board's port names (`SW`, `KEY_N`, `LEDR`, `HEX0_N` …, or `KEY` and `HEX0` … on the DE1-SoC board) and press Start. The virtual board's switches, buttons, LEDs and 7-segment displays behave like the real ones, so you can test a design by playing with it.
 
 ### What is a DE1-SoC?
 

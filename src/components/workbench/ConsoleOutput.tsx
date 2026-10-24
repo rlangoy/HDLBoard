@@ -10,6 +10,12 @@ import { icarusLineTime } from '../waveform/consoleTimes';
 import { parseSimTime } from '../waveform/timeAxis';
 import './ConsoleOutput.css';
 
+/** A link at the end of a console line the frontend adds: Undo after a board change, Fix… after a hint. */
+export interface ConsoleLink {
+  readonly label: string;
+  readonly onClick: () => void;
+}
+
 export interface ConsoleLine {
   id: number;
   time: string;
@@ -17,6 +23,8 @@ export interface ConsoleLine {
   tone?: 'success' | 'error';
   /** A line the frontend adds that ends in a link: "✓ Testbench finished – Open waveform" (FR-25). */
   action?: 'open-waveform';
+  /** Any other link the line ends in. */
+  link?: ConsoleLink;
 }
 
 export interface ConsoleOutputProps {
@@ -198,6 +206,18 @@ function OpenWaveformLine({ text, onOpenWaveform }: { text: string; onOpenWavefo
   );
 }
 
+/** A line the frontend wrote, ending in its link. */
+function LinkedLine({ text, link }: { text: string; link: ConsoleLink }) {
+  return (
+    <>
+      {text}
+      <button type="button" className="wb-console__link wb-console__line-link" onClick={link.onClick}>
+        {link.label}
+      </button>
+    </>
+  );
+}
+
 /** The bottom "Simulator Output / Status" panel — a scrolling, clearable log. */
 export function ConsoleOutput({ lines, onClear, locate, onOpenLocation, waveButton, onOpenTime, onOpenWaveform }: ConsoleOutputProps) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -234,6 +254,8 @@ export function ConsoleOutput({ lines, onClear, locate, onOpenLocation, waveButt
               <span className="wb-console__time">[{block.line.time}]</span>{' '}
               {block.line.action === 'open-waveform' ? (
                 <OpenWaveformLine text={block.line.text} onOpenWaveform={onOpenWaveform} />
+              ) : block.line.link ? (
+                <LinkedLine text={block.line.text} link={block.line.link} />
               ) : (
                 <LineText text={block.line.text} locate={locate} onOpenLocation={onOpenLocation} onOpenTime={onOpenTime} />
               )}

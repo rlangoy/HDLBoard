@@ -62,7 +62,7 @@ class MemoryDisk implements SaveDisk {
 const PROJECT_FILE = 'fantasicleds.hdlboard.json';
 
 function project(overrides: Partial<OpenProject> = {}): OpenProject {
-  return { ...newProject('Fantasic Leds', []), fileName: PROJECT_FILE, ...overrides };
+  return { ...newProject('Fantasic Leds', [], 'default'), fileName: PROJECT_FILE, ...overrides };
 }
 
 const files = (...names: string[]) => names.map((name) => ({ name, text: `-- ${name}` }));
@@ -163,7 +163,7 @@ describe('running a plan against a disk', () => {
   it('keeps two projects with the same file names apart in one folder (AC-2)', async () => {
     const disk = new MemoryDisk();
     await save(disk, project(), ['DE1_SoC.vhdl']);
-    await save(disk, { ...newProject('x', []), fileName: 'not_so_fantasicleds.hdlboard.json' }, ['DE1_SoC.vhdl']);
+    await save(disk, { ...newProject('x', [], 'default'), fileName: 'not_so_fantasicleds.hdlboard.json' }, ['DE1_SoC.vhdl']);
     expect(disk.paths()).toEqual([
       'fantasicleds.hdlboard.json',
       'fantasicleds/src/DE1_SoC.vhdl',

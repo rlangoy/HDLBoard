@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 -- Press KEY0 to count up, KEY1 to reset. The count (00..99) is shown in
--- decimal on HEX1 (tens) and HEX0 (ones); the other displays stay blank.
+-- decimal on HEX1_N (tens) and HEX0_N (ones); the other displays stay blank.
 entity keyCounter7Seg is
     port (
         CLOCK_50 : in  std_logic;

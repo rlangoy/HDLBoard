@@ -14,7 +14,7 @@
  * handed to GHDL.
  */
 
-import { BOARD_PORTS } from './engines/boardPorts.js';
+import { boardPortKeys, type BoardIo } from './engines/boardPorts.js';
 import { portDeclarations } from './engines/vhdlPorts.js';
 import type { VhdlFileInput } from './protocol.js';
 
@@ -63,7 +63,7 @@ export interface TopEntityError {
 
 /**
  * Scans every submitted file for entity declarations and picks the one
- * whose ports best match the board's own names (§ 3.2) — the top entity
+ * whose ports best match `board`'s names (§ 3.2) — the top entity
  * is identified by its interface, not by filename or file order, since
  * `RUN`'s files are not guaranteed to arrive top-entity-last (§ 6.3).
  *
@@ -79,6 +79,7 @@ export interface TopEntityError {
  */
 export function findTopEntity(
   files: VhdlFileInput[],
+  board: BoardIo,
   preferredFileName?: string,
   runTarget?: string,
 ): TopEntity | TopEntityError {
@@ -112,10 +113,11 @@ export function findTopEntity(
     return { message: "No 'entity ... is' declaration found in the submitted project." };
   }
 
+  const boardPorts = boardPortKeys(board, { legacyReset: true });
   const scored = candidates
     .map((c) => ({
       c,
-      score: [...c.ports].filter((p) => (BOARD_PORTS as readonly string[]).includes(p)).length,
+      score: [...c.ports].filter((p) => boardPorts.has(p)).length,
     }))
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -125,7 +127,7 @@ export function findTopEntity(
     return {
       message:
         `None of the declared entities (${names}) has a port matching the board interface ` +
-        `(${BOARD_PORTS.join(', ')}). Check the spelling of your entity's port names.`,
+        `(${[...boardPorts].join(', ')}). Check the spelling of your entity's port names.`,
     };
   }
 

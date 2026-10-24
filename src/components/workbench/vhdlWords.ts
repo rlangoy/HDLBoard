@@ -33,8 +33,16 @@ export const PSL_WORDS: ReadonlySet<string> = new Set([
   'restrict_guarantee', 'sequence', 'strong', 'vmode', 'vprop', 'vunit',
 ]);
 
+/**
+ * Reserved words a beginner never writes, one edit from a name they often do. Never
+ * suggested: `bus` (guarded signals) is one edit from `busy`, a common signal name.
+ */
+export const RARELY_WRITTEN_WORDS: ReadonlySet<string> = new Set(['bus']);
+
 /** The reserved words a misspelling may be corrected to. */
-export const SUGGESTED_KEYWORDS: readonly string[] = [...RESERVED_WORDS].filter((word) => !PSL_WORDS.has(word));
+export const SUGGESTED_KEYWORDS: readonly string[] = [...RESERVED_WORDS].filter(
+  (word) => !PSL_WORDS.has(word) && !RARELY_WRITTEN_WORDS.has(word),
+);
 
 /**
  * Names from the standard libraries a beginner uses. Never "corrected" to a

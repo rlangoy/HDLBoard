@@ -38,7 +38,6 @@ import {
   type ProjectsView,
 } from './projectCatalog';
 import { MAX_LISTED_PROJECTS } from './localProjectScan';
-import { shareLink } from './projectGitHub';
 import { AccountCard, OpenNowCard, type OpenProjectInfo } from './ProjectsAccount';
 import { ScrollArea } from './ScrollArea';
 import type { GitHubConnection } from './useGitHub';
@@ -290,7 +289,7 @@ function menuActionsFor(
     const entry = item.entry;
     return [
       open,
-      copy('Copy share link', shareLink(window.location.href, { htmlUrl: entry.url })),
+      copy('Copy share link', entry.url),
       { label: 'Delete from GitHub…', icon: <DeleteIcon aria-hidden="true" />, danger: true, onSelect: () => gitHubProjects.remove(entry) },
     ];
   }

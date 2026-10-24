@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useState } from 'react';
+import type { BoardCatalog } from '../../boards/types';
+import { BoardSetting } from './BoardSetting';
 import { Dialog } from './Dialog';
 import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
@@ -15,6 +17,12 @@ import './SettingsDialog.css';
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Board: the boards available here, and the open project's (docs/board_io_config_spec.md § 3.2). */
+  boards: BoardCatalog;
+  boardId: string;
+  onBoardChange: (id: string) => void;
+  /** Loading or saving the project, or compiling: the board cannot change just now. */
+  boardLocked: boolean;
   /** Languages: the Examples pane opens with these ticked (languagePrefs.ts). */
   preferredLanguages: PreferredLanguages;
   onPreferredLanguagesChange: (languages: PreferredLanguages) => void;
@@ -110,6 +118,10 @@ const NEW_ISSUE = `${ISSUES_URL}/new`;
 export function SettingsDialog({
   open,
   onClose,
+  boards,
+  boardId,
+  onBoardChange,
+  boardLocked,
   preferredLanguages,
   onPreferredLanguagesChange,
   splitPreference,
@@ -140,6 +152,7 @@ export function SettingsDialog({
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
+      <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} />
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />

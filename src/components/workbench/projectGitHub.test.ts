@@ -10,7 +10,6 @@ import {
   gistLinkFromUrl,
   gitHubSyncState,
   projectSnapshot,
-  shareLink,
   withGistLink,
   withoutGistLink,
   withSavedGistLink,
@@ -29,7 +28,7 @@ const FILES = [
   { name: 'adder_tb.vhd', content: 'entity adder_tb' },
 ];
 
-const adder = () => newProject('Adder', FILES.map((file) => file.name));
+const adder = () => newProject('Adder', FILES.map((file) => file.name), 'default');
 
 describe('projectSnapshot', () => {
   it('holds the project file first, then the project files', () => {
@@ -141,14 +140,6 @@ describe('opening a project from its gist', () => {
       fetch: offline,
     });
     expect(opened.files).toEqual([FILES[0]]);
-  });
-});
-
-describe('shareLink', () => {
-  it('opens the gist in HDLBoard', () => {
-    expect(shareLink('https://hdlboard.example/app/?project=old#x', LINK)).toBe(
-      'https://hdlboard.example/app/?project=https%3A%2F%2Fgist.github.com%2Fstudent%2Fabc123',
-    );
   });
 });
 

@@ -6,7 +6,7 @@
  * misspelled name was most likely meant to be. Pure.
  */
 
-import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
+import { boardInputNames, boardOutputNames, type BoardIo } from './boardPorts.js';
 
 /** From this length on, a name may be two edits from the board port it was meant to be. */
 const LONG_WORD_LENGTH = 3;
@@ -44,11 +44,11 @@ function nearestBoardPort(name: string, declared: ReadonlySet<string>, candidate
 }
 
 /** The board input a misspelled input was probably meant to be: `SdsW` → `SW`. `declared` is lower case. */
-export function suggestBoardInput(name: string, declared: ReadonlySet<string>): string | undefined {
-  return nearestBoardPort(name, declared, BOARD_INPUT_NAMES);
+export function suggestBoardInput(name: string, declared: ReadonlySet<string>, board: BoardIo): string | undefined {
+  return nearestBoardPort(name, declared, boardInputNames(board));
 }
 
 /** The board output a misspelled output was probably meant to be: `LEDRR` → `LEDR`. `declared` is lower case. */
-export function suggestBoardOutput(name: string, declared: ReadonlySet<string>): string | undefined {
-  return nearestBoardPort(name, declared, BOARD_OUTPUT_NAMES);
+export function suggestBoardOutput(name: string, declared: ReadonlySet<string>, board: BoardIo): string | undefined {
+  return nearestBoardPort(name, declared, boardOutputNames(board));
 }

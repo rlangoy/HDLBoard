@@ -8,12 +8,18 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import './FlatSelect.css';
 
 export interface FlatSelectProps<T extends string> {
   readonly value: T;
   readonly options: readonly T[];
   readonly label: string;
   readonly onChange: (value: T) => void;
+  /** What an option reads as; left out, the option itself (`ns`). */
+  readonly labelOf?: (option: T) => string;
+  /** Added to the root's class, for another look (Settings › Board). */
+  readonly className?: string;
+  readonly disabled?: boolean;
 }
 
 type ListAction = 'open' | 'up' | 'down' | 'pick' | 'close';
@@ -83,9 +89,12 @@ interface OptionListProps<T extends string> {
   readonly value: T;
   readonly active: number;
   readonly onPick: (index: number) => void;
+  readonly labelOf: (option: T) => string;
 }
 
-function OptionList<T extends string>({ id, label, options, value, active, onPick }: OptionListProps<T>) {
+const asItself = <T extends string>(option: T): string => option;
+
+function OptionList<T extends string>({ id, label, options, value, active, onPick, labelOf }: OptionListProps<T>) {
   return (
     <ul className="wv-flat-select__list" id={id} role="listbox" aria-label={label}>
       {options.map((option, index) => (
@@ -99,37 +108,63 @@ function OptionList<T extends string>({ id, label, options, value, active, onPic
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(index)}
         >
-          {option}
+          {labelOf(option)}
         </li>
       ))}
     </ul>
   );
 }
 
+interface SelectButtonProps {
+  readonly text: string;
+  readonly label: string;
+  /** The open list's id, and the id of the option the keys are on; none while it is shut. */
+  readonly listId?: string;
+  readonly activeId?: string;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+}
+
+/** The face of the dropdown: the choice and a chevron. */
+function SelectButton({ text, label, listId, activeId, disabled, onClick }: SelectButtonProps) {
+  return (
+    <button
+      type="button"
+      className="wv-flat-select__button"
+      aria-label={label}
+      aria-haspopup="listbox"
+      aria-expanded={listId !== undefined}
+      aria-controls={listId}
+      aria-activedescendant={activeId}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="wv-flat-select__value">{text}</span>
+      <svg className="wv-flat-select__chevron" viewBox="0 0 10 6" aria-hidden="true">
+        <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 export function FlatSelect<T extends string>(props: FlatSelectProps<T>) {
-  const { value, options, label } = props;
+  const { value, options, label, labelOf = asItself, className, disabled = false } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const { open, active, close, openList, pick, onKeyDown } = useListbox(props);
   useClickOutside(rootRef, open, close);
+  const shown = open && !disabled;
   return (
-    <div className="wv-flat-select" ref={rootRef} onKeyDown={onKeyDown}>
-      <button
-        type="button"
-        className="wv-flat-select__button"
-        aria-label={label}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-activedescendant={open ? `${listId}-${active}` : undefined}
+    <div className={['wv-flat-select', className].filter(Boolean).join(' ')} ref={rootRef} onKeyDown={disabled ? undefined : onKeyDown}>
+      <SelectButton
+        text={labelOf(value)}
+        label={label}
+        listId={shown ? listId : undefined}
+        activeId={shown ? `${listId}-${active}` : undefined}
+        disabled={disabled}
         onClick={() => (open ? close() : openList())}
-      >
-        {value}
-        <svg className="wv-flat-select__chevron" viewBox="0 0 10 6" aria-hidden="true">
-          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && <OptionList id={listId} label={label} options={options} value={value} active={active} onPick={pick} />}
+      />
+      {shown && <OptionList id={listId} label={label} options={options} value={value} active={active} onPick={pick} labelOf={labelOf} />}
     </div>
   );
 }

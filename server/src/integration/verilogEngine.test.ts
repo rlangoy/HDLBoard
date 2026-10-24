@@ -19,6 +19,7 @@ import { icarusForTests } from '../testSupport/icarus.js';
 import { readFixture } from '../testSupport/fixture.js';
 import { makeTempDir } from '../testSupport/sessionDir.js';
 import { setToolPaths } from '../verilog/tools.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 const icarus = icarusForTests();
 
@@ -38,7 +39,7 @@ function newDir(t: TestContext): string {
 }
 
 async function prepare(t: TestContext, files: Files, topFile: string | undefined = files[0]?.name): Promise<PrepareResult> {
-  return verilogEngine.prepare({ dir: newDir(t), files, topFile });
+  return verilogEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile });
 }
 
 const fixtureFile = (name: string) => ({ name, content: readFixture('verilog', name) });
@@ -81,7 +82,7 @@ describe('VerilogEngine.prepare', { skip: icarus.skip }, () => {
 
   test('writes the project’s files and the timescale file into the session directory', async (t) => {
     const dir = newDir(t);
-    await verilogEngine.prepare({ dir, files: [fixtureFile('DE1_SoC.v')], topFile: 'DE1_SoC.v' });
+    await verilogEngine.prepare({ board: DEFAULT_BOARD_IO, dir, files: [fixtureFile('DE1_SoC.v')], topFile: 'DE1_SoC.v' });
     assert.ok(existsSync(join(dir, 'DE1_SoC.v')));
     assert.ok(existsSync(join(dir, '_hdlboard_ts.v')));
   });
@@ -131,7 +132,7 @@ describe('VerilogEngine.prepare', { skip: icarus.skip }, () => {
     const original = { name: 'dup_tb.v', content: displayingTestbench('dup_tb', 'from the original') };
     const copy = { name: 'mytest_tb.v', content: displayingTestbench('dup_tb', 'from my copy') };
     for (const files of [[copy, original], [original, copy]]) {
-      const result = await verilogEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
+      const result = await verilogEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
       assert.ok(result.ok, result.ok ? '' : result.text);
       const output = await batchOutput(result.plan);
       assert.match(output, /from my copy/);
@@ -144,7 +145,7 @@ describe('VerilogEngine.prepare', { skip: icarus.skip }, () => {
       { name: 'dup_tb.v', content: displayingTestbench('dup_tb', 'from the original') },
       { name: 'mytest_tb.v', content: displayingTestbench('dup_tb', 'from my copy') },
     ];
-    const result = await verilogEngine.prepare({ dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
+    const result = await verilogEngine.prepare({ board: DEFAULT_BOARD_IO, dir: newDir(t), files, topFile: 'mytest_tb.v', runTarget: 'dup_tb' });
     assert.ok(result.ok, result.ok ? '' : result.text);
     assert.ok(
       result.plan.messages.includes(

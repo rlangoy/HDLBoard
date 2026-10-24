@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { classifyCompileFailure, extractBanner, parseVersion, standaloneHint, versionWarning } from './diagnostics.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 const BANNER_13 = 'Icarus Verilog version 13.0 (stable) (v13_0)';
 const BANNER_12 = 'Icarus Verilog version 12.0 (stable) ()';
@@ -98,7 +99,7 @@ describe('versionWarning', () => {
 
 describe('standaloneHint', () => {
   test('names the module and the ports a board design must declare', () => {
-    const hint = standaloneHint('leds');
+    const hint = standaloneHint('leds', DEFAULT_BOARD_IO);
     assert.match(hint, /'leds'/);
     assert.match(hint, /CLOCK_50.*SW.*KEY_N.*LEDR.*HEX0_N/);
   });

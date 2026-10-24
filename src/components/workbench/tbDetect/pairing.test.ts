@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { analyzeProject, type SourceFile } from './analyzeProject';
-import { fixtureFile, sourceFile } from './fixtures.testSupport';
+import { fixtureFile, sourceFile, TEST_BOARD_PORTS } from './fixtures.testSupport';
 import { contradictsCode, findPair } from './pairing';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from './types';
 
@@ -13,7 +13,7 @@ const ALU_V = 'module alu (input a, output y);\nassign y = a;\nendmodule\n';
 const aluTb = (name: string) => `module ${name};\nreg a; wire y;\nalu dut (.a(a), .y(y));\ninitial begin #1 $finish; end\nendmodule\n`;
 
 function pairOf(files: SourceFile[], anchor: string, overrides: TestbenchOverrides = EMPTY_OVERRIDES, mru: string[] = []) {
-  return findPair(anchor, analyzeProject(files), overrides, mru);
+  return findPair(anchor, analyzeProject(files, TEST_BOARD_PORTS), overrides, mru);
 }
 
 /** The desktop workspace this came from: adder4_tb tests adder4, but was once paired with keyCouter2Led. */
@@ -145,7 +145,7 @@ describe('a stored pairing the code rules out', () => {
   });
 
   test('contradictsCode: true only when the testbench tests another file and not this one', () => {
-    const project = analyzeProject(STALE);
+    const project = analyzeProject(STALE, TEST_BOARD_PORTS);
     expect(contradictsCode(project, EMPTY_OVERRIDES, 'vhdl/keyCouter2Led.vhdl', 'vhdl/adder4_tb.vhd')).toBe(true);
     expect(contradictsCode(project, EMPTY_OVERRIDES, 'vhdl/adder4.vhd', 'vhdl/adder4_tb.vhd')).toBe(false);
   });
@@ -153,7 +153,7 @@ describe('a stored pairing the code rules out', () => {
   test('a testbench that instantiates nothing the project defines keeps any pairing', () => {
     const files = [STALE[2], sourceFile('vhdl/new_tb.vhd', 'entity new_tb is\nend entity;\narchitecture sim of new_tb is\nbegin\n  process begin wait; end process;\nend architecture;\n')];
     const pairs: TestbenchOverrides = { roles: {}, pairs: { 'vhdl/keyCouter2Led.vhdl': 'vhdl/new_tb.vhd' } };
-    expect(contradictsCode(analyzeProject(files), pairs, 'vhdl/keyCouter2Led.vhdl', 'vhdl/new_tb.vhd')).toBe(false);
+    expect(contradictsCode(analyzeProject(files, TEST_BOARD_PORTS), pairs, 'vhdl/keyCouter2Led.vhdl', 'vhdl/new_tb.vhd')).toBe(false);
     expect(pairOf(files, 'vhdl/keyCouter2Led.vhdl', pairs).tb?.fileId).toBe('vhdl/new_tb.vhd');
   });
 });

@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { explainUnconnectedPorts, planExtraPorts, unconnectedPorts, type TopSource } from './extraPorts.js';
 import { portDeclarations } from './vhdlPorts.js';
+import { DEFAULT_BOARD_IO } from './boardPorts.js';
+import { DE1_SOC_BOARD_IO } from '../testSupport/boards.js';
 
 function topOf(content: string, entityName = 'top'): TopSource {
   const ports = new Set(portDeclarations(content, entityName).map((port) => port.name.toLowerCase()));
-  return { fileName: 'top.vhdl', content, entityName, ports };
+  return { fileName: 'top.vhdl', content, entityName, ports, board: DEFAULT_BOARD_IO };
 }
 
 const EXTRAS = topOf(`entity top is
@@ -108,5 +110,26 @@ describe('explainUnconnectedPorts', () => {
 
   test('keeps GHDL\'s own text when the port cannot be found in the top file', () => {
     assert.equal(explainUnconnectedPorts(GHDL_OPEN_SDSW, { ...TYPO, content: 'entity DE1_SoC is end;' }), undefined);
+  });
+});
+
+describe('extra ports on the DE1-SoC board', () => {
+  test('KEY_N is an extra input there, held at 0, and is pointed at KEY', () => {
+    const content = `entity top is
+  port (
+    KEY_N : in  std_logic_vector(3 downto 0);
+    LEDR  : out std_logic_vector(9 downto 0)
+  );
+end entity;`;
+    const top = { ...topOf(content), board: DE1_SOC_BOARD_IO };
+    const plan = planExtraPorts(top);
+    assert.deepEqual(plan.tiedInputs, [{ name: 'KEY_N', value: "(others => '0')" }]);
+    assert.equal(plan.warnings.length, 1);
+    assert.match(plan.warnings[0], /`KEY_N` \(top\.vhdl, line 3\) is not a board input — did you mean `KEY`\?/);
+  });
+
+  test('KEY is a board port there', () => {
+    const top = { ...topOf('entity top is port (KEY : in std_logic_vector(3 downto 0)); end entity;'), board: DE1_SOC_BOARD_IO };
+    assert.deepEqual(planExtraPorts(top), { tiedInputs: [], warnings: [] });
   });
 });

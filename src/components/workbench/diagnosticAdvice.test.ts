@@ -58,15 +58,20 @@ describe('§ 6.2 false-positive guards (Rule B)', () => {
   });
 
   test('a signal declared in the same file is never "corrected"', () => {
-    const snapshot = snapshotOf('signal busy : bit;\n    q <= busy + 1');
-    expect(headlineFor(snapshot, errorAt(snapshot, { line: 2, word: 'busy' }))).toBeUndefined();
+    const snapshot = snapshotOf('signal procss : bit;\n    q <= procss + 1');
+    expect(headlineFor(snapshot, errorAt(snapshot, { line: 2, word: 'procss' }))).toBeUndefined();
   });
 
   test('the same word undeclared is (the declaration is what keeps it quiet)', () => {
-    const snapshot = snapshotOf('    q <= busy + 1');
-    expect(headlineFor(snapshot, errorAt(snapshot, { line: 1, word: 'busy' }))).toBe(
-      '`busy` is not a VHDL keyword — did you mean `bus`?',
+    const snapshot = snapshotOf('    q <= procss + 1');
+    expect(headlineFor(snapshot, errorAt(snapshot, { line: 1, word: 'procss' }))).toBe(
+      '`procss` is not a VHDL keyword — did you mean `process`?',
     );
+  });
+
+  test('busy, undeclared, is never "corrected" to the rarely written bus', () => {
+    const snapshot = snapshotOf('    q <= busy + 1');
+    expect(headlineFor(snapshot, errorAt(snapshot, { line: 1, word: 'busy' }))).toBeUndefined();
   });
 
   test('two equally near keywords give no advice', () => {

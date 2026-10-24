@@ -210,7 +210,7 @@ export function FileExplorer({
           <UploadIcon className="wb-files__action-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Upload File</span>
         </button>
-        <button type="button" className="wb-files__new" onClick={onNewFile} title="New File">
+        <button type="button" className="wb-files__new" onClick={onNewFile} title="Create a new project or add a new file">
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
           <span className="wb-files__label-text">New File</span>
         </button>

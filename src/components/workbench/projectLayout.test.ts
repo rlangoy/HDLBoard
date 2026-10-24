@@ -35,7 +35,7 @@ function folder(files: Record<string, string>) {
 }
 
 function project(overrides: Partial<OpenProject> = {}): OpenProject {
-  return { ...newProject('Fantasic Leds', []), fileName: 'fantasicleds.hdlboard.json', ...overrides };
+  return { ...newProject('Fantasic Leds', [], 'default'), fileName: 'fantasicleds.hdlboard.json', ...overrides };
 }
 
 describe('where the files go (docs/impl_project_structure.md § 6.1, § 6.3)', () => {
@@ -64,7 +64,7 @@ describe('where the files go (docs/impl_project_structure.md § 6.1, § 6.3)', (
   });
 
   it('starts a new project with src', () => {
-    expect(newProject('x', []).sourceDirectory).toBe('src');
+    expect(newProject('x', [], 'default').sourceDirectory).toBe('src');
   });
 });
 
@@ -274,7 +274,7 @@ describe('the Default project: the workspace when no other project is open', () 
   ];
 
   it('is "Default", with no description and its files in src', () => {
-    const p = defaultProject(files);
+    const p = defaultProject(files, 'default');
     const json = JSON.parse(projectFileText(p, files.map((f) => f.name)));
     expect([json.name, json.description, json.sourceDirectory, json.projectDirectory]).toEqual(['Default', '', 'src', 'default']);
     expect(json.files.map((f: { name: string }) => f.name)).toEqual(['DE1_SoC.vhdl', 'DE1_SoC.v']);
@@ -282,7 +282,7 @@ describe('the Default project: the workspace when no other project is open', () 
   });
 
   it('is downloaded as "Not set yet" while its description is empty, and keeps one it was given', () => {
-    const p = defaultProject(files);
+    const p = defaultProject(files, 'default');
     const names = files.map((f) => f.name);
     expect(JSON.parse(projectFileText(withDescriptionForDownload(p), names)).description).toBe('Not set yet');
     expect(JSON.parse(projectFileText(withDescriptionForDownload({ ...p, description: 'Mine' }), names)).description).toBe('Mine');
@@ -290,12 +290,12 @@ describe('the Default project: the workspace when no other project is open', () 
   });
 
   it('describes the start-up files DE1_SoC.vhdl and DE1_SoC.v', () => {
-    const rows = projectEntries(defaultProject(files), files.map((f) => f.name));
+    const rows = projectEntries(defaultProject(files, 'default'), files.map((f) => f.name));
     expect(rows.map((row) => row.description)).toEqual(['Displays the switch states on the LEDs', 'Displays the switch states on the LEDs']);
   });
 
   it('keeps the descriptions of a project just closed', () => {
-    const rows = projectEntries(defaultProject([...files, { name: 'a.vhd', content: '' }], { 'a.vhd': 'Mine', 'de1_soc.v': 'Edited' }), [
+    const rows = projectEntries(defaultProject([...files, { name: 'a.vhd', content: '' }], 'default', { 'a.vhd': 'Mine', 'de1_soc.v': 'Edited' }), [
       'DE1_SoC.vhdl',
       'DE1_SoC.v',
       'a.vhd',
@@ -304,14 +304,14 @@ describe('the Default project: the workspace when no other project is open', () 
   });
 
   it('reads as saved until something changes', () => {
-    const p = defaultProject(files);
+    const p = defaultProject(files, 'default');
     expect(hasUnsavedChanges(p, files)).toBe(false);
     expect(hasUnsavedChanges(p, [...files, { name: 'and_gate.vhd', content: '' }])).toBe(true);
     expect(hasUnsavedChanges(p, [{ ...files[0], content: 'edited' }, files[1]])).toBe(true);
   });
 
   it('takes in an example or a dropped file at once', () => {
-    const p = defaultProject(files);
+    const p = defaultProject(files, 'default');
     const json = JSON.parse(projectFileText(p, [...files.map((f) => f.name), 'and_gate.vhd']));
     expect(json.files.map((f: { name: string }) => f.name)).toContain('and_gate.vhd');
   });

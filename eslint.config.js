@@ -19,6 +19,17 @@ const NEW_CODE = [
   // The waveform view saved in the project file (docs/imp_wave_rearange.md § 11).
   'src/project/waveViews.ts',
   'src/components/workbench/useProjectWaveViews.ts',
+  // Configurable board port names (docs/board_io_config_spec.md).
+  'src/boards/**/*.ts',
+  'src/components/workbench/useBoards.ts',
+  'src/components/workbench/useBoardChange.ts',
+  'src/components/workbench/BoardChangeDialog.tsx',
+  'src/components/workbench/BoardIoPanel.tsx',
+  'src/components/workbench/BoardSetting.tsx',
+  'src/components/workbench/boardText.ts',
+  'src/components/workbench/helpSignals.ts',
+  'src/components/workbench/regExpText.ts',
+  'src/components/workbench/boardUi.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

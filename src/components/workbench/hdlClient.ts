@@ -18,8 +18,13 @@ import { patternToSegments, type SegmentVector } from '../SevenSegment';
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
 import type { RunWaveStatus, WaveFormat } from '../waveform/model';
+import { BOARD_VERB, encodeBoardFrame } from '../../boards/boardFrame';
+import type { BoardPorts } from '../../boards/types';
 
-const PROTOCOL_VERSION = '1';
+// 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version is informational.
+const PROTOCOL_VERSION = '2';
+/** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
+const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
 const STATE_LENGTH = 10 + 6 * 7;
 
 export interface HdlClientHandlers {
@@ -29,6 +34,11 @@ export interface HdlClientHandlers {
   onError(stage: string, text: string): void;
   onDone(reason: string): void;
   onClosed(): void;
+  /**
+   * The backend does not know the BOARD frame, so it simulates with the Default names.
+   * Called once per connection; no more BOARD frames are sent on it.
+   */
+  onOldBackend?(): void;
   /** The waveform frames (docs/waveform_viewer_spec.md § 7.4); omitted, they are ignored. */
   wave?: WaveClientHandlers;
 }
@@ -141,6 +151,8 @@ export class HdlClient {
   private everReady = false;
   // Binary frames are only valid between WAVE-BEGIN and WAVE-END (waveform spec § 7.4).
   private waveTransfer = false;
+  // False once this connection's backend has said it does not know BOARD (an older backend).
+  private backendKnowsBoard = true;
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -152,6 +164,7 @@ export class HdlClient {
       return this.ws;
     }
     this.everReady = false;
+    this.backendKnowsBoard = true;
     const ws = new WebSocket(this.url);
     // Waveform content arrives as binary frames; an ArrayBuffer goes straight to the worker.
     ws.binaryType = 'arraybuffer';
@@ -200,7 +213,8 @@ export class HdlClient {
         this.handlers.onLog(body);
         break;
       case 'ERROR':
-        this.handlers.onError(inline, body);
+        if (this.isOldBackendAnswer(inline, body)) this.noteOldBackend();
+        else this.handlers.onError(inline, body);
         break;
       case 'DONE':
         this.handlers.onDone(inline);
@@ -217,6 +231,17 @@ export class HdlClient {
         // Unknown verb: ignore, per § 6.2 — never disconnect on this.
         break;
     }
+  }
+
+  /** `ERROR protocol` about the BOARD verb: the backend predates it, and the RUN that follows still runs. */
+  private isOldBackendAnswer(stage: string, text: string): boolean {
+    return stage === 'protocol' && text.includes(UNKNOWN_BOARD_VERB);
+  }
+
+  private noteOldBackend(): void {
+    if (!this.backendKnowsBoard) return;
+    this.backendKnowsBoard = false;
+    this.handlers.onOldBackend?.();
   }
 
   private handleBinary(data: unknown): void {
@@ -252,16 +277,18 @@ export class HdlClient {
    * (the file currently marked as top in the Files panel), is sent as
    * `RUN`'s inline arg so the backend elaborates that file's design
    * rather than guessing from board-port matches — see `portDetect.ts`'s
-   * `findTopEntity`.
+   * `findTopEntity`. `board`'s port names go in a BOARD frame just before the RUN.
    */
-  run(files: VhdlFile[], topFileName?: string, runTarget?: string | null, recordWave?: boolean): void {
+  run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, recordWave: boolean, board: BoardPorts): void {
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = runHeader(topFileName, runTarget);
     const send = () => {
       // WAVE goes right before the RUN it is for (docs/waveform_viewer_spec.md § 7.1).
-      if (recordWave !== undefined) ws.send(`WAVE ${recordWave ? 'on' : 'off'}`);
+      ws.send(`WAVE ${recordWave ? 'on' : 'off'}`);
+      // BOARD too: settings for the next run, sent before every RUN, so a reconnect needs no state.
+      if (this.backendKnowsBoard) ws.send(encodeBoardFrame(board));
       ws.send(`${head}\n${body}`);
     };
     // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.

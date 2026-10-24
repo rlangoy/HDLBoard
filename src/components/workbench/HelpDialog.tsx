@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { sevenSegmentPattern } from '../../boards/boardPorts';
+import type { BoardDefinition } from '../../boards/types';
 import { Dialog } from './Dialog';
 import { CHEAT_SHEET, GUIDES, REFERENCES, type HelpResource } from './helpResources';
+import { signalRows, usesActiveLowSuffix } from './helpSignals';
 import './HelpDialog.css';
 
 export interface HelpDialogProps {
   open: boolean;
   onClose: () => void;
+  /** The active board: the signal table and the samples use its names. */
+  board: BoardDefinition;
 }
 
 /** A book with a question mark, drawn to sit in the dialog's white badge. */
@@ -20,54 +25,6 @@ function HelpIcon() {
     </svg>
   );
 }
-
-interface SignalRow {
-  port: string;
-  dir: 'in' | 'out';
-  panel: string;
-  meaning: string;
-}
-
-/** The DE1_SoC entity's ports, in the order the starter file declares them. */
-const SIGNALS: SignalRow[] = [
-  {
-    port: 'CLOCK_50',
-    dir: 'in',
-    panel: 'Runs by itself',
-    meaning: "The board's 50 MHz clock. There is no widget for it.",
-  },
-  {
-    port: 'CLOCK_500Hz',
-    dir: 'in',
-    panel: 'Runs by itself',
-    meaning:
-      'Simulator only: a ready-divided 500 Hz clock, handy for counters and blinking LEDs. Not a pin on the real board.',
-  },
-  {
-    port: 'SW[9:0]',
-    dir: 'in',
-    panel: 'Switches',
-    meaning: "Ten slide switches. Up reads '1', down reads '0'.",
-  },
-  {
-    port: 'KEY_N[3:0]',
-    dir: 'in',
-    panel: 'Pushbuttons',
-    meaning: "Four pushbuttons, active low: released reads '1', pressed reads '0'.",
-  },
-  {
-    port: 'LEDR[9:0]',
-    dir: 'out',
-    panel: 'LEDs',
-    meaning: "Ten red LEDs. Drive a bit to '1' to light its LED.",
-  },
-  {
-    port: 'HEXn_N[6:0]',
-    dir: 'out',
-    panel: '7-Segment Displays',
-    meaning: "Six displays, HEX0_N to HEX5_N, seven bits each, active low: a '0' lights a segment.",
-  },
-];
 
 /**
  * The board's own segment numbering (bit 0 = top … bit 6 = middle), the
@@ -128,10 +85,14 @@ function ResourceLink({ resource, rank }: { resource: HelpResource; rank?: numbe
 
 /**
  * Help: first, what the board's signal names mean — the part that trips up
- * every newcomer (`KEY_N`, `HEXn_N`, `[3:0]`) — then a short, curated list
- * of places to learn VHDL. The links are data in `helpResources.ts`.
+ * every newcomer (`KEY_N`, `HEXn`, `[3:0]`), in the active board's names — then a
+ * short, curated list of places to learn VHDL. The links are data in `helpResources.ts`.
  */
-export function HelpDialog({ open, onClose }: HelpDialogProps) {
+export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
+  const { ports, labels } = board;
+  const [firstDisplay] = ports.sevenSegment;
+  const lastDisplay = ports.sevenSegment[ports.sevenSegment.length - 1];
+  const displayPattern = sevenSegmentPattern(ports.sevenSegment);
   return (
     <Dialog
       open={open}
@@ -148,16 +109,16 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
         </h3>
         <p className="wb-dialog__lead">
           Your top-level entity (VHDL) or module (Verilog), for example{' '}
-          <code>DE1_SoC</code>, talks to the board through the ports below. They are the DE1-SoC&rsquo;s own names, with a
-          couple of course conventions. Declare only the ones you use &mdash;
+          <code>DE1_SoC</code>, talks to the board through the ports below. They are the {board.name} board&rsquo;s names
+          (Settings &rsaquo; Board). Declare only the ones you use &mdash;
           every port is optional &mdash; and remember that VHDL ignores case,
-          so <code>ledr</code> and <code>LEDR</code> are the same port (HDLBoard
+          so <code>{ports.leds.toLowerCase()}</code> and <code>{ports.leds}</code> are the same port (HDLBoard
           matches the names without regard to case for Verilog too).
         </p>
 
         <div className="wb-help__tablewrap">
           <table className="wb-help__table">
-            <caption className="wb-help__sr">Ports of the DE1_SoC entity</caption>
+            <caption className="wb-help__sr">Ports of the top-level entity on the {board.name} board</caption>
             <thead>
               <tr>
                 <th scope="col">Port</th>
@@ -167,7 +128,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               </tr>
             </thead>
             <tbody>
-              {SIGNALS.map((s) => (
+              {signalRows(board).map((s) => (
                 <tr key={s.port}>
                   <th scope="row">
                     <code>{s.port}</code>
@@ -185,25 +146,28 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
 
         <h4 className="wb-help__subheading">Reading the names</h4>
         <dl className="wb-help__terms">
+          {usesActiveLowSuffix(board) && (
+            <div className="wb-help__term">
+              <dt>
+                <code>_N</code>
+              </dt>
+              <dd>
+                <strong>Active low</strong> &mdash; N for &ldquo;negative&rdquo;. The signal is
+                &ldquo;on&rdquo; when it is <code>&apos;0&apos;</code>. So a released <code>{ports.pushbuttons}</code>{' '}
+                button reads <code>&apos;1&apos;</code> and a pressed one <code>&apos;0&apos;</code>, and{' '}
+                <code>{firstDisplay} &lt;= (others =&gt; &apos;1&apos;)</code> turns a display off.
+              </dd>
+            </div>
+          )}
           <div className="wb-help__term">
             <dt>
-              <code>_N</code>
+              <code>{displayPattern}</code>
             </dt>
             <dd>
-              <strong>Active low</strong> &mdash; N for &ldquo;negative&rdquo;. The signal is
-              &ldquo;on&rdquo; when it is <code>&apos;0&apos;</code>. So a released <code>KEY_N</code>{' '}
-              button reads <code>&apos;1&apos;</code> and a pressed one <code>&apos;0&apos;</code>, and{' '}
-              <code>HEX0_N &lt;= (others =&gt; &apos;1&apos;)</code> turns a display off.
-            </dd>
-          </div>
-          <div className="wb-help__term">
-            <dt>
-              <code>HEXn</code>
-            </dt>
-            <dd>
-              The <code>n</code> is the display number, 0 to 5. <code>HEX0_N</code> is the
-              rightmost display and <code>HEX5_N</code> the leftmost. Each is its own 7-bit
-              port &mdash; there is no single 42-bit vector.
+              The <code>n</code> is the display number, 0 to 5. <code>{firstDisplay}</code> is the
+              rightmost display and <code>{lastDisplay}</code> the leftmost. Each is its own 7-bit
+              port &mdash; there is no single 42-bit vector. The keys and the displays are active low on every board:
+              a pressed key reads <code>&apos;0&apos;</code>, and a <code>&apos;0&apos;</code> lights a segment.
             </dd>
           </div>
           <div className="wb-help__term">
@@ -212,8 +176,8 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             </dt>
             <dd>
               The bit range, written <code>std_logic_vector(3 downto 0)</code> in VHDL. Bit 0 is the
-              rightmost bit, and <code>KEY_N(0)</code> is <code>KEY0</code>. Likewise{' '}
-              <code>[9:0]</code> is ten bits, <code>SW(0)</code> to <code>SW(9)</code>.
+              rightmost bit, and <code>{ports.pushbuttons}(0)</code> is <code>{labels.pushbuttons}0</code>. Likewise{' '}
+              <code>[9:0]</code> is ten bits, <code>{ports.switches}(0)</code> to <code>{ports.switches}(9)</code>.
             </dd>
           </div>
           <div className="wb-help__term">
@@ -232,7 +196,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           <SegmentFigure />
           <div className="wb-help__seg-text">
             <p>
-              Each bit of <code>HEXn_N</code> drives one segment. The numbering is the board&rsquo;s
+              Each bit of <code>{displayPattern}</code> drives one segment. The numbering is the board&rsquo;s
               own, not the a&ndash;g letters: bit 0 is the top segment, then clockwise round to
               bit 5, and bit 6 is the middle bar. There is no decimal point.
             </p>
@@ -240,18 +204,21 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
               Because it is active low, a <code>&apos;0&apos;</code> lights a segment. To show a
               &ldquo;1&rdquo; you light segments 1 and 2 only, and write the word with bit 6 first:
             </p>
-            <pre className="wb-help__code">HEX0_N &lt;= &quot;1111001&quot;;</pre>
+            <pre className="wb-help__code">{firstDisplay} &lt;= &quot;1111001&quot;;</pre>
           </div>
         </div>
 
         <div className="wb-dialog__callout wb-dialog__callout--info" role="note">
           <p className="wb-dialog__callout-title">Moving to the real board</p>
           <p>
-            On the physical DE1-SoC the pins are called plain <code>KEY</code> and{' '}
-            <code>HEX0</code> to <code>HEX5</code>: the <code>_N</code> is this course&rsquo;s
-            convention, to make the polarity visible. Before you synthesise, drop the suffix (or
-            wrap your entity), and remove <code>CLOCK_500Hz</code>, which exists only in the
-            simulator.
+            {usesActiveLowSuffix(board) && (
+              <>
+                On the physical DE1-SoC the pins are called plain <code>KEY</code> and <code>HEX0</code> to{' '}
+                <code>HEX5</code>: the <code>_N</code> is a course convention, to make the polarity visible. Choose{' '}
+                <strong>DE1-SoC</strong> in Settings &rsaquo; Board, and HDLBoard renames the ports for you.{' '}
+              </>
+            )}
+            Before you synthesise, remove <code>{ports.clock500Hz}</code>, which exists only in the simulator.
           </p>
         </div>
       </section>

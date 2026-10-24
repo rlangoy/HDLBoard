@@ -101,15 +101,6 @@ export function isSomeoneElses(link: GistLink | undefined, userLogin: string | n
   return link !== undefined && userLogin !== null && link.ownerLogin !== '' && link.ownerLogin.toLowerCase() !== userLogin.toLowerCase();
 }
 
-/** A link that opens the project in HDLBoard for anyone who has it (`?project=`, docs/PROJECTS.md). */
-export function shareLink(pageUrl: string, link: Pick<GistLink, 'htmlUrl'>): string {
-  const page = new URL(pageUrl);
-  page.search = '';
-  page.hash = '';
-  page.searchParams.set('project', link.htmlUrl);
-  return page.toString();
-}
-
 /** "2 files changed, 1 new, 1 deleted", or "no changes". */
 export function describeSavePlan(plan: GistSavePlan): string {
   const count = (kind: string) => plan.changes.filter((change) => change.kind === kind).length;

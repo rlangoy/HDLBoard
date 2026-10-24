@@ -1,0 +1,5 @@
+{
+  "$schema": "./board.schema.json",
+  "version": 1,
+  "boards": []
+}

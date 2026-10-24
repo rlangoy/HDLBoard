@@ -17,7 +17,7 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
-import { BOARD_INPUT_NAMES, BOARD_OUTPUT_NAMES } from './boardPorts.js';
+import { boardInputNames, boardOutputNames, declaresPort, type BoardIo } from './boardPorts.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
 import { sameNameNotes } from './sameNameNotes.js';
 import type { BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './types.js';
@@ -130,15 +130,16 @@ interface BoardTop {
   readonly dir: string;
   readonly top: TopEntity;
   readonly topContent: string;
+  readonly board: BoardIo;
 }
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
-async function prepareBoard({ dir, top, topContent }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
+async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
   // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
   // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
-  const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports };
+  const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports, board };
   const extraPorts = planExtraPorts(source);
-  const testbench = generateTestbench(top.name, top.ports, {
+  const testbench = generateTestbench(top.name, top.ports, board, {
     pacingFromStdin: PACING === 'stdin',
     tiedInputs: extraPorts.tiedInputs,
   });
@@ -156,13 +157,13 @@ async function prepareBoard({ dir, top, topContent }: BoardTop, notes: readonly 
     return failure(
       'elaborate',
       `GHDL elaboration error (check that your entity's port names match the board's — ` +
-        `${[...BOARD_INPUT_NAMES, ...BOARD_OUTPUT_NAMES].join(', ')}):\n${elaborated.err}`,
+        `${[...boardInputNames(board), ...boardOutputNames(board)].join(', ')}):\n${elaborated.err}`,
     );
   }
 
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
-  const timing = boardTimingFor(top.ports.has('clock_50'));
+  const timing = boardTimingFor(declaresPort(top.ports, board.clock50));
   const banner = await ghdlBanner(dir);
   const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...extraPorts.warnings];
   return { ok: true, plan: boardPlan(dir, timing, messages) };
@@ -207,14 +208,14 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
 }
 
 /** Analyses the student's files, then decides how the top runs. */
-async function prepareAnalysed({ dir, files, topFile, runTarget, wave }: PrepareRequest): Promise<PrepareResult> {
+async function prepareAnalysed({ dir, files, topFile, runTarget, wave, board }: PrepareRequest): Promise<PrepareResult> {
   // Every file is analysed before our own port scan, so a genuine syntax error gets
   // GHDL's real diagnosis under `analyze` instead of being intercepted early by
   // `findTopEntity`'s regex heuristic, which runs on source not yet known to be VHDL.
   const analysisErrors = await analyzeToFixedPoint(dir, files);
   if (analysisErrors !== undefined) return failure('analyze', analysisErrors);
 
-  const top = findTopEntity([...files], topFile, runTarget);
+  const top = findTopEntity([...files], board, topFile, runTarget);
   if ('message' in top) return failure('elaborate', top.message);
 
   // The library holds whichever same-named entity was analysed last: analysing the top's
@@ -226,7 +227,7 @@ async function prepareAnalysed({ dir, files, topFile, runTarget, wave }: Prepare
 
   if (top.ports.size === 0) return withWave(await prepareBatch(dir, top.name, notes), wave);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
-  return prepareBoard({ dir, top, topContent }, notes);
+  return prepareBoard({ dir, top, topContent, board }, notes);
 }
 
 /** File names arrive relative to the session directory; GHDL has always been given absolute paths. */

@@ -1,0 +1,71 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* A flat dropdown: no border of its own, a chevron, and a short list below. */
+.wv-flat-select {
+  position: relative;
+  display: inline-flex;
+}
+
+.wv-flat-select__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--wv-tool-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wv-flat-select__button:hover,
+.wv-flat-select__button[aria-expanded='true'] {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.wv-flat-select__button:focus-visible {
+  outline: 2px solid var(--wv-selection);
+  outline-offset: 1px;
+}
+
+.wv-flat-select__chevron {
+  width: 10px;
+  height: 6px;
+}
+
+.wv-flat-select__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  min-width: 64px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--wb-border, #e2e8f0);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.wv-flat-select__list li {
+  padding: 5px 10px;
+  border-radius: 5px;
+  color: var(--wb-text, #0f172a);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wv-flat-select__list li.is-active {
+  background: var(--wb-hover, #eef2f7);
+}
+
+.wv-flat-select__list li[aria-selected='true'] {
+  color: var(--wv-tool-ink);
+  font-weight: 700;
+}

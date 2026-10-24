@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { readFixture } from '../testSupport/fixture.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, parseStubPorts, type Port } from './ports.js';
+import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
 
 describe('moduleNames', () => {
   test('finds a module declaration', () => {
@@ -129,28 +130,28 @@ const port = (name: string, direction: Port['direction'] = 'input', width = 1): 
 
 describe('board detection', () => {
   test('recognises a design that declares board ports', () => {
-    assert.equal(isBoardDesign([port('SW', 'input', 10), port('LEDR', 'output', 10)]), true);
+    assert.equal(isBoardDesign([port('SW', 'input', 10), port('LEDR', 'output', 10)], DEFAULT_BOARD_IO), true);
   });
 
   test('matches board port names case-insensitively', () => {
-    assert.equal(isBoardDesign([port('Clock_50')]), true);
-    assert.equal(isBoardDesign([port('key_n', 'input', 4)]), true);
+    assert.equal(isBoardDesign([port('Clock_50')], DEFAULT_BOARD_IO), true);
+    assert.equal(isBoardDesign([port('key_n', 'input', 4)], DEFAULT_BOARD_IO), true);
   });
 
   test('does not take a testbench with an output of its own for a board design', () => {
-    assert.equal(isBoardDesign([port('done', 'output')]), false);
+    assert.equal(isBoardDesign([port('done', 'output')], DEFAULT_BOARD_IO), false);
   });
 
   test('does not take a design with no ports for a board design', () => {
-    assert.equal(isBoardDesign([]), false);
+    assert.equal(isBoardDesign([], DEFAULT_BOARD_IO), false);
   });
 
   test('does not treat the VHDL-only legacy rst port as a board port', () => {
-    assert.equal(isBoardDesign([port('rst')]), false);
+    assert.equal(isBoardDesign([port('rst')], DEFAULT_BOARD_IO), false);
   });
 
   test('maps each board port to the spelling the design declared', () => {
-    const spellings = boardPortSpellings([port('Clock_50'), port('done', 'output'), port('LEDR', 'output', 10)]);
+    const spellings = boardPortSpellings([port('Clock_50'), port('done', 'output'), port('LEDR', 'output', 10)], DEFAULT_BOARD_IO);
     assert.deepEqual([...spellings.entries()].sort(), [['clock_50', 'Clock_50'], ['ledr', 'LEDR']]);
   });
 });

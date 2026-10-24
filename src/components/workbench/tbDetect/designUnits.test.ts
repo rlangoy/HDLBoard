@@ -4,12 +4,12 @@
 import { describe, expect, test } from 'vitest';
 import { blankSource } from './blank';
 import { designUnits } from './designUnits';
-import { fixture } from './fixtures.testSupport';
+import { fixture, TEST_BOARD_PORTS } from './fixtures.testSupport';
 import type { Language } from './types';
 
 /** docs/impl_split_screen.md § 5.3. */
 
-const units = (language: Language, src: string) => designUnits(language, blankSource(language, src).code);
+const units = (language: Language, src: string) => designUnits(language, blankSource(language, src).code, TEST_BOARD_PORTS);
 
 describe('VHDL units', () => {
   test('two entities in one file, each with its context clause and architecture', () => {

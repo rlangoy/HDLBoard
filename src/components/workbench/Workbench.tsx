@@ -11,15 +11,18 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from 'react';
-import { Board, cx, zeroBits, type BitVector } from '../board';
-import { Leds } from '../Leds';
-import { Pushbuttons } from '../Pushbuttons';
-import { Switches } from '../Switches';
-import {
-  SevenSegmentDisplays,
-  blankSegments,
-  type SegmentVector,
-} from '../SevenSegment';
+import { cx, fillBits, zeroBits, type BitVector } from '../board';
+import { blankSegments, type SegmentVector } from '../SevenSegment';
+import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
+import { foreignBoardNames } from '../../boards/boardMatch';
+import { LED_COUNT, PUSHBUTTON_COUNT, SEVEN_SEGMENT_COUNT, SWITCH_COUNT, boardDesignPortNames } from '../../boards/boardPorts';
+import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
+import { BoardIoPanel } from './BoardIoPanel';
+import { BoardChangeDialog } from './BoardChangeDialog';
+import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog } from './boardText';
+import { useBoards } from './useBoards';
+import { useBoardChange } from './useBoardChange';
+import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { Header } from './Header';
 import { GitHubSplitButton } from './GitHubSplitButton';
 import { AboutDialog } from './AboutDialog';
@@ -33,19 +36,19 @@ import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { ExamplesPane } from './ExamplesPane';
 import { PickerWaitNotice, usePickerWait } from './PickerWait';
-import { copyExample, type Example } from './examples';
+import { copyExample, starterFilesFor, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
 import { PanelToggleIcon } from './icons';
 import { CodeEditor } from './CodeEditor';
 import { EmptyProject } from './EmptyProject';
 import { SimulationCard, type SimStatus } from './SimulationCard';
-import { ConsoleOutput, type ConsoleLine } from './ConsoleOutput';
+import { ConsoleOutput, type ConsoleLine, type ConsoleLink } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
 import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
-import { STARTER_FILES, DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
+import { DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
 import { useWaveformView } from '../waveform/useWaveformView';
@@ -62,6 +65,7 @@ import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editor
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
+import { findUnit } from './tbDetect/analyzeProject';
 import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
@@ -176,6 +180,13 @@ function projectTopFile(files: readonly VhdlFile[]): VhdlFile | undefined {
   return designs.find((f) => !/(^tb_|_tb\.|_tb_|testbench)/i.test(f.name)) ?? designs[0];
 }
 
+/** A fresh workspace: the starter files on the preferred board when `catalog` has it, else on the Default board. */
+function freshWorkspace(catalog: BoardCatalog, preferred: string): { board: BoardDefinition; files: VhdlFile[]; project: OpenProject } {
+  const { board } = findBoard(catalog, preferredBoardIn(catalog, preferred));
+  const files = starterFilesFor(board);
+  return { board, files, project: defaultProject(files, board.id) };
+}
+
 /** An error's message, without Electron's "Error invoking remote method …: Error:" wrapping. */
 function errorText(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -241,7 +252,11 @@ type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
  */
 
 export function Workbench() {
-  const [files, setFiles] = useState<VhdlFile[]>(STARTER_FILES);
+  // The boards available here, and the student's last choice, which a fresh workspace starts on.
+  const catalog = useBoards();
+  const [preferredBoard] = useState(loadPreferredBoard);
+  const [freshStart] = useState(() => freshWorkspace(BUILT_IN_CATALOG, preferredBoard));
+  const [files, setFiles] = useState<VhdlFile[]>(freshStart.files);
   // The file in the editor's focused pane (docs/cleanup_file_tabs.md): the Files
   // highlight, what Ctrl+S saves, and the file the split pairs from.
   const [activeFileId, setActiveFileId] = useState<string | null>(DEFAULT_SHOWN_FILE);
@@ -251,7 +266,7 @@ export function Workbench() {
   // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
   // showed as a static label before this was selectable.
   const [topFileId, setTopFileId] = useState<string | null>(
-    () => STARTER_FILES.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
+    () => freshStart.files.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
   );
   // The top file's unit a pane's Play chose (docs/impl_split_screen.md D20); null = the backend chooses, as always.
   const [topUnit, setTopUnit] = useState<string | null>(null);
@@ -282,7 +297,7 @@ export function Workbench() {
         setTopFileId(ws.topFileId);
         setTopUnit(ws.topUnit ?? null);
         restoreOverridesRef.current(ws.testbench ?? EMPTY_OVERRIDES);
-        setProject(ws.project ?? defaultProject(ws.files));
+        setProject(ws.project ?? defaultProject(ws.files, freshStart.board.id));
       })
       .catch((err: unknown) => console.error('Could not load the saved workspace:', err))
       .finally(() => {
@@ -304,7 +319,9 @@ export function Workbench() {
   const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
-  const [project, setProject] = useState<OpenProject>(() => defaultProject(STARTER_FILES));
+  const [project, setProject] = useState<OpenProject>(freshStart.project);
+  // The open project's board is the active one: what the board panel shows and the simulation uses.
+  const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
   // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
   const [projectGeneration, setProjectGeneration] = useState(0);
   const replaceProject = useCallback((next: OpenProject) => {
@@ -354,8 +371,9 @@ export function Workbench() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimer = useRef<number | null>(null);
 
-  const [sw, setSw] = useState<BitVector>(() => zeroBits(10));
-  const [key, setKey] = useState<BitVector>(() => [1, 1, 1, 1]);
+  const [sw, setSw] = useState<BitVector>(() => zeroBits(SWITCH_COUNT));
+  // Released: the pushbuttons are active low on every board.
+  const [key, setKey] = useState<BitVector>(() => fillBits(PUSHBUTTON_COUNT, 1));
   // Mirrors of sw/key for the HdlClient's handlers to read (below): those
   // handlers are captured once, when the client is lazily constructed, so
   // reading `sw`/`key` directly there would see whatever they were at that
@@ -367,9 +385,9 @@ export function Workbench() {
   // Board outputs are driven by the simulation backend, never by the
   // inputs. Whenever no simulation is running they stay at their blank
   // values (Design_Description.md § 5 convention 11).
-  const [ledState, setLedState] = useState<BitVector>(() => zeroBits(10));
+  const [ledState, setLedState] = useState<BitVector>(() => zeroBits(LED_COUNT));
   const [hexState, setHexState] = useState<SegmentVector[]>(() =>
-    Array.from({ length: 6 }, () => blankSegments()),
+    Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()),
   );
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -412,13 +430,24 @@ export function Workbench() {
   // The ongoing run is to end without its closing messages, because an example was
   // opened and the console now belongs to it (handleOpenExample).
   const quietEnd = useRef(false);
+  // The run still compiling is to stop as soon as it is ready: the server takes Stop only then.
+  const stopWhenReady = useRef(false);
 
-  const appendLog = useCallback((text: string, tone?: ConsoleLine['tone'], action?: ConsoleLine['action']) => {
+  const pushLine = useCallback((line: Omit<ConsoleLine, 'id' | 'time'>) => {
     // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
     logSeq.current += 1;
     const id = logSeq.current;
-    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), text, tone, ...(action ? { action } : {}) }));
+    setLogLines((prev) => appendCapped(prev, { id, time: timestamp(), ...line }));
   }, []);
+  const appendLog = useCallback(
+    (text: string, tone?: ConsoleLine['tone'], action?: ConsoleLine['action']) => pushLine({ text, tone, ...(action ? { action } : {}) }),
+    [pushLine],
+  );
+  /** A line that ends in a link: Undo after a board change, Fix… after a hint. */
+  const logWithLink = useCallback(
+    (text: string, link?: ConsoleLink, tone?: ConsoleLine['tone']) => pushLine({ text, tone, ...(link ? { link } : {}) }),
+    [pushLine],
+  );
 
   // GitHub (docs/GITHUB.md): the sign-in, through this page's backend; the token kept per tab, or by the Windows app.
   const [tokenStore] = useState(gitHubTokenStore);
@@ -435,8 +464,8 @@ export function Workbench() {
   // § 5 convention 11. Used whenever a session isn't actively running —
   // before Start, and after Stop/error/disconnect — never only on mount.
   const blankBoard = useCallback(() => {
-    setLedState(zeroBits(10));
-    setHexState(Array.from({ length: 6 }, () => blankSegments()));
+    setLedState(zeroBits(LED_COUNT));
+    setHexState(Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()));
   }, []);
 
   // One HdlClient per Workbench instance, created lazily on first Start
@@ -505,8 +534,8 @@ export function Workbench() {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
         onReady: () => {
-          // A quiet end asked for while it compiled: the server takes Stop only now.
-          if (quietEnd.current) {
+          // A stop asked for while it compiled: the server takes Stop only now.
+          if (stopWhenReady.current) {
             clientRef.current?.stop();
             return;
           }
@@ -562,6 +591,7 @@ export function Workbench() {
           setStatus('stopped');
           blankBoard();
         },
+        onOldBackend: () => appendLog(BOARD_TEXT.oldBackend, 'error'),
         wave: waveHandlers,
       });
     }
@@ -635,11 +665,21 @@ export function Workbench() {
     if (!isSimulating) makeTop(id);
   };
 
-  /** Ends an ongoing run without its closing messages: now if it runs, as soon as it is ready if it still compiles. */
+  /**
+   * Stops the ongoing run: now if it runs, as soon as it is ready if it still compiles.
+   * Its closing messages are shown as for any stop. A board change stops the run this
+   * way, as it was built with the old names.
+   */
+  const stopRunSoon = () => {
+    if (status === 'compiling') stopWhenReady.current = true;
+    if (status === 'running') getClient().stop();
+  };
+
+  /** Ends an ongoing run without its closing messages. */
   const endRunQuietly = () => {
     if (!isSimulating) return;
     quietEnd.current = true;
-    if (status === 'running') getClient().stop();
+    stopRunSoon();
   };
 
   const handleDownloadFile = (id: string) => {
@@ -704,9 +744,10 @@ export function Workbench() {
   const handleOpenExample = (example: Example) => {
     endRunQuietly();
     setLogLines([]);
-    const { added, kept, openId, descriptions } = copyExample(example, filesRef.current, nextFileId);
+    const { added, kept, openId, descriptions, untranslated } = copyExample(example, filesRef.current, nextFileId, activeBoard);
     for (const f of added) appendLog(`Copied ${f.name} from Examples into ${f.folder}/.`);
     for (const name of kept) appendLog(`${name} is already in your files - kept your copy, unchanged.`);
+    for (const { name, reasons } of untranslated) appendLog(untranslatedLog(name, activeBoard, reasons), 'error');
     setFiles((prev) => [...prev, ...added]);
     // Each copied file joins the project with what its example says it is for.
     setProject((p) => added.reduce((next, f) => withEntryEdited(next, f.name, { description: descriptions[f.name] ?? '' }), p));
@@ -726,11 +767,18 @@ export function Workbench() {
     const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
     setNewTestbenchFor(null);
     const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
-    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newFileContent(name, language);
+    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
     // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
     if (design) tb.setPairOverride(design.id, id);
+  };
+
+  /** A new design with the board's ports; one whose name clashes with a port keeps the Default names, and says why. */
+  const newDesignContent = (name: string, language: NewFileLanguage): string => {
+    const template = newFileContent(name, language, activeBoard);
+    if (template.untranslated) appendLog(untranslatedLog(name, activeBoard, template.untranslated), 'error');
+    return template.text;
   };
 
   // "Create testbench" (§ 4.6): New File, named <stem>_tb (the tb_ prefix is reserved), in the design's language.
@@ -1309,7 +1357,8 @@ export function Workbench() {
     appendLog(`Closed project ${project.name}; Files keeps its files, in the ${DEFAULT_PROJECT_NAME} project.`);
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
-    replaceProject(defaultProject(filesRef.current, descriptions));
+    // The files are in the closed project's names, so the Default project keeps its board.
+    replaceProject(defaultProject(filesRef.current, project.board, descriptions));
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
@@ -1323,7 +1372,8 @@ export function Workbench() {
   // New File > Project: a project listing every file now in Files, shown on the project settings.
   const handleCreateProject = (name: string) => {
     setDialog(null);
-    const created = newProject(name, fileNames);
+    // It lists the files now in Files, which are in the open project's names: its board too.
+    const created = newProject(name, fileNames, project.board);
     saveFolderRef.current = null;
     replaceProject(created);
     setOverlay('project');
@@ -1332,7 +1382,8 @@ export function Workbench() {
 
   // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
   const handleStartProject = () => {
-    const started = startProject(fileNames);
+    // The files it offers are in the open project's names: its board too.
+    const started = startProject(fileNames, project.board);
     saveFolderRef.current = null;
     replaceProject(started);
     setOverlay('project');
@@ -1390,6 +1441,7 @@ export function Workbench() {
   // `runTarget`: the unit to elaborate when the backend must be told (`RUN <file> @<unit>`, D20).
   const startRun = (fileId: string | null, runTarget: string | null = null, unitName: string | null = null) => {
     quietEnd.current = false;
+    stopWhenReady.current = false;
     setLogLines([]);
     stopElapsedTimer();
     setElapsedSeconds(0);
@@ -1407,7 +1459,28 @@ export function Workbench() {
       title: runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench',
       source: runSource(fileId, unitName),
     });
-    getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording);
+    logRunBoard();
+    if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
+    getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording, activeBoard.ports);
+  };
+
+  /** A run's first line names the board, so a screenshot shows which names were expected (§ 3.1). */
+  const logRunBoard = () => {
+    if (boardInstalled) appendLog(runBoardLog(activeBoard));
+    else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => setDialog('settings') });
+  };
+
+  /**
+   * The name-mismatch hint (§ 3.5): the top unit declares ports another installed board
+   * has and the active one does not. It only informs; Fix… offers both ways out.
+   */
+  const hintForeignNames = (topFile: VhdlFile, unitName: string | null) => {
+    const analysis = tb.fileAnalysis(topFile.id);
+    const unit = analysis && (findUnit(analysis, unitName) ?? analysis.units.find((u) => u.hasPorts));
+    const foreign = unit && foreignBoardNames(unit.portNames, catalog, activeBoard);
+    if (!foreign) return;
+    const fix = { label: BOARD_TEXT.fix, onClick: () => boardChange.offerMismatchFix(topFile.name, foreign.board) };
+    logWithLink(mismatchHint(topFile.name, foreign, activeBoard), fix);
   };
 
   /**
@@ -1482,9 +1555,13 @@ export function Workbench() {
 
   const consoleTexts = useMemo(() => logLines.map((line) => line.text), [logLines]);
 
+  // The names that make a unit a board design rather than a testbench follow the active board (§ 6.9).
+  const boardPorts = useMemo(() => boardDesignPortNames(activeBoard), [activeBoard]);
+
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
     files,
+    boardPorts,
     activeFileId,
     setActiveFileId,
     reveal,
@@ -1514,6 +1591,45 @@ export function Workbench() {
   };
 
   restoreOverridesRef.current = tb.restoreOverrides;
+
+  /** The files a board change (or its Undo) made: a renamed file's markers are about text that has changed, as after an edit. */
+  const replaceFilesForBoard = (next: VhdlFile[]) => {
+    const before = new Map(filesRef.current.map((file) => [file.id, file.content]));
+    for (const file of next) if (before.get(file.id) !== file.content) dismissDiagnostics(file.id);
+    setFiles(next);
+  };
+
+  // Changing the board (docs/board_io_config_spec.md § 3.3): from Settings, the project settings, or a mismatch hint.
+  // Not while the project loads or saves, or a run compiles: there is no overlapping state to define.
+  const boardLocked = projectBusy !== null || status === 'compiling';
+  const boardChange = useBoardChange({
+    files,
+    setFiles: replaceFilesForBoard,
+    project,
+    setProject,
+    catalog,
+    stopSimulation: stopRunSoon,
+    reopenSettings: () => setDialog('settings'),
+    log: logWithLink,
+    busy: boardLocked,
+    projectKey: String(projectGeneration),
+  });
+  // Settings closes only for a change that happens: the question takes its place, or the board just changes.
+  const handleBoardChosenInSettings = (id: string) => {
+    if (boardChange.requestBoardChange(id, { fromSettings: true })) setDialog(null);
+  };
+
+  // A fresh start on a board from boards/boards.json: that file arrives after the first
+  // render, and the untouched starter files are then put in the board's names. A run
+  // started before it arrived, even one still compiling, was built with the old names, so it stops.
+  useEffect(() => {
+    const ready = freshWorkspace(catalog, preferredBoard);
+    const untouched = filesRef.current === freshStart.files && project === freshStart.project;
+    if (!untouched || ready.board.id === freshStart.board.id) return;
+    stopRunSoon();
+    setFiles(ready.files);
+    setProject(ready.project);
+  }, [catalog]);
 
   useEffect(() => {
     const save = desktopBridge()?.saveWorkspace;
@@ -1626,6 +1742,10 @@ export function Workbench() {
       <SettingsDialog
         open={dialog === 'settings'}
         onClose={() => setDialog(null)}
+        boards={catalog}
+        boardId={project.board}
+        onBoardChange={handleBoardChosenInSettings}
+        boardLocked={boardLocked}
         preferredLanguages={preferredLanguages}
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
         splitPreference={tb.split.prefs.preference}
@@ -1633,7 +1753,18 @@ export function Workbench() {
         recordWaves={waveView.waveform.recording}
         onRecordWavesChange={waveView.waveform.setRecording}
       />
-      <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
+      <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} board={activeBoard} />
+      {boardChange.pending && (
+        <BoardChangeDialog
+          pending={boardChange.pending}
+          simulating={status === 'running'}
+          onUpdateFiles={boardChange.confirmUpdate}
+          onBoardOnly={boardChange.confirmBoardOnly}
+          onSwitchBoard={(board) => boardChange.requestBoardChange(board.id)}
+          onRenameFiles={boardChange.requestRenameToBoard}
+          onCancel={boardChange.cancel}
+        />
+      )}
       <NoWaveformDialog {...waveView.dialog} />
       <PickerWaitNotice phase={pickerWait.phase} />
       <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
@@ -1821,6 +1952,10 @@ export function Workbench() {
                 unsaved={projectUnsaved}
                 busy={projectBusy}
                 onDetailsChange={(details) => setProject((p) => withDetails(p, details))}
+                boards={catalog}
+                onBoardChange={(id) => boardChange.requestBoardChange(id)}
+                boardLocked={boardLocked}
+                onChooseBoard={() => setDialog('settings')}
                 onEntryChange={(name, patch) => setProject((p) => withEntryEdited(p, name, patch))}
                 onOpenFile={handleOpenProjectFile}
                 onRemoveEntry={(name) => setProject((p) => withEntryRemoved(p, name))}
@@ -1888,7 +2023,7 @@ export function Workbench() {
           <SidePanel
             ids={PANE_IDS.board}
             side="right"
-            title={BOARD_PANE_TITLE}
+            title={boardPaneTitle(BOARD_PANE_TITLE, activeBoard)}
             width={layout.boardWidth}
             collapsed={collapsed.board}
             onCollapse={() => togglePane('board')}
@@ -1902,12 +2037,15 @@ export function Workbench() {
                 ref={boardScalerRef}
                 style={{ transform: `scale(${boardScale})` }}
               >
-                <Board size={24}>
-                  <Leds value={ledState} />
-                  <SevenSegmentDisplays value={hexState} />
-                  <Switches value={sw} onChange={handleSwChange} />
-                  <Pushbuttons value={key} onChange={handleKeyChange} showHint={false} />
-                </Board>
+                <BoardIoPanel
+                  board={activeBoard}
+                  ledState={ledState}
+                  hexState={hexState}
+                  sw={sw}
+                  keys={key}
+                  onSwChange={handleSwChange}
+                  onKeyChange={handleKeyChange}
+                />
               </div>
             </div>
           </SidePanel>

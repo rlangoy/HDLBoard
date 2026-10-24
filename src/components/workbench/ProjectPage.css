@@ -860,3 +860,25 @@ button.wb-project__file:hover {
   min-height: 32px;
   color: var(--wb-text-muted);
 }
+
+/* A project on a board that is not installed here (docs/board_io_config_spec.md § 3.4). */
+.wb-project__board-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.wb-project__text-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--wb-accent);
+  cursor: pointer;
+}
+
+.wb-project__text-btn:hover {
+  text-decoration: underline;
+}

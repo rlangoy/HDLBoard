@@ -14,12 +14,14 @@ import type { WaveformData } from './model';
 import { useWaveTransfers } from './useWaveTransfers';
 import { useWaveWorker } from './useWaveWorker';
 import { withVerilogMemories } from './verilogMemories';
+import { verilogModulesIn } from './verilogModules';
+import { withVerilogStateNames } from './verilogStates';
 import { loadRecordWaves, loadWaveOpenedOnce, saveRecordWaves, saveWaveOpenedOnce } from './wavePrefs';
 import { INITIAL_WAVE_STATE, waveReducer, type WaveState } from './waveState';
 
 /** The run's sources and name, as the viewer needs them after the run. */
 export interface RunInfo {
-  /** The contents of the files the run sent: Verilog memories are found in them. */
+  /** The contents of the files the run sent: Verilog memories and state names are found in them. */
   readonly sources: readonly string[];
   /** The testbench's file name, for the downloaded waveform's name. */
   readonly topFileName: string | undefined;
@@ -58,13 +60,23 @@ function usePrefs() {
   return { recording, setRecording, openedOnce, markOpened };
 }
 
+/**
+ * What the file leaves out and the sources say: Verilog memories, and state names. Only
+ * a VCD can come from Icarus (GHW is GHDL's), and the modules are found once for both.
+ */
+function withSourceDetails(data: WaveformData, sources: readonly string[]): WaveformData {
+  if (data.source.format !== 'vcd') return data;
+  const modules = verilogModulesIn(sources);
+  return withVerilogStateNames(withVerilogMemories(data, modules), modules);
+}
+
 /** `waveGet`: sends `WAVE-GET`; the client is created by the Workbench. */
 export function useWaveform(waveGet: (run: number) => void): Waveform {
   const [state, dispatch] = useReducer(waveReducer, INITIAL_WAVE_STATE);
   const stateRef = useRef(state);
   stateRef.current = state;
   const runInfo = useRef<RunInfo>({ sources: [], topFileName: undefined });
-  const complete = useCallback((data: WaveformData) => withVerilogMemories(data, runInfo.current.sources), []);
+  const complete = useCallback((data: WaveformData) => withSourceDetails(data, runInfo.current.sources), []);
   const worker = useWaveWorker({ dispatch, stateRef, complete });
   const fileName = useCallback(() => runInfo.current.topFileName, []);
   const transfers = useWaveTransfers({ state, stateRef, dispatch, worker, waveGet, fileName });

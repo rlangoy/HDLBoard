@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { newFileContent, newFileName, newFileNameError } from './newFile';
+import { DEFAULT_BOARD } from '../../boards/boardCatalog';
 
 describe('newFileName', () => {
   test('adds the extension of the chosen language', () => {
@@ -50,7 +51,7 @@ describe('newFileContent', () => {
   const BOARD_PORTS = ['CLOCK_50', 'SW', 'KEY_N', 'LEDR', 'HEX0_N', 'HEX1_N', 'HEX2_N', 'HEX3_N', 'HEX4_N', 'HEX5_N'];
 
   test('a VHDL file starts as an entity named after the file with every board port', () => {
-    const content = newFileContent('counter.vhd', 'vhdl');
+    const content = newFileContent('counter.vhd', 'vhdl', DEFAULT_BOARD).text;
     expect(content).toMatch(/^entity counter is$/m);
     expect(content).toMatch(/^architecture rtl of counter is$/m);
     for (const port of BOARD_PORTS) expect(content).toMatch(new RegExp(`^\\s+${port}\\s+:`, 'm'));
@@ -58,7 +59,7 @@ describe('newFileContent', () => {
   });
 
   test('a Verilog file starts as a module named after the file with every board port', () => {
-    const content = newFileContent('counter.v', 'verilog');
+    const content = newFileContent('counter.v', 'verilog', DEFAULT_BOARD).text;
     expect(content).toMatch(/^module counter \(/);
     expect(content).toMatch(/\);\n\nendmodule\n$/);
     for (const port of BOARD_PORTS) expect(content).toMatch(new RegExp(`wire(\\s+\\[\\d+:0\\])?\\s+${port}\\b`));
