@@ -137,6 +137,22 @@ describe('a state register', () => {
     expect(named(`${GROUP}\n  initial state = IDLE;\n  always @(posedge c) if (state <= DONE) state <= RUN;`).kind).toBe('enum');
   });
 
+  it('is not one when it is also written in part: State[0] <= …', () => {
+    expect(named(`${GROUP}\n  initial state = IDLE;\n  always @(posedge c) state[0] <= 1'b1;`).kind).toBe('vector');
+  });
+
+  it('is not one when it is also a concatenation target: {state, f} <= …', () => {
+    expect(named(`${GROUP}\n  initial state = IDLE;\n  always @(posedge c) {state, f} <= 3'b0;`).kind).toBe('vector');
+  });
+
+  it('is not one when it is also written with a compound operator', () => {
+    expect(named(`${GROUP}\n  initial state = IDLE;\n  always @(posedge c) state += 1;`).kind).toBe('vector');
+  });
+
+  it('sees an initial value given in a declaration list: reg [1:0] a, state = 2\'b11', () => {
+    expect(named(`${GROUP}\n  reg [1:0] a, state = 2'b11;\n  initial state = IDLE;`).kind).toBe('vector');
+  });
+
   it('ignores a comparison and a commented-out assignment', () => {
     expect(named(`${GROUP}\n  initial state = IDLE;\n  // state = 2'b11;\n  wire w = state == 2'd3;`).kind).toBe('enum');
   });
@@ -164,7 +180,7 @@ describe('a localparam group', () => {
   const kindWith = (group: string) => signal(withStates(wave(), [MODULE(`${group}\n  initial state = X;\n  initial state = Y;`)]), 'state', 'm').kind;
 
   it('may be unsized', () => expect(kindWith('  localparam X = 0, Y = 1;')).toBe('enum'));
-  it('may be a parameter statement', () => expect(kindWith('  parameter X = 0, Y = 1;')).toBe('enum'));
+  it('is not a parameter statement, whose values an instantiation can change', () => expect(kindWith('  parameter X = 0, Y = 1;')).toBe('vector'));
   it('needs distinct values', () => expect(kindWith('  localparam X = 1, Y = 1;')).toBe('vector'));
   it('needs constant values', () => expect(kindWith('  localparam X = 0, Y = X + 1;')).toBe('vector'));
   it('needs two names in one statement', () => expect(kindWith('  localparam X = 0;\n  localparam Y = 1;')).toBe('vector'));
@@ -182,5 +198,24 @@ describe('a name with characters a pattern would read', () => {
 
   it('is matched only as itself', () => {
     expect(signal(named(), NAME, 'm').kind).toBe('vector');
+  });
+});
+
+describe('a value no state names', () => {
+  const VALUES = ['$timescale 1ns $end', '$scope module m $end', '$var reg 2 ! state [1:0] $end', '$upscope $end', '$enddefinitions $end'];
+  const steps = ['#0', 'bxx !', '#1', 'bzz !', '#2', 'bx1 !', '#3', 'b0 !', '#4', 'bXX !', '#5'];
+  const data = withStates(parseVcd([...VALUES, ...steps].join('\n')), [MODULE(`${GROUP}\n  initial state = IDLE;`)]);
+  const trace = () => {
+    const found = data.traces.get(signal(data, 'state', 'm').trace);
+    if (found === undefined) throw new Error('No trace');
+    return found;
+  };
+
+  it('reads X or Z when every bit is, and keeps mixed bits', () => {
+    expect(valuesOf(data, signal(data, 'state', 'm'))).toEqual(['X', 'Z', 'X1', 'IDLE', 'X']);
+  });
+
+  it('is interned once, however many bit strings read the same', () => {
+    expect(trace().values).toEqual(['X', 'Z', 'X1', 'IDLE']);
   });
 });

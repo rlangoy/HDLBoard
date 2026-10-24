@@ -48,7 +48,11 @@ interface Analysis {
   readonly stateGroups: Map<StateGroup, boolean>;
 }
 
-const PARAMETER_STATEMENT = /\b(?:localparam|parameter)\b\s*(?:signed\b\s*)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?([^;]*);/g;
+/**
+ * `localparam` only: a `parameter` can be given another value where the module is
+ * instantiated (`#(.IDLE(1))`), and the names read from the source would then be wrong.
+ */
+const LOCALPARAM_STATEMENT = /\blocalparam\b\s*(?:signed\b\s*)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?([^;]*);/g;
 const NAMED_VALUE = /^\s*([A-Za-z_]\w*)\s*=\s*(.+?)\s*$/;
 /** `2'd1`, `2'b01`, `4'hA`, `'d3`; the size is optional. */
 const BASED_LITERAL = /^(\d+)?\s*'\s*[sS]?([dDbBhHoO])\s*([0-9a-fA-F_]+)$/;
@@ -60,7 +64,7 @@ const RADIX: Readonly<Record<string, string>> = { d: '', b: '0b', h: '0x', o: '0
  * one before, a condition or `@*`, a case label, a delay, a declaration's type or range.
  * Never `(`, so the comparison in `if (State <= STOP_BIT)` is not taken for an assignment.
  */
-const STATEMENT_START = String.raw`(?<=(?:[;:)\]*\d]|\b(?:begin|else|end|default|assign|reg|wire|logic|integer|initial|always))\s*)`;
+const STATEMENT_START = String.raw`(?<=(?:[;:,)\]*\d]|\b(?:begin|else|end|default|assign|reg|wire|logic|integer|initial|always))\s*)`;
 const CASE_SUBJECT = /\bcase[zx]?\s*\(\s*([A-Za-z_]\w*)\s*\)/g;
 /** A group names at least two states. */
 const MIN_STATES = 2;
@@ -104,7 +108,7 @@ function groupOf(range: string | undefined, rangeEnd: string | undefined, body: 
 
 /** A module with the state groups its `localparam` statements declare. */
 function withGroups(module: VerilogModule): ModuleSource {
-  const groups = [...module.text.matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
+  const groups = [...module.text.matchAll(LOCALPARAM_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
   return { ...module, groups };
 }
 
@@ -172,12 +176,28 @@ interface Reading {
   readonly other: boolean;
 }
 
+/**
+ * Whether `name` is also written some way other than a whole assignment: a part-select
+ * (`State[0] <= x`), a concatenation target (`{State, f} <= y`), a compound operator
+ * (`State += 1`) or a `for` loop. A register written like that is not a state register.
+ */
+function hasOtherWrites(module: ModuleSource, name: string): boolean {
+  const target = `(?<![\\w.$])${escapeForRegExp(name)}`;
+  const otherWrites = [
+    `${target}\\s*\\[[^\\]]*\\]\\s*<?=(?!=)`,
+    `\\{[^{};]*${target}\\b[^{};]*\\}\\s*<?=(?!=)`,
+    `${target}\\s*(?:[-+*/%&|^]|<<<?|>>>?)=`,
+    `\\bfor\\s*\\(\\s*${target}\\s*=`,
+  ];
+  return new RegExp(otherWrites.join('|')).test(module.text);
+}
+
 function readingOf(register: Register): Reading {
   const sources = assignmentsTo(register.module, register.name, register.analysis).map((text) => sourceOf(text, register));
   return {
     groups: sources.flatMap((source) => (source !== 'other' && 'group' in source ? [source.group] : [])),
     registers: sources.flatMap((source) => (source !== 'other' && 'register' in source ? [source.register] : [])),
-    other: sources.length === 0 || sources.includes('other'),
+    other: sources.length === 0 || sources.includes('other') || hasOtherWrites(register.module, register.name),
   };
 }
 
@@ -269,10 +289,21 @@ function stateGroupOf(signal: SignalRef, register: Register): StateGroup | undef
   return fits ? group : undefined;
 }
 
-/** A bit string as the state it names: the name, the bits when no state has that value, `X` when it is unknown. */
+/** A bit string as the state it names: the name; the bits when no state has that value; X or Z when every bit is. */
 function stateName(bits: string, names: ReadonlyMap<bigint, string>): string {
-  if (!/^[01]+$/.test(bits)) return 'X';
-  return names.get(BigInt(`0b${bits}`)) ?? bits;
+  if (/^[01]+$/.test(bits)) return names.get(BigInt(`0b${bits}`)) ?? bits;
+  // All X reads X and all Z reads Z, as for a bit; anything mixed (`X1`) keeps its bits.
+  const [first] = bits;
+  return [...bits].every((bit) => bit === first) ? first : bits;
+}
+
+/** The trace with its values named, interned again: two values can take one name (`XX` and `xx`). */
+function namedTrace(trace: Trace, names: ReadonlyMap<bigint, string>): Trace {
+  const labels = trace.values.map((bits) => stateName(bits, names));
+  const values = [...new Set(labels)];
+  const indexOf = new Map(values.map((label, index) => [label, index] as const));
+  const valueIndex = Uint32Array.from(trace.valueIndex, (index) => indexOf.get(labels[index]) ?? 0);
+  return { ...trace, values, valueIndex };
 }
 
 /** One past the highest trace id: a loop, as spreading a big waveform's ids as arguments overflows the stack. */
@@ -310,7 +341,7 @@ class NamedTraces {
     const trace = this.original.get(id);
     if (existing !== undefined || trace === undefined) return existing ?? id;
     const names = new Map([...group.values].map(([name, value]) => [value, name] as const));
-    this.added.set(this.next, { ...trace, values: trace.values.map((bits) => stateName(bits, names)) });
+    this.added.set(this.next, namedTrace(trace, names));
     this.made.set(key, this.next);
     return this.next++;
   }

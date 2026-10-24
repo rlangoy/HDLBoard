@@ -156,9 +156,15 @@ describe('viewsAfterUndo', () => {
     expect(viewsAfterUndo(record, afterViews, verilog)).toBe(beforeViews);
   });
 
-  it('keeps a view changed since, with the names renamed back', () => {
+  it("keeps a view changed since, its renamed names in the files' own spelling again", () => {
     const changedSince = { counter_tb: { signals: [{ path: 'uut/KEY' }, { path: 'uut/added_after' }] } };
-    expect(viewsAfterUndo(record, changedSince, verilog)).toEqual({ counter_tb: { signals: [{ path: 'uut/KEY_N' }, { path: 'uut/added_after' }] } });
+    expect(viewsAfterUndo(record, changedSince, verilog)).toEqual({ counter_tb: { signals: [{ path: 'uut/key_n' }, { path: 'uut/added_after' }] } });
+  });
+
+  it('renames back a name the change did not rename in any view', () => {
+    const changedSince = { counter_tb: { signals: [{ path: 'uut/KEY' }] }, other_tb: { signals: [{ path: 'dut/HEX0' }] } };
+    const both: BoardChangeRecord<string[]> = { ...record, renames: [...record.renames, { from: 'HEX0_N', to: 'HEX0' }] };
+    expect(viewsAfterUndo(both, changedSince, verilog)?.other_tb.signals).toEqual([{ path: 'dut/HEX0_N' }]);
   });
 });
 

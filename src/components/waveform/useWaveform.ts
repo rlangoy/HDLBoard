@@ -60,8 +60,12 @@ function usePrefs() {
   return { recording, setRecording, openedOnce, markOpened };
 }
 
-/** What the file leaves out and the sources say: Verilog memories, and state names. The modules are found once for both. */
+/**
+ * What the file leaves out and the sources say: Verilog memories, and state names. Only
+ * a VCD can come from Icarus (GHW is GHDL's), and the modules are found once for both.
+ */
 function withSourceDetails(data: WaveformData, sources: readonly string[]): WaveformData {
+  if (data.source.format !== 'vcd') return data;
   const modules = verilogModulesIn(sources);
   return withVerilogStateNames(withVerilogMemories(data, modules), modules);
 }

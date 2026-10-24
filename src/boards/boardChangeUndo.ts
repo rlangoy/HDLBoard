@@ -10,7 +10,7 @@
  * choosing the previous board again is the way back – it renames with the same checks.
  */
 
-import type { SavedWaveViews } from '../project/types';
+import type { SavedWaveSignal, SavedWaveView, SavedWaveViews } from '../project/types';
 import type { PortRename } from './boardPorts';
 import { renameWaveViews, type TestbenchLanguage } from './renamePorts';
 
@@ -45,17 +45,56 @@ export function undoneRenames(renames: readonly PortRename[]): PortRename[] {
   return renames.map(({ from, to }) => ({ from: to, to: from }));
 }
 
+/** Every saved path of a view, the shown signals first: the order `renameWaveViews` keeps. */
+const pathsOf = (view: SavedWaveView | undefined): string[] =>
+  view === undefined ? [] : [...view.signals, ...(view.notShown ?? [])].map((signal) => signal.path);
+
+/**
+ * How the files spelled each name the change renamed, read from the views it renamed,
+ * path by path and segment by segment: `KEY` was `key_n` in a Verilog file that wrote it so.
+ */
+function earlierSpellings(before: SavedWaveViews | undefined, after: SavedWaveViews | undefined): Map<string, string> {
+  const spellings = new Map<string, string>();
+  for (const [testbench, view] of Object.entries(after ?? {})) {
+    const earlier = pathsOf(before?.[testbench]).map((path) => path.split('/'));
+    pathsOf(view).forEach((path, index) =>
+      path.split('/').forEach((segment, at) => {
+        const was = earlier[index]?.[at];
+        if (was !== undefined && was !== segment) spellings.set(segment, was);
+      }),
+    );
+  }
+  return spellings;
+}
+
+/** The views with each segment the change renamed spelled as it was before. */
+function respelled(views: SavedWaveViews | undefined, spellings: ReadonlyMap<string, string>): SavedWaveViews | undefined {
+  if (views === undefined || spellings.size === 0) return views;
+  const respell = (signal: SavedWaveSignal): SavedWaveSignal => ({
+    ...signal,
+    path: signal.path.split('/').map((segment) => spellings.get(segment) ?? segment).join('/'),
+  });
+  return Object.fromEntries(
+    Object.entries(views).map(([testbench, view]) => {
+      const notShown = view.notShown === undefined ? {} : { notShown: view.notShown.map(respell) };
+      return [testbench, { ...view, signals: view.signals.map(respell), ...notShown }];
+    }),
+  );
+}
+
 /**
  * The saved waveform views after Undo. Views left as the change made them are
- * restored exactly – their paths in the files' own spelling, which renaming back could
- * not know (`uut/key_n` written in lower case in a Verilog file). Views the student
- * changed since keep those changes, with the names renamed back.
+ * restored exactly. In views the student changed since, each renamed name gets back the
+ * spelling the files had – which renaming back alone could not know (`uut/key_n`
+ * written in lower case in a Verilog file); a name only added since is renamed back.
  */
 export function viewsAfterUndo<Files>(
   record: BoardChangeRecord<Files>,
   current: SavedWaveViews | undefined,
   languageOf: TestbenchLanguage,
 ): SavedWaveViews | undefined {
-  if (current === record.after.waveViews) return record.before.waveViews;
-  return renameWaveViews(current, undoneRenames(record.renames), languageOf);
+  const { before, after } = record;
+  if (current === after.waveViews) return before.waveViews;
+  const spelledAsBefore = respelled(current, earlierSpellings(before.waveViews, after.waveViews));
+  return renameWaveViews(spelledAsBefore, undoneRenames(record.renames), languageOf);
 }

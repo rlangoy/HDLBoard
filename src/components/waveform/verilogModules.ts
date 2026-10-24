@@ -18,6 +18,11 @@ export interface VerilogModule {
 
 const MODULE = /\bmodule\s+(\w+)[\s\S]*?\bendmodule\b/g;
 
+/** A quick look before the full read: a source without the word `module` (a VHDL file) holds none. */
+const MAY_HOLD_A_MODULE = /\bmodule\b/;
+
 export function verilogModulesIn(sources: readonly string[]): VerilogModule[] {
-  return sources.flatMap((source) => [...blankSource('verilog', source).code.matchAll(MODULE)].map((match) => ({ name: match[1], text: match[0] })));
+  return sources
+    .filter((source) => MAY_HOLD_A_MODULE.test(source))
+    .flatMap((source) => [...blankSource('verilog', source).code.matchAll(MODULE)].map((match) => ({ name: match[1], text: match[0] })));
 }
