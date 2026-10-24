@@ -786,8 +786,19 @@ begin
 end architecture rtl;
 `;
 
-const UART_TX_VHD = `library ieee;
+const UART_TX_VHD = `-- The transmitter's states, in a package so that a testbench can show
+-- them too (UART_Tx_tb copies uut's State into its own signal).
+--   IDLE      : line high, wait for Start and then for BitTimer
+--   START_BIT : '0' on Tx for one bit period
+--   DATA_BITS : the 8 data bits on Tx, LSB first
+--   STOP_BIT  : '1' on Tx for one bit period
+package UART_Tx_pkg is
+    type StateType is (IDLE, START_BIT, DATA_BITS, STOP_BIT);
+end package UART_Tx_pkg;
+
+library ieee;
 use ieee.std_logic_1164.all;
+use work.UART_Tx_pkg.all;
 
 -- Transmits one byte as RS-232 8N1: a frame of 10 bits on the Tx line.
 --   BitIndex 0    : start bit ('0')
@@ -823,11 +834,7 @@ architecture RTL of UART_Tx is
 
     constant CLKS_PER_BIT : positive := CLOCK_FREQ / BAUD_RATE;
 
-    -- IDLE      : line high, wait for Start and then for BitTimer
-    -- START_BIT : '0' on Tx for one bit period
-    -- DATA_BITS : the 8 data bits on Tx, LSB first
-    -- STOP_BIT  : '1' on Tx for one bit period
-    type StateType is (IDLE, START_BIT, DATA_BITS, STOP_BIT);
+    -- The states are in UART_Tx_pkg, at the top of this file.
     signal State : StateType := IDLE;
 
     -- Position of the current bit in the 10-bit frame
@@ -951,6 +958,7 @@ const UART_TX_TB_VHD = `-- Presses KEY0 once so UART_Tx sends 'A' (0x41) as one 
 -- is placed on Tx at the clock edge that ends a BitTimer pulse.
 library ieee;
 use ieee.std_logic_1164.all;
+use work.UART_Tx_pkg.all;
 
 entity UART_Tx_tb is
 end entity UART_Tx_tb;
@@ -969,6 +977,7 @@ architecture sim of UART_Tx_tb is
     signal busy     : std_logic;
     signal complete : std_logic;
     signal sim_done : boolean := false;
+    signal state    : StateType;  -- uut's State, shown with the testbench's signals
 
 begin
 
@@ -989,6 +998,9 @@ begin
 
     -- Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
     start <= not key0_n;
+
+    -- The transmitter's state, read from inside uut (a VHDL-2008 external name).
+    state <= <<signal .UART_Tx_tb.uut.State : StateType>>;
 
     -- Stops once the stimulus is done, so the simulation ends by itself.
     clock_50 <= not clock_50 after CLOCK_PERIOD / 2 when not sim_done;
@@ -1241,12 +1253,13 @@ module UART_Tx_tb;
     localparam CLOCK_PERIOD = 20;         // ns
     localparam [7:0] CHAR_A = 8'h41;      // ASCII 'A'
 
-    reg  clock_50 = 1'b0;
-    reg  key0_n   = 1'b1;  // KEY0, active low
-    wire start;
-    wire tx;
-    wire busy;
-    wire complete;
+    reg        clock_50 = 1'b0;
+    reg        key0_n   = 1'b1;  // KEY0, active low
+    wire       start;
+    wire       tx;
+    wire       busy;
+    wire       complete;
+    wire [1:0] state;            // uut's State, shown with the testbench's signals
 
     UART_Tx #(
         .CLOCK_FREQ(CLOCK_FREQ),
@@ -1263,6 +1276,9 @@ module UART_Tx_tb;
 
     // Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
     assign start = !key0_n;
+
+    // The transmitter's state, read from inside uut (a hierarchical name).
+    assign state = uut.State;
 
     always #(CLOCK_PERIOD / 2) clock_50 = !clock_50;
 

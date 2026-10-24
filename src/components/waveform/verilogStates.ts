@@ -12,7 +12,8 @@
  *     reg [1:0] State = IDLE;  …  State <= START_BIT;
  *
  * becomes an `enum` signal whose values are those names. A register is also a state
- * register when it is assigned another one (`state <= next_state`). Anything else –
+ * register when it is assigned another one: `state <= next_state`, or a testbench's
+ * `assign state = uut.State;`, which follows the instance to its module. Anything else –
  * an expression, a name of a second group – leaves it as bits, so a guess never shows
  * a wrong name. Pure.
  */
@@ -100,23 +101,43 @@ function assignedTo(text: string, name: string): string[] {
   return [...text.matchAll(assignment)].map((match) => match[1].trim());
 }
 
-/** What one right-hand side says about a register: a group it names, another register, or neither. */
-type Source = { readonly group: StateGroup } | { readonly register: string } | 'other';
-
-function sourceOf(rhs: string, module: ModuleSource): Source {
-  if (!IDENTIFIER.test(rhs)) return 'other';
-  const group = module.groups.find((candidate) => candidate.values.has(rhs));
-  return group === undefined ? { register: rhs } : { group };
+/** A register in one module of the sources, with every module to follow instances through. */
+interface Register {
+  readonly module: ModuleSource;
+  readonly name: string;
+  readonly modules: readonly ModuleSource[];
 }
 
-/** The one group every assignment to `name` leads to, following registers it is assigned from. */
-function groupOfRegister(module: ModuleSource, name: string, seen: ReadonlySet<string> = new Set()): StateGroup | undefined {
-  const rhs = assignedTo(module.text, name);
-  if (rhs.length === 0 || seen.has(name)) return undefined;
+/** What one right-hand side says about a register: a group it names, another register, or neither. */
+type Source = { readonly group: StateGroup } | { readonly register: Register } | 'other';
+
+/** `uut.State`, `top.uut.State`: the register a hierarchical name reads, down through the instances. */
+function registerAt(from: Register, path: readonly string[]): Register | undefined {
+  const [label, ...rest] = path;
+  if (rest.length === 0) return { ...from, name: label };
+  const child = instantiated(from.module, label, from.modules);
+  return child === undefined ? undefined : registerAt({ ...from, module: child }, rest);
+}
+
+function sourceOf(rhs: string, register: Register): Source {
+  const path = rhs.split(/\s*\.\s*/);
+  if (!path.every((part) => IDENTIFIER.test(part))) return 'other';
+  const group = path.length === 1 ? register.module.groups.find((candidate) => candidate.values.has(rhs)) : undefined;
+  if (group !== undefined) return { group };
+  const read = registerAt(register, path);
+  return read === undefined ? 'other' : { register: read };
+}
+
+const keyOf = (register: Register) => `${register.module.name}.${register.name}`;
+
+/** The one group every assignment to a register leads to, following the registers it is assigned from. */
+function groupOfRegister(register: Register, seen: ReadonlySet<string> = new Set()): StateGroup | undefined {
+  const rhs = assignedTo(register.module.text, register.name);
+  if (rhs.length === 0 || seen.has(keyOf(register))) return undefined;
   const reached = new Set<StateGroup | undefined>();
-  for (const source of rhs.map((text) => sourceOf(text, module))) {
+  for (const source of rhs.map((text) => sourceOf(text, register))) {
     if (source === 'other') return undefined;
-    reached.add('group' in source ? source.group : groupOfRegister(module, source.register, new Set([...seen, name])));
+    reached.add('group' in source ? source.group : groupOfRegister(source.register, new Set([...seen, keyOf(register)])));
   }
   const [group] = reached;
   return reached.size === 1 ? group : undefined;
@@ -145,9 +166,9 @@ function instantiated(parent: ModuleSource, label: string, modules: readonly Mod
 }
 
 /** The enum a signal shows, or undefined when it is not a state register of a group that fits it. */
-function stateGroupOf(signal: SignalRef, module: ModuleSource): StateGroup | undefined {
+function stateGroupOf(signal: SignalRef, register: Register): StateGroup | undefined {
   if (signal.kind !== 'vector' && signal.kind !== 'logic') return undefined;
-  const group = groupOfRegister(module, signal.name);
+  const group = groupOfRegister(register);
   if (group === undefined || (group.width !== undefined && group.width !== signal.width)) return undefined;
   const fits = [...group.values.values()].every((value) => value < ONE << BigInt(signal.width));
   return fits ? group : undefined;
@@ -190,16 +211,16 @@ interface Walk {
   readonly traces: NamedTraces;
 }
 
-function namedSignal(signal: SignalRef, module: ModuleSource, traces: NamedTraces): SignalRef {
-  const group = stateGroupOf(signal, module);
+function namedSignal(signal: SignalRef, module: ModuleSource, walk: Walk): SignalRef {
+  const group = stateGroupOf(signal, { module, name: signal.name, modules: walk.modules });
   if (group === undefined) return signal;
-  return { ...signal, kind: 'enum', trace: traces.named(signal.trace, group), enumType: { name: signal.name, literals: [...group.values.keys()] } };
+  return { ...signal, kind: 'enum', trace: walk.traces.named(signal.trace, group), enumType: { name: signal.name, literals: [...group.values.keys()] } };
 }
 
 /** The scope with its state registers named, and its instances' below it. */
 function namedScope(scope: Scope, module: ModuleSource | undefined, walk: Walk): Scope {
   const scopes = scope.scopes.map((child) => namedScope(child, module && instantiated(module, child.name, walk.modules), walk));
-  const signals = module === undefined ? scope.signals : scope.signals.map((signal) => namedSignal(signal, module, walk.traces));
+  const signals = module === undefined ? scope.signals : scope.signals.map((signal) => namedSignal(signal, module, walk));
   return { ...scope, scopes, signals };
 }
 

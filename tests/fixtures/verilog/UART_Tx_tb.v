@@ -15,12 +15,13 @@ module UART_Tx_tb;
     localparam CLOCK_PERIOD = 20;         // ns
     localparam [7:0] CHAR_A = 8'h41;      // ASCII 'A'
 
-    reg  clock_50 = 1'b0;
-    reg  key0_n   = 1'b1;  // KEY0, active low
-    wire start;
-    wire tx;
-    wire busy;
-    wire complete;
+    reg        clock_50 = 1'b0;
+    reg        key0_n   = 1'b1;  // KEY0, active low
+    wire       start;
+    wire       tx;
+    wire       busy;
+    wire       complete;
+    wire [1:0] state;            // uut's State, shown with the testbench's signals
 
     UART_Tx #(
         .CLOCK_FREQ(CLOCK_FREQ),
@@ -37,6 +38,9 @@ module UART_Tx_tb;
 
     // Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
     assign start = !key0_n;
+
+    // The transmitter's state, read from inside uut (a hierarchical name).
+    assign state = uut.State;
 
     always #(CLOCK_PERIOD / 2) clock_50 = !clock_50;
 

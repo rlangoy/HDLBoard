@@ -1,5 +1,16 @@
+-- The transmitter's states, in a package so that a testbench can show
+-- them too (UART_Tx_tb copies uut's State into its own signal).
+--   IDLE      : line high, wait for Start and then for BitTimer
+--   START_BIT : '0' on Tx for one bit period
+--   DATA_BITS : the 8 data bits on Tx, LSB first
+--   STOP_BIT  : '1' on Tx for one bit period
+package UART_Tx_pkg is
+    type StateType is (IDLE, START_BIT, DATA_BITS, STOP_BIT);
+end package UART_Tx_pkg;
+
 library ieee;
 use ieee.std_logic_1164.all;
+use work.UART_Tx_pkg.all;
 
 -- Transmits one byte as RS-232 8N1: a frame of 10 bits on the Tx line.
 --   BitIndex 0    : start bit ('0')
@@ -35,11 +46,7 @@ architecture RTL of UART_Tx is
 
     constant CLKS_PER_BIT : positive := CLOCK_FREQ / BAUD_RATE;
 
-    -- IDLE      : line high, wait for Start and then for BitTimer
-    -- START_BIT : '0' on Tx for one bit period
-    -- DATA_BITS : the 8 data bits on Tx, LSB first
-    -- STOP_BIT  : '1' on Tx for one bit period
-    type StateType is (IDLE, START_BIT, DATA_BITS, STOP_BIT);
+    -- The states are in UART_Tx_pkg, at the top of this file.
     signal State : StateType := IDLE;
 
     -- Position of the current bit in the 10-bit frame

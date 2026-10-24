@@ -10,6 +10,7 @@
 -- is placed on Tx at the clock edge that ends a BitTimer pulse.
 library ieee;
 use ieee.std_logic_1164.all;
+use work.UART_Tx_pkg.all;
 
 entity UART_Tx_tb is
 end entity UART_Tx_tb;
@@ -28,6 +29,7 @@ architecture sim of UART_Tx_tb is
     signal busy     : std_logic;
     signal complete : std_logic;
     signal sim_done : boolean := false;
+    signal state    : StateType;  -- uut's State, shown with the testbench's signals
 
 begin
 
@@ -48,6 +50,9 @@ begin
 
     -- Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
     start <= not key0_n;
+
+    -- The transmitter's state, read from inside uut (a VHDL-2008 external name).
+    state <= <<signal .UART_Tx_tb.uut.State : StateType>>;
 
     -- Stops once the stimulus is done, so the simulation ends by itself.
     clock_50 <= not clock_50 after CLOCK_PERIOD / 2 when not sim_done;

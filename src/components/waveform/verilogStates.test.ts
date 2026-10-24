@@ -56,6 +56,11 @@ describe('the UART Tx Testbench (Verilog)', () => {
     expect(valuesOf(named(), state)).toEqual(['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE']);
   });
 
+  it("shows the testbench's copy of uut.State by its state names too", () => {
+    const state = signal(named(), 'state', 'UART_Tx_tb');
+    expect(valuesOf(named(), state)).toEqual(['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE']);
+  });
+
   it('leaves the other registers as bits', () => {
     expect(signal(named(), 'BitIndex', 'UART_Tx_tb', 'uut').kind).toBe('vector');
     expect(signal(named(), 'DataReg', 'UART_Tx_tb', 'uut').kind).toBe('vector');
@@ -105,6 +110,24 @@ describe('a state register', () => {
 
   it('ignores a comparison and a commented-out assignment', () => {
     expect(named(`${GROUP}\n  initial state = IDLE;\n  // state = 2'b11;\n  wire w = state == 2'd3;`).kind).toBe('enum');
+  });
+});
+
+describe('a hierarchical name', () => {
+  const TOP = 'module top;\n  wire [1:0] state;\n  child u1 ();\n  assign state = u1.s;\nendmodule\n';
+  const TOP_WAVE = ['$timescale 1ns $end', '$scope module top $end', '$var wire 2 ! state [1:0] $end', '$upscope $end', '$enddefinitions $end', '#0', 'b1 !'];
+  const kindWith = (child: string) => signal(withVerilogStateNames(parseVcd(TOP_WAVE.join('\n')), [TOP, child]), 'state', 'top').kind;
+
+  it("reads the instance's state register", () => {
+    expect(kindWith(`module child;\n${GROUP}\n  reg [1:0] s = RUN;\nendmodule\n`)).toBe('enum');
+  });
+
+  it("stays bits when the instance's register is not a state register", () => {
+    expect(kindWith("module child;\n  reg [1:0] s = 2'd1;\nendmodule\n")).toBe('vector');
+  });
+
+  it('stays bits when the instance is not in the sources', () => {
+    expect(kindWith(MODULE(GROUP))).toBe('vector');
   });
 });
 
