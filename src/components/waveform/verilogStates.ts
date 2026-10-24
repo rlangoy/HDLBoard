@@ -20,6 +20,7 @@
  * works out is kept in its own `Analysis`, which nothing outlives.
  */
 
+import { escapeForRegExp } from '../workbench/regExpText';
 import type { Scope, SignalRef, Trace, TraceId, WaveformData } from './model';
 import type { VerilogModule } from './verilogModules';
 
@@ -119,18 +120,11 @@ function remembered<K, V>(store: Map<K, V>, key: K, make: () => V): V {
 const storeOf = <V>(stores: Map<ModuleSource, Map<string, V>>, module: ModuleSource): Map<string, V> =>
   remembered(stores, module, () => new Map<string, V>());
 
-/**
- * A name as a pattern that matches it literally. VCD names can hold any character – an
- * escaped identifier such as `\cnt(3) `, a generate scope such as `genblk1[0]` – and a
- * name like that must neither throw nor match other text.
- */
-const escaped = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 /** The right-hand sides of the statements that assign `name`: `name <= x;`, `name = x;`, `reg [1:0] name = x;`. */
 function assignmentsTo(module: ModuleSource, name: string, analysis: Analysis): readonly string[] {
   return remembered(storeOf(analysis.assignments, module), name, () => {
     // The name is looked for first, so the statement-start lookbehind runs only where it is.
-    const assignment = new RegExp(`(?=${escaped(name)})${STATEMENT_START}(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
+    const assignment = new RegExp(`(?=${escapeForRegExp(name)})${STATEMENT_START}(?<![\\w.$])${escapeForRegExp(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
     return [...module.text.matchAll(assignment)].map((match) => match[1].trim());
   });
 }
@@ -208,7 +202,7 @@ function chainOf(start: Register): Chain {
 
 /** The names a module uses as states of `group`: `case (state)`, `state == IDLE`, `IDLE != state`. */
 function stateSubjects(module: ModuleSource, group: StateGroup): string[] {
-  const names = [...group.values.keys()].map(escaped).join('|');
+  const names = [...group.values.keys()].map(escapeForRegExp).join('|');
   const compared = [
     new RegExp(`(?<![\\w.$])([A-Za-z_]\\w*)\\s*[!=]==?\\s*(?:${names})\\b`, 'g'),
     new RegExp(`\\b(?:${names})\\s*[!=]==?\\s*([A-Za-z_]\\w*)\\b`, 'g'),
@@ -253,7 +247,7 @@ function afterParameters(text: string, at: number): number {
 
 /** Whether `parent` has an instance of `module` whose label `labelled` matches. */
 function instantiates(parent: ModuleSource, module: ModuleSource, labelled: RegExp): boolean {
-  return [...parent.text.matchAll(new RegExp(`\\b${escaped(module.name)}\\b`, 'g'))].some((use) =>
+  return [...parent.text.matchAll(new RegExp(`\\b${escapeForRegExp(module.name)}\\b`, 'g'))].some((use) =>
     labelled.test(parent.text.slice(afterParameters(parent.text, (use.index ?? 0) + module.name.length))),
   );
 }
@@ -261,7 +255,7 @@ function instantiates(parent: ModuleSource, module: ModuleSource, labelled: RegE
 /** The module an instance label in `parent` instantiates: `UART_Tx #( … ) uut (`. */
 function instantiated(parent: ModuleSource, label: string, analysis: Analysis): ModuleSource | undefined {
   return remembered(storeOf(analysis.instances, parent), label, () => {
-    const labelled = new RegExp(`^\\s*${escaped(label)}\\s*\\(`);
+    const labelled = new RegExp(`^\\s*${escapeForRegExp(label)}\\s*\\(`);
     return analysis.modules.find((module) => instantiates(parent, module, labelled));
   });
 }
@@ -288,26 +282,35 @@ function nextTraceId(traces: ReadonlyMap<TraceId, Trace>): TraceId {
   return highest + 1;
 }
 
-/** Builds the named traces, one per trace and group (Icarus's aliases share theirs). */
+/** Builds the named traces, one per trace and group (Icarus's aliases share theirs), beside the waveform's own. */
 class NamedTraces {
-  readonly traces: Map<TraceId, Trace>;
   private next: TraceId;
+  private readonly added = new Map<TraceId, Trace>();
   private readonly made = new Map<string, TraceId>();
   private readonly groupIds = new Map<StateGroup, number>();
 
-  constructor(traces: ReadonlyMap<TraceId, Trace>) {
-    this.traces = new Map(traces);
-    this.next = nextTraceId(traces);
+  constructor(private readonly original: ReadonlyMap<TraceId, Trace>) {
+    this.next = nextTraceId(original);
+  }
+
+  /** Whether any trace was named: when none was, the waveform stays as it is. */
+  get namedAny(): boolean {
+    return this.added.size > 0;
+  }
+
+  /** The waveform's traces with the named ones added. */
+  all(): ReadonlyMap<TraceId, Trace> {
+    return new Map([...this.original, ...this.added]);
   }
 
   /** The trace of `id` with its values named after `group`. */
   named(id: TraceId, group: StateGroup): TraceId {
     const key = `${id}/${remembered(this.groupIds, group, () => this.groupIds.size)}`;
     const existing = this.made.get(key);
-    const trace = this.traces.get(id);
+    const trace = this.original.get(id);
     if (existing !== undefined || trace === undefined) return existing ?? id;
     const names = new Map([...group.values].map(([name, value]) => [value, name] as const));
-    this.traces.set(this.next, { ...trace, values: trace.values.map((bits) => stateName(bits, names)) });
+    this.added.set(this.next, { ...trace, values: trace.values.map((bits) => stateName(bits, names)) });
     this.made.set(key, this.next);
     return this.next++;
   }
@@ -338,5 +341,6 @@ export function withVerilogStateNames(data: WaveformData, verilogModules: readon
   const analysis: Analysis = { modules, assignments: new Map(), instances: new Map(), stateGroups: new Map() };
   const walk: Walk = { analysis, traces: new NamedTraces(data.traces) };
   const scopes = data.root.scopes.map((top) => namedScope(top, modules.find((module) => module.name === top.name), walk));
-  return { ...data, root: { ...data.root, scopes }, traces: walk.traces.traces };
+  if (!walk.traces.namedAny) return data;
+  return { ...data, root: { ...data.root, scopes }, traces: walk.traces.all() };
 }

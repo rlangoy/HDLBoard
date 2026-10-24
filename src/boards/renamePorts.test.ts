@@ -243,6 +243,23 @@ describe('planBoardChange and applyBoardChange', () => {
     expect(testbenchLanguageIn(files)('counter_tb')).toBe('vhdl');
   });
 
+  it('knows both views of a testbench written in both languages, as in the UART example', () => {
+    const uart = [
+      { id: 'h', name: 'UART_Tx_tb.vhd', content: 'entity UART_Tx_tb is end entity;' },
+      { id: 'v', name: 'UART_Tx_tb.v', content: 'module UART_Tx_tb; endmodule' },
+    ];
+    const languageOf = testbenchLanguageIn(uart);
+    expect([languageOf('uart_tx_tb'), languageOf('UART_Tx_tb')]).toEqual(['vhdl', 'verilog']);
+  });
+
+  it('is not misled by a quote in a qualified expression before a comment', () => {
+    const files = [
+      { id: 'h', name: 'counter_tb.vhd', content: 'entity counter_tb is end entity;' },
+      { id: 'w', name: 'other.vhd', content: `architecture a of b is begin report character'('"'); -- entity foo is\nend;` },
+    ];
+    expect(testbenchLanguageIn(files)('foo')).toBeUndefined();
+  });
+
   it('cannot tell the language of a testbench both languages declare', () => {
     const both = [
       { id: 'h', name: 'counter_tb.vhd', content: 'entity counter_tb is end entity;' },

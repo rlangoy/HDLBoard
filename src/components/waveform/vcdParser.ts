@@ -208,7 +208,7 @@ export class VcdParser {
     $timescale: (args) => this.setTimescale(args.join('')),
     $scope: (args) => this.tree.enter(args[1] ?? args[0] ?? '', 'instance'),
     $upscope: () => this.tree.leave(),
-    $var: (args) => this.declareVariable(args),
+    $var: (args) => this.declareUnlessParameter(args),
     $comment: (args) => this.headerComment(args),
     $enddefinitions: () => {
       this.phase = 'body';
@@ -230,8 +230,12 @@ export class VcdParser {
     this.tickFs = Number(match[1]) * FS_PER_UNIT[match[2]];
   }
 
-  /** `$var`: a signal. Icarus also records each parameter and localparam, which never change: left out, as GHDL leaves out VHDL constants. */
-  private declareVariable(args: readonly string[]): void {
+  /**
+   * `$var`, unless it is a parameter: Icarus records each parameter and localparam, which
+   * never change, and they are left out, as GHDL leaves out VHDL constants. Kept apart
+   * from `declare`, which is at the complexity limit already.
+   */
+  private declareUnlessParameter(args: readonly string[]): void {
     const [type] = args;
     if (type === 'parameter') return;
     this.declare(args);

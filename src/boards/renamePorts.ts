@@ -19,7 +19,8 @@
 
 import { languageOfName, type Language } from '../components/workbench/fileKinds';
 import { tokenizeSource } from '../components/workbench/highlight';
-import { withoutComments } from '../components/workbench/sourceComments';
+import { escapeForRegExp } from '../components/workbench/regExpText';
+import { blankSource } from '../components/workbench/tbDetect/blank';
 import type { Token } from '../components/workbench/vhdlHighlight';
 import type { SavedWaveSignal, SavedWaveViews } from '../project/types';
 import { DEFAULT_BOARD } from './boardCatalog';
@@ -45,10 +46,6 @@ const NAME_TOKEN_TYPES: ReadonlySet<Token['type']> = new Set(['identifier', 'typ
 interface ReadToken {
   readonly token: Token;
   readonly name?: string;
-}
-
-function escapeForRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** The name a token stands for, if it is a name at all; `previous` tells a VHDL `\extended\` identifier. */
@@ -299,21 +296,24 @@ const VERILOG_MODULE = /\bmodule\s+([A-Za-z_]\w*)/g;
 function declaredUnitsOf(files: readonly RenameableFile[], language: Language): Set<string> {
   const pattern = language === 'vhdl' ? VHDL_ENTITY : VERILOG_MODULE;
   const ofLanguage = files.filter((file) => languageOfName(file.name) === language);
-  const names = ofLanguage.flatMap((file) => [...withoutComments(file.content, language).matchAll(pattern)].map((match) => match[1]));
+  const names = ofLanguage.flatMap((file) => [...blankSource(language, file.content).code.matchAll(pattern)].map((match) => match[1]));
   return new Set(language === 'vhdl' ? names.map((name) => name.toLowerCase()) : names);
 }
 
 /**
  * A saved view's language, from the files: views are kept by the testbench name the
- * simulator wrote (`uart_tx_tb` from GHDL, `UART_Tx_tb` from Icarus). Undefined when
- * neither or both languages declare it.
+ * simulator wrote (`uart_tx_tb` from GHDL, `UART_Tx_tb` from Icarus). GHDL writes every
+ * name in lower case, so a name with a capital is never a VHDL view – the UART example
+ * has `UART_Tx_tb` in both languages, and its Verilog view is still known as Verilog.
+ * Undefined when neither or both languages declare it. The files are read only when a
+ * language is first asked for: a board-only change, which renames nothing, reads none.
  */
 export function testbenchLanguageIn(files: readonly RenameableFile[]): TestbenchLanguage {
-  const vhdl = declaredUnitsOf(files, 'vhdl');
-  const verilog = declaredUnitsOf(files, 'verilog');
+  let units: { readonly vhdl: ReadonlySet<string>; readonly verilog: ReadonlySet<string> } | undefined;
   return (testbench) => {
-    const inVhdl = vhdl.has(testbench.toLowerCase());
-    if (inVhdl === verilog.has(testbench)) return undefined;
+    units ??= { vhdl: declaredUnitsOf(files, 'vhdl'), verilog: declaredUnitsOf(files, 'verilog') };
+    const inVhdl = testbench === testbench.toLowerCase() && units.vhdl.has(testbench);
+    if (inVhdl === units.verilog.has(testbench)) return undefined;
     return inVhdl ? 'vhdl' : 'verilog';
   };
 }

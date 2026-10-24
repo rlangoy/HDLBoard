@@ -74,6 +74,11 @@ describe('the UART Tx Testbench (Verilog)', () => {
     expect(kinds).toEqual(['vector', 'vector']);
   });
 
+  it('leaves the waveform as it is when no register is named, so nothing is copied', () => {
+    const data = uartWave();
+    expect(withStates(data, ["module UART_Tx_tb;\n  localparam A = 0, B = 1;\nendmodule\n"])).toBe(data);
+  });
+
   it('shows the bits without the sources', () => {
     expect(signal(withStates(uartWave(), []), 'State', 'UART_Tx_tb', 'uut').kind).toBe('vector');
   });
