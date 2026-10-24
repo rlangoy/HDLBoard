@@ -11,31 +11,18 @@
  * connections, tie-offs and clock processes vary with the design's ports.
  */
 
-/** One board signal the testbench owns, and what an unconnected output reads as. */
-interface BoardSignal {
-  /** The board's port name, lower case (as in `boardPortSpellings`). */
-  readonly port: string;
-  /** The testbench-side signal it connects to. */
-  readonly signal: string;
-  /** Present for outputs only: the electrically "off" value read when the design lacks the port. */
-  readonly offValue?: string;
-}
+import { boardBindings, type BoardBinding, type BoardIo } from '../engines/boardPorts.js';
 
-const HEX_DISPLAY_COUNT = 6;
-const HEX_DISPLAYS = Array.from({ length: HEX_DISPLAY_COUNT }, (_, index) => index);
 const LED_OFF = "10'b0";
 const SEGMENTS_OFF = "7'h7F"; // active low: all ones is blank
 
-/** In the order the ports are connected and the 52-bit state is assembled. */
-const BOARD_SIGNALS: readonly BoardSignal[] = [
-  { port: 'clock_50', signal: 'clk_sig' },
-  { port: 'clock_500hz', signal: 'clk500_sig' },
-  { port: 'sw', signal: 'sw_sig' },
-  { port: 'key_n', signal: 'key_sig' },
-  { port: 'ledr', signal: 'ledr_sig', offValue: LED_OFF },
-  ...HEX_DISPLAYS.map((index) => ({ port: `hex${index}_n`, signal: `hex${index}_sig`, offValue: SEGMENTS_OFF })),
-];
+/** What a board output reads as when the design lacks it: its electrically "off" value. None for an input. */
+function offValueOf({ role }: BoardBinding): string | undefined {
+  if (role === 'leds') return LED_OFF;
+  return role.startsWith('sevenSegment') ? SEGMENTS_OFF : undefined;
+}
 
+/** `lower-case board name -> the spelling the design declared`, from `boardPortSpellings`. */
 type Spellings = ReadonlyMap<string, string>;
 
 /**
@@ -43,9 +30,9 @@ type Spellings = ReadonlyMap<string, string>;
  * by the spelling it declared (`.Clock_50(clk_sig)`), because Verilog names are
  * case-sensitive.
  */
-export function instantiation(top: string, spellings: Spellings): string {
-  const connections = BOARD_SIGNALS.flatMap(({ port, signal }) => {
-    const declared = spellings.get(port);
+export function instantiation(top: string, spellings: Spellings, board: BoardIo): string {
+  const connections = boardBindings(board).flatMap(({ key, signal }) => {
+    const declared = spellings.get(key);
     return declared === undefined ? [] : [`.${declared}(${signal})`];
   });
   return `  ${top} uut (${connections.join(', ')});`;
@@ -56,10 +43,11 @@ export function instantiation(top: string, spellings: Spellings): string {
  * value, so an unconnected LED or display reads as blank rather than undefined
  * (the Verilog equivalent of `tbTemplate.ts`'s signal defaults).
  */
-export function tieOffs(spellings: Spellings): string[] {
-  return BOARD_SIGNALS.flatMap(({ port, signal, offValue }) =>
-    offValue !== undefined && !spellings.has(port) ? [`assign ${signal} = ${offValue};`] : [],
-  );
+export function tieOffs(spellings: Spellings, board: BoardIo): string[] {
+  return boardBindings(board).flatMap((binding) => {
+    const offValue = offValueOf(binding);
+    return offValue !== undefined && !spellings.has(binding.key) ? [`assign ${binding.signal} = ${offValue};`] : [];
+  });
 }
 
 // --- The fixed sections of the testbench ------------------------------------
@@ -169,28 +157,29 @@ const BOARD_IO = `  // Board I/O: apply at most one queued input line per poll, 
 // --- Assembly ----------------------------------------------------------------
 
 /** The tie-off block, or an empty string when the design declares every output. */
-function tieOffSection(spellings: Spellings): string {
-  const assignments = tieOffs(spellings);
+function tieOffSection(spellings: Spellings, board: BoardIo): string {
+  const assignments = tieOffs(spellings, board);
   if (assignments.length === 0) return '';
   return [TIE_OFF_COMMENT, ...assignments.map((assignment) => `  ${assignment}`)].join('\n');
 }
 
-/** The 50 MHz clock only when the design declares `CLOCK_50`; the 500 Hz clock always. */
-function clockProcesses(spellings: Spellings): string {
-  return [spellings.has('clock_50') ? CLOCK_50_PROCESS : '', CLOCK_500HZ_PROCESS].filter(Boolean).join('\n');
+/** The 50 MHz clock only when the design declares the board's 50 MHz clock; the 500 Hz clock always. */
+function clockProcesses(spellings: Spellings, board: BoardIo): string {
+  const hasClock50 = spellings.has(board.clock50.toLowerCase());
+  return [hasClock50 ? CLOCK_50_PROCESS : '', CLOCK_500HZ_PROCESS].filter(Boolean).join('\n');
 }
 
 /**
  * The complete `hdl_board_tb` module for a design whose top module is `top` and which
- * declares the board ports in `spellings` (from `boardPortSpellings`).
+ * declares the board ports in `spellings` (from `boardPortSpellings`), on `board`.
  */
-export function buildBoardTestbench(top: string, spellings: Spellings): string {
+export function buildBoardTestbench(top: string, spellings: Spellings, board: BoardIo): string {
   const sections = [
     TIMESCALE,
     DECLARATIONS,
-    tieOffSection(spellings),
-    instantiation(top, spellings),
-    clockProcesses(spellings),
+    tieOffSection(spellings, board),
+    instantiation(top, spellings, board),
+    clockProcesses(spellings, board),
     RUNTIME_SETTINGS,
     PACING,
     BOARD_IO,

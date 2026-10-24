@@ -10,6 +10,7 @@
 
 import type { ErrorStage, VhdlFileInput, WaveFormat } from '../protocol.js';
 import type { BatchHandle, RunHandle } from '../runtime.js';
+import type { BoardIo } from './boardPorts.js';
 
 export type Language = 'vhdl' | 'verilog';
 
@@ -86,6 +87,12 @@ export interface PrepareRequest {
   readonly runTarget?: string;
   /** Record a waveform when the design runs as a batch run (§ 7.1); omitted, none is recorded. */
   readonly wave?: WaveRequest;
+  /**
+   * The port names the design is matched against and the testbench connects by
+   * (docs/board_io_config_spec.md § 9). Required, so a caller that forgets it is a
+   * compile error, not a silent fallback to the Default names.
+   */
+  readonly board: BoardIo;
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */

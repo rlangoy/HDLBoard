@@ -32,10 +32,15 @@ import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
+import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
+import type { DecodedBoard } from './boardFrame.js';
 import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile } from './wave/waveTransfer.js';
+
+/** What a `RUN` after an invalid `BOARD` frame is told (docs/board_io_config_spec.md § 8.2). */
+export const RUN_REFUSED_FOR_BOARD = 'RUN refused: the last BOARD frame was not valid.';
 
 /** The files a board testbench exchanges data through, in the session directory. */
 const INPUT_FILE_NAME = 'input.txt';
@@ -190,6 +195,12 @@ export class Session {
   private readonly chooseEngine: (topFile: string | undefined) => SimEngine;
   /** Whether the client asked for waveforms (`WAVE on`); off for a client that never says. */
   private waveRequested = false;
+  /**
+   * The board the next run is for (docs/board_io_config_spec.md § 8.2): the Default names
+   * until a `BOARD` frame arrives, then that board — sticky, like `WAVE` — and `rejected`
+   * after an invalid one, which refuses runs until a valid one arrives.
+   */
+  private board: BoardIo | 'rejected' = DEFAULT_BOARD_IO;
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
   private wave: RunWave | null = null;
   /** Numbers each batch start's waveform; never reused within a session (W10). */
@@ -255,6 +266,11 @@ export class Session {
   /** `WAVE on|off`: whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1). */
   handleWave(on: boolean): void {
     this.waveRequested = on;
+  }
+
+  /** `BOARD`: the port names of the next runs. The caller has already said why an invalid one is invalid. */
+  handleBoard(decoded: DecodedBoard): void {
+    this.board = decoded.ok ? decoded.board : 'rejected';
   }
 
   /**
@@ -360,6 +376,13 @@ export class Session {
     this.state = 'compiling';
     const request = ++this.runRequest;
 
+    // A client that sent a broken board never gets a simulation with names it did not ask for.
+    const board = this.board;
+    if (board === 'rejected') {
+      this.failRun('protocol', RUN_REFUSED_FOR_BOARD);
+      return;
+    }
+
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
     if (refusal !== undefined) {
@@ -367,7 +390,7 @@ export class Session {
       return;
     }
 
-    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget, wave: this.waveRequest() });
+    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (this.destroyed || request !== this.runRequest) return;

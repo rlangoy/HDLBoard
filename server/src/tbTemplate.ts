@@ -23,9 +23,10 @@
  * unconnected output reads as blank rather than undefined (Appendix B).
  */
 
-const TB_ENTITY = 'hdl_board_tb';
+import { boardBindings, declaresPort, LEGACY_RESET_PORT, type BoardIo } from './engines/boardPorts.js';
 
-const HEX_NAMES = ['hex0', 'hex1', 'hex2', 'hex3', 'hex4', 'hex5'] as const;
+const TB_ENTITY = 'hdl_board_tb';
+const RESET_SIGNAL = 'rst_sig';
 
 /** An extra input of the entity, held at a constant: `dummy => (others => '0')`. */
 export interface TiedInput {
@@ -34,16 +35,15 @@ export interface TiedInput {
   readonly value: string;
 }
 
-/** `port =>` associations for whichever of these the entity declares, then the tied inputs. */
-function buildPortMap(ports: ReadonlySet<string>, tied: readonly TiedInput[]): string {
+/**
+ * `port =>` associations for whichever board ports the entity declares, then the tied
+ * inputs. The formal is the board name in lower case (`key_n => key_sig`): VHDL ignores
+ * case, so this connects whatever spelling the entity used.
+ */
+function buildPortMap(ports: ReadonlySet<string>, board: BoardIo, tied: readonly TiedInput[]): string {
   const known: Array<[string, string]> = [
-    ['clock_50', 'clk_sig'],
-    ['clock_500hz', 'clk500_sig'],
-    ['sw', 'sw_sig'],
-    ['key_n', 'key_sig'],
-    ['ledr', 'ledr_sig'],
-    ...HEX_NAMES.map((h): [string, string] => [`${h}_n`, `${h}_sig`]),
-    ['rst', 'rst_sig'],
+    ...boardBindings(board).map((b): [string, string] => [b.key, b.signal]),
+    [LEGACY_RESET_PORT, RESET_SIGNAL],
   ];
   const assocs = known
     .filter(([formal]) => ports.has(formal))
@@ -54,16 +54,16 @@ function buildPortMap(ports: ReadonlySet<string>, tied: readonly TiedInput[]): s
 }
 
 /**
- * `rst` is not a DE1-SoC pin (§ 3.2) — a legacy file that declares it
- * gets it wired from `not KEY_N(0)` when the entity also has `key_n`, so
- * older files still elaborate; with no `key_n` to source it from, it is
- * tied permanently deasserted rather than left floating.
+ * `rst` is not a board pin (§ 3.2) — a legacy file that declares it gets it wired from
+ * the first pushbutton (`not key_sig(0)`) when the entity also has the pushbuttons, so
+ * older files still elaborate; with no pushbuttons to source it from, it is tied
+ * permanently deasserted rather than left floating.
  */
-function buildRstDrive(ports: ReadonlySet<string>): string {
-  if (!ports.has('rst')) return '';
-  return ports.has('key_n')
-    ? "\n  rst_sig <= not key_sig(0);"
-    : "\n  rst_sig <= '0';";
+function buildRstDrive(ports: ReadonlySet<string>, board: BoardIo): string {
+  if (!ports.has(LEGACY_RESET_PORT)) return '';
+  return declaresPort(ports, board.pushbuttons)
+    ? `\n  ${RESET_SIGNAL} <= not key_sig(0);`
+    : `\n  ${RESET_SIGNAL} <= '0';`;
 }
 
 export interface TestbenchOptions {
@@ -90,14 +90,20 @@ export interface TestbenchOptions {
   tiedInputs?: readonly TiedInput[];
 }
 
+/**
+ * The testbench for entity `entityName`, whose ports (lower case) are `ports`, on
+ * `board`. With `DEFAULT_BOARD_IO` the text is byte-for-byte what it was before boards
+ * were configurable (the golden files pin it).
+ */
 export function generateTestbench(
   entityName: string,
   ports: ReadonlySet<string>,
+  board: BoardIo,
   options: TestbenchOptions = {},
 ): string {
-  const portMap = buildPortMap(ports, options.tiedInputs ?? []);
-  const rstDrive = buildRstDrive(ports);
-  const hasClock50 = ports.has('clock_50');
+  const portMap = buildPortMap(ports, board, options.tiedInputs ?? []);
+  const rstDrive = buildRstDrive(ports, board);
+  const hasClock50 = declaresPort(ports, board.clock50);
   const stdinPacing = options.pacingFromStdin === true;
   // The three places the heartbeat process differs between the two pacing
   // sources. The FIFO strings are the original text, verbatim.

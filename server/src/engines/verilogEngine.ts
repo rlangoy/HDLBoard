@@ -25,9 +25,9 @@ import { WAVE_MODULE_FILE_NAME, WAVE_MODULE_NAME, waveModuleSource, wavePlusarg 
 import type { ToolPaths } from '../verilog/toolPaths.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { sameNameNotes, type SameNameDeclarations } from './sameNameNotes.js';
+import type { BoardIo } from './boardPorts.js';
 import type { PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
-const CLOCK_BOARD_NAME = 'clock_50';
 /** Every platform paces through stdin: Verilog can block in `$fgets` on it, and there is no `mkfifo` on Windows. */
 const PACING: RunPlan['pacing'] = 'stdin';
 
@@ -42,6 +42,8 @@ interface Build {
   readonly sources: readonly string[];
   /** Simulator messages to show before the run: the version banner, then compiler warnings. */
   readonly notes: readonly string[];
+  /** The port names the design is matched against and the wrapper connects by. */
+  readonly board: BoardIo;
 }
 
 type Checked =
@@ -136,7 +138,7 @@ function planWave(files: readonly VhdlFileInput[]): Recording {
 }
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
-  const timing = boardTimingFor(boardPortSpellings(ports).has(CLOCK_BOARD_NAME));
+  const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock50.toLowerCase()));
   return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
 }
 
@@ -149,7 +151,7 @@ async function prepareBatch(build: Build, ports: readonly Port[], recording: Rec
   const compiled = await compileVerilog(build.tools, compileRequest(build, build.top, helperExtras(build, recording)));
   if (!compiled.ok) return failure(compiled.failure.stage, compiled.failure.text);
   // A top with ports of its own but none of the board's is told why it is not a board design.
-  const hint = ports.length > 0 ? [standaloneHint(build.top)] : [];
+  const hint = ports.length > 0 ? [standaloneHint(build.top, build.board)] : [];
   const note = recording?.note === undefined ? [] : [recording.note];
   return { ok: true, plan: batchPlan(build, [...build.notes, ...hint, ...compiled.messages, ...note], recording?.wave) };
 }
@@ -167,7 +169,7 @@ function helperExtras(build: Build, recording: Recording | undefined): Extras {
  * wrapper's — the student's code is not the likely cause.
  */
 async function prepareBoard(build: Build, ports: readonly Port[]): Promise<PrepareResult> {
-  writeFileSync(join(build.dir, TESTBENCH_FILE_NAME), buildBoardTestbench(build.top, boardPortSpellings(ports)));
+  writeFileSync(join(build.dir, TESTBENCH_FILE_NAME), buildBoardTestbench(build.top, boardPortSpellings(ports, build.board), build.board));
   const compiled = await compileVerilog(build.tools, compileRequest(build, TESTBENCH_MODULE_NAME, { files: [TESTBENCH_FILE_NAME] }));
   if (compiled.ok) return { ok: true, plan: boardPlan(build, ports, [...build.notes, ...compiled.messages]) };
   const { stage, text } = compiled.failure;
@@ -186,7 +188,7 @@ async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
   return notes;
 }
 
-async function prepare({ dir, files, topFile, runTarget, wave }: PrepareRequest): Promise<PrepareResult> {
+async function prepare({ dir, files, topFile, runTarget, wave, board }: PrepareRequest): Promise<PrepareResult> {
   const checked = checkProject(files, topFile, runTarget);
   if (!checked.ok) return failure(checked.stage, checked.text);
   writeProject(dir, files);
@@ -195,10 +197,10 @@ async function prepare({ dir, files, topFile, runTarget, wave }: PrepareRequest)
   const sameNamed = sameNamedElsewhere(files, checked);
   const sources = checked.sources.filter((name) => !sameNamed.otherFiles.includes(name));
   const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
-  const build: Build = { tools, dir, top: checked.top, sources, notes };
+  const build: Build = { tools, dir, top: checked.top, sources, notes, board };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
-  if (isBoardDesign(ports.ports)) return prepareBoard(build, ports.ports);
+  if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);
   return prepareBatch(build, ports.ports, wave === undefined ? undefined : planWave(compiledFiles(files, checked.sources, sources)));
 }
 

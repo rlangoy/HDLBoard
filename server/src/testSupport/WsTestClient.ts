@@ -19,6 +19,7 @@ import {
   type ServerFrame,
   type VhdlFileInput,
 } from '../protocol.js';
+import type { BoardIo } from '../engines/boardPorts.js';
 import { normalizeState, type BoardState } from './boardState.js';
 
 const PROTOCOL_VERSION = '1';
@@ -68,6 +69,11 @@ export class WsTestClient {
 
   run(files: VhdlFileInput[], topFile?: string, runTarget?: string): void {
     this.sendFrame(runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget });
+  }
+
+  /** `BOARD`: the port names the next runs use (docs/board_io_config_spec.md § 8). */
+  board(io: BoardIo): void {
+    this.sendFrame({ verb: 'BOARD', board: { ok: true, board: io } });
   }
 
   stim(bits: string): void {

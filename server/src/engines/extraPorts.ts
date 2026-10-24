@@ -18,7 +18,7 @@
  */
 
 import type { TiedInput } from '../tbTemplate.js';
-import { BOARD_INPUT_NAMES, BOARD_PORTS } from './boardPorts.js';
+import { boardInputNames, boardPortKeys, type BoardIo } from './boardPorts.js';
 import { suggestBoardInput, suggestBoardOutput } from './boardPortSuggestions.js';
 import { ghdlPosition, portDeclarations, type PortDeclaration } from './vhdlPorts.js';
 
@@ -28,6 +28,8 @@ export interface TopSource {
   readonly entityName: string;
   /** The entity's ports, lower case. */
   readonly ports: ReadonlySet<string>;
+  /** The board the run is for: which ports are board ports, and what a typo was meant to be. */
+  readonly board: BoardIo;
 }
 
 /** What the run does with the top entity's extra ports. */
@@ -45,7 +47,6 @@ export interface ExtraPortPlan {
 const MUST_BE_CONNECTED =
   /^hdl_board_tb\.vhdl:\d+:\d+:error: (?<message>port "(?<name>[^"]+)" of mode (?:IN|INOUT) must be connected)/gim;
 
-const BOARD_PORT_NAMES: ReadonlySet<string> = new Set(BOARD_PORTS);
 const BIT_TYPES: ReadonlySet<string> = new Set(['std_logic', 'std_ulogic', 'bit']);
 const VECTOR_TYPES: ReadonlySet<string> = new Set(['std_logic_vector', 'std_ulogic_vector', 'bit_vector', 'unsigned', 'signed']);
 
@@ -57,7 +58,7 @@ interface ExtraPortWording {
   readonly effect: string;
   /** "To … it, simulate a testbench". */
   readonly verb: string;
-  readonly suggest?: (name: string, declared: ReadonlySet<string>) => string | undefined;
+  readonly suggest?: (name: string, declared: ReadonlySet<string>, board: BoardIo) => string | undefined;
 }
 
 const INPUT_WORDING: ExtraPortWording = {
@@ -77,8 +78,9 @@ const OTHER_PORT_WORDING: ExtraPortWording = { kind: 'port', effect: 'the board 
 const inBackticks = (text: string): string => `\`${text}\``;
 const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-function isBoardPort(port: PortDeclaration): boolean {
-  return BOARD_PORT_NAMES.has(port.name.toLowerCase());
+/** A port of the board, or the legacy `rst` the testbench wires itself. */
+function isBoardPort(port: PortDeclaration, board: BoardIo): boolean {
+  return boardPortKeys(board, { legacyReset: true }).has(port.name.toLowerCase());
 }
 
 /** The constant 0 of the port's type, or `undefined` when it is not a bit or a constrained vector of bits. */
@@ -103,7 +105,7 @@ function wordingFor(port: PortDeclaration): ExtraPortWording | undefined {
 
 function extraPortWarning(top: TopSource, port: PortDeclaration, wording: ExtraPortWording): string {
   const { line } = ghdlPosition(top.content, port.offset);
-  const suggestion = wording.suggest?.(port.name, top.ports);
+  const suggestion = wording.suggest?.(port.name, top.ports, top.board);
   const what = `${inBackticks(port.name)} (${top.fileName}, line ${line}) is not a board ${wording.kind}`;
   const headline = suggestion
     ? `Warning: ${what} — did you mean ${inBackticks(suggestion)}? ${capitalized(wording.effect)}.`
@@ -116,7 +118,7 @@ function extraPortWarning(top: TopSource, port: PortDeclaration, wording: ExtraP
 
 /** The extra ports' values for the testbench, and a warning for each the run goes on without. */
 export function planExtraPorts(top: TopSource): ExtraPortPlan {
-  const extraPorts = portDeclarations(top.content, top.entityName).filter((port) => !isBoardPort(port));
+  const extraPorts = portDeclarations(top.content, top.entityName).filter((port) => !isBoardPort(port, top.board));
   const tiedInputs = extraPorts.flatMap((port) => {
     const value = heldValueOf(port);
     return value === undefined ? [] : [{ name: port.name, value }];
@@ -139,13 +141,13 @@ export function unconnectedPorts(ghdlText: string): Array<{ name: string; messag
 /** GHDL-shaped lines about one open input, on its declaration: the headline, then `(…)` details. */
 function unconnectedPortError(top: TopSource, port: PortDeclaration, ghdlMessage: string): string {
   const { line, column } = ghdlPosition(top.content, port.offset);
-  const suggestion = suggestBoardInput(port.name, top.ports);
+  const suggestion = suggestBoardInput(port.name, top.ports, top.board);
   const what = `${inBackticks(port.name)} is not a board input`;
   const headline = suggestion
     ? `${what} — did you mean ${inBackticks(suggestion)}? Nothing on the board drives this port.`
     : `${what}, so nothing on the board drives it.`;
   const at = `${top.fileName}:${line}:${column}:error:`;
-  const remedy = `(the board's inputs are ${BOARD_INPUT_NAMES.join(', ')}; give the port a default value with := to keep it)`;
+  const remedy = `(the board's inputs are ${boardInputNames(top.board).join(', ')}; give the port a default value with := to keep it)`;
   return [`${at} ${headline}`, `${at} ${remedy}`, `${at} (GHDL: ${ghdlMessage})`].join('\n');
 }
 
