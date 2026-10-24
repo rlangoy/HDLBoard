@@ -22,11 +22,12 @@ module UART_Tx #(
 
     output wire       Tx,
     output wire       Busy,
-    output reg        Complete
+    output wire       Complete
 );
 
     localparam CLKS_PER_BIT = CLOCK_FREQ / BAUD_RATE;
 
+    // The states of the transmitter. The waveform shows State by these names.
     // IDLE      : line high, wait for Start and then for BitTimer
     // START_BIT : 0 on Tx for one bit period
     // DATA_BITS : the 8 data bits on Tx, LSB first
@@ -46,22 +47,29 @@ module UART_Tx #(
     // ClkCnt counts the clocks within one bit period. BitTimer is a
     // one-clock tick on the last clock of the period: on the next clock
     // edge the next bit is placed on Tx.
-    integer   ClkCnt = 0;
-    wire      BitTimer = (ClkCnt == CLKS_PER_BIT - 1);
+    integer   ClkCnt      = 0;
+    wire      BitTimer;
 
     reg [3:0] BitIndex    = START_BIT_INDEX;
     reg [7:0] DataReg     = 8'h00;
     reg       SendRequest = 1'b0;  // Start seen, waiting for BitTimer
     reg       TxReg       = 1'b1;
+    reg       CompleteReg = 1'b0;
 
-    initial Complete = 1'b0;
+    // The data bit sent at frame position Index (1..8): Data[0]..Data[7]
+    function Data_Bit(input [7:0] Byte, input integer Index);
+        Data_Bit = Byte[Index - FIRST_DATA_BIT_INDEX];
+    endfunction
 
-    assign Tx   = TxReg;
-    assign Busy = !(State == IDLE && !SendRequest);
+    assign Tx       = TxReg;
+    assign Busy     = (State == IDLE && SendRequest == 1'b0) ? 1'b0 : 1'b1;
+    assign Complete = CompleteReg;
+
+    assign BitTimer = (ClkCnt == CLKS_PER_BIT - 1) ? 1'b1 : 1'b0;
 
     // Free-running clock counter that sets the baud rate.
     always @(posedge Clk) begin : BitTimerGenerator
-        if (Reset || BitTimer)
+        if (Reset == 1'b1 || BitTimer == 1'b1)
             ClkCnt <= 0;
         else
             ClkCnt <= ClkCnt + 1;
@@ -69,12 +77,11 @@ module UART_Tx #(
 
     // Tx, State and BitIndex change together on the clock edge that ends
     // a BitTimer pulse: that edge is where the next bit is placed on Tx.
-    // The data bit at frame position BitIndex (1..8) is DataReg[BitIndex - 1].
     always @(posedge Clk) begin : FrameTransmitter
         // Single-cycle pulse: low unless set below
-        Complete <= 1'b0;
+        CompleteReg <= 1'b0;
 
-        if (Reset) begin
+        if (Reset == 1'b1) begin
             State       <= IDLE;
             TxReg       <= 1'b1;
             BitIndex    <= START_BIT_INDEX;
@@ -83,12 +90,12 @@ module UART_Tx #(
             case (State)
 
                 IDLE: begin
-                    if (Start) begin
+                    if (Start == 1'b1) begin
                         DataReg     <= Data;
                         SendRequest <= 1'b1;
                     end
 
-                    if (SendRequest && BitTimer) begin
+                    if (SendRequest == 1'b1 && BitTimer == 1'b1) begin
                         SendRequest <= 1'b0;
                         BitIndex    <= START_BIT_INDEX;
                         TxReg       <= 1'b0;              // start bit
@@ -97,32 +104,32 @@ module UART_Tx #(
                 end
 
                 START_BIT: begin
-                    if (BitTimer) begin
+                    if (BitTimer == 1'b1) begin
                         BitIndex <= FIRST_DATA_BIT_INDEX;
-                        TxReg    <= DataReg[0];
+                        TxReg    <= Data_Bit(DataReg, FIRST_DATA_BIT_INDEX);
                         State    <= DATA_BITS;
                     end
                 end
 
                 DATA_BITS: begin
-                    if (BitTimer) begin
+                    if (BitTimer == 1'b1) begin
                         if (BitIndex == LAST_DATA_BIT_INDEX) begin
                             BitIndex <= STOP_BIT_INDEX;
                             TxReg    <= 1'b1;             // stop bit
                             State    <= STOP_BIT;
                         end else begin
                             BitIndex <= BitIndex + 1;
-                            TxReg    <= DataReg[BitIndex]; // the bit at BitIndex + 1
+                            TxReg    <= Data_Bit(DataReg, BitIndex + 1);
                         end
                     end
                 end
 
                 STOP_BIT: begin
-                    if (BitTimer) begin
-                        BitIndex <= START_BIT_INDEX;
-                        TxReg    <= 1'b1;                 // line idle
-                        Complete <= 1'b1;
-                        State    <= IDLE;
+                    if (BitTimer == 1'b1) begin
+                        BitIndex    <= START_BIT_INDEX;
+                        TxReg       <= 1'b1;              // line idle
+                        CompleteReg <= 1'b1;
+                        State       <= IDLE;
                     end
                 end
 

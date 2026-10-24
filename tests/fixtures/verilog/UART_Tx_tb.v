@@ -1,7 +1,6 @@
 // Presses KEY0 once so UART_Tx sends 'A' (0x41) as one RS-232 frame.
 // Not self-checking: open the waveform and follow the transmitter's FSM
-// through IDLE -> START_BIT -> DATA_BITS -> STOP_BIT -> IDLE
-// (State 0 -> 1 -> 2 -> 3 -> 0).
+// through IDLE -> START_BIT -> DATA_BITS -> STOP_BIT -> IDLE.
 //
 // The baud rate is raised to 5 Mbaud so one bit lasts only 10 clocks
 // (200 ns) and the whole frame fits in a short, readable waveform.
