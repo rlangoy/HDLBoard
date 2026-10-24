@@ -701,6 +701,582 @@ module and_gate_truthtable_tb;
 endmodule
 `;
 
+// Key to UART Tx: a board design that sends a character per key press through an RS-232
+// transmitter, and a testbench that shows one frame in the waveform.
+const KEY_UART_TX_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+
+-- Press KEY0 to send 'A', KEY1 to send 'B' over RS-232 (8N1, 9600 baud).
+-- The serial line is shown on LEDR0 (idle high, so the LED is lit when
+-- nothing is sent) and LEDR1 lights while a frame is being transmitted.
+-- On real hardware, route Tx to a GPIO pin with a USB-UART adapter.
+-- A key press while a frame is still being sent is ignored.
+entity keyUartTx is
+    generic (
+        CLOCK_FREQ : positive := 50_000_000;
+        BAUD_RATE  : positive := 9_600
+    );
+    port (
+        CLOCK_50 : in  std_logic;
+        KEY_N    : in  std_logic_vector(3 downto 0);
+        LEDR     : out std_logic_vector(9 downto 0)
+    );
+end entity keyUartTx;
+
+architecture rtl of keyUartTx is
+
+    constant CHAR_A : std_logic_vector(7 downto 0) := x"41";  -- ASCII 'A'
+    constant CHAR_B : std_logic_vector(7 downto 0) := x"42";  -- ASCII 'B'
+
+    -- The keys as they were on the previous clock edge: a press is the
+    -- edge where a key goes from released ('1') to pressed ('0').
+    signal key_prev     : std_logic_vector(1 downto 0) := "11";
+    signal key0_pressed : boolean;
+    signal key1_pressed : boolean;
+
+    signal tx_data  : std_logic_vector(7 downto 0) := (others => '0');
+    signal tx_start : std_logic := '0';
+    signal tx       : std_logic;
+    signal tx_busy  : std_logic;
+
+begin
+
+    Transmitter : entity work.UART_Tx
+        generic map (
+            CLOCK_FREQ => CLOCK_FREQ,
+            BAUD_RATE  => BAUD_RATE
+        )
+        port map (
+            Clk      => CLOCK_50,
+            Reset    => '0',
+            Data     => tx_data,
+            Start    => tx_start,
+            Tx       => tx,
+            Busy     => tx_busy,
+            Complete => open
+        );
+
+    key0_pressed <= key_prev(0) = '1' and KEY_N(0) = '0';
+    key1_pressed <= key_prev(1) = '1' and KEY_N(1) = '0';
+
+    -- Picks the character for the pressed key and gives the transmitter
+    -- a one-clock Start pulse, but only when it is idle.
+    CharacterSelector : process (CLOCK_50)
+    begin
+        if rising_edge(CLOCK_50) then
+            key_prev <= KEY_N(1 downto 0);
+            tx_start <= '0';
+
+            if tx_busy = '0' then
+                if key0_pressed then
+                    tx_data  <= CHAR_A;
+                    tx_start <= '1';
+                elsif key1_pressed then
+                    tx_data  <= CHAR_B;
+                    tx_start <= '1';
+                end if;
+            end if;
+        end if;
+    end process CharacterSelector;
+
+    LEDR(0)          <= tx;
+    LEDR(1)          <= tx_busy;
+    LEDR(9 downto 2) <= (others => '0');
+
+end architecture rtl;
+`;
+
+const UART_TX_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+
+-- Transmits one byte as RS-232 8N1: a frame of 10 bits on the Tx line.
+--   BitIndex 0    : start bit ('0')
+--   BitIndex 1..8 : data bits, LSB first (Data(0) .. Data(7))
+--   BitIndex 9    : stop bit ('1')
+--
+-- BitTimer is a free-running baud tick: a one-clock pulse once every bit
+-- period. Tx only changes on the clock edge that ends a BitTimer pulse,
+-- so every bit - the start bit included - is placed on Tx by BitTimer.
+--
+--   Start    : one-clock pulse; Data is latched when Start is seen in IDLE.
+--              The start bit is sent on the next BitTimer tick.
+--   Busy     : high from Start until the frame has been sent.
+--   Complete : one-clock pulse at the end of the stop bit.
+entity UART_Tx is
+    generic (
+        CLOCK_FREQ : positive := 50_000_000;
+        BAUD_RATE  : positive := 9_600
+    );
+    port (
+        Clk      : in  std_logic;
+        Reset    : in  std_logic;
+        Data     : in  std_logic_vector(7 downto 0);
+        Start    : in  std_logic;
+
+        Tx       : out std_logic;
+        Busy     : out std_logic;
+        Complete : out std_logic
+    );
+end entity UART_Tx;
+
+architecture RTL of UART_Tx is
+
+    constant CLKS_PER_BIT : positive := CLOCK_FREQ / BAUD_RATE;
+
+    -- IDLE      : line high, wait for Start and then for BitTimer
+    -- START_BIT : '0' on Tx for one bit period
+    -- DATA_BITS : the 8 data bits on Tx, LSB first
+    -- STOP_BIT  : '1' on Tx for one bit period
+    type StateType is (IDLE, START_BIT, DATA_BITS, STOP_BIT);
+    signal State : StateType := IDLE;
+
+    -- Position of the current bit in the 10-bit frame
+    constant START_BIT_INDEX      : natural := 0;
+    constant FIRST_DATA_BIT_INDEX : natural := 1;
+    constant LAST_DATA_BIT_INDEX  : natural := 8;
+    constant STOP_BIT_INDEX       : natural := 9;
+
+    -- ClkCnt counts the clocks within one bit period. BitTimer is a
+    -- one-clock tick on the last clock of the period: on the next clock
+    -- edge the next bit is placed on Tx.
+    signal ClkCnt      : natural range 0 to CLKS_PER_BIT - 1 := 0;
+    signal BitTimer    : std_logic;
+
+    signal BitIndex    : natural range START_BIT_INDEX to STOP_BIT_INDEX := START_BIT_INDEX;
+    signal DataReg     : std_logic_vector(7 downto 0) := (others => '0');
+    signal SendRequest : std_logic := '0';  -- Start seen, waiting for BitTimer
+    signal TxReg       : std_logic := '1';
+    signal CompleteReg : std_logic := '0';
+
+    -- The data bit sent at frame position Index (1..8): Data(0)..Data(7)
+    function Data_Bit(Byte : std_logic_vector(7 downto 0); Index : natural)
+        return std_logic is
+    begin
+        return Byte(Index - FIRST_DATA_BIT_INDEX);
+    end function Data_Bit;
+
+begin
+
+    Tx       <= TxReg;
+    Busy     <= '0' when State = IDLE and SendRequest = '0' else '1';
+    Complete <= CompleteReg;
+
+    BitTimer <= '1' when ClkCnt = CLKS_PER_BIT - 1 else '0';
+
+    -- Free-running clock counter that sets the baud rate.
+    BitTimerGenerator : process (Clk)
+    begin
+        if rising_edge(Clk) then
+            if Reset = '1' or BitTimer = '1' then
+                ClkCnt <= 0;
+            else
+                ClkCnt <= ClkCnt + 1;
+            end if;
+        end if;
+    end process BitTimerGenerator;
+
+    -- Tx, State and BitIndex change together on the clock edge that ends
+    -- a BitTimer pulse: that edge is where the next bit is placed on Tx.
+    FrameTransmitter : process (Clk)
+    begin
+        if rising_edge(Clk) then
+            -- Single-cycle pulse: low unless set below
+            CompleteReg <= '0';
+
+            if Reset = '1' then
+                State       <= IDLE;
+                TxReg       <= '1';
+                BitIndex    <= START_BIT_INDEX;
+                SendRequest <= '0';
+            else
+                case State is
+
+                    when IDLE =>
+                        if Start = '1' then
+                            DataReg     <= Data;
+                            SendRequest <= '1';
+                        end if;
+
+                        if SendRequest = '1' and BitTimer = '1' then
+                            SendRequest <= '0';
+                            BitIndex    <= START_BIT_INDEX;
+                            TxReg       <= '0';               -- start bit
+                            State       <= START_BIT;
+                        end if;
+
+                    when START_BIT =>
+                        if BitTimer = '1' then
+                            BitIndex <= FIRST_DATA_BIT_INDEX;
+                            TxReg    <= Data_Bit(DataReg, FIRST_DATA_BIT_INDEX);
+                            State    <= DATA_BITS;
+                        end if;
+
+                    when DATA_BITS =>
+                        if BitTimer = '1' then
+                            if BitIndex = LAST_DATA_BIT_INDEX then
+                                BitIndex <= STOP_BIT_INDEX;
+                                TxReg    <= '1';              -- stop bit
+                                State    <= STOP_BIT;
+                            else
+                                BitIndex <= BitIndex + 1;
+                                TxReg    <= Data_Bit(DataReg, BitIndex + 1);
+                            end if;
+                        end if;
+
+                    when STOP_BIT =>
+                        if BitTimer = '1' then
+                            BitIndex    <= START_BIT_INDEX;
+                            TxReg       <= '1';               -- line idle
+                            CompleteReg <= '1';
+                            State       <= IDLE;
+                        end if;
+
+                end case;
+            end if;
+        end if;
+    end process FrameTransmitter;
+
+end architecture RTL;
+`;
+
+const UART_TX_TB_VHD = `-- Presses KEY0 once so UART_Tx sends 'A' (0x41) as one RS-232 frame.
+-- Not self-checking: open the waveform and follow the transmitter's FSM
+-- through IDLE -> START_BIT -> DATA_BITS -> STOP_BIT -> IDLE.
+--
+-- The baud rate is raised to 5 Mbaud so one bit lasts only 10 clocks
+-- (200 ns) and the whole frame fits in a short, readable waveform.
+-- Expected Tx: idle 1, start 0, data 1 0 0 0 0 0 1 0 (LSB first), stop 1.
+-- BitIndex in UART_Tx counts the frame: 0 = start, 1..8 = data, 9 = stop.
+-- BitTimer is a free-running baud tick; every bit, the start bit included,
+-- is placed on Tx at the clock edge that ends a BitTimer pulse.
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity UART_Tx_tb is
+end entity UART_Tx_tb;
+
+architecture sim of UART_Tx_tb is
+
+    constant CLOCK_FREQ   : positive := 50_000_000;
+    constant BAUD_RATE    : positive := 5_000_000;  -- Make it simple 10clks per txBit
+    constant CLOCK_PERIOD : time     := 20 ns;
+    constant CHAR_A       : std_logic_vector(7 downto 0) := x"41";  -- ASCII 'A'
+
+    signal clock_50 : std_logic := '0';
+    signal key0_n   : std_logic := '1';  -- KEY0, active low
+    signal start    : std_logic;
+    signal tx       : std_logic;
+    signal busy     : std_logic;
+    signal complete : std_logic;
+    signal sim_done : boolean := false;
+
+begin
+
+    uut : entity work.UART_Tx
+        generic map (
+            CLOCK_FREQ => CLOCK_FREQ,
+            BAUD_RATE  => BAUD_RATE
+        )
+        port map (
+            Clk      => clock_50,
+            Reset    => '0',
+            Data     => CHAR_A,
+            Start    => start,
+            Tx       => tx,
+            Busy     => busy,
+            Complete => complete
+        );
+
+    -- Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
+    start <= not key0_n;
+
+    -- Stops once the stimulus is done, so the simulation ends by itself.
+    clock_50 <= not clock_50 after CLOCK_PERIOD / 2 when not sim_done;
+
+    Stimulus : process
+    begin
+        report "IDLE: Tx line is high, waiting for KEY0" severity note;
+        wait for 5 * CLOCK_PERIOD;
+
+        report "KEY0 pressed: sending 'A' (0x41)" severity note;
+        key0_n <= '0';
+        wait for 5 * CLOCK_PERIOD;
+        key0_n <= '1';
+
+        wait until complete = '1';
+        report "Frame sent: back in IDLE" severity note;
+        wait for 5 * CLOCK_PERIOD;
+
+        sim_done <= true;
+        wait;
+    end process Stimulus;
+
+end architecture sim;
+`;
+
+const KEY_UART_TX_V = `// Press KEY0 to send 'A', KEY1 to send 'B' over RS-232 (8N1, 9600 baud).
+// The serial line is shown on LEDR0 (idle high, so the LED is lit when
+// nothing is sent) and LEDR1 lights while a frame is being transmitted.
+// On real hardware, route Tx to a GPIO pin with a USB-UART adapter.
+// A key press while a frame is still being sent is ignored.
+module keyUartTx #(
+    parameter CLOCK_FREQ = 50_000_000,
+    parameter BAUD_RATE  = 9_600
+) (
+    input  wire       CLOCK_50,
+    input  wire [3:0] KEY_N,
+    output wire [9:0] LEDR
+);
+
+    localparam [7:0] CHAR_A = 8'h41;  // ASCII 'A'
+    localparam [7:0] CHAR_B = 8'h42;  // ASCII 'B'
+
+    // The keys as they were on the previous clock edge: a press is the
+    // edge where a key goes from released (1) to pressed (0).
+    reg  [1:0] key_prev = 2'b11;
+    wire       key0_pressed = key_prev[0] && !KEY_N[0];
+    wire       key1_pressed = key_prev[1] && !KEY_N[1];
+
+    reg  [7:0] tx_data  = 8'h00;
+    reg        tx_start = 1'b0;
+    wire       tx;
+    wire       tx_busy;
+
+    UART_Tx #(
+        .CLOCK_FREQ(CLOCK_FREQ),
+        .BAUD_RATE(BAUD_RATE)
+    ) Transmitter (
+        .Clk(CLOCK_50),
+        .Reset(1'b0),
+        .Data(tx_data),
+        .Start(tx_start),
+        .Tx(tx),
+        .Busy(tx_busy),
+        .Complete()
+    );
+
+    // Picks the character for the pressed key and gives the transmitter
+    // a one-clock Start pulse, but only when it is idle.
+    always @(posedge CLOCK_50) begin : CharacterSelector
+        key_prev <= KEY_N[1:0];
+        tx_start <= 1'b0;
+
+        if (!tx_busy) begin
+            if (key0_pressed) begin
+                tx_data  <= CHAR_A;
+                tx_start <= 1'b1;
+            end else if (key1_pressed) begin
+                tx_data  <= CHAR_B;
+                tx_start <= 1'b1;
+            end
+        end
+    end
+
+    assign LEDR[0]   = tx;
+    assign LEDR[1]   = tx_busy;
+    assign LEDR[9:2] = 8'b0;
+
+endmodule
+`;
+
+const UART_TX_V = `// Transmits one byte as RS-232 8N1: a frame of 10 bits on the Tx line.
+//   BitIndex 0    : start bit (0)
+//   BitIndex 1..8 : data bits, LSB first (Data[0] .. Data[7])
+//   BitIndex 9    : stop bit (1)
+//
+// BitTimer is a free-running baud tick: a one-clock pulse once every bit
+// period. Tx only changes on the clock edge that ends a BitTimer pulse,
+// so every bit - the start bit included - is placed on Tx by BitTimer.
+//
+//   Start    : one-clock pulse; Data is latched when Start is seen in IDLE.
+//              The start bit is sent on the next BitTimer tick.
+//   Busy     : high from Start until the frame has been sent.
+//   Complete : one-clock pulse at the end of the stop bit.
+module UART_Tx #(
+    parameter CLOCK_FREQ = 50_000_000,
+    parameter BAUD_RATE  = 9_600
+) (
+    input  wire       Clk,
+    input  wire       Reset,
+    input  wire [7:0] Data,
+    input  wire       Start,
+
+    output wire       Tx,
+    output wire       Busy,
+    output reg        Complete
+);
+
+    localparam CLKS_PER_BIT = CLOCK_FREQ / BAUD_RATE;
+
+    // IDLE      : line high, wait for Start and then for BitTimer
+    // START_BIT : 0 on Tx for one bit period
+    // DATA_BITS : the 8 data bits on Tx, LSB first
+    // STOP_BIT  : 1 on Tx for one bit period
+    localparam [1:0] IDLE      = 2'd0,
+                     START_BIT = 2'd1,
+                     DATA_BITS = 2'd2,
+                     STOP_BIT  = 2'd3;
+    reg [1:0] State = IDLE;
+
+    // Position of the current bit in the 10-bit frame
+    localparam START_BIT_INDEX      = 0;
+    localparam FIRST_DATA_BIT_INDEX = 1;
+    localparam LAST_DATA_BIT_INDEX  = 8;
+    localparam STOP_BIT_INDEX       = 9;
+
+    // ClkCnt counts the clocks within one bit period. BitTimer is a
+    // one-clock tick on the last clock of the period: on the next clock
+    // edge the next bit is placed on Tx.
+    integer   ClkCnt = 0;
+    wire      BitTimer = (ClkCnt == CLKS_PER_BIT - 1);
+
+    reg [3:0] BitIndex    = START_BIT_INDEX;
+    reg [7:0] DataReg     = 8'h00;
+    reg       SendRequest = 1'b0;  // Start seen, waiting for BitTimer
+    reg       TxReg       = 1'b1;
+
+    initial Complete = 1'b0;
+
+    assign Tx   = TxReg;
+    assign Busy = !(State == IDLE && !SendRequest);
+
+    // Free-running clock counter that sets the baud rate.
+    always @(posedge Clk) begin : BitTimerGenerator
+        if (Reset || BitTimer)
+            ClkCnt <= 0;
+        else
+            ClkCnt <= ClkCnt + 1;
+    end
+
+    // Tx, State and BitIndex change together on the clock edge that ends
+    // a BitTimer pulse: that edge is where the next bit is placed on Tx.
+    // The data bit at frame position BitIndex (1..8) is DataReg[BitIndex - 1].
+    always @(posedge Clk) begin : FrameTransmitter
+        // Single-cycle pulse: low unless set below
+        Complete <= 1'b0;
+
+        if (Reset) begin
+            State       <= IDLE;
+            TxReg       <= 1'b1;
+            BitIndex    <= START_BIT_INDEX;
+            SendRequest <= 1'b0;
+        end else begin
+            case (State)
+
+                IDLE: begin
+                    if (Start) begin
+                        DataReg     <= Data;
+                        SendRequest <= 1'b1;
+                    end
+
+                    if (SendRequest && BitTimer) begin
+                        SendRequest <= 1'b0;
+                        BitIndex    <= START_BIT_INDEX;
+                        TxReg       <= 1'b0;              // start bit
+                        State       <= START_BIT;
+                    end
+                end
+
+                START_BIT: begin
+                    if (BitTimer) begin
+                        BitIndex <= FIRST_DATA_BIT_INDEX;
+                        TxReg    <= DataReg[0];
+                        State    <= DATA_BITS;
+                    end
+                end
+
+                DATA_BITS: begin
+                    if (BitTimer) begin
+                        if (BitIndex == LAST_DATA_BIT_INDEX) begin
+                            BitIndex <= STOP_BIT_INDEX;
+                            TxReg    <= 1'b1;             // stop bit
+                            State    <= STOP_BIT;
+                        end else begin
+                            BitIndex <= BitIndex + 1;
+                            TxReg    <= DataReg[BitIndex]; // the bit at BitIndex + 1
+                        end
+                    end
+                end
+
+                STOP_BIT: begin
+                    if (BitTimer) begin
+                        BitIndex <= START_BIT_INDEX;
+                        TxReg    <= 1'b1;                 // line idle
+                        Complete <= 1'b1;
+                        State    <= IDLE;
+                    end
+                end
+
+            endcase
+        end
+    end
+
+endmodule
+`;
+
+const UART_TX_TB_V = `// Presses KEY0 once so UART_Tx sends 'A' (0x41) as one RS-232 frame.
+// Not self-checking: open the waveform and follow the transmitter's FSM
+// through IDLE -> START_BIT -> DATA_BITS -> STOP_BIT -> IDLE
+// (State 0 -> 1 -> 2 -> 3 -> 0).
+//
+// The baud rate is raised to 5 Mbaud so one bit lasts only 10 clocks
+// (200 ns) and the whole frame fits in a short, readable waveform.
+// Expected Tx: idle 1, start 0, data 1 0 0 0 0 0 1 0 (LSB first), stop 1.
+// BitIndex in UART_Tx counts the frame: 0 = start, 1..8 = data, 9 = stop.
+// BitTimer is a free-running baud tick; every bit, the start bit included,
+// is placed on Tx at the clock edge that ends a BitTimer pulse.
+module UART_Tx_tb;
+
+    localparam CLOCK_FREQ   = 50_000_000;
+    localparam BAUD_RATE    = 5_000_000;  // Make it simple: 10 clocks per Tx bit
+    localparam CLOCK_PERIOD = 20;         // ns
+    localparam [7:0] CHAR_A = 8'h41;      // ASCII 'A'
+
+    reg  clock_50 = 1'b0;
+    reg  key0_n   = 1'b1;  // KEY0, active low
+    wire start;
+    wire tx;
+    wire busy;
+    wire complete;
+
+    UART_Tx #(
+        .CLOCK_FREQ(CLOCK_FREQ),
+        .BAUD_RATE(BAUD_RATE)
+    ) uut (
+        .Clk(clock_50),
+        .Reset(1'b0),
+        .Data(CHAR_A),
+        .Start(start),
+        .Tx(tx),
+        .Busy(busy),
+        .Complete(complete)
+    );
+
+    // Pressing KEY0 starts a frame; UART_Tx only reacts to Start in IDLE.
+    assign start = !key0_n;
+
+    always #(CLOCK_PERIOD / 2) clock_50 = !clock_50;
+
+    // Ends the simulation once the frame has been sent.
+    initial begin : Stimulus
+        $display("IDLE: Tx line is high, waiting for KEY0");
+        #(5 * CLOCK_PERIOD);
+
+        $display("KEY0 pressed: sending 'A' (0x41)");
+        key0_n = 1'b0;
+        #(5 * CLOCK_PERIOD);
+        key0_n = 1'b1;
+
+        @(posedge complete);
+        $display("Frame sent: back in IDLE");
+        #(5 * CLOCK_PERIOD);
+
+        $finish;
+    end
+
+endmodule
+`;
+
 export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
@@ -709,6 +1285,9 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'and_gate', name: 'and_gate.vhdl', folder: 'vhdl', content: AND_GATE_VHD },
   { id: 'and_gate_tb', name: 'and_gate_tb.vhd', folder: 'vhdl', content: AND_GATE_TB_VHD },
   { id: 'and_gate_truthtable_tb', name: 'and_gate_truthtable_tb.vhd', folder: 'vhdl', content: AND_GATE_TRUTHTABLE_TB_VHD },
+  { id: 'key_uart_tx', name: 'keyUartTx.vhdl', folder: 'vhdl', content: KEY_UART_TX_VHD },
+  { id: 'uart_tx', name: 'UART_Tx.vhdl', folder: 'vhdl', content: UART_TX_VHD },
+  { id: 'uart_tx_tb', name: 'UART_Tx_tb.vhd', folder: 'vhdl', content: UART_TX_TB_VHD },
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
@@ -716,6 +1295,9 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
   { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },
   { id: 'and_gate_truthtable_tb_v', name: 'and_gate_truthtable_tb.v', folder: 'verilog', content: AND_GATE_TRUTHTABLE_TB_V },
+  { id: 'key_uart_tx_v', name: 'keyUartTx.v', folder: 'verilog', content: KEY_UART_TX_V },
+  { id: 'uart_tx_v', name: 'UART_Tx.v', folder: 'verilog', content: UART_TX_V },
+  { id: 'uart_tx_tb_v', name: 'UART_Tx_tb.v', folder: 'verilog', content: UART_TX_TB_V },
 ];
 
 /** What a first start shows in the Files panel: the board's top level, in both languages. */

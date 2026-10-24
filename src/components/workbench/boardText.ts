@@ -14,7 +14,8 @@ import { REPO_URL } from './project';
 export const BOARD_TEXT = {
   settingTitle: 'Board',
   settingNote: 'The board of the open project, also used for new projects.',
-  settingMoreBoards: 'More boards with other port names can be added in boards/boards.json',
+  settingFileLead: 'Board definitions are loaded from',
+  settingFileEdit: 'Add or edit entries to customize the board list.',
   settingHowTo: 'How to add a board',
   settingFixedShape: 'The number of switches, keys, LEDs and displays is the same on every board.',
   changeTitle: 'Change board?',

@@ -71,6 +71,23 @@ const CATALOGUE: readonly ExampleEntry[] = [
     files: { vhdl: ['key_counter_7seg'], verilog: ['key_counter_7seg_v'] },
   },
   {
+    key: 'key_uart_tx',
+    title: 'Key to UART Tx',
+    description: "Press KEY0 to send 'A' and KEY1 to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on LEDR0, Busy on LEDR1.",
+    role: 'design',
+    files: {
+      vhdl: ['key_uart_tx', 'uart_tx', 'uart_tx_tb'],
+      verilog: ['key_uart_tx_v', 'uart_tx_v', 'uart_tx_tb_v'],
+    },
+  },
+  {
+    key: 'uart_tx_tb',
+    title: 'UART Tx Testbench',
+    description: "Sends 'A' once and shows the RS-232 frame and the transmitter's states in the waveform. Copies UART_Tx too.",
+    role: 'testbench',
+    files: { vhdl: ['uart_tx_tb', 'uart_tx'], verilog: ['uart_tx_tb_v', 'uart_tx_v'] },
+  },
+  {
     key: 'and_gate',
     title: 'AND Gate',
     description: 'Basic AND gate implementation.',

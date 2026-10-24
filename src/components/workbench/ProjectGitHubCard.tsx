@@ -6,7 +6,7 @@ import { copyText } from './clipboard';
 import { Activity, GitHubStatus } from './GitHubStatus';
 import { CloudDownloadIcon, CloudUploadIcon, CopyIcon, GitHubIcon } from './icons';
 import type { ProjectGistLink } from './gistLink';
-import { isSomeoneElses, shareLink, type GitHubSyncState } from './projectGitHub';
+import { isSomeoneElses, type GitHubSyncState } from './projectGitHub';
 import type { GitHubProjects } from './useGitHubProjects';
 import './GitHub.css';
 
@@ -67,7 +67,8 @@ function GistAddress({ link }: { link: ProjectGistLink }) {
     const timer = window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
     return () => window.clearTimeout(timer);
   }, [copied]);
-  const copyShareLink = async () => setCopied(await copyText(shareLink(window.location.href, link)));
+  // The gist's own address: it opens on GitHub, and Open Project in HDLBoard takes it as it is.
+  const copyShareLink = async () => setCopied(await copyText(link.htmlUrl));
   return (
     <p className="wb-github__address">
       <a href={link.htmlUrl} target="_blank" rel="noreferrer" className="wb-project__mono">
@@ -77,7 +78,7 @@ function GistAddress({ link }: { link: ProjectGistLink }) {
         type="button"
         className="wb-github__btn wb-github__btn--small"
         onClick={() => void copyShareLink()}
-        title="Copy a link that opens this project in HDLBoard, to share it"
+        title="Copy the address of this project's gist on GitHub, to share it"
       >
         <CopyIcon aria-hidden="true" />
         {copied ? 'Link copied' : 'Copy share link'}

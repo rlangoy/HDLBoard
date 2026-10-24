@@ -10,7 +10,6 @@ import {
   gistLinkFromUrl,
   gitHubSyncState,
   projectSnapshot,
-  shareLink,
   withGistLink,
   withoutGistLink,
   withSavedGistLink,
@@ -141,14 +140,6 @@ describe('opening a project from its gist', () => {
       fetch: offline,
     });
     expect(opened.files).toEqual([FILES[0]]);
-  });
-});
-
-describe('shareLink', () => {
-  it('opens the gist in HDLBoard', () => {
-    expect(shareLink('https://hdlboard.example/app/?project=old#x', LINK)).toBe(
-      'https://hdlboard.example/app/?project=https%3A%2F%2Fgist.github.com%2Fstudent%2Fabc123',
-    );
   });
 });
 
