@@ -29,6 +29,7 @@ const NEW_CODE = [
   'src/components/workbench/boardText.ts',
   'src/components/workbench/helpSignals.ts',
   'src/components/workbench/sourceComments.ts',
+  'src/components/workbench/sourceComments.test.ts',
   'src/components/workbench/boardUi.test.ts',
 ];
 

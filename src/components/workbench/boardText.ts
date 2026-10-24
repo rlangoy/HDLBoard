@@ -34,6 +34,7 @@ export const BOARD_TEXT = {
   chooseBoard: 'Choose a board…',
   nothingToUndo:
     'Nothing to undo: the project has changed since the board was changed. Choose the previous board in Settings to rename back.',
+  undoWhenFree: 'Undo has to wait while the project is loaded or saved, or a run compiles. Click Undo again when it is done.',
   oldBackend:
     'This simulation backend is older than this page and simulates with the Default names only. ' +
     'Update HDLBoard (Windows: install the new version; Docker: pull the new backend image).',

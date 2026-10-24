@@ -14,6 +14,7 @@ import type { WaveformData } from './model';
 import { useWaveTransfers } from './useWaveTransfers';
 import { useWaveWorker } from './useWaveWorker';
 import { withVerilogMemories } from './verilogMemories';
+import { verilogModulesIn } from './verilogModules';
 import { withVerilogStateNames } from './verilogStates';
 import { loadRecordWaves, loadWaveOpenedOnce, saveRecordWaves, saveWaveOpenedOnce } from './wavePrefs';
 import { INITIAL_WAVE_STATE, waveReducer, type WaveState } from './waveState';
@@ -59,9 +60,10 @@ function usePrefs() {
   return { recording, setRecording, openedOnce, markOpened };
 }
 
-/** What the file leaves out and the sources say: Verilog memories, and state names. */
+/** What the file leaves out and the sources say: Verilog memories, and state names. The modules are found once for both. */
 function withSourceDetails(data: WaveformData, sources: readonly string[]): WaveformData {
-  return withVerilogStateNames(withVerilogMemories(data, sources), sources);
+  const modules = verilogModulesIn(sources);
+  return withVerilogStateNames(withVerilogMemories(data, modules), modules);
 }
 
 /** `waveGet`: sends `WAVE-GET`; the client is created by the Workbench. */

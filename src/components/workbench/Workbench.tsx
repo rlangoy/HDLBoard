@@ -429,6 +429,8 @@ export function Workbench() {
   // The ongoing run is to end without its closing messages, because an example was
   // opened and the console now belongs to it (handleOpenExample).
   const quietEnd = useRef(false);
+  // The run still compiling is to stop as soon as it is ready: the server takes Stop only then.
+  const stopWhenReady = useRef(false);
 
   const pushLine = useCallback((line: Omit<ConsoleLine, 'id' | 'time'>) => {
     // Taken now, not in the updater: lines logged in one batch would otherwise share the last id.
@@ -531,8 +533,8 @@ export function Workbench() {
     if (!clientRef.current) {
       clientRef.current = new HdlClient(hdlBackendUrl(HDL_WS_PORT), {
         onReady: () => {
-          // A quiet end asked for while it compiled: the server takes Stop only now.
-          if (quietEnd.current) {
+          // A stop asked for while it compiled: the server takes Stop only now.
+          if (stopWhenReady.current) {
             clientRef.current?.stop();
             return;
           }
@@ -662,20 +664,21 @@ export function Workbench() {
     if (!isSimulating) makeTop(id);
   };
 
-  /** Ends an ongoing run without its closing messages: now if it runs, as soon as it is ready if it still compiles. */
-  const endRunQuietly = () => {
-    if (!isSimulating) return;
-    quietEnd.current = true;
+  /**
+   * Stops the ongoing run: now if it runs, as soon as it is ready if it still compiles.
+   * Its closing messages are shown as for any stop. A board change stops the run this
+   * way, as it was built with the old names.
+   */
+  const stopRunSoon = () => {
+    if (status === 'compiling') stopWhenReady.current = true;
     if (status === 'running') getClient().stop();
   };
 
-  /**
-   * Stops the run for a board change: it was built with the old names. One still
-   * compiling is stopped as soon as it is ready, as the server takes Stop only then.
-   */
-  const stopRunForBoardChange = () => {
-    if (status === 'compiling') quietEnd.current = true;
-    if (status === 'running') getClient().stop();
+  /** Ends an ongoing run without its closing messages. */
+  const endRunQuietly = () => {
+    if (!isSimulating) return;
+    quietEnd.current = true;
+    stopRunSoon();
   };
 
   const handleDownloadFile = (id: string) => {
@@ -1437,6 +1440,7 @@ export function Workbench() {
   // `runTarget`: the unit to elaborate when the backend must be told (`RUN <file> @<unit>`, D20).
   const startRun = (fileId: string | null, runTarget: string | null = null, unitName: string | null = null) => {
     quietEnd.current = false;
+    stopWhenReady.current = false;
     setLogLines([]);
     stopElapsedTimer();
     setElapsedSeconds(0);
@@ -1603,7 +1607,7 @@ export function Workbench() {
     project,
     setProject,
     catalog,
-    stopSimulation: stopRunForBoardChange,
+    stopSimulation: stopRunSoon,
     reopenSettings: () => setDialog('settings'),
     log: logWithLink,
     busy: boardLocked,
@@ -1621,7 +1625,7 @@ export function Workbench() {
     const ready = freshWorkspace(catalog, preferredBoard);
     const untouched = filesRef.current === freshStart.files && project === freshStart.project;
     if (!untouched || ready.board.id === freshStart.board.id) return;
-    stopRunForBoardChange();
+    stopRunSoon();
     setFiles(ready.files);
     setProject(ready.project);
   }, [catalog]);

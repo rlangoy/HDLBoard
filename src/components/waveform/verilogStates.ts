@@ -20,8 +20,8 @@
  * works out is kept in its own `Analysis`, which nothing outlives.
  */
 
-import { withoutComments } from '../workbench/sourceComments';
 import type { Scope, SignalRef, Trace, TraceId, WaveformData } from './model';
+import type { VerilogModule } from './verilogModules';
 
 /** Names for the values of one state register: one `localparam` statement. */
 interface StateGroup {
@@ -32,9 +32,7 @@ interface StateGroup {
 }
 
 /** One module of the sources: its text without comments, and its groups. */
-interface ModuleSource {
-  readonly name: string;
-  readonly text: string;
+interface ModuleSource extends VerilogModule {
   readonly groups: readonly StateGroup[];
 }
 
@@ -49,7 +47,6 @@ interface Analysis {
   readonly stateGroups: Map<StateGroup, boolean>;
 }
 
-const MODULE = /\bmodule\s+(\w+)[\s\S]*?\bendmodule\b/g;
 const PARAMETER_STATEMENT = /\b(?:localparam|parameter)\b\s*(?:signed\b\s*)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?([^;]*);/g;
 const NAMED_VALUE = /^\s*([A-Za-z_]\w*)\s*=\s*(.+?)\s*$/;
 /** `2'd1`, `2'b01`, `4'hA`, `'d3`; the size is optional. */
@@ -104,13 +101,10 @@ function groupOf(range: string | undefined, rangeEnd: string | undefined, body: 
   return { values, width };
 }
 
-function modulesIn(sources: readonly string[]): ModuleSource[] {
-  return sources.flatMap((source) =>
-    [...withoutComments(source, 'verilog').matchAll(MODULE)].map((match) => {
-      const groups = [...match[0].matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
-      return { name: match[1], text: match[0], groups };
-    }),
-  );
+/** A module with the state groups its `localparam` statements declare. */
+function withGroups(module: VerilogModule): ModuleSource {
+  const groups = [...module.text.matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
+  return { ...module, groups };
 }
 
 /** The value kept for `key`, made by `make` the first time it is asked for. */
@@ -125,12 +119,18 @@ function remembered<K, V>(store: Map<K, V>, key: K, make: () => V): V {
 const storeOf = <V>(stores: Map<ModuleSource, Map<string, V>>, module: ModuleSource): Map<string, V> =>
   remembered(stores, module, () => new Map<string, V>());
 
-const escaped = (name: string) => name.replace(/[$]/g, '\\$&');
+/**
+ * A name as a pattern that matches it literally. VCD names can hold any character – an
+ * escaped identifier such as `\cnt(3) `, a generate scope such as `genblk1[0]` – and a
+ * name like that must neither throw nor match other text.
+ */
+const escaped = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The right-hand sides of the statements that assign `name`: `name <= x;`, `name = x;`, `reg [1:0] name = x;`. */
 function assignmentsTo(module: ModuleSource, name: string, analysis: Analysis): readonly string[] {
   return remembered(storeOf(analysis.assignments, module), name, () => {
-    const assignment = new RegExp(`${STATEMENT_START}(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
+    // The name is looked for first, so the statement-start lookbehind runs only where it is.
+    const assignment = new RegExp(`(?=${escaped(name)})${STATEMENT_START}(?<![\\w.$])${escaped(name)}\\s*<?=(?!=)\\s*([^;]*);`, 'g');
     return [...module.text.matchAll(assignment)].map((match) => match[1].trim());
   });
 }
@@ -332,8 +332,8 @@ function namedScope(scope: Scope, module: ModuleSource | undefined, walk: Walk):
 }
 
 /** The waveform with every Verilog state register the sources name shown by its state names. */
-export function withVerilogStateNames(data: WaveformData, sources: readonly string[]): WaveformData {
-  const modules = modulesIn(sources);
+export function withVerilogStateNames(data: WaveformData, verilogModules: readonly VerilogModule[]): WaveformData {
+  const modules = verilogModules.map(withGroups);
   if (!modules.some((module) => module.groups.length > 0)) return data;
   const analysis: Analysis = { modules, assignments: new Map(), instances: new Map(), stateGroups: new Map() };
   const walk: Walk = { analysis, traces: new NamedTraces(data.traces) };

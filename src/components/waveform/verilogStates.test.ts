@@ -7,7 +7,11 @@ import uartTxTb from '../../../tests/fixtures/verilog/UART_Tx_tb.v?raw';
 import { fixtureText, scopeAt } from './fixtures.testSupport';
 import type { SignalRef, WaveformData } from './model';
 import { parseVcd } from './vcdParser';
+import { verilogModulesIn } from './verilogModules';
 import { withVerilogStateNames } from './verilogStates';
+
+/** The state names the sources give the waveform, as the viewer works them out. */
+const withStates = (data: WaveformData, sources: readonly string[]) => withVerilogStateNames(data, verilogModulesIn(sources));
 
 // icarus_uart_tx.vcd: the built-in UART Tx Testbench (Verilog), run by Icarus 13.
 const uartWave = () => parseVcd(fixtureText('icarus_uart_tx.vcd'));
@@ -50,7 +54,7 @@ const GROUP = "  localparam [1:0] IDLE = 2'd0, RUN = 2'd1, DONE = 2'b10;";
 
 describe('the UART Tx Testbench (Verilog)', () => {
   // Parsed and named once: every test reads the same waveform.
-  const named = withVerilogStateNames(uartWave(), [uartTx, uartTxTb]);
+  const named = withStates(uartWave(), [uartTx, uartTxTb]);
   const FRAME_STATES = ['IDLE', 'START_BIT', 'DATA_BITS', 'STOP_BIT', 'IDLE'];
 
   it('shows State as an enumeration of its four states, as the VHDL testbench does', () => {
@@ -71,20 +75,20 @@ describe('the UART Tx Testbench (Verilog)', () => {
   });
 
   it('shows the bits without the sources', () => {
-    expect(signal(withVerilogStateNames(uartWave(), []), 'State', 'UART_Tx_tb', 'uut').kind).toBe('vector');
+    expect(signal(withStates(uartWave(), []), 'State', 'UART_Tx_tb', 'uut').kind).toBe('vector');
   });
 });
 
 describe('a state register', () => {
-  const named = (body: string, data = wave()) => signal(withVerilogStateNames(data, [MODULE(body)]), 'state', 'm');
+  const named = (body: string, data = wave()) => signal(withStates(data, [MODULE(body)]), 'state', 'm');
 
   it('is assigned only names of one localparam group', () => {
-    const data = withVerilogStateNames(wave(), [MODULE(`${GROUP}\n  always @* state = IDLE;\n  initial state <= RUN;`)]);
+    const data = withStates(wave(), [MODULE(`${GROUP}\n  always @* state = IDLE;\n  initial state <= RUN;`)]);
     expect(valuesOf(data, signal(data, 'state', 'm'))).toEqual(['IDLE', 'RUN', 'DONE']);
   });
 
   it('may be assigned another state register: state <= next_state', () => {
-    const data = withVerilogStateNames(wave(), [MODULE(`${GROUP}\n  always @* next_state = RUN;\n  always @(posedge c) state <= next_state;`)]);
+    const data = withStates(wave(), [MODULE(`${GROUP}\n  always @* next_state = RUN;\n  always @(posedge c) state <= next_state;`)]);
     expect(signal(data, 'state', 'm').kind).toBe('enum');
     expect(valuesOf(data, signal(data, 'next_state', 'm'))).toEqual(['RUN', 'DONE', 'X']);
   });
@@ -103,24 +107,24 @@ describe('a state register', () => {
   });
 
   it('keeps the bits of a value no state has', () => {
-    const data = withVerilogStateNames(wave(), [MODULE("  localparam [1:0] IDLE = 2'd0, RUN = 2'd1;\n  initial state = RUN;")]);
+    const data = withStates(wave(), [MODULE("  localparam [1:0] IDLE = 2'd0, RUN = 2'd1;\n  initial state = RUN;")]);
     expect(valuesOf(data, signal(data, 'state', 'm'))).toEqual(['IDLE', 'RUN', '10']);
   });
 
   it('may have next_state = state as the default of a two-process state machine', () => {
     const body = `${GROUP}\n  always @* begin next_state = state; if (go) next_state = RUN; end\n  always @(posedge c) state <= next_state;\n  initial state = IDLE;`;
-    const data = withVerilogStateNames(wave(), [MODULE(body)]);
+    const data = withStates(wave(), [MODULE(body)]);
     expect([signal(data, 'state', 'm').kind, signal(data, 'next_state', 'm').kind]).toEqual(['enum', 'enum']);
   });
 
   it('may be used as a state in a comparison instead of a case', () => {
-    const data = withVerilogStateNames(wave(), [`module m;\n  reg [1:0] state;\n${GROUP}\n  initial state = IDLE;\n  wire idle = (state == IDLE);\nendmodule\n`]);
+    const data = withStates(wave(), [`module m;\n  reg [1:0] state;\n${GROUP}\n  initial state = IDLE;\n  wire idle = (state == IDLE);\nendmodule\n`]);
     expect(signal(data, 'state', 'm').kind).toBe('enum');
   });
 
   it('is not one when it is never used as a state: constants loaded into a counter', () => {
     const body = "  localparam [1:0] FULL = 2'd3, HALF = 2'd1;\n  initial state = FULL;\n  always @(posedge c) state <= HALF;";
-    const data = withVerilogStateNames(wave(), [`module m;\n  reg [1:0] state;\n${body}\nendmodule\n`]);
+    const data = withStates(wave(), [`module m;\n  reg [1:0] state;\n${body}\nendmodule\n`]);
     expect(signal(data, 'state', 'm').kind).toBe('vector');
   });
 
@@ -136,7 +140,7 @@ describe('a state register', () => {
 describe('a hierarchical name', () => {
   const TOP = 'module top;\n  wire [1:0] state;\n  child u1 ();\n  assign state = u1.s;\nendmodule\n';
   const TOP_WAVE = ['$timescale 1ns $end', '$scope module top $end', '$var wire 2 ! state [1:0] $end', '$upscope $end', '$enddefinitions $end', '#0', 'b1 !'];
-  const kindWith = (child: string) => signal(withVerilogStateNames(parseVcd(TOP_WAVE.join('\n')), [TOP, child]), 'state', 'top').kind;
+  const kindWith = (child: string) => signal(withStates(parseVcd(TOP_WAVE.join('\n')), [TOP, child]), 'state', 'top').kind;
 
   it("reads the instance's state register", () => {
     expect(kindWith(`module child;\n${GROUP}\n  reg [1:0] s = RUN;\n  always @* case (s) default: ; endcase\nendmodule\n`)).toBe('enum');
@@ -152,11 +156,26 @@ describe('a hierarchical name', () => {
 });
 
 describe('a localparam group', () => {
-  const kindWith = (group: string) => signal(withVerilogStateNames(wave(), [MODULE(`${group}\n  initial state = X;\n  initial state = Y;`)]), 'state', 'm').kind;
+  const kindWith = (group: string) => signal(withStates(wave(), [MODULE(`${group}\n  initial state = X;\n  initial state = Y;`)]), 'state', 'm').kind;
 
   it('may be unsized', () => expect(kindWith('  localparam X = 0, Y = 1;')).toBe('enum'));
   it('may be a parameter statement', () => expect(kindWith('  parameter X = 0, Y = 1;')).toBe('enum'));
   it('needs distinct values', () => expect(kindWith('  localparam X = 1, Y = 1;')).toBe('vector'));
   it('needs constant values', () => expect(kindWith('  localparam X = 0, Y = X + 1;')).toBe('vector'));
   it('needs two names in one statement', () => expect(kindWith('  localparam X = 0;\n  localparam Y = 1;')).toBe('vector'));
+});
+
+describe('a name with characters a pattern would read', () => {
+  // `\a+b(3` is an escaped identifier with an unbalanced `(`: as a raw pattern it throws.
+  const NAME = String.raw`\a+b(3`;
+  const ESCAPED = ['$timescale 1ns $end', '$scope module m $end', `$var reg 2 ! ${NAME} [1:0] $end`, '$scope module genblk1[0] $end', '$upscope $end', '$upscope $end', '$enddefinitions $end', '#0', 'b1 !'];
+  const named = () => withStates(parseVcd(ESCAPED.join('\n')), [MODULE(GROUP)]);
+
+  it('does not stop the waveform from opening: an escaped identifier, a generate scope', () => {
+    expect(named).not.toThrow();
+  });
+
+  it('is matched only as itself', () => {
+    expect(signal(named(), NAME, 'm').kind).toBe('vector');
+  });
 });

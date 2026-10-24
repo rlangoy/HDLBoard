@@ -32,11 +32,7 @@ export interface BoardChangeRecord<Files> {
 }
 
 /** What Undo compares with the record: the open project's key, files and board. */
-export interface CurrentBoardState<Files> {
-  readonly project: string;
-  readonly files: Files;
-  readonly board: string;
-}
+export type CurrentBoardState<Files> = Pick<BoardChangeState<Files>, 'files' | 'board'> & { readonly project: string };
 
 /** Undo is possible only in the same project, while the files and the board are exactly as the change left them. */
 export function canUndo<Files>(record: BoardChangeRecord<Files>, current: CurrentBoardState<Files>): boolean {

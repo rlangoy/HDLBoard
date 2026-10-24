@@ -3,7 +3,7 @@
 
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { findBoard } from '../../boards/boardCatalog';
-import { canUndo, viewsAfterUndo, type BoardChangeRecord } from '../../boards/boardChangeUndo';
+import { canUndo, viewsAfterUndo, type BoardChangeRecord, type BoardChangeState } from '../../boards/boardChangeUndo';
 import type { PortRename } from '../../boards/boardPorts';
 import { applyBoardChange, canApply, planBoardChange, renameWaveViews, testbenchLanguageIn, type BoardChangePlan } from '../../boards/renamePorts';
 import { savePreferredBoard } from '../../boards/preferredBoard';
@@ -102,23 +102,21 @@ function boardOnly(latest: Latest, board: BoardDefinition): BoardChangeResult {
   return { files: latest.current.files, board, boardId: board.id, renames: [], message: boardOnlyLog(board) };
 }
 
-/** What a board change, or its Undo, puts in place. */
-interface BoardState {
-  readonly files: VhdlFile[];
-  readonly board: string;
-  readonly waveViews: SavedWaveViews | undefined;
-}
+/** The saved waveform views as the project holds them when the update is applied, made into the new ones. */
+type ViewsUpdate = (current: SavedWaveViews | undefined) => SavedWaveViews | undefined;
 
 /**
- * Puts a board state in place in one batch of state updates. The preferred board is
- * saved only when the board changes: renaming the files to a shared project's board is
- * not a choice of board for the student's own new projects.
+ * Puts the files and the board in place in one batch of state updates. The views are
+ * worked out from the project as it is then, so a view the viewer saved in the same
+ * batch is not overwritten. The preferred board is saved only when the board changes:
+ * renaming the files to a shared project's board is not a choice of board for the
+ * student's own new projects.
  */
-function applyBoardState(latest: Latest, next: BoardState): void {
+function applyBoardState(latest: Latest, next: Pick<BoardChangeState<VhdlFile[]>, 'files' | 'board'>, viewsOf: ViewsUpdate): void {
   const { project, setFiles, setProject, stopSimulation } = latest.current;
   stopSimulation();
   setFiles(next.files);
-  setProject((p) => withWaveViews({ ...p, board: next.board }, next.waveViews));
+  setProject((p) => withWaveViews({ ...p, board: next.board }, viewsOf(p.waveViews)));
   if (next.board !== project.board) savePreferredBoard(next.board);
 }
 
@@ -129,15 +127,18 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   // Each console line undoes its own change, and only while it is the last one and nothing has changed since.
   const undo = useCallback(
     (done: ChangeRecord) => {
-      const { files, project, projectKey, catalog, log } = latest.current;
-      const isLatest = record.current === done && canUndo(done, { project: projectKey, files, board: project.board });
-      if (!isLatest) {
+      const { busy, files, project, projectKey, catalog, log } = latest.current;
+      if (busy) {
+        log(BOARD_TEXT.undoWhenFree);
+        return;
+      }
+      if (record.current !== done || !canUndo(done, { project: projectKey, files, board: project.board })) {
         log(BOARD_TEXT.nothingToUndo);
         return;
       }
       record.current = null;
-      const waveViews = viewsAfterUndo(done, project.waveViews, testbenchLanguageIn(done.before.files));
-      applyBoardState(latest, { ...done.before, waveViews });
+      const languageOf = testbenchLanguageIn(done.before.files);
+      applyBoardState(latest, done.before, (current) => viewsAfterUndo(done, current, languageOf));
       log(boardUndoneLog(findBoard(catalog, done.before.board).board));
     },
     [latest],
@@ -146,19 +147,18 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   return useCallback(
     (change: BoardChangeResult) => {
       const { files, project, projectKey, log } = latest.current;
-      const after: BoardState = {
-        files: change.files,
-        board: change.boardId,
-        waveViews: renameWaveViews(project.waveViews, change.renames, testbenchLanguageIn(change.files)),
-      };
+      const languageOf = testbenchLanguageIn(change.files);
+      const renamed = (views: SavedWaveViews | undefined) => renameWaveViews(views, change.renames, languageOf);
+      const afterViews = renamed(project.waveViews);
       const done: ChangeRecord = {
         project: projectKey,
         before: { files, board: project.board, waveViews: project.waveViews },
-        after,
+        after: { files: change.files, board: change.boardId, waveViews: afterViews },
         renames: change.renames,
       };
       record.current = done;
-      applyBoardState(latest, after);
+      // Views changed in the same batch are renamed too; Undo then sees they differ from the record's.
+      applyBoardState(latest, done.after, (current) => (current === project.waveViews ? afterViews : renamed(current)));
       log(change.message, { label: BOARD_TEXT.undo, onClick: () => undo(done) });
     },
     [latest, undo],
