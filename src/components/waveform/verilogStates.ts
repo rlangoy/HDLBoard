@@ -20,6 +20,7 @@
  * works out is kept in its own `Analysis`, which nothing outlives.
  */
 
+import { withoutComments } from '../workbench/sourceComments';
 import type { Scope, SignalRef, Trace, TraceId, WaveformData } from './model';
 
 /** Names for the values of one state register: one `localparam` statement. */
@@ -48,7 +49,6 @@ interface Analysis {
   readonly stateGroups: Map<StateGroup, boolean>;
 }
 
-const COMMENTS = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
 const MODULE = /\bmodule\s+(\w+)[\s\S]*?\bendmodule\b/g;
 const PARAMETER_STATEMENT = /\b(?:localparam|parameter)\b\s*(?:signed\b\s*)?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?([^;]*);/g;
 const NAMED_VALUE = /^\s*([A-Za-z_]\w*)\s*=\s*(.+?)\s*$/;
@@ -106,7 +106,7 @@ function groupOf(range: string | undefined, rangeEnd: string | undefined, body: 
 
 function modulesIn(sources: readonly string[]): ModuleSource[] {
   return sources.flatMap((source) =>
-    [...source.replace(COMMENTS, '').matchAll(MODULE)].map((match) => {
+    [...withoutComments(source, 'verilog').matchAll(MODULE)].map((match) => {
       const groups = [...match[0].matchAll(PARAMETER_STATEMENT)].flatMap((statement) => groupOf(statement[1], statement[2], statement[3]) ?? []);
       return { name: match[1], text: match[0], groups };
     }),
@@ -166,21 +166,25 @@ const keyOf = (register: Register) => `${register.module.name}.${register.name}`
 
 /** A register and every register it is assigned from, followed to the end: the groups they name. */
 interface Chain {
-  readonly groups: Set<StateGroup>;
-  readonly registers: Register[];
+  readonly groups: ReadonlySet<StateGroup>;
   /** Some assignment is neither a group's name nor a register: the chain names no states. */
-  other: boolean;
+  readonly other: boolean;
 }
 
-/** Adds what `register`'s assignments say to the chain, and the registers they read to `pending`. */
-function visit(register: Register, chain: Chain, pending: Register[]): void {
-  const rhs = assignmentsTo(register.module, register.name, register.analysis);
-  if (rhs.length === 0) chain.other = true;
-  for (const source of rhs.map((text) => sourceOf(text, register))) {
-    if (source === 'other') chain.other = true;
-    else if ('group' in source) chain.groups.add(source.group);
-    else pending.push(source.register);
-  }
+/** What one register's assignments say: the groups they name, the registers they read, and whether any is neither. */
+interface Reading {
+  readonly groups: readonly StateGroup[];
+  readonly registers: readonly Register[];
+  readonly other: boolean;
+}
+
+function readingOf(register: Register): Reading {
+  const sources = assignmentsTo(register.module, register.name, register.analysis).map((text) => sourceOf(text, register));
+  return {
+    groups: sources.flatMap((source) => (source !== 'other' && 'group' in source ? [source.group] : [])),
+    registers: sources.flatMap((source) => (source !== 'other' && 'register' in source ? [source.register] : [])),
+    other: sources.length === 0 || sources.includes('other'),
+  };
 }
 
 /**
@@ -188,16 +192,18 @@ function visit(register: Register, chain: Chain, pending: Register[]): void {
  * `next_state = state;` default next to `state <= next_state;` does not hide the states.
  */
 function chainOf(start: Register): Chain {
-  const chain: Chain = { groups: new Set(), registers: [], other: false };
+  const groups = new Set<StateGroup>();
   const seen = new Set<string>();
   const pending = [start];
-  for (let register = pending.pop(); register !== undefined && !chain.other; register = pending.pop()) {
+  for (let register = pending.pop(); register !== undefined; register = pending.pop()) {
     if (seen.has(keyOf(register))) continue;
     seen.add(keyOf(register));
-    chain.registers.push(register);
-    visit(register, chain, pending);
+    const reading = readingOf(register);
+    if (reading.other) return { groups, other: true };
+    reading.groups.forEach((group) => groups.add(group));
+    pending.push(...reading.registers);
   }
-  return chain;
+  return { groups, other: false };
 }
 
 /** The names a module uses as states of `group`: `case (state)`, `state == IDLE`, `IDLE != state`. */
@@ -275,6 +281,13 @@ function stateName(bits: string, names: ReadonlyMap<bigint, string>): string {
   return names.get(BigInt(`0b${bits}`)) ?? bits;
 }
 
+/** One past the highest trace id: a loop, as spreading a big waveform's ids as arguments overflows the stack. */
+function nextTraceId(traces: ReadonlyMap<TraceId, Trace>): TraceId {
+  let highest = -1;
+  for (const id of traces.keys()) highest = Math.max(highest, id);
+  return highest + 1;
+}
+
 /** Builds the named traces, one per trace and group (Icarus's aliases share theirs). */
 class NamedTraces {
   readonly traces: Map<TraceId, Trace>;
@@ -284,7 +297,7 @@ class NamedTraces {
 
   constructor(traces: ReadonlyMap<TraceId, Trace>) {
     this.traces = new Map(traces);
-    this.next = Math.max(-1, ...traces.keys()) + 1;
+    this.next = nextTraceId(traces);
   }
 
   /** The trace of `id` with its values named after `group`. */

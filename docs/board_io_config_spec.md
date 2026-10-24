@@ -739,12 +739,13 @@ leds LEDR
 sevenSegment HEX0 HEX1 HEX2 HEX3 HEX4 HEX5
 ```
 
-Rules (decoder `decodeBoardBody`, in `protocol.ts`):
+Rules (decoder `decodeBoardBody`, in `server/src/boardFrame.ts`):
 - Every role appears exactly once, including `clock500Hz`. The client always sends a complete board: defaults are filled
   in when the board file is parsed (§ 4.2), never on the wire. `sevenSegment` has exactly 6 names and every other role has 1.
 - Every name passes `isPlainIdentifier` (§ 4.4), is at most 32 characters, is not `rst`, and is unique ignoring case.
   Ignoring case is deliberate: one board serves both VHDL, where case does not matter, and Verilog, so the stricter rule applies (§ 4.4).
-- On any violation: `ERROR protocol` with a one-line reason, and the session's board becomes **rejected** (§ 8.2).
+- On any violation the session's board becomes **rejected** (§ 8.2) and keeps the one-line reason. The frame itself is not
+  answered: the `RUN` that follows it is refused with `ERROR protocol` and the reason, so one problem gives one error.
 
 ### 8.2 Order and lifetime
 
@@ -825,7 +826,7 @@ export function describeBoardPorts(board: BoardIo): string;  // 'CLOCK_50, CLOCK
 
 ### 9.2 Validation
 
-`protocol.ts` gets `decodeBoardBody(body): BoardIo | ProtocolError`, using the § 8.1 rules. The identifier rule is the
+`boardFrame.ts` has `decodeBoardBody(body): DecodedBoard` (the board, or why it is not one), using the § 8.1 rules. The identifier rule is the
 **security boundary**: the names are pasted into generated HDL. Only `^[A-Za-z](?:_?[A-Za-z0-9])*$` gets through, so no
 quote, parenthesis, semicolon, newline or comment marker ever reaches a testbench. The server never relies on the
 frontend having validated anything: every rule of § 8.1 is checked here again.
@@ -843,7 +844,7 @@ A test sends such a frame directly and pins this behaviour.
 |---|---|
 | `protocol.ts` | `ClientFrame` gets `{ verb: 'BOARD'; board: BoardIo \| ProtocolError }`. A `BOARD` frame always decodes to this verb, so the session learns about an invalid board too (instead of the generic decode-error path). Plus `encodeClientFrame` for `WsTestClient`. |
 | `server.ts` | `case 'BOARD'`: call `session.handleBoard(frame.board)`; an invalid board is reported once, by the `RUN` that follows it. `PROTOCOL_VERSION = '2'`. |
-| `session.ts` | `private board: BoardIo \| { rejected: string } = DEFAULT_BOARD_IO`, `handleBoard(result)` (a valid board sets it; an invalid one keeps its reason), and in `handleRun`: refuse with that reason when rejected (§ 8.2), else `engine.prepare({ …, board: this.board })`. |
+| `session.ts` | `private board: DecodedBoard = { ok: true, board: DEFAULT_BOARD_IO }`, `handleBoard(decoded)` keeps the decoded frame as it is, and in `handleRun`: refuse with its reason when it is not ok (§ 8.2), else `engine.prepare({ …, board })`. |
 | `engines/types.ts` | `PrepareRequest.board: BoardIo` (required). |
 | `tbTemplate.ts` | `generateTestbench(entity, ports, board, options)`. `buildPortMap` builds `known` from `boardBindings(board)` (formal = binding name, actual = binding signal). `buildRstDrive` checks `declaresPort(ports, board.pushbuttons)`. `hasClock50 = declaresPort(ports, board.clock50)`. The formal is the binding's lower-case `key` (`key => key_sig`), exactly as today's map writes `key_n => key_sig`. VHDL ignores case, so this is valid for any board, and with `DEFAULT_BOARD_IO` the generated text stays byte-identical, so the golden files do not change. |
 | `verilog/testbench.ts` | `BOARD_SIGNALS` becomes `boardBindings(board)` plus an off-value per role (`leds` → `10'b0`, `sevenSegment*` → `7'h7F`). `instantiation`, `tieOffs` and `buildBoardTestbench` take `board`. The clock check uses `board.clock50`. |

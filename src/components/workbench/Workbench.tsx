@@ -669,6 +669,15 @@ export function Workbench() {
     if (status === 'running') getClient().stop();
   };
 
+  /**
+   * Stops the run for a board change: it was built with the old names. One still
+   * compiling is stopped as soon as it is ready, as the server takes Stop only then.
+   */
+  const stopRunForBoardChange = () => {
+    if (status === 'compiling') quietEnd.current = true;
+    if (status === 'running') getClient().stop();
+  };
+
   const handleDownloadFile = (id: string) => {
     const file = files.find((f) => f.id === id);
     if (file) downloadSourceFile(file);
@@ -1594,9 +1603,7 @@ export function Workbench() {
     project,
     setProject,
     catalog,
-    stopSimulation: () => {
-      if (status === 'running') getClient().stop();
-    },
+    stopSimulation: stopRunForBoardChange,
     reopenSettings: () => setDialog('settings'),
     log: logWithLink,
     busy: boardLocked,
@@ -1609,12 +1616,12 @@ export function Workbench() {
 
   // A fresh start on a board from boards/boards.json: that file arrives after the first
   // render, and the untouched starter files are then put in the board's names. A run
-  // started before it arrived was built with the old names, so it stops, as for any board change.
+  // started before it arrived, even one still compiling, was built with the old names, so it stops.
   useEffect(() => {
     const ready = freshWorkspace(catalog, preferredBoard);
     const untouched = filesRef.current === freshStart.files && project === freshStart.project;
     if (!untouched || ready.board.id === freshStart.board.id) return;
-    if (status === 'running') getClient().stop();
+    stopRunForBoardChange();
     setFiles(ready.files);
     setProject(ready.project);
   }, [catalog]);

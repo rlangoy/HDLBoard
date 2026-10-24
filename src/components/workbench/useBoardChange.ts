@@ -3,7 +3,7 @@
 
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { findBoard } from '../../boards/boardCatalog';
-import { canUndo, undoneRenames, type BoardChangeRecord } from '../../boards/boardChangeUndo';
+import { canUndo, viewsAfterUndo, type BoardChangeRecord } from '../../boards/boardChangeUndo';
 import type { PortRename } from '../../boards/boardPorts';
 import { applyBoardChange, canApply, planBoardChange, renameWaveViews, testbenchLanguageIn, type BoardChangePlan } from '../../boards/renamePorts';
 import { savePreferredBoard } from '../../boards/preferredBoard';
@@ -11,6 +11,7 @@ import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { BOARD_TEXT, boardOnlyLog, boardRenamedLog, boardUndoneLog } from './boardText';
 import type { ConsoleLink } from './ConsoleOutput';
 import type { VhdlFile } from './files';
+import type { SavedWaveViews } from '../../project/types';
 import type { OpenProject } from './projectFile';
 
 /** What the board-change dialog shows (docs/board_io_config_spec.md § 3.3, § 3.5). */
@@ -104,9 +105,8 @@ function boardOnly(latest: Latest, board: BoardDefinition): BoardChangeResult {
 /** What a board change, or its Undo, puts in place. */
 interface BoardState {
   readonly files: VhdlFile[];
-  readonly boardId: string;
-  /** The renames the saved waveform views follow. */
-  readonly renames: readonly PortRename[];
+  readonly board: string;
+  readonly waveViews: SavedWaveViews | undefined;
 }
 
 /**
@@ -118,9 +118,8 @@ function applyBoardState(latest: Latest, next: BoardState): void {
   const { project, setFiles, setProject, stopSimulation } = latest.current;
   stopSimulation();
   setFiles(next.files);
-  const languageOf = testbenchLanguageIn(next.files);
-  setProject((p) => withWaveViews({ ...p, board: next.boardId }, renameWaveViews(p.waveViews, next.renames, languageOf)));
-  if (next.boardId !== project.board) savePreferredBoard(next.boardId);
+  setProject((p) => withWaveViews({ ...p, board: next.board }, next.waveViews));
+  if (next.board !== project.board) savePreferredBoard(next.board);
 }
 
 /** Applies a change, remembers what it replaced, and offers Undo of that change in the console. */
@@ -131,13 +130,14 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   const undo = useCallback(
     (done: ChangeRecord) => {
       const { files, project, projectKey, catalog, log } = latest.current;
-      const isLatest = record.current === done && canUndo(done, { files, board: project.board, project: projectKey });
+      const isLatest = record.current === done && canUndo(done, { project: projectKey, files, board: project.board });
       if (!isLatest) {
         log(BOARD_TEXT.nothingToUndo);
         return;
       }
       record.current = null;
-      applyBoardState(latest, { files: done.before.files, boardId: done.before.board, renames: undoneRenames(done.renames) });
+      const waveViews = viewsAfterUndo(done, project.waveViews, testbenchLanguageIn(done.before.files));
+      applyBoardState(latest, { ...done.before, waveViews });
       log(boardUndoneLog(findBoard(catalog, done.before.board).board));
     },
     [latest],
@@ -146,13 +146,19 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   return useCallback(
     (change: BoardChangeResult) => {
       const { files, project, projectKey, log } = latest.current;
+      const after: BoardState = {
+        files: change.files,
+        board: change.boardId,
+        waveViews: renameWaveViews(project.waveViews, change.renames, testbenchLanguageIn(change.files)),
+      };
       const done: ChangeRecord = {
-        before: { files, board: project.board, project: projectKey },
-        after: { files: change.files, board: change.boardId, project: projectKey },
+        project: projectKey,
+        before: { files, board: project.board, waveViews: project.waveViews },
+        after,
         renames: change.renames,
       };
       record.current = done;
-      applyBoardState(latest, change);
+      applyBoardState(latest, after);
       log(change.message, { label: BOARD_TEXT.undo, onClick: () => undo(done) });
     },
     [latest, undo],

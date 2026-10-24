@@ -3,13 +3,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, builtInBoard, DEFAULT_BOARD, mergeCatalog } from './boardCatalog';
-import { canUndo, undoneRenames, type BoardChangeRecord } from './boardChangeUndo';
+import { canUndo, undoneRenames, viewsAfterUndo, type BoardChangeRecord } from './boardChangeUndo';
 import { encodeBoardFrame } from './boardFrame';
 import { foreignBoardNames } from './boardMatch';
 import { BUILT_IN_PORT_NAMES, portList, sevenSegmentHeading } from './boardPorts';
 import { DEFAULT_LABELS } from './parseBoards';
 import { parsePreferredBoard, preferredBoardIn } from './preferredBoard';
-import { renameWaveViews } from './renamePorts';
 import type { BoardDefinition } from './types';
 
 const DE1_SOC = builtInBoard('de1-soc');
@@ -106,31 +105,32 @@ describe('canUndo', () => {
   const before = [{ id: 'a', content: 'KEY_N' }];
   const after = [{ id: 'a', content: 'KEY' }];
   const record: BoardChangeRecord<Array<{ id: string; content: string }>> = {
-    before: { files: before, board: 'default', project: '0' },
-    after: { files: after, board: 'de1-soc', project: '0' },
+    project: '0',
+    before: { files: before, board: 'default', waveViews: undefined },
+    after: { files: after, board: 'de1-soc', waveViews: undefined },
     renames: [{ from: 'KEY_N', to: 'KEY' }],
   };
 
   it('is possible right after the change', () => {
-    expect(canUndo(record, { files: after, board: 'de1-soc', project: '0' })).toBe(true);
+    expect(canUndo(record, { project: '0', files: after, board: 'de1-soc' })).toBe(true);
   });
 
   it('is not possible once a file changed, was added, deleted or renamed: a new array', () => {
-    expect(canUndo(record, { files: [...after], board: 'de1-soc', project: '0' })).toBe(false);
-    expect(canUndo(record, { files: [{ id: 'a', content: 'KEY ' }], board: 'de1-soc', project: '0' })).toBe(false);
+    expect(canUndo(record, { project: '0', files: [...after], board: 'de1-soc' })).toBe(false);
+    expect(canUndo(record, { project: '0', files: [{ id: 'a', content: 'KEY ' }], board: 'de1-soc' })).toBe(false);
   });
 
   it('is not possible once the board changed again', () => {
-    expect(canUndo(record, { files: after, board: 'default', project: '0' })).toBe(false);
+    expect(canUndo(record, { project: '0', files: after, board: 'default' })).toBe(false);
   });
 
   it('is not possible in another project, even one with the same files and board (Close project)', () => {
-    expect(canUndo(record, { files: after, board: 'de1-soc', project: '1' })).toBe(false);
+    expect(canUndo(record, { project: '1', files: after, board: 'de1-soc' })).toBe(false);
   });
 
   it('holds for a board-only change with the same files', () => {
-    const boardOnly = { before: { files: before, board: 'default', project: '0' }, after: { files: before, board: 'de1-soc', project: '0' }, renames: [] };
-    expect(canUndo(boardOnly, { files: before, board: 'de1-soc', project: '0' })).toBe(true);
+    const boardOnly = { ...record, before: { ...record.before, files: before }, after: { ...record.after, files: before }, renames: [] };
+    expect(canUndo(boardOnly, { project: '0', files: before, board: 'de1-soc' })).toBe(true);
   });
 });
 
@@ -138,13 +138,27 @@ describe('undoneRenames', () => {
   it('takes every name back', () => {
     expect(undoneRenames([{ from: 'KEY_N', to: 'KEY' }])).toEqual([{ from: 'KEY', to: 'KEY_N' }]);
   });
+});
 
-  it('keeps a waveform view changed after the board change, only renamed back', () => {
-    const renames = [{ from: 'KEY_N', to: 'KEY' }];
-    const changedSince = { uart_tx_tb: { signals: [{ path: 'uut/KEY' }, { path: 'uut/added_after' }] } };
-    expect(renameWaveViews(changedSince, undoneRenames(renames))).toEqual({
-      uart_tx_tb: { signals: [{ path: 'uut/KEY_N' }, { path: 'uut/added_after' }] },
-    });
+describe('viewsAfterUndo', () => {
+  // A Verilog port written in lower case: the change wrote the board's spelling, Undo puts the file back.
+  const beforeViews = { counter_tb: { signals: [{ path: 'uut/key_n' }] } };
+  const afterViews = { counter_tb: { signals: [{ path: 'uut/KEY' }] } };
+  const record: BoardChangeRecord<string[]> = {
+    project: '0',
+    before: { files: [], board: 'default', waveViews: beforeViews },
+    after: { files: [], board: 'de1-soc', waveViews: afterViews },
+    renames: [{ from: 'KEY_N', to: 'KEY' }],
+  };
+  const verilog = () => 'verilog' as const;
+
+  it('restores views left as the change made them exactly, in the spelling the files had', () => {
+    expect(viewsAfterUndo(record, afterViews, verilog)).toBe(beforeViews);
+  });
+
+  it('keeps a view changed since, with the names renamed back', () => {
+    const changedSince = { counter_tb: { signals: [{ path: 'uut/KEY' }, { path: 'uut/added_after' }] } };
+    expect(viewsAfterUndo(record, changedSince, verilog)).toEqual({ counter_tb: { signals: [{ path: 'uut/KEY_N' }, { path: 'uut/added_after' }] } });
   });
 });
 

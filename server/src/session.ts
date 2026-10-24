@@ -268,7 +268,7 @@ export class Session {
     this.waveRequested = on;
   }
 
-  /** `BOARD`: the port names of the next runs. The caller has already said why an invalid one is invalid. */
+  /** `BOARD`: the port names of the next runs. An invalid one is not answered here: the next RUN is refused with its reason. */
   handleBoard(decoded: DecodedBoard): void {
     this.board = decoded;
   }

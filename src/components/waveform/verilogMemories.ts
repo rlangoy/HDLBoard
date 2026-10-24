@@ -7,9 +7,9 @@
  * testbench's own source because the file does not mention them. Pure.
  */
 
+import { withoutComments } from '../workbench/sourceComments';
 import type { WaveformData } from './model';
 
-const COMMENTS = /\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
 const MODULE = /\bmodule\s+(\w+)[\s\S]*?\bendmodule\b/g;
 /** `reg [7:0] mem [0:3];`, `reg [7:0] a, mem [0:3];`, `logic [3:0] m [4];` */
 const MEMORY_DECLARATION = /\b(?:reg|wire|logic|integer)\b(?:\s*signed)?\s*(?:\[[^\]]*\])?\s*([^;]*);/g;
@@ -25,7 +25,7 @@ function memoriesIn(moduleText: string): string[] {
 
 /** The memories `moduleName` declares in `source`. */
 export function memoryNames(source: string, moduleName: string): string[] {
-  const code = source.replace(COMMENTS, '');
+  const code = withoutComments(source, 'verilog');
   const module = [...code.matchAll(MODULE)].find((match) => match[1] === moduleName);
   return module === undefined ? [] : memoriesIn(module[0]);
 }

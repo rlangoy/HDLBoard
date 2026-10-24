@@ -19,6 +19,7 @@
 
 import { languageOfName, type Language } from '../components/workbench/fileKinds';
 import { tokenizeSource } from '../components/workbench/highlight';
+import { withoutComments } from '../components/workbench/sourceComments';
 import type { Token } from '../components/workbench/vhdlHighlight';
 import type { SavedWaveSignal, SavedWaveViews } from '../project/types';
 import { DEFAULT_BOARD } from './boardCatalog';
@@ -298,7 +299,7 @@ const VERILOG_MODULE = /\bmodule\s+([A-Za-z_]\w*)/g;
 function declaredUnitsOf(files: readonly RenameableFile[], language: Language): Set<string> {
   const pattern = language === 'vhdl' ? VHDL_ENTITY : VERILOG_MODULE;
   const ofLanguage = files.filter((file) => languageOfName(file.name) === language);
-  const names = ofLanguage.flatMap((file) => [...file.content.matchAll(pattern)].map((match) => match[1]));
+  const names = ofLanguage.flatMap((file) => [...withoutComments(file.content, language).matchAll(pattern)].map((match) => match[1]));
   return new Set(language === 'vhdl' ? names.map((name) => name.toLowerCase()) : names);
 }
 

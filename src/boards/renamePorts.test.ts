@@ -235,6 +235,14 @@ describe('planBoardChange and applyBoardChange', () => {
     expect(renameWaveViews(views, TO_DE1, testbenchLanguageIn(vhdl))?.counter_tb.signals).toEqual([{ path: 'uut/key' }]);
   });
 
+  it('does not count a unit named only in a comment', () => {
+    const files = [
+      { id: 'h', name: 'counter_tb.vhd', content: 'entity counter_tb is end entity;' },
+      { id: 'v', name: 'notes.v', content: '// this module counter_tb is the VHDL one\nmodule other; endmodule' },
+    ];
+    expect(testbenchLanguageIn(files)('counter_tb')).toBe('vhdl');
+  });
+
   it('cannot tell the language of a testbench both languages declare', () => {
     const both = [
       { id: 'h', name: 'counter_tb.vhd', content: 'entity counter_tb is end entity;' },
