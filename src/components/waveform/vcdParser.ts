@@ -208,7 +208,8 @@ export class VcdParser {
     $timescale: (args) => this.setTimescale(args.join('')),
     $scope: (args) => this.tree.enter(args[1] ?? args[0] ?? '', 'instance'),
     $upscope: () => this.tree.leave(),
-    $var: (args) => this.declare(args),
+    // Icarus records each parameter and localparam, which never change: left out, as GHDL leaves out VHDL constants.
+    $var: (args) => args[0] !== 'parameter' && this.declare(args),
     $comment: (args) => this.headerComment(args),
     $enddefinitions: () => {
       this.phase = 'body';

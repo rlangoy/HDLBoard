@@ -61,6 +61,11 @@ describe('the UART Tx Testbench (Verilog)', () => {
     expect(signal(named(), 'DataReg', 'UART_Tx_tb', 'uut').kind).toBe('vector');
   });
 
+  it('leaves out the localparams, as the VHDL waveform leaves out constants', () => {
+    const names = scopeAt(named(), 'UART_Tx_tb', 'uut').signals.map((s) => s.name);
+    expect(names.filter((name) => /INDEX|^IDLE$|CLKS_PER_BIT|BAUD_RATE/.test(name))).toEqual([]);
+  });
+
   it('shows the bits without the sources', () => {
     expect(signal(withVerilogStateNames(uartWave(), []), 'State', 'UART_Tx_tb', 'uut').kind).toBe('vector');
   });
