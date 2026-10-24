@@ -96,7 +96,7 @@ export const RULE_TEXT: Readonly<Record<RuleId, RuleText>> = {
   'vhdl-tb-name': { title: 'testbench name', explanation: 'The name looks like a testbench (`*_tb`, `tb_*`, `*_test`…). Only a hint — a name is a promise, not a proof.' },
   'vhdl-framework': { title: 'test framework', explanation: 'VUnit or OSVVM is a verification framework; only testbenches use it.' },
   'vhdl-sim-only': { title: 'translate_off region', explanation: 'Code between `synthesis translate_off` and `translate_on` is hidden from synthesis — simulation-only code inside a design.' },
-  'vhdl-board-ports': { title: 'board ports', explanation: 'The entity has DE1-SoC board ports (SW, LEDR, KEY_N…), so it is a board design, never a testbench.' },
+  'vhdl-board-ports': { title: 'board ports', explanation: 'The entity has board ports (SW, LEDR, KEY…), so it is a board design, never a testbench.' },
   'vlog-portless': { title: 'no ports', explanation: 'The module has no port list. A design talks to the world through ports; a testbench is the world, so it needs none.' },
   'vlog-delay': { title: '# delay', explanation: `A \`#\` delay inside \`initial\` or \`always\` pauses for simulated time. ${NO_TIME}` },
   'vlog-assign-delay': { title: 'assign #', explanation: 'A delay on a continuous assignment is ignored by synthesis. Designs sometimes use it to make waveforms readable.' },
@@ -112,5 +112,5 @@ export const RULE_TEXT: Readonly<Record<RuleId, RuleText>> = {
   'vlog-uvm': { title: 'UVM', explanation: 'UVM is a verification library; only testbenches use it.' },
   'vlog-sim-only': { title: 'simulation-only region', explanation: 'Code inside `ifndef SYNTHESIS` or `translate_off` is hidden from synthesis — simulation-only code inside a design.' },
   'vlog-assert': { title: 'assert', explanation: 'An immediate `assert` checks a condition while simulating. Designs use it too, so this is a weak hint.' },
-  'vlog-board-ports': { title: 'board ports', explanation: 'The module has DE1-SoC board ports (SW, LEDR, KEY_N…), so it is a board design, never a testbench.' },
+  'vlog-board-ports': { title: 'board ports', explanation: 'The module has board ports (SW, LEDR, KEY…), so it is a board design, never a testbench.' },
 };

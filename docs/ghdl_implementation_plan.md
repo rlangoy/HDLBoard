@@ -1196,7 +1196,8 @@ body        = *OCTET          ; everything after the first LF, verbatim
 
 | Verb | Args | Body | Meaning | Proposal § 4 equivalent |
 |---|---|---|---|---|
-| `HELLO` | version | — | First frame. `1` today. | — |
+| `HELLO` | version | — | First frame. `2` today (any version is accepted, see § 6.6). | — |
+| `BOARD` | — | one `role name…` line per board role | The board's port names for the next runs (below). | — |
 | `RUN` | top file name (optional) | the VHDL project | Analyze, elaborate, start. | `compile` + `start` |
 | `STIM` | 14 chars `[01]{14}` | — | New `SW`/`KEY` state. | `input` |
 | `RESET` | — | — | Restart simulation from t=0, same compiled design. | `reset` |
@@ -1250,6 +1251,31 @@ two files declaring identical board ports but opposite logic
 cannot distinguish): the explicit hint reliably picks the one actually
 named, confirmed against the real simulated `LEDR` value, not just that
 the right frame went out.
+
+**`BOARD` — the board's port names** (protocol version 2, docs/board_io_config_spec.md § 8). The
+client sends it before every `RUN`, after `WAVE`, so the board design is matched and wired by the
+names of the board the student chose:
+
+```
+BOARD
+clock50 CLOCK_50
+clock500Hz CLOCK_500Hz
+switches SW
+pushbuttons KEY
+leds LEDR
+sevenSegment HEX0 HEX1 HEX2 HEX3 HEX4 HEX5
+```
+
+- Every role exactly once; `sevenSegment` has six names, display 0 first, the others one each.
+- Every name is a plain identifier (`^[A-Za-z](?:_?[A-Za-z0-9])*$`), at most 32 characters, not `rst`,
+  and unique ignoring case. The names go into the generated testbench, so the server checks this itself:
+  nothing else ever reaches generated HDL. Reserved words are not checked: the testbench then fails to
+  compile, under stage `internal`.
+- The board is sticky, like `WAVE`: later `RUN`s without a `BOARD` use it too. A session that never got
+  one uses the Default names (`KEY_N`, `HEX0_N` … `HEX5_N`), so older clients behave as before.
+- An invalid `BOARD` is answered with `ERROR protocol`, and every `RUN` after it is refused
+  (`RUN refused: the last BOARD frame was not valid.`) until a valid one arrives.
+- `STIM` and `STATE` are keyed by role and do not change.
 
 ### 6.4 Server → client
 
@@ -1306,6 +1332,11 @@ user-initiated end, in either mode.
 misinterpreted. A server that does not support the requested version replies
 `ERROR protocol`, lists supported versions in the body, and closes. New
 verbs are additive.
+
+In practice the version is informational: the backend accepts any `HELLO` version and answers
+with its own. Version 2 added `BOARD`. A backend older than that answers `BOARD` with
+`ERROR protocol` `Unknown verb: "BOARD"` and runs with the Default names; the client then says
+once that the backend is older than the page, and sends no more `BOARD` frames on that connection.
 
 ---
 

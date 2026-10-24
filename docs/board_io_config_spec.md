@@ -8,7 +8,7 @@ HDLBoard can follow another board's naming. A board is chosen in **Settings**. W
 HDLBoard offers to rename the ports in the project's files. Built-in examples open with the
 chosen board's names. Expert users add boards in a JSON file. There is no board editor.
 
-Status: **specification, not implemented.** Written against `hdl-board` 1.5.1. Revised after four
+Status: **implemented in 1.6.0** (branch impl_customs_board_config). Written against `hdl-board` 1.5.1. Revised after four
 reviews. § 19 lists what was changed, and why some suggestions were not taken.
 
 Guiding rule for every decision below: **logical and easy to implement**. A suggestion was taken when it

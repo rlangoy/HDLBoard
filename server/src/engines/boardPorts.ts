@@ -63,23 +63,25 @@ export interface BoardBinding {
   readonly direction: BoardDirection;
 }
 
-function binding(role: string, name: string, signal: string, direction: BoardDirection): BoardBinding {
-  return { role, name, key: name.toLowerCase(), signal, direction };
-}
+/** A row of the table before its matching key is added. */
+type BindingRow = Omit<BoardBinding, 'key'>;
+
+const withKey = (row: BindingRow): BoardBinding => ({ ...row, key: row.name.toLowerCase() });
 
 /**
  * THE table, in port-map order: the order both testbench generators connect the ports
  * in and `STATE` is assembled in (LEDs, then display 0 … 5).
  */
 export function boardBindings(board: BoardIo): readonly BoardBinding[] {
-  return [
-    binding('clock50', board.clock50, 'clk_sig', 'in'),
-    binding('clock500Hz', board.clock500Hz, 'clk500_sig', 'in'),
-    binding('switches', board.switches, 'sw_sig', 'in'),
-    binding('pushbuttons', board.pushbuttons, 'key_sig', 'in'),
-    binding('leds', board.leds, 'ledr_sig', 'out'),
-    ...board.sevenSegment.map((name, index) => binding(`sevenSegment${index}`, name, `hex${index}_sig`, 'out')),
+  const rows: BindingRow[] = [
+    { role: 'clock50', name: board.clock50, signal: 'clk_sig', direction: 'in' },
+    { role: 'clock500Hz', name: board.clock500Hz, signal: 'clk500_sig', direction: 'in' },
+    { role: 'switches', name: board.switches, signal: 'sw_sig', direction: 'in' },
+    { role: 'pushbuttons', name: board.pushbuttons, signal: 'key_sig', direction: 'in' },
+    { role: 'leds', name: board.leds, signal: 'ledr_sig', direction: 'out' },
+    ...board.sevenSegment.map((name, index): BindingRow => ({ role: `sevenSegment${index}`, name, signal: `hex${index}_sig`, direction: 'out' })),
   ];
+  return rows.map(withKey);
 }
 
 /** The board's port names, lower case, in table order; with `legacyReset`, `rst` last. */

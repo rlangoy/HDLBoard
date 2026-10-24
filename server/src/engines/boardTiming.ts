@@ -32,7 +32,7 @@ import type { BoardTiming } from './types.js';
  * press and release that reached the process together — since a real human press lasts
  * far longer than either value. With `CLOCK_50` one poll (10 us) is already 500 clock
  * edges. Without it, 4 ms spans two rising edges of `CLOCK_500Hz`, so a design that
- * samples `KEY_N` on that clock still sees every queued press.
+ * samples the pushbuttons on that clock still sees every queued press.
  */
 export const TIMING_WITH_CLOCK_50: BoardTiming = { pollIntervalNs: 10_000, minDwellNs: 10_000 };
 
