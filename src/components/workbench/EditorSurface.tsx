@@ -9,6 +9,7 @@ import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrol
 import { isOverflowing } from './scrollThumb';
 import { applyEdit } from './find/applyEdit';
 import { unwrapCodeFence } from './pasteFence';
+import { tabEdit } from './tabIndent';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import type { CharRange, Token } from './vhdlHighlight';
 import type { FindDecor } from './find/useFind';
@@ -199,6 +200,20 @@ export function EditorSurface({
   const gutterRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scroll = useScrollMetrics(textareaRef);
+  // Tab indents, as in an IDE (tabIndent.ts); Esc then Tab moves on to the next control.
+  const tabLeaves = useRef(false);
+  const handleTab = (textarea: HTMLTextAreaElement, outdent: boolean, withModifier: boolean): boolean => {
+    if (withModifier || tabLeaves.current) {
+      tabLeaves.current = false;
+      return false;
+    }
+    const edit = tabEdit(textarea.value, textarea.selectionStart, textarea.selectionEnd, outdent);
+    if (edit !== undefined) {
+      applyEdit(textarea, edit.start, edit.end, edit.text);
+      textarea.setSelectionRange(edit.selectStart, edit.selectEnd);
+    }
+    return true;
+  };
   // Where both bars show, each stops short of the corner the other one runs into.
   const bothBars = isOverflowing(scroll.x) && isOverflowing(scroll.y);
   const cornerInset = bothBars ? SCROLLBAR_PX : 0;
@@ -289,6 +304,12 @@ export function EditorSurface({
           onSelect={atCaret.onSelect}
           onPointerDown={onFindDismiss}
           onKeyDown={(e) => {
+            if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
+              e.preventDefault();
+              return;
+            }
+            // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
+            tabLeaves.current = e.key === 'Escape';
             if (e.key === 'Escape' && onFindEscape?.()) e.preventDefault();
           }}
           aria-label={label ?? `${file.name} source`}
