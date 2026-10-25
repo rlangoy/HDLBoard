@@ -31,7 +31,7 @@ import { normaliseBoardBits } from './engines/boardBits.js';
 import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
-import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
+import type { BoardFiles, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
 import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
@@ -99,6 +99,10 @@ const PACING_MAX_OUTSTANDING = 1000;
  */
 const SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 const MS_PER_SECOND = 1000;
+/** How often, and how far apart, removing the session folder is tried on teardown. */
+const TEARDOWN_RETRIES = 10;
+const TEARDOWN_RETRY_MS = 100;
+
 /** How often a contended rename is retried before giving up (`renameOverOpenFile`). */
 const MAX_RENAME_RETRIES = 50;
 const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
@@ -210,6 +214,8 @@ export class Session {
    * one, runs are refused with its reason until a valid one arrives.
    */
   private decodedBoard: DecodedBoard = { ok: true, board: DEFAULT_BOARD_IO };
+  /** The compile in progress, if any: the next one waits for it (`prepareInTurn`). */
+  private compiling: Promise<void> = Promise.resolve();
   /** The board of the run in progress: what its `STIM` and `STATE` lengths are (§ 6.2). */
   private runBoard: BoardIo = DEFAULT_BOARD_IO;
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
@@ -387,15 +393,8 @@ export class Session {
     this.state = 'compiling';
     const request = ++this.runRequest;
 
-    // A client that sent a broken board never gets a simulation with names it did not ask for.
-    const decoded = this.decodedBoard;
-    if (!decoded.ok) {
-      // One error for one problem: the BOARD frame itself is not answered, so its reason comes here.
-      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${decoded.reason}`);
-      return;
-    }
-    const { board } = decoded;
-    this.setRunBoard(board);
+    const board = this.boardForRun();
+    if (board === undefined) return;
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
@@ -404,15 +403,19 @@ export class Session {
       return;
     }
 
-    const prepared = await engine.prepare({ dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board });
+    const prepared = await this.prepareInTurn(engine, request, { dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
-    if (this.destroyed || request !== this.runRequest) return;
+    if (prepared === undefined || this.destroyed || request !== this.runRequest) return;
+    this.startPrepared(engine, prepared);
+  }
+
+  /** A finished compile: its failure, or the run it prepared. */
+  private startPrepared(engine: SimEngine, prepared: PrepareResult): void {
     if (!prepared.ok) {
       this.failRun(prepared.stage, prepared.text);
       return;
     }
-
     this.engine = engine;
     this.plan = prepared.plan;
     for (const message of prepared.plan.messages) this.send({ verb: 'LOG', text: message });
@@ -428,6 +431,37 @@ export class Session {
   private setRunBoard(board: BoardIo): void {
     if (!sameStimMeaning(this.runBoard, board)) this.lastStimBits = null;
     this.runBoard = board;
+  }
+
+  /**
+   * The board the run is for, or undefined after refusing the run: a client that sent a
+   * broken board never gets a simulation with names it did not ask for. One error for one
+   * problem: the BOARD frame itself is not answered, so its reason comes here.
+   */
+  private boardForRun(): BoardIo | undefined {
+    const decoded = this.decodedBoard;
+    if (!decoded.ok) {
+      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${decoded.reason}`);
+      return undefined;
+    }
+    this.setRunBoard(decoded.board);
+    return decoded.board;
+  }
+
+  /**
+   * One compile at a time in the session folder: a compile cannot be stopped half-way,
+   * and two would write over each other's files there. A RUN waits for the compile
+   * before it; one superseded meanwhile (a newer RUN, Stop, a closed tab) never starts.
+   */
+  private async prepareInTurn(engine: SimEngine, request: number, prepare: PrepareRequest): Promise<PrepareResult | undefined> {
+    await this.compiling;
+    if (this.destroyed || request !== this.runRequest) return undefined;
+    const preparing = engine.prepare(prepare);
+    this.compiling = preparing.then(
+      () => undefined,
+      () => undefined,
+    );
+    return preparing;
   }
 
   private failRun(stage: ErrorStage, text: string): void {
@@ -447,7 +481,7 @@ export class Session {
     // few ms; `output.txt` is shared but milder — one stale board state,
     // corrected by this run's first real one.
     this.runSeq++;
-    rmSync(this.outputPath(), { force: true });
+    this.removeStaleOutput();
     // A fresh process starts having applied nothing, so the queue restarts
     // as the one current input state rather than replaying the old run's
     // backlog — what `input.txt` surviving across runs used to give for
@@ -758,6 +792,19 @@ export class Session {
     // Gave up; the next write will carry the same queue.
   }
 
+  /**
+   * The last run's `output.txt`. On Windows the simulator just killed may still hold it
+   * open for a moment (EBUSY, EPERM); after a few tries it is left, which costs one stale
+   * board state, corrected by the new run's first one — never the session.
+   */
+  private removeStaleOutput(): void {
+    try {
+      rmSync(this.outputPath(), { force: true, maxRetries: MAX_RENAME_RETRIES, retryDelay: 1 });
+    } catch {
+      // Still held: see above.
+    }
+  }
+
   handleReset(): void {
     if (this.state !== 'running' || !this.engine || !this.plan) return;
     this.stopActive(null);
@@ -767,7 +814,18 @@ export class Session {
   }
 
   handleStop(): void {
-    this.stopActive('stopped');
+    if (this.state === 'compiling') this.abandonCompile();
+    else this.stopActive('stopped');
+  }
+
+  /**
+   * Stop while a run compiles: the compile is left to finish, but its result is dropped
+   * (the request number moves on, as for a newer RUN), so nothing starts after Stop.
+   */
+  private abandonCompile(): void {
+    this.runRequest++;
+    this.state = 'stopped';
+    this.send({ verb: 'DONE', reason: 'stopped' });
   }
 
   /** Tears down whichever of the two run kinds is currently active. */
@@ -799,6 +857,7 @@ export class Session {
     this.stopLimiterTimer();
     if (this.run) this.run.kill();
     if (this.batchRun) this.batchRun.kill();
-    void fs.rm(this.dir, { recursive: true, force: true }).catch(() => {});
+    // Retried: on Windows the simulator just killed still holds the folder for a moment.
+    void fs.rm(this.dir, { recursive: true, force: true, maxRetries: TEARDOWN_RETRIES, retryDelay: TEARDOWN_RETRY_MS }).catch(() => {});
   }
 }

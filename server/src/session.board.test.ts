@@ -85,3 +85,55 @@ describe('the session board', () => {
     assert.deepEqual(boards, [DE1_SOC_BOARD_IO]);
   });
 });
+
+describe('Stop while a run compiles', () => {
+  test('ends the run at once, and nothing starts when the compile finishes', async () => {
+    let finishCompile: () => void = () => {};
+    const engine: SimEngine = {
+      language: 'vhdl',
+      prepare: () =>
+        new Promise((resolve) => {
+          finishCompile = () => resolve({ ok: true, plan: { mode: 'board', dir: '', runTarget: '', timing: { pollIntervalNs: 1, minDwellNs: 1 }, pacing: 'stdin', messages: [] } });
+        }),
+      startBoardRun: () => assert.fail('a stopped run must not start'),
+      startBatchRun: () => assert.fail('a stopped run must not start'),
+    };
+    const { session, frames } = sessionWith(engine);
+    const run = session.handleRun(FILES, 'top.vhdl');
+    session.handleStop();
+    finishCompile();
+    await run;
+    session.destroy();
+    assert.deepEqual(frames, [{ verb: 'DONE', reason: 'stopped' }]);
+  });
+});
+
+describe('a RUN while another compiles', () => {
+  test('waits for that compile before its own starts, and only the newest run is answered', async () => {
+    const finishers: Array<() => void> = [];
+    let compiles = 0;
+    const engine: SimEngine = {
+      language: 'vhdl',
+      prepare: () => {
+        compiles++;
+        return new Promise((resolve) => finishers.push(() => resolve({ ok: false, stage: 'analyze', text: `compile ${compiles}` })));
+      },
+      startBoardRun: () => assert.fail('nothing runs in this test'),
+      startBatchRun: () => assert.fail('nothing runs in this test'),
+    };
+    const { session, frames } = sessionWith(engine);
+    const first = session.handleRun(FILES, 'top.vhdl');
+    await new Promise((resolve) => setImmediate(resolve));
+    const second = session.handleRun(FILES, 'top.vhdl');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(compiles, 1, 'the second compile must wait for the first');
+    finishers[0]();
+    await first;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(compiles, 2);
+    finishers[1]();
+    await second;
+    session.destroy();
+    assert.deepEqual(frames, [{ verb: 'ERROR', stage: 'analyze', text: 'compile 2' }]);
+  });
+});

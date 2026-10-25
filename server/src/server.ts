@@ -43,6 +43,14 @@ import {
   isGitHubAuthPath,
   type OAuthAppCredentials,
 } from './githubAuth.js';
+import { socketRequestAllowed } from './requestOrigin.js';
+
+/**
+ * The largest frame a client may send: a RUN with every source of a project. Far above
+ * any course project, far below ws's default of 100 MiB, which one tab could make the
+ * backend buffer.
+ */
+const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 
 const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
@@ -235,12 +243,18 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
    * `/ghdlsim`) is a socket
    * while everything else stays a normal request.
    */
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
     const { pathname } = new URL(req.url ?? '/', 'http://localhost');
     if (pathname !== WSPATH && pathname !== LEGACY_WSPATH) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    // Only HDLBoard's own page may start simulations, never another site (requestOrigin.ts).
+    if (!socketRequestAllowed(req, { loopbackOnly: serveDir !== null })) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }

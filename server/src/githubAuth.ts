@@ -16,6 +16,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isSameHost } from './requestOrigin.js';
 
 export const GITHUB_AUTH_PATH = '/github-auth';
 
@@ -159,14 +160,7 @@ function corsHeadersFor(request: IncomingMessage): Record<string, string> | null
   };
 }
 
-function isSameHost(origin: string, hostHeader: string | undefined): boolean {
-  if (hostHeader === undefined) return false;
-  try {
-    return new URL(origin).hostname === new URL(`http://${hostHeader}`).hostname;
-  } catch {
-    return false;
-  }
-}
+
 
 function toForm(params: Record<string, unknown>, allowedParams: readonly string[]): URLSearchParams {
   const form = new URLSearchParams();
