@@ -844,6 +844,8 @@ export function Workbench() {
     const zipMembers = chosen.filter((file): file is ZipMember => zipPathOf(file) !== undefined);
     const projectUpload = projectFileInZip(zipMembers) ?? pickProjectUpload(chosen.filter((file) => zipPathOf(file) === undefined));
     if (projectUpload) {
+      // The project's files replace Files: never without asking when the open project has changes.
+      if (!confirmLeavingUnsaved(projectUpload.name)) return;
       projectFileHandleRef.current = handles.get(projectUpload.name) ?? null;
       await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
       for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
@@ -1006,7 +1008,7 @@ export function Workbench() {
     setDialog(null);
     // A project file in the folder itself, not one folder down.
     const own = outcome.items.filter((item) => parentFolder(item.location) === withSlashes(folder));
-    if (own.length === 1) {
+    if (own.length === 1 && confirmLeavingUnsaved(own[0].name)) {
       const item = own[0];
       const source = outcome.sources.get(item.key);
       // The Windows app lists full paths and opens them as such; browsers read their source.
@@ -1097,6 +1099,7 @@ export function Workbench() {
 
   const handleOpenProjectFrom = async (input: string) => {
     setOpenProjectError(null);
+    if (!confirmLeavingUnsaved(input)) return;
     const error = await openProjectFrom(input);
     if (error === null) setDialog(null);
     else setOpenProjectError(error);
@@ -1363,7 +1366,9 @@ export function Workbench() {
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
     // The files are in the closed project's names, so the Default project keeps its board.
-    replaceProject(defaultProject(filesRef.current, project.board, descriptions));
+    const closed = defaultProject(filesRef.current, project.board, descriptions);
+    // Changes not saved in the closed project are still not saved: the next open asks about them.
+    replaceProject(projectUnsaved ? { ...closed, savedFiles: project.savedFiles ?? {} } : closed);
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
