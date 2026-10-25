@@ -38,6 +38,7 @@ const NEW_CODE = [
   'src/components/Pushbuttons/PushbuttonCross.tsx',
   'src/components/Pushbuttons/ResetButton.tsx',
   'src/components/Pushbuttons/levels.ts',
+  'src/components/workbench/RemoveFilesDialog.tsx',
 ];
 
 const MAX_FUNCTION_LINES = 40;

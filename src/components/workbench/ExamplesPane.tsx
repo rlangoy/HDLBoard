@@ -39,6 +39,8 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewSt
   const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
   const shown = filterExamples(EXAMPLES, query, languages);
+  // The examples are written for the Default shape; another board gets a notice instead (§ 5.4).
+  const hasExamples = isDefaultShape(board.ports);
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -69,21 +71,23 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewSt
           </header>
           <p className="wb-examples__subtitle">Browse and open example designs to get started.</p>
 
-          <label className="wb-examples__search">
-            <SearchIcon className="wb-examples__search-icon" aria-hidden="true" />
-            <input
-              ref={searchRef}
-              type="search"
-              placeholder="Search examples..."
-              aria-label="Search examples"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
+          {hasExamples && (
+            <label className="wb-examples__search">
+              <SearchIcon className="wb-examples__search-icon" aria-hidden="true" />
+              <input
+                ref={searchRef}
+                type="search"
+                placeholder="Search examples..."
+                aria-label="Search examples"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+          )}
 
-          <LanguageFilter languages={languages} onChange={setLanguages} />
+          {hasExamples && <LanguageFilter languages={languages} onChange={setLanguages} />}
 
-          {!isDefaultShape(board.ports) ? (
+          {!hasExamples ? (
             <OtherShapeNotice board={board} onNewStarterFile={onNewStarterFile} />
           ) : shown.length === 0 ? (
             <p className="wb-examples__empty">{emptyMessage(languages, query)}</p>

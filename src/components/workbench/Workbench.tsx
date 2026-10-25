@@ -32,6 +32,8 @@ import { SettingsDialog } from './SettingsDialog';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog } from './NewFileDialog';
+import { RemoveFilesDialog } from './RemoveFilesDialog';
+
 import { RefusedFilesDialog } from './RefusedFilesDialog';
 import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
@@ -140,6 +142,12 @@ import { filesBesideProject, pathBeside, type Placed, type TaggedFile } from './
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
+
+/** New File > Project's answer: the project's name and board. */
+interface NewProjectRequest {
+  readonly name: string;
+  readonly board: string;
+}
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
 // overridable at build time so a deployment can point at a different
@@ -313,6 +321,10 @@ export function Workbench() {
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
+  // New File > Project with files in Files: asked first whether the project keeps them (RemoveFilesDialog).
+  const [projectToCreate, setProjectToCreate] = useState<NewProjectRequest | null>(null);
+  // A project that kept its files is created on their board; the change to the board chosen follows.
+  const [boardForNewProject, setBoardForNewProject] = useState<string | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
@@ -755,22 +767,22 @@ export function Workbench() {
 
   const suggestedNewFileName = `untitled${files.filter((f) => f.name.startsWith('untitled')).length + 1}`;
 
-  const handleCreateFile = (name: string, language: NewFileLanguage) => {
+  const handleCreateFile = (name: string, language: NewFileLanguage, board: string) => {
     setDialog(null);
     const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
     setNewTestbenchFor(null);
     const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
-    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language);
+    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language, findBoard(catalog, board).board);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
     // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
     if (design) tb.setPairOverride(design.id, id);
   };
 
-  /** A new design with the board's ports; one whose name clashes with a port keeps the Default names, and says why. */
-  const newDesignContent = (name: string, language: NewFileLanguage): string => {
-    const template = newFileContent(name, language, activeBoard);
-    if (template.untranslated) appendLog(untranslatedLog(name, activeBoard, template.untranslated), 'error');
+  /** A new design with the ports of `board` (chosen in New File); one whose name clashes with a port keeps the Default names, and says why. */
+  const newDesignContent = (name: string, language: NewFileLanguage, board: BoardDefinition): string => {
+    const template = newFileContent(name, language, board);
+    if (template.untranslated) appendLog(untranslatedLog(name, board, template.untranslated), 'error');
     return template.text;
   };
 
@@ -1362,15 +1374,42 @@ export function Workbench() {
     if (file) handleOpenFile(file.id);
   };
 
-  // New File > Project: a project listing every file now in Files, shown on the project settings.
-  const handleCreateProject = (name: string) => {
+  // New File > Project: with files in Files, RemoveFilesDialog asks first whether the project keeps them.
+  const handleCreateProject = (name: string, board: string) => {
     setDialog(null);
-    // It lists the files now in Files, which are in the open project's names: its board too.
-    const created = newProject(name, fileNames, project.board);
+    if (files.length === 0) createProject(name, board, []);
+    else setProjectToCreate({ name, board });
+  };
+
+  /** A new project on `board`, listing `listed`, shown on the project settings. */
+  const createProject = (name: string, board: string, listed: readonly string[]) => {
+    const created = newProject(name, listed, board);
     saveFolderRef.current = null;
     replaceProject(created);
     setOverlay('project');
-    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project settings.`, 'success');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings.`, 'success');
+  };
+
+  /**
+   * Keep files: the project lists the files now in Files. They are in the open project's
+   * board's names, so it starts on that board, and the change to the board chosen follows
+   * as any board change does: renames, hand edits and Undo (boardForNewProject).
+   */
+  const keepFilesInNewProject = ({ name, board }: NewProjectRequest) => {
+    setProjectToCreate(null);
+    createProject(name, project.board, fileNames);
+    if (board !== project.board) setBoardForNewProject(board);
+  };
+
+  /** Remove files: Files starts again with the chosen board's starter files, and the project lists them. */
+  const removeFilesForNewProject = ({ name, board }: NewProjectRequest) => {
+    setProjectToCreate(null);
+    endRunQuietly();
+    const starters = starterFilesFor(findBoard(catalog, board).board).map((file) => ({ ...file, id: nextFileId() }));
+    appendLog(`Removed ${fileNames.length} file(s) from Files for the new project.`);
+    setFiles(starters);
+    showNewFile(starters[0].id);
+    createProject(name, board, starters.map((file) => file.name));
   };
 
   // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
@@ -1595,6 +1634,13 @@ export function Workbench() {
     busy: boardLocked,
     projectKey: String(projectGeneration),
   });
+  // A new project that kept its files, on another board: the board change follows once the project is in place.
+  useEffect(() => {
+    if (boardForNewProject === null) return;
+    setBoardForNewProject(null);
+    boardChange.requestBoardChange(boardForNewProject);
+  }, [boardForNewProject, boardChange]);
+
   // Settings closes only for a change that happens: the question takes its place, or the board just changes.
   const handleBoardChosenInSettings = (id: string) => {
     if (boardChange.requestBoardChange(id, { fromSettings: true })) setDialog(null);
@@ -1776,10 +1822,22 @@ export function Workbench() {
           onCreateProject={testbenchDesign ? undefined : handleCreateProject}
           projectFileCount={files.length}
           openProjectName={project.name}
+          boards={testbenchDesign ? undefined : catalog}
+          initialBoard={activeBoard.id}
           onClose={() => {
             setDialog(null);
             setNewTestbenchFor(null);
           }}
+        />
+      )}
+      {projectToCreate && (
+        <RemoveFilesDialog
+          projectName={projectToCreate.name}
+          fileNames={fileNames}
+          boardName={findBoard(catalog, projectToCreate.board).board.name}
+          onKeep={() => keepFilesInNewProject(projectToCreate)}
+          onRemove={() => removeFilesForNewProject(projectToCreate)}
+          onCancel={() => setProjectToCreate(null)}
         />
       )}
       {dialog === 'openProject' && (

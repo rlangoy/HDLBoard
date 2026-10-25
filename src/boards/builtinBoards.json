@@ -78,7 +78,8 @@
       "resources": [
         { "label": "Board definitions", "url": "https://github.com/Digilent/Basys3/blob/master/Resources/XDC/Basys3_Master.xdc" },
         { "label": "I/O examples", "url": "https://github.com/Digilent/Basys3/blob/master/Projects/GPIO/src/hdl/GPIO_Demo.vhd" }
-      ]
+      ],
+      "labels": { "switches": "SW", "pushbuttons": "BTN", "leds": "LD", "sevenSegment": "AN" }
     },
     {
       "id": "nexys-a7",
@@ -107,7 +108,8 @@
       "resources": [
         { "label": "Board definitions", "url": "https://github.com/Digilent/digilent-xdc/blob/master/Nexys-A7-100T-Master.xdc" },
         { "label": "I/O top file", "url": "https://github.com/Digilent/Nexys-A7-100T-GPIO/blob/master/src/hdl/top.vhd" }
-      ]
+      ],
+      "labels": { "switches": "SW", "pushbuttons": "BTN", "leds": "LD", "sevenSegment": "AN" }
     }
   ]
 }

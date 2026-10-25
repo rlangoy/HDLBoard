@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useId, useState, type FormEvent } from 'react';
+import { findBoard } from '../../boards/boardCatalog';
+import type { BoardCatalog } from '../../boards/types';
 import { Dialog } from './Dialog';
 import { FilesIcon } from './icons';
 import { newFileName, newFileNameError, type NewFileLanguage } from './newFile';
@@ -13,7 +15,8 @@ export interface NewFileDialogProps {
   suggestedName: string;
   /** Every file name in the project, so a duplicate is caught before it is created. */
   existingNames: readonly string[];
-  onCreate: (name: string, language: NewFileLanguage) => void;
+  /** `board` is the id chosen in the dialog's board list; the active board's when there is no list. */
+  onCreate: (name: string, language: NewFileLanguage, board: string) => void;
   onClose: () => void;
   /** The language selected at first; VHDL unless given. */
   initialLanguage?: NewFileLanguage;
@@ -25,11 +28,18 @@ export interface NewFileDialogProps {
    * Offers a third choice, Project: a project file listing the files now in Files,
    * opened on the project settings. Not offered when this is not given.
    */
-  onCreateProject?: (projectName: string) => void;
+  onCreateProject?: (projectName: string, board: string) => void;
   /** How many files a new project would list. */
   projectFileCount?: number;
   /** The name of the project that is open now, which a new project replaces. */
   openProjectName?: string;
+  /**
+   * The boards to choose from: the board a new design declares the ports of, and a new
+   * project's board. No list when left out (a testbench has no board ports).
+   */
+  boards?: BoardCatalog;
+  /** The board chosen at first: the active one. */
+  initialBoard: string;
 }
 
 type Choice = NewFileLanguage | 'project';
@@ -54,9 +64,13 @@ export function NewFileDialog({
   onCreateProject,
   projectFileCount = 0,
   openProjectName,
+  boards,
+  initialBoard,
 }: NewFileDialogProps) {
   const [name, setName] = useState(suggestedName);
   const [choice, setChoice] = useState<Choice>(initialLanguage);
+  const [board, setBoard] = useState(initialBoard);
+  const boardName = boards === undefined ? undefined : findBoard(boards, board).board.name;
   const formId = useId();
   const errorId = `${formId}-error`;
   const isProject = choice === 'project';
@@ -70,8 +84,8 @@ export function NewFileDialog({
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (error !== undefined) return;
-    if (isProject) onCreateProject?.(name.trim());
-    else onCreate(newFileName(name, language), language);
+    if (isProject) onCreateProject?.(name.trim(), board);
+    else onCreate(newFileName(name, language), language, board);
   };
 
   return (
@@ -120,7 +134,7 @@ export function NewFileDialog({
             <>
               Creates <strong>{newFileName(name, language)}</strong>
               {language === 'verilog' ? ' with a module' : ' with an entity'} of the same name
-              {kind === 'testbench' ? ': an empty testbench, no ports.' : " and the board's ports."}
+              {kind === 'testbench' ? ': an empty testbench, no ports.' : ` and the ${boardName ?? 'board'}'s ports.`}
             </>
           )}
         </p>
@@ -160,6 +174,22 @@ export function NewFileDialog({
             </label>
           )}
         </fieldset>
+
+        {boards !== undefined && (
+          <>
+            <label className="wb-newfile__label wb-newfile__board-label" htmlFor={`${formId}-board`}>
+              Board
+            </label>
+            {/* A native list: it opens over the dialog, where a drawn one would be clipped by the dialog's scroll area. */}
+            <select id={`${formId}-board`} className="wb-newfile__name wb-newfile__board" value={board} onChange={(e) => setBoard(e.target.value)}>
+              {boards.boards.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </form>
     </Dialog>
   );
