@@ -11,7 +11,7 @@
  * line. Do not "simplify" this to `exec`.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export interface CmdResult {
   code: number;
@@ -36,16 +36,36 @@ export const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
  * that cannot be started comes back as `code: -1` with the reason in `err`, and one
  * that outlives its timeout is killed and comes back with `timedOut: true`.
  */
+/**
+ * Ends a compile step and every process it started: `iverilog` runs `ivlpp` and `ivl`
+ * itself, and killing the driver alone leaves `ivl` spinning after a timeout. Windows:
+ * `taskkill /T`; POSIX: the process group `runCommand` gave the child.
+ */
+function killTree(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => child.kill('SIGKILL'));
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL');
+  }
+}
+
 export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS }: CommandOptions): Promise<CmdResult> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd });
+    // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
+    const child = spawn(cmd, args, { cwd, detached: process.platform !== 'win32' });
     let out = '';
     let err = '';
     let timedOut = false;
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      killTree(child);
     }, timeoutMs);
 
     child.stdout.on('data', (d) => (out += d));
@@ -109,6 +129,18 @@ export function lineSplitter(cb: (line: string) => void): (chunk: Buffer | strin
 }
 
 /**
+ * The most of a process's stderr kept: enough for any compiler or crash message, never
+ * a board run's warnings piling up for hours. The end is kept, where a crash says why.
+ */
+const MAX_STDERR_CHARS = 65_536;
+
+/** `text` and then `more`, cut to its last MAX_STDERR_CHARS. */
+function appendTail(text: string, more: string): string {
+  const joined = text + more;
+  return joined.length <= MAX_STDERR_CHARS ? joined : joined.slice(-MAX_STDERR_CHARS);
+}
+
+/**
  * Stops a killed child's output reaching anyone. Only the `data` listeners go: removing
  * *every* listener also strips the stream's own, and the child's `close` event — which
  * waits for its streams to end — would then never fire.
@@ -124,7 +156,7 @@ function stopDelivering(child: ChildProcessWithoutNullStreams): void {
  */
 export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandle {
   let stderr = '';
-  child.stderr.on('data', (chunk) => (stderr += chunk));
+  child.stderr.on('data', (chunk) => (stderr = appendTail(stderr, String(chunk))));
   // stdin is only ever written for pacing, but the stream exists either way, and a
   // write to a process that has just exited (Stop/Reset racing a pacing tick)
   // surfaces as an `error` event — EPIPE on POSIX, EOF/EPERM on Windows. Unhandled,
@@ -133,7 +165,7 @@ export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandl
   child.stdin.on('error', () => {});
   // A program that cannot be started (a missing `vvp`) reports through `error`, which unhandled
   // would take the whole backend down; its reason becomes the run's stderr instead.
-  child.on('error', (error) => (stderr += error.message));
+  child.on('error', (error) => (stderr = appendTail(stderr, error.message)));
 
   const outputCallbacks: Array<(line: string) => void> = [];
   child.stdout.on('data', lineSplitter((line) => {
@@ -171,9 +203,9 @@ export function createBatchHandle(
   let stderr = '';
   let timedOut = false;
   child.stdin.on('error', () => {});
-  child.on('error', (error) => (stderr += error.message));
+  child.on('error', (error) => (stderr = appendTail(stderr, error.message)));
   child.stdin.end();
-  child.stderr.on('data', (chunk) => (stderr += chunk));
+  child.stderr.on('data', (chunk) => (stderr = appendTail(stderr, String(chunk))));
   child.stdout.on('data', lineSplitter(onOutput));
 
   const timer = setTimeout(() => {

@@ -20,13 +20,16 @@ import type { Bit, BitVector } from '../board';
  *        3            bit 6  middle       (g)
  * ```
  *
- * The board has no decimal-point bit — `HEX0 … HEX5` are 7 bits each
- * (`DesignResources/7SegmentDisplay_pin_assignment.png`), so the dot is
- * moulded into the package and never lights.
+ * A board with a decimal point has an eighth bit: bit 7 drives the dot
+ * (docs/board_io_v2_spec.md § 3.3). On a 7-bit board the dot is moulded
+ * into the package and never lights.
  */
 export type SegmentVector = BitVector;
 
 export const SEGMENT_COUNT = 7;
+/** A word with a decimal point: bit 7 is the dot. */
+export const SEGMENT_COUNT_WITH_POINT = 8;
+export const DECIMAL_POINT_BIT = 7;
 
 /**
  * The decoder table from the course's VHDL, transcribed exactly.
@@ -61,11 +64,11 @@ export const BLANK_PATTERN = '1111111';
 export const patternToSegments = (pattern: string): SegmentVector =>
   [...pattern].reverse().map((c) => (c === '1' ? 1 : 0) as Bit);
 
-/** `"1000000"` — segment word as the VHDL writes it, MSB first. */
-export const segmentsToPattern = (segments: SegmentVector): string =>
+/** `"1000000"` — segment word as the VHDL writes it, MSB first; `width` 8 includes the point. */
+export const segmentsToPattern = (segments: SegmentVector, width = SEGMENT_COUNT): string =>
   Array.from(
-    { length: SEGMENT_COUNT },
-    (_, i) => segments[SEGMENT_COUNT - 1 - i] ?? 1,
+    { length: width },
+    (_, i) => segments[width - 1 - i] ?? 1,
   ).join('');
 
 /** All segments dark. */
@@ -91,8 +94,8 @@ export const numberToDisplays = (
   Array.from({ length: count }, (_, i) => nibbleToSegments((value >> (i * 4)) & 0xf));
 
 /** `[0,0,0,0,0,0,1]` → `"40"` — the segment word as two hex digits. */
-export const segmentsToHexByte = (segments: SegmentVector): string =>
-  parseInt(segmentsToPattern(segments), 2)
+export const segmentsToHexByte = (segments: SegmentVector, width = SEGMENT_COUNT): string =>
+  parseInt(segmentsToPattern(segments, width), 2)
     .toString(16)
     .toUpperCase()
     .padStart(2, '0');

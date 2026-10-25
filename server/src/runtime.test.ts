@@ -9,6 +9,21 @@ import { makeTempDir } from './testSupport/sessionDir.js';
 
 const SHORT_TIMEOUT_MS = 300;
 const node = process.execPath;
+const GONE_WAIT_MS = 3000;
+const GONE_POLL_MS = 50;
+
+/** Whether process `pid` has ended within GONE_WAIT_MS: taskkill, like a signal, takes a moment. */
+async function gone(pid: number): Promise<boolean> {
+  for (let waited = 0; waited < GONE_WAIT_MS; waited += GONE_POLL_MS) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, GONE_POLL_MS));
+  }
+  return false;
+}
 
 describe('lineSplitter', () => {
   function collect(): { lines: string[]; feed: (chunk: Buffer | string) => void } {
@@ -91,6 +106,17 @@ describe('runCommand', () => {
     const result = await runCommand({ cmd: node, args: ['-e', script], cwd: cwdDir.path, timeoutMs: SHORT_TIMEOUT_MS });
     assert.equal(result.timedOut, true);
     assert.notEqual(result.code, 0);
+  });
+
+  test('kills the processes a timed-out command started too (iverilog starts ivl)', async () => {
+    // Out of Node's job object on Windows (where Node would end it anyway), as ivl is; in the same process group on POSIX, as ivl is.
+    const options = `{ stdio: 'ignore', detached: process.platform === 'win32' }`;
+    const grandchild = `require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], ${options})`;
+    const script = `const c = ${grandchild}; console.log(c.pid); setInterval(() => {}, 1000)`;
+    const result = await runCommand({ cmd: node, args: ['-e', script], cwd: cwdDir.path, timeoutMs: SHORT_TIMEOUT_MS * 3 });
+    const pid = Number(result.out.trim());
+    assert.ok(pid > 0, `no grandchild pid in ${JSON.stringify(result.out)}`);
+    assert.equal(await gone(pid), true, `the grandchild ${pid} still runs`);
   });
 
   test('reports a program that cannot be started, without throwing', async () => {

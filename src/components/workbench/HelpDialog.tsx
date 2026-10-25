@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { sevenSegmentPattern } from '../../boards/boardPorts';
-import type { BoardDefinition } from '../../boards/types';
+import { DISPLAY_PERSIST_MS } from '../../boards/boardLimits';
+import { sevenSegmentPattern } from '../../boards/boardPortText';
+import { hasDecimalPoint } from '../../boards/boardShape';
+import type { BoardDefinition, BoardPorts, SevenSegment } from '../../boards/types';
+import { BoardResourceLinks } from './BoardResourceLinks';
 import { Dialog } from './Dialog';
 import { CHEAT_SHEET, GUIDES, REFERENCES, type HelpResource } from './helpResources';
 import { signalRows, usesActiveLowSuffix } from './helpSignals';
@@ -83,16 +86,130 @@ function ResourceLink({ resource, rank }: { resource: HelpResource; rank?: numbe
   );
 }
 
+/** `KEY_N` for a vector of buttons, `btnC` (the first) for scalars: a name to write `(0)` after or not. */
+function firstButton(board: BoardDefinition): { name: string; indexed: boolean } {
+  const { group } = board.ports.pushbuttons;
+  return group.kind === 'vector' ? { name: group.port, indexed: true } : { name: group.ports[0], indexed: false };
+}
+
+/** The port a sample segment word is written to: the first display, or the shared segments. */
+function segmentTarget(displays: SevenSegment): string {
+  if (displays.kind === 'independent') return displays.ports[0];
+  return displays.segments.kind === 'vector' ? displays.segments.port : displays.segments.ports[0];
+}
+
+/** `'0'` or `'1'`, as VHDL writes a bit. */
+const bit = (level: 0 | 1) => <code>&apos;{level}&apos;</code>;
+
+/** The terms a newcomer trips over, in the active board's names. */
+function NameTerms({ board }: { board: BoardDefinition }) {
+  const { ports, labels } = board;
+  const displays = ports.sevenSegment;
+  const button = firstButton(board);
+  const activeLowButtons = ports.pushbuttons.activeLow;
+  const lastSwitch = ports.switches.count - 1;
+  return (
+    <dl className="wb-help__terms">
+      {usesActiveLowSuffix(board) && (
+        <div className="wb-help__term">
+          <dt>
+            <code>_N</code>
+          </dt>
+          <dd>
+            <strong>Active low</strong> &mdash; N for &ldquo;negative&rdquo;. The signal is &ldquo;on&rdquo; when it is {bit(0)}.
+          </dd>
+        </div>
+      )}
+      <div className="wb-help__term">
+        <dt>Polarity</dt>
+        <dd>
+          Your design sees the level on the pin. On the {board.name} board a released <code>{button.name}</code> reads{' '}
+          {bit(activeLowButtons ? 1 : 0)} and a pressed one {bit(activeLowButtons ? 0 : 1)}, and a {bit(displays.activeLow ? 0 : 1)}{' '}
+          lights a segment. A name never changes the polarity; the board does.
+        </dd>
+      </div>
+      {displays.kind === 'independent' ? (
+        <div className="wb-help__term">
+          <dt>
+            <code>{sevenSegmentPattern(displays.ports)}</code>
+          </dt>
+          <dd>
+            One port per display. <code>{displays.ports[0]}</code> is the rightmost display and{' '}
+            <code>{displays.ports[displays.ports.length - 1]}</code> the leftmost; each is its own {displays.width}-bit port.
+          </dd>
+        </div>
+      ) : (
+        <div className="wb-help__term">
+          <dt>
+            <code>{displays.digitEnables}</code>
+          </dt>
+          <dd>
+            The digits share one set of segments. <code>{displays.digitEnables}</code> has one enable per digit, bit 0 the
+            rightmost; a digit shows the segments driven while its enable is active. Light the digits one after another,
+            each at least 20 times a second, and all of them seem lit at once. HDLBoard shows a digit until it has not been
+            refreshed for {DISPLAY_PERSIST_MS} ms; <code>{ports.clock500Hz}</code> is a good clock for the refresh counter.
+          </dd>
+        </div>
+      )}
+      <div className="wb-help__term">
+        <dt>
+          <code>[{lastSwitch}:0]</code>
+        </dt>
+        <dd>
+          The bit range, written <code>std_logic_vector({lastSwitch} downto 0)</code> in VHDL. Bit 0 is the rightmost bit:{' '}
+          <code>{ports.switches.port}(0)</code> to <code>{ports.switches.port}({lastSwitch})</code>.
+          {button.indexed && (
+            <>
+              {' '}
+              <code>{button.name}(0)</code> is <code>{labels.pushbuttons}0</code>.
+            </>
+          )}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+/** What each bit of a display word lights, and a sample word. */
+function SegmentSection({ ports }: { ports: BoardPorts }) {
+  const displays = ports.sevenSegment;
+  const hasPoint = hasDecimalPoint(ports);
+  const scalars = displays.kind === 'multiplexed' && displays.segments.kind === 'scalars';
+  // The port written to holds the point as bit 7 only on independent 8-bit displays; it stays off.
+  const pointInWord = displays.kind === 'independent' && hasPoint;
+  const one = `${pointInWord ? (displays.activeLow ? '1' : '0') : ''}${displays.activeLow ? '1111001' : '0000110'}`;
+  return (
+    <div className="wb-help__seg-row">
+      <SegmentFigure />
+      <div className="wb-help__seg-text">
+        <p>
+          Each bit drives one segment: bit 0 is the top segment (a), then clockwise round to bit 5 (f), and bit 6 is the
+          middle bar (g). {hasPoint ? 'Bit 7 is the decimal point.' : 'There is no decimal point.'}
+          {scalars && ' On this board each segment is its own port, in the order a to g.'}
+        </p>
+        {!scalars && (
+          <>
+            <p>
+              To show a &ldquo;1&rdquo; you light segments 1 and 2 only, and write the word with bit {pointInWord ? 7 : 6} first; a{' '}
+              {bit(displays.activeLow ? 0 : 1)} lights a segment:
+            </p>
+            <pre className="wb-help__code">
+              {segmentTarget(displays)} &lt;= &quot;{one}&quot;;
+            </pre>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Help: first, what the board's signal names mean — the part that trips up
  * every newcomer (`KEY_N`, `HEXn`, `[3:0]`), in the active board's names — then a
  * short, curated list of places to learn VHDL. The links are data in `helpResources.ts`.
  */
 export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
-  const { ports, labels } = board;
-  const [firstDisplay] = ports.sevenSegment;
-  const lastDisplay = ports.sevenSegment[ports.sevenSegment.length - 1];
-  const displayPattern = sevenSegmentPattern(ports.sevenSegment);
+  const { ports } = board;
   return (
     <Dialog
       open={open}
@@ -108,12 +225,11 @@ export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
           The board&rsquo;s signal names
         </h3>
         <p className="wb-dialog__lead">
-          Your top-level entity (VHDL) or module (Verilog), for example{' '}
-          <code>DE1_SoC</code>, talks to the board through the ports below. They are the {board.name} board&rsquo;s names
-          (Settings &rsaquo; Board). Declare only the ones you use &mdash;
-          every port is optional &mdash; and remember that VHDL ignores case,
-          so <code>{ports.leds.toLowerCase()}</code> and <code>{ports.leds}</code> are the same port (HDLBoard
-          matches the names without regard to case for Verilog too).
+          Your top-level entity (VHDL) or module (Verilog) talks to the board through the ports below. They are the{' '}
+          {board.name} board&rsquo;s names (Settings &rsaquo; Board). Declare only the ones you use &mdash; every port is
+          optional &mdash; and remember that VHDL ignores case, so <code>{ports.leds.port.toLowerCase()}</code> and{' '}
+          <code>{ports.leds.port}</code> are the same port (HDLBoard matches the names without regard to case for Verilog
+          too).
         </p>
 
         <div className="wb-help__tablewrap">
@@ -145,68 +261,10 @@ export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
         </div>
 
         <h4 className="wb-help__subheading">Reading the names</h4>
-        <dl className="wb-help__terms">
-          {usesActiveLowSuffix(board) && (
-            <div className="wb-help__term">
-              <dt>
-                <code>_N</code>
-              </dt>
-              <dd>
-                <strong>Active low</strong> &mdash; N for &ldquo;negative&rdquo;. The signal is
-                &ldquo;on&rdquo; when it is <code>&apos;0&apos;</code>. So a released <code>{ports.pushbuttons}</code>{' '}
-                button reads <code>&apos;1&apos;</code> and a pressed one <code>&apos;0&apos;</code>, and{' '}
-                <code>{firstDisplay} &lt;= (others =&gt; &apos;1&apos;)</code> turns a display off.
-              </dd>
-            </div>
-          )}
-          <div className="wb-help__term">
-            <dt>
-              <code>{displayPattern}</code>
-            </dt>
-            <dd>
-              The <code>n</code> is the display number, 0 to 5. <code>{firstDisplay}</code> is the
-              rightmost display and <code>{lastDisplay}</code> the leftmost. Each is its own 7-bit
-              port &mdash; there is no single 42-bit vector. The keys and the displays are active low on every board:
-              a pressed key reads <code>&apos;0&apos;</code>, and a <code>&apos;0&apos;</code> lights a segment.
-            </dd>
-          </div>
-          <div className="wb-help__term">
-            <dt>
-              <code>[3:0]</code>
-            </dt>
-            <dd>
-              The bit range, written <code>std_logic_vector(3 downto 0)</code> in VHDL. Bit 0 is the
-              rightmost bit, and <code>{ports.pushbuttons}(0)</code> is <code>{labels.pushbuttons}0</code>. Likewise{' '}
-              <code>[9:0]</code> is ten bits, <code>{ports.switches}(0)</code> to <code>{ports.switches}(9)</code>.
-            </dd>
-          </div>
-          <div className="wb-help__term">
-            <dt>
-              <code>SW</code> <code>KEY</code> <code>LEDR</code>
-            </dt>
-            <dd>
-              The board&rsquo;s silkscreen names: <b>SW</b>itches, <b>KEY</b>s (pushbuttons) and
-              <b> LEDR</b>, the <b>R</b>ed LEDs.
-            </dd>
-          </div>
-        </dl>
+        <NameTerms board={board} />
 
-        <h4 className="wb-help__subheading">The seven bits of a display</h4>
-        <div className="wb-help__seg-row">
-          <SegmentFigure />
-          <div className="wb-help__seg-text">
-            <p>
-              Each bit of <code>{displayPattern}</code> drives one segment. The numbering is the board&rsquo;s
-              own, not the a&ndash;g letters: bit 0 is the top segment, then clockwise round to
-              bit 5, and bit 6 is the middle bar. There is no decimal point.
-            </p>
-            <p>
-              Because it is active low, a <code>&apos;0&apos;</code> lights a segment. To show a
-              &ldquo;1&rdquo; you light segments 1 and 2 only, and write the word with bit 6 first:
-            </p>
-            <pre className="wb-help__code">{firstDisplay} &lt;= &quot;1111001&quot;;</pre>
-          </div>
-        </div>
+        <h4 className="wb-help__subheading">The bits of a display</h4>
+        <SegmentSection ports={ports} />
 
         <div className="wb-dialog__callout wb-dialog__callout--info" role="note">
           <p className="wb-dialog__callout-title">Moving to the real board</p>
@@ -218,8 +276,12 @@ export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
                 <strong>DE1-SoC</strong> in Settings &rsaquo; Board, and HDLBoard renames the ports for you.{' '}
               </>
             )}
-            Before you synthesise, remove <code>{ports.clock500Hz}</code>, which exists only in the simulator.
+            Before you synthesise, remove <code>{ports.clock500Hz}</code>, which exists only in the simulator. An older
+            file may declare <code>rst</code>: HDLBoard still drives it, from{' '}
+            {ports.resetButton ? <code>{ports.resetButton.port}</code> : 'button 0'}, but use the board&rsquo;s own port
+            instead.
           </p>
+          <BoardResourceLinks resources={board.resources} lead="Board resources:" />
         </div>
       </section>
 

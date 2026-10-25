@@ -21,6 +21,23 @@ export interface PortDeclaration {
   /** A `(` follows the type mark: `std_logic_vector(9 downto 0)`. */
   readonly constrained: boolean;
   readonly hasDefault: boolean;
+  /** The subtype as written, without mode or default: `std_logic_vector(9 downto 0)`. */
+  readonly declaration: string;
+  /** Its width when HDLBoard can read it: 1 for `std_logic`, N for a literal range; else undefined (§ 8). */
+  readonly width?: number;
+}
+
+const SCALAR_TYPES: readonly string[] = ['std_logic', 'std_ulogic', 'bit'];
+const VECTOR_TYPES: readonly string[] = ['std_logic_vector', 'std_ulogic_vector', 'bit_vector', 'unsigned', 'signed'];
+/** A literal range: `(9 downto 0)` or `(0 to 9)`. */
+const LITERAL_RANGE = /^\(\s*(\d+)\s+(?:downto|to)\s+(\d+)\s*\)$/i;
+
+/** The width of a declared subtype, when it is a scalar type or a vector type with a literal range. */
+export function declaredWidth(type: string, declaration: string): number | undefined {
+  if (SCALAR_TYPES.includes(type)) return 1;
+  if (!VECTOR_TYPES.includes(type)) return undefined;
+  const range = LITERAL_RANGE.exec(declaration.slice(declaration.indexOf('(')).trim());
+  return range ? Math.abs(Number(range[1]) - Number(range[2])) + 1 : undefined;
 }
 
 const GHDL_TAB_STOP = 8;
@@ -70,14 +87,25 @@ function parseDeclaration(offset: number, text: string): PortDeclaration[] {
   if (colon < 0) return [];
   const subtype = text.slice(colon + 1);
   const groups = MODE_AND_TYPE.exec(subtype)?.groups ?? {};
+  const type = (groups.type ?? '').toLowerCase().split('.').pop() ?? '';
+  const declaration = writtenSubtype(subtype, groups.mode);
   const shared = {
     mode: (groups.mode ?? 'in').toLowerCase(),
-    type: (groups.type ?? '').toLowerCase().split('.').pop() ?? '',
+    type,
     constrained: groups.constraint !== undefined,
     hasDefault: subtype.includes(':='),
+    declaration,
+    width: declaredWidth(type, declaration),
   };
   const names = [...text.slice(0, colon).matchAll(/\w+/g)];
   return names.map((m) => ({ ...shared, name: m[0], offset: offset + (m.index ?? 0) }));
+}
+
+/** `in std_logic_vector(9 downto 0) := …` → `std_logic_vector(9 downto 0)`, spaces collapsed. */
+function writtenSubtype(subtype: string, mode: string | undefined): string {
+  const withoutDefault = subtype.split(':=')[0] ?? '';
+  const withoutMode = mode === undefined ? withoutDefault : withoutDefault.replace(new RegExp(`^\\s*${mode}\\b`, 'i'), '');
+  return withoutMode.replace(/\s+/g, ' ').trim();
 }
 
 /** Every name of `entityName`'s port clause, in order; none when the clause cannot be found. */

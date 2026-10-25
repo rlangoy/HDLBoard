@@ -50,11 +50,22 @@ export function isProjectFileName(name: string): boolean {
   return nameKey(name).endsWith(PROJECT_FILE_EXTENSION);
 }
 
-/** Last segment of a path or URL path, e.g. `counter.hdlboard.json`. */
+/**
+ * Last segment of a path or URL path, e.g. `counter.hdlboard.json`, percent-decoded. A
+ * `%` that starts no escape (`100%.hdlboard.json`) stays as it is: a name never throws.
+ */
 export function baseName(location: string): string {
   const withoutQuery = location.split(/[?#]/)[0];
   const segments = withoutQuery.split(/[/\\]/).filter((segment) => segment !== '');
-  return decodeURIComponent(segments[segments.length - 1] ?? '');
+  return decodeUriSafe(segments[segments.length - 1] ?? '');
+}
+
+function decodeUriSafe(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
 }
 
 /** Folder a project is stored in: its file name without `.hdlboard.json`, e.g. `adder-and-counter`. */

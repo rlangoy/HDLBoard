@@ -38,7 +38,37 @@ export const TIMING_WITH_CLOCK_50: BoardTiming = { pollIntervalNs: 10_000, minDw
 
 export const TIMING_WITHOUT_CLOCK_50: BoardTiming = { pollIntervalNs: 1_000_000, minDwellNs: 4_000_000 };
 
-/** The one policy for every engine: what a design's clock decides is how finely to poll. */
-export function boardTimingFor(hasClock50: boolean): BoardTiming {
-  return hasClock50 ? TIMING_WITH_CLOCK_50 : TIMING_WITHOUT_CLOCK_50;
+/**
+ * The one policy for every engine: what a design's clock decides is how finely to poll.
+ * The board's clock, whatever its name and frequency (`CLOCK_50`, `clk` at 100 MHz),
+ * is what makes simulated time crawl; a faster one only crawls more.
+ */
+export function boardTimingFor(hasBoardClock: boolean): BoardTiming {
+  return hasBoardClock ? TIMING_WITH_CLOCK_50 : TIMING_WITHOUT_CLOCK_50;
+}
+
+/**
+ * A multiplexed digit not refreshed for this long goes dark (docs/board_io_v2_spec.md
+ * § 7.4). 75 ms leaves a margin over the 50 ms period of a 20 Hz refresh. Written into
+ * both testbench generators; not configurable.
+ */
+export const DISPLAY_PERSIST_MS = 75;
+
+const PS_PER_NS = 1000;
+/** Half a period in picoseconds is 500 000 / MHz. */
+const PS_PER_HALF_PERIOD_AT_1_MHZ = 500_000;
+
+/** The board clock's half period, rounded to 1 ps: 10 000 ps at 50 MHz, 6734 ps at 74.25 MHz. */
+export function clockHalfPeriodPs(mhz: number): number {
+  return Math.round(PS_PER_HALF_PERIOD_AT_1_MHZ / mhz);
+}
+
+/** A VHDL time: `10 ns` when whole nanoseconds (so 50 MHz stays as it was), else `6734 ps`. */
+export function vhdlTime(ps: number): string {
+  return ps % PS_PER_NS === 0 ? `${ps / PS_PER_NS} ns` : `${ps} ps`;
+}
+
+/** A Verilog delay at the testbench's 1 ns timescale, at most 3 decimals: `10`, `6.734`. */
+export function verilogDelay(ps: number): string {
+  return String(ps / PS_PER_NS);
 }

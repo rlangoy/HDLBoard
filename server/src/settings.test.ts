@@ -22,6 +22,12 @@ describe('readIntSetting', () => {
     assert.equal(readIntSetting(WS_PORT, {}), 9010);
     assert.equal(readIntSetting(MAX_SESSIONS, {}), 32);
   });
+
+  test('uses the default, with a warning, for a value that is not a whole number: never "no limit"', (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    for (const raw of ['', 'many', '3.5', '-1']) assert.equal(readIntSetting(MAX_SESSIONS, { HDL_MAX_SESSIONS: raw }), 32, raw);
+    assert.equal(warn.mock.callCount(), 4);
+  });
 });
 
 describe('waveform settings', () => {

@@ -7,6 +7,7 @@ import { canUndo, viewsAfterUndo, type BoardChangeRecord, type BoardChangeState 
 import type { PortRename } from '../../boards/boardPorts';
 import { applyBoardChange, canApply, planBoardChange, renameWaveViews, testbenchLanguageIn, type BoardChangePlan } from '../../boards/renamePorts';
 import { savePreferredBoard } from '../../boards/preferredBoard';
+import { describeShapeChange } from '../../boards/shapeChange';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { BOARD_TEXT, boardOnlyLog, boardRenamedLog, boardUndoneLog } from './boardText';
 import type { ConsoleLink } from './ConsoleOutput';
@@ -165,6 +166,16 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
   );
 }
 
+/**
+ * Whether a board change asks first (§ 5.3): when it renames something in the files, when
+ * a file cannot be renamed, and always between boards of different shapes, so the
+ * student sees the hand edits before the board changes.
+ */
+function needsQuestion(plan: BoardChangePlan): boolean {
+  const renamesFiles = plan.changes.length > 0 || !canApply(plan);
+  return renamesFiles || describeShapeChange(plan.from.ports, plan.to.ports).length > 0;
+}
+
 type Requests = Pick<BoardChange, 'requestBoardChange' | 'requestRenameToBoard' | 'offerMismatchFix'>;
 
 /** The three ways a board change starts: choose a board, rename the files to the board, or the mismatch hint. */
@@ -176,10 +187,10 @@ function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) =>
       if (busy || toId === project.board || !target.installed) return false;
       // A board that is not installed here runs with the Default names, so its files are renamed from those.
       const plan = planBoardChange(files, activeBoardOf(latest), target.board);
-      const nothingToRename = plan.changes.length === 0 && canApply(plan);
+      const ask = needsQuestion(plan);
       // A mismatch dialog that asked for this is answered either way.
-      setPending(nothingToRename ? null : { kind: 'change', plan, fromSettings: origin.fromSettings });
-      if (nothingToRename) commit(boardOnly(latest, target.board));
+      setPending(ask ? { kind: 'change', plan, fromSettings: origin.fromSettings } : null);
+      if (!ask) commit(boardOnly(latest, target.board));
       return true;
     },
     [latest, commit, setPending],

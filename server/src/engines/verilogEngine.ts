@@ -26,6 +26,7 @@ import type { ToolPaths } from '../verilog/toolPaths.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { sameNameNotes, type SameNameDeclarations } from './sameNameNotes.js';
 import type { BoardIo } from './boardPorts.js';
+import { checkBoardPortShapes, shapeNotes, type DeclaredPort } from './boardShapeCheck.js';
 import type { PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
 
 /** Every platform paces through stdin: Verilog can block in `$fgets` on it, and there is no `mkfifo` on Windows. */
@@ -138,7 +139,7 @@ function planWave(files: readonly VhdlFileInput[]): Recording {
 }
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
-  const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock50.toLowerCase()));
+  const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock.port.toLowerCase()));
   return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
 }
 
@@ -168,10 +169,17 @@ function helperExtras(build: Build, recording: Recording | undefined): Extras {
  * top alone already compiled (its ports were just read), so a failure here is the
  * wrapper's — the student's code is not the likely cause.
  */
+/** A port as Icarus elaborated it, for the width check (§ 8): `input [9:0]`. */
+function declaredPort({ name, direction, width }: Port): DeclaredPort {
+  return { name, width, declaration: width === 1 ? direction : `${direction} [${width - 1}:0]` };
+}
+
 async function prepareBoard(build: Build, ports: readonly Port[]): Promise<PrepareResult> {
+  // A board port of another width is said plainly; Icarus connects the low bits and runs it.
+  const widthNotes = shapeNotes(checkBoardPortShapes(ports.map(declaredPort), build.board, 'verilog'));
   writeFileSync(join(build.dir, TESTBENCH_FILE_NAME), buildBoardTestbench(build.top, boardPortSpellings(ports, build.board), build.board));
   const compiled = await compileVerilog(build.tools, compileRequest(build, TESTBENCH_MODULE_NAME, { files: [TESTBENCH_FILE_NAME] }));
-  if (compiled.ok) return { ok: true, plan: boardPlan(build, ports, [...build.notes, ...compiled.messages]) };
+  if (compiled.ok) return { ok: true, plan: boardPlan(build, ports, [...build.notes, ...widthNotes, ...compiled.messages]) };
   const { stage, text } = compiled.failure;
   return stage === 'analyze' ? failure('internal', `Internal testbench build error:\n${text}`) : failure(stage, text);
 }

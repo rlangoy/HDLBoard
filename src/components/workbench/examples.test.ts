@@ -3,8 +3,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
-import { EXAMPLES, copyExample, filterExamples, type Example } from './examples';
-import { DEFAULT_BOARD } from '../../boards/boardCatalog';
+import { EXAMPLES, copyExample, examplesFor, filterExamples, hasExamples, type Example } from './examples';
+import { DEFAULT_BOARD, builtInBoard } from '../../boards/boardCatalog';
 
 const example = (id: string): Example => {
   const found = EXAMPLES.find((e) => e.id === id);
@@ -106,5 +106,57 @@ describe('copyExample', () => {
     expect(copyExample(example('blink_vhdl'), STARTER_FILES, idSequence(), DEFAULT_BOARD).descriptions).toEqual({
       'blinkTest.vhdl': 'Simple blinking LED example using a counter.',
     });
+  });
+});
+
+describe('examples written for Basys 3, Nexys A7 and DE10-Lite', () => {
+  const boards = ['basys3', 'nexys-a7', 'de10-lite'].map((id) => builtInBoard(id));
+
+  test('the list is the original one without the examples that use the 7-segment displays', () => {
+    const original = EXAMPLES.filter((e) => !e.usesHex).map((e) => e.id);
+    expect(original).not.toContain('key_counter_7seg_vhdl');
+    for (const board of boards) {
+      expect(hasExamples(board), board.name).toBe(true);
+      expect(examplesFor(board).map((e) => e.id), board.name).toEqual(original);
+    }
+    expect(examplesFor(DEFAULT_BOARD)).toEqual(EXAMPLES);
+  });
+
+  test('a board with neither the Default shape nor files of its own has none', () => {
+    const custom = { ...builtInBoard('basys3'), id: 'my-own-board' };
+    expect(hasExamples(custom)).toBe(false);
+    expect(examplesFor(custom)).toEqual([]);
+  });
+
+  test("every example copies in the board's own names, and mentions no display", () => {
+    for (const board of boards) {
+      for (const e of examplesFor(board)) {
+        const result = copyExample(e, [], idSequence(), board);
+        expect(result.untranslated).toEqual([]);
+        for (const f of result.added) expect(f.content, `${board.name}: ${f.name}`).not.toMatch(/\bHEX|\bseg\b|\bsegment/i);
+        const names = result.added.map((f) => f.name);
+        expect(new Set(names).size).toBe(names.length);
+      }
+    }
+  });
+
+  test('the top level and the key examples use only the ports of the board', () => {
+    const basys = builtInBoard('basys3');
+    const top = copyExample(example('de1_soc_vhdl'), [], idSequence(), basys).added[0];
+    expect(top.name).toBe('Basys_3.vhdl');
+    expect(top.content).toContain('led <= sw;');
+    expect(top.content).not.toMatch(/btn|clk/);
+    const counter = copyExample(example('key_counter_verilog'), [], idSequence(), basys).added[0];
+    expect(counter.content).toMatch(/input\s+wire\s+btnC/);
+    expect(counter.content).not.toMatch(/\bsw\b|\bclk\b/);
+    expect(examplesFor(basys).find((e) => e.key === 'key_uart_tx')?.description).toContain('btnC');
+  });
+
+  test('the DE10-Lite keeps its two keys and 50 MHz clock; the 100 MHz boards double the UART divider', () => {
+    const uart = (id: string) => copyExample(example('key_uart_tx_vhdl'), [], idSequence(), builtInBoard(id)).added[0].content;
+    expect(uart('de10-lite')).toContain('MAX10_CLK1_50 : in');
+    expect(uart('de10-lite')).toContain('50_000_000');
+    expect(uart('basys3')).toContain('100_000_000');
+    expect(uart('nexys-a7')).toContain('CLK100MHZ : in');
   });
 });

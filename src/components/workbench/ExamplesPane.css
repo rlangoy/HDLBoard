@@ -278,3 +278,16 @@
   flex: none;
   color: var(--wb-accent);
 }
+
+/* A board of another shape (docs/board_io_v2_spec.md § 5.4): a notice in place of the cards. */
+.wb-examples__shape {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-border, #d0d7de);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.wb-examples__shape p {
+  margin: 0 0 10px;
+}

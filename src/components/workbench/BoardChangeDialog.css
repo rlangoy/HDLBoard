@@ -73,3 +73,18 @@
   font-size: 13px;
   color: var(--wb-text-muted);
 }
+
+/* Board shapes (docs/board_io_v2_spec.md § 5.3): the renames and the hand edits under their headings. */
+.wb-boardchange__heading {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+
+.wb-boardchange__handedits ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.wb-boardchange__handedits li {
+  margin: 2px 0;
+}

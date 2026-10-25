@@ -15,3 +15,11 @@ export {
   fillBits,
 } from '../board';
 export type { Bit, BitVector } from '../board';
+
+export { PushbuttonCross, CROSS_POSITIONS } from './PushbuttonCross';
+export type { PushbuttonCrossProps } from './PushbuttonCross';
+
+export { ResetButton } from './ResetButton';
+export type { ResetButtonProps } from './ResetButton';
+
+export { levelWhen, releasedLevel } from './levels';

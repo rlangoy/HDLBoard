@@ -93,6 +93,7 @@ describe('Session runs that outlive their request', () => {
     const session = new Session((frame) => frames.push(frame), () => engine);
 
     const run = session.handleRun(FILES, 'top.vhdl');
+    await settle(); // the compile has started
     session.destroy();
     compiles[0].resolve({ ok: true, plan: batchPlan(tmpdir()) });
     await run;
@@ -107,11 +108,13 @@ describe('Session runs that outlive their request', () => {
     const session = new Session((frame) => frames.push(frame), () => engine);
 
     const first = session.handleRun(FILES, 'top.vhdl');
+    await settle(); // the first compile has started; the second RUN waits for it
     const second = session.handleRun(FILES, 'top.vhdl');
-    compiles[1].resolve({ ok: true, plan: batchPlan(tmpdir()) });
-    await second;
     compiles[0].resolve({ ok: true, plan: batchPlan(tmpdir()) });
     await first;
+    await settle();
+    compiles[1].resolve({ ok: true, plan: batchPlan(tmpdir()) });
+    await second;
     await settle();
     session.destroy();
 
@@ -151,9 +154,11 @@ describe('Session runs that outlive their request', () => {
     const session = new Session((frame) => frames.push(frame), () => engine);
 
     const first = session.handleRun(FILES, 'top.vhdl');
+    await settle(); // the first compile has started; the second RUN waits for it
     const second = session.handleRun(FILES, 'top.vhdl');
     compiles[0].resolve({ ok: false, stage: 'analyze', text: 'stale error' });
     await first;
+    await settle();
     compiles[1].resolve({ ok: true, plan: batchPlan(tmpdir()) });
     await second;
     session.destroy();

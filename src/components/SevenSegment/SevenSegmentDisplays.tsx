@@ -6,7 +6,7 @@ import { BitRow, Panel, Readout, cx, scaleStyle } from '../board';
 import { SevenSegmentDisplay } from './SevenSegmentDisplay';
 import {
   SEGMENT_COUNT,
-  blankSegments,
+  SEGMENT_COUNT_WITH_POINT,
   segmentsToHexByte,
   type SegmentVector,
 } from './segments';
@@ -25,9 +25,13 @@ export interface SevenSegmentDisplaysProps extends NativeProps {
    * `HEX0`. Each word is 7 bits LSB first, so `value[0][6]` is
    * `HEX0[6]`, the middle segment. Missing entries blank their display.
    */
-  value?: SegmentVector[];
+  value?: readonly SegmentVector[];
   /** `true` (default): a `0` lights a segment, as on the DE-board. */
   activeLow?: boolean;
+  /** Each word has an eighth bit, the decimal point (bit 7). Default `false`. */
+  decimalPoint?: boolean;
+  /** One line under the row, e.g. how a multiplexed display shows its digits. */
+  note?: string;
   /** Signal name used in the title, labels and readout. Default `"HEX"`. */
   name?: string;
   /**
@@ -59,6 +63,8 @@ export function SevenSegmentDisplays({
   count = 6,
   value,
   activeLow = true,
+  decimalPoint = false,
+  note,
   name = 'HEX',
   port = `${name}n`,
   title,
@@ -70,21 +76,22 @@ export function SevenSegmentDisplays({
   style,
   ...rest
 }: SevenSegmentDisplaysProps) {
-  /** Exactly `count` words of exactly SEGMENT_COUNT bits, blank-filled. */
-  const displays = useMemo<SegmentVector[]>(() => {
-    const dark = blankSegments();
-    return Array.from({ length: count }, (_, display) =>
-      Array.from(
-        { length: SEGMENT_COUNT },
-        (_unused, bit) => value?.[display]?.[bit] ?? dark[bit],
+  const width = decimalPoint ? SEGMENT_COUNT_WITH_POINT : SEGMENT_COUNT;
+  const offLevel = activeLow ? 1 : 0;
+
+  /** Exactly `count` words of exactly `width` bits, filled with segments off. */
+  const displays = useMemo<SegmentVector[]>(
+    () =>
+      Array.from({ length: count }, (_, display) =>
+        Array.from({ length: width }, (_unused, bit) => value?.[display]?.[bit] ?? offLevel),
       ),
-    );
-  }, [count, value]);
+    [count, value, width, offLevel],
+  );
 
   // The heading names the entity port pattern, not the display row: each
   // display is its own 7-bit port (`HEX0` … `HEX5`), which `n` stands for —
   // so it is the segment range that is shown.
-  const heading = title ?? `7-Segment Displays (${port}[${SEGMENT_COUNT - 1}:0])`;
+  const heading = title ?? `7-Segment Displays (${port}[${width - 1}:0])`;
 
   // HEX columns have their own pitch, and the readout prints six hex
   // bytes rather than single bits, so it needs tighter tracking.
@@ -97,7 +104,7 @@ export function SevenSegmentDisplays({
 
   // MSB display first, matching the labels and the silkscreen.
   const readout = displays
-    .map(segmentsToHexByte)
+    .map((word) => segmentsToHexByte(word, width))
     .reverse()
     .join(' ');
 
@@ -119,10 +126,12 @@ export function SevenSegmentDisplays({
           <SevenSegmentDisplay
             segments={displays[i]}
             activeLow={activeLow}
+            decimalPoint={decimalPoint}
             label={`${name}${i}`}
           />
         )}
       />
+      {note && <p className="pb-panel__hint">{note}</p>}
       {showReadout && <Readout name={name} text={readout} />}
     </Panel>
   );

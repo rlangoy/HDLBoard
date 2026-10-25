@@ -43,6 +43,14 @@ import {
   isGitHubAuthPath,
   type OAuthAppCredentials,
 } from './githubAuth.js';
+import { socketRequestAllowed } from './requestOrigin.js';
+
+/**
+ * The largest frame a client may send: a RUN with every source of a project. Far above
+ * any course project, far below ws's default of 100 MiB, which one tab could make the
+ * backend buffer.
+ */
+const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 
 const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
@@ -50,7 +58,9 @@ const WSPATH = '/hdlsim';
 const LEGACY_WSPATH = '/ghdlsim';
 // 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version stays
 // informational: any version a client names is accepted, and answered with this one.
-const PROTOCOL_VERSION = '2';
+// 3: board shapes — a JSON BOARD body, STIM and STATE lengths per board
+// (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
+const PROTOCOL_VERSION = '3';
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
@@ -233,12 +243,18 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
    * `/ghdlsim`) is a socket
    * while everything else stays a normal request.
    */
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
     const { pathname } = new URL(req.url ?? '/', 'http://localhost');
     if (pathname !== WSPATH && pathname !== LEGACY_WSPATH) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    // Only HDLBoard's own page may start simulations, never another site (requestOrigin.ts).
+    if (!socketRequestAllowed(req, { loopbackOnly: serveDir !== null })) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }

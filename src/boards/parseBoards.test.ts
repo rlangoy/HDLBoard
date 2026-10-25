@@ -35,11 +35,11 @@ function problemOf(board: unknown): string {
 }
 
 describe('parseBoardFile', () => {
-  it('parses both built-in boards', () => {
-    expect(BUILT_IN_BOARDS.map((board) => board.id)).toEqual(['default', 'de1-soc']);
+  it('parses every built-in board', () => {
+    expect(BUILT_IN_BOARDS.map((board) => board.id)).toEqual(['default', 'de1-soc', 'de10-lite', 'basys3', 'nexys-a7']);
     const de1 = BUILT_IN_BOARDS[1];
-    expect(de1.ports.pushbuttons).toBe('KEY');
-    expect(de1.ports.sevenSegment).toEqual(['HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5']);
+    expect(de1.ports.pushbuttons.group).toEqual({ kind: 'vector', port: 'KEY', count: 4 });
+    expect(de1.ports.sevenSegment).toMatchObject({ ports: ['HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5'] });
   });
 
   it('fills in the 500 Hz clock and the labels when they are left out', () => {
@@ -77,7 +77,7 @@ describe('parseBoardFile', () => {
     ['a Verilog reserved word', boardJson({}, { leds: 'wire' }), 'ports.leds "wire" is a Verilog reserved word'],
     ['the legacy reset', boardJson({}, { leds: 'rst' }), 'ports.leds "rst" is reserved'],
     ['a display name in error', boardJson({}, { sevenSegment: ['A0', 'A1', 'A 2', 'A3', 'A4', 'A5'] }), 'ports.sevenSegment[2] "A 2"'],
-    ['Key and KEY in one board', boardJson({}, { switches: 'Key', pushbuttons: 'KEY' }), 'is the same name as ports.switches "Key" (names ignore case)'],
+    ['Key and KEY in one board', boardJson({}, { switches: 'Key', pushbuttons: 'KEY' }), 'ports.pushbuttons.port "KEY" is the same name as ports.switches.port "Key" (names ignore case)'],
     ['a 9-character label', boardJson({ labels: { leds: 'LONGLABEL' } }), 'labels.leds "LONGLABEL" is longer than 8 characters'],
     ['an unknown label', boardJson({ labels: { clock50: 'CLK' } }), 'labels.clock50 is not a labelled role'],
   ])('skips a board with %s', (_case, board, expected) => {
@@ -106,7 +106,7 @@ describe('parseBoardFile', () => {
   it.each([
     ['not JSON', '{ "version": 1,', 'boards/boards.json is not valid JSON'],
     ['not an object', '[]', 'the top level must be a JSON object'],
-    ['another version', '{ "version": 2, "boards": [] }', 'is not a version-1 board file ("version" is 2)'],
+    ['another version', '{ "version": 3, "boards": [] }', 'is not a board file of version 1 or 2 ("version" is 3)'],
     ['no boards array', '{ "version": 1 }', '"boards" must be an array'],
   ])('rejects a whole file that is %s, with one warning', (_case, text, expected) => {
     const parsed = parseBoardFile(text, USER);
@@ -138,14 +138,14 @@ describe('the catalog', () => {
   it('keeps the built-ins first and skips a user board that takes a built-in id', () => {
     const parsed = parseBoardFile(user([boardJson({ id: 'default', name: 'Mine' }), boardJson()]), USER);
     const catalog = mergeCatalog(BUILT_IN_BOARDS, parsed);
-    expect(catalog.boards.map((board) => board.id)).toEqual(['default', 'de1-soc', 'course']);
+    expect(catalog.boards.map((board) => board.id)).toEqual(['default', 'de1-soc', 'de10-lite', 'basys3', 'nexys-a7', 'course']);
     expect(catalog.warnings).toEqual(['boards/boards.json: board "default" was skipped: the id "default" is already used by a built-in board.']);
   });
 
   it('finds an installed board, and falls back to Default for one that is not', () => {
     const catalog = mergeCatalog(BUILT_IN_BOARDS, { boards: [], warnings: [] });
     expect(findBoard(catalog, 'de1-soc')).toMatchObject({ installed: true, board: { name: 'DE1-SoC' } });
-    expect(findBoard(catalog, 'de10-lite')).toMatchObject({ installed: false, board: { id: 'default' } });
+    expect(findBoard(catalog, 'de0-nano')).toMatchObject({ installed: false, board: { id: 'default' } });
   });
 
   it('treats a missing user file as no boards and no warning', async () => {

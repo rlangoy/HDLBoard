@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { renamesPortsOn } from '../../boards/boardPorts';
 import { canApply, type BoardChangePlan } from '../../boards/renamePorts';
+import { describeShapeChange, formatShapeDifference, type ShapeDifference } from '../../boards/shapeChange';
 import type { BoardDefinition } from '../../boards/types';
+import { BoardResourceLinks } from './BoardResourceLinks';
 import { Dialog } from './Dialog';
 import { ChipIcon } from './icons';
 import {
   BOARD_TEXT,
   boardChangeHeading,
   conflictLine,
+  differentClock,
+  differentIo,
+  portNamesByHand,
   filesUseNames,
   filesWillChange,
   mismatchLead,
@@ -63,32 +69,91 @@ function MismatchDialog({ pending, onSwitchBoard, onRenameFiles, onCancel }: Mis
 }
 
 function ChangeDialog({ pending: { plan }, simulating, onUpdateFiles, onBoardOnly, onCancel }: ChangeProps) {
-  const updatable = canApply(plan);
-  const footer = (
+  const differences = describeShapeChange(plan.from.ports, plan.to.ports);
+  const renames = plan.changes.length > 0 || !canApply(plan);
+  const subtitle = boardChangeHeading(plan.from, plan.to);
+  const footer = <ChangeButtons plan={plan} renames={renames} onUpdateFiles={onUpdateFiles} onBoardOnly={onBoardOnly} onCancel={onCancel} />;
+  return (
+    <Dialog open onClose={onCancel} title={BOARD_TEXT.changeTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
+      <p className="wb-dialog__lead">{changeLead(plan, differences)}</p>
+      {renames && <RenameSection plan={plan} titled={differences.length > 0} />}
+      {differences.length > 0 && <HandEdits differences={differences} from={plan.from} board={plan.to} />}
+      {renames && <ChangeChoices />}
+      <p className="wb-boardchange__note">
+        {renames && BOARD_TEXT.stringsNote}
+        {simulating && ` ${BOARD_TEXT.stopsSimulation}`}
+      </p>
+    </Dialog>
+  );
+}
+
+/** What the change means: names only, a clock only, or parts that differ. */
+function changeLead(plan: BoardChangePlan, differences: readonly ShapeDifference[]): string {
+  if (differences.length === 0) return filesUseNames(plan.from);
+  return differences.every((difference) => difference.role === 'clock') ? differentClock(plan.to) : differentIo(plan.to);
+}
+
+interface ChangeButtonsProps {
+  plan: BoardChangePlan;
+  /** Some file uses a name that would be renamed: Update files is offered. */
+  renames: boolean;
+  onUpdateFiles: () => void;
+  onBoardOnly: () => void;
+  onCancel: () => void;
+}
+
+/** Cancel, Change board only, and Update files when there is something to update. */
+function ChangeButtons({ plan, renames, onUpdateFiles, onBoardOnly, onCancel }: ChangeButtonsProps) {
+  const updatable = renames && canApply(plan);
+  return (
     <div className="wb-newfile__buttons">
       <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
         {BOARD_TEXT.cancel}
       </button>
-      <button type="button" className="wb-newfile__cancel" autoFocus={!updatable} onClick={onBoardOnly}>
+      <button type="button" className={updatable ? 'wb-newfile__cancel' : 'wb-dialog__close'} autoFocus={!updatable} onClick={onBoardOnly}>
         {BOARD_TEXT.boardOnly}
       </button>
-      <button type="button" className="wb-dialog__close" autoFocus={updatable} disabled={!updatable} onClick={onUpdateFiles}>
-        {BOARD_TEXT.updateFiles}
-      </button>
+      {renames && (
+        <button type="button" className="wb-dialog__close" autoFocus={updatable} disabled={!updatable} onClick={onUpdateFiles}>
+          {BOARD_TEXT.updateFiles}
+        </button>
+      )}
     </div>
   );
-  const subtitle = boardChangeHeading(plan.from, plan.to);
+}
+
+/** The renames, and which files they change or why they cannot. */
+function RenameSection({ plan, titled }: { plan: BoardChangePlan; titled: boolean }) {
   return (
-    <Dialog open onClose={onCancel} title={BOARD_TEXT.changeTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
-      <p className="wb-dialog__lead">{filesUseNames(plan.from)}</p>
+    <>
+      {titled && <p className="wb-boardchange__heading">{BOARD_TEXT.renamedInFiles}</p>}
       <RenameList plan={plan} />
-      {updatable ? <ChangedFiles plan={plan} /> : <Conflicts plan={plan} />}
-      <ChangeChoices />
-      <p className="wb-boardchange__note">
-        {BOARD_TEXT.stringsNote}
-        {simulating && ` ${BOARD_TEXT.stopsSimulation}`}
-      </p>
-    </Dialog>
+      {canApply(plan) ? <ChangedFiles plan={plan} /> : <Conflicts plan={plan} />}
+    </>
+  );
+}
+
+/** What the student changes by hand on a board of another shape, and where its resources are. */
+interface HandEditsProps {
+  differences: readonly ShapeDifference[];
+  from: BoardDefinition;
+  board: BoardDefinition;
+}
+
+function HandEdits({ differences, from, board }: HandEditsProps) {
+  // Between these boards Update files renames nothing (renamesPortsOn): the names are a hand edit too.
+  const namesByHand = !renamesPortsOn(from.ports) || !renamesPortsOn(board.ports);
+  return (
+    <div className="wb-boardchange__handedits">
+      <p className="wb-boardchange__heading">{BOARD_TEXT.changeByHand}</p>
+      <ul aria-label={BOARD_TEXT.changeByHand}>
+        {namesByHand && <li>{portNamesByHand(board)}</li>}
+        {differences.map((difference) => (
+          <li key={difference.role}>{formatShapeDifference(difference)}</li>
+        ))}
+      </ul>
+      <BoardResourceLinks resources={board.resources} lead={BOARD_TEXT.boardResources} />
+    </div>
   );
 }
 

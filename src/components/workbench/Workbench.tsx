@@ -11,15 +11,17 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from 'react';
-import { cx, fillBits, zeroBits, type BitVector } from '../board';
-import { blankSegments, type SegmentVector } from '../SevenSegment';
+import { cx } from '../board';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
-import { LED_COUNT, PUSHBUTTON_COUNT, SEVEN_SEGMENT_COUNT, SWITCH_COUNT, boardDesignPortNames } from '../../boards/boardPorts';
+import { boardDesignPortNames } from '../../boards/boardPorts';
+import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
+import { useBoardIo } from './useBoardIo';
+import { generateBoardTop, starterTopFileName } from '../../boards/boardTop';
 import { BoardChangeDialog } from './BoardChangeDialog';
-import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog } from './boardText';
+import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog, withBoardName } from './boardText';
 import { useBoards } from './useBoards';
 import { useBoardChange } from './useBoardChange';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
@@ -29,7 +31,9 @@ import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
-import { NewFileDialog } from './NewFileDialog';
+import { NewFileDialog, type NewProjectChoice } from './NewFileDialog';
+import { RemoveFilesDialog } from './RemoveFilesDialog';
+
 import { RefusedFilesDialog } from './RefusedFilesDialog';
 import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
@@ -138,6 +142,7 @@ import { filesBesideProject, pathBeside, type Placed, type TaggedFile } from './
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
+
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
 // overridable at build time so a deployment can point at a different
@@ -266,7 +271,8 @@ export function Workbench() {
   // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
   // showed as a static label before this was selectable.
   const [topFileId, setTopFileId] = useState<string | null>(
-    () => freshStart.files.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
+    // By id: on a board of another shape the starter file is named after the board.
+    () => freshStart.files.find((f) => f.id === DEFAULT_SHOWN_FILE)?.id ?? null,
   );
   // The top file's unit a pane's Play chose (docs/impl_split_screen.md D20); null = the backend chooses, as always.
   const [topUnit, setTopUnit] = useState<string | null>(null);
@@ -312,6 +318,10 @@ export function Workbench() {
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
+  // New File > Project with files in Files: asked first whether the project keeps them (RemoveFilesDialog).
+  const [projectToCreate, setProjectToCreate] = useState<NewProjectChoice | null>(null);
+  // A project that kept its files is created on their board; the change to the board chosen follows.
+  const [boardForNewProject, setBoardForNewProject] = useState<string | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
@@ -371,24 +381,11 @@ export function Workbench() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimer = useRef<number | null>(null);
 
-  const [sw, setSw] = useState<BitVector>(() => zeroBits(SWITCH_COUNT));
-  // Released: the pushbuttons are active low on every board.
-  const [key, setKey] = useState<BitVector>(() => fillBits(PUSHBUTTON_COUNT, 1));
-  // Mirrors of sw/key for the HdlClient's handlers to read (below): those
-  // handlers are captured once, when the client is lazily constructed, so
-  // reading `sw`/`key` directly there would see whatever they were at that
-  // moment forever after — a stale closure. Refs are updated synchronously
-  // in handleSwChange/handleKeyChange and always read current.
-  const swRef = useRef(sw);
-  const keyRef = useRef(key);
-
-  // Board outputs are driven by the simulation backend, never by the
-  // inputs. Whenever no simulation is running they stay at their blank
-  // values (Design_Description.md § 5 convention 11).
-  const [ledState, setLedState] = useState<BitVector>(() => zeroBits(LED_COUNT));
-  const [hexState, setHexState] = useState<SegmentVector[]>(() =>
-    Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()),
-  );
+  // The Board pane: inputs the student sets, outputs the simulation drives (useBoardIo).
+  // Outputs stay off whenever no simulation is running (Design_Description.md § 5 convention 11).
+  const boardIo = useBoardIo(activeBoard);
+  const activeBoardName = useRef(activeBoard.name);
+  activeBoardName.current = activeBoard.name;
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -463,10 +460,7 @@ export function Workbench() {
   // Nothing is simulating: the honest board state, per Design_Description.md
   // § 5 convention 11. Used whenever a session isn't actively running —
   // before Start, and after Stop/error/disconnect — never only on mount.
-  const blankBoard = useCallback(() => {
-    setLedState(zeroBits(LED_COUNT));
-    setHexState(Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()));
-  }, []);
+  const blankBoard = boardIo.blank;
 
   // One HdlClient per Workbench instance, created lazily on first Start
   // rather than on mount, so opening the page never opens a socket the
@@ -547,22 +541,21 @@ export function Workbench() {
           // sit — sync the current input state immediately so a design
           // that reacts combinationally shows the right thing before the
           // user touches anything.
-          clientRef.current?.stim(swRef.current, keyRef.current);
+          clientRef.current?.stim(boardIo.stimBits());
         },
-        onState: (ledr, hex) => {
-          setLedState(ledr);
-          setHexState(hex);
+        onState: (bits) => {
+          boardIo.showState(bits);
           // A board run records no waveform (W1): the view closes.
           boardStateSeen();
         },
         onLog: (text) => {
-          appendLog(text);
+          appendLog(withBoardName(text, activeBoardName.current));
           const located = recordDiagnostics(text, filesRef.current).filter((d) => d.severity === 'error');
           if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
         onError: (stage, text) => {
           if (!takeFlag(quietEnd)) {
-            appendLog(`${stage} error:\n${text}`, 'error');
+            appendLog(`${stage} error:\n${withBoardName(text, activeBoardName.current)}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
             else if (stage === 'runtime') revealFirstError(advised.length > 0 ? advised : lastRunError.current ? [lastRunError.current] : []);
@@ -596,7 +589,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
+  }, [appendLog, blankBoard, boardIo.stimBits, boardIo.showState, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
 
   useEffect(
     () => () => {
@@ -756,28 +749,37 @@ export function Workbench() {
     makeTop(openId);
   };
 
+  // A board of another shape has no examples: the Examples pane offers its generated
+  // starter top instead (docs/board_io_v2_spec.md § 5.4), in the first language ticked.
+  const handleNewStarterFile = () => {
+    const language = preferredLanguages.has('vhdl') ? 'vhdl' : 'verilog';
+    const name = starterTopFileName(activeBoard, language, files.map((f) => f.name));
+    addFile(name, generateBoardTop(activeBoard, language, baseName(name)), folderForUpload(name) ?? 'vhdl');
+    appendLog(`Added ${name}: a starter top file for the ${activeBoard.name} board.`, 'success');
+  };
+
   // New File asks for a name and a language first (NewFileDialog); the file is
   // added once the dialog's Create is pressed.
   const handleNewFile = () => setDialog('newFile');
 
   const suggestedNewFileName = `untitled${files.filter((f) => f.name.startsWith('untitled')).length + 1}`;
 
-  const handleCreateFile = (name: string, language: NewFileLanguage) => {
+  const handleCreateFile = (name: string, language: NewFileLanguage, board: string) => {
     setDialog(null);
     const design = newTestbenchFor === null ? undefined : files.find((f) => f.id === newTestbenchFor);
     setNewTestbenchFor(null);
     const dut = design && tb.fileAnalysis(design.id)?.units[0]?.name;
-    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language);
+    const content = design ? testbenchContent(name, language, dut ?? baseName(design.name)) : newDesignContent(name, language, findBoard(catalog, board).board);
     // folderForUpload keeps the upload rules: .v to verilog/, VHDL to vhdl/.
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
     // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
     if (design) tb.setPairOverride(design.id, id);
   };
 
-  /** A new design with the board's ports; one whose name clashes with a port keeps the Default names, and says why. */
-  const newDesignContent = (name: string, language: NewFileLanguage): string => {
-    const template = newFileContent(name, language, activeBoard);
-    if (template.untranslated) appendLog(untranslatedLog(name, activeBoard, template.untranslated), 'error');
+  /** A new design with the ports of `board` (chosen in New File); one whose name clashes with a port keeps the Default names, and says why. */
+  const newDesignContent = (name: string, language: NewFileLanguage, board: BoardDefinition): string => {
+    const template = newFileContent(name, language, board);
+    if (template.untranslated) appendLog(untranslatedLog(name, board, template.untranslated), 'error');
     return template.text;
   };
 
@@ -839,6 +841,8 @@ export function Workbench() {
     const zipMembers = chosen.filter((file): file is ZipMember => zipPathOf(file) !== undefined);
     const projectUpload = projectFileInZip(zipMembers) ?? pickProjectUpload(chosen.filter((file) => zipPathOf(file) === undefined));
     if (projectUpload) {
+      // The project's files replace Files: never without asking when the open project has changes.
+      if (!confirmLeavingUnsaved(projectUpload.name)) return;
       projectFileHandleRef.current = handles.get(projectUpload.name) ?? null;
       await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
       for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
@@ -1001,7 +1005,7 @@ export function Workbench() {
     setDialog(null);
     // A project file in the folder itself, not one folder down.
     const own = outcome.items.filter((item) => parentFolder(item.location) === withSlashes(folder));
-    if (own.length === 1) {
+    if (own.length === 1 && confirmLeavingUnsaved(own[0].name)) {
       const item = own[0];
       const source = outcome.sources.get(item.key);
       // The Windows app lists full paths and opens them as such; browsers read their source.
@@ -1092,6 +1096,7 @@ export function Workbench() {
 
   const handleOpenProjectFrom = async (input: string) => {
     setOpenProjectError(null);
+    if (!confirmLeavingUnsaved(input)) return;
     const error = await openProjectFrom(input);
     if (error === null) setDialog(null);
     else setOpenProjectError(error);
@@ -1358,7 +1363,9 @@ export function Workbench() {
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
     // The files are in the closed project's names, so the Default project keeps its board.
-    replaceProject(defaultProject(filesRef.current, project.board, descriptions));
+    const closed = defaultProject(filesRef.current, project.board, descriptions);
+    // Changes not saved in the closed project are still not saved: the next open asks about them.
+    replaceProject(projectUnsaved ? { ...closed, savedFiles: project.savedFiles ?? {} } : closed);
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
@@ -1369,15 +1376,59 @@ export function Workbench() {
     if (file) handleOpenFile(file.id);
   };
 
-  // New File > Project: a project listing every file now in Files, shown on the project settings.
-  const handleCreateProject = (name: string) => {
+  // New File › Create project: with files in Files, RemoveFilesDialog asks first whether the project keeps them.
+  const handleCreateProject = (choice: NewProjectChoice) => {
     setDialog(null);
-    // It lists the files now in Files, which are in the open project's names: its board too.
-    const created = newProject(name, fileNames, project.board);
+    if (files.length === 0) removeFilesForNewProject(choice);
+    else setProjectToCreate(choice);
+  };
+
+  /** A new project's top file: the chosen board's generated top, named after the board, in the language chosen. */
+  const boardTopFile = ({ board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
+    const definition = findBoard(catalog, board).board;
+    const name = starterTopFileName(definition, language, takenNames);
+    return { id: nextFileId(), name, folder: folderForUpload(name) ?? 'vhdl', content: generateBoardTop(definition, language, baseName(name)) };
+  };
+
+  /** A new project on `board`, listing `listed`, with `top` as its Top File, shown on the project settings. */
+  const createProject = (name: string, board: string, listed: readonly string[], top: VhdlFile) => {
+    const created = newProject(name, listed, board);
     saveFolderRef.current = null;
     replaceProject(created);
+    showNewFile(top.id);
+    setTopFileId(top.id);
+    setTopUnit(null);
     setOverlay('project');
-    appendLog(`New project ${created.name} (${created.fileName}), listing ${fileNames.length} file(s). Save it from the project settings.`, 'success');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings.`, 'success');
+  };
+
+  /**
+   * Keep files: the project lists the files now in Files, and a new top file. All of them
+   * are in the open project's board's names — the top file too, so they agree — and the
+   * project starts on that board. The change to the board chosen follows as any board
+   * change does: renames, hand edits and Undo. If it is cancelled, the project stays on
+   * a board its files match.
+   */
+  const keepFilesInNewProject = (choice: NewProjectChoice) => {
+    setProjectToCreate(null);
+    const top = boardTopFile({ ...choice, board: project.board }, fileNames);
+    setFiles((prev) => [...prev, top]);
+    createProject(choice.name, project.board, [...fileNames, top.name], top);
+    if (choice.board !== project.board) setBoardForNewProject(choice.board);
+  };
+
+  /** Remove files (or none there): Files holds only the new top file, and the project lists it. */
+  const removeFilesForNewProject = (choice: NewProjectChoice) => {
+    setProjectToCreate(null);
+    endRunQuietly();
+    const top = boardTopFile(choice, []);
+    if (fileNames.length > 0) appendLog(`Removed ${fileNames.length} file(s) from Files for the new project.`);
+    // As when a project is opened: nothing may still point at a removed file (top, pairs, diagnostics).
+    for (const f of filesRef.current) dismissDiagnostics(f.id);
+    setFiles([top]);
+    tb.restoreOverrides(EMPTY_OVERRIDES);
+    setEmptiedFolders([]);
+    createProject(choice.name, choice.board, [top.name], top);
   };
 
   // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
@@ -1418,23 +1469,11 @@ export function Workbench() {
     dismissDiagnostics(id);
   };
 
-  // The next value is sent, never the `sw`/`key` state variable — React
-  // state isn't updated synchronously, so sending the stale closure value
-  // here would make the board always one flip behind (§ 8.3). The other
-  // half comes from its ref for the same reason: a key press and a switch
-  // flip before the next render must not undo each other. The refs are
-  // updated here synchronously, so onReady's stim() above always sees the
-  // latest positions regardless of render timing.
-  const handleSwChange = (next: BitVector) => {
-    setSw(next);
-    swRef.current = next;
-    getClient().stim(next, keyRef.current);
-  };
-
-  const handleKeyChange = (next: BitVector) => {
-    setKey(next);
-    keyRef.current = next;
-    getClient().stim(swRef.current, next);
+  // The next value is sent, never the inputs state variable: React state isn't updated
+  // synchronously, so the stale value would leave the board one flip behind (§ 8.3).
+  const handleBoardInputsChange = (changed: Partial<BoardInputs>) => {
+    const next = boardIo.setInputs(changed);
+    getClient().stim(encodeStim(activeBoard.ports, next));
   };
 
   // A new run starts with an empty console, so what it shows is this run's output only.
@@ -1614,6 +1653,16 @@ export function Workbench() {
     busy: boardLocked,
     projectKey: String(projectGeneration),
   });
+  // A new project that kept its files, on another board: the board change follows once the project is in place.
+  useEffect(() => {
+    if (boardForNewProject === null) return;
+    setBoardForNewProject(null);
+    // Refused only while the project is busy: say so, so the board chosen is not lost without a word.
+    if (!boardChange.requestBoardChange(boardForNewProject)) {
+      appendLog(`The new project stays on ${activeBoard.name} for now: choose ${findBoard(catalog, boardForNewProject).board.name} in Settings › Board.`, 'error');
+    }
+  }, [boardForNewProject, boardChange, appendLog, activeBoard, catalog]);
+
   // Settings closes only for a change that happens: the question takes its place, or the board just changes.
   const handleBoardChosenInSettings = (id: string) => {
     if (boardChange.requestBoardChange(id, { fromSettings: true })) setDialog(null);
@@ -1793,12 +1842,24 @@ export function Workbench() {
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
           onCreateProject={testbenchDesign ? undefined : handleCreateProject}
-          projectFileCount={files.length}
           openProjectName={project.name}
+          boards={testbenchDesign ? undefined : catalog}
+          initialBoard={activeBoard.id}
           onClose={() => {
             setDialog(null);
             setNewTestbenchFor(null);
           }}
+        />
+      )}
+      {projectToCreate && (
+        <RemoveFilesDialog
+          projectName={projectToCreate.name}
+          fileNames={fileNames}
+          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, fileNames)}
+          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [])}
+          onKeep={() => keepFilesInNewProject(projectToCreate)}
+          onRemove={() => removeFilesForNewProject(projectToCreate)}
+          onCancel={() => setProjectToCreate(null)}
         />
       )}
       {dialog === 'openProject' && (
@@ -2007,7 +2068,13 @@ export function Workbench() {
               <WaveformPane waveform={waveView.waveform} consoleLines={consoleTexts} {...waveView.pane} />
             )}
             {overlay === 'examples' && (
-            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
+            <ExamplesPane
+              initialLanguages={preferredLanguages}
+              onOpen={handleOpenExample}
+              onClose={() => setOverlay(null)}
+              board={activeBoard}
+              onNewStarterFile={handleNewStarterFile}
+            />
           )}
           </div>
 
@@ -2039,12 +2106,9 @@ export function Workbench() {
               >
                 <BoardIoPanel
                   board={activeBoard}
-                  ledState={ledState}
-                  hexState={hexState}
-                  sw={sw}
-                  keys={key}
-                  onSwChange={handleSwChange}
-                  onKeyChange={handleKeyChange}
+                  outputs={boardIo.outputs}
+                  inputs={boardIo.inputs}
+                  onInputsChange={handleBoardInputsChange}
                 />
               </div>
             </div>

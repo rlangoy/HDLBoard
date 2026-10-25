@@ -120,3 +120,15 @@
   font-style: italic;
   color: #64748b;
 }
+
+/* The 7-segment and pushbutton cards are as narrow as their parts: a long heading
+   (`Pushbuttons (BTNC, BTNU, BTNL, BTNR, BTND)`) or the multiplexing note wraps
+   inside that width instead of widening the card. Zero width plus a 100% minimum
+   takes the text out of the card's own width without shrinking it below the parts. */
+.pb-sevenseg .pb-panel__title,
+.pb-sevenseg .pb-panel__hint,
+.pb-pushbuttons .pb-panel__title {
+  width: 0;
+  min-width: 100%;
+  white-space: normal;
+}

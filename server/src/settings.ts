@@ -23,10 +23,16 @@ export const MAX_WAVE_BYTES: IntSetting = { name: 'HDL_MAX_WAVE_BYTES', fallback
 /** How often the session checks the waveform file's size while a run is going. */
 export const WAVE_CHECK_MS: IntSetting = { name: 'HDL_WAVE_CHECK_MS', fallback: 250 };
 
+const WHOLE_NUMBER = /^\d+$/;
+
 /** The setting's value: its own name first, then its legacy name, then the fallback. */
 export function readIntSetting(setting: IntSetting, env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[setting.name] ?? (setting.legacyName === undefined ? undefined : env[setting.legacyName]);
-  return raw === undefined ? setting.fallback : parseInt(raw, 10);
+  if (raw === undefined) return setting.fallback;
+  if (WHOLE_NUMBER.test(raw.trim())) return Number(raw);
+  // An empty or mistyped value must not quietly mean "no limit" (a NaN compares false with everything).
+  console.warn(`hdl-board: ${setting.name}=${JSON.stringify(raw)} is not a whole number; using ${setting.fallback}.`);
+  return setting.fallback;
 }
 
 export type VhdlWaveFormat = 'ghw' | 'vcd';

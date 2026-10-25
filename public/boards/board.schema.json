@@ -2,15 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rlangoy/HDLBoard/docs/BOARDS.md#board-file",
   "title": "HDLBoard board file",
-  "description": "Boards with other port names for HDLBoard. Editor help only: HDLBoard checks the file itself, and its Settings › Board list shows what is wrong. See docs/BOARDS.md.",
+  "description": "Boards for HDLBoard: their port names, how many parts they have, and their polarity. Editor help only: HDLBoard checks the file itself, and its Settings › Board list shows what is wrong. See docs/BOARDS.md.",
   "type": "object",
   "required": ["version", "boards"],
   "properties": {
     "$schema": { "type": "string" },
-    "version": { "const": 1, "description": "The board file format version." },
-    "boards": { "type": "array", "items": { "$ref": "#/$defs/board" } }
+    "version": { "enum": [1, 2], "description": "The board file format version: 2. Version-1 files still load." },
+    "boards": { "type": "array" }
   },
   "additionalProperties": false,
+  "if": { "properties": { "version": { "const": 1 } } },
+  "then": { "properties": { "boards": { "items": { "$ref": "#/$defs/boardV1" } } } },
+  "else": { "properties": { "boards": { "items": { "$ref": "#/$defs/board" } } } },
   "$defs": {
     "portName": {
       "type": "string",
@@ -24,22 +27,122 @@
       "maxLength": 8,
       "description": "The small text under each part on the board picture."
     },
+    "activeLow": { "type": "boolean", "description": "true (the default): the part is on, or pressed, at '0'." },
+    "vector": {
+      "type": "object",
+      "required": ["port", "count"],
+      "properties": {
+        "port": { "$ref": "#/$defs/portName" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 18 }
+      },
+      "additionalProperties": false
+    },
+    "pushbuttons": {
+      "description": "A vector row (port + count), a row of scalar ports, or a cross written with position keys.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["port", "count"],
+          "properties": {
+            "port": { "$ref": "#/$defs/portName" },
+            "count": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "activeLow": { "$ref": "#/$defs/activeLow" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["ports"],
+          "properties": {
+            "ports": { "type": "array", "items": { "$ref": "#/$defs/portName" }, "minItems": 1, "maxItems": 8, "description": "The first name is button 0." },
+            "activeLow": { "$ref": "#/$defs/activeLow" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["cross"],
+          "properties": {
+            "cross": {
+              "type": "object",
+              "required": ["centre", "up", "left", "right", "down"],
+              "properties": {
+                "centre": { "$ref": "#/$defs/portName", "description": "Button 0." },
+                "up": { "$ref": "#/$defs/portName", "description": "Button 1." },
+                "left": { "$ref": "#/$defs/portName", "description": "Button 2." },
+                "right": { "$ref": "#/$defs/portName", "description": "Button 3." },
+                "down": { "$ref": "#/$defs/portName", "description": "Button 4." }
+              },
+              "additionalProperties": false
+            },
+            "activeLow": { "$ref": "#/$defs/activeLow" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sevenSegment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "ports", "width"],
+          "properties": {
+            "kind": { "const": "independent" },
+            "ports": { "type": "array", "items": { "$ref": "#/$defs/portName" }, "minItems": 1, "maxItems": 8, "description": "One port per display, the rightmost display first." },
+            "width": { "enum": [7, 8], "description": "8 when bit 7 is the decimal point." },
+            "activeLow": { "$ref": "#/$defs/activeLow" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "segments", "digitEnables", "digits"],
+          "properties": {
+            "kind": { "const": "multiplexed" },
+            "segments": {
+              "description": "A 7-bit vector, or 7 scalar ports in the order a, b, c, d, e, f, g.",
+              "oneOf": [
+                { "$ref": "#/$defs/portName" },
+                { "type": "array", "items": { "$ref": "#/$defs/portName" }, "minItems": 7, "maxItems": 7 }
+              ]
+            },
+            "decimalPoint": { "$ref": "#/$defs/portName" },
+            "digitEnables": { "$ref": "#/$defs/portName", "description": "A vector of `digits` bits; bit 0 is the rightmost digit." },
+            "digits": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "activeLow": { "$ref": "#/$defs/activeLow" },
+            "digitEnablesActiveLow": { "$ref": "#/$defs/activeLow" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ports": {
       "type": "object",
-      "required": ["clock50", "switches", "pushbuttons", "leds", "sevenSegment"],
+      "required": ["clock", "switches", "pushbuttons", "leds", "sevenSegment"],
       "properties": {
-        "clock50": { "$ref": "#/$defs/portName", "description": "The 50 MHz clock input (1 bit)." },
+        "clock": { "$ref": "#/$defs/portName", "description": "The board clock (1 bit)." },
+        "clockMHz": { "type": "number", "minimum": 1, "maximum": 1000, "description": "The clock frequency; 50 when left out. At most 3 decimals." },
         "clock500Hz": { "$ref": "#/$defs/portName", "description": "The simulator's 500 Hz clock (1 bit). Optional: CLOCK_500Hz when left out." },
-        "switches": { "$ref": "#/$defs/portName", "description": "The 10 slide switches (10 bits, input)." },
-        "pushbuttons": { "$ref": "#/$defs/portName", "description": "The 4 pushbuttons (4 bits, input, active low)." },
-        "leds": { "$ref": "#/$defs/portName", "description": "The 10 red LEDs (10 bits, output)." },
-        "sevenSegment": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/portName" },
-          "minItems": 6,
-          "maxItems": 6,
-          "description": "The 6 displays, 7 bits each, active low. The rightmost display first."
-        }
+        "switches": { "$ref": "#/$defs/vector", "description": "The slide switches (input)." },
+        "pushbuttons": { "$ref": "#/$defs/pushbuttons" },
+        "resetButton": {
+          "type": "object",
+          "required": ["port"],
+          "properties": { "port": { "$ref": "#/$defs/portName" }, "activeLow": { "$ref": "#/$defs/activeLow" } },
+          "additionalProperties": false,
+          "description": "Optional: a reset button, one scalar input."
+        },
+        "leds": { "$ref": "#/$defs/vector", "description": "The LEDs (output, active high)." },
+        "sevenSegment": { "$ref": "#/$defs/sevenSegment" }
+      },
+      "additionalProperties": false
+    },
+    "resource": {
+      "type": "object",
+      "required": ["label", "url"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "url": { "type": "string", "pattern": "^https://\\S+$", "maxLength": 512 }
       },
       "additionalProperties": false
     },
@@ -56,16 +159,43 @@
         "name": { "type": "string", "minLength": 1, "maxLength": 40, "description": "Shown in Settings › Board." },
         "description": { "type": "string", "maxLength": 140, "description": "Shown beside the name in Settings › Board." },
         "ports": { "$ref": "#/$defs/ports" },
-        "labels": {
-          "type": "object",
-          "properties": {
-            "switches": { "$ref": "#/$defs/label" },
-            "pushbuttons": { "$ref": "#/$defs/label" },
-            "leds": { "$ref": "#/$defs/label" },
-            "sevenSegment": { "$ref": "#/$defs/label" }
-          },
-          "additionalProperties": false
-        }
+        "labels": { "$ref": "#/$defs/labels" },
+        "resources": { "type": "array", "items": { "$ref": "#/$defs/resource" }, "maxItems": 4, "description": "Links to the board's design resources, shown in Settings › Board." }
+      },
+      "additionalProperties": false
+    },
+    "labels": {
+      "type": "object",
+      "properties": {
+        "switches": { "$ref": "#/$defs/label" },
+        "pushbuttons": { "$ref": "#/$defs/label" },
+        "leds": { "$ref": "#/$defs/label" },
+        "sevenSegment": { "$ref": "#/$defs/label" }
+      },
+      "additionalProperties": false
+    },
+    "portsV1": {
+      "type": "object",
+      "required": ["clock50", "switches", "pushbuttons", "leds", "sevenSegment"],
+      "properties": {
+        "clock50": { "$ref": "#/$defs/portName", "description": "The 50 MHz clock input (1 bit)." },
+        "clock500Hz": { "$ref": "#/$defs/portName" },
+        "switches": { "$ref": "#/$defs/portName", "description": "The 10 slide switches." },
+        "pushbuttons": { "$ref": "#/$defs/portName", "description": "The 4 pushbuttons, active low." },
+        "leds": { "$ref": "#/$defs/portName", "description": "The 10 red LEDs." },
+        "sevenSegment": { "type": "array", "items": { "$ref": "#/$defs/portName" }, "minItems": 6, "maxItems": 6 }
+      },
+      "additionalProperties": false
+    },
+    "boardV1": {
+      "type": "object",
+      "required": ["id", "name", "ports"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 32 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "description": { "type": "string", "maxLength": 140 },
+        "ports": { "$ref": "#/$defs/portsV1" },
+        "labels": { "$ref": "#/$defs/labels" }
       },
       "additionalProperties": false
     }

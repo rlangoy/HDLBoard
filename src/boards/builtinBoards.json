@@ -1,30 +1,115 @@
 {
-  "version": 1,
+  "version": 2,
   "boards": [
     {
       "id": "default",
       "name": "Default",
       "description": "HDLBoard's original names: KEY_N and HEX0_N … HEX5_N.",
       "ports": {
-        "clock50": "CLOCK_50",
-        "clock500Hz": "CLOCK_500Hz",
-        "switches": "SW",
-        "pushbuttons": "KEY_N",
-        "leds": "LEDR",
-        "sevenSegment": ["HEX0_N", "HEX1_N", "HEX2_N", "HEX3_N", "HEX4_N", "HEX5_N"]
+        "clock": "CLOCK_50",
+        "switches": { "port": "SW", "count": 10 },
+        "pushbuttons": { "port": "KEY_N", "count": 4, "activeLow": true },
+        "leds": { "port": "LEDR", "count": 10 },
+        "sevenSegment": {
+          "kind": "independent",
+          "ports": ["HEX0_N", "HEX1_N", "HEX2_N", "HEX3_N", "HEX4_N", "HEX5_N"],
+          "width": 7,
+          "activeLow": true
+        }
       }
     },
     {
       "id": "de1-soc",
       "name": "DE1-SoC",
-      "description": "Terasic's names, as in the DE1-SoC System Builder top level: KEY and HEX0 … HEX5.",
+      "description": "Terasic DE1-SoC, System Builder names: KEY and HEX0 … HEX5.",
       "ports": {
-        "clock50": "CLOCK_50",
-        "switches": "SW",
-        "pushbuttons": "KEY",
-        "leds": "LEDR",
-        "sevenSegment": ["HEX0", "HEX1", "HEX2", "HEX3", "HEX4", "HEX5"]
+        "clock": "CLOCK_50",
+        "switches": { "port": "SW", "count": 10 },
+        "pushbuttons": { "port": "KEY", "count": 4, "activeLow": true },
+        "leds": { "port": "LEDR", "count": 10 },
+        "sevenSegment": {
+          "kind": "independent",
+          "ports": ["HEX0", "HEX1", "HEX2", "HEX3", "HEX4", "HEX5"],
+          "width": 7,
+          "activeLow": true
+        }
       }
+    },
+    {
+      "id": "de10-lite",
+      "name": "DE10-Lite",
+      "description": "Terasic DE10-Lite: 2 keys, 6 displays with decimal point, MAX10_CLK1_50.",
+      "ports": {
+        "clock": "MAX10_CLK1_50",
+        "switches": { "port": "SW", "count": 10 },
+        "pushbuttons": { "port": "KEY", "count": 2, "activeLow": true },
+        "leds": { "port": "LEDR", "count": 10 },
+        "sevenSegment": {
+          "kind": "independent",
+          "ports": ["HEX0", "HEX1", "HEX2", "HEX3", "HEX4", "HEX5"],
+          "width": 8,
+          "activeLow": true
+        }
+      }
+    },
+    {
+      "id": "basys3",
+      "name": "Basys 3",
+      "description": "Digilent Basys 3, master XDC names: 16 sw/led, 5 buttons, 4-digit multiplexed display, 100 MHz.",
+      "ports": {
+        "clock": "clk",
+        "clockMHz": 100,
+        "switches": { "port": "sw", "count": 16 },
+        "pushbuttons": {
+          "cross": { "centre": "btnC", "up": "btnU", "left": "btnL", "right": "btnR", "down": "btnD" },
+          "activeLow": false
+        },
+        "leds": { "port": "led", "count": 16 },
+        "sevenSegment": {
+          "kind": "multiplexed",
+          "segments": "seg",
+          "decimalPoint": "dp",
+          "digitEnables": "an",
+          "digits": 4,
+          "activeLow": true,
+          "digitEnablesActiveLow": true
+        }
+      },
+      "resources": [
+        { "label": "Board definitions", "url": "https://github.com/Digilent/Basys3/blob/master/Resources/XDC/Basys3_Master.xdc" },
+        { "label": "I/O examples", "url": "https://github.com/Digilent/Basys3/blob/master/Projects/GPIO/src/hdl/GPIO_Demo.vhd" }
+      ],
+      "labels": { "switches": "SW", "pushbuttons": "BTN", "leds": "LD", "sevenSegment": "AN" }
+    },
+    {
+      "id": "nexys-a7",
+      "name": "Nexys A7",
+      "description": "Digilent Nexys A7, master XDC names: 16 SW/LED, 5 buttons + CPU_RESETN, 8-digit multiplexed display, 100 MHz.",
+      "ports": {
+        "clock": "CLK100MHZ",
+        "clockMHz": 100,
+        "switches": { "port": "SW", "count": 16 },
+        "pushbuttons": {
+          "cross": { "centre": "BTNC", "up": "BTNU", "left": "BTNL", "right": "BTNR", "down": "BTND" },
+          "activeLow": false
+        },
+        "resetButton": { "port": "CPU_RESETN", "activeLow": true },
+        "leds": { "port": "LED", "count": 16 },
+        "sevenSegment": {
+          "kind": "multiplexed",
+          "segments": ["CA", "CB", "CC", "CD", "CE", "CF", "CG"],
+          "decimalPoint": "DP",
+          "digitEnables": "AN",
+          "digits": 8,
+          "activeLow": true,
+          "digitEnablesActiveLow": true
+        }
+      },
+      "resources": [
+        { "label": "Board definitions", "url": "https://github.com/Digilent/digilent-xdc/blob/master/Nexys-A7-100T-Master.xdc" },
+        { "label": "I/O top file", "url": "https://github.com/Digilent/Nexys-A7-100T-GPIO/blob/master/src/hdl/top.vhd" }
+      ],
+      "labels": { "switches": "SW", "pushbuttons": "BTN", "leds": "LD", "sevenSegment": "AN" }
     }
   ]
 }
