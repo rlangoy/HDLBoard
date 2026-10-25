@@ -106,7 +106,7 @@ describe('examples, starter files and New File on the DE1-SoC', () => {
   });
 
   it('copies an example in the Default names when a user board\'s names clash with it, and says which', () => {
-    const clk = { ...DE1_SOC, id: 'clk-board', name: 'Clk board', ports: { ...DE1_SOC.ports, clock50: 'clk' } };
+    const clk = { ...DE1_SOC, id: 'clk-board', name: 'Clk board', ports: { ...DE1_SOC.ports, clock: { port: 'clk', mhz: 50 } } };
     const example = theOne(EXAMPLES, (e) => e.id === 'key_uart_tx_vhdl', 'Key to UART Tx example');
     const copied = copyExample(example, [], () => 'x', clk);
     expect(copied.added).toHaveLength(3);
@@ -115,7 +115,7 @@ describe('examples, starter files and New File on the DE1-SoC', () => {
   });
 
   it('starts a workspace on such a board without failing', () => {
-    const clashing = { ...DE1_SOC, id: 'odd', name: 'Odd', ports: { ...DE1_SOC.ports, leds: 'DE1_SoC' } };
+    const clashing = { ...DE1_SOC, id: 'odd', name: 'Odd', ports: { ...DE1_SOC.ports, leds: { port: 'DE1_SoC', count: 10 } } };
     expect(starterFilesFor(clashing).map((file) => file.content)).toEqual(starterFilesFor(DEFAULT_BOARD).map((file) => file.content));
   });
 });

@@ -169,3 +169,8 @@
     transition-duration: 1ms;
   }
 }
+
+/* A board with a decimal-point bit lights the dot like a segment. */
+.pb-hex__dp.is-lit {
+  background-color: var(--pb-hex-seg-on);
+}

@@ -2,38 +2,34 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Reads a board file (docs/board_io_config_spec.md § 4.2, § 4.4): the built-in one and
- * the user's `boards/boards.json` alike. Never throws. A file that is not a version-1
- * board file gives one warning and no boards; a board that breaks a rule is skipped
- * with a warning that names it and its JSON path, and the other boards still load.
+ * Reads a board file (docs/board_io_v2_spec.md § 3): the built-in one and the user's
+ * `boards/boards.json` alike. Never throws. A file of version 1 or 2 is read; any
+ * other gives one warning and no boards. A board that breaks a rule is skipped with a
+ * warning that names it and its first problem, and the other boards still load.
+ * Version-1 boards are upgraded on the way in (`upgradeV1Board`), so every board comes
+ * out as the same normalized `BoardDefinition`.
  */
 
 import { isObject } from '../project/jsonValue';
-import { labelProblem, portNameProblem } from './boardNames';
-import {
-  BOARD_ROLES,
-  LABELLED_ROLES,
-  type BoardDefinition,
-  type BoardLabels,
-  type BoardPorts,
-  type BoardRole,
-  type LabelledRole,
-  type ParsedBoards,
-} from './types';
+import { checkBoard, fail, invalid, quoted, valid, type Checked } from './boardFileReader';
+import { labelProblem } from './boardNames';
+import { readPorts } from './parsePorts';
+import { readResources } from './parseResources';
+import { LABELLED_ROLES, type BoardDefinition, type BoardLabels, type LabelledRole, type ParsedBoards } from './types';
+import { upgradeV1Board } from './upgradeV1Board';
 
-export const BOARD_FILE_VERSION = 1;
-export const SEVEN_SEGMENT_NAME_COUNT = 6;
+/** The version HDLBoard writes; version 1 is still read. */
+export const BOARD_FILE_VERSION = 2;
+const READABLE_VERSIONS: readonly number[] = [1, BOARD_FILE_VERSION];
 
-/** The 500 Hz clock is simulator-provided, so a board file need not invent a name for it. */
-export const DEFAULT_CLOCK_500HZ_NAME = 'CLOCK_500Hz';
 export const DEFAULT_LABELS: BoardLabels = { switches: 'SW', pushbuttons: 'KEY', leds: 'LEDR', sevenSegment: 'HEX' };
 
 const BOARD_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 32;
 const MAX_NAME_LENGTH = 40;
 const MAX_DESCRIPTION_LENGTH = 140;
-const BOARD_KEYS: readonly string[] = ['id', 'name', 'description', 'ports', 'labels'];
-const OPTIONAL_ROLES: readonly BoardRole[] = ['clock500Hz'];
+const V1_BOARD_FIELDS: readonly string[] = ['id', 'name', 'description', 'ports', 'labels'];
+const V2_BOARD_FIELDS: readonly string[] = [...V1_BOARD_FIELDS, 'resources'];
 
 /** Where a board file comes from: its name in warnings, and the origin of its boards. */
 export interface BoardFileSource {
@@ -41,12 +37,16 @@ export interface BoardFileSource {
   readonly origin: BoardDefinition['origin'];
 }
 
-/** A value, or why there is none — the first problem found. */
-type Checked<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly problem: string };
+interface BoardFile {
+  readonly version: number;
+  readonly boards: readonly unknown[];
+}
 
-const valid = <T>(value: T): Checked<T> => ({ ok: true, value });
-const invalid = (problem: string): Checked<never> => ({ ok: false, problem });
-const quoted = (value: unknown): string => JSON.stringify(value);
+/** What every board of one file shares: the file's version, and where its boards come from. */
+interface BoardContext {
+  readonly version: number;
+  readonly origin: BoardDefinition['origin'];
+}
 
 export function parseBoardFile(text: string, source: BoardFileSource): ParsedBoards {
   const file = parseFileShape(text);
@@ -54,8 +54,8 @@ export function parseBoardFile(text: string, source: BoardFileSource): ParsedBoa
 
   const boards: BoardDefinition[] = [];
   const warnings: string[] = [];
-  file.value.forEach((raw, index) => {
-    const board = parseNewBoard(raw, source.origin, boards);
+  file.value.boards.forEach((raw, index) => {
+    const board = parseNewBoard(raw, { version: file.value.version, origin: source.origin }, boards);
     if (board.ok) boards.push(board.value);
     else warnings.push(skippedWarning({ fileName: source.fileName, index, raw }, board.problem));
   });
@@ -63,8 +63,8 @@ export function parseBoardFile(text: string, source: BoardFileSource): ParsedBoa
 }
 
 /** A board of the file, unless it breaks a rule or takes the id or name of one before it. */
-function parseNewBoard(raw: unknown, origin: BoardDefinition['origin'], earlier: readonly BoardDefinition[]): Checked<BoardDefinition> {
-  const board = parseBoard(raw, origin);
+function parseNewBoard(raw: unknown, context: BoardContext, earlier: readonly BoardDefinition[]): Checked<BoardDefinition> {
+  const board = checkBoard(() => readBoard(raw, context));
   if (!board.ok) return board;
   const clash = clashWithEarlier(board.value, earlier);
   return clash === undefined ? board : invalid(clash);
@@ -77,14 +77,14 @@ export interface BoardEntry {
   readonly raw: unknown;
 }
 
-/** `boards/boards.json: boards[2] "de10" was skipped: ports.sevenSegment needs exactly 6 names (found 8).` */
+/** `boards/boards.json: boards[2] "lab" was skipped: ports.switches.count: 20 is above the limit of 18.` */
 export function skippedWarning({ fileName, index, raw }: BoardEntry, problem: string): string {
   const id = isObject(raw) && typeof raw.id === 'string' ? ` ${quoted(raw.id)}` : '';
   return `${fileName}: boards[${index}]${id} was skipped: ${problem}.`;
 }
 
-/** The `boards` array of a version-1 board file. */
-function parseFileShape(text: string): Checked<readonly unknown[]> {
+/** The version and `boards` array of a board file. */
+function parseFileShape(text: string): Checked<BoardFile> {
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -92,135 +92,72 @@ function parseFileShape(text: string): Checked<readonly unknown[]> {
     return invalid(`is not valid JSON (${(error as Error).message})`);
   }
   if (!isObject(json)) return invalid('is not a board file: the top level must be a JSON object');
-  if (json.version !== BOARD_FILE_VERSION) {
-    return invalid(`is not a version-${BOARD_FILE_VERSION} board file ("version" is ${quoted(json.version) ?? 'missing'})`);
+  if (typeof json.version !== 'number' || !READABLE_VERSIONS.includes(json.version)) {
+    return invalid(`is not a board file of version ${READABLE_VERSIONS.join(' or ')} ("version" is ${quoted(json.version) ?? 'missing'})`);
   }
   if (!Array.isArray(json.boards)) return invalid('is not a board file: "boards" must be an array');
-  return valid(json.boards);
+  return valid({ version: json.version, boards: json.boards });
 }
 
 /** The board an entry of the file defines, with its defaults filled in. */
-function parseBoard(raw: unknown, origin: BoardDefinition['origin']): Checked<BoardDefinition> {
-  if (!isObject(raw)) return invalid('it is not an object');
-  const unknownKey = Object.keys(raw).find((key) => !BOARD_KEYS.includes(key));
-  if (unknownKey !== undefined) return invalid(`${quoted(unknownKey)} is not a board field (the fields are ${BOARD_KEYS.join(', ')})`);
-
-  const id = parseId(raw.id);
-  if (!id.ok) return id;
-  const name = parseName(raw.name);
-  if (!name.ok) return name;
-  const description = parseDescription(raw.description);
-  if (!description.ok) return description;
-  const ports = parsePorts(raw.ports);
-  if (!ports.ok) return ports;
-  const labels = parseLabels(raw.labels);
-  if (!labels.ok) return labels;
-  return valid({ id: id.value, name: name.value, description: description.value, ports: ports.value, labels: labels.value, origin });
+function readBoard(entry: unknown, { version, origin }: BoardContext): BoardDefinition {
+  if (!isObject(entry)) fail('it is not an object');
+  const fields = version === 1 ? V1_BOARD_FIELDS : V2_BOARD_FIELDS;
+  const unknownKey = Object.keys(entry).find((key) => !fields.includes(key));
+  if (unknownKey !== undefined) fail(`${quoted(unknownKey)} is not a board field (the fields are ${fields.join(', ')})`);
+  const raw = version === 1 ? upgraded(entry) : entry;
+  return {
+    id: readId(raw.id),
+    name: readName(raw.name),
+    description: readDescription(raw.description),
+    ports: readPorts(raw.ports),
+    labels: readLabels(raw.labels),
+    resources: readResources(raw.resources),
+    origin,
+  };
 }
 
-function parseId(value: unknown): Checked<string> {
-  if (typeof value !== 'string') return invalid('"id" must be a string');
-  if (value.length > MAX_ID_LENGTH) return invalid(`"id" is longer than ${MAX_ID_LENGTH} characters`);
-  if (!BOARD_ID.test(value)) return invalid(`"id" ${quoted(value)} must be lower-case letters and digits, joined by single hyphens`);
-  return valid(value);
+function upgraded(entry: Record<string, unknown>): Record<string, unknown> {
+  const result = upgradeV1Board(entry);
+  if (!result.ok) fail(result.problem);
+  return result.value as Record<string, unknown>;
 }
 
-function parseName(value: unknown): Checked<string> {
-  if (typeof value !== 'string' || value.trim() === '') return invalid('"name" must be a non-empty string');
-  if (value.length > MAX_NAME_LENGTH) return invalid(`"name" is longer than ${MAX_NAME_LENGTH} characters`);
-  return valid(value);
+function readId(value: unknown): string {
+  if (typeof value !== 'string') fail('"id" must be a string');
+  if (value.length > MAX_ID_LENGTH) fail(`"id" is longer than ${MAX_ID_LENGTH} characters`);
+  if (!BOARD_ID.test(value)) fail(`"id" ${quoted(value)} must be lower-case letters and digits, joined by single hyphens`);
+  return value;
 }
 
-function parseDescription(value: unknown): Checked<string> {
-  if (value === undefined) return valid('');
-  if (typeof value !== 'string') return invalid('"description" must be a string');
-  if (value.length > MAX_DESCRIPTION_LENGTH) return invalid(`"description" is longer than ${MAX_DESCRIPTION_LENGTH} characters`);
-  return valid(value);
+function readName(value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '') fail('"name" must be a non-empty string');
+  if (value.length > MAX_NAME_LENGTH) fail(`"name" is longer than ${MAX_NAME_LENGTH} characters`);
+  return value;
 }
 
-function parsePorts(value: unknown): Checked<BoardPorts> {
-  if (!isObject(value)) return invalid('"ports" must be an object');
-  const withDefaults: Record<string, unknown> = { ...value, clock500Hz: value.clock500Hz ?? DEFAULT_CLOCK_500HZ_NAME };
-  const problem = roleKeyProblem(value) ?? portNamesProblem(withDefaults);
-  if (problem !== undefined) return invalid(problem);
-  // Every role is now there, with a valid name (or six): the shape BoardPorts describes.
-  const ports = withDefaults as unknown as BoardPorts;
-  const duplicate = duplicateNameProblem(ports);
-  return duplicate === undefined ? valid(ports) : invalid(duplicate);
+function readDescription(value: unknown): string {
+  if (value === undefined) return '';
+  if (typeof value !== 'string') fail('"description" must be a string');
+  if (value.length > MAX_DESCRIPTION_LENGTH) fail(`"description" is longer than ${MAX_DESCRIPTION_LENGTH} characters`);
+  return value;
 }
 
-/** A key of `ports` that is no role, or a required role left out. */
-function roleKeyProblem(ports: Record<string, unknown>): string | undefined {
-  const unknownRole = Object.keys(ports).find((key) => !(BOARD_ROLES as readonly string[]).includes(key));
-  if (unknownRole !== undefined) return `ports.${unknownRole} is not a role (the roles are ${BOARD_ROLES.join(', ')})`;
-  const missingRole = BOARD_ROLES.find((role) => !(role in ports) && !OPTIONAL_ROLES.includes(role));
-  return missingRole === undefined ? undefined : `ports.${missingRole} is missing`;
-}
-
-/** The first role whose name (or names) breaks a rule. */
-function portNamesProblem(ports: Record<string, unknown>): string | undefined {
-  for (const role of BOARD_ROLES) {
-    const problem = role === 'sevenSegment' ? sevenSegmentProblem(ports.sevenSegment) : singleNameProblem(role, ports[role]);
-    if (problem !== undefined) return problem;
-  }
-  return undefined;
-}
-
-function singleNameProblem(role: BoardRole, name: unknown): string | undefined {
-  if (typeof name !== 'string') return `ports.${role} must be a string (one port name)`;
-  const problem = portNameProblem(name);
-  return problem === undefined ? undefined : `ports.${role} ${quoted(name)} ${problem}`;
-}
-
-function sevenSegmentProblem(names: unknown): string | undefined {
-  if (!Array.isArray(names)) return `ports.sevenSegment must be an array of ${SEVEN_SEGMENT_NAME_COUNT} names`;
-  if (names.length !== SEVEN_SEGMENT_NAME_COUNT) {
-    return `ports.sevenSegment needs exactly ${SEVEN_SEGMENT_NAME_COUNT} names (found ${names.length})`;
-  }
-  const index = names.findIndex((name) => typeof name !== 'string' || portNameProblem(name) !== undefined);
-  if (index < 0) return undefined;
-  const name: unknown = names[index];
-  if (typeof name !== 'string') return `ports.sevenSegment[${index}] must be a string`;
-  return `ports.sevenSegment[${index}] ${quoted(name)} ${portNameProblem(name)}`;
-}
-
-/** Every port name with its JSON path, in role order. */
-function namedPorts(ports: BoardPorts): { path: string; name: string }[] {
-  return BOARD_ROLES.flatMap((role) =>
-    role === 'sevenSegment'
-      ? ports.sevenSegment.map((name, index) => ({ path: `ports.sevenSegment[${index}]`, name }))
-      : [{ path: `ports.${role}`, name: ports[role] }],
-  );
-}
-
-/** VHDL sees `Key` and `KEY` as one port, so a board's names must differ ignoring case. */
-function duplicateNameProblem(ports: BoardPorts): string | undefined {
-  const seen = new Map<string, string>();
-  for (const { path, name } of namedPorts(ports)) {
-    const earlier = seen.get(name.toLowerCase());
-    if (earlier !== undefined) return `${path} ${quoted(name)} is the same name as ${earlier} (names ignore case)`;
-    seen.set(name.toLowerCase(), `${path} ${quoted(name)}`);
-  }
-  return undefined;
-}
-
-function parseLabels(value: unknown): Checked<BoardLabels> {
-  if (value === undefined) return valid(DEFAULT_LABELS);
-  if (!isObject(value)) return invalid('"labels" must be an object');
+function readLabels(value: unknown): BoardLabels {
+  if (value === undefined) return DEFAULT_LABELS;
+  if (!isObject(value)) fail('"labels" must be an object');
   const unknownRole = Object.keys(value).find((key) => !(LABELLED_ROLES as readonly string[]).includes(key));
-  if (unknownRole !== undefined) {
-    return invalid(`labels.${unknownRole} is not a labelled role (the labelled roles are ${LABELLED_ROLES.join(', ')})`);
-  }
+  if (unknownRole !== undefined) fail(`labels.${unknownRole} is not a labelled role (the labelled roles are ${LABELLED_ROLES.join(', ')})`);
   const labels: Record<LabelledRole, string> = { ...DEFAULT_LABELS };
   for (const role of LABELLED_ROLES) {
     const label = value[role];
     if (label === undefined) continue;
-    if (typeof label !== 'string') return invalid(`labels.${role} must be a string`);
+    if (typeof label !== 'string') fail(`labels.${role} must be a string`);
     const problem = labelProblem(label);
-    if (problem !== undefined) return invalid(`labels.${role} ${quoted(label)} ${problem}`);
+    if (problem !== undefined) fail(`labels.${role} ${quoted(label)} ${problem}`);
     labels[role] = label;
   }
-  return valid(labels);
+  return labels;
 }
 
 /**

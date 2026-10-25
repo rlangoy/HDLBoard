@@ -11,15 +11,16 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from 'react';
-import { cx, fillBits, zeroBits, type BitVector } from '../board';
-import { blankSegments, type SegmentVector } from '../SevenSegment';
+import { cx } from '../board';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
-import { LED_COUNT, PUSHBUTTON_COUNT, SEVEN_SEGMENT_COUNT, SWITCH_COUNT, boardDesignPortNames } from '../../boards/boardPorts';
+import { boardDesignPortNames } from '../../boards/boardPorts';
+import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
+import { useBoardIo } from './useBoardIo';
 import { BoardChangeDialog } from './BoardChangeDialog';
-import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog } from './boardText';
+import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog, withBoardName } from './boardText';
 import { useBoards } from './useBoards';
 import { useBoardChange } from './useBoardChange';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
@@ -370,24 +371,11 @@ export function Workbench() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const elapsedTimer = useRef<number | null>(null);
 
-  const [sw, setSw] = useState<BitVector>(() => zeroBits(SWITCH_COUNT));
-  // Released: the pushbuttons are active low on every board.
-  const [key, setKey] = useState<BitVector>(() => fillBits(PUSHBUTTON_COUNT, 1));
-  // Mirrors of sw/key for the HdlClient's handlers to read (below): those
-  // handlers are captured once, when the client is lazily constructed, so
-  // reading `sw`/`key` directly there would see whatever they were at that
-  // moment forever after — a stale closure. Refs are updated synchronously
-  // in handleSwChange/handleKeyChange and always read current.
-  const swRef = useRef(sw);
-  const keyRef = useRef(key);
-
-  // Board outputs are driven by the simulation backend, never by the
-  // inputs. Whenever no simulation is running they stay at their blank
-  // values (Design_Description.md § 5 convention 11).
-  const [ledState, setLedState] = useState<BitVector>(() => zeroBits(LED_COUNT));
-  const [hexState, setHexState] = useState<SegmentVector[]>(() =>
-    Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()),
-  );
+  // The Board pane: inputs the student sets, outputs the simulation drives (useBoardIo).
+  // Outputs stay off whenever no simulation is running (Design_Description.md § 5 convention 11).
+  const boardIo = useBoardIo(activeBoard);
+  const activeBoardName = useRef(activeBoard.name);
+  activeBoardName.current = activeBoard.name;
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -462,10 +450,7 @@ export function Workbench() {
   // Nothing is simulating: the honest board state, per Design_Description.md
   // § 5 convention 11. Used whenever a session isn't actively running —
   // before Start, and after Stop/error/disconnect — never only on mount.
-  const blankBoard = useCallback(() => {
-    setLedState(zeroBits(LED_COUNT));
-    setHexState(Array.from({ length: SEVEN_SEGMENT_COUNT }, () => blankSegments()));
-  }, []);
+  const blankBoard = boardIo.blank;
 
   // One HdlClient per Workbench instance, created lazily on first Start
   // rather than on mount, so opening the page never opens a socket the
@@ -546,11 +531,10 @@ export function Workbench() {
           // sit — sync the current input state immediately so a design
           // that reacts combinationally shows the right thing before the
           // user touches anything.
-          clientRef.current?.stim(swRef.current, keyRef.current);
+          clientRef.current?.stim(boardIo.stimBits());
         },
-        onState: (ledr, hex) => {
-          setLedState(ledr);
-          setHexState(hex);
+        onState: (bits) => {
+          boardIo.showState(bits);
           // A board run records no waveform (W1): the view closes.
           boardStateSeen();
         },
@@ -561,7 +545,7 @@ export function Workbench() {
         },
         onError: (stage, text) => {
           if (!takeFlag(quietEnd)) {
-            appendLog(`${stage} error:\n${text}`, 'error');
+            appendLog(`${stage} error:\n${withBoardName(text, activeBoardName.current)}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
             else if (stage === 'runtime') revealFirstError(advised.length > 0 ? advised : lastRunError.current ? [lastRunError.current] : []);
@@ -595,7 +579,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
+  }, [appendLog, blankBoard, boardIo.stimBits, boardIo.showState, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
 
   useEffect(
     () => () => {
@@ -1417,23 +1401,11 @@ export function Workbench() {
     dismissDiagnostics(id);
   };
 
-  // The next value is sent, never the `sw`/`key` state variable — React
-  // state isn't updated synchronously, so sending the stale closure value
-  // here would make the board always one flip behind (§ 8.3). The other
-  // half comes from its ref for the same reason: a key press and a switch
-  // flip before the next render must not undo each other. The refs are
-  // updated here synchronously, so onReady's stim() above always sees the
-  // latest positions regardless of render timing.
-  const handleSwChange = (next: BitVector) => {
-    setSw(next);
-    swRef.current = next;
-    getClient().stim(next, keyRef.current);
-  };
-
-  const handleKeyChange = (next: BitVector) => {
-    setKey(next);
-    keyRef.current = next;
-    getClient().stim(swRef.current, next);
+  // The next value is sent, never the inputs state variable: React state isn't updated
+  // synchronously, so the stale value would leave the board one flip behind (§ 8.3).
+  const handleBoardInputsChange = (next: BoardInputs) => {
+    boardIo.setInputs(next);
+    getClient().stim(encodeStim(activeBoard.ports, next));
   };
 
   // A new run starts with an empty console, so what it shows is this run's output only.
@@ -2038,12 +2010,9 @@ export function Workbench() {
               >
                 <BoardIoPanel
                   board={activeBoard}
-                  ledState={ledState}
-                  hexState={hexState}
-                  sw={sw}
-                  keys={key}
-                  onSwChange={handleSwChange}
-                  onKeyChange={handleKeyChange}
+                  outputs={boardIo.outputs}
+                  inputs={boardIo.inputs}
+                  onInputsChange={handleBoardInputsChange}
                 />
               </div>
             </div>

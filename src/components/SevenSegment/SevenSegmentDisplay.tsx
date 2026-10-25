@@ -3,7 +3,7 @@
 
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cx, scaleStyle, type Bit } from '../board';
-import { segmentsToPattern, type SegmentVector } from './segments';
+import { DECIMAL_POINT_BIT, SEGMENT_COUNT, SEGMENT_COUNT_WITH_POINT, segmentsToPattern, type SegmentVector } from './segments';
 import '../board/tokens.css';
 import './SevenSegmentDisplay.css';
 
@@ -32,6 +32,8 @@ export interface SevenSegmentDisplayProps extends NativeProps {
    * false for a common-cathode part where `1` lights.
    */
   activeLow?: boolean;
+  /** The word has an eighth bit, and `segments[7]` lights the decimal point. Default `false`. */
+  decimalPoint?: boolean;
   /** Accessible name, e.g. `"HEX0"`. */
   label?: string;
   /**
@@ -53,17 +55,18 @@ export const SevenSegmentDisplay = forwardRef<
   HTMLSpanElement,
   SevenSegmentDisplayProps
 >(function SevenSegmentDisplay(
-  { segments, activeLow = true, label, size, className, style, ...rest },
+  { segments, activeLow = true, decimalPoint = false, label, size, className, style, ...rest },
   ref,
 ) {
   const onLevel: Bit = activeLow ? 0 : 1;
+  const width = decimalPoint ? SEGMENT_COUNT_WITH_POINT : SEGMENT_COUNT;
 
   return (
     <span
       {...rest}
       ref={ref}
       role="img"
-      aria-label={label ? `${label} ${segmentsToPattern(segments)}` : undefined}
+      aria-label={label ? `${label} ${segmentsToPattern(segments, width)}` : undefined}
       className={cx('pb-ui', 'pb-hex', className)}
       style={scaleStyle(size, style)}
     >
@@ -80,8 +83,8 @@ export const SevenSegmentDisplay = forwardRef<
           />
         ))}
       </span>
-      {/* Moulded into the package; the board has no bit for it. */}
-      <span className="pb-hex__dp" />
+      {/* Moulded into the package; it lights only on a board with a bit for it. */}
+      <span className={cx('pb-hex__dp', decimalPoint && segments[DECIMAL_POINT_BIT] === onLevel && 'is-lit')} />
     </span>
   );
 });

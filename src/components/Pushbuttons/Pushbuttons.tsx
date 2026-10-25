@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type HTMLAttributes,
+  type ReactNode,
 } from 'react';
 import {
   BitRow,
@@ -21,6 +22,7 @@ import {
   type BitVector,
 } from '../board';
 import { Pushbutton } from './Pushbutton';
+import { levelWhen, releasedLevel } from './levels';
 import '../board/tokens.css';
 
 type NativeProps = Omit<
@@ -43,6 +45,10 @@ export interface PushbuttonsProps extends NativeProps {
   onChange?: (next: BitVector, changedIndex: number) => void;
   /** Signal name used in the title, labels and readout. Default `"KEY"`. */
   name?: string;
+  /** One label per button, index 0 first: port names for scalar buttons. Default `KEY0`, `KEY1`, …. */
+  labels?: readonly string[];
+  /** Drawn to the right of the buttons, inside the panel: a reset button. */
+  aside?: ReactNode;
   /**
    * The entity port name in the heading: `KEY_N` on a board that names its
    * active-low keys so. Default: `name`. Polarity is not part of a name:
@@ -91,6 +97,8 @@ export function Pushbuttons({
   defaultValue,
   onChange,
   name = 'KEY',
+  labels,
+  aside,
   port = name,
   title,
   activeLow = true,
@@ -106,7 +114,8 @@ export function Pushbuttons({
   ...rest
 }: PushbuttonsProps) {
   /** The level a button sits at when nobody is touching it. */
-  const restBit: Bit = activeLow ? 1 : 0;
+  const restBit: Bit = releasedLevel(activeLow);
+  const labelOf = (index: number): string => labels?.[index] ?? `${name}${index}`;
 
   const [internal, setInternal] = useState<BitVector>(
     () => defaultValue ?? fillBits(count, restBit),
@@ -121,11 +130,11 @@ export function Pushbuttons({
   const handlePressedChange = useCallback(
     (index: number, isPressed: boolean) => {
       const next = [...bits];
-      next[index] = (isPressed ? 1 - restBit : restBit) as Bit;
+      next[index] = levelWhen(isPressed, activeLow);
       if (!isControlled) setInternal(next);
       onChange?.(next, index);
     },
-    [bits, isControlled, onChange, restBit],
+    [activeLow, bits, isControlled, onChange],
   );
 
   // The heading names the entity port, not the silkscreen label.
@@ -149,21 +158,24 @@ export function Pushbuttons({
       className={cx('pb-pushbuttons', className)}
       style={{ ...scaleStyle(size, style), ...layout }}
     >
-      <BitRow
-        count={count}
-        showIndices={showIndices}
-        ariaLabel={heading}
-        formatIndex={(i) => `${name}${i}`}
-        renderBit={(i) => (
-          <Pushbutton
-            pressed={bits[i] !== restBit}
-            momentary={momentary}
-            label={`${name}${i}`}
-            disabled={disabled}
-            onPressedChange={(isPressed) => handlePressedChange(i, isPressed)}
-          />
-        )}
-      />
+      <div className="pb-keys-row">
+        <BitRow
+          count={count}
+          showIndices={showIndices}
+          ariaLabel={heading}
+          formatIndex={labelOf}
+          renderBit={(i) => (
+            <Pushbutton
+              pressed={bits[i] !== restBit}
+              momentary={momentary}
+              label={labelOf(i)}
+              disabled={disabled}
+              onPressedChange={(isPressed) => handlePressedChange(i, isPressed)}
+            />
+          )}
+        />
+        {aside}
+      </div>
       {showReadout && <Readout name={name} text={bitsToString(bits)} />}
       {showHint && activeLow && (
         <p className="pb-panel__hint">(Active low – 0 when pressed)</p>

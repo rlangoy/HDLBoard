@@ -1,0 +1,42 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The buttons, then whatever sits beside them (a reset button), in one row. */
+.pb-keys-row {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--pb-unit) * 0.9);
+}
+
+/* Up above, left centre right in the middle, down below. */
+.pb-cross {
+  display: grid;
+  grid-template-columns: repeat(3, var(--pb-key-pitch));
+  grid-template-areas:
+    '. up .'
+    'left centre right'
+    '. down .';
+  row-gap: calc(var(--pb-unit) * 0.25);
+}
+
+.pb-cross__cell,
+.pb-reset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--pb-unit) * 0.25);
+  --pb-index-size: calc(var(--pb-unit) * 0.46);
+}
+
+.pb-cross__cell--centre { grid-area: centre; }
+.pb-cross__cell--up { grid-area: up; }
+.pb-cross__cell--left { grid-area: left; }
+.pb-cross__cell--right { grid-area: right; }
+.pb-cross__cell--down { grid-area: down; }
+
+/* The reset button stands apart from the others: a red cap. */
+.pb-ui.pb-key--reset {
+  --pb-key-cap-hi: #e0574c;
+  --pb-key-cap-body: #c0392b;
+  --pb-key-cap-lo: #922b21;
+}
