@@ -7,8 +7,8 @@ import { BUILT_IN_BOARDS } from '../../boards/boardCatalog';
 import { isDefaultShape } from '../../boards/shapeChange';
 import type { BoardDefinition } from '../../boards/types';
 import { BoardResourceLinks } from './BoardResourceLinks';
-import { BOARD_TEXT, examplesNotice } from './boardText';
-import { EXAMPLES, EXAMPLE_LANGUAGES, LANGUAGE_LABEL, filterExamples, type Example, type ExampleLanguage } from './examples';
+import { BOARD_TEXT, examplesNotice, ownExamplesNotice } from './boardText';
+import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL, examplesFor, filterExamples, hasExamples as boardHasExamples, type Example, type ExampleLanguage } from './examples';
 import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
 import type { PreferredLanguages } from './languagePrefs';
 import { ScrollArea } from './ScrollArea';
@@ -38,9 +38,9 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewSt
   const [query, setQuery] = useState('');
   const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
-  const shown = filterExamples(EXAMPLES, query, languages);
-  // The examples are written for the Default shape; another board gets a notice instead (§ 5.4).
-  const hasExamples = isDefaultShape(board.ports);
+  const shown = filterExamples(examplesFor(board), query, languages, board);
+  // The examples are written for the Default shape and for the boards with files of their own; any other board gets a notice instead (§ 5.4).
+  const hasExamples = boardHasExamples(board);
 
   useEffect(() => searchRef.current?.focus(), []);
 
@@ -114,6 +114,7 @@ function OtherShapeNotice({ board, onNewStarterFile }: { board: BoardDefinition;
   return (
     <div className="wb-examples__shape" role="note">
       <p>{examplesNotice(BUILT_IN_BOARDS.filter((builtIn) => isDefaultShape(builtIn.ports)))}</p>
+      <p>{ownExamplesNotice(BUILT_IN_BOARDS.filter((builtIn) => !isDefaultShape(builtIn.ports) && boardHasExamples(builtIn)))}</p>
       <p>
         <button type="button" className="wb-dialog__close" onClick={onNewStarterFile}>
           {BOARD_TEXT.newStarterFile}

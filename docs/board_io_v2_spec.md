@@ -480,6 +480,7 @@ Settings › Board, per row:
 | Active board | Examples pane | New project / New File template |
 |---|---|---|
 | `isDefaultShape` (Default, DE1-SoC, user boards with that shape) | As today: translated from Default names. | As today. |
+| Basys 3, Nexys A7, DE10-Lite | The same cards without those that use the 7-segment displays. The files are stored per board in `boardExamples/<board id>/`, written in the board's names and declaring only the ports they use (a file the folder lacks, such as the AND gate, is the built-in one). | As the row below. |
 | Any other shape | A notice instead of the cards, its counts generated from `DEFAULT_SHAPE`: *The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC).* Below it: a **New starter file** button (adds `generateBoardTop` output to the project, as New File does) and `BoardResourceLinks`. | `generateBoardTop(board, language)` (§ 5.5). |
 
 ### 5.5 Generated top file (`src/boards/boardTop.ts`, pure)

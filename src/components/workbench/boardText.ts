@@ -107,6 +107,11 @@ export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]):
   return `The built-in examples are written for boards with ${DEFAULT_SHAPE_SUMMARY} (${names}).`;
 }
 
+/** Beside the notice above: the boards of another shape that have examples written for them. */
+export function ownExamplesNotice(boards: readonly BoardDefinition[]): string {
+  return `Examples without the 7-segment displays are also built in for ${boards.map((board) => board.name).join(', ')}.`;
+}
+
 /** The lead of a change between boards of different shapes (§ 5.3). */
 export function differentIo(to: BoardDefinition): string {
   return `These boards have different I/O. Your design will not run on ${to.name} until the changes listed below are made.`;

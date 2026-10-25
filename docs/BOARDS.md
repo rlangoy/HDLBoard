@@ -78,8 +78,10 @@ Expected: sw : in std_logic_vector(15 downto 0);
 
 ### Examples, starter files and New File
 
-The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC). Examples
-for the other boards are a later stage. On a board of another shape the Examples pane says so and offers **New
+The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC). Basys 3,
+Nexys A7 and DE10-Lite have examples of their own, stored in `src/components/workbench/boardExamples/<board id>/`
+and written in the board's names with only the ports each one uses; the list is the same without the example that
+drives the 7-segment displays. On any other board the Examples pane says so and offers **New
 starter file** instead: a top file with every port of the board in its own names, the LEDs following the switches
 and the displays off.
 
