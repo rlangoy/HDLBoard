@@ -1402,13 +1402,15 @@ export function Workbench() {
   };
 
   /**
-   * Keep files: the project lists the files now in Files, and the new top file. They are
-   * in the open project's board's names, so it starts on that board, and the change to
-   * the board chosen follows as any board change does: renames, hand edits and Undo.
+   * Keep files: the project lists the files now in Files, and a new top file. All of them
+   * are in the open project's board's names — the top file too, so they agree — and the
+   * project starts on that board. The change to the board chosen follows as any board
+   * change does: renames, hand edits and Undo. If it is cancelled, the project stays on
+   * a board its files match.
    */
   const keepFilesInNewProject = (choice: NewProjectChoice) => {
     setProjectToCreate(null);
-    const top = boardTopFile(choice, fileNames);
+    const top = boardTopFile({ ...choice, board: project.board }, fileNames);
     setFiles((prev) => [...prev, top]);
     createProject(choice.name, project.board, [...fileNames, top.name], top);
     if (choice.board !== project.board) setBoardForNewProject(choice.board);
@@ -1852,7 +1854,8 @@ export function Workbench() {
         <RemoveFilesDialog
           projectName={projectToCreate.name}
           fileNames={fileNames}
-          newFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [])}
+          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, fileNames)}
+          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [])}
           onKeep={() => keepFilesInNewProject(projectToCreate)}
           onRemove={() => removeFilesForNewProject(projectToCreate)}
           onCancel={() => setProjectToCreate(null)}

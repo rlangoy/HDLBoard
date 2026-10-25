@@ -745,6 +745,13 @@ means the same structure (vector/scalars/cross, independent/multiplexed), the sa
 | resetButton | Both boards have one, with the same polarity. |
 | sevenSegment | Both independent with the same count, width and polarity → name by name. Both multiplexed with the same `digits` and polarities → `segments` only when both are vectors or both scalars, `decimalPoint` when both have one, `digitEnables`. Anything else → not renamed. |
 
+**Which boards rename (decision of 2026-10-25).** In this release `renamesBetween` renames ports only when *both*
+boards are in the Terasic style — the buttons as one vector and one port per display (`renamesPortsOn`): Default,
+DE1-SoC, DE10-Lite and user boards like them. A change to or from Basys 3 or Nexys A7 renames nothing: Update files is
+not offered, and the dialog's "Change by hand" list starts with the port names to use. Renaming for boards with a
+cross of scalar buttons or a multiplexed display is complex and is left to a later stage; the per-role rule above is
+unchanged and is what that stage will switch on.
+
 Everything not renamed is covered by a `ShapeDifference`. The token-aware engine, conflict check and Undo are unchanged.
 
 ---
@@ -826,7 +833,8 @@ before until gate 4.
 - `describeShapeChange`: Default ↔ DE1-SoC empty; Default → Basys 3 the five differences of § 4.1, in role order; a
   board equal to Default except 100 MHz gives only the clock difference and is still `isDefaultShape`.
 - `roleRenames`: each row of § 9, including Basys 3 → Nexys A7 (no segment rename: vector vs scalars; no `an` rename:
-  4 vs 8 digits) and a polarity change (never renamed).
+  4 vs 8 digits) and a polarity change (never renamed). `renamesBetween` itself renames nothing to or from Basys 3 or
+  Nexys A7 (§ 9, decision of 2026-10-25), and renames `CLOCK_50` → `MAX10_CLK1_50` from DE1-SoC to DE10-Lite.
 - `generateBoardTop`: output per built-in × language (snapshot); a test-only board with 16 switches and 8 LEDs, and one
   with 8 switches and 16 LEDs; each passes `checkBoardPortShapes`.
 - `BoardIoPanel` (component test): part counts per built-in; cross positions and aria labels; reset button only on

@@ -23,7 +23,8 @@ const SPACES_PER_LEVEL = 4;
 
 /** The lines a selection touches: from the start of the first to the end of the last (a final newline ends it). */
 function touchedLines(text: string, start: number, end: number): { from: number; to: number } {
-  const from = text.lastIndexOf('\n', start - 1) + 1;
+  // lastIndexOf reads a negative index as 0, which would find a newline at index 0 from a start at 0.
+  const from = start === 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
   const lastCharacter = end > start && text[end - 1] === '\n' ? end - 1 : end;
   const newline = text.indexOf('\n', lastCharacter);
   return { from, to: newline < 0 ? text.length : newline };
@@ -45,7 +46,8 @@ export function tabEdit(text: string, start: number, end: number, outdent: boole
   const lines = text.slice(from, to).split('\n');
   const removed = lines.map((line) => (outdent ? indentationLength(line) : 0));
   if (outdent && removed.every((count) => count === 0)) return undefined;
-  const edited = lines.map((line, index) => (outdent ? line.slice(removed[index]) : `${TAB}${line}`)).join('\n');
+  // Empty lines stay empty, so no line is left with only a tab.
+  const edited = lines.map((line, index) => (outdent ? line.slice(removed[index]) : line === '' ? line : `${TAB}${line}`)).join('\n');
   if (severalLines) return { start: from, end: to, text: edited, selectStart: from, selectEnd: from + edited.length };
   // One line, Shift+Tab: the caret stays where it was in the text, moved left by what was taken off.
   const caret = Math.max(from, start - removed[0]);

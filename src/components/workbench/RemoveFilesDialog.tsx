@@ -11,8 +11,9 @@ export interface RemoveFilesDialogProps {
   projectName: string;
   /** The files now in Files. */
   fileNames: readonly string[];
-  /** The new project's top file, which a project started without the files holds alone. */
-  newFileName: string;
+  /** The top file Keep files adds (in the open project's board's names), and the one Remove files leaves alone (the chosen board's). */
+  keepFileName: string;
+  removeFileName: string;
   onKeep: () => void;
   onRemove: () => void;
   onCancel: () => void;
@@ -26,7 +27,7 @@ const LISTED_FILES = 8;
  * without them? Removing takes them out of Files only — files saved on disk or in a gist
  * stay there — so the dialog says that unsaved changes are lost. Cancel creates nothing.
  */
-export function RemoveFilesDialog({ projectName, fileNames, newFileName, onKeep, onRemove, onCancel }: RemoveFilesDialogProps) {
+export function RemoveFilesDialog({ projectName, fileNames, keepFileName, removeFileName, onKeep, onRemove, onCancel }: RemoveFilesDialogProps) {
   return (
     <Dialog
       open
@@ -50,7 +51,7 @@ export function RemoveFilesDialog({ projectName, fileNames, newFileName, onKeep,
       }
     >
       <FileList fileNames={fileNames} />
-      <Choices newFileName={newFileName} />
+      <Choices keepFileName={keepFileName} removeFileName={removeFileName} />
     </Dialog>
   );
 }
@@ -75,18 +76,18 @@ function FileList({ fileNames }: { fileNames: readonly string[] }) {
 }
 
 /** What each button does, in its own words. */
-function Choices({ newFileName }: { newFileName: string }) {
+function Choices({ keepFileName, removeFileName }: { keepFileName: string; removeFileName: string }) {
   return (
     <dl className="wb-boardchange__choices">
       <div>
         <dt>Keep files</dt>
-        <dd>The new project lists them, and {newFileName}.</dd>
+        <dd>The new project lists them, and {keepFileName}, a new top file in their names.</dd>
       </div>
       <div>
         <dt>Remove files</dt>
         <dd>
-          They leave Files, and the new project starts with {newFileName} alone. Copies saved on disk or on GitHub are
-          not touched; changes not saved are lost.
+          They leave Files, and the new project starts with {removeFileName} alone. Copies saved on disk or on GitHub
+          are not touched; changes not saved are lost.
         </dd>
       </div>
     </dl>

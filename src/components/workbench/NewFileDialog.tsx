@@ -158,8 +158,8 @@ function Hint({ name, language, board, asProject, error, kind = 'design', boards
   if (asProject && chosen !== undefined) {
     return (
       <>
-        Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, existingNames)}</strong>, a top file
-        for the {chosen.name} board, and opens the project settings.
+        Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, [])}</strong>, a top file
+        for the {chosen.name} board, and opens the project settings.{existingNames.length > 0 && ' You are asked what to do with your files.'}
         {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
       </>
     );

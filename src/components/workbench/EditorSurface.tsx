@@ -28,6 +28,9 @@ export interface EditorTab {
   content: string;
 }
 
+/** Keys that only modify another: they neither end nor start the Esc-then-Tab escape. */
+const MODIFIER_KEYS: readonly string[] = ['Shift', 'Control', 'Alt', 'Meta', 'Tab'];
+
 const NO_RANGES: readonly CharRange[] = [];
 const NO_OCCURRENCES: readonly Occurrence[] = [];
 
@@ -200,7 +203,8 @@ export function EditorSurface({
   const gutterRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scroll = useScrollMetrics(textareaRef);
-  // Tab indents, as in an IDE (tabIndent.ts); Esc then Tab moves on to the next control.
+  // Tab indents, as in an IDE (tabIndent.ts); Esc then Tab moves on to the next control, and
+  // Esc then Shift+Tab to the previous one. Any click or leaving the editor forgets the Esc.
   const tabLeaves = useRef(false);
   const handleTab = (textarea: HTMLTextAreaElement, outdent: boolean, withModifier: boolean): boolean => {
     if (withModifier || tabLeaves.current) {
@@ -302,15 +306,23 @@ export function EditorSurface({
           }}
           {...hovered.handlers}
           onSelect={atCaret.onSelect}
-          onPointerDown={onFindDismiss}
+          onPointerDown={() => {
+            tabLeaves.current = false;
+            onFindDismiss?.();
+          }}
+          onBlur={() => {
+            tabLeaves.current = false;
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
               e.preventDefault();
               return;
             }
+            if (MODIFIER_KEYS.includes(e.key)) return; // Esc, Shift, Tab: the Shift of Shift+Tab must not undo the Esc
+            const closedFind = e.key === 'Escape' && onFindEscape?.();
+            if (closedFind) e.preventDefault();
             // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
-            tabLeaves.current = e.key === 'Escape';
-            if (e.key === 'Escape' && onFindEscape?.()) e.preventDefault();
+            tabLeaves.current = e.key === 'Escape' && !closedFind;
           }}
           aria-label={label ?? `${file.name} source`}
           aria-describedby={statusId}

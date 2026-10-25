@@ -37,6 +37,16 @@ describe('tabEdit', () => {
     expect(after(text, tabEdit(text, 5, 5, true))).toBe('x\n\ts[]ig;');
   });
 
+  it('indents from the start of the text, even when its first line is empty', () => {
+    const text = '\nab\ncd';
+    expect(after(text, tabEdit(text, 0, text.length, false))).toBe('[\n\tab\n\tcd]');
+  });
+
+  it('leaves empty lines empty when indenting', () => {
+    const text = 'a\n\nb';
+    expect(after(text, tabEdit(text, 0, text.length, false))).toBe('[\ta\n\n\tb]');
+  });
+
   it('does nothing on Shift+Tab when there is no indentation to take off', () => {
     expect(tabEdit('abc', 1, 1, true)).toBeUndefined();
   });
