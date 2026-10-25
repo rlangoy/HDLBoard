@@ -18,7 +18,9 @@ import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { boardInputNames, boardOutputNames, declaresPort, type BoardIo } from './boardPorts.js';
+import { checkBoardPortShapes, shapeErrors, shapeNotes, type DeclaredPort } from './boardShapeCheck.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
+import { ghdlPosition, portDeclarations } from './vhdlPorts.js';
 import { sameNameNotes } from './sameNameNotes.js';
 import type { BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './types.js';
 import type { WaveFormat } from '../protocol.js';
@@ -133,11 +135,23 @@ interface BoardTop {
   readonly board: BoardIo;
 }
 
+/** The top's ports with their widths and where they are declared, for the width check (§ 8). */
+function declaredPorts(source: TopSource): DeclaredPort[] {
+  return portDeclarations(source.content, source.entityName).map((port) => {
+    const { line, column } = ghdlPosition(source.content, port.offset);
+    return { name: port.name, declaration: port.declaration, width: port.width, location: `${source.fileName}:${line}:${column}:` };
+  });
+}
+
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
 async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
   // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
   // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
   const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports, board };
+  // A board port of the wrong width is said plainly, before GHDL would fail on the testbench.
+  const shapes = checkBoardPortShapes(declaredPorts(source), board, 'vhdl');
+  const widthErrors = shapeErrors(shapes);
+  if (widthErrors !== undefined) return failure('elaborate', widthErrors);
   const extraPorts = planExtraPorts(source);
   const testbench = generateTestbench(top.name, top.ports, board, {
     pacingFromStdin: PACING === 'stdin',
@@ -165,7 +179,7 @@ async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: re
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(declaresPort(top.ports, board.clock.port));
   const banner = await ghdlBanner(dir);
-  const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...extraPorts.warnings];
+  const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...shapeNotes(shapes), ...extraPorts.warnings];
   return { ok: true, plan: boardPlan(dir, timing, messages) };
 }
 

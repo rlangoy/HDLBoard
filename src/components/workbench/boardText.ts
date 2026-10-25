@@ -213,9 +213,11 @@ export function renameFilesTo(board: BoardDefinition): string {
 }
 
 /**
- * A backend message about the board, with the board's name in front: the backend never
- * receives board names, so `STIM needs 21 bits …` becomes `Basys 3: STIM needs 21 bits …`.
+ * A backend message about the board, with the board's name in it: the backend never
+ * receives board names, so `STIM needs 21 bits …` becomes `Basys 3: STIM needs 21 bits …`,
+ * and the width check's `but the board has 16 switches` becomes `but the Basys 3 board has …`.
  */
 export function withBoardName(text: string, boardName: string): string {
-  return text.startsWith('STIM needs') ? `${boardName}: ${text}` : text;
+  const named = text.replace(/the board has/g, `the ${boardName} board has`);
+  return named.startsWith('STIM needs') ? `${boardName}: ${named}` : named;
 }

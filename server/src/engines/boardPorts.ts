@@ -106,6 +106,8 @@ export interface BoardBinding {
   /** A scalar port connects to one bit of its vector signal: `key_sig(0)`. */
   readonly index?: number;
   readonly direction: BoardDirection;
+  /** How many bits the port has on the board: 1 for a scalar (§ 8). */
+  readonly width: number;
 }
 
 /** A row of the table before its matching key is added. */
@@ -123,19 +125,20 @@ interface GroupBinding {
 
 /** A group's rows: the vector under `role`, or each scalar under `scalarRole0`, `scalarRole1`, … with its index. */
 function groupRows(group: PortGroup, { role, scalarRole, signal, direction }: GroupBinding): BindingRow[] {
-  if (group.kind === 'vector') return [{ role, name: group.port, signal, direction }];
-  return group.ports.map((name, index) => ({ role: `${scalarRole}${index}`, name, signal, index, direction }));
+  if (group.kind === 'vector') return [{ role, name: group.port, signal, direction, width: group.count }];
+  return group.ports.map((name, index) => ({ role: `${scalarRole}${index}`, name, signal, index, direction, width: 1 }));
 }
 
 function sevenSegmentRows(displays: SevenSegment): BindingRow[] {
   if (displays.kind === 'independent') {
-    return displays.ports.map((name, index) => ({ role: `sevenSegment${index}`, name, signal: `hex${index}_sig`, direction: 'out' }));
+    return displays.ports.map((name, index) => ({ role: `sevenSegment${index}`, name, signal: `hex${index}_sig`, direction: 'out', width: displays.width }));
   }
-  const point: BindingRow[] = displays.decimalPoint === undefined ? [] : [{ role: 'decimalPoint', name: displays.decimalPoint, signal: 'dp_sig', direction: 'out' }];
+  const point: BindingRow[] =
+    displays.decimalPoint === undefined ? [] : [{ role: 'decimalPoint', name: displays.decimalPoint, signal: 'dp_sig', direction: 'out', width: 1 }];
   return [
     ...groupRows(displays.segments, { role: 'segments', scalarRole: 'segment', signal: 'seg_sig', direction: 'out' }),
     ...point,
-    { role: 'digitEnables', name: displays.digitEnables, signal: 'an_sig', direction: 'out' },
+    { role: 'digitEnables', name: displays.digitEnables, signal: 'an_sig', direction: 'out', width: displays.digits },
   ];
 }
 
@@ -144,14 +147,15 @@ function sevenSegmentRows(displays: SevenSegment): BindingRow[] {
  * in (§ 7.1).
  */
 export function boardBindings(board: BoardIo): readonly BoardBinding[] {
-  const reset: BindingRow[] = board.resetButton === undefined ? [] : [{ role: 'resetButton', name: board.resetButton.port, signal: 'rstbtn_sig', direction: 'in' }];
+  const reset: BindingRow[] =
+    board.resetButton === undefined ? [] : [{ role: 'resetButton', name: board.resetButton.port, signal: 'rstbtn_sig', direction: 'in', width: 1 }];
   const rows: BindingRow[] = [
-    { role: 'clock', name: board.clock.port, signal: 'clk_sig', direction: 'in' },
-    { role: 'clock500Hz', name: board.clock500Hz, signal: 'clk500_sig', direction: 'in' },
-    { role: 'switches', name: board.switches.port, signal: 'sw_sig', direction: 'in' },
+    { role: 'clock', name: board.clock.port, signal: 'clk_sig', direction: 'in', width: 1 },
+    { role: 'clock500Hz', name: board.clock500Hz, signal: 'clk500_sig', direction: 'in', width: 1 },
+    { role: 'switches', name: board.switches.port, signal: 'sw_sig', direction: 'in', width: board.switches.count },
     ...groupRows(board.pushbuttons.group, { role: 'pushbuttons', scalarRole: 'pushbutton', signal: 'key_sig', direction: 'in' }),
     ...reset,
-    { role: 'leds', name: board.leds.port, signal: 'ledr_sig', direction: 'out' },
+    { role: 'leds', name: board.leds.port, signal: 'ledr_sig', direction: 'out', width: board.leds.count },
     ...sevenSegmentRows(board.sevenSegment),
   ];
   return rows.map(withKey);

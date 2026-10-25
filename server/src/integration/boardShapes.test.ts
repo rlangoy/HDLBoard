@@ -180,6 +180,17 @@ describe('Boards of other shapes', { skip }, () => {
     }
   }
 
+  test('a VHDL switch port of the old width is refused before elaboration, with the declaration to write', () =>
+    withSession(async (client) => {
+      const source = 'library ieee;\nuse ieee.std_logic_1164.all;\nentity old is\n  port (SW : in std_logic_vector(9 downto 0); led : out std_logic_vector(15 downto 0));\nend entity;\narchitecture rtl of old is\nbegin\n  led <= (others => \'0\');\nend architecture;\n';
+      client.board(BASYS3_BOARD_IO);
+      client.run([{ name: 'old.vhdl', content: source }], 'old.vhdl');
+      const error = await client.until((frame) => frame.verb === 'ERROR', STATE_WAIT_MS);
+      assert.ok(error.verb === 'ERROR' && error.stage === 'elaborate');
+      assert.match(error.text, /old\.vhdl:4:9:error: SW is declared as std_logic_vector\(9 downto 0\) \(10 bits\), but the board has 16 switches\./);
+      assert.match(error.text, /Expected: sw : in std_logic_vector\(15 downto 0\);/);
+    }));
+
   test('a STIM of the wrong length for the board is refused, naming its fields', () =>
     withSession(async (client) => {
       const design = BASYS3_DESIGN.vhdl;

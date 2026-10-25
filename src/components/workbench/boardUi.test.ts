@@ -159,6 +159,9 @@ describe('boards of another shape (docs/board_io_v2_spec.md § 5.3, § 5.4)', ()
       'Basys 3: STIM needs 21 bits for this board (switches 16 + buttons 5), got 14.',
     );
     expect(withBoardName('RUN refused.', 'Basys 3')).toBe('RUN refused.');
+    expect(withBoardName('SW is declared as std_logic_vector(9 downto 0) (10 bits), but the board has 16 switches.', 'Basys 3')).toBe(
+      'SW is declared as std_logic_vector(9 downto 0) (10 bits), but the Basys 3 board has 16 switches.',
+    );
   });
 
   it('lead the change dialog with what the student must do', () => {

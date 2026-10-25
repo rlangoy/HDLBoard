@@ -540,7 +540,7 @@ export function Workbench() {
           boardStateSeen();
         },
         onLog: (text) => {
-          appendLog(text);
+          appendLog(withBoardName(text, activeBoardName.current));
           const located = recordDiagnostics(text, filesRef.current).filter((d) => d.severity === 'error');
           if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
