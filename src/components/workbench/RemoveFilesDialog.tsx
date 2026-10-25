@@ -27,8 +27,6 @@ const LISTED_FILES = 8;
  * stay there — so the dialog says that unsaved changes are lost. Cancel creates nothing.
  */
 export function RemoveFilesDialog({ projectName, fileNames, boardName, onKeep, onRemove, onCancel }: RemoveFilesDialogProps) {
-  const listed = fileNames.slice(0, LISTED_FILES);
-  const more = fileNames.length - listed.length;
   return (
     <Dialog
       open
@@ -51,6 +49,18 @@ export function RemoveFilesDialog({ projectName, fileNames, boardName, onKeep, o
         </div>
       }
     >
+      <FileList fileNames={fileNames} />
+      <Choices boardName={boardName} />
+    </Dialog>
+  );
+}
+
+/** The files now in Files, at most LISTED_FILES by name. */
+function FileList({ fileNames }: { fileNames: readonly string[] }) {
+  const listed = fileNames.slice(0, LISTED_FILES);
+  const more = fileNames.length - listed.length;
+  return (
+    <>
       <p className="wb-newfile__label">Files has {fileNames.length === 1 ? 'a file' : `${fileNames.length} files`}:</p>
       <ul id="wb-removefiles-list" className="wb-overwrite__list">
         {listed.map((name) => (
@@ -60,19 +70,25 @@ export function RemoveFilesDialog({ projectName, fileNames, boardName, onKeep, o
         ))}
         {more > 0 && <li>and {more} more</li>}
       </ul>
-      <dl className="wb-boardchange__choices">
-        <div>
-          <dt>Keep files</dt>
-          <dd>The new project lists them.</dd>
-        </div>
-        <div>
-          <dt>Remove files</dt>
-          <dd>
-            They leave Files, and the new project starts with a starter file for the {boardName} board. Copies saved on
-            disk or on GitHub are not touched; changes not saved are lost.
-          </dd>
-        </div>
-      </dl>
-    </Dialog>
+    </>
+  );
+}
+
+/** What each button does, in its own words. */
+function Choices({ boardName }: { boardName: string }) {
+  return (
+    <dl className="wb-boardchange__choices">
+      <div>
+        <dt>Keep files</dt>
+        <dd>The new project lists them.</dd>
+      </div>
+      <div>
+        <dt>Remove files</dt>
+        <dd>
+          They leave Files, and the new project starts with a starter file for the {boardName} board. Copies saved on
+          disk or on GitHub are not touched; changes not saved are lost.
+        </dd>
+      </div>
+    </dl>
   );
 }
