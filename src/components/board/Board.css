@@ -24,11 +24,24 @@
   row-gap: calc(var(--pb-unit) * 0.34); /* 10 / 29 */
 }
 
+/* The 7-segment and pushbutton cards share the right column at one width: the
+   wider card's. The column is max-content, so stretching never widens it. */
+.pb-board > .pb-sevenseg,
+.pb-board > .pb-pushbuttons {
+  justify-self: stretch;
+}
+
 /* Below the width of two cards the columns stack rather than overflow;
    the row gap becomes the only gap, so it takes the larger value. */
 @media (max-width: 900px) {
   .pb-board {
     grid-template-columns: max-content;
     row-gap: calc(var(--pb-unit) * 0.66);
+  }
+
+  /* One column for all four cards: each keeps its own width. */
+  .pb-board > .pb-sevenseg,
+  .pb-board > .pb-pushbuttons {
+    justify-self: start;
   }
 }
