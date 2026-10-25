@@ -112,6 +112,11 @@ export function differentIo(to: BoardDefinition): string {
   return `These boards have different I/O. Your design will not run on ${to.name} until the changes listed below are made.`;
 }
 
+/** The first hand edit when Update files renames nothing between the two boards. */
+export function portNamesByHand(to: BoardDefinition): string {
+  return `Port names: use the ${to.name} board's names (Help lists them); they are not renamed for you.`;
+}
+
 /** The lead of a change between boards that differ only in their clock: the design runs, its timing changes. */
 export function differentClock(to: BoardDefinition): string {
   return `These boards have a different clock. Your design runs on ${to.name}, but anything that counts clock cycles runs at another speed until the change below is made.`;

@@ -175,8 +175,14 @@ describe('roleRenames: a port is renamed only when it needs no further edit (§ 
     ]);
   });
 
-  it('renames only the clock from Default to Basys 3', () => {
-    expect(renamesBetween(DEFAULT_BOARD, BASYS3)).toEqual([{ from: 'CLOCK_50', to: 'clk' }]);
+  it('renames nothing to or from a Digilent board: that is a later stage', () => {
+    expect(renamesBetween(DEFAULT_BOARD, BASYS3)).toEqual([]);
+    expect(renamesBetween(NEXYS_A7, DE1_SOC)).toEqual([]);
+    expect(renamesBetween(BASYS3, NEXYS_A7)).toEqual([]);
+  });
+
+  it('renames between Default, DE1-SoC and DE10-Lite what needs no further edit', () => {
+    expect(renamesBetween(DE1_SOC, DE10_LITE)).toEqual([{ from: 'CLOCK_50', to: 'MAX10_CLK1_50' }]);
   });
 
   it('renames a cross name by name, and keeps vector and scalar segments and 4 and 8 digits apart (Basys 3 → Nexys A7)', () => {

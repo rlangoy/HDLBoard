@@ -88,7 +88,19 @@ export function roleRenames(role: RenamedRole, from: BoardPorts, to: BoardPorts)
   return ROLE_RENAMES[role](from, to);
 }
 
-/** Every rename from one board to another, in role order. */
+/**
+ * Whether Update files renames ports on this board: boards in the Terasic style, with the
+ * buttons as one vector and one port per display — Default, DE1-SoC, DE10-Lite and user
+ * boards like them. Renaming to or from a board with a cross of scalar buttons or a
+ * multiplexed display (Basys 3, Nexys A7) is a later stage: such a change renames
+ * nothing and lists every difference as a hand edit.
+ */
+export function renamesPortsOn(ports: BoardPorts): boolean {
+  return ports.pushbuttons.group.kind === 'vector' && ports.sevenSegment.kind === 'independent';
+}
+
+/** Every rename from one board to another, in role order; none unless both boards rename ports. */
 export function renamesBetween(from: BoardDefinition, to: BoardDefinition): PortRename[] {
+  if (!renamesPortsOn(from.ports) || !renamesPortsOn(to.ports)) return [];
   return Object.values(ROLE_RENAMES).flatMap((rename) => rename(from.ports, to.ports));
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { renamesPortsOn } from '../../boards/boardPorts';
 import { canApply, type BoardChangePlan } from '../../boards/renamePorts';
 import { describeShapeChange, formatShapeDifference, type ShapeDifference } from '../../boards/shapeChange';
 import type { BoardDefinition } from '../../boards/types';
@@ -13,6 +14,7 @@ import {
   conflictLine,
   differentClock,
   differentIo,
+  portNamesByHand,
   filesUseNames,
   filesWillChange,
   mismatchLead,
@@ -75,7 +77,7 @@ function ChangeDialog({ pending: { plan }, simulating, onUpdateFiles, onBoardOnl
     <Dialog open onClose={onCancel} title={BOARD_TEXT.changeTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
       <p className="wb-dialog__lead">{changeLead(plan, differences)}</p>
       {renames && <RenameSection plan={plan} titled={differences.length > 0} />}
-      {differences.length > 0 && <HandEdits differences={differences} board={plan.to} />}
+      {differences.length > 0 && <HandEdits differences={differences} from={plan.from} board={plan.to} />}
       {renames && <ChangeChoices />}
       <p className="wb-boardchange__note">
         {renames && BOARD_TEXT.stringsNote}
@@ -132,11 +134,20 @@ function RenameSection({ plan, titled }: { plan: BoardChangePlan; titled: boolea
 }
 
 /** What the student changes by hand on a board of another shape, and where its resources are. */
-function HandEdits({ differences, board }: { differences: readonly ShapeDifference[]; board: BoardDefinition }) {
+interface HandEditsProps {
+  differences: readonly ShapeDifference[];
+  from: BoardDefinition;
+  board: BoardDefinition;
+}
+
+function HandEdits({ differences, from, board }: HandEditsProps) {
+  // Between these boards Update files renames nothing (renamesPortsOn): the names are a hand edit too.
+  const namesByHand = !renamesPortsOn(from.ports) || !renamesPortsOn(board.ports);
   return (
     <div className="wb-boardchange__handedits">
       <p className="wb-boardchange__heading">{BOARD_TEXT.changeByHand}</p>
       <ul aria-label={BOARD_TEXT.changeByHand}>
+        {namesByHand && <li>{portNamesByHand(board)}</li>}
         {differences.map((difference) => (
           <li key={difference.role}>{formatShapeDifference(difference)}</li>
         ))}
