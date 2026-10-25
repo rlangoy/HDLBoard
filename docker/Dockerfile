@@ -46,6 +46,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY src/ src/
+# tsc -b also type-checks the tests, which import shared JSON fixtures.
+COPY tests/fixtures/ tests/fixtures/
 # Projects published with the page (docs/PROJECTS.md): copied into dist/ by the build.
 COPY public/ public/
 # The port the browser opens /hdlsim on. Empty = the page's own origin (and
