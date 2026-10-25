@@ -13,13 +13,19 @@ import {
   boardOnlyLog,
   boardPaneTitle,
   boardRenamedLog,
+  buttonsTitle,
   conflictLine,
+  differentIo,
+  displaysTitle,
+  examplesNotice,
   filesWillChange,
   mismatchHint,
+  multiplexedNote,
   notInstalledNote,
   notInstalledRunLog,
   renameRows,
   runBoardLog,
+  withBoardName,
 } from './boardText';
 import { copyExample, EXAMPLES, starterFilesFor } from './examples';
 import { languageOf, theOne } from '../../boards/boards.testSupport';
@@ -129,5 +135,50 @@ describe('Help on another board', () => {
   it('explains _N only on a board that uses it', () => {
     expect(usesActiveLowSuffix(DEFAULT_BOARD)).toBe(true);
     expect(usesActiveLowSuffix(DE1_SOC)).toBe(false);
+  });
+});
+
+describe('boards of another shape (docs/board_io_v2_spec.md § 5.3, § 5.4)', () => {
+  const BASYS3 = builtInBoard('basys3');
+
+  it('say why the examples are missing, with the counts and boards of the Default shape', () => {
+    expect(examplesNotice([DEFAULT_BOARD, DE1_SOC])).toBe(
+      'The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC).',
+    );
+  });
+
+  it('start a workspace and a new file from the generated top, under the same names and ids', () => {
+    const starters = starterFilesFor(BASYS3);
+    expect(starters.map((file) => file.id)).toEqual(starterFilesFor(DEFAULT_BOARD).map((file) => file.id));
+    expect(starters[0].content).toContain('Starter top file for the Basys 3 board');
+    expect(newFileContent('blink.vhd', 'vhdl', BASYS3).text).toMatch(/entity blink is[\s\S]*btnC\s+: in {2}std_logic;/);
+  });
+
+  it('put the board name in front of a STIM length error, and leave other errors alone', () => {
+    expect(withBoardName('STIM needs 21 bits for this board (switches 16 + buttons 5), got 14.', 'Basys 3')).toBe(
+      'Basys 3: STIM needs 21 bits for this board (switches 16 + buttons 5), got 14.',
+    );
+    expect(withBoardName('RUN refused.', 'Basys 3')).toBe('RUN refused.');
+  });
+
+  it('lead the change dialog with what the student must do', () => {
+    expect(differentIo(BASYS3)).toBe('These boards have different I/O. Your design will not run on Basys 3 until the changes listed below are made.');
+  });
+
+  it('heads the Board pane with the board\'s own names', () => {
+    expect(buttonsTitle(BASYS3.ports.pushbuttons)).toBe('Pushbuttons (btnC, btnU, btnL, btnR, btnD)');
+    expect(displaysTitle(builtInBoard('de10-lite').ports.sevenSegment)).toBe('7-Segment Displays (HEXn[7:0])');
+    expect(multiplexedNote(DE1_SOC.ports.sevenSegment)).toBeUndefined();
+  });
+});
+
+describe('Help on a board of another shape', () => {
+  it('lists every port, with polarity and the multiplexing note', () => {
+    const rows = signalRows(builtInBoard('nexys-a7'));
+    expect(rows.map((row) => row.port)).toEqual(['CLK100MHZ', 'CLOCK_500Hz', 'SW[15:0]', 'BTNC, BTNU, BTNL, BTNR, BTND', 'CPU_RESETN', 'LED[15:0]', 'CA…CG', 'DP', 'AN[7:0]']);
+    expect(rows[0].meaning).toContain('100 MHz clock');
+    expect(rows[0].meaning).toContain('simulates more slowly');
+    expect(rows[3].meaning).toContain("active high: released reads '0', pressed reads '1'");
+    expect(rows[8].meaning).toContain('goes dark when it is not refreshed for 75 ms');
   });
 });

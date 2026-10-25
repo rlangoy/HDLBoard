@@ -25,6 +25,11 @@ export const BOARD_TEXT = {
   settingFileEdit: 'Add or edit entries to customize the board list.',
   settingHowTo: 'How to add a board',
   changeTitle: 'Change board?',
+  renamedInFiles: 'Renamed in your files:',
+  changeByHand: 'Change by hand:',
+  boardResources: 'Board resources:',
+  newStarterFile: 'New starter file',
+  newStarterFileNote: "Adds a top file in this board's names to your files: the LEDs follow the switches, the displays are off.",
   mismatchTitle: 'Port names do not match the board',
   updateFiles: 'Update files',
   updateFilesNote: 'Renames these names in your files and changes the board.',
@@ -91,6 +96,20 @@ export function boardPaneTitle(paneTitle: string, board: BoardDefinition): strin
 /** `Default → DE1-SoC`. */
 export function boardChangeHeading(from: BoardDefinition, to: BoardDefinition): string {
   return `${from.name} → ${to.name}`;
+}
+
+/**
+ * Instead of the example cards on a board of another shape (§ 5.4): `The built-in examples
+ * are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC).`
+ */
+export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]): string {
+  const names = defaultShapedBoards.map((board) => board.name).join(', ');
+  return `The built-in examples are written for boards with ${DEFAULT_SHAPE_SUMMARY} (${names}).`;
+}
+
+/** The lead of a change between boards of different shapes (§ 5.3). */
+export function differentIo(to: BoardDefinition): string {
+  return `These boards have different I/O. Your design will not run on ${to.name} until the changes listed below are made.`;
 }
 
 /** `Your files use the Default board's port names.` */

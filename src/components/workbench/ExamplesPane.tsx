@@ -3,6 +3,11 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
+import { BUILT_IN_BOARDS } from '../../boards/boardCatalog';
+import { isDefaultShape } from '../../boards/shapeChange';
+import type { BoardDefinition } from '../../boards/types';
+import { BoardResourceLinks } from './BoardResourceLinks';
+import { BOARD_TEXT, examplesNotice } from './boardText';
 import { EXAMPLES, EXAMPLE_LANGUAGES, LANGUAGE_LABEL, filterExamples, type Example, type ExampleLanguage } from './examples';
 import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
 import type { PreferredLanguages } from './languagePrefs';
@@ -18,6 +23,10 @@ export interface ExamplesPaneProps {
   /** Copy the example's files into the project and open the first one. */
   onOpen: (example: Example) => void;
   onClose: () => void;
+  /** The active board: the examples are offered only on boards of the Default shape. */
+  board: BoardDefinition;
+  /** Add the board's generated starter top to the project (§ 5.4). */
+  onNewStarterFile: () => void;
 }
 
 /**
@@ -25,7 +34,7 @@ export interface ExamplesPaneProps {
  * mounted underneath, so its scroll position and undo history survive). Each card copies
  * its example into the Files panel; the built-in files are never edited.
  */
-export function ExamplesPane({ initialLanguages, onOpen, onClose }: ExamplesPaneProps) {
+export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewStarterFile }: ExamplesPaneProps) {
   const [query, setQuery] = useState('');
   const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -74,7 +83,9 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose }: ExamplesPane
 
           <LanguageFilter languages={languages} onChange={setLanguages} />
 
-          {shown.length === 0 ? (
+          {!isDefaultShape(board.ports) ? (
+            <OtherShapeNotice board={board} onNewStarterFile={onNewStarterFile} />
+          ) : shown.length === 0 ? (
             <p className="wb-examples__empty">{emptyMessage(languages, query)}</p>
           ) : (
             <ul className="wb-examples__grid">
@@ -91,6 +102,22 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose }: ExamplesPane
         </div>
       </ScrollArea>
     </section>
+  );
+}
+
+/** On a board of another shape: why there are no cards, a starter file instead, and the board's resources. */
+function OtherShapeNotice({ board, onNewStarterFile }: { board: BoardDefinition; onNewStarterFile: () => void }) {
+  return (
+    <div className="wb-examples__shape" role="note">
+      <p>{examplesNotice(BUILT_IN_BOARDS.filter((builtIn) => isDefaultShape(builtIn.ports)))}</p>
+      <p>
+        <button type="button" className="wb-dialog__close" onClick={onNewStarterFile}>
+          {BOARD_TEXT.newStarterFile}
+        </button>{' '}
+        {BOARD_TEXT.newStarterFileNote}
+      </p>
+      <BoardResourceLinks resources={board.resources} lead={BOARD_TEXT.boardResources} />
+    </div>
   );
 }
 

@@ -45,7 +45,7 @@ function displayPattern(names: readonly string[]): string | undefined {
 }
 
 /** `seg[6:0]` for a vector, `CA…CG` for seven scalars. */
-function segmentsHeading(segments: PortGroup): string {
+export function segmentsHeading(segments: PortGroup): string {
   if (segments.kind === 'vector') return vectorHeading(segments.port, SEGMENT_COUNT);
   return `${segments.ports[0]}…${segments.ports[segments.ports.length - 1]}`;
 }

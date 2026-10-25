@@ -138,7 +138,7 @@ function planWave(files: readonly VhdlFileInput[]): Recording {
 }
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
-  const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock50.toLowerCase()));
+  const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock.port.toLowerCase()));
   return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
 }
 

@@ -163,7 +163,7 @@ async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: re
 
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
-  const timing = boardTimingFor(declaresPort(top.ports, board.clock50));
+  const timing = boardTimingFor(declaresPort(top.ports, board.clock.port));
   const banner = await ghdlBanner(dir);
   const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...extraPorts.warnings];
   return { ok: true, plan: boardPlan(dir, timing, messages) };

@@ -19,6 +19,7 @@
  */
 
 import { decodeBoardBody, encodeBoardBody, type DecodedBoard } from './boardFrame.js';
+import { MAX_STATE_BITS, MAX_STIM_BITS } from './engines/boardLimits.js';
 
 export interface VhdlFileInput {
   name: string;
@@ -80,11 +81,13 @@ export interface ProtocolError {
   message: string;
 }
 
-/** `STIM`'s payload: SW9..SW0, KEY3..KEY0 — 14 bits, MSB-first (§ 6.3). */
-export const STIM_LENGTH = 14;
-
-/** `STATE`'s payload: LEDR(10) + HEX0..HEX5(7 each) = 52 bits (§ 6.4). */
-export const STATE_LENGTH = 10 + 6 * 7;
+/**
+ * `STIM` and `STATE` lengths follow the board (docs/board_io_v2_spec.md § 6.2): the
+ * grammar bounds them by the largest board, and the session checks the exact length
+ * against the board of the run (`engines/boardShape.ts`).
+ */
+const STIM_PAYLOAD = new RegExp(`^[01]{1,${MAX_STIM_BITS}}$`);
+const STATE_PAYLOAD = new RegExp(`^[01X]{1,${MAX_STATE_BITS}}$`);
 
 const FILE_MARKER = /^@@FILE (.+)@@$/;
 
@@ -169,9 +172,9 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       return { verb: 'BOARD', board };
     }
     case 'STIM': {
-      if (!new RegExp(`^[01]{${STIM_LENGTH}}$`).test(inline)) {
+      if (!STIM_PAYLOAD.test(inline)) {
         return {
-          message: `STIM requires exactly ${STIM_LENGTH} bits ('0'/'1'), got: ${JSON.stringify(inline)}`,
+          message: `STIM requires 1 to ${MAX_STIM_BITS} bits ('0'/'1'), got: ${JSON.stringify(inline)}`,
         };
       }
       return { verb: 'STIM', bits: inline };
@@ -257,9 +260,9 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
     case 'READY':
       return { verb: 'READY' };
     case 'STATE':
-      if (!new RegExp(`^[01X]{${STATE_LENGTH}}$`).test(inline)) {
+      if (!STATE_PAYLOAD.test(inline)) {
         return {
-          message: `STATE requires exactly ${STATE_LENGTH} bits ('0'/'1'/'X'), got: ${JSON.stringify(inline)}`,
+          message: `STATE requires 1 to ${MAX_STATE_BITS} bits ('0'/'1'/'X'), got: ${JSON.stringify(inline)}`,
         };
       }
       return { verb: 'STATE', bits: inline };

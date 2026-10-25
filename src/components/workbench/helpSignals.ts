@@ -7,8 +7,8 @@
  * display, how the simulator shows it.
  */
 
-import { DISPLAY_PERSIST_MS, SEGMENT_COUNT, SEGMENT_COUNT_WITH_POINT } from '../../boards/boardLimits';
-import { groupHeading, sevenSegmentHeading, vectorHeading } from '../../boards/boardPortText';
+import { DISPLAY_PERSIST_MS, SEGMENT_COUNT_WITH_POINT } from '../../boards/boardLimits';
+import { groupHeading, segmentsHeading, sevenSegmentHeading, vectorHeading } from '../../boards/boardPortText';
 import { groupWidth, portList } from '../../boards/boardShape';
 import { DEFAULT_CLOCK_MHZ } from '../../boards/parsePorts';
 import type { BoardDefinition, BoardPorts, ButtonGroup, MultiplexedDisplays, ResetButton } from '../../boards/types';
@@ -106,8 +106,7 @@ function displayRows(ports: BoardPorts): SignalRow[] {
 
 function multiplexedRows(displays: MultiplexedDisplays): SignalRow[] {
   const panel = '7-Segment Display';
-  const segments = displays.segments;
-  const segmentPort = segments.kind === 'vector' ? vectorHeading(segments.port, SEGMENT_COUNT) : groupHeading(segments);
+  const segmentPort = segmentsHeading(displays.segments);
   const enables = displays.digitEnablesActiveLow ? "a '0' enables a digit" : "a '1' enables a digit";
   return [
     { port: segmentPort, dir: 'out', panel, meaning: `Segments a to g, shared by every digit, ${segmentPolarity(displays.activeLow)}.` },

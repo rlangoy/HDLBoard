@@ -32,15 +32,24 @@ import { mismatchedFiles, mismatchMessage } from './engines/language.js';
 import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
-import { DEFAULT_BOARD_IO } from './engines/boardPorts.js';
+import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
+import { describeStimFields, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
-import { STATE_LENGTH, type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import { type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile } from './wave/waveTransfer.js';
 
 /** What a `RUN` after an invalid `BOARD` frame is told (docs/board_io_config_spec.md § 8.2). */
 export const RUN_REFUSED_FOR_BOARD = 'RUN refused: the last BOARD frame was not valid.';
+
+/**
+ * `STIM needs 21 bits for this board (switches 16 + buttons 5), got 14.` The backend
+ * never hears the board's name; the frontend puts it in front when it shows this.
+ */
+export function stimLengthMessage(board: BoardIo, got: number): string {
+  return `STIM needs ${stimLength(board)} bits for this board (${describeStimFields(board)}), got ${got}.`;
+}
 
 /** The files a board testbench exchanges data through, in the session directory. */
 const INPUT_FILE_NAME = 'input.txt';
@@ -201,6 +210,8 @@ export class Session {
    * one, runs are refused with its reason until a valid one arrives.
    */
   private decodedBoard: DecodedBoard = { ok: true, board: DEFAULT_BOARD_IO };
+  /** The board of the run in progress: what its `STIM` and `STATE` lengths are (§ 6.2). */
+  private runBoard: BoardIo = DEFAULT_BOARD_IO;
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
   private wave: RunWave | null = null;
   /** Numbers each batch start's waveform; never reused within a session (W10). */
@@ -384,6 +395,7 @@ export class Session {
       return;
     }
     const { board } = decoded;
+    this.runBoard = board;
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
@@ -532,7 +544,7 @@ export class Session {
     }
     const [rawBits = '', ackText = ''] = (text.split('\n')[0] ?? '').trim().split(/\s+/);
     const bits = normaliseBoardBits(rawBits);
-    return bits.length === STATE_LENGTH ? { bits, ack: parseInt(ackText, 10) } : undefined;
+    return bits.length === stateLength(this.runBoard) ? { bits, ack: parseInt(ackText, 10) } : undefined;
   }
 
   /** Drops the queued transitions the testbench says it has applied. */
@@ -680,6 +692,10 @@ export class Session {
 
   handleStim(bits: string): void {
     if (this.state !== 'running' || this.plan?.mode !== 'board') return;
+    if (bits.length !== stimLength(this.runBoard)) {
+      this.send({ verb: 'ERROR', stage: 'protocol', text: stimLengthMessage(this.runBoard, bits.length) });
+      return;
+    }
     if (bits === this.lastStimBits) return;
     this.lastStimBits = bits;
     // Queued, not overwritten (§ 5.13): a press and its release can reach

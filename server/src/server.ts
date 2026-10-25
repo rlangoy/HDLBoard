@@ -50,7 +50,9 @@ const WSPATH = '/hdlsim';
 const LEGACY_WSPATH = '/ghdlsim';
 // 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version stays
 // informational: any version a client names is accepted, and answered with this one.
-const PROTOCOL_VERSION = '2';
+// 3: board shapes — a JSON BOARD body, STIM and STATE lengths per board
+// (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
+const PROTOCOL_VERSION = '3';
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */

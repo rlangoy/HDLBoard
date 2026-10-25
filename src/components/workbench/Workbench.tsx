@@ -19,6 +19,7 @@ import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
 import { useBoardIo } from './useBoardIo';
+import { generateBoardTop, starterTopFileName } from '../../boards/boardTop';
 import { BoardChangeDialog } from './BoardChangeDialog';
 import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog, withBoardName } from './boardText';
 import { useBoards } from './useBoards';
@@ -737,6 +738,15 @@ export function Workbench() {
     if (added.some((f) => f.id === openId)) showNewFile(openId);
     else handleOpenFile(openId);
     makeTop(openId);
+  };
+
+  // A board of another shape has no examples: the Examples pane offers its generated
+  // starter top instead (docs/board_io_v2_spec.md § 5.4), in the first language ticked.
+  const handleNewStarterFile = () => {
+    const language = preferredLanguages.has('vhdl') ? 'vhdl' : 'verilog';
+    const name = starterTopFileName(activeBoard, language, files.map((f) => f.name));
+    addFile(name, generateBoardTop(activeBoard, language, baseName(name)), folderForUpload(name) ?? 'vhdl');
+    appendLog(`Added ${name}: a starter top file for the ${activeBoard.name} board.`, 'success');
   };
 
   // New File asks for a name and a language first (NewFileDialog); the file is
@@ -1978,7 +1988,13 @@ export function Workbench() {
               <WaveformPane waveform={waveView.waveform} consoleLines={consoleTexts} {...waveView.pane} />
             )}
             {overlay === 'examples' && (
-            <ExamplesPane initialLanguages={preferredLanguages} onOpen={handleOpenExample} onClose={() => setOverlay(null)} />
+            <ExamplesPane
+              initialLanguages={preferredLanguages}
+              onOpen={handleOpenExample}
+              onClose={() => setOverlay(null)}
+              board={activeBoard}
+              onNewStarterFile={handleNewStarterFile}
+            />
           )}
           </div>
 
