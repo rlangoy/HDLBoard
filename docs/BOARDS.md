@@ -33,25 +33,34 @@ the same. Settings shows each board's description and, for Basys 3 and Nexys A7,
 When you change the board, HDLBoard asks first if your files use the old board's names or the boards have
 different parts:
 
-- **Update files** renames ports in all your files and changes the board. A port is renamed only when nothing
-  else about it has to change: the same width, the same polarity, the same kind of port. Only whole names in
-  code are renamed (and the same names in comments); strings and longer names such as `HEX0_N_reg` are left
-  alone. If a file cannot be renamed safely, nothing is renamed and the dialog says which file and why.
+- **Update files** renames ports in all your files and changes the board. It is offered between **Default,
+  DE1-SoC and DE10-Lite** (and user boards built like them: the buttons as one vector, one port per display).
+  A port is renamed only when nothing else about it has to change: the same width, the same polarity, the same
+  kind of port. Only whole names in code are renamed (and the same names in comments); strings and longer names
+  such as `HEX0_N_reg` are left alone. If a file cannot be renamed safely, nothing is renamed and the dialog says
+  which file and why.
 - **Change board only** changes the board and leaves your files as they are.
 - **Change by hand** lists everything that is not renamed: a different clock frequency, number of switches,
   buttons, LEDs or displays, a polarity, a reset button, a multiplexed display.
 
+Renaming to or from **Basys 3 and Nexys A7** is not done yet: their buttons are single ports in a cross and their
+display is multiplexed, so such a change renames nothing and the dialog only lists what to change by hand,
+starting with the port names to use (Help lists them for the active board).
+
 Example, Default → Basys 3:
 
 ```
-Renamed in your files:   CLOCK_50 → clk
 Change by hand:
+  • Port names: use the Basys 3 board's names (Help lists them); they are not renamed for you.
   • Clock frequency: 50 MHz → 100 MHz (divider and counter constants change).
   • Switches: 10 → 16 (sw[15:0]).
   • Pushbuttons: 4 active-low (KEY_N[3:0]) → 5 active-high in a cross (btnC, btnU, btnL, btnR, btnD).
   • LEDs: 10 → 16 (led[15:0]).
   • 7-segment: 6 separate displays → a 4-digit multiplexed display (seg[6:0], dp, an[3:0]).
 ```
+
+Example, DE1-SoC → DE10-Lite: `CLOCK_50` is renamed to `MAX10_CLK1_50`; the keys (4 → 2) and the displays (7 → 8
+bits) are listed by hand.
 
 Either way the console shows what happened, with an **Undo**. Undo works until you change something else;
 after that, choose the previous board again to rename back.
@@ -67,12 +76,38 @@ Expected: sw : in std_logic_vector(15 downto 0);
 
 (In Verilog this is a warning and the run goes on: Icarus connects the low bits.)
 
-### Examples and starter files
+### Examples, starter files and New File
 
-The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC). On a
-board of another shape the Examples pane offers **New starter file** instead: a top file with every port of the
-board in its own names, the LEDs following the switches and the displays off. New File and a fresh workspace
-start from the same file.
+The built-in examples are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC). Examples
+for the other boards are a later stage. On a board of another shape the Examples pane says so and offers **New
+starter file** instead: a top file with every port of the board in its own names, the LEDs following the switches
+and the displays off.
+
+**New File** (the **+** in Files) asks for a name, a language (VHDL or Verilog) and a **Board**; the new file
+declares that board's ports. Ticking **Create project** (`.hdlboard.json`) makes the name the project's and gives
+it one top file for the chosen board, named after the board like the entity or module inside it: `Nexys_A7.vhdl`
+with `entity Nexys_A7`, `Basys_3.v` with `module Basys_3` (`DE1_SoC` for Default). If Files already holds files,
+HDLBoard asks:
+
+- **Keep files**: the project lists them and a new top file in *their* board's names; when you chose another
+  board, the usual Change board question follows.
+- **Remove files**: Files holds only the new top file. Copies saved on disk or on GitHub are not touched; changes
+  not saved are lost.
+- **Cancel** creates nothing.
+
+On a board whose seven segments are separate ports (Nexys A7: `CA` … `CG`) the generated file drives them through
+one vector, so a segment pattern is written as a vector: `HEX(0)` is segment a (`CA`).
+
+```vhdl
+signal HEX : std_logic_vector(6 downto 0);
+...
+(CG, CF, CE, CD, CC, CB, CA) <= HEX;  -- single segments as one vector
+HEX <= (others => '1');               -- display segments off
+AN  <= (others => '1');               -- all digits off
+```
+
+In the code editor **Tab** indents (the selected lines, if several), **Shift+Tab** takes one level off, and **Esc**
+then **Tab** moves on to the next control.
 
 ## Polarity
 
