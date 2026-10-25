@@ -6,10 +6,17 @@
  * so the tests can pin them and the components stay free of prose.
  */
 
-import { displayRange, type PortRename } from '../../boards/boardPorts';
 import type { ForeignNames } from '../../boards/boardMatch';
-import type { BoardDefinition } from '../../boards/types';
+import type { PortRename } from '../../boards/boardPorts';
+import { displayRange, groupHeading, sevenSegmentHeading, vectorHeading } from '../../boards/boardPortText';
+import { buttonCount, displayCount, sevenSegmentNames } from '../../boards/boardShape';
+import { DEFAULT_SHAPE } from '../../boards/shapeChange';
+import type { BoardDefinition, ButtonGroup, SevenSegment, VectorPort } from '../../boards/types';
 import { REPO_URL } from './project';
+
+/** `10 switches, 4 keys and 6 displays`: the shape the built-in examples and an older backend need. */
+export const DEFAULT_SHAPE_SUMMARY =
+  `${DEFAULT_SHAPE.switches.count} switches, ${buttonCount(DEFAULT_SHAPE)} keys and ${displayCount(DEFAULT_SHAPE)} displays`;
 
 export const BOARD_TEXT = {
   settingTitle: 'Board',
@@ -17,8 +24,12 @@ export const BOARD_TEXT = {
   settingFileLead: 'Board definitions are loaded from',
   settingFileEdit: 'Add or edit entries to customize the board list.',
   settingHowTo: 'How to add a board',
-  settingFixedShape: 'The number of switches, keys, LEDs and displays is the same on every board.',
   changeTitle: 'Change board?',
+  renamedInFiles: 'Renamed in your files:',
+  changeByHand: 'Change by hand:',
+  boardResources: 'Board resources:',
+  newStarterFile: 'New starter file',
+  newStarterFileNote: "Adds a top file in this board's names to your files: the LEDs follow the switches, the displays are off.",
   mismatchTitle: 'Port names do not match the board',
   updateFiles: 'Update files',
   updateFilesNote: 'Renames these names in your files and changes the board.',
@@ -38,12 +49,44 @@ export const BOARD_TEXT = {
   oldBackend:
     'This simulation backend is older than this page and simulates with the Default names only. ' +
     'Update HDLBoard (Windows: install the new version; Docker: pull the new backend image).',
+  oldBackendShape:
+    `The simulator backend is older than this page and supports only boards with ${DEFAULT_SHAPE_SUMMARY} and a ${DEFAULT_SHAPE.clock.mhz} MHz clock. ` +
+    'Update HDLBoard, or choose Default or DE1-SoC.',
 } as const;
 
 export const BOARDS_DOC_URL = `${REPO_URL}/blob/main/docs/BOARDS.md`;
 
 /** At most this many file names are listed; the rest are counted. */
 const LISTED_FILES = 5;
+
+// --- The Board pane's headings (docs/board_io_v2_spec.md § 5.1) ----------------------
+
+/** `LEDs (led[15:0])`. */
+export function ledsTitle(leds: VectorPort): string {
+  return `LEDs (${vectorHeading(leds.port, leds.count)})`;
+}
+
+/** `Switches (sw[15:0])`. */
+export function switchesTitle(switches: VectorPort): string {
+  return `Switches (${vectorHeading(switches.port, switches.count)})`;
+}
+
+/** `Pushbuttons (KEY[1:0])`, or `Pushbuttons (btnC, btnU, btnL, btnR, btnD)`. */
+export function buttonsTitle(buttons: ButtonGroup): string {
+  return `Pushbuttons (${groupHeading(buttons.group)})`;
+}
+
+/** `7-Segment Displays (HEXn[7:0])`, or `7-Segment Display (seg[6:0], dp, an[3:0])` for one multiplexed display. */
+export function displaysTitle(displays: SevenSegment): string {
+  const noun = displays.kind === 'multiplexed' ? '7-Segment Display' : '7-Segment Displays';
+  return `${noun} (${sevenSegmentHeading(displays)})`;
+}
+
+/** The line under a multiplexed display; none for independent displays. */
+export function multiplexedNote(displays: SevenSegment): string | undefined {
+  if (displays.kind !== 'multiplexed') return undefined;
+  return `Multiplexed: a digit shows the segments driven while its ${displays.digitEnables} bit is active.`;
+}
 
 /** `Board I/O · DE1-SoC`. */
 export function boardPaneTitle(paneTitle: string, board: BoardDefinition): string {
@@ -53,6 +96,35 @@ export function boardPaneTitle(paneTitle: string, board: BoardDefinition): strin
 /** `Default → DE1-SoC`. */
 export function boardChangeHeading(from: BoardDefinition, to: BoardDefinition): string {
   return `${from.name} → ${to.name}`;
+}
+
+/**
+ * Instead of the example cards on a board of another shape (§ 5.4): `The built-in examples
+ * are written for boards with 10 switches, 4 keys and 6 displays (Default, DE1-SoC).`
+ */
+export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]): string {
+  const names = defaultShapedBoards.map((board) => board.name).join(', ');
+  return `The built-in examples are written for boards with ${DEFAULT_SHAPE_SUMMARY} (${names}).`;
+}
+
+/** Beside the notice above: the boards of another shape that have examples written for them. */
+export function ownExamplesNotice(boards: readonly BoardDefinition[]): string {
+  return `Examples without the 7-segment displays are also built in for ${boards.map((board) => board.name).join(', ')}.`;
+}
+
+/** The lead of a change between boards of different shapes (§ 5.3). */
+export function differentIo(to: BoardDefinition): string {
+  return `These boards have different I/O. Your design will not run on ${to.name} until the changes listed below are made.`;
+}
+
+/** The first hand edit when Update files renames nothing between the two boards. */
+export function portNamesByHand(to: BoardDefinition): string {
+  return `Port names: use the ${to.name} board's names (Help lists them); they are not renamed for you.`;
+}
+
+/** The lead of a change between boards that differ only in their clock: the design runs, its timing changes. */
+export function differentClock(to: BoardDefinition): string {
+  return `These boards have a different clock. Your design runs on ${to.name}, but anything that counts clock cycles runs at another speed until the change below is made.`;
 }
 
 /** `Your files use the Default board's port names.` */
@@ -66,9 +138,9 @@ export interface RenameRow {
   readonly to: string;
 }
 
-const isDisplayRename = (rename: PortRename, board: BoardDefinition): boolean => board.ports.sevenSegment.includes(rename.from);
+const isDisplayRename = (rename: PortRename, board: BoardDefinition): boolean => sevenSegmentNames(board.ports).includes(rename.from);
 
-/** The renames as the dialog lists them: one row each, the six displays as one. */
+/** The renames as the dialog lists them: one row each, the 7-segment ports as one. */
 export function renameRows(renames: readonly PortRename[], from: BoardDefinition): RenameRow[] {
   const displays = renames.filter((r) => isDisplayRename(r, from));
   const others = renames.filter((r) => !isDisplayRename(r, from)).map(({ from: old, to }) => ({ from: old, to }));
@@ -154,3 +226,20 @@ export function switchBoardTo(board: BoardDefinition): string {
 export function renameFilesTo(board: BoardDefinition): string {
   return `Rename files to ${board.name} names`;
 }
+
+/**
+ * A backend message about the board, with the board's name in it: the backend never
+ * receives board names, so `STIM needs 21 bits …` becomes `Basys 3: STIM needs 21 bits …`,
+ * and the width check's `but the board has 16 switches` becomes `but the Basys 3 board has …`.
+ */
+export function withBoardName(text: string, boardName: string): string {
+  if (text.startsWith('STIM needs')) return `${boardName}: ${text}`;
+  return text.replace(WIDTH_CHECK_LINE, (line) => line.replace(BOARD_HAS, `the ${boardName} board has`));
+}
+
+/**
+ * A line of HDLBoard's own width check (server/src/engines/boardShapeCheck.ts), and only
+ * such a line: a student's own report text that says "the board has" is left alone.
+ */
+const WIDTH_CHECK_LINE = /^.*(?:is declared as .*, but the board has|^Note: .* has a width HDLBoard cannot read|^Warning: .* is declared as .*, but the board has).*$/gm;
+const BOARD_HAS = 'the board has';

@@ -6,6 +6,7 @@ import { EXAMPLE_FILES, STARTER_FILES } from '../components/workbench/files';
 import { languageOf } from './boards.testSupport';
 import { BUILT_IN_BOARDS, builtInBoard, DEFAULT_BOARD } from './boardCatalog';
 import { renamesBetween, type PortRename } from './boardPorts';
+import { isDefaultShape } from './shapeChange';
 import {
   applyBoardChange,
   keepColumn,
@@ -160,8 +161,8 @@ describe('keepColumn', () => {
 describe('translateFromDefault', () => {
   const sources = [...EXAMPLE_FILES, ...STARTER_FILES];
 
-  it.each(BUILT_IN_BOARDS.map((board) => [board.name, board] as const))(
-    'translates every built-in source to %s without a conflict, and back again exactly',
+  it.each(BUILT_IN_BOARDS.filter((board) => isDefaultShape(board.ports)).map((board) => [board.name, board] as const))(
+    'translates every built-in source to %s, a board of the Default shape, without a conflict, and back again exactly',
     (_name, board) => {
       for (const file of sources) {
         const language = languageOf(file.name);

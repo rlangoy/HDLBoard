@@ -13,23 +13,26 @@
  * sync by hand if the protocol changes.
  */
 
-import { bitsToString, type BitVector } from '../board';
-import { patternToSegments, type SegmentVector } from '../SevenSegment';
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
 import type { RunWaveStatus, WaveFormat } from '../waveform/model';
-import { BOARD_VERB, encodeBoardFrame } from '../../boards/boardFrame';
+import { BOARD_VERB, encodeBoardFrame, encodeV1BoardFrame, fitsV1BoardFrame } from '../../boards/boardFrame';
 import type { BoardPorts } from '../../boards/types';
+import { BOARD_TEXT } from './boardText';
 
-// 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version is informational.
-const PROTOCOL_VERSION = '2';
+// 3: board shapes, a JSON BOARD body and STIM/STATE lengths per board (docs/board_io_v2_spec.md § 6).
+const PROTOCOL_VERSION = '3';
+/** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
+const SHAPED_BOARD_PROTOCOL = 3;
+/** A backend that answers WELCOME without a number is the oldest one. */
+const OLDEST_PROTOCOL = 1;
 /** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
 const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
-const STATE_LENGTH = 10 + 6 * 7;
 
 export interface HdlClientHandlers {
   onReady(): void;
-  onState(ledr: BitVector, hex: SegmentVector[]): void;
+  /** `STATE`'s payload as sent; `decodeState` reads it for the active board. */
+  onState(bits: string): void;
   onLog(text: string): void;
   onError(stage: string, text: string): void;
   onDone(reason: string): void;
@@ -85,27 +88,6 @@ export function hdlBackendHttpUrl(port: number, path: string): string {
 }
 
 /**
- * `STATE`'s 52-bit payload → the board's own value shapes. `HEX0` is
- * slice 0 (§ 6.4). Any bit that isn't `'0'`/`'1'` (`'X'`, GHDL's
- * undefined) coerces to that field's own *off* value (§ 8.4) — `0` for
- * `LEDR` (active high), `'1'` for a `HEX` segment (active low) — rather
- * than a tri-state `Bit`, per the plan's recommendation to ship the
- * simple version first.
- */
-function parseState(bits: string): { ledr: BitVector; hex: SegmentVector[] } {
-  const ledrField = bits.slice(0, 10);
-  const ledr: BitVector = [...ledrField].reverse().map((c) => (c === '1' ? 1 : 0));
-
-  const hex: SegmentVector[] = [];
-  for (let i = 0; i < 6; i++) {
-    const field = bits.slice(10 + i * 7, 10 + (i + 1) * 7);
-    const coerced = [...field].map((c) => (c === '0' || c === '1' ? c : '1')).join('');
-    hex.push(patternToSegments(coerced));
-  }
-  return { ledr, hex };
-}
-
-/**
  * The files one run sends: those in the folder of the top file (`sourceFolderFor`:
  * `verilog/` for a Verilog top, `vhdl/` otherwise). A `work/` testbench run from the
  * TB pane is the top itself, so it goes too — every other `work/` file stays out
@@ -140,6 +122,10 @@ export class HdlClient {
   private waveTransfer = false;
   // False once this connection's backend has said it does not know BOARD (an older backend).
   private backendKnowsBoard = true;
+  // The protocol the backend named in WELCOME; undefined until it has answered HELLO.
+  private backendVersion: number | undefined;
+  // What waits for WELCOME: a run's frames depend on the backend's version (§ 6.3).
+  private afterWelcome: Array<() => void> = [];
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -152,6 +138,8 @@ export class HdlClient {
     }
     this.everReady = false;
     this.backendKnowsBoard = true;
+    this.backendVersion = undefined;
+    this.afterWelcome = [];
     const ws = new WebSocket(this.url);
     // Waveform content arrives as binary frames; an ArrayBuffer goes straight to the worker.
     ws.binaryType = 'arraybuffer';
@@ -185,16 +173,14 @@ export class HdlClient {
 
     switch (verb) {
       case 'WELCOME':
-        break; // nothing to do — HELLO/WELCOME just confirms the version
+        this.welcome(inline);
+        break;
       case 'READY':
         this.everReady = true;
         this.handlers.onReady();
         break;
       case 'STATE':
-        if (inline.length === STATE_LENGTH) {
-          const { ledr, hex } = parseState(inline);
-          this.handlers.onState(ledr, hex);
-        }
+        this.handlers.onState(inline);
         break;
       case 'LOG':
         this.handlers.onLog(body);
@@ -218,6 +204,28 @@ export class HdlClient {
         // Unknown verb: ignore, per § 6.2 — never disconnect on this.
         break;
     }
+  }
+
+  private welcome(version: string): void {
+    this.backendVersion = Number.parseInt(version, 10) || OLDEST_PROTOCOL;
+    const waiting = this.afterWelcome;
+    this.afterWelcome = [];
+    for (const action of waiting) action();
+  }
+
+  private whenWelcomed(action: () => void): void {
+    if (this.backendVersion === undefined) this.afterWelcome.push(action);
+    else action();
+  }
+
+  /**
+   * The BOARD frame this backend understands: the JSON frame from protocol 3, the 1.6
+   * frame before it, which only a board of the Default shape at 50 MHz fits — undefined for any
+   * other board (§ 6.3).
+   */
+  private boardFrameFor(board: BoardPorts): string | undefined {
+    if ((this.backendVersion ?? OLDEST_PROTOCOL) >= SHAPED_BOARD_PROTOCOL) return encodeBoardFrame(board);
+    return fitsV1BoardFrame(board) ? encodeV1BoardFrame(board) : undefined;
   }
 
   /** `ERROR protocol` about the BOARD verb: the backend predates it, and the RUN that follows still runs. */
@@ -272,20 +280,26 @@ export class HdlClient {
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
     const head = runHeader(topFileName, runTarget);
     const send = () => {
+      const boardFrame = this.boardFrameFor(board);
+      if (boardFrame === undefined) {
+        this.handlers.onError('protocol', BOARD_TEXT.oldBackendShape);
+        return;
+      }
       // WAVE goes right before the RUN it is for (docs/waveform_viewer_spec.md § 7.1).
       ws.send(`WAVE ${recordWave ? 'on' : 'off'}`);
       // BOARD too: settings for the next run, sent before every RUN, so a reconnect needs no state.
-      if (this.backendKnowsBoard) ws.send(encodeBoardFrame(board));
+      if (this.backendKnowsBoard) ws.send(boardFrame);
       ws.send(`${head}\n${body}`);
     };
-    // Still connecting: `onopen` (ensureSocket) sends HELLO first, then this listener sends RUN.
-    if (ws.readyState === WebSocket.OPEN) send();
-    else ws.addEventListener('open', send, { once: true });
+    // Still connecting: `onopen` (ensureSocket) sends HELLO first; the run waits for WELCOME.
+    if (ws.readyState === WebSocket.OPEN) this.whenWelcomed(send);
+    else ws.addEventListener('open', () => this.whenWelcomed(send), { once: true });
   }
 
-  stim(sw: BitVector, key: BitVector): void {
+  /** Sends a `STIM` payload, as `encodeStim` writes it for the active board. */
+  stim(bits: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(`STIM ${bitsToString(sw)}${bitsToString(key)}`);
+    this.ws.send(`STIM ${bits}`);
   }
 
   /** Asks for the waveform of `run` (`WAVE-GET`); it arrives through `handlers.wave`. */

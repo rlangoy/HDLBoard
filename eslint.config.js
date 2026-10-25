@@ -30,6 +30,15 @@ const NEW_CODE = [
   'src/components/workbench/helpSignals.ts',
   'src/components/workbench/regExpText.ts',
   'src/components/workbench/boardUi.test.ts',
+  // Board shapes (docs/board_io_v2_spec.md).
+  'src/components/workbench/useBoardIo.ts',
+  'src/components/workbench/BoardResourceLinks.tsx',
+  'src/components/workbench/ExternalLink.tsx',
+  'src/components/workbench/BoardIoPanel.test.tsx',
+  'src/components/Pushbuttons/PushbuttonCross.tsx',
+  'src/components/Pushbuttons/ResetButton.tsx',
+  'src/components/Pushbuttons/levels.ts',
+  'src/components/workbench/RemoveFilesDialog.tsx',
 ];
 
 const MAX_FUNCTION_LINES = 40;
@@ -54,7 +63,7 @@ export default tseslint.config(
   },
   {
     // A test suite's `describe` callback is a list of cases, and its expected values are the test data.
-    files: ['**/*.test.ts', '**/*.testSupport.ts'],
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.testSupport.ts'],
     // TypeScript, wherever the test is: without the parser, `eslint src` fails on every
     // test file outside NEW_CODE (no rules apply to those; this block only turns rules off).
     languageOptions: { parser: tseslint.parser },

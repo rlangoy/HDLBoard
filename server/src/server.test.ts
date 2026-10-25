@@ -100,9 +100,9 @@ describe('the WebSocket endpoint path', () => {
    * Whether a WebSocket upgrade on `path` opens (true) or is refused (false). The `ws`
    * package rather than Node's global WebSocket, which Node 18 and 20 do not have.
    */
-  const opens = (path: string) =>
+  const opens = (path: string, origin?: string) =>
     new Promise<boolean>((resolve) => {
-      const ws = new WebSocket(`ws://${LOOPBACK}:${backend.port}${path}`);
+      const ws = new WebSocket(`ws://${LOOPBACK}:${backend.port}${path}`, origin === undefined ? {} : { origin });
       ws.once('open', () => {
         ws.close();
         resolve(true);
@@ -113,4 +113,9 @@ describe('the WebSocket endpoint path', () => {
   test('accepts /hdlsim', async () => assert.equal(await opens('/hdlsim'), true));
   test('still accepts the legacy /ghdlsim', async () => assert.equal(await opens('/ghdlsim'), true));
   test('refuses any other path', async () => assert.equal(await opens('/other'), false));
+
+  // Another site must not run VHDL here: its textio could write files anywhere (requestOrigin.ts).
+  test('refuses a page from another site', async () => assert.equal(await opens('/hdlsim', 'https://evil.example'), false));
+  test("accepts the page's own host on another port (Vite, Docker)", async () =>
+    assert.equal(await opens('/hdlsim', `http://${LOOPBACK}:5173`), true));
 });

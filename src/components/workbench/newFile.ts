@@ -8,7 +8,9 @@
  */
 
 import { fileNameRefusal } from './fileNameRules';
+import { generateBoardTop } from '../../boards/boardTop';
 import { translateFromDefault, type Translation } from '../../boards/renamePorts';
+import { isDefaultShape } from '../../boards/shapeChange';
 import { type BoardDefinition } from '../../boards/types';
 
 export type NewFileLanguage = 'vhdl' | 'verilog';
@@ -62,8 +64,10 @@ export function newFileNameError(
  * for the module named after the top file when it holds several (server/src/verilog/ports.ts).
  * The body is left empty: the behaviour is the student's to write. A name that clashes
  * with a port of the board (`key.vhd` on the DE1-SoC) keeps the Default names, and says why.
+ * A board of another shape gets its generated starter top instead (docs/board_io_v2_spec.md § 5.4).
  */
 export function newFileContent(input: string, language: NewFileLanguage, board: BoardDefinition): Translation {
+  if (!isDefaultShape(board.ports)) return { text: generateBoardTop(board, language, baseName(input)) };
   return translateFromDefault(designTemplate(baseName(input), language), language, board);
 }
 

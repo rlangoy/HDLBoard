@@ -4,35 +4,24 @@
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, builtInBoard, DEFAULT_BOARD, mergeCatalog } from './boardCatalog';
 import { canUndo, undoneRenames, viewsAfterUndo, type BoardChangeRecord } from './boardChangeUndo';
-import { encodeBoardFrame } from './boardFrame';
+import { encodeV1BoardFrame } from './boardFrame';
 import { foreignBoardNames } from './boardMatch';
-import { BUILT_IN_PORT_NAMES, portList, sevenSegmentHeading } from './boardPorts';
-import { DEFAULT_LABELS } from './parseBoards';
+import { BUILT_IN_PORT_NAMES } from './boardPorts';
+import { sevenSegmentHeading } from './boardPortText';
+import { portList } from './boardShape';
+import { testBoard } from './boards.testSupport';
 import { parsePreferredBoard, preferredBoardIn } from './preferredBoard';
-import type { BoardDefinition } from './types';
+import type { IndependentDisplays } from './types';
 
 const DE1_SOC = builtInBoard('de1-soc');
 
-/** A user board whose own names differ from both built-ins: `BTN`, `SEG0`…. */
-const COURSE: BoardDefinition = {
-  id: 'course',
-  name: 'Course',
-  description: '',
-  origin: 'user',
-  labels: DEFAULT_LABELS,
-  ports: {
-    clock50: 'CLOCK_50',
-    clock500Hz: 'CLOCK_500Hz',
-    switches: 'SW',
-    pushbuttons: 'BTN',
-    leds: 'LEDR',
-    sevenSegment: ['SEG0', 'SEG1', 'SEG2', 'SEG3', 'SEG4', 'SEG5'],
-  },
-};
+/** A user board whose own names differ from every built-in: `BTN0`…, `SEG0`…. */
+const COURSE = testBoard('course');
 
 /**
- * The literal Default `BOARD` frame. The same text is in server/src/protocol.test.ts:
- * the two packages share no code, so this text is their contract.
+ * The literal Default `BOARD` frame of protocol 2, which a 1.6 backend still gets. The
+ * same text is in server/src/protocol.test.ts: the two packages share no code, so this
+ * text is their contract.
  */
 const DEFAULT_BOARD_FRAME = `BOARD
 clock50 CLOCK_50
@@ -47,28 +36,36 @@ describe('board ports', () => {
     expect(portList(DE1_SOC.ports)).toEqual(['CLOCK_50', 'CLOCK_500Hz', 'SW', 'KEY', 'LEDR', 'HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5']);
   });
 
-  it('knows the names of every built-in board, lower case', () => {
+  it('knows the names of the Default and DE1-SoC boards only, lower case (F8)', () => {
     for (const name of ['key_n', 'key', 'hex0_n', 'hex0', 'clock_500hz', 'ledr']) expect(BUILT_IN_PORT_NAMES.has(name)).toBe(true);
-    expect(BUILT_IN_PORT_NAMES.has('rst')).toBe(false);
+    for (const name of ['rst', 'clk', 'led', 'seg', 'an', 'max10_clk1_50']) expect(BUILT_IN_PORT_NAMES.has(name)).toBe(false);
   });
 
+  const independent = (ports: string[], width: 7 | 8 = 7): IndependentDisplays => ({ kind: 'independent', ports, width, activeLow: true });
+
   it.each([
-    [['HEX0_N', 'HEX1_N', 'HEX2_N', 'HEX3_N', 'HEX4_N', 'HEX5_N'], 'HEXn_N[6:0]'],
-    [['HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5'], 'HEXn[6:0]'],
-    [['SEG_A', 'SEG_B', 'SEG_C', 'SEG_D', 'SEG_E', 'SEG_F'], 'SEG_A…SEG_F[6:0]'],
-    [['D0', 'D1', 'D2', 'D3', 'D5', 'D4'], 'D0…D4[6:0]'],
-  ])('heads the displays %j as %s', (names, heading) => {
-    expect(sevenSegmentHeading(names)).toBe(heading);
+    [independent(['HEX0_N', 'HEX1_N', 'HEX2_N', 'HEX3_N', 'HEX4_N', 'HEX5_N']), 'HEXn_N[6:0]'],
+    [independent(['HEX0', 'HEX1', 'HEX2', 'HEX3', 'HEX4', 'HEX5'], 8), 'HEXn[7:0]'],
+    [independent(['SEG_A', 'SEG_B', 'SEG_C', 'SEG_D', 'SEG_E', 'SEG_F']), 'SEG_A…SEG_F[6:0]'],
+    [independent(['D0', 'D1', 'D2', 'D3', 'D5', 'D4']), 'D0…D4[6:0]'],
+    [builtInBoard('basys3').ports.sevenSegment, 'seg[6:0], dp, an[3:0]'],
+    [builtInBoard('nexys-a7').ports.sevenSegment, 'CA…CG, DP, AN[7:0]'],
+  ])('heads the displays %j as %s', (displays, heading) => {
+    expect(sevenSegmentHeading(displays)).toBe(heading);
   });
 });
 
-describe('the BOARD frame', () => {
-  it('is the literal Default frame the server decodes', () => {
-    expect(encodeBoardFrame(DEFAULT_BOARD.ports)).toBe(DEFAULT_BOARD_FRAME);
+describe('the protocol-2 BOARD frame', () => {
+  it('is the literal Default frame a 1.6 server decodes', () => {
+    expect(encodeV1BoardFrame(DEFAULT_BOARD.ports)).toBe(DEFAULT_BOARD_FRAME);
+  });
+
+  it('cannot carry a board of another shape', () => {
+    expect(() => encodeV1BoardFrame(builtInBoard('basys3').ports)).toThrow(/Default shape/);
   });
 
   it('carries the DE1-SoC names', () => {
-    expect(encodeBoardFrame(DE1_SOC.ports)).toBe(
+    expect(encodeV1BoardFrame(DE1_SOC.ports)).toBe(
       'BOARD\nclock50 CLOCK_50\nclock500Hz CLOCK_500Hz\nswitches SW\npushbuttons KEY\nleds LEDR\nsevenSegment HEX0 HEX1 HEX2 HEX3 HEX4 HEX5',
     );
   });
@@ -88,11 +85,11 @@ describe('foreignBoardNames', () => {
   });
 
   it('picks the board with the most names', () => {
-    expect(foreignBoardNames(['KEY', 'HEX0', 'BTN'], catalog, DEFAULT_BOARD)?.board.id).toBe('de1-soc');
+    expect(foreignBoardNames(['MAX10_CLK1_50', 'KEY', 'BTN0'], catalog, DEFAULT_BOARD)?.board.id).toBe('de10-lite');
   });
 
   it('gives no hint on a tie between two boards', () => {
-    expect(foreignBoardNames(['KEY', 'BTN'], catalog, DEFAULT_BOARD)).toBeUndefined();
+    expect(foreignBoardNames(['MAX10_CLK1_50', 'BTN0'], catalog, DEFAULT_BOARD)).toBeUndefined();
   });
 
   it('gives no hint for a unit without ports, or one on its own board', () => {
@@ -180,7 +177,7 @@ describe('the preferred board', () => {
   });
 
   it('falls back to Default for an id that is not installed', () => {
-    expect(preferredBoardIn(BUILT_IN_CATALOG, 'de10-lite')).toBe('default');
+    expect(preferredBoardIn(BUILT_IN_CATALOG, 'de0-nano')).toBe('default');
     expect(preferredBoardIn(BUILT_IN_CATALOG, 'de1-soc')).toBe('de1-soc');
   });
 });

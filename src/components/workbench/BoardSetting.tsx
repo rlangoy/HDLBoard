@@ -4,7 +4,9 @@
 import { DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import type { BoardCatalog } from '../../boards/types';
 import { FlatSelect } from '../waveform/FlatSelect';
+import { BoardResourceLinks } from './BoardResourceLinks';
 import { BOARD_TEXT, BOARDS_DOC_URL, notInstalledNote, notInstalledOption } from './boardText';
+import { ExternalLink } from './ExternalLink';
 import { InfoIcon } from './icons';
 import './BoardSetting.css';
 
@@ -41,6 +43,7 @@ export function BoardSetting({ boards, boardId, locked, onChange }: BoardSetting
           notInstalledNote(boardId, DEFAULT_BOARD)
         )}
       </p>
+      {installed && <BoardResourceLinks resources={board.resources} className="wb-board-setting__links" />}
       <BoardFileNote />
       {boards.warnings.map((warning) => (
         <span key={warning} className="wb-settings__note wb-settings__note--error">
@@ -51,7 +54,7 @@ export function BoardSetting({ boards, boardId, locked, onChange }: BoardSetting
   );
 }
 
-/** Where the boards come from, and that only names can change. */
+/** Where the boards come from. */
 function BoardFileNote() {
   return (
     <div className="wb-board-setting__note" role="note">
@@ -59,12 +62,10 @@ function BoardFileNote() {
       <div>
         <p>
           {BOARD_TEXT.settingFileLead} <em>boards/boards.json</em>. {BOARD_TEXT.settingFileEdit}{' '}
-          <a href={BOARDS_DOC_URL} target="_blank" rel="noopener noreferrer">
-            {BOARD_TEXT.settingHowTo}
-          </a>
+          <ExternalLink href={BOARDS_DOC_URL}>{BOARD_TEXT.settingHowTo}</ExternalLink>
         </p>
         <p className="wb-board-setting__note-small">
-          {BOARD_TEXT.settingNote} {BOARD_TEXT.settingFixedShape}
+          {BOARD_TEXT.settingNote}
         </p>
       </div>
     </div>

@@ -24,6 +24,17 @@
  */
 
 import { boardBindings, declaresPort, LEGACY_RESET_PORT, type BoardIo } from './engines/boardPorts.js';
+import { stateLength, stimLength } from './engines/boardShape.js';
+import {
+  clockHalfPeriod,
+  decoderProcess,
+  ioVariables,
+  legacyResetDrive,
+  signalDeclarations,
+  stateAssembly,
+  stimApply,
+  vhdlActual,
+} from './engines/vhdlBoardText.js';
 
 const TB_ENTITY = 'hdl_board_tb';
 const RESET_SIGNAL = 'rst_sig';
@@ -42,7 +53,7 @@ export interface TiedInput {
  */
 function buildPortMap(ports: ReadonlySet<string>, board: BoardIo, tied: readonly TiedInput[]): string {
   const known: Array<[string, string]> = [
-    ...boardBindings(board).map((b): [string, string] => [b.key, b.signal]),
+    ...boardBindings(board).map((b): [string, string] => [b.key, vhdlActual(b)]),
     [LEGACY_RESET_PORT, RESET_SIGNAL],
   ];
   const assocs = known
@@ -51,19 +62,6 @@ function buildPortMap(ports: ReadonlySet<string>, board: BoardIo, tied: readonly
     .concat(tied.map(({ name, value }) => `${name} => ${value}`));
   if (assocs.length === 0) return '';
   return `\n    port map (\n      ${assocs.join(',\n      ')}\n    )`;
-}
-
-/**
- * `rst` is not a board pin (§ 3.2) — a legacy file that declares it gets it wired from
- * the first pushbutton (`not key_sig(0)`) when the entity also has the pushbuttons, so
- * older files still elaborate; with no pushbuttons to source it from, it is tied
- * permanently deasserted rather than left floating.
- */
-function buildRstDrive(ports: ReadonlySet<string>, board: BoardIo): string {
-  if (!ports.has(LEGACY_RESET_PORT)) return '';
-  return declaresPort(ports, board.pushbuttons)
-    ? `\n  ${RESET_SIGNAL} <= not key_sig(0);`
-    : `\n  ${RESET_SIGNAL} <= '0';`;
 }
 
 export interface TestbenchOptions {
@@ -102,8 +100,11 @@ export function generateTestbench(
   options: TestbenchOptions = {},
 ): string {
   const portMap = buildPortMap(ports, board, options.tiedInputs ?? []);
-  const rstDrive = buildRstDrive(ports, board);
-  const hasClock50 = declaresPort(ports, board.clock50);
+  const rstDrive = legacyResetDrive(ports, board);
+  const hasBoardClock = declaresPort(ports, board.clock.port);
+  const halfPeriod = clockHalfPeriod(board);
+  const stim = stimLength(board);
+  const state = stateLength(board);
   const stdinPacing = options.pacingFromStdin === true;
   // The three places the heartbeat process differs between the two pacing
   // sources. The FIFO strings are the original text, verbatim.
@@ -137,14 +138,7 @@ architecture sim of ${TB_ENTITY} is
   -- the entity actually declares — buildPortMap() above only connects the
   -- ones that exist. Defaults are each signal's electrically "off" value,
   -- so an unassociated output reads as blank on the wire, not undefined.
-  signal clk_sig    : std_logic := '0';
-  signal clk500_sig : std_logic := '0';
-  signal rst_sig    : std_logic := '0';
-  signal sw_sig     : std_logic_vector(9 downto 0) := (others => '0');
-  signal key_sig    : std_logic_vector(3 downto 0) := (others => '1');
-  signal ledr_sig   : std_logic_vector(9 downto 0) := (others => '0');
-  signal hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig
-    : std_logic_vector(6 downto 0) := (others => '1');
+${signalDeclarations(board)}
 
   function sl2c(v : std_logic) return character is
   begin
@@ -169,9 +163,9 @@ architecture sim of ${TB_ENTITY} is
 begin
 
   uut: entity work.${entityName}${portMap};
-${rstDrive}
+${rstDrive}${decoderProcess(board)}
 ${
-  hasClock50
+  hasBoardClock
     ? `
   -- Free-running clock, only instantiated when the entity actually
   -- declares CLOCK_50 (§ 5.8) — its own 20 ns period is what makes a
@@ -181,8 +175,8 @@ ${
   -- drive the DUT's own CLOCK_50 input.
   clkgen : process
   begin
-    clk_sig <= '0'; wait for 10 ns;
-    clk_sig <= '1'; wait for 10 ns;
+    clk_sig <= '0'; wait for ${halfPeriod};
+    clk_sig <= '1'; wait for ${halfPeriod};
   end process;
 `
     : ''
@@ -248,15 +242,15 @@ ${pacingOpen}    loop
     -- and sharing one with the output would prepend that to STATE (§ 5.14).
     variable lin  : line;
     variable lout : line;
-    variable rec : string(1 to 14);
+    variable rec : string(1 to ${stim});
     variable sep : character;
     variable seq : integer;
     variable ok  : boolean;
     variable applied_seq : integer := 0;
     variable applied_at  : time := 0 ns;
-    variable last : string(1 to 52) := (others => ' ');
+    variable last : string(1 to ${state}) := (others => ' ');
     variable last_seq : integer := -1;
-    variable now_bits : string(1 to 52);
+    variable now_bits : string(1 to ${state});${ioVariables(board)}
   begin
     loop
       -- A plain time-based wait, not clock edges (§ 5.8) — this process
@@ -281,14 +275,9 @@ ${pacingOpen}    loop
             read(lin, seq, ok);
             next when not ok or seq <= applied_seq;
             read(lin, sep, ok);
-            next when not ok or lin'length < 14;
+            next when not ok or lin'length < ${stim};
             read(lin, rec);
-            for i in 0 to 9 loop
-              sw_sig(9 - i) <= '1' when rec(1 + i) = '1' else '0';
-            end loop;
-            for i in 0 to 3 loop
-              key_sig(3 - i) <= '1' when rec(11 + i) = '1' else '0';
-            end loop;
+${stimApply(board)}
             applied_seq := seq;
             applied_at := now;
             exit;
@@ -299,9 +288,7 @@ ${pacingOpen}    loop
 
       -- STATE's own wire format (§ 6.4): LEDR then HEX0..HEX5, 52 bits,
       -- then the last applied input seq — the Node side's acknowledgement.
-      now_bits := slv2str(ledr_sig) & slv2str(hex0_sig) & slv2str(hex1_sig)
-                                    & slv2str(hex2_sig) & slv2str(hex3_sig)
-                                    & slv2str(hex4_sig) & slv2str(hex5_sig);
+${stateAssembly(board)}
       if (now_bits /= last or applied_seq /= last_seq) and output_file'length > 0 then
         -- Opened, written and closed on every change rather than held
         -- open for the session: file_close is what flushes, and a

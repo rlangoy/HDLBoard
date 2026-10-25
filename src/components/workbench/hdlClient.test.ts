@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { HdlClient } from './hdlClient';
 import type { VhdlFile } from './files';
 import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
-import { encodeBoardFrame } from '../../boards/boardFrame';
+import { encodeBoardFrame, encodeV1BoardFrame } from '../../boards/boardFrame';
+import { BOARD_TEXT } from './boardText';
 
 const DE1_SOC = builtInBoard('de1-soc');
 
@@ -60,6 +61,9 @@ const PROJECT: VhdlFile[] = [
   file('defs.vh', 'verilog'),
 ];
 
+/** What a backend of this release answers HELLO with; a run waits for it. */
+const WELCOME_CURRENT = 'WELCOME 3';
+
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
   return sent[sent.length - 1] ?? '';
@@ -85,6 +89,7 @@ function recordingHandlers() {
 function runWith(topFileName?: string, runTarget?: string | null): string {
   const client = new HdlClient('ws://test', recordingHandlers());
   client.run(PROJECT, topFileName, runTarget ?? null, false, DEFAULT_BOARD.ports);
+  FakeSocket.last?.receive(WELCOME_CURRENT);
   return lastFrame();
 }
 
@@ -120,6 +125,7 @@ describe('HdlClient.run', () => {
     FakeSocket.initialState = FakeSocket.CONNECTING;
     runWith('top.vhd');
     FakeSocket.last?.open();
+    FakeSocket.last?.receive(WELCOME_CURRENT);
     const verbs = (FakeSocket.last?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
     expect(verbs).toEqual(['HELLO', 'WAVE', 'BOARD', 'RUN']);
   });
@@ -154,6 +160,7 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
   test('WAVE on/off and the board go right before every RUN', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
     client.run(PROJECT, 'top.vhd', null, true, DE1_SOC.ports);
+    FakeSocket.last?.receive(WELCOME_CURRENT);
     const sent = FakeSocket.last?.sent ?? [];
     expect(sent.slice(-3, -1)).toEqual(['WAVE on', encodeBoardFrame(DE1_SOC.ports)]);
     client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
@@ -206,6 +213,7 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
     const client = new HdlClient('ws://test', handlers);
     client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
     const socket = FakeSocket.last!;
+    socket.receive('WELCOME 1');
     socket.receive(OLD_BACKEND_ANSWER);
     client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
     socket.receive(OLD_BACKEND_ANSWER);
@@ -213,6 +221,33 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
     expect(handlers.onOldBackend).toHaveBeenCalledTimes(1);
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(socket.sent.filter((frame) => frame.startsWith('BOARD'))).toHaveLength(1);
+  });
+
+  test('a protocol-2 backend gets the 1.6 frame for a board of the Default shape (§ 6.3)', () => {
+    const client = new HdlClient('ws://test', recordingHandlers());
+    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    const socket = FakeSocket.last!;
+    socket.receive('WELCOME 2');
+    expect(socket.sent).toContain(encodeV1BoardFrame(DE1_SOC.ports));
+    expect(socket.sent[socket.sent.length - 1].startsWith('RUN')).toBe(true);
+  });
+
+  test('a protocol-2 backend runs no board of another shape, and says why', () => {
+    const handlers = recordingHandlers();
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, false, builtInBoard('basys3').ports);
+    const socket = FakeSocket.last!;
+    socket.receive('WELCOME 2');
+    expect(socket.sent.filter((frame) => frame.startsWith('RUN') || frame.startsWith('BOARD'))).toEqual([]);
+    expect(handlers.onError).toHaveBeenCalledWith('protocol', BOARD_TEXT.oldBackendShape);
+    expect(BOARD_TEXT.oldBackendShape).toContain('10 switches, 4 keys and 6 displays');
+  });
+
+  test('a run waits for WELCOME, and sends nothing before it', () => {
+    new HdlClient('ws://test', recordingHandlers()).run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    const socket = FakeSocket.last!;
+    expect(socket.sent).toEqual([]);
+    socket.receive(WELCOME_CURRENT);
+    expect(socket.sent).toContain(encodeBoardFrame(DEFAULT_BOARD.ports));
   });
 
   test('still reports any other protocol error', () => {

@@ -14,7 +14,7 @@
  */
 
 import { fetchText, type FetchFn } from '../../project/fetchText';
-import { fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
+import { baseName, fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
 import { boardIdOf, parseProject, serializeProject } from '../../project/parseProject';
 import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
 import { parseWaveViews, withWaveViewOf } from '../../project/waveViews';
@@ -587,17 +587,8 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
 
 /** The last segment of the location when it is a project file name, else one made from the project name. */
 function projectFileName(location: string, projectName: string): string {
-  const last = location.split(/[?#]/)[0].split(/[/\\]/).filter(Boolean).pop() ?? '';
-  const name = decodeURIComponentSafe(last);
+  const name = baseName(location);
   return isProjectFileName(name) ? name : projectFileNameFor(projectName);
-}
-
-function decodeURIComponentSafe(text: string): string {
-  try {
-    return decodeURIComponent(text);
-  } catch {
-    return text;
-  }
 }
 
 /**

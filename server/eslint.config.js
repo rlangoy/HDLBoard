@@ -33,6 +33,10 @@ const NEW_CODE = [
   'src/session.board.test.ts',
   'src/tbTemplate.test.ts',
   'src/integration/boards.test.ts',
+  // Board shapes (docs/board_io_v2_spec.md).
+  'src/boardFrameFields.ts',
+  'src/boardNames.ts',
+  'src/integration/boardShapes.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

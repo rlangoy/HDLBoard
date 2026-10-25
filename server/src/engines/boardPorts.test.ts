@@ -53,7 +53,7 @@ describe('boardPortKeys', () => {
   });
 
   test('tells whether a design declares a board port, ignoring case', () => {
-    assert.equal(declaresPort(new Set(['clock_50']), DE1_SOC_BOARD_IO.clock50), true);
-    assert.equal(declaresPort(new Set(['key_n']), DE1_SOC_BOARD_IO.pushbuttons), false);
+    assert.equal(declaresPort(new Set(['clock_50']), DE1_SOC_BOARD_IO.clock.port), true);
+    assert.equal(declaresPort(new Set(['key_n']), 'KEY'), false);
   });
 });

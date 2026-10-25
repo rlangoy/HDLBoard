@@ -245,3 +245,12 @@
 .wb-overwrite__list li {
   margin: 2px 0;
 }
+
+/* The board the new file or project is for (docs/board_io_v2_spec.md). */
+.wb-newfile__board-label {
+  margin-top: 12px;
+}
+
+.wb-newfile__board {
+  cursor: pointer;
+}

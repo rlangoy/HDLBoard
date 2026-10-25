@@ -7,33 +7,37 @@
  * `tbTemplate.ts`. It speaks the same file protocol as the VHDL one, so everything
  * downstream (the stimulus queue, `STATE` polling, real-time pacing) is shared.
  *
- * Pure: it only builds text. The Verilog below is data, in named sections; only the
- * connections, tie-offs and clock processes vary with the design's ports.
+ * Pure: it only builds text. The Verilog below is data, in named sections; what
+ * follows the board — widths, rest and off values, the clock, the `STIM`/`STATE`
+ * layout, a multiplexed display's decoder — comes from `boardText.ts`
+ * (docs/board_io_v2_spec.md § 7.3).
  */
 
-import { boardBindings, type BoardBinding, type BoardIo } from '../engines/boardPorts.js';
-
-const LED_OFF = "10'b0";
-const SEGMENTS_OFF = "7'h7F"; // active low: all ones is blank
-
-/** What a board output reads as when the design lacks it: its electrically "off" value. None for an input. */
-function offValueOf({ role }: BoardBinding): string | undefined {
-  if (role === 'leds') return LED_OFF;
-  return role.startsWith('sevenSegment') ? SEGMENTS_OFF : undefined;
-}
+import { boardBindings, type BoardIo } from '../engines/boardPorts.js';
+import { stateLength, stimLength } from '../engines/boardShape.js';
+import {
+  boardBitsDeclaration,
+  boardBitsUpdate,
+  boardClockProcess,
+  declarations,
+  decoderSection,
+  outputOffValue,
+  stimSlices,
+  verilogActual,
+} from './boardText.js';
 
 /** `lower-case board name -> the spelling the design declared`, from `boardPortSpellings`. */
 type Spellings = ReadonlyMap<string, string>;
 
 /**
  * The instance of the student's top module, connecting each board port it declares
- * by the spelling it declared (`.Clock_50(clk_sig)`), because Verilog names are
- * case-sensitive.
+ * by the spelling it declared (`.Clock_50(clk_sig)`, `.btnC(key_sig[0])`), because
+ * Verilog names are case-sensitive.
  */
 export function instantiation(top: string, spellings: Spellings, board: BoardIo): string {
-  const connections = boardBindings(board).flatMap(({ key, signal }) => {
-    const declared = spellings.get(key);
-    return declared === undefined ? [] : [`.${declared}(${signal})`];
+  const connections = boardBindings(board).flatMap((binding) => {
+    const declared = spellings.get(binding.key);
+    return declared === undefined ? [] : [`.${declared}(${verilogActual(binding)})`];
   });
   return `  ${top} uut (${connections.join(', ')});`;
 }
@@ -45,8 +49,8 @@ export function instantiation(top: string, spellings: Spellings, board: BoardIo)
  */
 export function tieOffs(spellings: Spellings, board: BoardIo): string[] {
   return boardBindings(board).flatMap((binding) => {
-    const offValue = offValueOf(binding);
-    return offValue !== undefined && !spellings.has(binding.key) ? [`assign ${binding.signal} = ${offValue};`] : [];
+    const offValue = outputOffValue(binding, board);
+    return offValue !== undefined && !spellings.has(binding.key) ? [`assign ${verilogActual(binding)} = ${offValue};`] : [];
   });
 }
 
@@ -61,18 +65,8 @@ const TIMESCALE = '`timescale 1ns/1ps';
 /** The wrapper's module name: what `iverilog -s` elaborates in a board run. */
 export const TESTBENCH_MODULE_NAME = 'hdl_board_tb';
 
-const DECLARATIONS = `module ${TESTBENCH_MODULE_NAME};
-  reg         clk_sig    = 1'b0;
-  reg         clk500_sig = 1'b0;
-  reg  [9:0]  sw_sig     = 10'b0;
-  reg  [3:0]  key_sig    = 4'hF;
-  wire [9:0]  ledr_sig;
-  wire [6:0]  hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig;`;
-
 const TIE_OFF_COMMENT = '  // Board outputs this design does not declare read as "off" (displays are active low).';
 
-/** 20 ns period: a 10 ns half-period at the 1 ns timescale. */
-const CLOCK_50_PROCESS = '  always #10 clk_sig = ~clk_sig;';
 /** 2 ms period, 500 Hz: a 1 ms half-period is 1 000 000 ns. Always present — see § 5.2. */
 const CLOCK_500HZ_PROCESS = '  always #1000000 clk500_sig = ~clk500_sig;';
 
@@ -112,30 +106,19 @@ const PACING = `  // Real-time pacing: after every 20 ms of simulated time, repo
 
 /**
  * The same file protocol as the VHDL testbench: apply at most one queued
- * "<seq> <SW10><KEY4>" line per poll (and not before the previous one has held for
- * min_dwell_ns), and publish "<52 state bits> <last applied seq>" whenever either changes.
+ * "<seq> <STIM bits>" line per poll (and not before the previous one has held for
+ * min_dwell_ns), and publish "<STATE bits> <last applied seq>" whenever either changes.
  */
-const BOARD_IO = `  // Board I/O: apply at most one queued input line per poll, publish the
-  // 52-bit board state whenever it (or the applied sequence number) changes.
-  wire [51:0] board_bits = {ledr_sig, hex0_sig, hex1_sig, hex2_sig, hex3_sig, hex4_sig, hex5_sig};
-  integer fin, fout, scan_count, seq, applied_seq = 0, last_seq = -1;
-  reg [13:0] rec;
-  reg [51:0] last_bits = 52'bx;
-  time applied_at = 0;
-  reg applied_one;
-  initial begin
-    #1;
-    forever begin
-      #(poll_interval_ns * 1);
-      if (input_file != 0 && ($time - applied_at) >= min_dwell_ns) begin
+/** Opens the input queue and applies its oldest new line, if the last one has held long enough. */
+function applyInput(board: BoardIo): string {
+  return `      if (input_file != 0 && ($time - applied_at) >= min_dwell_ns) begin
         fin = $fopen(input_file, "r");
         if (fin != 0) begin
           applied_one = 0;
           while (!applied_one && !$feof(fin)) begin
             scan_count = $fscanf(fin, "%d %b", seq, rec);
             if (scan_count == 2 && seq > applied_seq) begin
-              sw_sig = rec[13:4];
-              key_sig = rec[3:0];
+${stimSlices(board)}
               applied_seq = seq;
               applied_at = $time;
               applied_one = 1;
@@ -143,8 +126,26 @@ const BOARD_IO = `  // Board I/O: apply at most one queued input line per poll, 
           end
           $fclose(fin);
         end
-      end
-      if (output_file != 0 && (board_bits !== last_bits || applied_seq != last_seq)) begin
+      end`;
+}
+
+function boardIo(board: BoardIo): string {
+  const stim = stimLength(board);
+  const state = stateLength(board);
+  return `  // Board I/O: apply at most one queued input line per poll, publish the
+  // ${state}-bit board state whenever it (or the applied sequence number) changes.
+${boardBitsDeclaration(board)}
+  integer fin, fout, scan_count, seq, applied_seq = 0, last_seq = -1;
+  reg [${stim - 1}:0] rec;
+  reg [${state - 1}:0] last_bits = ${state}'bx;
+  time applied_at = 0;
+  reg applied_one;
+  initial begin
+    #1;
+    forever begin
+      #(poll_interval_ns * 1);
+${applyInput(board)}
+${boardBitsUpdate(board)}      if (output_file != 0 && (board_bits !== last_bits || applied_seq != last_seq)) begin
         fout = $fopen(output_file, "w");
         $fdisplay(fout, "%b %0d", board_bits, applied_seq);
         $fclose(fout);
@@ -153,6 +154,7 @@ const BOARD_IO = `  // Board I/O: apply at most one queued input line per poll, 
       end
     end
   end`;
+}
 
 // --- Assembly ----------------------------------------------------------------
 
@@ -163,10 +165,10 @@ function tieOffSection(spellings: Spellings, board: BoardIo): string {
   return [TIE_OFF_COMMENT, ...assignments.map((assignment) => `  ${assignment}`)].join('\n');
 }
 
-/** The 50 MHz clock only when the design declares the board's 50 MHz clock; the 500 Hz clock always. */
+/** The board clock only when the design declares it; the 500 Hz clock always. */
 function clockProcesses(spellings: Spellings, board: BoardIo): string {
-  const hasClock50 = spellings.has(board.clock50.toLowerCase());
-  return [hasClock50 ? CLOCK_50_PROCESS : '', CLOCK_500HZ_PROCESS].filter(Boolean).join('\n');
+  const hasBoardClock = spellings.has(board.clock.port.toLowerCase());
+  return [hasBoardClock ? boardClockProcess(board) : '', CLOCK_500HZ_PROCESS].filter(Boolean).join('\n');
 }
 
 /**
@@ -176,13 +178,14 @@ function clockProcesses(spellings: Spellings, board: BoardIo): string {
 export function buildBoardTestbench(top: string, spellings: Spellings, board: BoardIo): string {
   const sections = [
     TIMESCALE,
-    DECLARATIONS,
+    declarations(board, TESTBENCH_MODULE_NAME),
     tieOffSection(spellings, board),
     instantiation(top, spellings, board),
+    decoderSection(board),
     clockProcesses(spellings, board),
     RUNTIME_SETTINGS,
     PACING,
-    BOARD_IO,
+    boardIo(board),
   ];
   return `${sections.filter((section) => section !== '').join('\n\n')}\nendmodule\n`;
 }

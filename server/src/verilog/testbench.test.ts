@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { readFixture } from '../testSupport/fixture.js';
 import { buildBoardTestbench, instantiation, tieOffs } from './testbench.js';
-import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
-import { DE1_SOC_BOARD_IO } from '../testSupport/boards.js';
+import { boardBindings, DEFAULT_BOARD_IO, type BoardIo } from '../engines/boardPorts.js';
+import { BASYS3_BOARD_IO, DE10_LITE_BOARD_IO, DE1_SOC_BOARD_IO, NEXYS_A7_BOARD_IO, VIDEO_CLOCK_BOARD_IO } from '../testSupport/boards.js';
 
 /** Board port names as `boardPortSpellings` returns them: lower-case board name -> declared spelling. */
 const spelled = (...names: string[]): Map<string, string> => new Map(names.map((name) => [name.toLowerCase(), name]));
@@ -156,5 +156,36 @@ describe('buildBoardTestbench', () => {
 
   test('has no run of blank lines', () => {
     assert.doesNotMatch(wrapperFor('SW'), /\n\n\n/);
+  });
+});
+
+describe('buildBoardTestbench on boards of other shapes (docs/board_io_v2_spec.md § 7.3)', () => {
+  const everyPort = (board: BoardIo): Map<string, string> => new Map(boardBindings(board).map((binding) => [binding.key, binding.name]));
+  const tops: Array<[string, string, BoardIo]> = [
+    ['de10-lite', 'de10_top', DE10_LITE_BOARD_IO],
+    ['basys3', 'basys_top', BASYS3_BOARD_IO],
+    ['nexys-a7', 'nexys_top', NEXYS_A7_BOARD_IO],
+  ];
+  for (const [id, top, board] of tops) {
+    test(`on the ${id} is its golden wrapper`, () => {
+      assert.equal(buildBoardTestbench(top, everyPort(board), board), readFixture('verilog', `golden/hdl_board_tb.${id}.v`));
+    });
+  }
+
+  test('connects scalar ports to one bit, and ties off the scalar outputs a design lacks', () => {
+    // By the design's own spelling: Verilog names are case-sensitive.
+    assert.match(instantiation('top', spelled('btnC', 'CA'), NEXYS_A7_BOARD_IO), /\.btnC\(key_sig\[0\]\), \.CA\(seg_sig\[0\]\)/);
+    const lines = tieOffs(spelled('CA'), NEXYS_A7_BOARD_IO);
+    assert.ok(lines.includes("assign seg_sig[1] = 1'b1;"));
+    assert.ok(lines.includes("assign an_sig = 8'hFF;"));
+    assert.ok(!lines.some((line) => line.includes('seg_sig[0]')));
+  });
+
+  test('clocks a 74.25 MHz board to the picosecond', () => {
+    assert.match(buildBoardTestbench('top', spelled('PIXEL_CLK'), VIDEO_CLOCK_BOARD_IO), /always #6\.734 clk_sig = ~clk_sig;/);
+  });
+
+  test('slices the reset button out of STIM last', () => {
+    assert.match(buildBoardTestbench('top', spelled('SW'), NEXYS_A7_BOARD_IO), /sw_sig = rec\[21:6\];\n\s+key_sig = rec\[5:1\];\n\s+rstbtn_sig = rec\[0\];/);
   });
 });

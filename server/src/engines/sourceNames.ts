@@ -24,11 +24,17 @@ export const rejectControlCharacters: NameRule = (name) =>
 export const rejectPaths: NameRule = (name) =>
   name.includes('..') || PATH_CHARACTER.test(name) ? `${name} must be a plain file name, not a folder or a path.` : undefined;
 
+/** Characters no Windows file name may hold; a name a Windows backend could not write is refused everywhere. */
+const RESERVED_CHARACTER = /[<>|?*"]/;
+
+export const rejectReservedCharacters: NameRule = (name) =>
+  RESERVED_CHARACTER.test(name) || name === '.' ? `${name}: a file name cannot be "." or contain < > | ? * or ".` : undefined;
+
 export const rejectLeadingDash: NameRule = (name) =>
   name.startsWith('-') ? `${name}: file names cannot start with "-", which the compiler would read as an option.` : undefined;
 
 /** Structural problems only, in the order their reasons are most useful. */
-export const PLAIN_NAME_RULES: readonly NameRule[] = [rejectEmpty, rejectControlCharacters, rejectPaths, rejectLeadingDash];
+export const PLAIN_NAME_RULES: readonly NameRule[] = [rejectEmpty, rejectControlCharacters, rejectPaths, rejectReservedCharacters, rejectLeadingDash];
 
 /** The first reason `rules` give against `name`, or `undefined` when none objects. */
 export function firstProblem(name: string, rules: readonly NameRule[]): string | undefined {
