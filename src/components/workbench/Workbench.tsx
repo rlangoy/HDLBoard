@@ -31,7 +31,7 @@ import { AboutDialog } from './AboutDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
-import { NewFileDialog } from './NewFileDialog';
+import { NewFileDialog, type NewProjectChoice } from './NewFileDialog';
 import { RemoveFilesDialog } from './RemoveFilesDialog';
 
 import { RefusedFilesDialog } from './RefusedFilesDialog';
@@ -143,11 +143,6 @@ import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
 import './Workbench.css';
 
-/** New File > Project's answer: the project's name and board. */
-interface NewProjectRequest {
-  readonly name: string;
-  readonly board: string;
-}
 
 // The backend's WebSocket port (ghdl_implementation_plan.md § 5.8) —
 // overridable at build time so a deployment can point at a different
@@ -275,7 +270,8 @@ export function Workbench() {
   // file TOP_LEVEL_ENTITY names, matching what SimulationCard already
   // showed as a static label before this was selectable.
   const [topFileId, setTopFileId] = useState<string | null>(
-    () => freshStart.files.find((f) => f.name === TOP_LEVEL_ENTITY)?.id ?? null,
+    // By id: on a board of another shape the starter file is named after the board.
+    () => freshStart.files.find((f) => f.id === DEFAULT_SHOWN_FILE)?.id ?? null,
   );
   // The top file's unit a pane's Play chose (docs/impl_split_screen.md D20); null = the backend chooses, as always.
   const [topUnit, setTopUnit] = useState<string | null>(null);
@@ -322,7 +318,7 @@ export function Workbench() {
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
   const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
   // New File > Project with files in Files: asked first whether the project keeps them (RemoveFilesDialog).
-  const [projectToCreate, setProjectToCreate] = useState<NewProjectRequest | null>(null);
+  const [projectToCreate, setProjectToCreate] = useState<NewProjectChoice | null>(null);
   // A project that kept its files is created on their board; the change to the board chosen follows.
   const [boardForNewProject, setBoardForNewProject] = useState<string | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
@@ -1379,48 +1375,57 @@ export function Workbench() {
     if (file) handleOpenFile(file.id);
   };
 
-  // New File > Project: with files in Files, RemoveFilesDialog asks first whether the project keeps them.
-  const handleCreateProject = (name: string, board: string) => {
+  // New File › Create project: with files in Files, RemoveFilesDialog asks first whether the project keeps them.
+  const handleCreateProject = (choice: NewProjectChoice) => {
     setDialog(null);
-    if (files.length === 0) createProject(name, board, []);
-    else setProjectToCreate({ name, board });
+    if (files.length === 0) removeFilesForNewProject(choice);
+    else setProjectToCreate(choice);
   };
 
-  /** A new project on `board`, listing `listed`, shown on the project settings. */
-  const createProject = (name: string, board: string, listed: readonly string[]) => {
+  /** A new project's top file: the chosen board's generated top, named after the board, in the language chosen. */
+  const boardTopFile = ({ board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
+    const definition = findBoard(catalog, board).board;
+    const name = starterTopFileName(definition, language, takenNames);
+    return { id: nextFileId(), name, folder: folderForUpload(name) ?? 'vhdl', content: generateBoardTop(definition, language, baseName(name)) };
+  };
+
+  /** A new project on `board`, listing `listed`, with `top` as its Top File, shown on the project settings. */
+  const createProject = (name: string, board: string, listed: readonly string[], top: VhdlFile) => {
     const created = newProject(name, listed, board);
     saveFolderRef.current = null;
     replaceProject(created);
+    showNewFile(top.id);
+    setTopFileId(top.id);
+    setTopUnit(null);
     setOverlay('project');
     appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings.`, 'success');
   };
 
   /**
-   * Keep files: the project lists the files now in Files. They are in the open project's
-   * board's names, so it starts on that board, and the change to the board chosen follows
-   * as any board change does: renames, hand edits and Undo (boardForNewProject).
+   * Keep files: the project lists the files now in Files, and the new top file. They are
+   * in the open project's board's names, so it starts on that board, and the change to
+   * the board chosen follows as any board change does: renames, hand edits and Undo.
    */
-  const keepFilesInNewProject = ({ name, board }: NewProjectRequest) => {
+  const keepFilesInNewProject = (choice: NewProjectChoice) => {
     setProjectToCreate(null);
-    createProject(name, project.board, fileNames);
-    if (board !== project.board) setBoardForNewProject(board);
+    const top = boardTopFile(choice, fileNames);
+    setFiles((prev) => [...prev, top]);
+    createProject(choice.name, project.board, [...fileNames, top.name], top);
+    if (choice.board !== project.board) setBoardForNewProject(choice.board);
   };
 
-  /** Remove files: Files starts again with the chosen board's starter files, and the project lists them. */
-  const removeFilesForNewProject = ({ name, board }: NewProjectRequest) => {
+  /** Remove files (or none there): Files holds only the new top file, and the project lists it. */
+  const removeFilesForNewProject = (choice: NewProjectChoice) => {
     setProjectToCreate(null);
     endRunQuietly();
-    const starters = starterFilesFor(findBoard(catalog, board).board).map((file) => ({ ...file, id: nextFileId() }));
-    appendLog(`Removed ${fileNames.length} file(s) from Files for the new project.`);
+    const top = boardTopFile(choice, []);
+    if (fileNames.length > 0) appendLog(`Removed ${fileNames.length} file(s) from Files for the new project.`);
     // As when a project is opened: nothing may still point at a removed file (top, pairs, diagnostics).
     for (const f of filesRef.current) dismissDiagnostics(f.id);
-    setFiles(starters);
+    setFiles([top]);
     tb.restoreOverrides(EMPTY_OVERRIDES);
     setEmptiedFolders([]);
-    setTopFileId(projectTopFile(starters)?.id ?? null);
-    setTopUnit(null);
-    showNewFile(starters[0].id);
-    createProject(name, board, starters.map((file) => file.name));
+    createProject(choice.name, choice.board, [top.name], top);
   };
 
   // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
@@ -1834,7 +1839,6 @@ export function Workbench() {
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
           onCreateProject={testbenchDesign ? undefined : handleCreateProject}
-          projectFileCount={files.length}
           openProjectName={project.name}
           boards={testbenchDesign ? undefined : catalog}
           initialBoard={activeBoard.id}
@@ -1848,7 +1852,7 @@ export function Workbench() {
         <RemoveFilesDialog
           projectName={projectToCreate.name}
           fileNames={fileNames}
-          boardName={findBoard(catalog, projectToCreate.board).board.name}
+          newFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [])}
           onKeep={() => keepFilesInNewProject(projectToCreate)}
           onRemove={() => removeFilesForNewProject(projectToCreate)}
           onCancel={() => setProjectToCreate(null)}

@@ -24,16 +24,12 @@ module starter_top (
     output wire        DP,
     output wire [7:0]  AN
 );
+    wire [6:0] HEX;
+    assign {CG, CF, CE, CD, CC, CB, CA} = HEX; // single segments as one vector: HEX[0] is segment a (CA)
     // The LEDs follow the switches.
     assign LED = SW[15:0];
     // The displays are off.
-    assign CA = 1'b1;
-    assign CB = 1'b1;
-    assign CC = 1'b1;
-    assign CD = 1'b1;
-    assign CE = 1'b1;
-    assign CF = 1'b1;
-    assign CG = 1'b1;
+    assign HEX = {7{1'b1}};
     assign DP = 1'b1;
     assign AN = {8{1'b1}};
 endmodule

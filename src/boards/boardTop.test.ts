@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_BOARDS, builtInBoard } from './boardCatalog';
-import { generateBoardTop, starterTopFileName, type TopLanguage } from './boardTop';
+import { BUILT_IN_BOARDS, builtInBoard, DEFAULT_BOARD } from './boardCatalog';
+import { boardTopName, generateBoardTop, starterTopFileName, type TopLanguage } from './boardTop';
 import type { BoardDefinition } from './types';
 
 const BASYS3 = builtInBoard('basys3');
@@ -46,9 +46,17 @@ describe('generateBoardTop', () => {
 
   it('turns every display part off at its inactive level', () => {
     const nexys = generateBoardTop(builtInBoard('nexys-a7'), 'vhdl', 't');
-    expect(nexys).toContain("CA <= '1';");
+    expect(nexys).toContain("HEX <= (others => '1');");
     expect(nexys).toContain("DP <= '1';");
     expect(nexys).toContain("AN <= (others => '1');");
+  });
+
+  it('drives scalar segments through one HEX word, bit 0 on segment a', () => {
+    const nexys = builtInBoard('nexys-a7');
+    expect(generateBoardTop(nexys, 'vhdl', 't')).toContain('signal HEX : std_logic_vector(6 downto 0);');
+    expect(generateBoardTop(nexys, 'vhdl', 't')).toContain('(CG, CF, CE, CD, CC, CB, CA) <= HEX;');
+    expect(generateBoardTop(nexys, 'verilog', 't')).toContain('assign {CG, CF, CE, CD, CC, CB, CA} = HEX;');
+    expect(generateBoardTop(BASYS3, 'vhdl', 't')).not.toContain('HEX');
   });
 
   it('marks the 500 Hz clock as simulator only, and names the board and its resources', () => {
@@ -69,7 +77,15 @@ describe('generateBoardTop', () => {
 
 describe('starterTopFileName', () => {
   it('is named after the board, and free', () => {
-    expect(starterTopFileName(BASYS3, 'vhdl', [])).toBe('basys3_top.vhdl');
-    expect(starterTopFileName(builtInBoard('nexys-a7'), 'verilog', ['Nexys_A7_top.v'])).toBe('nexys_a7_top_2.v');
+    expect(starterTopFileName(BASYS3, 'vhdl', [])).toBe('Basys_3.vhdl');
+    expect(starterTopFileName(builtInBoard('nexys-a7'), 'verilog', ['nexys_a7.v'])).toBe('Nexys_A7_2.v');
+    expect(starterTopFileName(builtInBoard('de10-lite'), 'vhdl', [])).toBe('DE10_Lite.vhdl');
+    expect(starterTopFileName(DEFAULT_BOARD, 'verilog', [])).toBe('DE1_SoC.v');
+  });
+
+  it('makes a valid identifier of any board name', () => {
+    const named = (name: string) => boardTopName({ ...BASYS3, id: 'x', name });
+    expect(named('9 Lab — rev B')).toBe('board_9_Lab_rev_B');
+    expect(named('Signal')).toBe('Signal_top');
   });
 });

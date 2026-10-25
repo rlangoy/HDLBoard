@@ -11,8 +11,8 @@ export interface RemoveFilesDialogProps {
   projectName: string;
   /** The files now in Files. */
   fileNames: readonly string[];
-  /** The new project's board, by name: what a project started without the files gets a starter file for. */
-  boardName: string;
+  /** The new project's top file, which a project started without the files holds alone. */
+  newFileName: string;
   onKeep: () => void;
   onRemove: () => void;
   onCancel: () => void;
@@ -26,7 +26,7 @@ const LISTED_FILES = 8;
  * without them? Removing takes them out of Files only — files saved on disk or in a gist
  * stay there — so the dialog says that unsaved changes are lost. Cancel creates nothing.
  */
-export function RemoveFilesDialog({ projectName, fileNames, boardName, onKeep, onRemove, onCancel }: RemoveFilesDialogProps) {
+export function RemoveFilesDialog({ projectName, fileNames, newFileName, onKeep, onRemove, onCancel }: RemoveFilesDialogProps) {
   return (
     <Dialog
       open
@@ -50,7 +50,7 @@ export function RemoveFilesDialog({ projectName, fileNames, boardName, onKeep, o
       }
     >
       <FileList fileNames={fileNames} />
-      <Choices boardName={boardName} />
+      <Choices newFileName={newFileName} />
     </Dialog>
   );
 }
@@ -75,18 +75,18 @@ function FileList({ fileNames }: { fileNames: readonly string[] }) {
 }
 
 /** What each button does, in its own words. */
-function Choices({ boardName }: { boardName: string }) {
+function Choices({ newFileName }: { newFileName: string }) {
   return (
     <dl className="wb-boardchange__choices">
       <div>
         <dt>Keep files</dt>
-        <dd>The new project lists them.</dd>
+        <dd>The new project lists them, and {newFileName}.</dd>
       </div>
       <div>
         <dt>Remove files</dt>
         <dd>
-          They leave Files, and the new project starts with a starter file for the {boardName} board. Copies saved on
-          disk or on GitHub are not touched; changes not saved are lost.
+          They leave Files, and the new project starts with {newFileName} alone. Copies saved on disk or on GitHub are
+          not touched; changes not saved are lost.
         </dd>
       </div>
     </dl>

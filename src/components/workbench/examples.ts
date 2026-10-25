@@ -11,7 +11,7 @@
 
 import { languageOfName } from './fileKinds';
 import { EXAMPLE_FILES, STARTER_FILES, type VhdlFile } from './files';
-import { generateBoardTop } from '../../boards/boardTop';
+import { boardTopName, generateBoardTop } from '../../boards/boardTop';
 import { translateFromDefault, type Translation } from '../../boards/renamePorts';
 import { isDefaultShape } from '../../boards/shapeChange';
 import type { BoardDefinition } from '../../boards/types';
@@ -177,17 +177,19 @@ function onBoard(source: VhdlFile, board: BoardDefinition): Translation {
 /**
  * The files a fresh workspace starts with, in `board`'s port names. One whose names clash
  * with the board's stays in the Default names; the run's mismatch hint then offers the way out.
- * A board of another shape gets its generated starter top, under the same names and ids (§ 5.4).
+ * A board of another shape gets its generated top instead, under the same ids, named
+ * after the board (`Nexys_A7.vhdl`, `Nexys_A7.v`) as the entity or module in it (§ 5.4).
  */
 export function starterFilesFor(board: BoardDefinition): VhdlFile[] {
-  if (!isDefaultShape(board.ports)) return STARTER_FILES.map((file) => ({ ...file, content: generatedStarter(file, board) }));
+  if (!isDefaultShape(board.ports)) return STARTER_FILES.map((file) => generatedStarter(file, board));
   return STARTER_FILES.map((file) => ({ ...file, content: onBoard(file, board).text }));
 }
 
-/** A starter file's generated top on `board`, named after the file, in the file's language. */
-function generatedStarter(file: VhdlFile, board: BoardDefinition): string {
+/** A starter file as `board`'s generated top, in the file's language. */
+function generatedStarter(file: VhdlFile, board: BoardDefinition): VhdlFile {
   const language = languageOfName(file.name) ?? 'vhdl';
-  return generateBoardTop(board, language, file.name.replace(/\.[^.]+$/, ''));
+  const name = boardTopName(board);
+  return { ...file, name: `${name}${file.name.slice(file.name.lastIndexOf('.'))}`, content: generateBoardTop(board, language, name) };
 }
 
 /** The description of the example `fileId` is the first file of, else of `example`, which it came with. */

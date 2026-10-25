@@ -31,17 +31,14 @@ entity starter_top is
 end entity;
 
 architecture rtl of starter_top is
+    signal HEX : std_logic_vector(6 downto 0);
 begin
     -- The LEDs follow the switches.
     LED <= SW(15 downto 0);
+
+    (CG, CF, CE, CD, CC, CB, CA) <= HEX; -- single segments as one vector: HEX(0) is segment a (CA)
     -- The displays are off.
-    CA <= '1';
-    CB <= '1';
-    CC <= '1';
-    CD <= '1';
-    CE <= '1';
-    CF <= '1';
-    CG <= '1';
+    HEX <= (others => '1');
     DP <= '1';
     AN <= (others => '1');
 end architecture;
