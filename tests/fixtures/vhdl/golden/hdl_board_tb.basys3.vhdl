@@ -80,12 +80,18 @@ begin
   -- A multiplexed display, decoded into stable digits (docs/board_io_v2_spec.md § 7.4):
   -- each digit keeps the segments it showed while enabled, for DISPLAY_PERSIST.
   mux_capture : process (seg_sig, dp_sig, an_sig)
+    variable was_on : std_logic_vector(3 downto 0) := (others => '0');
   begin
     for d in 0 to 3 loop
       if an_sig(d) = AN_ON then
         digit_word(d) <= dp_sig & seg_sig;
         digit_last(d) <= now;
         digit_seen(d) <= '1';
+        was_on(d) := '1';
+      elsif was_on(d) = '1' then
+        -- Switched off: the hold of DISPLAY_PERSIST starts now.
+        digit_last(d) <= now;
+        was_on(d) := '0';
       end if;
     end loop;
   end process;

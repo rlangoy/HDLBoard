@@ -22,12 +22,18 @@ module hdl_board_tb;
   basys_top uut (.clk(clk_sig), .CLOCK_500Hz(clk500_sig), .sw(sw_sig), .btnC(key_sig[0]), .btnU(key_sig[1]), .btnL(key_sig[2]), .btnR(key_sig[3]), .btnD(key_sig[4]), .led(ledr_sig), .seg(seg_sig), .dp(dp_sig), .an(an_sig));
 
   integer capture_digit;
+  reg [3:0] digit_on = 0;
   always @(seg_sig or dp_sig or an_sig)
     for (capture_digit = 0; capture_digit < 4; capture_digit = capture_digit + 1)
       if (an_sig[capture_digit] === AN_ON) begin
         digit_word[capture_digit] = {dp_sig, seg_sig};
         digit_last[capture_digit] = $time;
         digit_seen[capture_digit] = 1'b1;
+        digit_on[capture_digit] = 1'b1;
+      end else if (digit_on[capture_digit]) begin
+        // Switched off: the hold of DISPLAY_PERSIST starts now.
+        digit_last[capture_digit] = $time;
+        digit_on[capture_digit] = 1'b0;
       end
 
   // Enabled: the live segments. Unknown enable: X. Refreshed lately: the latched word. Else off.

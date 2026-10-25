@@ -23,12 +23,18 @@ module hdl_board_tb;
   nexys_top uut (.CLK100MHZ(clk_sig), .CLOCK_500Hz(clk500_sig), .SW(sw_sig), .BTNC(key_sig[0]), .BTNU(key_sig[1]), .BTNL(key_sig[2]), .BTNR(key_sig[3]), .BTND(key_sig[4]), .CPU_RESETN(rstbtn_sig), .LED(ledr_sig), .CA(seg_sig[0]), .CB(seg_sig[1]), .CC(seg_sig[2]), .CD(seg_sig[3]), .CE(seg_sig[4]), .CF(seg_sig[5]), .CG(seg_sig[6]), .DP(dp_sig), .AN(an_sig));
 
   integer capture_digit;
+  reg [7:0] digit_on = 0;
   always @(seg_sig or dp_sig or an_sig)
     for (capture_digit = 0; capture_digit < 8; capture_digit = capture_digit + 1)
       if (an_sig[capture_digit] === AN_ON) begin
         digit_word[capture_digit] = {dp_sig, seg_sig};
         digit_last[capture_digit] = $time;
         digit_seen[capture_digit] = 1'b1;
+        digit_on[capture_digit] = 1'b1;
+      end else if (digit_on[capture_digit]) begin
+        // Switched off: the hold of DISPLAY_PERSIST starts now.
+        digit_last[capture_digit] = $time;
+        digit_on[capture_digit] = 1'b0;
       end
 
   // Enabled: the live segments. Unknown enable: X. Refreshed lately: the latched word. Else off.

@@ -17,7 +17,7 @@ import { BASYS3_BOARD_IO, boardFromFrame, DE10_LITE_BOARD_IO, MUX_NO_POINT_BOARD
 import type { FixtureLanguage } from '../testSupport/fixture.js';
 import { backendOptionsFor, icarusForTests } from '../testSupport/icarus.js';
 import { requireTool } from '../testSupport/requireTool.js';
-import { BASYS3_DESIGN, BASYS3_REFRESH_DESIGN, DE10_LITE_DESIGN, NEXYS_A7_DESIGN, type ShapeDesign } from '../testSupport/shapeDesigns.js';
+import { BASYS3_DESIGN, BASYS3_REFRESH_DESIGN, BASYS3_SLOW_SCAN_DESIGN, DE10_LITE_DESIGN, NEXYS_A7_DESIGN, type ShapeDesign } from '../testSupport/shapeDesigns.js';
 import { startTestBackend, type TestBackend } from '../testSupport/testBackend.js';
 import { startRun, withSession as withSessionOn } from '../testSupport/withSession.js';
 import type { WsTestClient } from '../testSupport/WsTestClient.js';
@@ -148,6 +148,17 @@ describe('Boards of other shapes', { skip }, () => {
         await untilState(client, leds + '11000000' + '11111001' + '10100100' + '10110000');
         client.stim('0'.repeat(21));
         await untilState(client, leds + OFF_8.repeat(4));
+      }));
+
+    test(`a digit switched off stays lit for 75 ms from then, not from when it was switched on (${language})`, () =>
+      withSession(async (client) => {
+        const design = BASYS3_SLOW_SCAN_DESIGN[language];
+        const leds = '0'.repeat(16);
+        client.board(BASYS3_BOARD_IO);
+        await startRun(client, [design], design.name);
+        await untilState(client, leds + ONE_WITH_POINT_OFF + OFF_8.repeat(3));
+        await untilState(client, leds + ONE_WITH_POINT_OFF + ONE_WITH_POINT_OFF + OFF_8.repeat(2));
+        await untilState(client, leds + OFF_8 + ONE_WITH_POINT_OFF + OFF_8.repeat(2));
       }));
 
     test(`an undriven digit enable shows that display as X (${language})`, () =>

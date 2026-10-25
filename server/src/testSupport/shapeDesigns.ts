@@ -216,3 +216,53 @@ endmodule
 `,
   },
 };
+
+/**
+ * Digit 0 held on for 100 ms (50 ticks of the 500 Hz clock), then digit 1 instead: a scan
+ * slower than DISPLAY_PERSIST. Digit 0 must stay lit for 75 ms after it is switched off,
+ * not go dark at once because it was switched on more than 75 ms before.
+ */
+export const BASYS3_SLOW_SCAN_DESIGN: Designs = {
+  vhdl: {
+    name: 'slowscan.vhdl',
+    content: `library ieee;
+use ieee.std_logic_1164.all;
+
+entity slowscan is
+  port (
+    CLOCK_500Hz : in  std_logic;
+    seg : out std_logic_vector(6 downto 0);
+    an  : out std_logic_vector(3 downto 0)
+  );
+end entity;
+
+architecture rtl of slowscan is
+  signal ticks : integer range 0 to 50 := 0;
+begin
+  process (CLOCK_500Hz)
+  begin
+    if rising_edge(CLOCK_500Hz) and ticks < 50 then
+      ticks <= ticks + 1;
+    end if;
+  end process;
+
+  seg <= "1111001";
+  an  <= "1110" when ticks < 50 else "1101";
+end architecture;
+`,
+  },
+  verilog: {
+    name: 'slowscan.v',
+    content: `module slowscan(
+  input  wire       CLOCK_500Hz,
+  output wire [6:0] seg,
+  output wire [3:0] an
+);
+  reg [5:0] ticks = 6'd0;
+  always @(posedge CLOCK_500Hz) if (ticks < 6'd50) ticks <= ticks + 6'd1;
+  assign seg = 7'b1111001;
+  assign an = (ticks < 6'd50) ? 4'b1110 : 4'b1101;
+endmodule
+`,
+  },
+};

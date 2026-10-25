@@ -23,7 +23,8 @@ import type { BoardDefinition } from '../../boards/types';
 export interface BoardIo {
   readonly inputs: BoardInputs;
   readonly outputs: BoardOutputs;
-  setInputs(next: BoardInputs): void;
+  /** Merges `changed` into the latest inputs (not the last render's) and returns the result. */
+  setInputs(changed: Partial<BoardInputs>): BoardInputs;
   /** The `STIM` payload for the inputs as they are now. */
   stimBits(): string;
   /** A `STATE` payload, shown on the board; a payload of the wrong length is dropped. */
@@ -40,9 +41,13 @@ export function useBoardIo(board: BoardDefinition): BoardIo {
   const [outputs, setOutputs] = useState(() => outputsOff(board.ports));
   const warnedAboutDrop = useRef(false);
 
-  const setInputs = useCallback((next: BoardInputs) => {
+  // Merged into the ref, not the rendered state: a switch flip and a key press before the
+  // next render must not undo each other.
+  const setInputs = useCallback((changed: Partial<BoardInputs>) => {
+    const next = { ...inputsRef.current, ...changed };
     inputsRef.current = next;
     setInputsState(next);
+    return next;
   }, []);
 
   // Another board: inputs kept when they mean the same there (Default ↔ DE1-SoC), else at rest.

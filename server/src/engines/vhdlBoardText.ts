@@ -163,12 +163,18 @@ export function decoderProcess(board: BoardIo): string {
   -- A multiplexed display, decoded into stable digits (docs/board_io_v2_spec.md § 7.4):
   -- each digit keeps the segments it showed while enabled, for DISPLAY_PERSIST.
   mux_capture : process (${sensitivity})
+    variable was_on : std_logic_vector(${displays.digits - 1} downto 0) := (others => '0');
   begin
     for d in 0 to ${displays.digits - 1} loop
       if an_sig(d) = AN_ON then
         digit_word(d) <= ${liveWord(displays)};
         digit_last(d) <= now;
         digit_seen(d) <= '1';
+        was_on(d) := '1';
+      elsif was_on(d) = '1' then
+        -- Switched off: the hold of DISPLAY_PERSIST starts now.
+        digit_last(d) <= now;
+        was_on(d) := '0';
       end if;
     end loop;
   end process;`;

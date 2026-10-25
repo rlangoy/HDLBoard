@@ -98,7 +98,7 @@ export function stimSlices(board: BoardIo): string {
   let high = stimLength(board) - 1;
   return stimFields(board)
     .map(({ signal, width }) => {
-      const slice = width === 1 && signal === 'rstbtn_sig' ? `rec[${high}]` : `rec[${high}:${high - width + 1}]`;
+      const slice = width === 1 ? `rec[${high}]` : `rec[${high}:${high - width + 1}]`;
       high -= width;
       return `              ${signal} = ${slice};`;
     })
@@ -149,12 +149,18 @@ export function decoderSection(board: BoardIo): string {
   const width = displayWordWidth(board);
   const sensitivity = displays.decimalPoint === undefined ? 'seg_sig or an_sig' : 'seg_sig or dp_sig or an_sig';
   return `  integer capture_digit;
+  reg [${displays.digits - 1}:0] digit_on = 0;
   always @(${sensitivity})
     for (capture_digit = 0; capture_digit < ${displays.digits}; capture_digit = capture_digit + 1)
       if (an_sig[capture_digit] === AN_ON) begin
         digit_word[capture_digit] = ${liveWord(displays)};
         digit_last[capture_digit] = $time;
         digit_seen[capture_digit] = 1'b1;
+        digit_on[capture_digit] = 1'b1;
+      end else if (digit_on[capture_digit]) begin
+        // Switched off: the hold of DISPLAY_PERSIST starts now.
+        digit_last[capture_digit] = $time;
+        digit_on[capture_digit] = 1'b0;
       end
 
   // Enabled: the live segments. Unknown enable: X. Refreshed lately: the latched word. Else off.

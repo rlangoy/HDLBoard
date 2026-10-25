@@ -33,7 +33,7 @@ import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
 import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
-import { describeStimFields, stateLength, stimLength } from './engines/boardShape.js';
+import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
@@ -395,7 +395,7 @@ export class Session {
       return;
     }
     const { board } = decoded;
-    this.runBoard = board;
+    this.setRunBoard(board);
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
@@ -418,6 +418,16 @@ export class Session {
     for (const message of prepared.plan.messages) this.send({ verb: 'LOG', text: message });
     if (prepared.plan.mode === 'batch') this.startBatchRun(engine, prepared.plan);
     else this.startRun(engine, prepared.plan);
+  }
+
+  /**
+   * The board of the run starting now. The last inputs are replayed into the next run
+   * (`startRun`); on a board where they mean something else they would press buttons or
+   * set switches nobody touched, so they are dropped.
+   */
+  private setRunBoard(board: BoardIo): void {
+    if (!sameStimMeaning(this.runBoard, board)) this.lastStimBits = null;
+    this.runBoard = board;
   }
 
   private failRun(stage: ErrorStage, text: string): void {

@@ -67,6 +67,12 @@ const totalWidth = (fields: readonly { width: number }[]): number => fields.redu
 export const stimLength = (board: BoardIo): number => totalWidth(stimFields(board));
 export const stateLength = (board: BoardIo): number => totalWidth(stateFields(board));
 
+/** Whether a `STIM` written for board `a` means the same on board `b`: the same fields and polarities. */
+export function sameStimMeaning(a: BoardIo, b: BoardIo): boolean {
+  const sameFields = describeStimFields(a) === describeStimFields(b);
+  return sameFields && a.pushbuttons.activeLow === b.pushbuttons.activeLow && a.resetButton?.activeLow === b.resetButton?.activeLow;
+}
+
 /** `switches 16 + buttons 5`: what a `STIM` of this board is made of, for the length error. */
 export function describeStimFields(board: BoardIo): string {
   return stimFields(board)

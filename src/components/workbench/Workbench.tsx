@@ -1458,8 +1458,8 @@ export function Workbench() {
 
   // The next value is sent, never the inputs state variable: React state isn't updated
   // synchronously, so the stale value would leave the board one flip behind (§ 8.3).
-  const handleBoardInputsChange = (next: BoardInputs) => {
-    boardIo.setInputs(next);
+  const handleBoardInputsChange = (changed: Partial<BoardInputs>) => {
+    const next = boardIo.setInputs(changed);
     getClient().stim(encodeStim(activeBoard.ports, next));
   };
 
@@ -1644,8 +1644,11 @@ export function Workbench() {
   useEffect(() => {
     if (boardForNewProject === null) return;
     setBoardForNewProject(null);
-    boardChange.requestBoardChange(boardForNewProject);
-  }, [boardForNewProject, boardChange]);
+    // Refused only while the project is busy: say so, so the board chosen is not lost without a word.
+    if (!boardChange.requestBoardChange(boardForNewProject)) {
+      appendLog(`The new project stays on ${activeBoard.name} for now: choose ${findBoard(catalog, boardForNewProject).board.name} in Settings › Board.`, 'error');
+    }
+  }, [boardForNewProject, boardChange, appendLog, activeBoard, catalog]);
 
   // Settings closes only for a change that happens: the question takes its place, or the board just changes.
   const handleBoardChosenInSettings = (id: string) => {

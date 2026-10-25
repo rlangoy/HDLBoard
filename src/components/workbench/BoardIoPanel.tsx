@@ -15,7 +15,8 @@ export interface BoardIoPanelProps {
   board: BoardDefinition;
   outputs: BoardOutputs;
   inputs: BoardInputs;
-  onInputsChange: (next: BoardInputs) => void;
+  /** The inputs that changed; the others keep their latest values, even before the next render. */
+  onInputsChange: (changed: Partial<BoardInputs>) => void;
 }
 
 /**
@@ -41,7 +42,7 @@ export function BoardIoPanel({ board, outputs, inputs, onInputsChange }: BoardIo
       <Switches
         value={inputs.switches}
         count={ports.switches.count}
-        onChange={(switches) => onInputsChange({ ...inputs, switches })}
+        onChange={(switches) => onInputsChange({ switches })}
         name={labels.switches}
         title={switchesTitle(ports.switches)}
       />
@@ -58,7 +59,7 @@ function ButtonsPart({ board, inputs, onInputsChange }: PartProps) {
   const { pushbuttons } = ports;
   const shared = {
     value: inputs.buttons,
-    onChange: (buttons: BitVector) => onInputsChange({ ...inputs, buttons }),
+    onChange: (buttons: BitVector) => onInputsChange({ buttons }),
     activeLow: pushbuttons.activeLow,
     name: labels.pushbuttons,
     title: buttonsTitle(pushbuttons),
@@ -78,7 +79,7 @@ function ResetPart({ board, inputs, onInputsChange }: PartProps) {
       value={inputs.reset[0] ?? releasedLevel(reset.activeLow)}
       activeLow={reset.activeLow}
       label={reset.port}
-      onChange={(level) => onInputsChange({ ...inputs, reset: [level] })}
+      onChange={(level) => onInputsChange({ reset: [level] })}
     />
   );
 }
