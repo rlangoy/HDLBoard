@@ -50,7 +50,7 @@ export const BOARD_TEXT = {
     'This simulation backend is older than this page and simulates with the Default names only. ' +
     'Update HDLBoard (Windows: install the new version; Docker: pull the new backend image).',
   oldBackendShape:
-    `The simulator backend is older than this page and supports only boards with ${DEFAULT_SHAPE_SUMMARY}. ` +
+    `The simulator backend is older than this page and supports only boards with ${DEFAULT_SHAPE_SUMMARY} and a ${DEFAULT_SHAPE.clock.mhz} MHz clock. ` +
     'Update HDLBoard, or choose Default or DE1-SoC.',
 } as const;
 
@@ -110,6 +110,11 @@ export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]):
 /** The lead of a change between boards of different shapes (§ 5.3). */
 export function differentIo(to: BoardDefinition): string {
   return `These boards have different I/O. Your design will not run on ${to.name} until the changes listed below are made.`;
+}
+
+/** The lead of a change between boards that differ only in their clock: the design runs, its timing changes. */
+export function differentClock(to: BoardDefinition): string {
+  return `These boards have a different clock. Your design runs on ${to.name}, but anything that counts clock cycles runs at another speed until the change below is made.`;
 }
 
 /** `Your files use the Default board's port names.` */
@@ -218,6 +223,13 @@ export function renameFilesTo(board: BoardDefinition): string {
  * and the width check's `but the board has 16 switches` becomes `but the Basys 3 board has …`.
  */
 export function withBoardName(text: string, boardName: string): string {
-  const named = text.replace(/the board has/g, `the ${boardName} board has`);
-  return named.startsWith('STIM needs') ? `${boardName}: ${named}` : named;
+  if (text.startsWith('STIM needs')) return `${boardName}: ${text}`;
+  return text.replace(WIDTH_CHECK_LINE, (line) => line.replace(BOARD_HAS, `the ${boardName} board has`));
 }
+
+/**
+ * A line of HDLBoard's own width check (server/src/engines/boardShapeCheck.ts), and only
+ * such a line: a student's own report text that says "the board has" is left alone.
+ */
+const WIDTH_CHECK_LINE = /^.*(?:is declared as .*, but the board has|^Note: .* has a width HDLBoard cannot read|^Warning: .* is declared as .*, but the board has).*$/gm;
+const BOARD_HAS = 'the board has';

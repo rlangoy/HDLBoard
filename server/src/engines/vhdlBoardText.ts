@@ -19,7 +19,7 @@ import {
   type SevenSegment,
 } from './boardPorts.js';
 import { SEGMENT_COUNT, SEGMENT_COUNT_WITH_POINT } from './boardLimits.js';
-import { displayWordWidth, stimFields, type StimField } from './boardShape.js';
+import { buttonCount, displayWordWidth, stimFields, type StimField } from './boardShape.js';
 import { clockHalfPeriodPs, DISPLAY_PERSIST_MS, vhdlTime } from './boardTiming.js';
 
 /** `'1'` for an active-low part at rest or off, else `'0'`. */
@@ -50,14 +50,12 @@ function displaySignals(displays: SevenSegment): string[] {
 /** Every testbench-side board signal, at the level its part rests at or is off at. */
 export function signalDeclarations(board: BoardIo): string {
   const reset = board.resetButton === undefined ? [] : [`  signal rstbtn_sig : std_logic := ${offLevel(board.resetButton.activeLow)};`];
-  const buttons = board.pushbuttons;
-  const width = buttons.group.kind === 'vector' ? buttons.group.count : buttons.group.ports.length;
   return [
     "  signal clk_sig    : std_logic := '0';",
     "  signal clk500_sig : std_logic := '0';",
     "  signal rst_sig    : std_logic := '0';",
     `  signal sw_sig     : ${vector(board.switches.count)} := (others => '0');`,
-    `  signal key_sig    : ${vector(width)} := (others => ${offLevel(buttons.activeLow)});`,
+    `  signal key_sig    : ${vector(buttonCount(board))} := (others => ${offLevel(board.pushbuttons.activeLow)});`,
     ...reset,
     `  signal ledr_sig   : ${vector(board.leds.count)} := (others => '0');`,
     ...displaySignals(board.sevenSegment),

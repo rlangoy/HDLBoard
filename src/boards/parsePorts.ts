@@ -101,9 +101,9 @@ function readButtons(value: unknown): ButtonGroup {
   const activeLow = booleanAt(`${path}.activeLow`, buttons.activeLow, ACTIVE_LOW_BY_DEFAULT);
   const forms = ['port', 'ports', 'cross'].filter((form) => buttons[form] !== undefined);
   if (forms.length !== 1) fail(`${path} needs exactly one of "port" (with "count"), "ports" or "cross"`);
+  if (buttons.port === undefined && buttons.count !== undefined) fail(`${path}.count goes with "port" only; a list of "ports" or a "cross" is counted`);
   if (buttons.cross !== undefined) return { group: readCross(`${path}.cross`, buttons.cross), activeLow, layout: 'cross' };
   if (buttons.ports !== undefined) {
-    if (buttons.count !== undefined) fail(`${path}.count goes with "port" only; a list of "ports" is counted`);
     return { group: { kind: 'scalars', ports: namesAt(`${path}.ports`, buttons.ports, BUTTON_LIMIT) }, activeLow, layout: 'row' };
   }
   if (buttons.count === undefined) fail(`${path}.count is missing`);

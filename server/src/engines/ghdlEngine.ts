@@ -139,7 +139,8 @@ interface BoardTop {
 function declaredPorts(source: TopSource): DeclaredPort[] {
   return portDeclarations(source.content, source.entityName).map((port) => {
     const { line, column } = ghdlPosition(source.content, port.offset);
-    return { name: port.name, declaration: port.declaration, width: port.width, location: `${source.fileName}:${line}:${column}:` };
+    const location = `${source.fileName}:${line}:${column}:`;
+    return { name: port.name, declaration: port.declaration, width: port.width, vector: port.width === undefined ? undefined : port.constrained, location };
   });
 }
 

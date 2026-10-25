@@ -15,7 +15,7 @@
  */
 
 import { groupNames } from './boardShape';
-import { isDefaultShape } from './shapeChange';
+import { DEFAULT_SHAPE, isDefaultShape } from './shapeChange';
 import type { BoardPorts, PortGroup, SevenSegment } from './types';
 
 export const BOARD_VERB = 'BOARD';
@@ -60,12 +60,20 @@ export function encodeBoardFrame(ports: BoardPorts): string {
 }
 
 /**
+ * Whether the 1.6 frame can carry this board: the Default shape at the Default clock.
+ * Version 1 has no frequency, so an older backend would run any other clock at 50 MHz.
+ */
+export function fitsV1BoardFrame(ports: BoardPorts): boolean {
+  return isDefaultShape(ports) && ports.sevenSegment.kind === 'independent' && ports.clock.mhz === DEFAULT_SHAPE.clock.mhz;
+}
+
+/**
  * The 1.6 frame, one line per role, for a backend that speaks protocol 2. Only a board
- * of the Default shape fits it; asking for another is a bug in the caller.
+ * that `fitsV1BoardFrame` can be sent in it; asking for another is a bug in the caller.
  */
 export function encodeV1BoardFrame(ports: BoardPorts): string {
-  if (!isDefaultShape(ports) || ports.sevenSegment.kind !== 'independent') {
-    throw new Error('A version-1 BOARD frame carries only a board of the Default shape');
+  if (!fitsV1BoardFrame(ports) || ports.sevenSegment.kind !== 'independent') {
+    throw new Error('A version-1 BOARD frame carries only a board of the Default shape at 50 MHz');
   }
   const lines = [
     `clock50 ${ports.clock.port}`,

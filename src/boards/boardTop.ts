@@ -17,35 +17,40 @@ export type TopLanguage = 'vhdl' | 'verilog';
 
 const SIMULATOR_ONLY = 'Simulator only (HDLBoard): delete this port before synthesis.';
 
-/** One port of the top: its name, direction and width (1 = a scalar). */
+/**
+ * One port of the top: its name, direction and width. A vector stays a vector at width 1
+ * (`std_logic_vector(0 downto 0)`), as the generated testbench declares it.
+ */
 interface TopPort {
   readonly name: string;
   readonly direction: 'in' | 'out';
   readonly width: number;
+  readonly vector: boolean;
   readonly note?: string;
 }
 
-const scalar = (name: string, direction: TopPort['direction']): TopPort => ({ name, direction, width: 1 });
+const scalar = (name: string, direction: TopPort['direction']): TopPort => ({ name, direction, width: 1, vector: false });
+const vectorPort = (name: string, direction: TopPort['direction'], width: number): TopPort => ({ name, direction, width, vector: true });
 
 function displayPorts(displays: SevenSegment): TopPort[] {
-  if (displays.kind === 'independent') return displays.ports.map((name) => ({ name, direction: 'out', width: displays.width }));
+  if (displays.kind === 'independent') return displays.ports.map((name) => vectorPort(name, 'out', displays.width));
   const segments: TopPort[] =
-    displays.segments.kind === 'vector' ? [{ name: displays.segments.port, direction: 'out', width: SEGMENT_COUNT }] : displays.segments.ports.map((name) => scalar(name, 'out'));
+    displays.segments.kind === 'vector' ? [vectorPort(displays.segments.port, 'out', SEGMENT_COUNT)] : displays.segments.ports.map((name) => scalar(name, 'out'));
   const point = displays.decimalPoint === undefined ? [] : [scalar(displays.decimalPoint, 'out')];
-  return [...segments, ...point, { name: displays.digitEnables, direction: 'out', width: displays.digits }];
+  return [...segments, ...point, vectorPort(displays.digitEnables, 'out', displays.digits)];
 }
 
 /** Every port of the board, in the order the starter files declare them. */
 function topPorts(ports: BoardPorts): TopPort[] {
   const { group } = ports.pushbuttons;
-  const buttons: TopPort[] = group.kind === 'vector' ? [{ name: group.port, direction: 'in', width: group.count }] : groupNames(group).map((name) => scalar(name, 'in'));
+  const buttons: TopPort[] = group.kind === 'vector' ? [vectorPort(group.port, 'in', group.count)] : groupNames(group).map((name) => scalar(name, 'in'));
   return [
     scalar(ports.clock.port, 'in'),
     { ...scalar(ports.clock500Hz, 'in'), note: SIMULATOR_ONLY },
-    { name: ports.switches.port, direction: 'in', width: ports.switches.count },
+    vectorPort(ports.switches.port, 'in', ports.switches.count),
     ...buttons,
     ...(ports.resetButton === undefined ? [] : [scalar(ports.resetButton.port, 'in')]),
-    { name: ports.leds.port, direction: 'out', width: ports.leds.count },
+    vectorPort(ports.leds.port, 'out', ports.leds.count),
     ...displayPorts(ports.sevenSegment),
   ];
 }
@@ -58,8 +63,8 @@ interface Assignment {
 }
 
 const bit = (level: 0 | 1): Pick<Assignment, 'vhdl' | 'verilog'> => ({ vhdl: `'${level}'`, verilog: `1'b${level}` });
-const allBits = (level: 0 | 1, width: number): Pick<Assignment, 'vhdl' | 'verilog'> =>
-  width === 1 ? bit(level) : { vhdl: `(others => '${level}')`, verilog: `{${width}{1'b${level}}}` };
+const allBits = (level: 0 | 1, port: TopPort): Pick<Assignment, 'vhdl' | 'verilog'> =>
+  port.vector ? { vhdl: `(others => '${level}')`, verilog: `{${port.width}{1'b${level}}}` } : bit(level);
 
 /** The LEDs follow the switches: as many as there are, the rest held at 0. */
 function ledsFollowSwitches({ switches, leds }: BoardPorts): Assignment {
@@ -79,9 +84,9 @@ function displaysOff(ports: BoardPorts): Assignment[] {
   const displays = ports.sevenSegment;
   const segmentOff = displays.activeLow ? 1 : 0;
   const outputs = displayPorts(displays);
-  if (displays.kind === 'independent') return outputs.map((port) => ({ target: port.name, ...allBits(segmentOff, port.width) }));
+  if (displays.kind === 'independent') return outputs.map((port) => ({ target: port.name, ...allBits(segmentOff, port) }));
   const enableOff = displays.digitEnablesActiveLow ? 1 : 0;
-  return outputs.map((port) => ({ target: port.name, ...allBits(port.name === displays.digitEnables ? enableOff : segmentOff, port.width) }));
+  return outputs.map((port) => ({ target: port.name, ...allBits(port.name === displays.digitEnables ? enableOff : segmentOff, port) }));
 }
 
 const polarity = (activeLow: boolean): string => (activeLow ? 'active low' : 'active high');
@@ -103,7 +108,7 @@ function headerLines(board: BoardDefinition): string[] {
 function vhdlPortLines(ports: readonly TopPort[]): string[] {
   const nameWidth = Math.max(...ports.map((port) => port.name.length));
   return ports.map((port, index) => {
-    const type = port.width === 1 ? 'std_logic' : `std_logic_vector(${port.width - 1} downto 0)`;
+    const type = port.vector ? `std_logic_vector(${port.width - 1} downto 0)` : 'std_logic';
     const end = index === ports.length - 1 ? '' : ';';
     const note = port.note === undefined ? '' : ` -- ${port.note}`;
     return `        ${port.name.padEnd(nameWidth)} : ${port.direction.padEnd('out'.length)} ${type}${end}${note}`;
@@ -137,7 +142,7 @@ function vhdlTop(board: BoardDefinition, name: string): string {
 // --- Verilog -----------------------------------------------------------------------
 
 function verilogPortLines(ports: readonly TopPort[]): string[] {
-  const ranges = ports.map((port) => (port.width === 1 ? '' : `[${port.width - 1}:0]`));
+  const ranges = ports.map((port) => (port.vector ? `[${port.width - 1}:0]` : ''));
   const rangeWidth = Math.max(...ranges.map((range) => range.length));
   return ports.map((port, index) => {
     const direction = port.direction === 'in' ? 'input ' : 'output';

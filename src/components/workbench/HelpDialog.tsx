@@ -3,7 +3,8 @@
 
 import { DISPLAY_PERSIST_MS } from '../../boards/boardLimits';
 import { sevenSegmentPattern } from '../../boards/boardPortText';
-import type { BoardDefinition, SevenSegment } from '../../boards/types';
+import { hasDecimalPoint } from '../../boards/boardShape';
+import type { BoardDefinition, BoardPorts, SevenSegment } from '../../boards/types';
 import { BoardResourceLinks } from './BoardResourceLinks';
 import { Dialog } from './Dialog';
 import { CHEAT_SHEET, GUIDES, REFERENCES, type HelpResource } from './helpResources';
@@ -170,10 +171,13 @@ function NameTerms({ board }: { board: BoardDefinition }) {
 }
 
 /** What each bit of a display word lights, and a sample word. */
-function SegmentSection({ displays }: { displays: SevenSegment }) {
-  const hasPoint = displays.kind === 'independent' ? displays.width === 8 : displays.decimalPoint !== undefined;
+function SegmentSection({ ports }: { ports: BoardPorts }) {
+  const displays = ports.sevenSegment;
+  const hasPoint = hasDecimalPoint(ports);
   const scalars = displays.kind === 'multiplexed' && displays.segments.kind === 'scalars';
-  const one = displays.activeLow ? '1111001' : '0000110';
+  // The port written to holds the point as bit 7 only on independent 8-bit displays; it stays off.
+  const pointInWord = displays.kind === 'independent' && hasPoint;
+  const one = `${pointInWord ? (displays.activeLow ? '1' : '0') : ''}${displays.activeLow ? '1111001' : '0000110'}`;
   return (
     <div className="wb-help__seg-row">
       <SegmentFigure />
@@ -186,7 +190,7 @@ function SegmentSection({ displays }: { displays: SevenSegment }) {
         {!scalars && (
           <>
             <p>
-              To show a &ldquo;1&rdquo; you light segments 1 and 2 only, and write the word with bit 6 first; a{' '}
+              To show a &ldquo;1&rdquo; you light segments 1 and 2 only, and write the word with bit {pointInWord ? 7 : 6} first; a{' '}
               {bit(displays.activeLow ? 0 : 1)} lights a segment:
             </p>
             <pre className="wb-help__code">
@@ -260,7 +264,7 @@ export function HelpDialog({ open, onClose, board }: HelpDialogProps) {
         <NameTerms board={board} />
 
         <h4 className="wb-help__subheading">The bits of a display</h4>
-        <SegmentSection displays={ports.sevenSegment} />
+        <SegmentSection ports={ports} />
 
         <div className="wb-dialog__callout wb-dialog__callout--info" role="note">
           <p className="wb-dialog__callout-title">Moving to the real board</p>

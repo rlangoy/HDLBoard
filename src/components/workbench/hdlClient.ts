@@ -16,8 +16,7 @@
 import { sourceFolderFor } from './fileKinds';
 import type { VhdlFile } from './files';
 import type { RunWaveStatus, WaveFormat } from '../waveform/model';
-import { BOARD_VERB, encodeBoardFrame, encodeV1BoardFrame } from '../../boards/boardFrame';
-import { isDefaultShape } from '../../boards/shapeChange';
+import { BOARD_VERB, encodeBoardFrame, encodeV1BoardFrame, fitsV1BoardFrame } from '../../boards/boardFrame';
 import type { BoardPorts } from '../../boards/types';
 import { BOARD_TEXT } from './boardText';
 
@@ -221,12 +220,12 @@ export class HdlClient {
 
   /**
    * The BOARD frame this backend understands: the JSON frame from protocol 3, the 1.6
-   * frame before it, which only a board of the Default shape fits — undefined for any
+   * frame before it, which only a board of the Default shape at 50 MHz fits — undefined for any
    * other board (§ 6.3).
    */
   private boardFrameFor(board: BoardPorts): string | undefined {
     if ((this.backendVersion ?? OLDEST_PROTOCOL) >= SHAPED_BOARD_PROTOCOL) return encodeBoardFrame(board);
-    return isDefaultShape(board) ? encodeV1BoardFrame(board) : undefined;
+    return fitsV1BoardFrame(board) ? encodeV1BoardFrame(board) : undefined;
   }
 
   /** `ERROR protocol` about the BOARD verb: the backend predates it, and the RUN that follows still runs. */

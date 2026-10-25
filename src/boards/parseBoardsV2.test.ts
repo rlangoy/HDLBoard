@@ -49,6 +49,8 @@ describe('parseBoardFile, version 2', () => {
       lab({ clock: 'CLOCK_500Hz' }),
       'ports.clock500Hz: "CLOCK_500Hz" is also ports.clock; set clock500Hz to another name',
     ],
+    ['a count next to a cross', lab({ pushbuttons: { cross: CROSS, count: 5 } }), 'ports.pushbuttons.count goes with "port" only'],
+    ['a count next to a list', lab({ pushbuttons: { ports: ['A', 'B'], count: 2 } }), 'ports.pushbuttons.count goes with "port" only'],
     ['two kinds of buttons at once', lab({ pushbuttons: { port: 'KEY', count: 4, cross: CROSS } }), 'needs exactly one of "port" (with "count"), "ports" or "cross"'],
     ['a display width of 9', lab({ sevenSegment: { ...VALID_PORTS.sevenSegment, width: 9 } }), 'ports.sevenSegment.width must be 7 or 8'],
     ['6 scalar segments', lab({ sevenSegment: { kind: 'multiplexed', segments: ['A', 'B', 'C', 'D', 'E', 'F'], digitEnables: 'AN', digits: 4 } }), 'ports.sevenSegment.segments: 6 names is below the minimum of 7'],

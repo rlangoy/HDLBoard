@@ -1407,7 +1407,13 @@ export function Workbench() {
     endRunQuietly();
     const starters = starterFilesFor(findBoard(catalog, board).board).map((file) => ({ ...file, id: nextFileId() }));
     appendLog(`Removed ${fileNames.length} file(s) from Files for the new project.`);
+    // As when a project is opened: nothing may still point at a removed file (top, pairs, diagnostics).
+    for (const f of filesRef.current) dismissDiagnostics(f.id);
     setFiles(starters);
+    tb.restoreOverrides(EMPTY_OVERRIDES);
+    setEmptiedFolders([]);
+    setTopFileId(projectTopFile(starters)?.id ?? null);
+    setTopUnit(null);
     showNewFile(starters[0].id);
     createProject(name, board, starters.map((file) => file.name));
   };

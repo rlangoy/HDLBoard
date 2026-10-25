@@ -76,4 +76,18 @@ describe('checkBoardPortShapes', () => {
     const ports = vhdlTop('    SW : in std_logic_vector(9 downto 0);\n    KEY_N : in std_logic_vector(3 downto 0);\n    HEX0_N : out std_logic_vector(6 downto 0)');
     assert.deepEqual(checkBoardPortShapes(ports, DEFAULT_BOARD_IO, 'vhdl'), []);
   });
+
+  test('a 1-bit vector on the board is not a std_logic in VHDL, which GHDL would refuse', () => {
+    const oneSwitch = { ...DEFAULT_BOARD_IO, switches: { port: 'SW', count: 1 } };
+    const ports = portDeclarations(entity('    SW : in std_logic;\n    CLOCK_50 : in std_logic'), 'top').map((port) => ({
+      name: port.name,
+      declaration: port.declaration,
+      width: port.width,
+      vector: port.constrained,
+    }));
+    const errors = shapeErrors(checkBoardPortShapes(ports, oneSwitch, 'vhdl')) ?? '';
+    assert.match(errors, /SW is declared as std_logic, but on the board it is a vector of 1 bit/);
+    assert.match(errors, /Expected: SW : in std_logic_vector\(0 downto 0\);/);
+    assert.doesNotMatch(errors, /CLOCK_50/);
+  });
 });

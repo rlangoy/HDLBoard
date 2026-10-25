@@ -22,6 +22,8 @@ export interface DeclaredPort {
   readonly declaration: string;
   /** Undefined when HDLBoard cannot read it. */
   readonly width?: number;
+  /** VHDL: a vector type (`std_logic_vector(0 downto 0)`) rather than a scalar (`std_logic`); undefined when not told. */
+  readonly vector?: boolean;
   /** Where it is declared, GHDL-style (`top.vhdl:5:9:`), to put the message on it; empty when unknown. */
   readonly location?: string;
 }
@@ -33,6 +35,12 @@ export interface ShapeCheck {
 }
 
 const bits = (width: number): string => (width === 1 ? '1 bit' : `${width} bits`);
+
+/** The board ports that are one bit by nature; every other one is a vector, even of one bit. */
+const SCALAR_ROLES: readonly string[] = ['clock', 'clock500Hz', 'resetButton', 'decimalPoint'];
+
+/** Whether the testbench connects this port as a vector: `sw_sig`, not `sw_sig(0)` or `clk_sig`. */
+const isVector = (binding: BoardBinding): boolean => binding.index === undefined && !SCALAR_ROLES.includes(binding.role);
 
 /** `16 switches`, `4 digits`, `btnC as one bit`: what the board has for this port. */
 function boardHas(binding: BoardBinding): string {
@@ -46,11 +54,12 @@ function boardHas(binding: BoardBinding): string {
 /** `sw : in std_logic_vector(15 downto 0);` or `input wire [15:0] sw`: the declaration the board needs. */
 function expectedDeclaration(binding: BoardBinding, language: Language): string {
   const { name, direction, width } = binding;
+  const vector = isVector(binding);
   if (language === 'verilog') {
-    const range = width === 1 ? '' : ` [${width - 1}:0]`;
+    const range = vector ? ` [${width - 1}:0]` : '';
     return `${direction === 'in' ? 'input' : 'output'} wire${range} ${name}`;
   }
-  const type = width === 1 ? 'std_logic' : `std_logic_vector(${width - 1} downto 0)`;
+  const type = vector ? `std_logic_vector(${width - 1} downto 0)` : 'std_logic';
   return `${name} : ${direction} ${type};`;
 }
 
@@ -59,12 +68,22 @@ function checkPort(port: DeclaredPort, binding: BoardBinding, language: Language
   if (port.width === undefined) {
     return { severity: 'note', text: `Note: ${port.name} has a width HDLBoard cannot read (${port.declaration}); the board has ${boardHas(binding)}.` };
   }
-  if (port.width === binding.width) return undefined;
+  if (port.width === binding.width) return kindMismatch(port, binding, language);
   const headline = `${port.name} is declared as ${port.declaration} (${bits(port.width)}), but the board has ${boardHas(binding)}.`;
   const expected = `Expected: ${expectedDeclaration(binding, language)}`;
   // Icarus connects the low bits and runs, as in 1.6: a warning, so a design that works keeps working.
   if (language === 'verilog') return { severity: 'note', text: `Warning: ${headline} Icarus connects the low bits only.\n  ${expected}` };
   return { severity: 'error', text: `${at}${headline}\n${at}${expected}` };
+}
+
+/** VHDL: a 1-bit vector and a scalar are different types, and GHDL would refuse the testbench's port map. */
+function kindMismatch(port: DeclaredPort, binding: BoardBinding, language: Language): ShapeCheck | undefined {
+  if (language !== 'vhdl' || port.vector === undefined || port.vector === isVector(binding)) return undefined;
+  const at = port.location ? `${port.location}error: ` : '';
+  const boardKind = isVector(binding) ? 'a vector of 1 bit' : 'a single bit';
+  const headline = `${port.name} is declared as ${port.declaration}, but on the board it is ${boardKind}.`;
+  return { severity: 'error', text: `${at}${headline}
+${at}Expected: ${expectedDeclaration(binding, language)}` };
 }
 
 /** Every board port the top declares whose width differs from the board's, or cannot be read. */

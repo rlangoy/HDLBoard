@@ -30,7 +30,7 @@ export function BoardIoPanel({ board, outputs, inputs, onInputsChange }: BoardIo
     <Board size={24}>
       <Leds value={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
       <SevenSegmentDisplays
-        value={[...outputs.displays]}
+        value={outputs.displays}
         count={displayCount(ports)}
         activeLow={ports.sevenSegment.activeLow}
         decimalPoint={hasDecimalPoint(ports)}

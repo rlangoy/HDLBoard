@@ -57,6 +57,14 @@ describe('generateBoardTop', () => {
     expect(text).toContain('// Buttons: active high. Displays: active low, multiplexed (digit enables active low).');
     expect(text).toContain('//   Board definitions: https://github.com/Digilent/Basys3/blob/master/Resources/XDC/Basys3_Master.xdc');
   });
+
+  it('declares a vector of one bit as a vector, as the testbench connects it', () => {
+    const one = withCounts('sw1-led1', 1, 1);
+    const vhdl = generateBoardTop(one, 'vhdl', 'top');
+    expect(vhdl).toMatch(/sw\s+: in\s+std_logic_vector\(0 downto 0\);/);
+    expect(vhdl).toContain('led <= sw(0 downto 0);');
+    expect(generateBoardTop(one, 'verilog', 'top')).toMatch(/input\s+wire \[0:0\]\s+sw,/);
+  });
 });
 
 describe('starterTopFileName', () => {

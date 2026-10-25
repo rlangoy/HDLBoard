@@ -11,6 +11,7 @@ import {
   BOARD_TEXT,
   boardChangeHeading,
   conflictLine,
+  differentClock,
   differentIo,
   filesUseNames,
   filesWillChange,
@@ -72,7 +73,7 @@ function ChangeDialog({ pending: { plan }, simulating, onUpdateFiles, onBoardOnl
   const footer = <ChangeButtons plan={plan} renames={renames} onUpdateFiles={onUpdateFiles} onBoardOnly={onBoardOnly} onCancel={onCancel} />;
   return (
     <Dialog open onClose={onCancel} title={BOARD_TEXT.changeTitle} subtitle={subtitle} icon={<ChipIcon />} footer={footer}>
-      <p className="wb-dialog__lead">{differences.length > 0 ? differentIo(plan.to) : filesUseNames(plan.from)}</p>
+      <p className="wb-dialog__lead">{changeLead(plan, differences)}</p>
       {renames && <RenameSection plan={plan} titled={differences.length > 0} />}
       {differences.length > 0 && <HandEdits differences={differences} board={plan.to} />}
       {renames && <ChangeChoices />}
@@ -82,6 +83,12 @@ function ChangeDialog({ pending: { plan }, simulating, onUpdateFiles, onBoardOnl
       </p>
     </Dialog>
   );
+}
+
+/** What the change means: names only, a clock only, or parts that differ. */
+function changeLead(plan: BoardChangePlan, differences: readonly ShapeDifference[]): string {
+  if (differences.length === 0) return filesUseNames(plan.from);
+  return differences.every((difference) => difference.role === 'clock') ? differentClock(plan.to) : differentIo(plan.to);
 }
 
 interface ChangeButtonsProps {

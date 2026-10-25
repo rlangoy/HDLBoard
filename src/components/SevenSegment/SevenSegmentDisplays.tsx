@@ -25,7 +25,7 @@ export interface SevenSegmentDisplaysProps extends NativeProps {
    * `HEX0`. Each word is 7 bits LSB first, so `value[0][6]` is
    * `HEX0[6]`, the middle segment. Missing entries blank their display.
    */
-  value?: SegmentVector[];
+  value?: readonly SegmentVector[];
   /** `true` (default): a `0` lights a segment, as on the DE-board. */
   activeLow?: boolean;
   /** Each word has an eighth bit, the decimal point (bit 7). Default `false`. */
