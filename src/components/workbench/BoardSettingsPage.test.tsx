@@ -9,13 +9,13 @@ import { BoardSettingsPage } from './BoardSettingsPage';
 const render = (id: string) => renderToStaticMarkup(<BoardSettingsPage document={initialBoardDocument()} boards={BUILT_IN_BOARDS}
   initialBoardId={id} onClose={() => {}} onSave={async () => {}} />);
 
-it('renders the Nexys cross spatially with independent reset and shared save controls', () => {
+it('renders the Nexys cross spatially with independent reset and no save controls until something changes', () => {
   const html = render('nexys-a7');
   expect(html).toContain('bce-cross__up');
   expect(html).toContain('value="BTNC"');
   expect(html).toContain('Pressing a button produces 1.');
   expect(html).toContain('Edit reset');
-  expect(html).toContain('Save changes');
+  expect(html).not.toContain('Save changes');
   expect(html).toContain('View JSON');
 });
 
@@ -33,6 +33,7 @@ it('shows no status line for a saved, editable board', () => {
   expect(html).not.toContain('All changes applied');
   expect(html).not.toContain('Save the project to store');
   expect(html).not.toContain('read-only');
+  expect(html).not.toContain('bce-footer');
 });
 
 it('explains a read-only board instead of claiming changes were applied', () => {

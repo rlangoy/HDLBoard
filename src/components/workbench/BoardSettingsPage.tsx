@@ -140,29 +140,46 @@ function EditorHeader({ source, editor, onJson, onCreateCopy }: EditorHeaderProp
   );
 }
 
+/** Shown only when there is something to say or do; a saved, valid board leaves it out, and a read-only one keeps just its note. */
 function EditorFooter({ editor }: { editor: BoardEditor }) {
   const invalid = Object.keys(editor.errors).length > 0;
+  const hasWork = editor.dirty || editor.saving || invalid || editor.error !== '';
+  if (!hasWork && !editor.readOnly) return null;
   return (
     <footer className="bce-footer">
       <div>
         <EditorStatus editor={editor} />
-        {invalid && (
-          <p className="bce-error">Fix the highlighted fields before saving.{editor.errors._board && ` ${editor.errors._board}`}</p>
-        )}
-        {editor.error && <p role="alert" className="bce-error">{editor.error}</p>}
+        <EditorProblems editor={editor} invalid={invalid} />
       </div>
-      <div className="bce-footer-actions">
-        <button type="button" disabled={editor.saving} onClick={editor.cancel}>Cancel</button>
-        <button
-          type="button"
-          className="bce-primary"
-          disabled={editor.readOnly || editor.saving || invalid}
-          onClick={() => void editor.save()}
-        >
-          Save changes
-        </button>
-      </div>
+      {hasWork && <EditorActions editor={editor} invalid={invalid} />}
     </footer>
+  );
+}
+
+function EditorProblems({ editor, invalid }: { editor: BoardEditor; invalid: boolean }) {
+  return (
+    <>
+      {invalid && (
+        <p className="bce-error">Fix the highlighted fields before saving.{editor.errors._board && ` ${editor.errors._board}`}</p>
+      )}
+      {editor.error && <p role="alert" className="bce-error">{editor.error}</p>}
+    </>
+  );
+}
+
+function EditorActions({ editor, invalid }: { editor: BoardEditor; invalid: boolean }) {
+  return (
+    <div className="bce-footer-actions">
+      <button type="button" disabled={editor.saving} onClick={editor.cancel}>Cancel</button>
+      <button
+        type="button"
+        className="bce-primary"
+        disabled={editor.readOnly || editor.saving || invalid}
+        onClick={() => void editor.save()}
+      >
+        Save changes
+      </button>
+    </div>
   );
 }
 
