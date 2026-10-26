@@ -26,8 +26,8 @@ export const DEFAULT_LABELS: BoardLabels = { switches: 'SW', pushbuttons: 'KEY',
 
 const BOARD_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 32;
-const MAX_NAME_LENGTH = 40;
-const MAX_DESCRIPTION_LENGTH = 140;
+export const MAX_NAME_LENGTH = 40;
+export const MAX_DESCRIPTION_LENGTH = 140;
 const V1_BOARD_FIELDS: readonly string[] = ['id', 'name', 'description', 'ports', 'labels'];
 const V2_BOARD_FIELDS: readonly string[] = [...V1_BOARD_FIELDS, 'resources'];
 

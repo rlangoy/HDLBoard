@@ -1,0 +1,49 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Shared by the waveform and the workbench's side pane dividers. */
+.hdl-column-divider {
+  --hdl-divider-accent: #2563eb;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.hdl-column-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%) scaleX(0.25);
+  background: var(--hdl-divider-accent);
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+.hdl-column-divider__grip {
+  position: sticky;
+  top: calc(50% - 14px);
+  z-index: 1;
+  display: block;
+  width: 8px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 4px;
+  background: var(--hdl-divider-accent) radial-gradient(circle, #fff 0.9px, transparent 1.3px) center / 8px 5px repeat-y;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.hdl-column-divider:hover::after,
+.hdl-column-divider:hover .hdl-column-divider__grip { transition-delay: 150ms; }
+.hdl-column-divider:hover::after { opacity: 0.45; transform: translateX(-50%); }
+.hdl-column-divider.is-dragging::after,
+.hdl-column-divider:focus-visible::after { opacity: 1; transform: translateX(-50%); transition-delay: 0ms; }
+.hdl-column-divider:hover .hdl-column-divider__grip,
+.hdl-column-divider.is-dragging .hdl-column-divider__grip,
+.hdl-column-divider:focus-visible .hdl-column-divider__grip { opacity: 1; }
+.hdl-column-divider.is-dragging .hdl-column-divider__grip,
+.hdl-column-divider:focus-visible .hdl-column-divider__grip { transition-delay: 0ms; }
+@media (prefers-reduced-motion: reduce) {
+  .hdl-column-divider::after,
+  .hdl-column-divider__grip { transition: none; }
+}

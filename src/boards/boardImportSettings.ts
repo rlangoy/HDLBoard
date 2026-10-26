@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import type { BoardDefinition, ButtonGroup, PortGroup } from './types';
+import { buttonCount, displayCount } from './boardShape';
 
 function groupSettings(group: PortGroup) {
   return group.kind === 'vector' ? { port: group.port, count: group.count } : { ports: group.ports };
@@ -28,11 +29,11 @@ export function boardImportSettings(board: BoardDefinition) {
       clock: ports.clock.port,
       clockMHz: ports.clock.mhz,
       clock500Hz: ports.clock500Hz,
-      switches: ports.switches,
-      pushbuttons: buttonSettings(ports.pushbuttons),
+      ...(ports.switches.count ? { switches: ports.switches } : {}),
+      ...(buttonCount(ports) ? { pushbuttons: buttonSettings(ports.pushbuttons) } : {}),
       ...(ports.resetButton ? { resetButton: ports.resetButton } : {}),
       leds: ports.leds,
-      sevenSegment: display.kind === 'independent' ? display : {
+      ...(displayCount(ports) ? { sevenSegment: display.kind === 'independent' ? display : {
         kind: display.kind,
         segments: display.segments.kind === 'vector' ? display.segments.port : display.segments.ports,
         ...(display.decimalPoint ? { decimalPoint: display.decimalPoint } : {}),
@@ -40,7 +41,7 @@ export function boardImportSettings(board: BoardDefinition) {
         digits: display.digits,
         activeLow: display.activeLow,
         digitEnablesActiveLow: display.digitEnablesActiveLow,
-      },
+      } } : {}),
     },
     labels: board.labels,
     resources: board.resources,

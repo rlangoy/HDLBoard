@@ -32,6 +32,8 @@ export interface HdlBoardProject {
   name: string;
   /** The board's id (`default`, `de1-soc`); one HDLBoard does not have here is kept as it is. */
   board: string;
+  /** Raw version-2 board node saved with this project, including extension fields. */
+  boardConfig?: Record<string, unknown>;
   description: string;
   /**
    * The folder next to the project file that holds the project's files on local disk

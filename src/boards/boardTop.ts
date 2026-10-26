@@ -49,7 +49,7 @@ function topPorts(ports: BoardPorts): TopPort[] {
   return [
     scalar(ports.clock.port, 'in'),
     { ...scalar(ports.clock500Hz, 'in'), note: SIMULATOR_ONLY },
-    vectorPort(ports.switches.port, 'in', ports.switches.count),
+    ...(ports.switches.count ? [vectorPort(ports.switches.port, 'in', ports.switches.count)] : []),
     ...buttons,
     ...(ports.resetButton === undefined ? [] : [scalar(ports.resetButton.port, 'in')]),
     vectorPort(ports.leds.port, 'out', ports.leds.count),
@@ -70,6 +70,7 @@ const allBits = (level: 0 | 1, port: TopPort): Pick<Assignment, 'vhdl' | 'verilo
 
 /** The LEDs follow the switches: as many as there are, the rest held at 0. */
 function ledsFollowSwitches({ switches, leds }: BoardPorts): Assignment {
+  if (!switches.count) return { target: leds.port, ...allBits(0, vectorPort(leds.port, 'out', leds.count)) };
   const sw = switches.port;
   if (leds.count <= switches.count) {
     return { target: leds.port, vhdl: `${sw}(${leds.count - 1} downto 0)`, verilog: `${sw}[${leds.count - 1}:0]` };
@@ -228,6 +229,14 @@ function verilogTop(board: BoardDefinition, name: string): string {
 /** The starter top file of `board`, its entity or module called `name`. */
 export function generateBoardTop(board: BoardDefinition, language: TopLanguage, name: string): string {
   return language === 'vhdl' ? vhdlTop(board, name) : verilogTop(board, name);
+}
+
+/** New designs declare the board's physical I/O and leave all behaviour to the author. */
+export function generateEmptyBoardTop(board: BoardDefinition, language: TopLanguage, name: string): string {
+  const ports = topPorts(board.ports).filter((port) => port.note === undefined);
+  if (language === 'verilog') return [`module ${name} (`, ...verilogPortLines(ports), ');', '', 'endmodule', ''].join('\n');
+  return ['library ieee;', 'use ieee.std_logic_1164.all;', '', `entity ${name} is`, '    port (',
+    ...vhdlPortLines(ports), '    );', 'end entity;', '', `architecture rtl of ${name} is`, 'begin', '', 'end architecture;', ''].join('\n');
 }
 
 const FILE_EXTENSION: Readonly<Record<TopLanguage, string>> = { vhdl: '.vhdl', verilog: '.v' };

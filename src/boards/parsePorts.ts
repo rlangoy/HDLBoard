@@ -9,6 +9,7 @@
  */
 
 import { isObject } from '../project/jsonValue';
+import { NO_SWITCHES, NO_BUTTONS, NO_DISPLAYS } from './optionalComponents';
 import {
   booleanAt,
   countAt,
@@ -46,8 +47,8 @@ export const DEFAULT_CLOCK_500HZ_NAME = 'CLOCK_500Hz';
 export const DEFAULT_CLOCK_MHZ = 50;
 
 const PORT_ROLES = {
-  required: ['clock', 'switches', 'pushbuttons', 'leds', 'sevenSegment'],
-  optional: ['clockMHz', 'clock500Hz', 'resetButton'],
+  required: ['clock', 'leds'],
+  optional: ['clockMHz', 'clock500Hz', 'resetButton', 'switches', 'pushbuttons', 'sevenSegment'],
   noun: 'role',
 } as const;
 
@@ -63,10 +64,10 @@ export function readPorts(value: unknown): BoardPorts {
   const parsed: BoardPorts = {
     clock: { port: nameAt('ports.clock', ports.clock), mhz: readClockMHz(ports.clockMHz) },
     clock500Hz: ports.clock500Hz === undefined ? DEFAULT_CLOCK_500HZ_NAME : nameAt('ports.clock500Hz', ports.clock500Hz),
-    switches: readVector('ports.switches', ports.switches, SWITCH_LIMIT),
-    pushbuttons: readButtons(ports.pushbuttons),
+    switches: ports.switches === undefined ? NO_SWITCHES : readVector('ports.switches', ports.switches, SWITCH_LIMIT),
+    pushbuttons: ports.pushbuttons === undefined ? NO_BUTTONS : readButtons(ports.pushbuttons),
     leds: readVector('ports.leds', ports.leds, LED_LIMIT),
-    sevenSegment: readSevenSegment(ports.sevenSegment),
+    sevenSegment: ports.sevenSegment === undefined ? NO_DISPLAYS : readSevenSegment(ports.sevenSegment),
   };
   const withReset = ports.resetButton === undefined ? parsed : { ...parsed, resetButton: readResetButton(ports.resetButton) };
   checkNamesUnique(withReset);
@@ -204,7 +205,7 @@ function sevenSegmentNames(displays: SevenSegment): NamedPort[] {
 function namedPorts(ports: BoardPorts): NamedPort[] {
   return [
     { path: 'ports.clock', name: ports.clock.port },
-    { path: 'ports.switches.port', name: ports.switches.port },
+    ...(ports.switches.count ? [{ path: 'ports.switches.port', name: ports.switches.port }] : []),
     ...buttonNames(ports.pushbuttons),
     ...(ports.resetButton === undefined ? [] : [{ path: 'ports.resetButton.port', name: ports.resetButton.port }]),
     { path: 'ports.leds.port', name: ports.leds.port },
