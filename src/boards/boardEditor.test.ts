@@ -9,7 +9,7 @@ import { validateBoardDraft } from './boardEditorValidation';
 
 afterEach(() => vi.unstubAllGlobals());
 const board = (id: string) => initialBoardDocument().boards.find((item) => item.id === id) as Record<string, unknown>;
-const validate = (raw: Record<string, unknown>) => validateBoardDraft(raw, boardImportSettings(builtInBoard(String(raw.id))), []);
+const validate = (raw: Record<string, unknown>) => validateBoardDraft(raw, boardImportSettings(builtInBoard(String(raw.id))), { boards: [] });
 
 it('round trips without filling optional defaults or changing array order', () => {
   const original = initialBoardDocument();

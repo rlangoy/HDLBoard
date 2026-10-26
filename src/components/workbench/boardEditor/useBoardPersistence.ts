@@ -2,7 +2,7 @@
 import { useRef } from 'react';
 import { appendBoard, replaceBoard } from '../../../boards/boardEditorModel';
 import type { BoardDraftSession } from './useBoardDraft';
-import type { BoardEditorSource } from './useBoardEditor';
+import type { BoardEditorSource } from './boardEditorSource';
 
 export function useBoardPersistence(session: BoardDraftSession, source: BoardEditorSource) {
   const saving = useRef(false);

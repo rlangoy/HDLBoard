@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardDraftSession } from './useBoardDraft';
 
 interface NavigationSource {
@@ -9,12 +9,19 @@ interface NavigationSource {
 
 export function useBoardEditorNavigation(session: BoardDraftSession, source: NavigationSource) {
   const { state, dispatch } = session;
-  const dirty = JSON.stringify(state.draft) !== JSON.stringify(state.saved);
+  const dirty = useMemo(() => JSON.stringify(state.draft) !== JSON.stringify(state.saved), [state.draft, state.saved]);
   const current = useRef({ dirty, saving: state.saving });
   current.current = { dirty, saving: state.saving };
   const [pending, setPending] = useState<(() => void) | null>(null);
+  /**
+   * Actions that run straight after a reset or save (closing, switching overlay) ask the guard
+   * again before React has re-rendered; this tells it the edits are already gone.
+   */
+  const markSettled = () => {
+    current.current = { dirty: false, saving: false };
+  };
   const resetTo = (board: Record<string, unknown>) => {
-    current.current.dirty = false;
+    markSettled();
     dispatch({ type: 'reset', board });
     setPending(null);
   };
@@ -32,8 +39,7 @@ export function useBoardEditorNavigation(session: BoardDraftSession, source: Nav
     },
     saveAndContinue: async () => {
       if (!await source.save()) return;
-      current.current.dirty = false;
-      current.current.saving = false;
+      markSettled();
       setPending(null);
       pending?.();
     },

@@ -16,7 +16,7 @@ it.each([...OPTIONAL_COMPONENTS.map((role) => [role]), [...OPTIONAL_COMPONENTS]]
   const parsed = parsedDocument({ version: 2, boards: [draft] });
   expect(parsed.boards).toHaveLength(1);
   const board = parsed.boards[0];
-  expect(validateBoardDraft(draft, boardImportSettings(board), [])).toEqual({});
+  expect(validateBoardDraft(draft, boardImportSettings(board), { boards: [] })).toEqual({});
   const exported = boardImportSettings(board);
   for (const role of roles) expect(valueAt(exported, ['ports', role])).toBeUndefined();
   expect(parsedDocument({ version: 2, boards: [exported] }).boards).toHaveLength(1);

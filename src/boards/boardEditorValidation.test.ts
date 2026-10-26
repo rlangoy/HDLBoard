@@ -10,7 +10,7 @@ import { CLOCK_MHZ_DECIMALS, CLOCK_MHZ_LIMIT } from './boardLimits';
 
 const original = initialBoardDocument().boards[0];
 const defaults = boardImportSettings(BUILT_IN_BOARDS[0]);
-const validate = (draft: Record<string, unknown>) => validateBoardDraft(draft, defaults, []);
+const validate = (draft: Record<string, unknown>) => validateBoardDraft(draft, defaults, { boards: [] });
 
 it('returns a structured path for a port array entry without the warning prefix', () => {
   const draft = changeAt(original, ['ports', 'sevenSegment', 'ports', 1], 'entity');
@@ -39,4 +39,26 @@ it('keeps the clock field message generated from the configured limits', () => {
 it('reports malformed non-field data as a board problem', () => {
   const draft = changeAt(original, ['ports', 'pushbuttons', 'activeLow'], 'yes') as Record<string, unknown>;
   expect(validate(draft)._board).toContain('must be true or false');
+});
+
+it('rejects an ID that another saved board already uses', () => {
+  const other = initialBoardDocument().boards[1];
+  const draft = { ...original, id: other.id, name: 'Distinct name' };
+  expect(validateBoardDraft(draft, defaults, { boards: [original, other], editingId: String(original.id) })._board).toContain('generated board ID');
+});
+
+it('lets a saved board keep its own ID', () => {
+  expect(validateBoardDraft(original, defaults, { boards: [original], editingId: String(original.id) })).toEqual({});
+});
+
+it('flags a copy that reuses its source board ID', () => {
+  expect(validateBoardDraft({ ...original, name: 'Copy' }, defaults, { boards: [original] })._board).toContain('generated board ID');
+});
+
+it('marks both links when two resource labels match', () => {
+  const draft = { ...original, resources: [
+    { label: 'Manual', url: 'https://example.com/a' },
+    { label: 'Manual', url: 'https://example.com/b' },
+  ] };
+  expect(validate(draft)).toMatchObject({ 'resources.0.label': expect.any(String), 'resources.1.label': expect.any(String) });
 });

@@ -81,7 +81,7 @@ import { ProjectPage } from './ProjectPage';
 import { BoardSettingsPage } from './BoardSettingsPage';
 import { BoardDraftIo } from './boardEditor/BoardDraftIo';
 import { useBoardSettings } from './boardEditor/useBoardSettings';
-import { useBoardOverlay } from './boardEditor/useBoardOverlay';
+import { useOverlay } from './useOverlay';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, pickProjectFolder, type FileHandles } from './fileSystemAccess';
@@ -329,7 +329,7 @@ export function Workbench() {
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
   // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
-  const { overlay, setOverlay, leaveGuard, navigate } = useBoardOverlay();
+  const { overlay, setOverlay, registerLeaveGuard, navigate } = useOverlay();
   const setDialog = useCallback((next: typeof dialog) => {
     if (next === null) applyDialog(null);
     else navigate(() => applyDialog(next));
@@ -2024,7 +2024,7 @@ export function Workbench() {
             </div>
             {overlay === 'boardSettings' && catalog.ready && (
               <BoardSettingsPage document={catalog.document} boards={catalog.editorBoards} builtInBoardIds={catalog.builtInBoardIds} initialBoardId={activeBoard.id}
-                onSave={boardSettings.onSave} onClose={() => setOverlay(null)} leaveGuard={leaveGuard} onPreview={boardSettings.onPreview} />
+                onSave={boardSettings.onSave} onClose={() => setOverlay(null)} registerLeaveGuard={registerLeaveGuard} onPreview={boardSettings.onPreview} />
             )}
             {overlay === 'project' && (
               <ProjectPage

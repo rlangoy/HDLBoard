@@ -7,7 +7,7 @@ import { validateBoardDraft } from '../../../boards/boardEditorValidation';
 import { BUILT_IN_BOARD_IDS } from '../../../boards/boardEditorStorage';
 import { newComponent, type OptionalComponent } from '../../../boards/optionalComponents';
 import { boardEditorReducer, initialEditorState } from './boardEditorState';
-import type { BoardEditorSource } from './useBoardEditor';
+import type { BoardEditorSource } from './boardEditorSource';
 import { useRepresentations } from './useRepresentations';
 
 export function useBoardDraft(source: BoardEditorSource) {
@@ -19,7 +19,11 @@ export function useBoardDraft(source: BoardEditorSource) {
   const board = source.boards.find((item) => item.id === boardId) ?? source.boards[0];
   const defaults = useMemo(() => boardImportSettings(board), [board]);
   const readOnly = (source.builtInBoardIds ?? BUILT_IN_BOARD_IDS).includes(boardId) && !state.isNew;
-  const errors = useMemo(() => validateBoardDraft(state.draft, defaults, source.document.boards), [state.draft, defaults, source.document]);
+  const savedId = state.isNew ? undefined : state.originalId;
+  const errors = useMemo(
+    () => validateBoardDraft(state.draft, defaults, { boards: source.document.boards, editingId: savedId }),
+    [state.draft, defaults, source.document, savedId],
+  );
   return { state, dispatch, boardId, defaults, readOnly, errors };
 }
 export type BoardDraftSession = ReturnType<typeof useBoardDraft>;
@@ -33,8 +37,8 @@ export function useBoardMutations(session: BoardDraftSession, source: BoardEdito
   };
   const changeBoardName = (name: string) => {
     if (readOnly || state.saving) return;
-    const existing = source.document.boards.filter((board) => state.isNew || board.id !== state.originalId);
-    dispatch({ type: 'rename', name, id: boardIdFromName(name, existing) });
+    const keepingId = state.isNew ? undefined : state.originalId;
+    dispatch({ type: 'rename', name, id: boardIdFromName(name, source.document.boards, keepingId) });
   };
   const removeComponent = (component: OptionalComponent) => {
     const current = get(['ports', component]);
@@ -48,9 +52,13 @@ export function useBoardMutations(session: BoardDraftSession, source: BoardEdito
   return { get, change, changeBoardName, changeRepresentation, addComponent, removeComponent };
 }
 
+const ACTIVE_LOW_KEYS = ['activeLow', 'digitEnablesActiveLow'];
+const IMPORTED_DEFAULT_KEYS = ['clockMHz', 'clock500Hz', 'description', 'resources'];
+
+/** What a field shows while the board leaves it unset: polarity is active-low, the rest come from the imported board. */
 function editorDefault(defaults: unknown, path: BoardPath) {
-  const last = path[path.length - 1];
-  if (last === 'activeLow' || last === 'digitEnablesActiveLow') return true;
-  if (path[0] === 'labels' || ['clockMHz', 'clock500Hz', 'description', 'resources'].includes(String(last))) return valueAt(defaults, path);
+  const last = String(path[path.length - 1]);
+  if (ACTIVE_LOW_KEYS.includes(last)) return true;
+  if (path[0] === 'labels' || IMPORTED_DEFAULT_KEYS.includes(last)) return valueAt(defaults, path);
   return undefined;
 }

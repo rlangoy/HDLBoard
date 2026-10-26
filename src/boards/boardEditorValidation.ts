@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
-import { checkBoard } from './boardFileReader';
 import { componentFields, fieldKey, presentComponents, resourceFields, type EditorField } from './boardEditorFields';
 import { knownBoard, valueAt } from './boardEditorModel';
 import { fieldProblem } from './boardEditorValueValidation';
 import { parseBoardFile } from './parseBoards';
-import { readResource } from './parseResources';
 
 export type EditorErrors = Record<string, string>;
+const DUPLICATE_LABEL = 'Link labels must be unique.';
 
 function fieldErrors(fields: EditorField[], readValue: (field: EditorField) => unknown): EditorErrors {
   const errors: EditorErrors = {};
@@ -27,40 +26,63 @@ function fieldErrors(fields: EditorField[], readValue: (field: EditorField) => u
   return errors;
 }
 
-export function validateBoardDraft(draft: Record<string, unknown>, defaults: unknown, existing: readonly Record<string, unknown>[]): EditorErrors {
+/** Earlier findings win: a field problem is more specific than the parser's, which is more specific than a board-wide one. */
+function addErrors(target: EditorErrors, more: EditorErrors): void {
+  for (const [key, message] of Object.entries(more)) target[key] ??= message;
+}
+
+/** The boards already saved, and which of them (if any) the draft is an edit of. */
+export interface SavedBoards {
+  readonly boards: readonly Record<string, unknown>[];
+  /** The saved board being edited; the only one that may share the draft's ID. Undefined for a new board. */
+  readonly editingId?: string;
+}
+
+export function validateBoardDraft(draft: Record<string, unknown>, defaults: unknown, saved: SavedBoards): EditorErrors {
   const fields = [...presentComponents(draft).flatMap((key) => componentFields(key, draft)), ...resourceFields(draft)];
   const errors = fieldErrors(fields, (field) => field.derive?.(draft) ?? valueAt(draft, field.path)
     ?? (field.optional ? undefined : valueAt(defaults, field.path)));
+  addErrors(errors, parserErrors(draft, fields));
+  addErrors(errors, duplicateLabelErrors(draft));
+  addErrors(errors, identityErrors(draft, saved));
+  return errors;
+}
+
+function parserErrors(draft: Record<string, unknown>, fields: readonly EditorField[]): EditorErrors {
+  const errors: EditorErrors = {};
   const parsed = parseBoardFile(JSON.stringify({ version: 2, boards: [knownBoard(draft)] }), { fileName: 'Draft', origin: 'user' });
   for (const problem of parsed.problems) {
     const key = fields.some((field) => fieldKey(field) === problem.path) ? problem.path : '_board';
     errors[key] ??= problem.message;
   }
-  return { ...errors, ...resourceErrors(draft), ...identityErrors(draft, existing) };
+  return errors;
 }
 
-function identityErrors(draft: Record<string, unknown>, existing: readonly Record<string, unknown>[]): EditorErrors {
+function identityErrors(draft: Record<string, unknown>, { boards, editingId }: SavedBoards): EditorErrors {
   const errors: EditorErrors = {};
-  if (existing.some((other) => other.id !== draft.id && String(other.name).toLowerCase() === String(draft.name).toLowerCase())) {
+  const name = String(draft.name).toLowerCase();
+  if (boards.some((other) => other.id !== editingId && String(other.name).toLowerCase() === name)) {
     errors.name = 'Another board already uses this name.';
+  }
+  if (draft.id !== editingId && boards.some((other) => other.id === draft.id)) {
+    errors._board = 'The generated board ID already belongs to another board. Change the board name.';
   }
   return errors;
 }
 
-function resourceErrors(draft: Record<string, unknown>): EditorErrors {
+function duplicateLabelErrors(draft: Record<string, unknown>): EditorErrors {
   const errors: EditorErrors = {};
   if (!Array.isArray(draft.resources)) return errors;
-  const labels = new Map<unknown, number>();
+  const firstIndexOf = new Map<unknown, number>();
   draft.resources.forEach((resource, index) => {
-    const checked = checkBoard(() => readResource(`resources.${index}`, knownBoard(resource, 'resources')));
-    if (!checked.ok) errors[checked.path || '_board'] = checked.problem;
     const label = valueAt(resource, ['label']);
-    const earlier = labels.get(label);
-    if (earlier !== undefined) {
-      errors[`resources.${index}.label`] = 'Link labels must be unique.';
-      errors[`resources.${earlier}.label`] = 'Link labels must be unique.';
+    const earlier = firstIndexOf.get(label);
+    if (earlier === undefined) {
+      firstIndexOf.set(label, index);
+      return;
     }
-    labels.set(label, index);
+    errors[`resources.${index}.label`] = DUPLICATE_LABEL;
+    errors[`resources.${earlier}.label`] = DUPLICATE_LABEL;
   });
   return errors;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parsedDocument, type BoardDocument } from '../../boards/boardEditorModel';
 import { editorCatalog, loadEditorCatalog } from '../../boards/boardEditorCatalog';
 import { BUILT_IN_BOARD_IDS, initialBoardDocument } from '../../boards/boardEditorStorage';
@@ -39,9 +39,6 @@ export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardC
       cancelled = true;
     };
   }, []);
-  const applyDocument = useCallback((file: BoardDocument) => {
-    setDocument(file);
-  }, []);
   const document = useMemo(() => withProjectBoard(savedDocument, boardConfig), [savedDocument, boardConfig]);
   const embedded = useMemo(() => projectBoard(boardConfig), [boardConfig]);
   const parsed = useMemo(() => {
@@ -50,5 +47,5 @@ export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardC
   }, [savedDocument, legacy, embedded]);
   const editorBoards = useMemo(() => parsedDocument(document).boards, [document]);
   const boardConfigFor = (id: string) => BUILT_IN_BOARD_IDS.includes(id) ? undefined : document.boards.find((board) => board.id === id);
-  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
+  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument: setDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
 }

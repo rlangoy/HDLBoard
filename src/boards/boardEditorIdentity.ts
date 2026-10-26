@@ -4,8 +4,9 @@ import { MAX_ID_LENGTH, MAX_NAME_LENGTH } from './parseBoards';
 const COPY_SUFFIX = ' Custom';
 type RawBoard = Record<string, unknown>;
 
-export function boardIdFromName(name: string, existing: readonly RawBoard[]): string {
-  const used = new Set(existing.map((board) => String(board.id)));
+/** `keepingId` is the board's own current ID, which does not count as taken. */
+export function boardIdFromName(name: string, existing: readonly RawBoard[], keepingId?: string): string {
+  const used = new Set(existing.filter((board) => board.id !== keepingId).map((board) => String(board.id)));
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, MAX_ID_LENGTH).replace(/^-|-$/g, '') || 'custom-board';
   let id = base;
   let suffix = 2;
