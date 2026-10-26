@@ -26,3 +26,17 @@ it('renders DE1-SoC as its original active-low vector', () => {
   expect(html).toContain('Pressing a button produces 0.');
   expect(html).not.toContain('Edit reset');
 });
+
+it('shows no status line for a saved, editable board', () => {
+  const html = renderToStaticMarkup(<BoardSettingsPage document={initialBoardDocument()} boards={BUILT_IN_BOARDS}
+    initialBoardId="de1-soc" builtInBoardIds={[]} onClose={() => {}} onSave={async () => {}} />);
+  expect(html).not.toContain('All changes applied');
+  expect(html).not.toContain('Save the project to store');
+  expect(html).not.toContain('read-only');
+});
+
+it('explains a read-only board instead of claiming changes were applied', () => {
+  const html = render('de1-soc');
+  expect(html).toContain('Built-in boards are read-only');
+  expect(html).not.toContain('All changes applied');
+});

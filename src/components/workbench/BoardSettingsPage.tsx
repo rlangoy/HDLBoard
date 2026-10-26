@@ -166,17 +166,21 @@ function EditorFooter({ editor }: { editor: BoardEditor }) {
   );
 }
 
+/** Says something only while there is something to say: a save in progress, unsaved edits, or why nothing can be edited. */
 function EditorStatus({ editor }: { editor: BoardEditor }) {
-  const status = editor.saving ? 'Applying…' : editor.dirty ? '● Unsaved changes' : 'All changes applied';
-  const message = editor.readOnly
-    ? 'Built-in boards are read-only. Create an editable copy to make changes.'
-    : 'Save the project to store these settings in its project file.';
-  return (
-    <>
-      <span role="status">{status}</span>
-      <small className="bce-muted">{message}</small>
-    </>
-  );
+  if (editor.saving) return <span role="status">Applying…</span>;
+  if (editor.dirty) {
+    return (
+      <>
+        <span role="status">● Unsaved changes</span>
+        <small className="bce-muted">Save the project to store these settings in its project file.</small>
+      </>
+    );
+  }
+  if (editor.readOnly) {
+    return <small className="bce-muted">Built-in boards are read-only. Create an editable copy to make changes.</small>;
+  }
+  return null;
 }
 
 function useFocusOnOpen(root: React.RefObject<HTMLElement>) {
