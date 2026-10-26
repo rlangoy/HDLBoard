@@ -37,6 +37,7 @@ const REQUIRED_FIELDS = ['version', 'name', 'board', 'description', 'files'] as 
 export function parseProject(json: string): ParsedProject {
   const raw = parseJsonObject(json);
   requireTopLevelFields(raw);
+  if (raw.boardConfig !== undefined && !isObject(raw.boardConfig)) throw new ProjectError('"boardConfig" must be a board configuration object');
 
   const warnings: Diagnostic[] = [];
   const { files, skipped } = parseFileEntries(raw.files as unknown[], warnings);
@@ -49,6 +50,7 @@ export function parseProject(json: string): ParsedProject {
     version: CURRENT_PROJECT_VERSION,
     name: raw.name as string,
     board: boardIdOf(raw.version as number, raw.board as string),
+    ...(isObject(raw.boardConfig) ? { boardConfig: raw.boardConfig } : {}),
     description: raw.description as string,
     ...(projectDirectory !== undefined ? { projectDirectory } : {}),
     ...(sourceDirectory !== undefined ? { sourceDirectory } : {}),
@@ -165,6 +167,7 @@ export function serializeProject(project: HdlBoardProject): string {
     version: CURRENT_PROJECT_VERSION,
     name: project.name,
     board: project.board,
+    ...(project.boardConfig !== undefined ? { boardConfig: project.boardConfig } : {}),
     description: project.description,
     ...(project.projectDirectory !== undefined ? { projectDirectory: project.projectDirectory } : {}),
     ...(project.sourceDirectory !== undefined ? { sourceDirectory: project.sourceDirectory } : {}),

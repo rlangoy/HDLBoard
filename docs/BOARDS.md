@@ -111,6 +111,46 @@ AN  <= (others => '1');               -- all digits off
 In the code editor **Tab** indents (the selected lines, if several), **Shift+Tab** takes one level off, and **Esc**
 then **Tab** moves on to the next control.
 
+## Edit board settings
+
+In **Settings › Board**, click **View board settings** to collapse Explorer and open the current board's
+editor. The left panel provides component selection and quick edits; the right panel shows all fields
+for the selected component. Both panels share one draft. **View JSON** previews the selected board's
+JSON node, including unsaved edits, without changing its original representations or omitted defaults.
+
+Board I/O previews the selected board, newly created editable copies and valid property changes
+immediately. Incomplete fields keep the last valid layout visible with an explanatory message.
+Closing the editor restores the project's board; preview controls do not send simulation inputs.
+
+Under **Board information → Components on this board**, custom boards can omit switches,
+pushbuttons or 7-segment displays. Uncheck a component to remove its port configuration, Quick edit
+card and Board I/O preview. Checking it again during editing restores its settings. Adding a component
+that was already absent starts with empty port names to fill in. Reset remains independent.
+Built-in boards stay read-only. Omitted components are supported by the editor and preview;
+the simulation server's board protocol still requires these roles.
+
+**Save changes** applies the custom board to the open project in memory and updates Board I/O.
+It marks the project as changed. **Save project**, **Save to GitHub** and project downloads write the
+same JSON node shown by **View JSON** as the project's optional `boardConfig` property in
+`.hdlboard.json`. Nothing is written to the project file until the project is saved.
+Other boards, array order and unknown extension fields are retained.
+
+Opening a project with `boardConfig` makes its board available in **Settings → Board** and the
+Board settings selector, and restores its layout in Board I/O. A project definition takes precedence
+over an installed custom board with the same ID. Built-in definitions cannot be replaced.
+Custom boards hide **Examples**. **New File** creates a VHDL entity or Verilog module declaring
+the board's physical I/O, with an empty architecture or module body.
+
+**Cancel** discards edits since the last application. Switching boards or closing with **×** or **Esc** while
+dirty offers **Save**, **Discard** or **Keep editing**; reloading the browser uses its native unsaved-changes prompt.
+Invalid fields block saving, and failed saves leave the draft available to retry.
+
+Button layouts and display kinds have dropdown selectors. Review the generated ports before saving;
+switching back during the same editing session restores that layout's previous draft. Board settings
+replaces the code panel, collapses Explorer into its icon rail, and keeps Board I/O open. Version-1 user boards
+remain available for simulation but are not migrated by this editor. If the selected board is unavailable
+for version-2 editing, the page explains the fallback. Code editors keep their contents and state.
+
 ## Polarity
 
 Your design sees the level on the pin; the board decides what that level means.
@@ -257,7 +297,10 @@ run (**Choose a board…**). The id is kept when the project is saved.
 
 ## Known limitations
 
-- Every board has switches, LEDs, pushbuttons and 7-segment displays; only the reset button is optional.
+- In version-2 configuration files, switches, pushbuttons, 7-segment displays and reset are optional.
+  Omit the corresponding port entry; when present, its fields and counts must meet the limits below.
+  The editor previews omitted components, while the simulation server still requires switches,
+  pushbuttons and displays.
 - Other parts (VGA, Pmod, RGB LEDs, a second clock) are not simulated.
 - Keep ids stable: a project refers to its board by id.
 - The Windows app overwrites `boards.json` when it is reinstalled or upgraded.

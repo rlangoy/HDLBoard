@@ -212,7 +212,7 @@
 
 .wb-is-resizing-x,
 .wb-is-resizing-x * {
-  cursor: ew-resize !important;
+  cursor: col-resize !important;
 }
 
 .wb-is-resizing-y,
@@ -226,6 +226,21 @@
   background: transparent;
   border-color: transparent;
 }
+
+/* Same hover line and grip as the waveform; keep the pane layout's 5 px slot. */
+.wb-resizer.hdl-column-divider {
+  border: 0;
+  background: linear-gradient(to right, transparent 2px, var(--wb-border) 2px 3px, transparent 3px);
+  cursor: col-resize;
+  outline: none;
+}
+.wb-resizer.hdl-column-divider::before { inset: 0 -2px; }
+.wb-resizer.hdl-column-divider .hdl-column-divider__grip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.wb-resizer.hdl-column-divider.is-beside-collapsed { background: transparent; }
 
 /*
  * The left pane (a SidePanel titled Explorer): a tinted strip holding two

@@ -152,7 +152,7 @@ export function portList(ports: BoardPorts): string[] {
   return [
     ports.clock.port,
     ports.clock500Hz,
-    ports.switches.port,
+    ...(ports.switches.count ? [ports.switches.port] : []),
     ...groupNames(ports.pushbuttons.group),
     ...(ports.resetButton === undefined ? [] : [ports.resetButton.port]),
     ports.leds.port,

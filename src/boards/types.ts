@@ -67,10 +67,13 @@ export interface BoardPorts {
   readonly clock: BoardClock;
   /** Simulator-only, on every board; always set after parsing. */
   readonly clock500Hz: string;
+  /** Absent JSON role: count 0 and no port name. */
   readonly switches: VectorPort;
+  /** Absent JSON role: an empty scalar group. */
   readonly pushbuttons: ButtonGroup;
   readonly resetButton?: ResetButton;
   readonly leds: VectorPort;
+  /** Absent JSON role: an independent display group with no ports. */
   readonly sevenSegment: SevenSegment;
 }
 
