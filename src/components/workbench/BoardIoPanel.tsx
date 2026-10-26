@@ -30,7 +30,7 @@ export function BoardIoPanel({ board, outputs, inputs, onInputsChange }: BoardIo
   return (
     <Board size={24}>
       <Leds value={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
-      <SevenSegmentDisplays
+      {displayCount(ports) > 0 && <SevenSegmentDisplays
         value={outputs.displays}
         count={displayCount(ports)}
         activeLow={ports.sevenSegment.activeLow}
@@ -38,14 +38,14 @@ export function BoardIoPanel({ board, outputs, inputs, onInputsChange }: BoardIo
         name={labels.sevenSegment}
         title={displaysTitle(ports.sevenSegment)}
         note={multiplexedNote(ports.sevenSegment)}
-      />
-      <Switches
+      />}
+      {ports.switches.count > 0 && <Switches
         value={inputs.switches}
         count={ports.switches.count}
         onChange={(switches) => onInputsChange({ switches })}
         name={labels.switches}
         title={switchesTitle(ports.switches)}
-      />
+      />}
       <ButtonsPart board={board} inputs={inputs} onInputsChange={onInputsChange} />
     </Board>
   );
@@ -57,6 +57,7 @@ type PartProps = Omit<BoardIoPanelProps, 'outputs'>;
 function ButtonsPart({ board, inputs, onInputsChange }: PartProps) {
   const { ports, labels } = board;
   const { pushbuttons } = ports;
+  if (buttonCount(ports) === 0) return <ResetPart board={board} inputs={inputs} onInputsChange={onInputsChange} />;
   const shared = {
     value: inputs.buttons,
     onChange: (buttons: BitVector) => onInputsChange({ buttons }),

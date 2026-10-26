@@ -21,6 +21,7 @@ export interface SettingsDialogProps {
   boards: BoardCatalog;
   boardId: string;
   onBoardChange: (id: string) => void;
+  onViewBoardSettings?: () => void;
   /** Loading or saving the project, or compiling: the board cannot change just now. */
   boardLocked: boolean;
   /** Languages: the Examples pane opens with these ticked (languagePrefs.ts). */
@@ -121,6 +122,7 @@ export function SettingsDialog({
   boards,
   boardId,
   onBoardChange,
+  onViewBoardSettings,
   boardLocked,
   preferredLanguages,
   onPreferredLanguagesChange,
@@ -152,7 +154,7 @@ export function SettingsDialog({
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
-      <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} />
+      <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} onViewSettings={onViewBoardSettings} />
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />

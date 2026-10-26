@@ -116,7 +116,7 @@ describe('parseBoardFile', () => {
   });
 
   it('ships a user board file that parses with no warnings', () => {
-    expect(parseBoardFile(shippedUserFile, USER)).toEqual({ boards: [], warnings: [] });
+    expect(parseBoardFile(shippedUserFile, USER)).toEqual({ boards: [], warnings: [], problems: [] });
   });
 
   it('agrees with the schema shipped for editors about the built-in boards', () => {

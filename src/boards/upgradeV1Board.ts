@@ -44,10 +44,10 @@ function upgradePorts(ports: Record<string, unknown>): Record<string, unknown> {
 }
 
 function displayNames(names: unknown): string[] {
-  if (!Array.isArray(names)) fail(`ports.sevenSegment must be an array of ${V1_SHAPE.displays} names`);
-  if (names.length !== V1_SHAPE.displays) fail(`ports.sevenSegment needs exactly ${V1_SHAPE.displays} names (found ${names.length})`);
+  if (!Array.isArray(names)) fail(`ports.sevenSegment must be an array of ${V1_SHAPE.displays} names`, 'ports.sevenSegment');
+  if (names.length !== V1_SHAPE.displays) fail(`ports.sevenSegment needs exactly ${V1_SHAPE.displays} names (found ${names.length})`, 'ports.sevenSegment');
   return names.map((name, index) => {
-    if (typeof name !== 'string') fail(`ports.sevenSegment[${index}] must be a string, not ${quoted(name)}`);
+    if (typeof name !== 'string') fail(`ports.sevenSegment[${index}] must be a string, not ${quoted(name)}`, `ports.sevenSegment[${index}]`);
     return nameAt(`ports.sevenSegment[${index}]`, name);
   });
 }

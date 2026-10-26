@@ -17,6 +17,7 @@ export interface BoardSettingProps {
   /** Loading or saving the project, or compiling: the board cannot change just now. */
   locked: boolean;
   onChange: (id: string) => void;
+  onViewSettings?: () => void;
 }
 
 /**
@@ -24,7 +25,7 @@ export interface BoardSettingProps {
  * line about the chosen one, and where the list comes from. A project on a board that
  * is not installed keeps that board as its choice, marked so.
  */
-export function BoardSetting({ boards, boardId, locked, onChange }: BoardSettingProps) {
+export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings }: BoardSettingProps) {
   const { board, installed } = findBoard(boards, boardId);
   const ids = boards.boards.map((candidate) => candidate.id);
   const options = installed ? ids : [...ids, boardId];
@@ -44,6 +45,7 @@ export function BoardSetting({ boards, boardId, locked, onChange }: BoardSetting
         )}
       </p>
       {installed && <BoardResourceLinks resources={board.resources} className="wb-board-setting__links" />}
+      {onViewSettings && <button type="button" className="wb-project__text-btn" onClick={onViewSettings}>View board settings</button>}
       <BoardFileNote />
       {boards.warnings.map((warning) => (
         <span key={warning} className="wb-settings__note wb-settings__note--error">

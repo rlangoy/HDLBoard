@@ -9,6 +9,7 @@
  */
 
 import { isObject } from '../project/jsonValue';
+import { NO_SWITCHES, NO_BUTTONS, NO_DISPLAYS } from './optionalComponents';
 import {
   booleanAt,
   countAt,
@@ -46,8 +47,8 @@ export const DEFAULT_CLOCK_500HZ_NAME = 'CLOCK_500Hz';
 export const DEFAULT_CLOCK_MHZ = 50;
 
 const PORT_ROLES = {
-  required: ['clock', 'switches', 'pushbuttons', 'leds', 'sevenSegment'],
-  optional: ['clockMHz', 'clock500Hz', 'resetButton'],
+  required: ['clock', 'leds'],
+  optional: ['clockMHz', 'clock500Hz', 'resetButton', 'switches', 'pushbuttons', 'sevenSegment'],
   noun: 'role',
 } as const;
 
@@ -63,10 +64,10 @@ export function readPorts(value: unknown): BoardPorts {
   const parsed: BoardPorts = {
     clock: { port: nameAt('ports.clock', ports.clock), mhz: readClockMHz(ports.clockMHz) },
     clock500Hz: ports.clock500Hz === undefined ? DEFAULT_CLOCK_500HZ_NAME : nameAt('ports.clock500Hz', ports.clock500Hz),
-    switches: readVector('ports.switches', ports.switches, SWITCH_LIMIT),
-    pushbuttons: readButtons(ports.pushbuttons),
+    switches: ports.switches === undefined ? NO_SWITCHES : readVector('ports.switches', ports.switches, SWITCH_LIMIT),
+    pushbuttons: ports.pushbuttons === undefined ? NO_BUTTONS : readButtons(ports.pushbuttons),
     leds: readVector('ports.leds', ports.leds, LED_LIMIT),
-    sevenSegment: readSevenSegment(ports.sevenSegment),
+    sevenSegment: ports.sevenSegment === undefined ? NO_DISPLAYS : readSevenSegment(ports.sevenSegment),
   };
   const withReset = ports.resetButton === undefined ? parsed : { ...parsed, resetButton: readResetButton(ports.resetButton) };
   checkNamesUnique(withReset);
@@ -79,6 +80,7 @@ function readClockMHz(value: unknown): number {
     fail(
       `ports.clockMHz: ${quoted(value)} is not valid; use a number from ${CLOCK_MHZ_LIMIT.min} to ${CLOCK_MHZ_LIMIT.max} ` +
         `with at most ${CLOCK_MHZ_DECIMALS} decimals`,
+      'ports.clockMHz',
     );
   }
   return value;
@@ -100,13 +102,13 @@ function readButtons(value: unknown): ButtonGroup {
   const buttons = objectAt(path, value, { required: [], optional: ['port', 'count', 'ports', 'cross', 'activeLow'] });
   const activeLow = booleanAt(`${path}.activeLow`, buttons.activeLow, ACTIVE_LOW_BY_DEFAULT);
   const forms = ['port', 'ports', 'cross'].filter((form) => buttons[form] !== undefined);
-  if (forms.length !== 1) fail(`${path} needs exactly one of "port" (with "count"), "ports" or "cross"`);
-  if (buttons.port === undefined && buttons.count !== undefined) fail(`${path}.count goes with "port" only; a list of "ports" or a "cross" is counted`);
+  if (forms.length !== 1) fail(`${path} needs exactly one of "port" (with "count"), "ports" or "cross"`, path);
+  if (buttons.port === undefined && buttons.count !== undefined) fail(`${path}.count goes with "port" only; a list of "ports" or a "cross" is counted`, `${path}.count`);
   if (buttons.cross !== undefined) return { group: readCross(`${path}.cross`, buttons.cross), activeLow, layout: 'cross' };
   if (buttons.ports !== undefined) {
     return { group: { kind: 'scalars', ports: namesAt(`${path}.ports`, buttons.ports, BUTTON_LIMIT) }, activeLow, layout: 'row' };
   }
-  if (buttons.count === undefined) fail(`${path}.count is missing`);
+  if (buttons.count === undefined) fail(`${path}.count is missing`, `${path}.count`);
   const group: PortGroup = { kind: 'vector', port: nameAt(`${path}.port`, buttons.port), count: countAt(`${path}.count`, buttons.count, BUTTON_LIMIT) };
   return { group, activeLow, layout: 'row' };
 }
@@ -115,7 +117,7 @@ function readButtons(value: unknown): ButtonGroup {
 function readCross(path: string, value: unknown): PortGroup {
   const cross = objectAt(path, value, { required: [], optional: CROSS_POSITIONS, noun: 'position' });
   const missing = CROSS_POSITIONS.find((position) => cross[position] === undefined);
-  if (missing !== undefined) fail(`${path}: ${quoted(missing)} is missing`);
+  if (missing !== undefined) fail(`${path}: ${quoted(missing)} is missing`, `${path}.${missing}`);
   return { kind: 'scalars', ports: CROSS_POSITIONS.map((position) => nameAt(`${path}.${position}`, cross[position])) };
 }
 
@@ -127,16 +129,16 @@ function readResetButton(value: unknown): ResetButton {
 
 function readSevenSegment(value: unknown): SevenSegment {
   const path = 'ports.sevenSegment';
-  if (!isObject(value)) fail(`${path} must be an object`);
+  if (!isObject(value)) fail(`${path} must be an object`, path);
   if (value.kind === 'independent') return readIndependent(path, value);
   if (value.kind === 'multiplexed') return readMultiplexed(path, value);
-  return fail(`${path}.kind must be "independent" or "multiplexed"`);
+  return fail(`${path}.kind must be "independent" or "multiplexed"`, `${path}.kind`);
 }
 
 function readIndependent(path: string, value: unknown): IndependentDisplays {
   const displays = objectAt(path, value, { required: ['kind', 'ports', 'width'], optional: ['activeLow'] });
   if (displays.width !== SEGMENT_COUNT && displays.width !== SEGMENT_COUNT_WITH_POINT) {
-    fail(`${path}.width must be ${SEGMENT_COUNT} or ${SEGMENT_COUNT_WITH_POINT} (${SEGMENT_COUNT_WITH_POINT} when bit 7 is the decimal point)`);
+    fail(`${path}.width must be ${SEGMENT_COUNT} or ${SEGMENT_COUNT_WITH_POINT} (${SEGMENT_COUNT_WITH_POINT} when bit 7 is the decimal point)`, `${path}.width`);
   }
   return {
     kind: 'independent',
@@ -166,7 +168,7 @@ function readMultiplexed(path: string, value: unknown): MultiplexedDisplays {
 /** A 7-bit vector name, or seven scalar names in the order a … g. */
 function readSegments(path: string, value: unknown): PortGroup {
   if (typeof value === 'string') return { kind: 'vector', port: nameAt(path, value), count: SEGMENT_COUNT };
-  if (!Array.isArray(value)) fail(`${path} must be a port name or an array of ${SEGMENT_COUNT} names (a … g)`);
+  if (!Array.isArray(value)) fail(`${path} must be a port name or an array of ${SEGMENT_COUNT} names (a … g)`, path);
   return { kind: 'scalars', ports: namesAt(path, value, SEGMENT_LIMIT) };
 }
 
@@ -204,7 +206,7 @@ function sevenSegmentNames(displays: SevenSegment): NamedPort[] {
 function namedPorts(ports: BoardPorts): NamedPort[] {
   return [
     { path: 'ports.clock', name: ports.clock.port },
-    { path: 'ports.switches.port', name: ports.switches.port },
+    ...(ports.switches.count ? [{ path: 'ports.switches.port', name: ports.switches.port }] : []),
     ...buttonNames(ports.pushbuttons),
     ...(ports.resetButton === undefined ? [] : [{ path: 'ports.resetButton.port', name: ports.resetButton.port }]),
     { path: 'ports.leds.port', name: ports.leds.port },
@@ -218,7 +220,7 @@ function checkNamesUnique(ports: BoardPorts): void {
   const seen = new Map<string, NamedPort>();
   for (const port of namedPorts(ports)) {
     const earlier = seen.get(port.name.toLowerCase());
-    if (earlier !== undefined) fail(duplicateMessage(port, earlier));
+    if (earlier !== undefined) fail(duplicateMessage(port, earlier), port.path);
     seen.set(port.name.toLowerCase(), port);
   }
 }

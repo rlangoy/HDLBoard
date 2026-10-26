@@ -1,30 +1,51 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useState } from 'react';
-import { BUILT_IN_BOARDS, BUILT_IN_CATALOG, fetchBoardFile, loadUserBoards, mergeCatalog } from '../../boards/boardCatalog';
-import type { BoardCatalog } from '../../boards/types';
+import { useEffect, useMemo, useState } from 'react';
+import { parsedDocument, type BoardDocument } from '../../boards/boardEditorModel';
+import { editorCatalog, loadEditorCatalog } from '../../boards/boardEditorCatalog';
+import { BUILT_IN_BOARD_IDS, initialBoardDocument } from '../../boards/boardEditorStorage';
+import { projectBoard, withProjectBoard } from '../../boards/projectBoard';
+import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 
 /**
- * The boards available here (docs/board_io_config_spec.md § 6.3): the built-in ones at
- * once, so the first render never waits, then the user's `boards/boards.json` as soon as
- * it is fetched. A project opened before that keeps its board id, and simply finds its
- * board on the next render. The file's problems are logged once for the expert who
- * edited it, and listed in Settings › Board.
+ * Applied settings live in memory until the project is saved. Raw documents retain
+ * extensions; the project's embedded board takes precedence over installed custom boards.
  */
-export function useBoards(): BoardCatalog {
-  const [catalog, setCatalog] = useState<BoardCatalog>(BUILT_IN_CATALOG);
+export interface EditableBoardCatalog extends BoardCatalog {
+  document: BoardDocument;
+  editorBoards: readonly BoardDefinition[];
+  builtInBoardIds: readonly string[];
+  ready: boolean;
+  applyDocument: (file: BoardDocument) => void;
+  boardConfigFor: (id: string) => Record<string, unknown> | undefined;
+}
+
+export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardCatalog {
+  const [savedDocument, setDocument] = useState(initialBoardDocument);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
+  const [legacy, setLegacy] = useState<readonly BoardDefinition[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void loadUserBoards(fetchBoardFile).then((user) => {
+    void loadEditorCatalog().then((loaded) => {
       if (cancelled) return;
-      const merged = mergeCatalog(BUILT_IN_BOARDS, user);
-      for (const warning of merged.warnings) console.warn(warning);
-      setCatalog(merged);
+      setDocument(loaded.file);
+      setWarnings(loaded.warnings);
+      setReady(true);
+      setLegacy(loaded.legacy);
     });
     return () => {
       cancelled = true;
     };
   }, []);
-  return catalog;
+  const document = useMemo(() => withProjectBoard(savedDocument, boardConfig), [savedDocument, boardConfig]);
+  const embedded = useMemo(() => projectBoard(boardConfig), [boardConfig]);
+  const parsed = useMemo(() => {
+    const installed = editorCatalog(savedDocument, legacy);
+    return embedded.board ? { ...installed, boards: [...installed.boards.filter((board) => board.id !== embedded.board.id), embedded.board] } : installed;
+  }, [savedDocument, legacy, embedded]);
+  const editorBoards = useMemo(() => parsedDocument(document).boards, [document]);
+  const boardConfigFor = (id: string) => BUILT_IN_BOARD_IDS.includes(id) ? undefined : document.boards.find((board) => board.id === id);
+  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument: setDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
 }

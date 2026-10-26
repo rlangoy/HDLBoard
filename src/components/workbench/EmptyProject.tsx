@@ -12,7 +12,7 @@ const TEXT = {
 };
 
 export interface EmptyProjectProps {
-  onExamples: () => void;
+  onExamples?: () => void;
   onNewFile: () => void;
   onUpload: () => void;
 }
@@ -26,12 +26,12 @@ export function EmptyProject({ onExamples, onNewFile, onUpload }: EmptyProjectPr
     <div className="wb-editor__empty">
       <FileIcon className="wb-editor__empty-icon" aria-hidden="true" />
       <p className="wb-editor__empty-title">{TEXT.title}</p>
-      <p className="wb-editor__empty-hint">{TEXT.hint}</p>
+      <p className="wb-editor__empty-hint">{onExamples ? TEXT.hint : 'Create a file with your board’s I/O, or upload a design.'}</p>
       <div className="wb-editor__empty-actions">
-        <button type="button" className="wb-editor__empty-btn is-primary" onClick={onExamples}>
+        {onExamples && <button type="button" className="wb-editor__empty-btn is-primary" onClick={onExamples}>
           <BookIcon aria-hidden="true" />
           {TEXT.examples}
-        </button>
+        </button>}
         <button type="button" className="wb-editor__empty-btn" onClick={onNewFile}>
           <span className="wb-icon wb-icon--plus" aria-hidden="true" />
           {TEXT.newFile}

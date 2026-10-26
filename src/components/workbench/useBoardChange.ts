@@ -28,6 +28,7 @@ export interface BoardChangeOptions {
   project: OpenProject;
   setProject: (update: (project: OpenProject) => OpenProject) => void;
   catalog: BoardCatalog;
+  boardConfigFor?: (id: string) => Record<string, unknown> | undefined;
   /** Stops a running simulation: it was built with the old names. */
   stopSimulation: () => void;
   /** Settings closes for the question; Cancel brings it back, so the student is where they started. */
@@ -117,7 +118,7 @@ function applyBoardState(latest: Latest, next: Pick<BoardChangeState<VhdlFile[]>
   const { project, setFiles, setProject, stopSimulation } = latest.current;
   stopSimulation();
   setFiles(next.files);
-  setProject((p) => withWaveViews({ ...p, board: next.board }, viewsOf(p.waveViews)));
+  setProject((p) => withWaveViews({ ...p, board: next.board, boardConfig: latest.current.boardConfigFor?.(next.board) }, viewsOf(p.waveViews)));
   if (next.board !== project.board) savePreferredBoard(next.board);
 }
 

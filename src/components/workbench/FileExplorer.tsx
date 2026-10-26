@@ -29,7 +29,7 @@ export interface FileExplorerProps {
   /** Save the whole project (every folder) as one .zip. */
   onDownloadAll: () => void;
   /** Show the Examples pane over the editor, or hide it again. */
-  onToggleExamples: () => void;
+  onToggleExamples?: () => void;
   /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
@@ -188,7 +188,7 @@ export function FileExplorer({
       <div className="wb-files__header">
         <FilesIcon className="wb-icon wb-icon--files" aria-hidden="true" />
         <h2 className="wb-files__title">Files</h2>
-        <button
+          {onToggleExamples && <button
           type="button"
           className="wb-files__examples"
           onClick={onToggleExamples}
@@ -197,7 +197,7 @@ export function FileExplorer({
         >
           <BookIcon className="wb-files__examples-icon" aria-hidden="true" />
           <span className="wb-files__label-text">Examples</span>
-        </button>
+          </button>}
       </div>
 
       <div className="wb-files__actions">

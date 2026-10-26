@@ -8,6 +8,7 @@
  */
 
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import '../workbench/ColumnDivider.css';
 
 const STORAGE_KEY = 'hdlboard.waveform.namesWidth';
 export const DEFAULT_NAMES_WIDTH = 260;
@@ -78,7 +79,7 @@ export function ColumnResizer({ width, onWidth }: { readonly width: number; read
   };
   return (
     <div
-      className={dragging ? 'wv-resizer is-dragging' : 'wv-resizer'}
+      className={`wv-resizer hdl-column-divider${dragging ? ' is-dragging' : ''}`}
       role="separator"
       aria-orientation="vertical"
       aria-label="Width of the signal list"
@@ -94,7 +95,7 @@ export function ColumnResizer({ width, onWidth }: { readonly width: number; read
       onDoubleClick={() => onWidth(DEFAULT_NAMES_WIDTH)}
       onKeyDown={onKeyDown}
     >
-      <span className="wv-resizer__grip" aria-hidden="true" />
+      <span className="hdl-column-divider__grip" aria-hidden="true" />
     </div>
   );
 }

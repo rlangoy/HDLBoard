@@ -11,7 +11,7 @@
  */
 
 import { isObject } from '../project/jsonValue';
-import { checkBoard, fail, invalid, quoted, valid, type Checked } from './boardFileReader';
+import { checkBoard, fail, invalid, quoted, valid, type BoardIssue, type Checked } from './boardFileReader';
 import { labelProblem } from './boardNames';
 import { readPorts } from './parsePorts';
 import { readResources } from './parseResources';
@@ -25,9 +25,9 @@ const READABLE_VERSIONS: readonly number[] = [1, BOARD_FILE_VERSION];
 export const DEFAULT_LABELS: BoardLabels = { switches: 'SW', pushbuttons: 'KEY', leds: 'LEDR', sevenSegment: 'HEX' };
 
 const BOARD_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_ID_LENGTH = 32;
-const MAX_NAME_LENGTH = 40;
-const MAX_DESCRIPTION_LENGTH = 140;
+export const MAX_ID_LENGTH = 32;
+export const MAX_NAME_LENGTH = 40;
+export const MAX_DESCRIPTION_LENGTH = 140;
 const V1_BOARD_FIELDS: readonly string[] = ['id', 'name', 'description', 'ports', 'labels'];
 const V2_BOARD_FIELDS: readonly string[] = [...V1_BOARD_FIELDS, 'resources'];
 
@@ -48,18 +48,27 @@ interface BoardContext {
   readonly origin: BoardDefinition['origin'];
 }
 
-export function parseBoardFile(text: string, source: BoardFileSource): ParsedBoards {
+export interface BoardFileResult extends ParsedBoards {
+  /** Paths are relative to each board, using dot-separated keys and array indexes. */
+  readonly problems: readonly (BoardIssue & { readonly boardIndex?: number })[];
+}
+
+export function parseBoardFile(text: string, source: BoardFileSource): BoardFileResult {
   const file = parseFileShape(text);
-  if (!file.ok) return { boards: [], warnings: [`${source.fileName} ${file.problem}.`] };
+  if (!file.ok) return { boards: [], warnings: [`${source.fileName} ${file.problem}.`], problems: [{ path: file.path, message: file.problem }] };
 
   const boards: BoardDefinition[] = [];
   const warnings: string[] = [];
+  const problems: (BoardIssue & { boardIndex: number })[] = [];
   file.value.boards.forEach((raw, index) => {
     const board = parseNewBoard(raw, { version: file.value.version, origin: source.origin }, boards);
     if (board.ok) boards.push(board.value);
-    else warnings.push(skippedWarning({ fileName: source.fileName, index, raw }, board.problem));
+    else {
+      warnings.push(skippedWarning({ fileName: source.fileName, index, raw }, board.problem));
+      problems.push({ path: board.path, message: board.problem, boardIndex: index });
+    }
   });
-  return { boards, warnings };
+  return { boards, warnings, problems };
 }
 
 /** A board of the file, unless it breaks a rule or takes the id or name of one before it. */
@@ -67,7 +76,7 @@ function parseNewBoard(raw: unknown, context: BoardContext, earlier: readonly Bo
   const board = checkBoard(() => readBoard(raw, context));
   if (!board.ok) return board;
   const clash = clashWithEarlier(board.value, earlier);
-  return clash === undefined ? board : invalid(clash);
+  return clash === undefined ? board : invalid(clash, earlier.some((item) => item.id === board.value.id) ? 'id' : 'name');
 }
 
 /** Where in a board file an entry is: the file, its index in `boards`, and the entry itself. */
@@ -104,7 +113,7 @@ function readBoard(entry: unknown, { version, origin }: BoardContext): BoardDefi
   if (!isObject(entry)) fail('it is not an object');
   const fields = version === 1 ? V1_BOARD_FIELDS : V2_BOARD_FIELDS;
   const unknownKey = Object.keys(entry).find((key) => !fields.includes(key));
-  if (unknownKey !== undefined) fail(`${quoted(unknownKey)} is not a board field (the fields are ${fields.join(', ')})`);
+  if (unknownKey !== undefined) fail(`${quoted(unknownKey)} is not a board field (the fields are ${fields.join(', ')})`, unknownKey);
   const raw = version === 1 ? upgraded(entry) : entry;
   return {
     id: readId(raw.id),
@@ -119,42 +128,42 @@ function readBoard(entry: unknown, { version, origin }: BoardContext): BoardDefi
 
 function upgraded(entry: Record<string, unknown>): Record<string, unknown> {
   const result = upgradeV1Board(entry);
-  if (!result.ok) fail(result.problem);
+  if (!result.ok) fail(result.problem, result.path);
   return result.value as Record<string, unknown>;
 }
 
 function readId(value: unknown): string {
-  if (typeof value !== 'string') fail('"id" must be a string');
-  if (value.length > MAX_ID_LENGTH) fail(`"id" is longer than ${MAX_ID_LENGTH} characters`);
-  if (!BOARD_ID.test(value)) fail(`"id" ${quoted(value)} must be lower-case letters and digits, joined by single hyphens`);
+  if (typeof value !== 'string') fail('"id" must be a string', 'id');
+  if (value.length > MAX_ID_LENGTH) fail(`"id" is longer than ${MAX_ID_LENGTH} characters`, 'id');
+  if (!BOARD_ID.test(value)) fail(`"id" ${quoted(value)} must be lower-case letters and digits, joined by single hyphens`, 'id');
   return value;
 }
 
 function readName(value: unknown): string {
-  if (typeof value !== 'string' || value.trim() === '') fail('"name" must be a non-empty string');
-  if (value.length > MAX_NAME_LENGTH) fail(`"name" is longer than ${MAX_NAME_LENGTH} characters`);
+  if (typeof value !== 'string' || value.trim() === '') fail('"name" must be a non-empty string', 'name');
+  if (value.length > MAX_NAME_LENGTH) fail(`"name" is longer than ${MAX_NAME_LENGTH} characters`, 'name');
   return value;
 }
 
 function readDescription(value: unknown): string {
   if (value === undefined) return '';
-  if (typeof value !== 'string') fail('"description" must be a string');
-  if (value.length > MAX_DESCRIPTION_LENGTH) fail(`"description" is longer than ${MAX_DESCRIPTION_LENGTH} characters`);
+  if (typeof value !== 'string') fail('"description" must be a string', 'description');
+  if (value.length > MAX_DESCRIPTION_LENGTH) fail(`"description" is longer than ${MAX_DESCRIPTION_LENGTH} characters`, 'description');
   return value;
 }
 
 function readLabels(value: unknown): BoardLabels {
   if (value === undefined) return DEFAULT_LABELS;
-  if (!isObject(value)) fail('"labels" must be an object');
+  if (!isObject(value)) fail('"labels" must be an object', 'labels');
   const unknownRole = Object.keys(value).find((key) => !(LABELLED_ROLES as readonly string[]).includes(key));
-  if (unknownRole !== undefined) fail(`labels.${unknownRole} is not a labelled role (the labelled roles are ${LABELLED_ROLES.join(', ')})`);
+  if (unknownRole !== undefined) fail(`labels.${unknownRole} is not a labelled role (the labelled roles are ${LABELLED_ROLES.join(', ')})`, `labels.${unknownRole}`);
   const labels: Record<LabelledRole, string> = { ...DEFAULT_LABELS };
   for (const role of LABELLED_ROLES) {
     const label = value[role];
     if (label === undefined) continue;
-    if (typeof label !== 'string') fail(`labels.${role} must be a string`);
+    if (typeof label !== 'string') fail(`labels.${role} must be a string`, `labels.${role}`);
     const problem = labelProblem(label);
-    if (problem !== undefined) fail(`labels.${role} ${quoted(label)} ${problem}`);
+    if (problem !== undefined) fail(`labels.${role} ${quoted(label)} ${problem}`, `labels.${role}`);
     labels[role] = label;
   }
   return labels;

@@ -31,6 +31,7 @@ export interface OpenProject {
   version: number;
   name: string;
   board: string;
+  boardConfig?: Record<string, unknown>;
   description: string;
   /** The project file's own name, e.g. `counter.hdlboard.json`. */
   fileName: string;
@@ -143,6 +144,7 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
     version: project.version,
     name: project.name,
     board: project.board,
+    boardConfig: project.boardConfig,
     description: project.description,
     projectDirectory: projectDirectoryOf(project),
     sourceDirectory: project.sourceDirectory,
@@ -566,6 +568,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     version: project.version,
     name: project.name,
     board: project.board,
+    ...(project.boardConfig !== undefined ? { boardConfig: project.boardConfig } : {}),
     description: project.description,
     fileName,
     sourceDirectory,
@@ -631,6 +634,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     version: CURRENT_PROJECT_VERSION,
     name: r.name as string,
     board: boardIdOf(r.version, r.board as string),
+    ...(r.boardConfig && typeof r.boardConfig === 'object' && !Array.isArray(r.boardConfig) ? { boardConfig: r.boardConfig as Record<string, unknown> } : {}),
     description: r.description as string,
     fileName: r.fileName as string,
     sourceDirectory,

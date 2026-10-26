@@ -12,6 +12,8 @@ import {
 import {
   BOARD_DEFAULT_W,
   BOARD_MIN_W,
+  CHROME_W,
+  EDITOR_MIN_W,
   SIDEBAR_DEFAULT_W,
   SIDEBAR_MIN_W,
   collapsesAt,
@@ -89,12 +91,15 @@ export interface PaneLayoutState {
   /** The width each side pane renders (or reopens) at. */
   sidebarWidth: number;
   boardWidth: number;
+  sidebarMaxWidth: number;
+  boardMaxWidth: number;
   consoleHeight: number;
   collapsed: SidePaneFlags;
   /** Opens a shut pane or shuts an open one, with a slide. */
   togglePane: (pane: SidePane) => void;
   /** Opens or shuts a pane, with a slide; nothing when it already is. */
   showPane: (pane: SidePane, open: boolean) => void;
+  setPaneWidth: (pane: SidePane, width: number) => void;
   onSidebarDividerPointerDown: DividerPointerDown;
   onBoardDividerPointerDown: DividerPointerDown;
   onConsoleDividerPointerDown: DividerPointerDown;
@@ -361,6 +366,14 @@ export function usePaneLayout(): PaneLayoutState {
     if (collapsedRef.current[pane] === open) togglePane(pane);
   };
 
+  const setPaneWidth = (pane: SidePane, width: number) => {
+    desiredWidth.current[pane] = Math.max(pane === 'sidebar' ? SIDEBAR_MIN_W : BOARD_MIN_W, width);
+    const wasCollapsed = collapsedRef.current[pane];
+    if (wasCollapsed) setPaneCollapsed(pane, false);
+    applyLayout(bodyWidth() + (wasCollapsed ? RAIL_W : 0), otherPane(pane));
+    storeLayout();
+  };
+
   useEffect(
     () => () => {
       if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
@@ -391,10 +404,13 @@ export function usePaneLayout(): PaneLayoutState {
     bodyRef,
     sidebarWidth,
     boardWidth,
+    sidebarMaxWidth: Math.max(SIDEBAR_MIN_W, bodyWidth() - CHROME_W - EDITOR_MIN_W - (collapsed.board ? 0 : BOARD_MIN_W)),
+    boardMaxWidth: Math.max(BOARD_MIN_W, bodyWidth() - CHROME_W - EDITOR_MIN_W - (collapsed.sidebar ? 0 : SIDEBAR_MIN_W)),
     consoleHeight,
     collapsed,
     togglePane,
     showPane,
+    setPaneWidth,
     onSidebarDividerPointerDown: (e) => resizePane(e, 'sidebar'),
     onBoardDividerPointerDown: (e) => resizePane(e, 'board'),
     onConsoleDividerPointerDown: resizeConsole,

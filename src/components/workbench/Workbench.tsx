@@ -11,7 +11,6 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from 'react';
-import { cx } from '../board';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
@@ -23,6 +22,7 @@ import { generateBoardTop, starterTopFileName } from '../../boards/boardTop';
 import { BoardChangeDialog } from './BoardChangeDialog';
 import { BOARD_TEXT, boardPaneTitle, mismatchHint, notInstalledRunLog, runBoardLog, untranslatedLog, withBoardName } from './boardText';
 import { useBoards } from './useBoards';
+import { withBoardConfig } from '../../boards/projectBoard';
 import { useBoardChange } from './useBoardChange';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { Header } from './Header';
@@ -42,6 +42,7 @@ import { ExamplesPane } from './ExamplesPane';
 import { PickerWaitNotice, usePickerWait } from './PickerWait';
 import { copyExample, starterFilesFor, type Example } from './examples';
 import { SidePanel } from './SidePanel';
+import { PaneDivider } from './PaneDivider';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
 import { PanelToggleIcon } from './icons';
 import { CodeEditor } from './CodeEditor';
@@ -77,6 +78,10 @@ import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
+import { BoardSettingsPage } from './BoardSettingsPage';
+import { BoardDraftIo } from './boardEditor/BoardDraftIo';
+import { useBoardSettings } from './boardEditor/useBoardSettings';
+import { useOverlay } from './useOverlay';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, pickProjectFolder, type FileHandles } from './fileSystemAccess';
@@ -258,7 +263,6 @@ type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
 
 export function Workbench() {
   // The boards available here, and the student's last choice, which a fresh workspace starts on.
-  const catalog = useBoards();
   const [preferredBoard] = useState(loadPreferredBoard);
   const [freshStart] = useState(() => freshWorkspace(BUILT_IN_CATALOG, preferredBoard));
   const [files, setFiles] = useState<VhdlFile[]>(freshStart.files);
@@ -317,7 +321,7 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, setDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
+  const [dialog, applyDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
   // New File > Project with files in Files: asked first whether the project keeps them (RemoveFilesDialog).
   const [projectToCreate, setProjectToCreate] = useState<NewProjectChoice | null>(null);
   // A project that kept its files is created on their board; the change to the board chosen follows.
@@ -326,10 +330,15 @@ export function Workbench() {
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
   // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
-  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | null>(null);
+  const { overlay, setOverlay, registerLeaveGuard, navigate } = useOverlay();
+  const setDialog = useCallback((next: typeof dialog) => {
+    if (next === null) applyDialog(null);
+    else navigate(() => applyDialog(next));
+  }, [navigate]);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(freshStart.project);
+  const catalog = useBoards(project.boardConfig);
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
   // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
@@ -481,11 +490,11 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>, highlight?: string) => {
+  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>, highlight?: string) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId(), highlight });
-  }, []);
+  }), [navigate, setOverlay]);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
   const openConsoleDiagnostic = useCallback(
     (diagnostic: LocatedDiagnostic) => {
@@ -600,16 +609,16 @@ export function Workbench() {
   );
 
   // Opening a file is a pair-change event: its testbench or design may join it (§ 4.3).
-  const handleOpenFile = (id: string) => {
+  const handleOpenFile = (id: string) => navigate(() => {
     setOverlay(null);
     tb.showFile(id, 'open');
-  };
+  });
 
   // A pick in a pane header's file menu: as a click in Files, then the caret goes to its code.
-  const handlePickFile = (id: string) => {
+  const handlePickFile = (id: string) => navigate(() => {
     handleOpenFile(id);
     window.setTimeout(() => document.querySelector<HTMLElement>('.wb-split__pane.is-focused textarea')?.focus());
-  };
+  });
 
   const handleRenameFile = (id: string, name: string) => {
     const current = files.find((f) => f.id === id);
@@ -734,7 +743,7 @@ export function Workbench() {
   // kept as it is, never overwritten) and its first file opens in the editor as the
   // Top File, so Start runs it. It starts from a clean slate: an ongoing simulation
   // ends and the console is cleared, keeping only what the copy did.
-  const handleOpenExample = (example: Example) => {
+  const handleOpenExample = (example: Example) => navigate(() => {
     endRunQuietly();
     setLogLines([]);
     const { added, kept, openId, descriptions, untranslated } = copyExample(example, filesRef.current, nextFileId, activeBoard);
@@ -747,7 +756,7 @@ export function Workbench() {
     if (added.some((f) => f.id === openId)) showNewFile(openId);
     else handleOpenFile(openId);
     makeTop(openId);
-  };
+  });
 
   // A board of another shape has no examples: the Examples pane offers its generated
   // starter top instead (docs/board_io_v2_spec.md § 5.4), in the first language ticked.
@@ -1106,7 +1115,7 @@ export function Workbench() {
     { project: opened, files: projectFiles }: OpenedProject,
     localFiles: readonly ProjectSourceFile[],
     page: ProjectPageWhen = 'always',
-  ) => {
+  ) => navigate(() => {
     endRunQuietly();
     setLogLines([]);
     const closed = filesRef.current;
@@ -1143,7 +1152,7 @@ export function Workbench() {
     }
     const listed = (name: string) => opened.entries.some((entry) => sameFileName(entry.name, name));
     for (const f of localFiles.filter((file) => !listed(file.name))) appendLog(`Ignored ${f.name}: the project does not list it.`);
-  };
+  });
 
   // ?project=<url>: open a project published at a URL, e.g. a GitHub gist (spec § 6.1). Once, on the first load.
   useEffect(() => {
@@ -1358,7 +1367,7 @@ export function Workbench() {
         : 'Download the project as a .zip';
 
   // Files keeps its files, in the Default project again.
-  const handleCloseProject = () => {
+  const handleCloseProject = () => navigate(() => {
     appendLog(`Closed project ${project.name}; Files keeps its files, in the ${DEFAULT_PROJECT_NAME} project.`);
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
@@ -1369,7 +1378,7 @@ export function Workbench() {
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
-  };
+  });
 
   const handleOpenProjectFile = (name: string) => {
     const file = files.find((f) => sameFileName(f.name, name));
@@ -1387,12 +1396,15 @@ export function Workbench() {
   const boardTopFile = ({ board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
     const definition = findBoard(catalog, board).board;
     const name = starterTopFileName(definition, language, takenNames);
-    return { id: nextFileId(), name, folder: folderForUpload(name) ?? 'vhdl', content: generateBoardTop(definition, language, baseName(name)) };
+    const content = definition.origin === 'user'
+      ? newFileContent(name, language, definition).text
+      : generateBoardTop(definition, language, baseName(name));
+    return { id: nextFileId(), name, folder: folderForUpload(name) ?? 'vhdl', content };
   };
 
   /** A new project on `board`, listing `listed`, with `top` as its Top File, shown on the project settings. */
   const createProject = (name: string, board: string, listed: readonly string[], top: VhdlFile) => {
-    const created = newProject(name, listed, board);
+    const created = withBoardConfig(newProject(name, listed, board), catalog.boardConfigFor(board));
     saveFolderRef.current = null;
     replaceProject(created);
     showNewFile(top.id);
@@ -1432,23 +1444,24 @@ export function Workbench() {
   };
 
   // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
-  const handleStartProject = () => {
+  const handleStartProject = () => navigate(() => {
     // The files it offers are in the open project's names: its board too.
-    const started = startProject(fileNames, project.board);
+    const started = withBoardConfig(startProject(fileNames, project.board), catalog.boardConfigFor(project.board));
     saveFolderRef.current = null;
     replaceProject(started);
     setOverlay('project');
     appendLog('New project: give it a name, and add the files that belong to it.', 'success');
-  };
+  });
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) void readAndAddFiles([...e.target.files]);
+    const chosen = [...(e.target.files ?? [])];
+    if (chosen.length) navigate(() => void readAndAddFiles(chosen));
     e.target.value = '';
   };
 
   const handleFilesDropped = (list: FileList, handles: Promise<FileHandles>) => {
     const files = [...list];
-    void handles.then((known) => readAndAddFiles(files, known));
+    navigate(() => void handles.then((known) => readAndAddFiles(files, known)));
   };
 
   /** The folder dialog's button: in Chrome and Edge the picker opens in the project file's folder. */
@@ -1641,6 +1654,8 @@ export function Workbench() {
   // Changing the board (docs/board_io_config_spec.md § 3.3): from Settings, the project settings, or a mismatch hint.
   // Not while the project loads or saves, or a run compiles: there is no overlapping state to define.
   const boardLocked = projectBusy !== null || status === 'compiling';
+  const boardSettings = useBoardSettings(catalog, { setProject, stopSimulation: stopRunSoon });
+  const boardPreview = boardSettings.preview;
   const boardChange = useBoardChange({
     files,
     setFiles: replaceFilesForBoard,
@@ -1648,6 +1663,7 @@ export function Workbench() {
     setProject,
     catalog,
     stopSimulation: stopRunSoon,
+    boardConfigFor: catalog.boardConfigFor,
     reopenSettings: () => setDialog('settings'),
     log: logWithLink,
     busy: boardLocked,
@@ -1794,6 +1810,11 @@ export function Workbench() {
         boards={catalog}
         boardId={project.board}
         onBoardChange={handleBoardChosenInSettings}
+        onViewBoardSettings={() => {
+          setDialog(null);
+          showPane('sidebar', false);
+          setOverlay('boardSettings');
+        }}
         boardLocked={boardLocked}
         preferredLanguages={preferredLanguages}
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
@@ -1970,7 +1991,7 @@ export function Workbench() {
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
               onDownloadAll={handleDownloadAll}
-              onToggleExamples={() => setOverlay((shown) => (shown === 'examples' ? null : 'examples'))}
+              onToggleExamples={activeBoard.origin === 'built-in' ? () => setOverlay((shown) => (shown === 'examples' ? null : 'examples')) : undefined}
               examplesOpen={overlay === 'examples'}
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
@@ -1981,12 +2002,8 @@ export function Workbench() {
             />
           </SidePanel>
 
-          <div
-            className={cx('wb-resizer', collapsed.sidebar && 'is-beside-collapsed')}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize Explorer"
-            aria-controls={PANE_IDS.sidebar.pane}
+          <PaneDivider pane="sidebar" width={layout.sidebarWidth} maxWidth={layout.sidebarMaxWidth} collapsed={collapsed.sidebar}
+            onWidth={(width) => layout.setPaneWidth('sidebar', width)}
             onPointerDown={layout.onSidebarDividerPointerDown}
           />
 
@@ -2001,11 +2018,15 @@ export function Workbench() {
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (
-                  <EmptyProject onExamples={() => setOverlay('examples')} onNewFile={handleNewFile} onUpload={showOpenDialog} />
+                  <EmptyProject onExamples={activeBoard.origin === 'built-in' ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
                 )
               }
             />
             </div>
+            {overlay === 'boardSettings' && catalog.ready && (
+              <BoardSettingsPage document={catalog.document} boards={catalog.editorBoards} builtInBoardIds={catalog.builtInBoardIds} initialBoardId={activeBoard.id}
+                onSave={boardSettings.onSave} onClose={() => setOverlay(null)} registerLeaveGuard={registerLeaveGuard} onPreview={boardSettings.onPreview} />
+            )}
             {overlay === 'project' && (
               <ProjectPage
                 project={project}
@@ -2078,19 +2099,15 @@ export function Workbench() {
           )}
           </div>
 
-          <div
-            className={cx('wb-resizer', collapsed.board && 'is-beside-collapsed')}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize board panel"
-            aria-controls={PANE_IDS.board.pane}
+          <PaneDivider pane="board" width={layout.boardWidth} maxWidth={layout.boardMaxWidth} collapsed={collapsed.board}
+            onWidth={(width) => layout.setPaneWidth('board', width)}
             onPointerDown={layout.onBoardDividerPointerDown}
           />
 
           <SidePanel
             ids={PANE_IDS.board}
             side="right"
-            title={boardPaneTitle(BOARD_PANE_TITLE, activeBoard)}
+            title={boardPaneTitle(BOARD_PANE_TITLE, overlay === 'boardSettings' && boardPreview ? boardPreview.board : activeBoard)}
             width={layout.boardWidth}
             collapsed={collapsed.board}
             onCollapse={() => togglePane('board')}
@@ -2104,12 +2121,12 @@ export function Workbench() {
                 ref={boardScalerRef}
                 style={{ transform: `scale(${boardScale})` }}
               >
-                <BoardIoPanel
+                {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} /> : <BoardIoPanel
                   board={activeBoard}
                   outputs={boardIo.outputs}
                   inputs={boardIo.inputs}
                   onInputsChange={handleBoardInputsChange}
-                />
+                />}
               </div>
             </div>
           </SidePanel>
