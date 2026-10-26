@@ -26,6 +26,8 @@ const NEW_CODE = [
   'src/components/workbench/BoardChangeDialog.tsx',
   'src/components/workbench/BoardIoPanel.tsx',
   'src/components/workbench/BoardSetting.tsx',
+  'src/components/workbench/BoardSettingsPage.tsx',
+  'src/components/workbench/BoardSettingsPage.test.tsx',
   'src/components/workbench/boardText.ts',
   'src/components/workbench/helpSignals.ts',
   'src/components/workbench/regExpText.ts',

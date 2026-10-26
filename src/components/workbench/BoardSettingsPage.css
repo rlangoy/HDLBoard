@@ -1,0 +1,45 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+.wb-board-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.wb-board-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.wb-board-settings__advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: white;
+  color: var(--wb-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.wb-board-settings__advanced[aria-expanded="true"] { background: var(--wb-sidebar-bg); }
+.wb-board-settings__advanced:focus-visible { outline: 2px solid var(--wb-accent); outline-offset: 3px; }
+.wb-board-settings__overview { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; }
+.wb-board-settings__overview dt { font-weight: 600; }
+.wb-board-settings__overview dd { margin: 0; }
+
+.wb-board-settings__header h2 { margin-top: 0; }
+.wb-board-settings__parameters {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

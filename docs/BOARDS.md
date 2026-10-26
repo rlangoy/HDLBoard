@@ -111,6 +111,15 @@ AN  <= (others => '1');               -- all digits off
 In the code editor **Tab** indents (the selected lines, if several), **Shift+Tab** takes one level off, and **Esc**
 then **Tab** moves on to the next control.
 
+## View board import settings
+
+In **Settings › Board**, click **View board settings** to collapse Explorer and open the current board's
+overview. Click **Advanced** to show or hide its complete version-2 JSON import parameters, including
+effective defaults, labels and resource links. The read-only page replaces the
+code area, in the same place as Project settings. Close it with **×** or **Esc** to return to your code;
+the editors keep their contents and state. Editing and importing boards from this page are planned for later.
+If the project's board is missing, the page identifies it and shows the active fallback board's parameters.
+
 ## Polarity
 
 Your design sees the level on the pin; the board decides what that level means.

@@ -77,6 +77,7 @@ import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
+import { BoardSettingsPage } from './BoardSettingsPage';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, pickProjectFolder, type FileHandles } from './fileSystemAccess';
@@ -325,7 +326,7 @@ export function Workbench() {
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
   // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
   // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
-  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | null>(null);
+  const [overlay, setOverlay] = useState<'examples' | 'project' | 'projects' | 'waveform' | 'boardSettings' | null>(null);
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(freshStart.project);
@@ -1793,6 +1794,11 @@ export function Workbench() {
         boards={catalog}
         boardId={project.board}
         onBoardChange={handleBoardChosenInSettings}
+        onViewBoardSettings={() => {
+          setDialog(null);
+          showPane('sidebar', false);
+          setOverlay('boardSettings');
+        }}
         boardLocked={boardLocked}
         preferredLanguages={preferredLanguages}
         onPreferredLanguagesChange={handlePreferredLanguagesChange}
@@ -2005,6 +2011,9 @@ export function Workbench() {
               }
             />
             </div>
+            {overlay === 'boardSettings' && (
+              <BoardSettingsPage board={activeBoard} requestedBoardId={project.board} onClose={() => setOverlay(null)} />
+            )}
             {overlay === 'project' && (
               <ProjectPage
                 project={project}
