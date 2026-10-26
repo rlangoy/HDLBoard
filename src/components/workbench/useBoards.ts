@@ -17,7 +17,7 @@ export interface EditableBoardCatalog extends BoardCatalog {
   editorBoards: readonly BoardDefinition[];
   builtInBoardIds: readonly string[];
   ready: boolean;
-  saveDocument: (file: BoardDocument) => Promise<void>;
+  applyDocument: (file: BoardDocument) => void;
   boardConfigFor: (id: string) => Record<string, unknown> | undefined;
 }
 
@@ -30,26 +30,25 @@ export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardC
     let cancelled = false;
     void loadEditorCatalog().then((loaded) => {
       if (cancelled) return;
-      setDocument(loaded.file); setWarnings(loaded.warnings); setReady(true);
+      setDocument(loaded.file);
+      setWarnings(loaded.warnings);
+      setReady(true);
       setLegacy(loaded.legacy);
     });
     return () => {
       cancelled = true;
     };
   }, []);
-  const saveDocument = useCallback(async (file: BoardDocument) => {
+  const applyDocument = useCallback((file: BoardDocument) => {
     setDocument(file);
   }, []);
   const document = useMemo(() => withProjectBoard(savedDocument, boardConfig), [savedDocument, boardConfig]);
   const embedded = useMemo(() => projectBoard(boardConfig), [boardConfig]);
-  useEffect(() => {
-    if (embedded.board && ready) setDocument((current) => withProjectBoard(current, boardConfig));
-  }, [boardConfig, embedded, ready]);
   const parsed = useMemo(() => {
     const installed = editorCatalog(savedDocument, legacy);
     return embedded.board ? { ...installed, boards: [...installed.boards.filter((board) => board.id !== embedded.board.id), embedded.board] } : installed;
   }, [savedDocument, legacy, embedded]);
   const editorBoards = useMemo(() => parsedDocument(document).boards, [document]);
   const boardConfigFor = (id: string) => BUILT_IN_BOARD_IDS.includes(id) ? undefined : document.boards.find((board) => board.id === id);
-  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, saveDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
+  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
 }

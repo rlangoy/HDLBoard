@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { builtInBoard } from './boardCatalog';
 import { boardImportSettings } from './boardImportSettings';
 import { changeAt, parsedDocument, readDocument, replaceBoard, valueAt } from './boardEditorModel';
-import { initialBoardDocument, loadBoardEdits, saveBoardEdits } from './boardEditorStorage';
+import { initialBoardDocument, loadBoardEdits } from './boardEditorStorage';
 import { validateBoardDraft } from './boardEditorValidation';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -66,12 +66,8 @@ it('reports duplicate and unsafe resource links beside their fields', () => {
   expect(errors['resources.0.label']).toBeTruthy();
   expect(errors['resources.1.label']).toBeTruthy();
 });
-it('saves and loads the raw document and propagates write failures', () => {
-  const values = new Map<string, string>();
-  vi.stubGlobal('window', { localStorage: { setItem: (key: string, value: string) => values.set(key, value), getItem: (key: string) => values.get(key) ?? null } });
+it('reads legacy local editor settings without writing to storage', () => {
   const file = initialBoardDocument();
-  saveBoardEdits(file); expect(loadBoardEdits()).toEqual(file);
-  vi.stubGlobal('window', { localStorage: { setItem: () => { throw new Error('Storage full'); } } });
-  expect(() => saveBoardEdits(file)).toThrow('Storage full');
-  expect(file).toEqual(initialBoardDocument());
+  vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify(file) } });
+  expect(loadBoardEdits()).toEqual(file);
 });

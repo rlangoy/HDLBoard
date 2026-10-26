@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
-import { buttonFields, componentFields, displayFields, labelField, resourceFields, type ComponentKey } from '../../../boards/boardEditorFields';
+import { buttonFields, componentFields, displayFields, fieldKey, labelField, resourceFields, type ComponentKey } from '../../../boards/boardEditorFields';
 import { DISPLAY_LIMIT, MAX_RESOURCES } from '../../../boards/boardLimits';
 import { EditorField, PolarityField } from './EditorField';
 import type { BoardEditor } from './useBoardEditor';
@@ -23,8 +23,8 @@ export function ComponentDetails(props: DetailProps) {
 }
 function Fields({ editor, component }: Pick<DetailProps, 'editor' | 'component'>) {
   return <div className="bce-fields">{componentFields(component, editor.draft).map((field) => field.kind === 'name'
-    ? <BoardNameField key={field.path.join('.')} editor={editor} />
-    : <EditorField key={field.path.join('.')} editor={editor} field={field} />)}</div>;
+    ? <BoardNameField key={fieldKey(field)} editor={editor} />
+    : <EditorField key={fieldKey(field)} editor={editor} field={field} />)}</div>;
 }
 
 function ButtonDetails({ editor, onSelect }: DetailProps) {
@@ -34,7 +34,7 @@ function ButtonDetails({ editor, onSelect }: DetailProps) {
       <EditorField editor={editor} field={labelField('pushbuttons')} /></div>
     <h4>Button port names</h4><p className="bce-muted">Match these names to your HDL top-level ports.</p>
     <div className={cross ? 'bce-cross' : 'bce-fields'}>{buttonFields(editor.draft).map((field) =>
-      <div key={field.path.join('.')} className={cross ? `bce-cross__${String(field.path[field.path.length - 1])}` : undefined}>
+      <div key={fieldKey(field)} className={cross ? `bce-cross__${String(field.path[field.path.length - 1])}` : undefined}>
         {field.path[field.path.length - 1] === 'count' && Array.isArray(editor.get(['ports', 'pushbuttons', 'ports']))
           ? <ScalarButtonCountField editor={editor} field={field} />
           : <EditorField editor={editor} field={field} />}
@@ -53,7 +53,7 @@ function DisplayDetails({ editor }: { editor: BoardEditor }) {
   return <>
     <RepresentationSelect editor={editor} component="sevenSegment" />
     <p className="bce-muted">Choose the wiring layout, then review its port names before saving.</p>
-    <div className="bce-fields">{displayFields(editor.draft).map((field) => <EditorField editor={editor} field={field} key={field.path.join('.')} inputAction={kind === 'independent' && typeof field.path[3] === 'number' ? <RemoveDisplayButton editor={editor} index={field.path[3]} /> : undefined} />)}</div>
+    <div className="bce-fields">{displayFields(editor.draft).map((field) => <EditorField editor={editor} field={field} key={fieldKey(field)} inputAction={kind === 'independent' && typeof field.path[3] === 'number' ? <RemoveDisplayButton editor={editor} index={field.path[3]} /> : undefined} />)}</div>
     {kind === 'independent' && <DisplayPortActions editor={editor} />}
     <EditorField editor={editor} field={labelField('sevenSegment')} />
     <PolarityField editor={editor} path={['ports', 'sevenSegment', 'activeLow']} title="Segment polarity" />

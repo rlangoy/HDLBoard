@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 import { useId, useState } from 'react';
-import { buttonFields, componentFields, COMPONENT_TITLES, labelField, presentComponents, type ComponentKey } from '../../../boards/boardEditorFields';
+import { buttonFields, componentFields, COMPONENT_TITLES, fieldKey, labelField, presentComponents, type ComponentKey } from '../../../boards/boardEditorFields';
 import { CodeIcon } from '../icons';
 import { ComponentIcon } from './ComponentIcons';
 export { ComponentIcon } from './ComponentIcons';
@@ -33,13 +33,13 @@ function QuickFields({ editor, component }: { editor: BoardEditor; component: Co
   if (component === 'sevenSegment') return <><EditorField editor={editor} field={labelField(component)} /><p className="bce-muted">{String(editor.get(['ports', component, 'kind']))} · {displayCount(editor)} digits</p></>;
   if (component === 'pushbuttons') return <><EditorField editor={editor} field={labelField(component)} />
     {editor.get(['ports', component, 'cross']) ? <CrossSummary editor={editor} /> : <div className="bce-fields">{buttonFields(editor.draft).map((field) =>
-      <div key={field.path.join('.')}>
+      <div key={fieldKey(field)}>
         {field.path[field.path.length - 1] === 'count' && Array.isArray(editor.get(['ports', component, 'ports']))
           ? <ScalarButtonCountField editor={editor} field={field} />
           : <EditorField editor={editor} field={field} />}
       </div>)}</div>}</>;
   const fields = componentFields(component, editor.draft).filter((field) => field.kind !== 'label' && field.path[field.path.length - 1] !== 'clock500Hz');
-  return <div className="bce-fields">{fields.map((field) => <EditorField key={field.path.join('.')} editor={editor} field={field} />)}</div>;
+  return <div className="bce-fields">{fields.map((field) => <EditorField key={fieldKey(field)} editor={editor} field={field} />)}</div>;
 }
 function displayCount(editor: BoardEditor): string {
   const ports = editor.get(['ports', 'sevenSegment', 'ports']);

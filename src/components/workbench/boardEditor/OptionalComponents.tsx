@@ -10,7 +10,7 @@ export function OptionalComponents({ editor }: { editor: BoardEditor }) {
     <p className="bce-muted">Include only the hardware your board has. Unchecked components are removed from its configuration.</p>
     {OPTIONAL_COMPONENTS.map((component) => <label key={component}>
       <input type="checkbox" checked={editor.get(['ports', component]) !== undefined}
-        onChange={(event) => editor.setComponentPresent(component, event.target.checked)} />
+        onChange={(event) => event.target.checked ? editor.addComponent(component) : editor.removeComponent(component)} />
       <ComponentIcon component={component} />{COMPONENT_TITLES[component]}
     </label>)}
   </fieldset>;

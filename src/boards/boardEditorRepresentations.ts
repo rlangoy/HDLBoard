@@ -2,12 +2,12 @@
 // Copyright (C) 2026 Rune Langøy
 import { valueAt } from './boardEditorModel';
 import { BUTTON_LIMIT, DISPLAY_LIMIT, SEGMENT_COUNT, SEGMENT_COUNT_WITH_POINT } from './boardLimits';
-import { componentFields, presentComponents } from './boardEditorFields';
+import { componentFields, presentComponents, SEGMENT_NAMES } from './boardEditorFields';
+import { CROSS_POSITIONS, DEFAULT_CLOCK_500HZ_NAME } from './parsePorts';
 
 export type ConfigurableComponent = 'pushbuttons' | 'sevenSegment';
 export type Representation = 'cross' | 'vector' | 'scalars' | 'independent' | 'multiplexed';
-const POSITIONS = ['centre', 'up', 'left', 'right', 'down'];
-const SEGMENT_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+const POSITIONS = CROSS_POSITIONS;
 const SHAPE_KEYS = {
   pushbuttons: ['port', 'count', 'ports', 'cross'],
   sevenSegment: ['kind', 'ports', 'width', 'segments', 'decimalPoint', 'digitEnables', 'digits', 'digitEnablesActiveLow'],
@@ -29,7 +29,7 @@ function portAllocator(board: Record<string, unknown>) {
   const used = new Set(presentComponents(board)
     .flatMap((key) => componentFields(key, board)).filter((field) => field.kind === 'port')
     .map((field) => String(valueAt(board, field.path) ?? '').toLowerCase()));
-  used.add('clock_500hz');
+  used.add(DEFAULT_CLOCK_500HZ_NAME.toLowerCase());
   return (prefix: string) => {
     let name = prefix;
     let suffix = 0;

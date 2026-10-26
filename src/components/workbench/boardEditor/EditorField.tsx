@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 import { useId, type ReactNode } from 'react';
 import type { EditorField as Field } from '../../../boards/boardEditorFields';
-import { fieldKey } from '../../../boards/boardEditorValidation';
+import { fieldKey } from '../../../boards/boardEditorFields';
 import type { BoardPath } from '../../../boards/boardEditorModel';
 import type { BoardEditor } from './useBoardEditor';
 
@@ -31,7 +31,7 @@ function fieldValue(field: Field, text: string): unknown {
 }
 function inputOptions(field: Field) {
   return { type: field.kind === 'number' ? 'number' : 'text', min: field.limit?.min, max: field.limit?.max,
-    step: fieldKey(field) === 'ports.clockMHz' ? '0.001' : '1' };
+    step: field.step ?? 1 };
 }
 
 interface PolarityProps { editor: BoardEditor; path: BoardPath; title: string; pressed?: boolean }

@@ -17,29 +17,29 @@ const WHITESPACE = /\s/;
 
 export function readResources(value: unknown): BoardResource[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > MAX_RESOURCES) fail(`resources must be an array of at most ${MAX_RESOURCES} links`);
+  if (!Array.isArray(value) || value.length > MAX_RESOURCES) fail(`resources must be an array of at most ${MAX_RESOURCES} links`, 'resources');
   const resources = value.map((entry, index) => readResource(`resources[${index}]`, entry));
   checkLabelsUnique(resources);
   return resources;
 }
 
-function readResource(path: string, value: unknown): BoardResource {
+export function readResource(path: string, value: unknown): BoardResource {
   const resource = objectAt(path, value, RESOURCE_FIELDS);
   return { label: readLabel(`${path}.label`, resource.label), url: readUrl(`${path}.url`, resource.url) };
 }
 
 function readLabel(path: string, value: unknown): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_RESOURCE_LABEL_LENGTH) {
-    fail(`${path} must be text of 1 to ${MAX_RESOURCE_LABEL_LENGTH} characters`);
+    fail(`${path} must be text of 1 to ${MAX_RESOURCE_LABEL_LENGTH} characters`, path);
   }
-  if (CONTROL_CHARACTER.test(value)) fail(`${path} ${quoted(value)} has a control character`);
+  if (CONTROL_CHARACTER.test(value)) fail(`${path} ${quoted(value)} has a control character`, path);
   return value;
 }
 
 function readUrl(path: string, value: unknown): string {
-  if (typeof value !== 'string') fail(`${path} must be a string`);
-  if (value.length > MAX_RESOURCE_URL_LENGTH) fail(`${path} is longer than ${MAX_RESOURCE_URL_LENGTH} characters`);
-  if (!isHttpsUrl(value)) fail(`${path} ${quoted(value)} must be an https:// address`);
+  if (typeof value !== 'string') fail(`${path} must be a string`, path);
+  if (value.length > MAX_RESOURCE_URL_LENGTH) fail(`${path} is longer than ${MAX_RESOURCE_URL_LENGTH} characters`, path);
+  if (!isHttpsUrl(value)) fail(`${path} ${quoted(value)} must be an https:// address`, path);
   return value;
 }
 
@@ -55,5 +55,5 @@ export function isHttpsUrl(text: string): boolean {
 
 function checkLabelsUnique(resources: readonly BoardResource[]): void {
   const repeated = resources.find((resource, index) => resources.findIndex((other) => other.label === resource.label) !== index);
-  if (repeated !== undefined) fail(`resources: the label ${quoted(repeated.label)} is used twice`);
+  if (repeated !== undefined) fail(`resources: the label ${quoted(repeated.label)} is used twice`, 'resources');
 }

@@ -88,17 +88,4 @@ function useBoardNavigation(editor: BoardEditor, root: React.RefObject<HTMLEleme
     if (leaveGuard) leaveGuard.current = editor.request;
     return () => { if (leaveGuard) leaveGuard.current = null; };
   }, [editor.request, leaveGuard]);
-  useEffect(() => {
-    if (!editor.dirty) return;
-    let replaying = false;
-    const intercept = (event: MouseEvent) => {
-      const target = event.target;
-      if (replaying || !(target instanceof Element) || root.current?.contains(target) || target.closest('.wb-dialog__backdrop, .wb-right, .wb-activitybar, .wb-resizer')) return;
-      event.preventDefault(); event.stopPropagation();
-      const control = target.closest<HTMLElement>('button,a');
-      if (control) editor.request(() => { replaying = true; control.click(); replaying = false; });
-    };
-    document.addEventListener('click', intercept, true);
-    return () => document.removeEventListener('click', intercept, true);
-  }, [editor.dirty, editor.request, root]);
 }

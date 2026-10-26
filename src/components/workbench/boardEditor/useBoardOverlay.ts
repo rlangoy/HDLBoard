@@ -6,11 +6,24 @@ export function useBoardOverlay() {
   const [overlay, setValue] = useState<Overlay>(null);
   const current = useRef(overlay);
   const leaveGuard = useRef<((action: () => void) => void) | null>(null);
-  const setOverlay = useCallback((update: SetStateAction<Overlay>) => {
-    const next = typeof update === 'function' ? update(current.current) : update;
-    const apply = () => { current.current = next; setValue(next); };
-    if (current.current === 'boardSettings' && next !== current.current && leaveGuard.current) leaveGuard.current(apply);
+  const navigating = useRef(false);
+  const navigate = useCallback((action: () => void) => {
+    const apply = () => {
+      const previous = navigating.current;
+      navigating.current = true;
+      try { action(); }
+      finally { navigating.current = previous; }
+    };
+    if (!navigating.current && current.current === 'boardSettings' && leaveGuard.current) leaveGuard.current(apply);
     else apply();
   }, []);
-  return { overlay, setOverlay, leaveGuard };
+  const setOverlay = useCallback((update: SetStateAction<Overlay>) => {
+    const next = typeof update === 'function' ? update(current.current) : update;
+    if (next === current.current) return;
+    navigate(() => {
+      current.current = next;
+      setValue(next);
+    });
+  }, [navigate]);
+  return { overlay, setOverlay, leaveGuard, navigate };
 }

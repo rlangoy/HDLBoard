@@ -2,6 +2,10 @@
 import { BUILT_IN_BOARDS } from './boardCatalog';
 import { parsedDocument, type BoardDocument } from './boardEditorModel';
 
+export function withBoardConfig<T extends { board: string }>(project: T, boardConfig?: Record<string, unknown>): T {
+  return { ...project, boardConfig };
+}
+
 /** Project definitions override an installed custom board with the same ID. */
 export function withProjectBoard(file: BoardDocument, boardConfig?: Record<string, unknown>): BoardDocument {
   if (!boardConfig || !projectBoard(boardConfig).board) return file;

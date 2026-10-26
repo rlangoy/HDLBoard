@@ -133,6 +133,7 @@ the simulation server's board protocol still requires these roles.
 It marks the project as changed. **Save project**, **Save to GitHub** and project downloads write the
 same JSON node shown by **View JSON** as the project's optional `boardConfig` property in
 `.hdlboard.json`. Nothing is written to the project file until the project is saved.
+Older editor settings in browser storage are still read for compatibility; new edits are stored with the project.
 Other boards, array order and unknown extension fields are retained.
 
 Opening a project with `boardConfig` makes its board available in **Settings → Board** and the
