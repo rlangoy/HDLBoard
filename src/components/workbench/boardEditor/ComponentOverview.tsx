@@ -16,7 +16,7 @@ export function ComponentOverview(props: OverviewProps) {
     {presentComponents(props.editor.draft).map((component) => <ComponentCard key={component} {...props} component={component} />)}</>;
 }
 function ComponentCard({ editor, selected, onSelect, component }: OverviewProps & { component: ComponentKey }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const id = useId();
   const simple = component === 'resources';
   return <section className={`bce-card ${selected === component ? 'is-selected' : ''}`} onClick={() => onSelect(component)}>
