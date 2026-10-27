@@ -100,11 +100,11 @@ export function NewFileDialog(props: NewFileDialogProps) {
 
 function CreateButtons({ formId, disabled, onClose }: { formId: string; disabled: boolean; onClose: () => void }) {
   return (
-    <div className="wb-newfile__buttons">
-      <button type="button" className="wb-newfile__cancel" onClick={onClose}>
+    <div className="wb-dialog__actions">
+      <button type="button" className="wb-dialog__secondary" onClick={onClose}>
         Cancel
       </button>
-      <button type="submit" form={formId} className="wb-dialog__close" disabled={disabled}>
+      <button type="submit" form={formId} className="wb-dialog__close wb-newfile__create" disabled={disabled}>
         Create
       </button>
     </div>

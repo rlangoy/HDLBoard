@@ -38,6 +38,11 @@ describe('parseProject', () => {
 
 /** docs/board_io_config_spec.md § 10: version 2 stores a board id; version 1 always meant the Default names. */
 describe('parseProject boards', () => {
+  it('ignores a legacy project layout field', () => {
+    const parsed = parseProject(projectJson([], { boardLayout: 'single-column' }));
+    expect(JSON.parse(serializeProject(parsed.project))).not.toHaveProperty('boardLayout');
+    expect(parsed.warnings).toEqual([]);
+  });
   it('opens a version-1 "DE1-SoC" project on the Default board, with no warning', () => {
     const { project, warnings } = parseProject(projectJson([], { version: 1, board: 'DE1-SoC' }));
     expect(project.board).toBe('default');

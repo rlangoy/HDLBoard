@@ -173,6 +173,40 @@
   padding: 16px 28px 20px;
 }
 
+.wb-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.wb-dialog__secondary {
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  padding: 9px 18px;
+  background: #ffffff;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-dialog__secondary:hover:not(:disabled) {
+  background: var(--wb-hover);
+}
+
+.wb-dialog__secondary:focus-visible,
+.wb-dialog__close:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-dialog__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .wb-dialog__close {
   border: none;
   border-radius: 8px;
@@ -186,7 +220,7 @@
   transition: background 140ms ease;
 }
 
-.wb-dialog__close:hover {
+.wb-dialog__close:hover:not(:disabled) {
   background: var(--wb-accent-dark);
 }
 

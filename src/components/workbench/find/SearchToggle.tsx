@@ -3,6 +3,7 @@
 
 import { cx } from '../../board';
 import { SearchIcon } from '../icons';
+import '../PaneHeaderButton.css';
 import { usePaneFind } from './FindContext';
 import { FIND_TEXT, searchLabel } from './findText';
 

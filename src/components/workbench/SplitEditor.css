@@ -77,45 +77,6 @@
   flex: 1;
 }
 
-/* Copy the code (CopyCodeButton.tsx): a quiet icon beside the file name, a tick once copied. */
-.wb-copycode {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--wb-text-muted);
-  cursor: pointer;
-}
-
-.wb-copycode svg {
-  width: 16px;
-  height: 16px;
-}
-
-.wb-copycode:hover {
-  background: rgba(15, 23, 42, 0.06);
-  color: var(--wb-text);
-}
-
-.wb-copycode:focus-visible {
-  outline: 2px solid var(--wb-accent);
-  outline-offset: 1px;
-}
-
-.wb-copycode.is-copied {
-  color: var(--wb-success-dark);
-}
-
-.wb-copycode.is-failed {
-  color: var(--wb-danger-dark);
-}
-
 /* The pane's Search button (docs/impl_search.md § 5.1): Copy's look, a light-blue tile while its Find bar is open. */
 .wb-searchtoggle.is-pressed,
 .wb-searchtoggle.is-pressed:hover {

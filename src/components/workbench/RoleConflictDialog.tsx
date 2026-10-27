@@ -31,11 +31,11 @@ export function RoleConflictDialog({ fileName, otherName, role, onKeep, onCancel
       subtitle={roleConflictText(fileName, otherName, role)}
       icon={role === 'tb' ? <FlaskIcon /> : <ChipIcon />}
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onCancel}>
             {TEXT.cancel}
           </button>
-          <button type="button" className="wb-newfile__cancel" onClick={() => onKeep('other')}>
+          <button type="button" className="wb-dialog__secondary" onClick={() => onKeep('other')}>
             {keepFile(otherName)}
           </button>
           <button type="button" className="wb-dialog__close" autoFocus onClick={() => onKeep('file')}>

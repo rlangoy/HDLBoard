@@ -8,11 +8,13 @@ import { SevenSegmentDisplays } from '../SevenSegment';
 import { Switches } from '../Switches';
 import { buttonCount, displayCount, groupNames, hasDecimalPoint, type BoardInputs, type BoardOutputs } from '../../boards/boardShape';
 import type { BoardDefinition } from '../../boards/types';
+import type { BoardLayout } from './boardLayoutPreference';
 import { buttonsTitle, displaysTitle, ledsTitle, multiplexedNote, switchesTitle } from './boardText';
 
 export interface BoardIoPanelProps {
   /** The active board: its shape decides the parts, its names head the panels. */
   board: BoardDefinition;
+  layout?: BoardLayout;
   outputs: BoardOutputs;
   inputs: BoardInputs;
   /** The inputs that changed; the others keep their latest values, even before the next render. */
@@ -25,10 +27,10 @@ export interface BoardIoPanelProps {
  * reset button beside them. This maps the board to the parts' props; the parts
  * themselves know nothing about boards.
  */
-export function BoardIoPanel({ board, outputs, inputs, onInputsChange }: BoardIoPanelProps) {
+export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, onInputsChange }: BoardIoPanelProps) {
   const { ports, labels } = board;
   return (
-    <Board size={24}>
+    <Board size={24} className={layout === 'single-column' ? 'pb-board--single' : undefined}>
       <Leds value={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
       {displayCount(ports) > 0 && <SevenSegmentDisplays
         value={outputs.displays}

@@ -20,10 +20,14 @@ export const DEFAULT_SHAPE_SUMMARY =
 
 export const BOARD_TEXT = {
   settingTitle: 'Board',
-  settingNote: 'The board of the open project, also used for new projects.',
-  settingFileLead: 'Board definitions are loaded from',
-  settingFileEdit: 'Add or edit entries to customize the board list.',
   settingHowTo: 'How to add a board',
+  settingNote: 'The board of the open project, also used for new projects.',
+  settingFileLead: 'Add or manage boards in Board settings, or edit boards/boards.json.',
+  settingFileEdit: 'Edit boards/boards.json to add or manage boards.',
+  settingManage: 'Manage board',
+  layoutTitle: 'Board simulator layout',
+  layoutSingle: 'Single column',
+  layoutTwo: 'Two columns',
   changeTitle: 'Change board?',
   renamedInFiles: 'Renamed in your files:',
   changeByHand: 'Change by hand:',
@@ -60,6 +64,20 @@ export const BOARDS_DOC_URL = `${REPO_URL}/blob/main/docs/BOARDS.md`;
 const LISTED_FILES = 5;
 
 // --- The Board pane's headings (docs/board_io_v2_spec.md § 5.1) ----------------------
+
+/** A compact, grammatically correct summary of the board's configured I/O. */
+export function boardSummary(board: BoardDefinition): string {
+  const { ports } = board;
+  const count = (n: number, singular: string, plural: string) => n ? `${n} ${n === 1 ? singular : plural}` : '';
+  const parts = [
+    count(ports.leds.count, 'LED', 'LEDs'),
+    count(displayCount(ports), 'HEX display', 'HEX displays'),
+    count(ports.switches.count, 'switch', 'switches'),
+    count(buttonCount(ports), 'button', 'buttons'),
+    count(ports.resetButton ? 1 : 0, 'reset button', 'reset buttons'),
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'No LEDs, displays, switches or buttons configured';
+}
 
 /** `LEDs (led[15:0])`. */
 export function ledsTitle(leds: VectorPort): string {

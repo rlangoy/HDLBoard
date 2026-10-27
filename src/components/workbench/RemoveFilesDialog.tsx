@@ -37,11 +37,11 @@ export function RemoveFilesDialog({ projectName, fileNames, keepFileName, remove
       icon={<AlertIcon />}
       describedBy="wb-removefiles-list"
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="wb-newfile__cancel" onClick={onRemove}>
+          <button type="button" className="wb-dialog__secondary" onClick={onRemove}>
             Remove files
           </button>
           <button type="button" className="wb-dialog__close" autoFocus onClick={onKeep}>

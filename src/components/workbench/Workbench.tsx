@@ -15,6 +15,8 @@ import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCa
 import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
+import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
+import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
 import { useBoardIo } from './useBoardIo';
@@ -402,35 +404,14 @@ export function Workbench() {
   const layout = usePaneLayout();
   const { collapsed, togglePane, showPane } = layout;
 
-  // The board keeps one fixed 2x2 arrangement at one fixed internal size and
-  // is scaled to whatever the pane currently gives it, so the parts never
-  // reflow or get scrolled out of reach. `offsetWidth`/`offsetHeight` are
-  // the untransformed layout size, and ResizeObserver likewise reports the
-  // untransformed box, so measuring here can't feed back into the scale.
-  const boardViewportRef = useRef<HTMLDivElement>(null);
-  const boardScalerRef = useRef<HTMLDivElement>(null);
-  const [boardScale, setBoardScale] = useState(1);
+  const [boardLayout, setBoardLayout] = useState(loadBoardLayout);
+  useEffect(() => subscribeBoardLayout(setBoardLayout), []);
 
-  useEffect(() => {
-    const viewport = boardViewportRef.current;
-    const scaler = boardScalerRef.current;
-    if (!viewport || !scaler) return;
-
-    const fit = () => {
-      const naturalW = scaler.offsetWidth;
-      const naturalH = scaler.offsetHeight;
-      if (!naturalW || !naturalH) return;
-      const { width, height } = viewport.getBoundingClientRect();
-      if (!width || !height) return;
-      setBoardScale(Math.min(width / naturalW, height / naturalH));
-    };
-
-    const observer = new ResizeObserver(fit);
-    observer.observe(viewport);
-    observer.observe(scaler);
-    fit();
-    return () => observer.disconnect();
-  }, []);
+  const changeBoardLayout = (next: BoardLayout) => {
+    if (next === boardLayout) return;
+    setBoardLayout(next);
+    saveBoardLayout(next);
+  };
 
   // The ongoing run is to end without its closing messages, because an example was
   // opened and the console now belongs to it (handleOpenExample).
@@ -1655,6 +1636,7 @@ export function Workbench() {
   const boardLocked = projectBusy !== null || status === 'compiling';
   const boardSettings = useBoardSettings(catalog, { setProject, stopSimulation: stopRunSoon });
   const boardPreview = boardSettings.preview;
+  const isSingle = boardLayout === 'single-column';
   const boardChange = useBoardChange({
     files,
     setFiles: replaceFilesForBoard,
@@ -1808,6 +1790,8 @@ export function Workbench() {
         onClose={() => setDialog(null)}
         boards={catalog}
         boardId={project.board}
+        boardLayout={boardLayout}
+        onBoardLayoutChange={changeBoardLayout}
         onBoardChange={handleBoardChosenInSettings}
         onViewBoardSettings={() => {
           setDialog(null);
@@ -2114,20 +2098,17 @@ export function Workbench() {
             className="wb-right"
             bodyClassName="wb-right__content"
           >
-            <div className="wb-board-fit" ref={boardViewportRef}>
-              <div
-                className="wb-board-fit__inner"
-                ref={boardScalerRef}
-                style={{ transform: `scale(${boardScale})` }}
-              >
-                {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} /> : <BoardIoPanel
-                  board={activeBoard}
-                  outputs={boardIo.outputs}
-                  inputs={boardIo.inputs}
-                  onInputsChange={handleBoardInputsChange}
-                />}
-              </div>
-            </div>
+            <BoardFit single={isSingle} collapsed={collapsed.board} paneWidth={layout.boardWidth}
+              onResize={(width) => layout.resizeOpenPane('board', width)}
+              contentKey={overlay === 'boardSettings' && boardPreview ? boardPreview : activeBoard}>
+              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} /> : <BoardIoPanel
+                board={activeBoard}
+                layout={boardLayout}
+                outputs={boardIo.outputs}
+                inputs={boardIo.inputs}
+                onInputsChange={handleBoardInputsChange}
+              />}
+            </BoardFit>
           </SidePanel>
         </div>
 
