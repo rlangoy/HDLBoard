@@ -41,7 +41,7 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 
 ## What is HDLBoard?
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
 
 Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
 
@@ -59,11 +59,11 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 | | Compile-and-waveform sites (e.g. EDA Playground) | Vendor tools (Quartus, ModelSim/Questa, Vivado) | **HDLBoard** |
 |---|---|---|---|
 | Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
-| Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual DE1-SoC |
+| Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual board |
 | Synthesis and bitstream for real hardware | No | Yes | No |
 | Setup | None | Large install, licence for some tools | **None** (browser), or a small Windows installer |
 
-HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus and the real board.
+HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus or Vivado and the real board.
 
 ## Built for teaching
 
@@ -82,7 +82,8 @@ Typical uses:
 ## Features
 
 ### An interactive virtual board
-- 10 slide switches, 4 pushbuttons, 10 red LEDs and six 7-segment displays, modelled on the Terasic DE1-SoC.
+- Choose the built-in **DE1-SoC**, **DE10-Lite**, **Basys 3**, **Nexys A7** or generic **Default** board in Settings. Each provides its own selection of switches, buttons, LEDs and 7-segment displays.
+- Configure a custom board with the I/O counts, port names, polarities and clock frequency for your course or hardware. See [BOARDS.md](docs/BOARDS.md) for the board editor and JSON configuration.
 - Inputs go to the simulation while it runs, and the design's outputs drive the board.
 - **Real-time pacing:** simulated time follows the clock on your wall, so an LED meant to blink once a second blinks once a second.
 
@@ -123,8 +124,8 @@ How to: [PROJECTS.md](docs/PROJECTS.md) · [GITHUB.md](docs/GITHUB.md)
 
 HDLBoard is a learning and simulation tool, not a replacement for an FPGA toolchain.
 
-- It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, use Quartus: add pin assignments and build there.
-- Only the **DE1-SoC** board is modelled, with its switches, keys, LEDs and 7-segment displays.
+- It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, add pin assignments and build with the appropriate vendor toolchain, such as Quartus or Vivado.
+- The virtual boards model selected inputs and outputs, not every peripheral on the physical boards. Built-in profiles cover **DE1-SoC**, **DE10-Lite**, **Basys 3** and **Nexys A7**, as well as a generic Default board.
 - A design that divides the real 50 MHz `CLOCK_50` down to a visible blink needs millions of simulated cycles, which is too slow to watch. For blinking and counting designs, declare the simulator-only `CLOCK_500Hz` port instead, and remove it before you build for the real board. See [Design_Description.md § 10](docs/Design_Description.md#10-known-limitations).
 - Work is not saved automatically. Save the project to a folder, download a ZIP or save to GitHub before you close the page.
 
@@ -148,10 +149,11 @@ Yes. That is what it was built for. Send students a `?project=` link so everyone
 
 ### Will my design run on a real FPGA?
 
-HDLBoard does not do synthesis. Because it uses the board's real pin names, though, a working design is a good starting point: add pin assignments in Quartus and build there.
+HDLBoard does not do synthesis. Because it uses the board's real pin names, though, a working design is a good starting point: add pin assignments and build in Quartus or Vivado, as appropriate for the board.
 
 ## Documentation
 
+- [BOARDS.md](docs/BOARDS.md) — built-in boards and custom board configuration
 - [BUILDING.md](docs/BUILDING.md) — build from source, run the dev server, package the Windows app
 - [HOSTING.md](docs/HOSTING.md) — self-host with Docker on Linux, macOS or Windows (WSL)
 - [PROJECTS.md](docs/PROJECTS.md) — create, open, edit, save and publish projects
@@ -185,7 +187,7 @@ HDLBoard builds on the work of many open-source projects. Thank you to all of th
 
 The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
 
-DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic.
+DE1-SoC and DE10-Lite are products of [Terasic Technologies](https://www.terasic.com.tw/). Basys 3 and Nexys A7 are products of [Digilent](https://digilent.com/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic or Digilent.
 
 ## License
 

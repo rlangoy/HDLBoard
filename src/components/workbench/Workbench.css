@@ -235,12 +235,21 @@
   outline: none;
 }
 .wb-resizer.hdl-column-divider::before { inset: 0 -2px; }
+.wb-resizer.hdl-column-divider:hover::before,
+.wb-resizer.hdl-column-divider:focus-visible::before { inset: 0 -10px; }
 .wb-resizer.hdl-column-divider .hdl-column-divider__grip {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
 }
 .wb-resizer.hdl-column-divider.is-beside-collapsed { background: transparent; }
+
+/* Fingers need a wider target even before the divider can be hovered. */
+@media (any-pointer: coarse) {
+  .wb-resizer::before,
+  .wb-resizer.hdl-column-divider::before { inset: 0 -10px; }
+  .wb-resizer--row::before { inset: -10px 0; }
+}
 
 /*
  * The left pane (a SidePanel titled Explorer): a tinted strip holding two

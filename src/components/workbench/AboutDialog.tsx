@@ -100,9 +100,9 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
         <div className="wb-about__fact">
           <dt>Trademarks</dt>
           <dd>
-            DE1-SoC is a product of Terasic Technologies. HDLBoard is an
-            independent teaching tool, not affiliated with or endorsed by
-            Terasic.
+            DE1-SoC and DE10-Lite are products of Terasic Technologies. Basys 3
+            and Nexys A7 are products of Digilent. HDLBoard is an independent
+            teaching tool, not affiliated with or endorsed by Terasic or Digilent.
           </dd>
         </div>
       </dl>

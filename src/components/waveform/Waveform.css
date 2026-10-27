@@ -265,6 +265,19 @@
   outline: none;
 }
 
+.wv-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.wv-resizer:hover::before,
+.wv-resizer:focus-visible::before { inset: 0 -8px; }
+
+@media (any-pointer: coarse) {
+  .wv-resizer::before { inset: 0 -8px; }
+}
+
 .wv-names__header {
   position: sticky;
   top: 0;
