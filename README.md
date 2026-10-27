@@ -48,7 +48,7 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 - **Make a mistake. See why in a second.** HDLBoard compiles your design in under a second, while Altera Quartus Prime needs more than five. Mistakes are marked right in your code, with a message that says what is wrong and a hint about how to fix it.
 - **Find any signal at a glance.** Rest your mouse on a signal or port, or click it, and it lights up everywhere it appears: where it is declared and every place it is used. No more scrolling up and down to find where `sum` was declared.
 - **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
-- **Real boards, real pin names:** choose **DE1-SoC**, **DE10-Lite**, **Basys 3** or **Nexys A7** in Settings and the virtual board takes that board's parts and the vendor's own pin names — 16 switches and a 4-digit multiplexed display on the Basys 3, a button cross and a reset button on the Nexys A7, decimal points on the DE10-Lite — so your design is a starting point for Quartus or Vivado. Or keep **Default** (`KEY_N`, `HEX0_N`), which shows the active-low ports in their names. Changing the board renames the ports in your files where it can and lists what to change by hand, and a teacher can add a board with the course's own parts and names in one JSON file ([docs/BOARDS.md](docs/BOARDS.md)).
+- **Real boards, real pin names:** choose **DE1-SoC**, **DE10-Lite**, **Basys 3** or **Nexys A7** in Settings and the virtual board takes that board's parts and the vendor's own pin names — 16 switches and a 4-digit multiplexed display on the Basys 3, a button cross and a reset button on the Nexys A7, decimal points on the DE10-Lite — so your design is a starting point for Quartus or Vivado. Or keep **Default** (`KEY_N`, `HEX0_N`), which shows the active-low ports in their names. Changing the board renames the ports in your files where it can and lists what to change by hand, and you can design your own board, with the course's own parts and names, right in the app ([docs/BOARDS.md](docs/BOARDS.md)).
 - **Real-time pacing:** an LED meant to blink once a second blinks once a second.
 - **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
 - **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
@@ -83,7 +83,7 @@ Typical uses:
 
 ### An interactive virtual board
 - Choose the built-in **DE1-SoC**, **DE10-Lite**, **Basys 3**, **Nexys A7** or generic **Default** board in Settings. Each provides its own selection of switches, buttons, LEDs and 7-segment displays.
-- Configure a custom board with the I/O counts, port names, polarities and clock frequency for your course or hardware. See [BOARDS.md](docs/BOARDS.md) for the board editor and JSON configuration.
+- **Design your own board.** Open **Settings › Board › View board settings** to make an editable copy of any board and shape it with the board editor: switches, pushbuttons, LEDs and 7-segment displays (any of them can be left out), their port names and polarities, and the clock frequency. The Board pane previews your changes as you type. Built-in boards stay read-only. Boards can also be added in a JSON file; see [BOARDS.md](docs/BOARDS.md).
 - Inputs go to the simulation while it runs, and the design's outputs drive the board.
 - **Real-time pacing:** simulated time follows the clock on your wall, so an LED meant to blink once a second blinks once a second.
 
@@ -115,6 +115,7 @@ When you open a testbench, the editor splits: the testbench is on the left and t
 
 ### Projects and sharing
 - A `.hdlboard.json` project file holds the project's name, board and files, with a description for each file.
+- **Your board travels with the project.** A custom board's settings are saved in the project file itself, so the project can carry a board design that is not part of HDLBoard's built-in boards. Whoever opens the project, from a file, a link or a Gist, gets the board and its layout automatically, with nothing extra to install.
 - Open a project from a file on your computer, a web address, a GitHub Gist or a `?project=` link. You can send that link to a class so everyone starts from the same exercise.
 - **Save to GitHub:** sign in once, and each project is kept in a secret Gist on your own account. You can open, update and delete it from any computer, and HDLBoard checks before overwriting changes made somewhere else.
 
