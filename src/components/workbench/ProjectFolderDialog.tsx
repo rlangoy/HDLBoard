@@ -46,8 +46,8 @@ export function ProjectFolderDialog({ projectName, missing, onFolderChosen, onCh
       subtitle={projectName || 'Project'}
       icon={<FolderOpenIcon />}
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onClose}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onClose}>
             Not now
           </button>
           <button type="button" className="wb-dialog__close wb-openproject__choose" onClick={onChooseInFolder ?? (() => inputRef.current?.click())} autoFocus>

@@ -48,11 +48,11 @@ type ChangeProps = BoardChangeDialogProps & { pending: Extract<PendingBoardChang
 
 function MismatchDialog({ pending, onSwitchBoard, onRenameFiles, onCancel }: MismatchProps) {
   const footer = (
-    <div className="wb-newfile__buttons">
-      <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+    <div className="wb-dialog__actions">
+      <button type="button" className="wb-dialog__secondary" onClick={onCancel}>
         {BOARD_TEXT.cancel}
       </button>
-      <button type="button" className="wb-newfile__cancel" onClick={() => onRenameFiles(pending.other)}>
+      <button type="button" className="wb-dialog__secondary" onClick={() => onRenameFiles(pending.other)}>
         {renameFilesTo(pending.active)}
       </button>
       <button type="button" className="wb-dialog__close" autoFocus onClick={() => onSwitchBoard(pending.other)}>
@@ -106,11 +106,11 @@ interface ChangeButtonsProps {
 function ChangeButtons({ plan, renames, onUpdateFiles, onBoardOnly, onCancel }: ChangeButtonsProps) {
   const updatable = renames && canApply(plan);
   return (
-    <div className="wb-newfile__buttons">
-      <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+    <div className="wb-dialog__actions">
+      <button type="button" className="wb-dialog__secondary" onClick={onCancel}>
         {BOARD_TEXT.cancel}
       </button>
-      <button type="button" className={updatable ? 'wb-newfile__cancel' : 'wb-dialog__close'} autoFocus={!updatable} onClick={onBoardOnly}>
+      <button type="button" className={updatable ? 'wb-dialog__secondary' : 'wb-dialog__close'} autoFocus={!updatable} onClick={onBoardOnly}>
         {BOARD_TEXT.boardOnly}
       </button>
       {renames && (

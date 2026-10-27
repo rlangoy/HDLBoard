@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { BoardCatalog } from '../../boards/types';
+import type { BoardLayout } from './boardLayoutPreference';
 import { BoardSetting } from './BoardSetting';
+import { BOARD_TEXT } from './boardText';
 import { Dialog } from './Dialog';
 import { desktopBridge } from './desktop';
 import { GearIcon } from './icons';
@@ -20,6 +22,8 @@ export interface SettingsDialogProps {
   /** Board: the boards available here, and the open project's (docs/board_io_config_spec.md § 3.2). */
   boards: BoardCatalog;
   boardId: string;
+  boardLayout: BoardLayout;
+  onBoardLayoutChange: (layout: BoardLayout) => void;
   onBoardChange: (id: string) => void;
   onViewBoardSettings?: () => void;
   /** Loading or saving the project, or compiling: the board cannot change just now. */
@@ -82,6 +86,30 @@ function LanguageSetting({ value, onChange }: { value: PreferredLanguages; onCha
   );
 }
 
+const BOARD_LAYOUT_CHOICES: readonly { layout: BoardLayout; label: string; columns: number }[] = [
+  { layout: 'single-column', label: BOARD_TEXT.layoutSingle, columns: 1 },
+  { layout: 'two-columns', label: BOARD_TEXT.layoutTwo, columns: 2 },
+];
+
+function BoardLayoutSetting({ value, onChange }: { value: BoardLayout; onChange: (layout: BoardLayout) => void }) {
+  const groupName = useId();
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">{BOARD_TEXT.layoutTitle}</legend>
+      <div className="wb-settings__layouts">
+        {BOARD_LAYOUT_CHOICES.map(({ layout, label, columns }) => {
+          return <label key={layout} className={`wb-settings__layout${value === layout ? ' is-selected' : ''}`}>
+            <input type="radio" name={groupName} value={layout} checked={value === layout} onChange={() => onChange(layout)} />
+            <span className="wb-settings__layout-check" aria-hidden="true">✓</span>
+            <span className="wb-settings__layout-icon" aria-hidden="true">{Array.from({ length: columns }, (_, i) => <span key={i} />)}</span>
+            <span>{label}</span>
+          </label>;
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 const SPLIT_CHOICES: readonly { value: SplitPreference; label: string; hint: string }[] = [
   { value: 'auto', label: TEXT.settingAuto, hint: TEXT.settingAutoHint },
   { value: 'always', label: TEXT.settingAlways, hint: TEXT.settingAlwaysHint },
@@ -121,6 +149,8 @@ export function SettingsDialog({
   onClose,
   boards,
   boardId,
+  boardLayout,
+  onBoardLayoutChange,
   onBoardChange,
   onViewBoardSettings,
   boardLocked,
@@ -155,6 +185,7 @@ export function SettingsDialog({
       icon={<GearIcon />}
     >
       <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} onViewSettings={onViewBoardSettings} />
+      <BoardLayoutSetting value={boardLayout} onChange={onBoardLayoutChange} />
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />

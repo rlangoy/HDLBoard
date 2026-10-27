@@ -85,6 +85,7 @@
 .bce-footer-actions { display: flex; gap: 10px; flex: none; }
 .bce .bce-primary { background: #0866ff; border-color: #0866ff; color: white; }.bce .bce-primary:hover { background: #0054d6; }
 .bce-json { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font-size: 12px; }
+.bce-json-toolbar { display: flex; justify-content: flex-end; }
 @container board-editor (max-width: 720px) {
   .bce-panels { grid-template-columns: minmax(0, 1fr); overflow-y: auto; flex-basis: 0; }
   .bce-panel { min-height: 340px; max-height: 65vh; }

@@ -41,14 +41,14 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 
 ## What is HDLBoard?
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with an interactive virtual **Terasic DE1-SoC** FPGA board. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
 
 Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
 
 - **Make a mistake. See why in a second.** HDLBoard compiles your design in under a second, while Altera Quartus Prime needs more than five. Mistakes are marked right in your code, with a message that says what is wrong and a hint about how to fix it.
 - **Find any signal at a glance.** Rest your mouse on a signal or port, or click it, and it lights up everywhere it appears: where it is declared and every place it is used. No more scrolling up and down to find where `sum` was declared.
 - **Live interaction:** edit → Start → flip a switch → watch the LEDs change, all while the simulation is running.
-- **Real boards, real pin names:** choose **DE1-SoC**, **DE10-Lite**, **Basys 3** or **Nexys A7** in Settings and the virtual board takes that board's parts and the vendor's own pin names — 16 switches and a 4-digit multiplexed display on the Basys 3, a button cross and a reset button on the Nexys A7, decimal points on the DE10-Lite — so your design is a starting point for Quartus or Vivado. Or keep **Default** (`KEY_N`, `HEX0_N`), which shows the active-low ports in their names. Changing the board renames the ports in your files where it can and lists what to change by hand, and a teacher can add a board with the course's own parts and names in one JSON file ([docs/BOARDS.md](docs/BOARDS.md)).
+- **Real boards, real pin names:** choose **DE1-SoC**, **DE10-Lite**, **Basys 3** or **Nexys A7** in Settings and the virtual board takes that board's parts and the vendor's own pin names — 16 switches and a 4-digit multiplexed display on the Basys 3, a button cross and a reset button on the Nexys A7, decimal points on the DE10-Lite — so your design is a starting point for Quartus or Vivado. Or keep **Default** (`KEY_N`, `HEX0_N`), which shows the active-low ports in their names. Changing the board renames the ports in your files where it can and lists what to change by hand, and you can design your own board, with the course's own parts and names, right in the app ([docs/BOARDS.md](docs/BOARDS.md)).
 - **Real-time pacing:** an LED meant to blink once a second blinks once a second.
 - **Real simulators:** [GHDL](https://github.com/ghdl/ghdl) (VHDL-2008) and [Icarus Verilog](https://github.com/steveicarus/iverilog), not a JavaScript approximation.
 - **Testbenches side by side:** a self-checking testbench opens next to the design it drives, and its reports appear live in the console.
@@ -59,11 +59,11 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 | | Compile-and-waveform sites (e.g. EDA Playground) | Vendor tools (Quartus, ModelSim/Questa, Vivado) | **HDLBoard** |
 |---|---|---|---|
 | Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
-| Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual DE1-SoC |
+| Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual board |
 | Synthesis and bitstream for real hardware | No | Yes | No |
 | Setup | None | Large install, licence for some tools | **None** (browser), or a small Windows installer |
 
-HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus and the real board.
+HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus or Vivado and the real board.
 
 ## Built for teaching
 
@@ -82,7 +82,8 @@ Typical uses:
 ## Features
 
 ### An interactive virtual board
-- 10 slide switches, 4 pushbuttons, 10 red LEDs and six 7-segment displays, modelled on the Terasic DE1-SoC.
+- Choose the built-in **DE1-SoC**, **DE10-Lite**, **Basys 3**, **Nexys A7** or generic **Default** board in Settings. Each provides its own selection of switches, buttons, LEDs and 7-segment displays.
+- **Design your own board.** Open **Settings › Board › View board settings** to make an editable copy of any board and shape it with the board editor: switches, pushbuttons, LEDs and 7-segment displays (any of them can be left out), their port names and polarities, and the clock frequency. The Board pane previews your changes as you type. Built-in boards stay read-only. Boards can also be added in a JSON file; see [BOARDS.md](docs/BOARDS.md).
 - Inputs go to the simulation while it runs, and the design's outputs drive the board.
 - **Real-time pacing:** simulated time follows the clock on your wall, so an LED meant to blink once a second blinks once a second.
 
@@ -114,6 +115,7 @@ When you open a testbench, the editor splits: the testbench is on the left and t
 
 ### Projects and sharing
 - A `.hdlboard.json` project file holds the project's name, board and files, with a description for each file.
+- **Your board travels with the project.** A custom board's settings are saved in the project file itself, so the project can carry a board design that is not part of HDLBoard's built-in boards. Whoever opens the project, from a file, a link or a Gist, gets the board and its layout automatically, with nothing extra to install.
 - Open a project from a file on your computer, a web address, a GitHub Gist or a `?project=` link. You can send that link to a class so everyone starts from the same exercise.
 - **Save to GitHub:** sign in once, and each project is kept in a secret Gist on your own account. You can open, update and delete it from any computer, and HDLBoard checks before overwriting changes made somewhere else.
 
@@ -123,8 +125,8 @@ How to: [PROJECTS.md](docs/PROJECTS.md) · [GITHUB.md](docs/GITHUB.md)
 
 HDLBoard is a learning and simulation tool, not a replacement for an FPGA toolchain.
 
-- It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, use Quartus: add pin assignments and build there.
-- Only the **DE1-SoC** board is modelled, with its switches, keys, LEDs and 7-segment displays.
+- It does **not** do synthesis, place-and-route, timing analysis or bitstream generation. To run on real hardware, add pin assignments and build with the appropriate vendor toolchain, such as Quartus or Vivado.
+- The virtual boards model selected inputs and outputs, not every peripheral on the physical boards. Built-in profiles cover **DE1-SoC**, **DE10-Lite**, **Basys 3** and **Nexys A7**, as well as a generic Default board.
 - A design that divides the real 50 MHz `CLOCK_50` down to a visible blink needs millions of simulated cycles, which is too slow to watch. For blinking and counting designs, declare the simulator-only `CLOCK_500Hz` port instead, and remove it before you build for the real board. See [Design_Description.md § 10](docs/Design_Description.md#10-known-limitations).
 - Work is not saved automatically. Save the project to a folder, download a ZIP or save to GitHub before you close the page.
 
@@ -148,10 +150,11 @@ Yes. That is what it was built for. Send students a `?project=` link so everyone
 
 ### Will my design run on a real FPGA?
 
-HDLBoard does not do synthesis. Because it uses the board's real pin names, though, a working design is a good starting point: add pin assignments in Quartus and build there.
+HDLBoard does not do synthesis. Because it uses the board's real pin names, though, a working design is a good starting point: add pin assignments and build in Quartus or Vivado, as appropriate for the board.
 
 ## Documentation
 
+- [BOARDS.md](docs/BOARDS.md) — built-in boards and custom board configuration
 - [BUILDING.md](docs/BUILDING.md) — build from source, run the dev server, package the Windows app
 - [HOSTING.md](docs/HOSTING.md) — self-host with Docker on Linux, macOS or Windows (WSL)
 - [PROJECTS.md](docs/PROJECTS.md) — create, open, edit, save and publish projects
@@ -185,7 +188,7 @@ HDLBoard builds on the work of many open-source projects. Thank you to all of th
 
 The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
 
-DE1-SoC is a product of [Terasic Technologies](https://www.terasic.com.tw/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic.
+DE1-SoC and DE10-Lite are products of [Terasic Technologies](https://www.terasic.com.tw/). Basys 3 and Nexys A7 are products of [Digilent](https://digilent.com/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic or Digilent.
 
 ## License
 

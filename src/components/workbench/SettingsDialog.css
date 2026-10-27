@@ -142,6 +142,55 @@ div.wb-settings__empty {
   gap: 24px;
 }
 
+.wb-settings__layouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wb-settings__layout {
+  position: relative;
+  display: flex;
+  min-height: 120px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  border: 2px solid #d4d9e0;
+  border-radius: 10px;
+  color: #626b78;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-settings__layout input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wb-settings__layout.is-selected {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark);
+}
+
+.wb-settings__layout:has(input:focus-visible) {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 3px;
+}
+
+.wb-settings__layout-icon { display: flex; gap: 5px; height: 48px; }
+.wb-settings__layout-icon span { width: 24px; border: 2px solid currentColor; border-radius: 4px; }
+.wb-settings__layout-check { position: absolute; top: 8px; right: 10px; visibility: hidden; font-size: 16px; }
+.wb-settings__layout.is-selected .wb-settings__layout-check { visibility: visible; }
+
 .wb-settings__option:has(input:disabled) {
   cursor: default;
 }

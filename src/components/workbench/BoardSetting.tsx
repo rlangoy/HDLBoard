@@ -5,9 +5,9 @@ import { DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import type { BoardCatalog } from '../../boards/types';
 import { FlatSelect } from '../waveform/FlatSelect';
 import { BoardResourceLinks } from './BoardResourceLinks';
-import { BOARD_TEXT, BOARDS_DOC_URL, notInstalledNote, notInstalledOption } from './boardText';
+import { BOARD_TEXT, BOARDS_DOC_URL, boardSummary, notInstalledNote, notInstalledOption } from './boardText';
 import { ExternalLink } from './ExternalLink';
-import { InfoIcon } from './icons';
+import { InfoIcon, OpenInIcon } from './icons';
 import './BoardSetting.css';
 
 export interface BoardSettingProps {
@@ -38,15 +38,16 @@ export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings
       <p className="wb-board-setting__info">
         {installed ? (
           <>
-            <strong>{board.name}</strong> {board.description}
+            <strong>{board.name}</strong> &middot; {boardSummary(board)}
           </>
         ) : (
           notInstalledNote(boardId, DEFAULT_BOARD)
         )}
       </p>
+      {installed && board.description && <p className="wb-board-setting__info">{board.description}</p>}
       {installed && <BoardResourceLinks resources={board.resources} className="wb-board-setting__links" />}
-      {onViewSettings && <button type="button" className="wb-project__text-btn" onClick={onViewSettings}>View board settings</button>}
-      <BoardFileNote />
+      {onViewSettings && <button type="button" className="wb-board-setting__action" onClick={onViewSettings}>{BOARD_TEXT.settingManage}</button>}
+      <BoardFileNote canManage={Boolean(onViewSettings)} />
       {boards.warnings.map((warning) => (
         <span key={warning} className="wb-settings__note wb-settings__note--error">
           ⚠ {warning}
@@ -57,18 +58,14 @@ export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings
 }
 
 /** Where the boards come from. */
-function BoardFileNote() {
+function BoardFileNote({ canManage }: { canManage: boolean }) {
   return (
     <div className="wb-board-setting__note" role="note">
       <InfoIcon className="wb-board-setting__note-icon" aria-hidden="true" />
       <div>
-        <p>
-          {BOARD_TEXT.settingFileLead} <em>boards/boards.json</em>. {BOARD_TEXT.settingFileEdit}{' '}
-          <ExternalLink href={BOARDS_DOC_URL}>{BOARD_TEXT.settingHowTo}</ExternalLink>
-        </p>
-        <p className="wb-board-setting__note-small">
-          {BOARD_TEXT.settingNote}
-        </p>
+        <p>{canManage ? BOARD_TEXT.settingFileLead : BOARD_TEXT.settingFileEdit}</p>
+        <p className="wb-board-setting__note-small">{BOARD_TEXT.settingNote}</p>
+        <ExternalLink className="wb-board-setting__help" href={BOARDS_DOC_URL}>{BOARD_TEXT.settingHowTo} <OpenInIcon aria-hidden="true" /></ExternalLink>
       </div>
     </div>
   );

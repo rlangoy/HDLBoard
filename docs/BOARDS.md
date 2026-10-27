@@ -292,9 +292,11 @@ Settings is the final word.
 
 ## Share a project that uses your board
 
-A project file stores the board's id. Whoever opens it needs the same board in their `boards.json`. Without it,
-the project still opens and runs on the Default board, and HDLBoard says so on the Project page and before every
-run (**Choose a board…**). The id is kept when the project is saved.
+A project file stores the board's id. A board made in the board editor is also stored in the project file
+(`boardConfig`, see above), so whoever opens the project gets that board with no `boards.json` entry. A board
+added only through `boards.json` must also be in the opener's `boards.json`. Without it, the project still opens
+and runs on the Default board, and HDLBoard says so on the Project page and before every run
+(**Choose a board…**). The id is kept when the project is saved.
 
 ## Known limitations
 

@@ -50,8 +50,8 @@ export function OpenProjectDialog({ canOpenPaths, busy, error, onOpen, onFolderC
       subtitle="Add source files, or open a .hdlboard.json project file and all its files"
       icon={<ProjectIcon />}
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onClose}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onClose}>
             Cancel
           </button>
           <button type="submit" form={formId} className="wb-dialog__close" disabled={empty || busy}>

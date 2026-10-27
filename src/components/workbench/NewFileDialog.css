@@ -91,39 +91,13 @@
   color: var(--wb-text-muted);
 }
 
-.wb-newfile__buttons {
-  display: flex;
-  gap: 10px;
+/* Keep the primary action's double border visible while the name field has focus. */
+.wb-newfile__create:not(:disabled) {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--wb-accent);
 }
 
-.wb-newfile__cancel {
-  border: 1px solid var(--wb-border);
-  border-radius: 8px;
-  padding: 9px 18px;
-  background: #ffffff;
-  color: var(--wb-text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.wb-newfile__cancel:hover {
-  background: var(--wb-hover);
-}
-
-.wb-newfile__cancel:focus-visible {
-  outline: 2px solid var(--wb-accent);
-  outline-offset: 2px;
-}
-
-.wb-newfile__buttons .wb-dialog__close:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.wb-newfile__buttons .wb-dialog__close:disabled:hover {
-  background: var(--wb-accent);
+.wb-newfile__create:focus-visible {
+  outline-offset: 5px;
 }
 
 /* Open Project: the kinds of address it takes. */

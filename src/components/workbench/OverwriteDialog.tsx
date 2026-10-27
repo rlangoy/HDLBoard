@@ -27,8 +27,8 @@ export function OverwriteDialog({ paths, onOverwrite, onCancel }: OverwriteDialo
       icon={<AlertIcon />}
       describedBy="wb-overwrite-list"
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onCancel}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onCancel}>
             Cancel
           </button>
           <button type="button" className="wb-dialog__close" autoFocus onClick={onOverwrite}>
