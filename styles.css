@@ -703,10 +703,10 @@ p { margin: 0; }
 .board-image img { display: block; width: 100%; }
 .board-image:hover { background: #F8FAFE; }
 .board-image:focus-visible, .manager-shot:focus-visible { outline: 3px solid var(--accent); outline-offset: -4px; }
-.board-layout-note { display: flex; align-items: flex-start; gap: 20px; margin-top: 32px; padding: 26px 28px; border-radius: 16px; background: var(--accent-soft); }
-.board-layout-note svg { flex: none; color: var(--accent-hover); margin-top: 4px; }
-.board-layout-note h3 { font-size: 1.375rem; margin-bottom: 6px; }
-.board-layout-note p { max-width: 850px; color: var(--muted); font-size: 1.0625rem; }
+.board-layout-note { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); align-items: center; gap: 32px; margin-top: 32px; padding: 30px 32px; border-radius: 16px; background: var(--accent-soft); }
+.board-layout-note img { display: block; width: 100%; height: auto; }
+.board-layout-note h3 { font-size: clamp(1.5rem, 2.3vw, 1.875rem); line-height: 1.15; margin-bottom: 12px; }
+.board-layout-note p { color: var(--muted); font-size: 1.125rem; line-height: 1.55; }
 .boards-footnote { max-width: 1000px; margin: 24px auto 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.65; text-align: center; }
 .boards-footnote code { font-size: 0.9em; }
 .board-manager { padding: 104px 0; }
@@ -733,7 +733,8 @@ p { margin: 0; }
   .board-gallery { grid-template-columns: 1fr; gap: 24px; margin-top: 32px; }
   .board-card-head { padding: 22px; }
   .board-image { padding: 16px; }
-  .board-layout-note { padding: 22px; gap: 14px; }
+  .board-layout-note { grid-template-columns: 1fr; padding: 22px; gap: 20px; }
+  .board-layout-note img { max-width: 400px; }
   .boards-footnote { text-align: left; }
   .board-workflow { grid-template-columns: 1fr; margin-top: 36px; }
 }

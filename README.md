@@ -32,6 +32,8 @@ and Board I/O previews, with no simulated output added to the images.
   Manage board and capture the Board I/O component area.
 - `board-manager.webp` shows Create editable copy → Basys 3 Custom →
   Pushbuttons, with the default port names unchanged.
+- `layout-selector.webp` shows the Board simulator layout choices in Settings,
+  with Two columns selected. It is a 504 × 156 element screenshot.
 - Capture viewport: 1920 × 1000; images are element screenshots saved as
   WebP at quality 92. The manager capture is 1090 × 759; board captures
   are 744 pixels wide with their natural heights.
