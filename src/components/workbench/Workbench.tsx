@@ -42,7 +42,7 @@ import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { ExamplesPane } from './ExamplesPane';
 import { PickerWaitNotice, usePickerWait } from './PickerWait';
-import { copyExample, starterFilesFor, type Example } from './examples';
+import { copyExample, hasExamples, starterFilesFor, type Example } from './examples';
 import { SidePanel } from './SidePanel';
 import { PaneDivider } from './PaneDivider';
 import { ActivityBar, ActivityBarRun, ActivityBarSeparator, ActivityBarShow } from './ActivityBar';
@@ -1974,7 +1974,7 @@ export function Workbench() {
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
               onDownloadAll={handleDownloadAll}
-              onToggleExamples={activeBoard.origin === 'built-in' ? () => setOverlay((shown) => (shown === 'examples' ? null : 'examples')) : undefined}
+              onToggleExamples={(activeBoard.origin === 'built-in' || hasExamples(activeBoard)) ? () => setOverlay((shown) => (shown === 'examples' ? null : 'examples')) : undefined}
               examplesOpen={overlay === 'examples'}
               onFilesDropped={handleFilesDropped}
               onSetTopFile={handleSetTopFile}
@@ -2001,7 +2001,7 @@ export function Workbench() {
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (
-                  <EmptyProject onExamples={activeBoard.origin === 'built-in' ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
+                  <EmptyProject onExamples={(activeBoard.origin === 'built-in' || hasExamples(activeBoard)) ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
                 )
               }
             />
