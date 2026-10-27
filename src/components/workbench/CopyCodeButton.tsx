@@ -19,7 +19,7 @@ const TITLE: Record<CopyState, string> = {
 };
 
 /** In a pane header, beside the file name: copies the whole file to the clipboard. */
-export function CopyCodeButton({ fileName, code, label }: { code: string } & ({ fileName: string; label?: never } | { label: string; fileName?: never })) {
+export function CopyCodeButton({ fileName, code, label, visibleLabel }: { code: string; visibleLabel?: string } & ({ fileName: string; label?: never } | { label: string; fileName?: never })) {
   const [state, setState] = useState<CopyState>('idle');
 
   useEffect(() => {
@@ -40,6 +40,7 @@ export function CopyCodeButton({ fileName, code, label }: { code: string } & ({ 
         onClick={() => void copy()}
       >
         {state === 'copied' ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+        {visibleLabel && <span>{state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : visibleLabel}</span>}
       </button>
       <span className="wb-sr-only" role="status" aria-live="polite">
         {state === 'idle' ? '' : TITLE[state]}

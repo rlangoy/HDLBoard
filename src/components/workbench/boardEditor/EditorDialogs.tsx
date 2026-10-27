@@ -18,8 +18,14 @@ export function UnsavedBoardDialog({ editor }: { editor: BoardEditor }) {
 }
 export function BoardJsonDialog({ editor, open, onClose }: { editor: BoardEditor; open: boolean; onClose: () => void }) {
   const json = JSON.stringify(editor.draft, null, 2);
-  return <Dialog open={open} onClose={onClose} title="Board JSON" subtitle={`Current draft for ${String(editor.get(['name']))}`} size="wide" icon={<CodeIcon />}>
-    <div className="bce-json-toolbar"><CopyCodeButton code={json} label="Copy board JSON" /></div>
-    <pre className="bce-json"><code>{json}</code></pre>
+  const lines = json.split('\n');
+  return <Dialog open={open} onClose={onClose} title="Board JSON" subtitle={`Current draft for ${String(editor.get(['name']))}`} size="wide" variant="board-json" icon={<CodeIcon />}>
+    <div className="bce-json-panel">
+      <div className="bce-json-toolbar"><CopyCodeButton code={json} label="Copy board JSON" visibleLabel="Copy JSON" /></div>
+      <pre className="bce-json"><code>{lines.map((line, index) => <span className="bce-json-line" key={index}><span className="bce-json-number" aria-hidden="true">{index + 1}</span><span>{line.split(/("(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g).map((part, i, parts) => {
+        const type = i % 2 === 0 ? '' : part.startsWith('"') ? (parts[i + 1]?.trimStart().startsWith(':') ? 'key' : 'string') : 'value';
+        return type ? <span className={`bce-json-${type}`} key={i}>{part}</span> : part;
+      })}</span>{index < lines.length - 1 ? '\n' : ''}</span>)}</code></pre>
+    </div>
   </Dialog>;
 }

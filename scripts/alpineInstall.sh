@@ -75,14 +75,33 @@ node_major="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$node_major" -ge 18 ] || die "Node $(node -v) is too old — HDLBoard needs 18 or newer"
 info "node $(node -v), npm $(npm -v)"
 
-# --- 3. GHDL ----------------------------------------------------------------
+# --- 3. service account -----------------------------------------------------
+# Created before GHDL is chosen, because the choice is made by asking this
+# account to run it.
+step "Creating the $USR account"
+getent group "$USR" >/dev/null || addgroup -S "$USR"
+id "$USR" >/dev/null 2>&1 || adduser -S -D -H -h "$DIR" -s /sbin/nologin -G "$USR" "$USR"
+install -d -o "$USR" -g "$USR" "$DIR"
+
+# --- 4. GHDL ----------------------------------------------------------------
 # Not packaged for Alpine (checked against 3.24 main and community), and the
 # upstream release binaries are linked against glibc, so on musl they need a
 # loader shim and a bundled glibc tree. Building the mcode backend from source
 # is the honest route: Alpine has the Ada compiler GHDL needs.
+#
+# A GHDL on root's PATH is not proof the service can use it: a glibc shim in
+# someone's ~/.local/bin resolves its tree through $HOME, which for $USR is
+# $DIR. So each candidate is run as $USR, and the first that answers wins.
 step "Installing GHDL"
-if command -v ghdl >/dev/null 2>&1; then
-	info "already installed: $(ghdl --version | head -1)"
+ghdl_works() { su -s /bin/sh "$USR" -c "'$1' --version" >/dev/null 2>&1; }
+GHDL_BIN=
+for cand in "$(command -v ghdl 2>/dev/null || true)" /usr/local/bin/ghdl /usr/bin/ghdl; do
+	[ -n "$cand" ] && [ -x "$cand" ] || continue
+	if ghdl_works "$cand"; then GHDL_BIN="$cand"; break; fi
+	info "skipping $cand: the $USR account cannot run it"
+done
+if [ -n "$GHDL_BIN" ]; then
+	info "already installed: $GHDL_BIN — $("$GHDL_BIN" --version | head -1)"
 else
 	info "not packaged for Alpine — building the mcode backend from source (a few minutes)"
 	# Verified on Alpine 3.24 / x86_64: this sequence builds 7.0.0-dev with
@@ -94,11 +113,12 @@ else
 	( cd "$src" && ./configure --prefix=/usr/local >/dev/null && make -j"$(nproc)" >/dev/null && make install >/dev/null ) \
 		|| die "the GHDL build failed; run it by hand in $src to see why"
 	rm -rf "$src"
-	command -v ghdl >/dev/null 2>&1 || die "GHDL installed but not on PATH"
-	info "built and installed: $(ghdl --version | head -1)"
+	GHDL_BIN=/usr/local/bin/ghdl
+	ghdl_works "$GHDL_BIN" || die "GHDL built, but the $USR account cannot run $GHDL_BIN"
+	info "built and installed: $("$GHDL_BIN" --version | head -1)"
 fi
 
-# --- 3b. Icarus Verilog -----------------------------------------------------
+# --- 4b. Icarus Verilog -----------------------------------------------------
 # Packaged for Alpine (community, enabled above), so no source build. The
 # backend needs both halves: iverilog compiles, vvp runs the result.
 step "Installing Icarus Verilog"
@@ -110,25 +130,18 @@ else
 	command -v vvp >/dev/null 2>&1 || die "vvp still not on PATH after 'apk add iverilog'"
 	info "installed: $(iverilog -V 2>/dev/null | head -1)"
 fi
-# Pinned for the same reason as GHDL below: the service uses the one verified here.
+# Pinned for the same reason as GHDL above: the service uses the one verified here.
 IVERILOG_BIN="$(command -v iverilog)"
 VVP_BIN="$(command -v vvp)"
 
-# Pin the absolute path of the GHDL we just found. OpenRC does put
+# GHDL_BIN is pinned into the service as GHDL_EXE below. OpenRC does put
 # /usr/local/bin on a service's PATH (see _LOCAL_PREFIX in
 # /usr/libexec/rc/sh/functions.sh), so a source build needs no help — but a
 # GHDL installed anywhere else does, and pinning it means the service keeps
 # using the one this installer verified.
-GHDL_BIN="$(command -v ghdl)"
-case "$GHDL_BIN" in
-	/home/*|/root/*) info "warning: $GHDL_BIN lives in a home directory; if it is a wrapper that uses \$HOME it will fail for the $USR account" ;;
-esac
 
-# --- 4. account and checkout ------------------------------------------------
-step "Creating the $USR account and fetching HDLBoard into $DIR"
-getent group "$USR" >/dev/null || addgroup -S "$USR"
-id "$USR" >/dev/null 2>&1 || adduser -S -D -H -h "$DIR" -s /sbin/nologin -G "$USR" "$USR"
-install -d -o "$USR" -g "$USR" "$DIR"
+# --- 5. checkout ------------------------------------------------------------
+step "Fetching HDLBoard into $DIR"
 
 # Stop first: rebuilding under a running backend would swap the files out from
 # under it.
@@ -152,7 +165,7 @@ fi
 chown -R "$USR:$USR" "$DIR"
 info "$(su -s /bin/sh "$USR" -c "cd '$DIR' && git log --oneline -1")"
 
-# --- 5. build ---------------------------------------------------------------
+# --- 6. build ---------------------------------------------------------------
 # VITE_HDL_WS_PORT is compiled into the page: it is how the browser knows
 # which port to open the WebSocket on, and it has to match the backend's
 # HDL_WS_PORT or the board never lights.
@@ -167,7 +180,7 @@ su -s /bin/sh "$USR" -c "cd '$DIR/server' && npm install --no-fund --no-audit &&
 [ -f "$DIR/server/dist/server.js" ] || die "no backend at $DIR/server/dist/server.js after the build"
 info "page in $DIR/dist, backend in $DIR/server/dist"
 
-# --- 6. the backend service -------------------------------------------------
+# --- 7. the backend service -------------------------------------------------
 step "Installing the OpenRC service"
 # Create the log only if it's missing: 'install /dev/null' truncates, which on
 # a re-run throws away the history you'd want for working out why the last run
@@ -207,7 +220,7 @@ rc-update add hdlboard default >/dev/null 2>&1 || true
 rc-service hdlboard restart
 info "backend on port $WS_PORT, log in $LOG"
 
-# --- 7. the page ------------------------------------------------------------
+# --- 8. the page ------------------------------------------------------------
 # The backend speaks WebSocket and nothing else — pointed at by a browser it
 # answers 426. Something has to serve the page, or there is no site to open.
 step "Installing nginx to serve the page on port $PAGE_PORT"
@@ -229,7 +242,7 @@ rc-update add nginx default >/dev/null 2>&1 || true
 rc-service nginx restart >/dev/null
 info "page served from $DIR/dist"
 
-# --- 8. prove it works ------------------------------------------------------
+# --- 9. prove it works ------------------------------------------------------
 step "Checking"
 rc=0
 sleep 2
@@ -278,9 +291,14 @@ else
 fi
 rm -rf "$probe"
 
-rc-update show 2>/dev/null | grep -q hdlboard && info "at boot   : hdlboard and nginx are in the default runlevel" || { info "at boot   : NOT registered"; rc=1; }
+boot=$(rc-update show default 2>/dev/null)
+if echo "$boot" | grep -qw hdlboard && echo "$boot" | grep -qw nginx; then
+	info "at boot  : hdlboard and nginx are in the default runlevel"
+else
+	info "at boot  : NOT registered — rc-update add hdlboard default; rc-update add nginx default"; rc=1
+fi
 
-# --- 9. done ----------------------------------------------------------------
+# --- 10. done ----------------------------------------------------------------
 ip=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)
 if [ "$rc" -eq 0 ]; then
 	step "HDLBoard is running"

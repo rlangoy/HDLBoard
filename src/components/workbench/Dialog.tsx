@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import './Dialog.css';
+import { CloseButton } from './CloseButton';
 
 export interface DialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ export interface DialogProps {
   describedBy?: string;
   /** `wide` (760 px) for content with a table; the default is 560 px. */
   size?: 'default' | 'wide';
+  variant?: 'board-json';
   /** Replaces the Close button, for a dialog that asks for something (New File). */
   footer?: ReactNode;
   children: ReactNode;
@@ -39,7 +41,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled])';
  * back to whatever had it before — so a keyboard user lands back on the
  * header button they opened it from.
  */
-export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size = 'default', footer, children }: DialogProps) {
+export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size = 'default', variant, footer, children }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = `${useId()}-title`;
@@ -81,7 +83,7 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
     <div className="wb-dialog__backdrop" onMouseDown={handleBackdropMouseDown}>
       <div
         ref={dialogRef}
-        className={size === 'wide' ? 'wb-dialog wb-dialog--wide' : 'wb-dialog'}
+        className={`wb-dialog${size === 'wide' ? ' wb-dialog--wide' : ''}${variant ? ` wb-dialog--${variant}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -96,6 +98,7 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
             </h2>
             {subtitle && <p className="wb-dialog__subtitle">{subtitle}</p>}
           </div>
+          {variant === 'board-json' && <CloseButton label="Close Board JSON" hint="Close" onClick={onClose} />}
         </header>
 
         <div className="wb-dialog__body">{children}</div>

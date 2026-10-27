@@ -12,5 +12,9 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     environment: 'node',
+    // Vitest stubs CSS imports to '' — even ?raw — unless included here. The
+    // board settings test reads its stylesheet that way rather than through
+    // node:fs, which tsc -b cannot type without @types/node in the frontend.
+    css: { include: [/BoardSettingsPage\.css/] },
   },
 });
