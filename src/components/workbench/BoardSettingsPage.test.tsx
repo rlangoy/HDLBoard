@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { BUILT_IN_BOARDS } from '../../boards/boardCatalog';
 import { initialBoardDocument } from '../../boards/boardEditorStorage';
@@ -40,4 +41,13 @@ it('explains a read-only board instead of claiming changes were applied', () => 
   const html = render('de1-soc');
   expect(html).toContain('Built-in boards are read-only');
   expect(html).not.toContain('All changes applied');
+});
+
+it('keeps panel padding independent of scrollbar visibility at both layout widths', () => {
+  // This selector must outrank ScrollArea's .wb-scroll.has-rail rule, and
+  // match both with and without has-rail so wrapping cannot toggle overflow.
+  const css = readFileSync(new URL('./BoardSettingsPage.css', import.meta.url), 'utf8');
+  const rules = [...css.matchAll(/\.bce\s+\.bce-panel\.wb-scroll\s*>\s*\.wb-scroll__viewport\s*\{\s*padding:\s*(\d+)px\s*;/g)];
+  expect(rules.map((rule) => Number(rule[1]))).toEqual([20, 16]);
+  expect(rules.every((rule) => Number(rule[1]) >= 14)).toBe(true);
 });

@@ -37,7 +37,8 @@
 .bce-header > button:not(.bce-json-button, .hdl-close-button) { color: #075fc7; border-color: #a8c9f2; }
 .bce-panels { display: grid; grid-template-columns: minmax(0, 44fr) minmax(0, 56fr); gap: 18px; flex: 1; min-height: 0; }
 .bce-panel { background: #fff; border: 1px solid #dce4ee; border-radius: 12px; min-width: 0; min-height: 0; box-shadow: 0 1px 4px #0f172a05; }
-.bce-panel > .wb-scroll__viewport { padding: 20px; }
+/* Keep the content width unchanged when the overlay scrollbar appears. */
+.bce .bce-panel.wb-scroll > .wb-scroll__viewport { padding: 20px; }
 .bce-card { border: 1px solid #dce4ee; border-radius: 9px; margin: 10px 0; padding: 10px; background: white; cursor: pointer; }
 .bce-card.is-selected { border-color: #80b6ff; box-shadow: inset 3px 0 #0866ff; background: #eff6ff; }
 .bce-card__heading { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
@@ -112,7 +113,7 @@
 @container board-editor (max-width: 720px) {
   .bce-panels { grid-template-columns: minmax(0, 1fr); overflow-y: auto; flex-basis: 0; }
   .bce-panel { min-height: 340px; max-height: 65vh; }
-  .bce-panel > .wb-scroll__viewport { padding: 16px; }
+  .bce .bce-panel.wb-scroll > .wb-scroll__viewport { padding: 16px; }
   .bce-header { gap: 10px; }.bce-header h2 { font-size: 21px; }
 }
 @container board-editor (max-width: 480px) {
