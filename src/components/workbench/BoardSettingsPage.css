@@ -84,8 +84,31 @@
 .bce-footer small { display: block; margin-top: 3px; }.bce-footer p { margin: 3px 0 0; }
 .bce-footer-actions { display: flex; gap: 10px; flex: none; }
 .bce .bce-primary { background: #0866ff; border-color: #0866ff; color: white; }.bce .bce-primary:hover { background: #0054d6; }
-.bce-json { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font-size: 12px; }
-.bce-json-toolbar { display: flex; justify-content: flex-end; }
+.wb-dialog--board-json { width: min(920px, 100%); }
+.wb-dialog--board-json .wb-dialog__hero { background: #fff; color: #10254a; padding: 26px 28px 20px; }
+.wb-dialog--board-json .wb-dialog__badge { background: #e7f1ff; color: #0756bd; box-shadow: none; }
+.wb-dialog--board-json .wb-dialog__title { font-size: 26px; }
+.wb-dialog--board-json .wb-dialog__subtitle { color: #60789f; font-size: 15px; }
+.wb-dialog--board-json .hdl-close-button { margin-left: auto; align-self: flex-start; }
+.wb-dialog--board-json .wb-dialog__body { padding: 0 28px 24px; }
+.wb-dialog--board-json .wb-dialog__footer { border-top: 1px solid #dce5f1; padding-top: 14px; }
+.bce .wb-dialog--board-json .wb-dialog__close { min-width: 110px; border-color: #0866ff; background: #0866ff; color: white; }
+.bce .wb-dialog--board-json .wb-dialog__close:hover { background: #0054d6; }
+.bce-json-panel { position: relative; overflow: auto; border: 1px solid #d9e4f2; border-radius: 9px; background: #f3f6fa; }
+.bce-json-toolbar { position: sticky; top: 0; left: 0; z-index: 1; height: 0; display: flex; justify-content: flex-end; padding: 16px 16px 0; }
+.bce .bce-json-toolbar .wb-copycode { width: auto; height: auto; gap: 8px; font-size: 14px; font-weight: 600; }
+.bce-json { min-width: max-content; margin: 0; padding: 42px 24px 18px; color: #10254a; user-select: text; font: 14px/1.55 ui-monospace, Consolas, monospace; }
+.bce-json-number { display: inline-block; width: 3em; margin-right: 1.5em; color: #8298b6; text-align: right; user-select: none; }
+.bce-json-key { color: #c5162b; }
+.bce-json-string { color: #0064e8; }
+.bce-json-value { color: #00832d; }
+@media (max-width: 600px) {
+  .wb-dialog--board-json .wb-dialog__hero { padding: 20px 18px 16px; gap: 12px; }
+  .wb-dialog--board-json .wb-dialog__badge { width: 48px; height: 48px; }
+  .wb-dialog--board-json .wb-dialog__title { font-size: 21px; }
+  .wb-dialog--board-json .wb-dialog__body { padding: 0 18px 18px; }
+  .bce-json { padding-left: 12px; font-size: 12px; }
+}
 @container board-editor (max-width: 720px) {
   .bce-panels { grid-template-columns: minmax(0, 1fr); overflow-y: auto; flex-basis: 0; }
   .bce-panel { min-height: 340px; max-height: 65vh; }
