@@ -687,6 +687,57 @@ p { margin: 0; }
 .footer-links a { color: var(--ink-2); text-decoration: none; }
 .footer-links a:hover { color: var(--accent); }
 
+/* ---------- Built-in boards and board manager ---------- */
+.boards { padding: 96px 0 80px; background: var(--surface); border-top: 1px solid var(--line); }
+.boards-intro { gap: 22px; }
+.eyebrow { color: var(--accent-hover); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; }
+.boards-intro > p:last-child { max-width: 740px; color: var(--muted); font-size: 1.25rem; line-height: 1.6; }
+.board-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin-top: 48px; }
+.board-card { display: flex; flex-direction: column; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--surface); }
+.board-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 26px 28px 24px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.board-maker { display: block; color: var(--muted); font-size: 0.8125rem; margin-bottom: 2px; }
+.board-card h3 { font-size: 1.75rem; }
+.board-clock { padding: 5px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--ink-2); font-size: 0.8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.board-card-head p { grid-column: 1 / -1; font-size: 1rem; color: var(--muted); line-height: 1.6; }
+.board-image { display: flex; align-items: center; flex: 1; padding: 20px; cursor: zoom-in; }
+.board-image img { display: block; width: 100%; }
+.board-image:hover { background: #F8FAFE; }
+.board-image:focus-visible, .manager-shot:focus-visible { outline: 3px solid var(--accent); outline-offset: -4px; }
+.board-layout-note { display: flex; align-items: flex-start; gap: 20px; margin-top: 32px; padding: 26px 28px; border-radius: 16px; background: var(--accent-soft); }
+.board-layout-note svg { flex: none; color: var(--accent-hover); margin-top: 4px; }
+.board-layout-note h3 { font-size: 1.375rem; margin-bottom: 6px; }
+.board-layout-note p { max-width: 850px; color: var(--muted); font-size: 1.0625rem; }
+.boards-footnote { max-width: 1000px; margin: 24px auto 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.65; text-align: center; }
+.boards-footnote code { font-size: 0.9em; }
+.board-manager { padding: 104px 0; }
+.manager-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.4fr); gap: 48px; align-items: center; }
+.board-manager h2 { font-size: clamp(2.2rem, 3.7vw, 3rem); }
+.board-manager .eyebrow { font-size: 0.8125rem; color: var(--accent-hover); }
+.board-manager .text-link { color: var(--accent-hover); }
+.manager-figure { min-width: 0; margin: 0; }
+.manager-shot { display: block; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.3); cursor: zoom-in; }
+.manager-shot img { display: block; width: 100%; }
+.manager-figure figcaption { color: var(--muted); font-size: 0.875rem; margin-top: 14px; text-align: center; }
+.board-workflow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; list-style: none; margin: 56px 0 0; padding: 32px 0 0; border-top: 1px solid var(--line-strong); }
+.board-workflow li { display: flex; gap: 16px; }
+.board-step { color: var(--accent-hover); font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; }
+.board-workflow h3 { font-size: 1.25rem; margin-bottom: 8px; }
+.board-workflow p { color: var(--muted); font-size: 1rem; line-height: 1.6; }
+@media (max-width: 960px) {
+  .manager-grid { grid-template-columns: 1fr; gap: 36px; }
+  .manager-grid .split-text { max-width: 720px; }
+  .board-workflow { gap: 24px; }
+}
+@media (max-width: 720px) {
+  .boards, .board-manager { padding: 64px 0; }
+  .board-gallery { grid-template-columns: 1fr; gap: 24px; margin-top: 32px; }
+  .board-card-head { padding: 22px; }
+  .board-image { padding: 16px; }
+  .board-layout-note { padding: 22px; gap: 14px; }
+  .boards-footnote { text-align: left; }
+  .board-workflow { grid-template-columns: 1fr; margin-top: 36px; }
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
   .split-media.glow::before { inset: -40px -24px; }  /* keep the glow inside the page: no sideways scroll */

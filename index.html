@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=8" />
+<link rel="stylesheet" href="styles.css?v=9" />
 
 <meta property="og:title" content="HDLBoard — Write VHDL or Verilog. Watch it light up." />
 <meta property="og:description" content="A free, open-source virtual FPGA board for learning VHDL and Verilog. No hardware needed." />
@@ -83,7 +83,7 @@
       </div>
     </div>
 
-    <img class="hero-shot" src="assets/workbench.png?v=9" width="1260" height="655" loading="eager"
+    <img class="hero-shot" src="assets/workbench.png?v=9" width="1260" height="655" loading="eager" fetchpriority="high"
          alt="HDLBoard running the Verilog design DE1_SoC.v under Icarus Verilog: the Simulation card and Files panel on the left, the editor in the middle, and the virtual board on the right with four switches up and their LEDs lit, plus the 7-segment displays and pushbuttons" />
   </div>
 </section>
@@ -122,6 +122,69 @@
         <p class="split-note">This is real simulation, not a JavaScript imitation: your design runs in GHDL or Icarus Verilog, and every flip of a switch goes to it while it runs.</p>
         <a class="text-link" href="https://hdlboard.onrender.com/" target="_blank" rel="noopener">Flip the switches yourself in the live demo <span aria-hidden="true">→</span></a>
       </div>
+    </div>
+  </section>
+
+  <section class="boards" id="boards" aria-labelledby="boards-heading">
+    <div class="wrap">
+      <div class="center boards-intro">
+        <p class="eyebrow">Your board. On screen.</p>
+        <h2 id="boards-heading">Pick your board.<br /><span class="h2-soft">See familiar controls.</span></h2>
+        <p>From the DE1-SoC’s switches to the Basys 3’s directional buttons, the simulation layout follows your board. Choose a built-in profile and work with its own port names, controls and displays.</p>
+      </div>
+
+      <div class="board-gallery">
+        <figure class="board-card">
+          <figcaption class="board-card-head">
+            <div><span class="board-maker">Terasic</span><h3>DE1-SoC</h3></div>
+            <span class="board-clock">50 MHz</span>
+            <p>10 switches · 10 LEDs · 4 pushbuttons<br />6 independent 7-segment displays</p>
+          </figcaption>
+          <a class="board-image" href="assets/board-de1-soc.webp" target="_blank" rel="noopener" aria-label="Enlarge the DE1-SoC simulation layout">
+            <img src="assets/board-de1-soc.webp" width="744" height="469" loading="lazy" decoding="async" alt="DE1-SoC preview in HDLBoard: ten LEDs and switches, six HEX displays and four KEY buttons." />
+          </a>
+        </figure>
+        <figure class="board-card">
+          <figcaption class="board-card-head">
+            <div><span class="board-maker">Digilent</span><h3>Basys 3</h3></div>
+            <span class="board-clock">100 MHz</span>
+            <p>16 switches · 16 LEDs · 5 directional buttons<br />4-digit multiplexed display</p>
+          </figcaption>
+          <a class="board-image" href="assets/board-basys3.webp" target="_blank" rel="noopener" aria-label="Enlarge the Basys 3 simulation layout">
+            <img src="assets/board-basys3.webp" width="744" height="590" loading="lazy" decoding="async" alt="Basys 3 preview in HDLBoard: sixteen switches and LEDs, four display digits and five buttons arranged in a cross." />
+          </a>
+        </figure>
+      </div>
+
+      <div class="board-layout-note">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <div><h3>A layout that fits your workspace</h3><p>Keep the controls in a single column or spread them across two. Choose your layout in Settings and resize the Board I/O panel beside your code.</p></div>
+      </div>
+      <p class="boards-footnote">Five profiles are built in: DE1-SoC, DE10-Lite, Basys 3, Nexys A7 and Default.<br />The board-specific profiles use the manufacturers’ names for switches, LEDs and other controls.</p>
+    </div>
+  </section>
+
+  <section class="board-manager" id="board-manager" aria-labelledby="board-manager-heading">
+    <div class="wrap">
+      <div class="manager-grid">
+        <div class="split-text">
+          <p class="eyebrow">Make room for your board</p>
+          <h2 id="board-manager-heading">Start with a board.<br /><span class="h2-soft">Make it your own.</span></h2>
+          <p>Different port names? A different number of switches? Open the board manager and make an editable copy of a built-in profile. Configure it with form fields and see the board preview update as you edit.</p>
+          <a class="text-link" href="https://github.com/rlangoy/HDLBoard/blob/main/docs/BOARDS.md">Read the board guide <span aria-hidden="true">→</span></a>
+        </div>
+        <figure class="manager-figure">
+          <a class="manager-shot" href="assets/board-manager.webp" target="_blank" rel="noopener" aria-label="Enlarge the board manager screenshot">
+            <img src="assets/board-manager.webp" width="1090" height="759" loading="lazy" decoding="async" alt="Board settings editing a Basys 3 Custom profile. The component list is on the left; the right shows the five-button cross layout and editable btnU, btnL, btnC, btnR and btnD port names. Save changes is below." />
+          </a>
+          <figcaption>Editing a copy of Basys 3. Select the screenshot to enlarge.</figcaption>
+        </figure>
+      </div>
+      <ol class="board-workflow">
+        <li><span class="board-step" aria-hidden="true">01</span><div><h3>Copy a starting point</h3><p>Go to Settings → Manage board, choose a profile and select <strong>Create editable copy</strong>.</p></div></li>
+        <li><span class="board-step" aria-hidden="true">02</span><div><h3>Set up your controls</h3><p>Edit port names, counts, button layouts and display settings. Valid changes appear in Board I/O.</p></div></li>
+        <li><span class="board-step" aria-hidden="true">03</span><div><h3>Keep it with your project</h3><p>Apply with <strong>Save changes</strong>, then save the project to keep its custom board configuration.</p></div></li>
+      </ol>
     </div>
   </section>
 
@@ -368,7 +431,7 @@
           <h3>What it is not</h3>
           <ul class="checks">
             <li class="is-no">No synthesis, timing analysis or bitstream: use Quartus for the real board</li>
-            <li class="is-no">One board only: the DE1-SoC’s switches, keys, LEDs and 7-segment displays</li>
+            <li class="is-no">Board profiles simulate their configured switches, buttons, LEDs and displays, not every peripheral on the physical board</li>
             <li class="is-no">In the browser, your work starts fresh every time you reload. Save to GitHub or download your files to keep them. (The Windows app preserves them automatically.)</li>
           </ul>
         </div>
