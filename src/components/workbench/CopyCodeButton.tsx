@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { cx } from '../board';
 import { copyText } from './clipboard';
 import { CheckIcon, CopyIcon } from './icons';
+import './PaneHeaderButton.css';
 
 /** How long the check mark shows after a copy. */
 const CONFIRMATION_MS = 1500;
@@ -18,7 +19,7 @@ const TITLE: Record<CopyState, string> = {
 };
 
 /** In a pane header, beside the file name: copies the whole file to the clipboard. */
-export function CopyCodeButton({ fileName, code }: { fileName: string; code: string }) {
+export function CopyCodeButton({ fileName, code, label }: { code: string } & ({ fileName: string; label?: never } | { label: string; fileName?: never })) {
   const [state, setState] = useState<CopyState>('idle');
 
   useEffect(() => {
@@ -30,17 +31,19 @@ export function CopyCodeButton({ fileName, code }: { fileName: string; code: str
   const copy = async () => setState((await copyText(code)) ? 'copied' : 'failed');
 
   return (
-    <button
-      type="button"
-      className={cx('wb-copycode', state !== 'idle' && `is-${state}`)}
-      aria-label={`Copy the code of ${fileName}`}
-      title={TITLE[state]}
-      onClick={() => void copy()}
-    >
-      {state === 'copied' ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
-      <span className="wb-sr-only" aria-live="polite">
+    <span className="wb-copycode-control">
+      <button
+        type="button"
+        className={cx('wb-copycode', state !== 'idle' && `is-${state}`)}
+        aria-label={label ?? (fileName ? `Copy the code of ${fileName}` : TITLE.idle)}
+        title={state === 'idle' && label ? label : TITLE[state]}
+        onClick={() => void copy()}
+      >
+        {state === 'copied' ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+      </button>
+      <span className="wb-sr-only" role="status" aria-live="polite">
         {state === 'idle' ? '' : TITLE[state]}
       </span>
-    </button>
+    </span>
   );
 }

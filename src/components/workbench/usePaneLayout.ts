@@ -100,6 +100,8 @@ export interface PaneLayoutState {
   /** Opens or shuts a pane, with a slide; nothing when it already is. */
   showPane: (pane: SidePane, open: boolean) => void;
   setPaneWidth: (pane: SidePane, width: number) => void;
+  /** Resize an open pane, returning its fitted width; never opens a collapsed pane. */
+  resizeOpenPane: (pane: SidePane, width: number) => number | undefined;
   onSidebarDividerPointerDown: DividerPointerDown;
   onBoardDividerPointerDown: DividerPointerDown;
   onConsoleDividerPointerDown: DividerPointerDown;
@@ -183,6 +185,7 @@ export function usePaneLayout(): PaneLayoutState {
     const fitted = fitSidePanes(containerWidth, desiredWidth.current, collapsedRef.current, shrinkFirst);
     setSidebarWidth(fitted.sidebar);
     setBoardWidth(fitted.board);
+    return fitted;
   }, []);
 
   // True for the length of a pane's slide (togglePane), while its rail is
@@ -374,6 +377,14 @@ export function usePaneLayout(): PaneLayoutState {
     storeLayout();
   };
 
+  const resizeOpenPane = (pane: SidePane, width: number) => {
+    if (collapsedRef.current[pane]) return undefined;
+    desiredWidth.current[pane] = Math.max(pane === 'sidebar' ? SIDEBAR_MIN_W : BOARD_MIN_W, width);
+    const fitted = applyLayout(bodyWidth(), otherPane(pane));
+    storeLayout();
+    return fitted?.[pane];
+  };
+
   useEffect(
     () => () => {
       if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
@@ -411,6 +422,7 @@ export function usePaneLayout(): PaneLayoutState {
     togglePane,
     showPane,
     setPaneWidth,
+    resizeOpenPane,
     onSidebarDividerPointerDown: (e) => resizePane(e, 'sidebar'),
     onBoardDividerPointerDown: (e) => resizePane(e, 'board'),
     onConsoleDividerPointerDown: resizeConsole,

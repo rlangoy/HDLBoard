@@ -36,11 +36,11 @@ export function RunTestbenchDialog({ designName, choices, onRunTestbench, onRunA
       subtitle={noBoardPorts(designName)}
       icon={<FlaskIcon />}
       footer={
-        <div className="wb-newfile__buttons">
-          <button type="button" className="wb-newfile__cancel" onClick={onClose}>
+        <div className="wb-dialog__actions">
+          <button type="button" className="wb-dialog__secondary" onClick={onClose}>
             {TEXT.cancel}
           </button>
-          <button type="button" className="wb-newfile__cancel" onClick={onRunAnyway}>
+          <button type="button" className="wb-dialog__secondary" onClick={onRunAnyway}>
             {runAnyway(designName)}
           </button>
           <button type="button" className="wb-dialog__close" autoFocus disabled={!choice} onClick={() => choice && onRunTestbench(choice)}>
