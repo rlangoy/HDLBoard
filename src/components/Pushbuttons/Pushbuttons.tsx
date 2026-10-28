@@ -31,6 +31,7 @@ type NativeProps = Omit<
 >;
 
 export interface PushbuttonsProps extends NativeProps {
+  headerAction?: ReactNode;
   /** Number of buttons. Default `4` (KEY[3:0]). */
   count?: number;
   /**
@@ -108,6 +109,7 @@ export function Pushbuttons({
   showIndices = true,
   showHint = true,
   size,
+  headerAction,
   disabled = false,
   className,
   style,
@@ -153,6 +155,7 @@ export function Pushbuttons({
     <Panel
       {...rest}
       heading={heading}
+      headerAction={headerAction}
       accent="keys"
       framed={framed}
       className={cx('pb-pushbuttons', className)}
