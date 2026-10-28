@@ -25,10 +25,10 @@ describe('grouped board I/O', () => {
     expect(formatIoValue(Array(60).fill(1), 'decimal')).toBe('1152921504606846975');
   });
 
-  it('renders numbered switches and current group values', () => {
+  it('renders numbered switches ungrouped by default', () => {
     const html = renderToStaticMarkup(<GroupedIoPanel kind="switches" count={4} bits={[1, 0, 1, 0]} name="SW" title="Switches" />);
     expect(html).toContain('aria-label="SW2"');
-    expect(html).toContain('0x5');
+    expect(html).not.toContain('pb-io-hex');
     expect(html).toContain('aria-label="SW value">0101</output>');
     expect(html).toContain('aria-label="Switch display options"');
     expect(html).toContain('aria-expanded="false"');
