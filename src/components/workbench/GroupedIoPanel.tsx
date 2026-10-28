@@ -239,15 +239,25 @@ interface DialogProps extends Pick<Props, 'kind' | 'name' | 'count'> {
 
 function VisibilityDialog({ kind, name, count, hidden, onCancel, onApply }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const applyButton = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState(hidden);
-  useEffect(() => { dialog.current?.showModal(); }, []);
+  useEffect(() => { dialog.current?.showModal(); applyButton.current?.focus(); }, []);
   return <dialog ref={dialog} className={`pb-ui pb-accent-${kind} pb-io-dialog`} onCancel={(event) => { event.preventDefault(); onCancel(); }} aria-labelledby={`visibility-${kind}`}>
     <form onSubmit={(event) => { event.preventDefault(); onApply(draft); }}>
-      <h2 id={`visibility-${kind}`}>Choose visible {kind === 'leds' ? 'LEDs' : 'switches'} ({name}[{count - 1}:0])</h2>
+      <div className="pb-io-dialog__hero">
+        <div className="pb-io-dialog__badge" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            {kind === 'leds' ? <><path d="M15 29V16a9 9 0 0 1 18 0v13M12 29h24M18 29v15M30 29v15" /></> : <><rect x="3" y="12" width="42" height="24" rx="12" /><circle cx="32" cy="24" r="7" fill="currentColor" stroke="none" /></>}
+          </svg>
+        </div>
+        <div>
+          <h2 id={`visibility-${kind}`}>Choose visible {kind === 'leds' ? 'LEDs' : 'switches'} ({name}[{count - 1}:0])</h2>
+          <p>Select the {kind === 'leds' ? 'LEDs' : 'switches'} to show on the board</p>
+        </div>
+      </div>
       <div className="pb-io-dialog__bits">
         {Array.from({ length: count }, (_, i) => count - 1 - i).map((index) => (
           <label key={index}>
-            {name}{index}
             <input
               type="checkbox"
               checked={!draft.includes(index)}
@@ -255,12 +265,13 @@ function VisibilityDialog({ kind, name, count, hidden, onCancel, onApply }: Dial
                 ? draft.filter((bit) => bit !== index)
                 : [...draft, index])}
             />
+            <span>{name}{index}</span>
           </label>
         ))}
       </div>
       <div className="pb-io-dialog__actions">
         <button type="button" onClick={onCancel}>Cancel</button>
-        <button type="submit">Apply</button>
+        <button ref={applyButton} type="submit">Apply</button>
       </div>
     </form>
   </dialog>;

@@ -55,12 +55,33 @@
 .pb-io-collapsed:focus-visible { outline: 3px solid var(--pb-focus); outline-offset: 2px; }
 .pb-io-collapsed__icon { width: 24px; height: 24px; flex: none; }
 .pb-io-collapsed__chevron { width: 16px; height: 16px; flex: none; color: var(--pb-chevron); }
-.pb-io-dialog { max-width: calc(100vw - 32px); padding: 0; border: 1px solid var(--pb-accent-border); border-radius: 6px; color: var(--pb-accent-title); box-shadow: 0 4px 14px var(--pb-dialog-shadow); }
-.pb-io-dialog::backdrop { background: var(--pb-dialog-backdrop); }
-.pb-io-dialog h2 { margin: 0; padding: 10px; background: var(--pb-accent-head); font-size: 14px; }
-.pb-io-dialog__bits { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 14px; }
-.pb-io-dialog__bits label { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
-.pb-io-dialog__bits input { width: 16px; height: 16px; accent-color: var(--pb-focus); }
-.pb-io-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px; border-top: 1px solid var(--pb-readout-border); }
-.pb-io-dialog__actions button { padding: 7px 18px; border: 1px solid var(--pb-dialog-button-border); border-radius: 4px; background: var(--pb-dialog-button-bg); color: var(--pb-dialog-button-text); cursor: pointer; }
-.pb-io-dialog__actions button[type=submit] { background: var(--pb-focus); border-color: var(--pb-focus); color: white; }
+.pb-io-dialog { box-sizing: border-box; width: 700px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); padding: 0; border: 0; border-radius: 12px; background: #fff; color: #102346; box-shadow: 0 24px 60px #0f172a59; overscroll-behavior: contain; font-family: 'Segoe UI', system-ui, sans-serif; }
+.pb-io-dialog::backdrop { background: #0f172a99; overflow: hidden; overscroll-behavior: contain; }
+.pb-io-dialog__hero { display: flex; align-items: center; gap: 20px; padding: 22px 28px; background: linear-gradient(180deg, #346cc6, #29549a); color: #fff; }
+.pb-io-dialog__badge { display: grid; flex: none; place-items: center; width: 68px; height: 68px; border-radius: 14px; background: #fff; color: #2861bd; box-shadow: 0 3px 8px #10234640; }
+.pb-io-dialog__badge svg { width: 48px; height: 48px; }
+.pb-io-dialog h2 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; }
+.pb-io-dialog__hero p { margin: 8px 0 0; color: #dce9ff; font-size: 17px; line-height: 1.3; }
+.pb-io-dialog__bits { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 10px; padding: 48px 28px 42px; }
+.pb-io-dialog__bits label { display: flex; min-width: 42px; flex-direction: column; align-items: center; gap: 10px; color: #102346; font-size: 15px; line-height: 1.2; cursor: pointer; }
+.pb-io-dialog__bits input { appearance: none; display: grid; place-content: center; box-sizing: border-box; width: 38px; height: 38px; margin: 0; border: 2px solid #a9bedb; border-radius: 6px; background: #fff; cursor: pointer; }
+.pb-io-dialog__bits input:checked { border-color: #2869ed; background: #2869ed; }
+.pb-io-dialog__bits input:checked::before { content: ''; width: 22px; height: 22px; background: white; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 12 5 5L20 6'/%3E%3C/svg%3E") center / contain no-repeat; }
+.pb-io-dialog__bits input:focus-visible, .pb-io-dialog__actions button:focus-visible { outline: 2px solid #2869ed; outline-offset: 3px; }
+.pb-io-dialog__actions { display: flex; justify-content: flex-end; gap: 12px; padding: 0 20px 22px 28px; }
+.pb-io-dialog__actions button { min-width: 110px; padding: 12px 20px; border: 2px solid #d5e3f5; border-radius: 10px; background: #fff; color: #102346; font: 600 18px/1.2 'Segoe UI', system-ui, sans-serif; cursor: pointer; }
+.pb-io-dialog__actions button[type=submit] { min-width: 120px; border-color: #2869ed; background: #2869ed; color: white; }
+.pb-io-dialog__actions button:hover { filter: brightness(.96); }
+@media (max-width: 600px) {
+  .pb-io-dialog__hero { gap: 14px; padding: 20px; }
+  .pb-io-dialog__badge { width: 52px; height: 52px; border-radius: 10px; }
+  .pb-io-dialog__badge svg { width: 38px; height: 38px; }
+  .pb-io-dialog h2 { font-size: 20px; }
+  .pb-io-dialog__hero p { font-size: 14px; }
+  .pb-io-dialog__bits { justify-content: center; padding: 28px 20px; gap: 20px; }
+  .pb-io-dialog__actions { padding: 0 20px 20px; }
+}
+@media (forced-colors: active) {
+  .pb-io-dialog__bits input { appearance: auto; }
+  .pb-io-dialog__bits input:checked::before { content: none; }
+}
