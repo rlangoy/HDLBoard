@@ -50,7 +50,7 @@ interface Props {
 }
 
 export function GroupedIoPanel({ kind, count, bits, name, title, onChange }: Props) {
-  const [view, setView] = useState<View>(NIBBLE);
+  const [view, setView] = useState<View>('default');
   const [hidden, setHidden] = useState<number[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [choosing, setChoosing] = useState(false);
