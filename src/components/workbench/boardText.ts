@@ -127,7 +127,7 @@ export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]):
 
 /** Beside the notice above: the boards of another shape that have examples written for them. */
 export function ownExamplesNotice(boards: readonly BoardDefinition[]): string {
-  return `Examples without the 7-segment displays are also built in for ${boards.map((board) => board.name).join(', ')}.`;
+  return `Examples are also built in for ${boards.map((board) => board.name).join(', ')}; available examples vary by board.`;
 }
 
 /** The lead of a change between boards of different shapes (§ 5.3). */

@@ -134,8 +134,7 @@ export const EXAMPLES: readonly Example[] = CATALOGUE.flatMap(({ key, files, use
  * of the Default shape has no folder: its examples are the built-in files, renamed. The
  * other boards' files are written in the board's own names and declare only the ports they
  * use. A file the folder lacks (the AND gate, the UART transmitter) names no board port and
- * is the built-in one. The 7-segment example is left out: the displays are not wired up
- * on these boards yet.
+ * is the built-in one. Display examples are offered only when a board has its own file.
  */
 const BOARD_SOURCES: Record<string, string> = import.meta.glob('./boardExamples/*/*/*', {
   query: '?raw',
@@ -160,9 +159,11 @@ const BOARD_EXAMPLE_FILES: ReadonlyMap<string, ReadonlyMap<string, VhdlFile>> = 
 /** What a board's card says where the built-in text names a key or an LED of another board. */
 const BOARD_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   basys3: {
+    key_counter_7seg: 'Press btnC to count up on the 7-segment displays (00-99); btnU resets.',
     key_uart_tx: "Press btnC to send 'A' and btnU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on led[0], Busy on led[1].",
   },
   'nexys-a7': {
+    key_counter_7seg: 'Press BTNC to count up on the 7-segment displays (00-99); BTNU resets.',
     key_uart_tx: "Press BTNC to send 'A' and BTNU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on LED[0], Busy on LED[1].",
   },
 };
@@ -177,12 +178,14 @@ export function hasExamples(board: BoardDefinition): boolean {
   return isDefaultShape(board.ports) || writtenForBoard(board);
 }
 
-/** The examples the Examples pane lists for `board`: all on the Default shape, those without displays on a board with files of its own. */
+/** Display examples need a board-specific file for the selected language. */
 export function examplesFor(board: BoardDefinition): readonly Example[] {
   if (isDefaultShape(board.ports)) return EXAMPLES;
   if (!writtenForBoard(board)) return [];
   const descriptions = BOARD_DESCRIPTIONS[board.id] ?? {};
-  return EXAMPLES.filter((e) => !e.usesHex).map((e) => ({ ...e, description: descriptions[e.key] ?? e.description }));
+  const files = BOARD_EXAMPLE_FILES.get(board.id);
+  return EXAMPLES.filter((e) => !e.usesHex || e.fileIds.every((id) => files?.has(id)))
+    .map((e) => ({ ...e, description: descriptions[e.key] ?? e.description }));
 }
 
 /** The built-in file an example names. The catalogue is fixed (and tested), so a missing id is a bug. */
