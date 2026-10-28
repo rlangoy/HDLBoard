@@ -28,6 +28,7 @@ export interface PanelProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   /** Draw the card chrome. When false, only the contents are rendered. */
   framed?: boolean;
   children: ReactNode;
+  headerAction?: ReactNode;
 }
 
 /**
@@ -39,6 +40,7 @@ export function Panel({
   accent,
   framed = true,
   children,
+  headerAction,
   className,
   ...rest
 }: PanelProps) {
@@ -53,9 +55,10 @@ export function Panel({
   }
 
   return (
-    <section {...rest} className={cx(root, 'pb-panel')}>
+    <section {...rest} className={cx(root, 'pb-panel', headerAction ? 'pb-panel--actions' : undefined)}>
       <header className="pb-panel__header">
         <h2 className="pb-panel__title">{heading}</h2>
+        {headerAction}
       </header>
       <div className="pb-panel__body">{children}</div>
     </section>

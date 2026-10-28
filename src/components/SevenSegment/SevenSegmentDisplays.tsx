@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useMemo, type CSSProperties, type HTMLAttributes } from 'react';
+import { useMemo, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { BitRow, Panel, Readout, cx, scaleStyle } from '../board';
 import { SevenSegmentDisplay } from './SevenSegmentDisplay';
 import {
@@ -18,6 +18,7 @@ type NativeProps = Omit<
 >;
 
 export interface SevenSegmentDisplaysProps extends NativeProps {
+  headerAction?: ReactNode;
   /** Number of displays. Default `6` (HEX[5:0]). */
   count?: number;
   /**
@@ -72,6 +73,7 @@ export function SevenSegmentDisplays({
   showReadout = true,
   showIndices = true,
   size,
+  headerAction,
   className,
   style,
   ...rest
@@ -112,6 +114,7 @@ export function SevenSegmentDisplays({
     <Panel
       {...rest}
       heading={heading}
+      headerAction={headerAction}
       accent="hex"
       framed={framed}
       className={cx('pb-sevenseg', className)}

@@ -148,6 +148,35 @@
     'Roboto Mono', monospace;
 
   --pb-focus: #2563eb;
+  --pb-surface: #fff;
+  --pb-menu-text: #20345e;
+  --pb-menu-icon: #294b5b;
+  --pb-menu-muted: #587982;
+  --pb-menu-badge-bg: #f4f5f5;
+  --pb-menu-badge-border: #d9dfe1;
+  --pb-menu-badge-text: #25394c;
+  --pb-menu-border: #d7e6e3;
+  --pb-menu-rule: #e0e8eb;
+  --pb-menu-control-border: #cedde7;
+  --pb-menu-shadow: #183d3a2b;
+  --pb-control-shadow: #0002;
+  --pb-dialog-shadow: #0003;
+  --pb-dialog-backdrop: #0004;
+  --pb-dialog-button-border: #b4c5dc;
+  --pb-dialog-button-bg: #edf3fa;
+  --pb-dialog-button-text: #17315e;
+  --pb-chevron: #526171;
+  --pb-menu-selected-fg: #fff;
+  --pb-menu-selected: #2563eb;
+  --pb-menu-focus: #2563eb;
+  --pb-menu-trigger-border: #a9cbf3;
+  --pb-menu-trigger-fg: #1e40af;
+  --pb-menu-trigger-hover: #d4e9fc;
+  --pb-menu-row-selected: #dfedfc;
+  --pb-menu-row-hover: #eef6ff;
+  --pb-menu-row-selected-hover: #d4e7fb;
+  --pb-collapsed-bg: #e7f3ff;
+  --pb-collapsed-hover: #d4eaff;
 
   /* Optional per-panel overrides. They are not set here: a panel passes
      one inline when its geometry differs, and the rule that reads it
@@ -184,6 +213,16 @@
   --pb-accent-head: #dbf0ee;
   --pb-accent-border: #c5e5de;
   --pb-accent-title: #166534;
+  --pb-menu-selected: #087d6c;
+  --pb-menu-focus: #087a60;
+  --pb-menu-trigger-border: #a8d9d0;
+  --pb-menu-trigger-fg: #174c52;
+  --pb-menu-trigger-hover: #c9eae2;
+  --pb-menu-row-selected: #def3ed;
+  --pb-menu-row-hover: #eaf7f3;
+  --pb-menu-row-selected-hover: #d3eee6;
+  --pb-collapsed-bg: #eff9f6;
+  --pb-collapsed-hover: #d9f1e9;
 }
 
 .pb-ui.pb-accent-keys {

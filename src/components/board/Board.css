@@ -10,9 +10,8 @@
  * natural size, flush to the top-left of its cell — which is why the
  * grid uses max-content columns and start alignment.
  *
- * Nothing else here: the panels already share one scale unit and one
- * part band (Design_Description.md § 4.7), so their columns line up and
- * their heights match without this file doing anything about it.
+ * Expanded panels stretch to the height of their grid row. Collapsed
+ * controls keep their compact size.
  * ------------------------------------------------------------------ */
 
 .pb-board {
@@ -22,6 +21,15 @@
   align-items: start;
   column-gap: calc(var(--pb-unit) * 0.66); /* 19 / 29 */
   row-gap: calc(var(--pb-unit) * 0.34); /* 10 / 29 */
+}
+
+.pb-board > .pb-panel {
+  align-self: stretch;
+}
+
+/* The expanded LED and switch banks share their grid column's width. */
+.pb-board > .pb-io-panel {
+  justify-self: stretch;
 }
 
 /* The 7-segment and pushbutton cards share the right column at one width: the
