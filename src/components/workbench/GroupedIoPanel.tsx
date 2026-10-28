@@ -10,6 +10,7 @@ import './GroupedIoPanel.css';
 
 const NIBBLE = 4;
 const BYTE = 8;
+const MULTI_ROW_THRESHOLD = 12;
 const HEX_RADIX = 16;
 const DECIMAL_RADIX = 10;
 type GroupSize = typeof NIBBLE | typeof BYTE;
@@ -58,23 +59,25 @@ export function GroupedIoPanel({ kind, count, bits, name, title, onChange }: Pro
   const label = panelLabel(kind);
   const groups = groupsForView(count, view);
 
-  if (collapsed) return <CollapsedPanelButton kind={kind} label={collapsedLabel(kind, label, hidden.length)} onExpand={() => setCollapsed(false)} />;
+  if (collapsed) return <CollapsedPanelButton kind={kind} label={collapsedLabel(label, hidden.length)} onExpand={() => setCollapsed(false)} />;
 
   return <Panel heading={title} accent={kind} className={panelClass(kind, format)} headerAction={
-    <DisplayMenu kind={kind} name={name} view={view} format={format} onFormat={setFormat} onView={(option) => { setView(option); if (option === 'default') setHidden([]); }} onChoose={() => setChoosing(true)} onCollapse={() => setCollapsed(true)} />
+    <div className="pb-io-panel__actions">
+      {hidden.length > 0 && <button type="button" className="pb-io-hidden" onClick={() => setChoosing(true)}>{hidden.length} {kind === 'leds' ? 'LEDs' : 'switches'} hidden</button>}
+      <DisplayMenu kind={kind} name={name} view={view} format={format} onFormat={setFormat} onView={(option) => { setView(option); if (option === 'default') setHidden([]); }} onChoose={() => setChoosing(true)} onCollapse={() => setCollapsed(true)} />
+    </div>
   }>
     <div className="pb-io-groups" role="group" aria-label={title}>
       {groups.map((group) => <IoGroup key={group[0]} group={group} hidden={hidden} kind={kind} bits={bits} name={name} view={view} onChange={onChange} />)}
     </div>
     <Readout name={name} text={formatIoValue(bits, format)} />
-    {kind === 'switches' && hidden.length > 0 && <button type="button" className="pb-io-hidden" onClick={() => setChoosing(true)}>{hidden.length} hidden</button>}
     {choosing && <VisibilityDialog kind={kind} name={name} count={count} hidden={hidden} onCancel={() => setChoosing(false)} onApply={(next) => { setHidden(next); setChoosing(false); }} />}
   </Panel>;
 }
 
 function panelLabel(kind: Kind): string { return kind === 'switches' ? 'Switches' : 'LEDs'; }
-function collapsedLabel(kind: Kind, label: string, count: number): string {
-  return kind === 'switches' && count > 0 ? `${label} (${count} hidden)` : label;
+function collapsedLabel(label: string, count: number): string {
+  return count > 0 ? `${label} (${count} hidden)` : label;
 }
 function groupsForView(count: number, view: View): number[][] {
   return view === 'default' ? [Array.from({ length: count }, (_, i) => count - 1 - i)] : bitGroups(count, view);
@@ -255,24 +258,22 @@ function VisibilityDialog({ kind, name, count, hidden, onCancel, onApply }: Dial
           <p>Select the {kind === 'leds' ? 'LEDs' : 'switches'} to show on the board</p>
         </div>
       </div>
-      <div className="pb-io-dialog__bits">
-        {Array.from({ length: count }, (_, i) => count - 1 - i).map((index) => (
-          <label key={index}>
-            <input
-              type="checkbox"
-              checked={!draft.includes(index)}
-              onChange={(event) => setDraft(event.target.checked
-                ? draft.filter((bit) => bit !== index)
-                : [...draft, index])}
-            />
-            <span>{name}{index}</span>
-          </label>
-        ))}
-      </div>
+      <VisibilityBits count={count} name={name} draft={draft} onChange={setDraft} />
       <div className="pb-io-dialog__actions">
         <button type="button" onClick={onCancel}>Cancel</button>
         <button ref={applyButton} type="submit">Apply</button>
       </div>
     </form>
   </dialog>;
+}
+
+function VisibilityBits({ count, name, draft, onChange }: { count: number; name: string; draft: number[]; onChange: (hidden: number[]) => void }) {
+  return <div className={`pb-io-dialog__bits${count >= MULTI_ROW_THRESHOLD ? ' pb-io-dialog__bits--multiple-rows' : ''}`}>
+    {bitGroups(count, NIBBLE).map((group) => <div className="pb-io-dialog__group" key={group[0]} style={{ flexGrow: group.length }}>
+      {group.map((index) => <label key={index}>
+        <input type="checkbox" aria-label={`${name}${index}`} checked={!draft.includes(index)} onChange={(event) => onChange(event.target.checked ? draft.filter((bit) => bit !== index) : [...draft, index])} />
+        <span>{index}</span>
+      </label>)}
+    </div>)}
+  </div>;
 }
