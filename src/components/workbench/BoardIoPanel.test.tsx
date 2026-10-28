@@ -63,4 +63,10 @@ describe('BoardIoPanel', () => {
     expect(html).toContain('while its an bit is active');
     expect(render(DEFAULT_BOARD)).toContain('7-Segment Displays (HEXn_N[6:0])');
   });
+
+  it('provides collapse menus for displays and pushbuttons', () => {
+    const html = render(DEFAULT_BOARD);
+    expect(html).toContain('aria-label="7-Segment Displays options"');
+    expect(html).toContain('aria-label="Pushbuttons options"');
+  });
 });

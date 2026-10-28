@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { useState } from 'react';
 import { Board, type BitVector } from '../board';
-import { Leds } from '../Leds';
 import { PushbuttonCross, Pushbuttons, ResetButton, releasedLevel } from '../Pushbuttons';
 import { SevenSegmentDisplays } from '../SevenSegment';
-import { Switches } from '../Switches';
+import { CollapsedPanelButton, CollapsePanelMenu, GroupedIoPanel } from './GroupedIoPanel';
 import { buttonCount, displayCount, groupNames, hasDecimalPoint, type BoardInputs, type BoardOutputs } from '../../boards/boardShape';
 import type { BoardDefinition } from '../../boards/types';
 import type { BoardLayout } from './boardLayoutPreference';
@@ -29,10 +29,11 @@ export interface BoardIoPanelProps {
  */
 export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, onInputsChange }: BoardIoPanelProps) {
   const { ports, labels } = board;
+  const [displaysCollapsed, setDisplaysCollapsed] = useState(false);
   return (
     <Board size={24} className={layout === 'single-column' ? 'pb-board--single' : undefined}>
-      <Leds value={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
-      {displayCount(ports) > 0 && <SevenSegmentDisplays
+      <GroupedIoPanel kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
+      {displayCount(ports) > 0 && (displaysCollapsed ? <CollapsedPanelButton kind="sevenseg" label="7-Segment Displays" onExpand={() => setDisplaysCollapsed(false)} /> : <SevenSegmentDisplays
         value={outputs.displays}
         count={displayCount(ports)}
         activeLow={ports.sevenSegment.activeLow}
@@ -40,9 +41,11 @@ export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, o
         name={labels.sevenSegment}
         title={displaysTitle(ports.sevenSegment)}
         note={multiplexedNote(ports.sevenSegment)}
-      />}
-      {ports.switches.count > 0 && <Switches
-        value={inputs.switches}
+        headerAction={<CollapsePanelMenu kind="sevenseg" label="7-Segment Displays" onCollapse={() => setDisplaysCollapsed(true)} />}
+      />)}
+      {ports.switches.count > 0 && <GroupedIoPanel
+        kind="switches"
+        bits={inputs.switches}
         count={ports.switches.count}
         onChange={(switches) => onInputsChange({ switches })}
         name={labels.switches}
@@ -59,7 +62,9 @@ type PartProps = Omit<BoardIoPanelProps, 'outputs'>;
 function ButtonsPart({ board, inputs, onInputsChange }: PartProps) {
   const { ports, labels } = board;
   const { pushbuttons } = ports;
+  const [collapsed, setCollapsed] = useState(false);
   if (buttonCount(ports) === 0) return <ResetPart board={board} inputs={inputs} onInputsChange={onInputsChange} />;
+  if (collapsed) return <CollapsedPanelButton kind="pushbuttons" label="Pushbuttons" onExpand={() => setCollapsed(false)} />;
   const shared = {
     value: inputs.buttons,
     onChange: (buttons: BitVector) => onInputsChange({ buttons }),
@@ -67,6 +72,7 @@ function ButtonsPart({ board, inputs, onInputsChange }: PartProps) {
     name: labels.pushbuttons,
     title: buttonsTitle(pushbuttons),
     aside: <ResetPart board={board} inputs={inputs} onInputsChange={onInputsChange} />,
+    headerAction: <CollapsePanelMenu kind="pushbuttons" label="Pushbuttons" onCollapse={() => setCollapsed(true)} />,
   };
   if (pushbuttons.layout === 'cross') return <PushbuttonCross {...shared} labels={groupNames(pushbuttons.group)} />;
   const scalarNames = pushbuttons.group.kind === 'scalars' ? pushbuttons.group.ports : undefined;

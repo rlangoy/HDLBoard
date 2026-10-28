@@ -15,6 +15,7 @@ const BUTTON_COUNT = CROSS_POSITIONS.length;
 type NativeProps = Omit<HTMLAttributes<HTMLElement>, 'onChange' | 'title'>;
 
 export interface PushbuttonCrossProps extends NativeProps {
+  headerAction?: ReactNode;
   /** The button signal, button 0 (centre) first, as pin levels. */
   value: BitVector;
   /** Called with the whole new signal on every press and release. */
@@ -47,6 +48,7 @@ export function PushbuttonCross({
   name = 'BTN',
   aside,
   size,
+  headerAction,
   className,
   style,
   ...native
@@ -57,6 +59,7 @@ export function PushbuttonCross({
     <Panel
       {...native}
       heading={title}
+      headerAction={headerAction}
       accent="keys"
       className={cx('pb-pushbuttons', className)}
       style={{ ...scaleStyle(size, style), ...layout }}

@@ -24,6 +24,9 @@
   border-bottom: 1px solid var(--pb-accent-border);
 }
 
+.pb-panel--actions .pb-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pb-panel.pb-panel--actions .pb-panel__title { width: auto; min-width: 0; }
+
 .pb-panel__title {
   margin: 0;
   font-size: calc(var(--pb-unit) * 0.6);
