@@ -32,7 +32,7 @@ export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, o
   const [displaysCollapsed, setDisplaysCollapsed] = useState(false);
   return (
     <Board size={24} className={layout === 'single-column' ? 'pb-board--single' : undefined}>
-      <GroupedIoPanel kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
+      <GroupedIoPanel key={`${board.id}-leds-${ports.leds.count}`} kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
       {displayCount(ports) > 0 && (displaysCollapsed ? <CollapsedPanelButton kind="sevenseg" label="7-Segment Displays" onExpand={() => setDisplaysCollapsed(false)} /> : <SevenSegmentDisplays
         value={outputs.displays}
         count={displayCount(ports)}
@@ -44,6 +44,7 @@ export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, o
         headerAction={<CollapsePanelMenu kind="sevenseg" label="7-Segment Displays" onCollapse={() => setDisplaysCollapsed(true)} />}
       />)}
       {ports.switches.count > 0 && <GroupedIoPanel
+        key={`${board.id}-switches-${ports.switches.count}`}
         kind="switches"
         bits={inputs.switches}
         count={ports.switches.count}

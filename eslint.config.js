@@ -25,6 +25,8 @@ const NEW_CODE = [
   'src/components/workbench/useBoardChange.ts',
   'src/components/workbench/BoardChangeDialog.tsx',
   'src/components/workbench/BoardIoPanel.tsx',
+  'src/components/workbench/GroupedIoPanel.tsx',
+  'src/components/workbench/GroupedIoPanel.test.tsx',
   'src/components/workbench/BoardSetting.tsx',
   'src/components/workbench/BoardSettingsPage.tsx',
   'src/components/workbench/PaneDivider.tsx',

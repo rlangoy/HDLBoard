@@ -27,6 +27,11 @@
   align-self: stretch;
 }
 
+/* The expanded LED and switch banks share their grid column's width. */
+.pb-board > .pb-io-panel {
+  justify-self: stretch;
+}
+
 /* The 7-segment and pushbutton cards share the right column at one width: the
    wider card's. The column is max-content, so stretching never widens it. */
 .pb-board > .pb-sevenseg,
