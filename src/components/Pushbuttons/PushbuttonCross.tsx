@@ -68,7 +68,7 @@ export function PushbuttonCross({
         <CrossGrid bits={bits} labels={labels} title={title} activeLow={activeLow} onChange={onChange} />
         {aside}
       </div>
-      <Readout name={name} text={bitsToString(bits)} />
+      <Readout name={name} format="Binary" text={bitsToString(bits)} />
     </Panel>
   );
 }

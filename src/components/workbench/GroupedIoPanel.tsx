@@ -40,7 +40,8 @@ export function formatIoValue(bits: BitVector, format: ValueFormat): string {
   if (format === 'binary') return binary;
   const value = BigInt(`0b${binary || '0'}`);
   if (format === 'decimal') return value.toString(DECIMAL_RADIX);
-  return `0x${value.toString(HEX_RADIX).toUpperCase().padStart(Math.ceil(bits.length / NIBBLE), '0')}`;
+  const digits = value.toString(HEX_RADIX).toUpperCase().padStart(Math.ceil(bits.length / NIBBLE), '0');
+  return digits.replace(/(?=(?:[0-9A-F]{2})+$)/g, ' ').trim();
 }
 
 interface Props {
@@ -72,13 +73,13 @@ export function GroupedIoPanel({ kind, count, bits, name, title, onChange, setti
   return <Panel heading={title} accent={kind} className={panelClass(kind, format)} headerAction={
     <div className="pb-io-panel__actions">
       {hidden.length > 0 && <button type="button" className="pb-io-hidden" onClick={() => setChoosing(true)}>{hidden.length} {kind === 'leds' ? 'LEDs' : 'switches'} hidden</button>}
-      <DisplayMenu kind={kind} name={name} view={view} readouts={current.readouts} onFormat={(option) => { const key = option === 'hex' ? 'hexadecimal' : option; update({ ...current, readouts: { ...current.readouts, [key]: !current.readouts[key] } }); }} onView={(option) => update({ ...withVisibleIndices(current, count, option === 'default' ? Array.from({ length: count }, (_, i) => i) : visible), groupSize: option === 'default' ? null : option })} onChoose={() => setChoosing(true)} onCollapse={() => setCollapsed(true)} />
+      <DisplayMenu kind={kind} name={name} view={view} format={format} onFormat={(option) => update({ ...current, readouts: { binary: option === 'binary', hexadecimal: option === 'hex', decimal: option === 'decimal' } })} onView={(option) => update({ ...withVisibleIndices(current, count, option === 'default' ? Array.from({ length: count }, (_, i) => i) : visible), groupSize: option === 'default' ? null : option })} onChoose={() => setChoosing(true)} onCollapse={() => setCollapsed(true)} />
     </div>
   }>
     <div className="pb-io-groups" role="group" aria-label={title}>
       {groups.map((group) => <IoGroup key={group[0]} group={group} hidden={hidden} kind={kind} bits={bits} name={name} view={view} onChange={onChange} />)}
     </div>
-    {(['binary', 'hex', 'decimal'] as const).filter((option) => current.readouts[readoutKey(option)]).map((option) => <Readout key={option} name={name} format={readoutLabel(option)} text={formatIoValue(bits, option)} />)}
+    <Readout name={name} format={formatLabel(format)} text={formatIoValue(bits, format)} />
     {choosing && <VisibilityDialog kind={kind} name={name} count={count} hidden={hidden} onCancel={() => setChoosing(false)} onApply={(next) => { update(withVisibleIndices(current, count, Array.from({ length: count }, (_, i) => i).filter((i) => !next.includes(i)))); setChoosing(false); }} />}
   </Panel>;
 }
@@ -139,7 +140,7 @@ interface DisplayMenuProps {
   kind: PanelKind;
   name: string;
   view: View;
-  readouts: IoDisplaySettings['readouts'];
+  format: ValueFormat;
   onFormat: (format: ValueFormat) => void;
   onView: (view: View) => void;
   onChoose: () => void;
@@ -213,7 +214,7 @@ function moveFormatFocus(event: KeyboardEvent<HTMLDivElement>): boolean {
   return true;
 }
 
-function DisplayMenu({ kind, name, view, readouts, onFormat, onView, onChoose, onCollapse, collapseOnly = false, allowVisibility = false }: DisplayMenuProps) {
+function DisplayMenu({ kind, name, view, format, onFormat, onView, onChoose, onCollapse, collapseOnly = false, allowVisibility = false }: DisplayMenuProps) {
   const { open, setOpen, position, trigger, menu, id, onMenuKey } = useDisplayMenu();
   const menuLabel = displayMenuLabel(kind, name);
 
@@ -229,7 +230,7 @@ function DisplayMenu({ kind, name, view, readouts, onFormat, onView, onChoose, o
       <div className="pb-display-menu__divider" role="separator" />
       <div className="pb-display-menu__format-label" id={`${id}-format`}>{name} value format</div>
         <div className="pb-display-menu__formats" role="group" aria-labelledby={`${id}-format`}>
-          {(['binary', 'hex', 'decimal'] as const).map((option) => <button key={option} type="button" role="menuitemcheckbox" aria-checked={readouts[readoutKey(option)]} onClick={() => { onFormat(option); setOpen(false); trigger.current?.focus(); }}>{formatLabel(option)}</button>)}
+          {(['binary', 'hex', 'decimal'] as const).map((option) => <button key={option} type="button" role="menuitemradio" aria-checked={format === option} onClick={() => { onFormat(option); setOpen(false); trigger.current?.focus(); }}>{formatLabel(option)}</button>)}
         </div>
         <div className="pb-display-menu__divider" role="separator" />
       <button type="button" role="menuitem" className="pb-display-menu__item" onClick={() => { setOpen(false); onChoose(); }}><span className="pb-display-menu__check" /><MenuIcon kind="eye" /><span>Choose visible {kind === 'leds' ? 'LEDs' : 'switches'}…</span></button>
@@ -245,12 +246,10 @@ function displayMenuLabel(kind: PanelKind, name: string) {
   if (kind === 'switches') return 'Switch display options';
   return `${name} options`;
 }
-function readoutKey(option: ValueFormat) { return option === 'hex' ? 'hexadecimal' : option; }
 function formatLabel(option: ValueFormat) { return option === 'hex' ? 'Hex' : option === 'binary' ? 'Binary' : 'Decimal'; }
-function readoutLabel(option: ValueFormat) { return option === 'hex' ? 'Hexadecimal' : formatLabel(option); }
 
 export function CollapsePanelMenu({ kind, label, onCollapse, onChoose }: { kind: 'sevenseg' | 'pushbuttons'; label: string; onCollapse: () => void; onChoose?: () => void }) {
-  return <DisplayMenu kind={kind} name={label} view="default" readouts={{ binary: true, hexadecimal: false, decimal: false }} onFormat={() => {}} onView={() => {}} onChoose={() => onChoose?.()} onCollapse={onCollapse} collapseOnly allowVisibility={!!onChoose} />;
+  return <DisplayMenu kind={kind} name={label} view="default" format="binary" onFormat={() => {}} onView={() => {}} onChoose={() => onChoose?.()} onCollapse={onCollapse} collapseOnly allowVisibility={!!onChoose} />;
 }
 
 function MenuIcon({ kind }: { kind: 'grid' | 'eye' | 'collapse' }) {
