@@ -16,7 +16,8 @@
 import { fetchText, type FetchFn } from '../../project/fetchText';
 import { baseName, fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
 import { boardIdOf, parseProject, serializeProject } from '../../project/parseProject';
-import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
+import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type DisplaySettings, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
+import { parseDisplaySettings } from '../../project/displaySettings';
 import { parseWaveViews, withWaveViewOf } from '../../project/waveViews';
 import { diskPath } from '../../project/resolveSource';
 import { projectDirectoryOf } from './projectLayout';
@@ -26,6 +27,7 @@ import { parseStoredGistLink, type ProjectGistLink } from './gistLink';
 import { folderForUpload } from './fileKinds';
 import { STARTER_FILES } from './files';
 import { RESERVED_PREFIX_REASON, RESERVED_PREFIX } from './fileNameRules';
+import { projectBoard } from '../../boards/projectBoard';
 
 export interface OpenProject {
   version: number;
@@ -82,6 +84,7 @@ export interface OpenProject {
   excluded?: string[];
   /** How the waveform view of each testbench was set up, saved in the project file (docs/imp_wave_rearange.md § 11). */
   waveViews?: SavedWaveViews;
+  displaySettings?: DisplaySettings;
 }
 
 /** One row of the project settings' file table. */
@@ -150,6 +153,7 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
     sourceDirectory: project.sourceDirectory,
     files: projectEntries(project, fileNames).map(({ name, url, description }) => ({ name, url, description })),
     waveViews: project.waveViews,
+    displaySettings: project.displaySettings,
   });
 }
 
@@ -175,11 +179,11 @@ export function unsavedChangesQuestion(question: string, projectName: string, sa
 }
 
 /** Records a save (or an open): the project file and its files as they are now become the saved state. */
-export function withSaved(project: OpenProject, files: readonly ProjectSourceFile[]): OpenProject {
+export function withSaved(project: OpenProject, files: readonly ProjectSourceFile[], snapshot: OpenProject = project): OpenProject {
   return {
     ...project,
-    savedText: projectFileText(project, files.map((file) => file.name)),
-    savedFiles: fileFingerprints(filesInProject(project, files)),
+    savedText: projectFileText(snapshot, files.map((file) => file.name)),
+    savedFiles: fileFingerprints(filesInProject(snapshot, files)),
   };
 }
 
@@ -288,12 +292,14 @@ export function defaultProject(
   files: readonly ProjectSourceFile[],
   board: string,
   descriptions: Readonly<Record<string, string>> = {},
+  boardConfig?: Record<string, unknown>,
 ): OpenProject {
   const starters = new Set(STARTER_FILES.map((file) => nameKey(file.name)));
   const described = (name: string) => descriptions[nameKey(name)] ?? (starters.has(nameKey(name)) ? STARTER_FILE_DESCRIPTION : '');
   const base = newProject(DEFAULT_PROJECT_NAME, [], board);
   const project: OpenProject = {
     ...base,
+    ...(boardConfig !== undefined ? { boardConfig } : {}),
     description: '',
     entries: files.map((file) => ({ name: file.name, url: '', description: described(file.name) })),
   };
@@ -507,6 +513,7 @@ async function findLocal(
  */
 export async function openProject(source: ProjectSource): Promise<OpenedProject> {
   const { project, warnings, skipped } = parseProject(source.text);
+  const boardWarnings = projectBoard(project.boardConfig, project.board).warnings;
   const localFiles = source.localFiles ?? [];
   const byPath = new Map(localFiles.filter((file) => file.path !== undefined).map((file) => [nameKey(file.path!), file]));
   // By name: a file without a path, else the shallowest one with that name.
@@ -579,10 +586,12 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     warnings: [
       ...warnings.filter((w) => !skipped.some((s) => s.name === w.fileName)).map((w) => w.message),
       ...skipped.map((s) => `${s.name} was skipped: ${s.reason}.`),
+      ...boardWarnings.map((warning) => `${warning} The project will use the Default board until its board is fixed or changed.`),
     ],
     savedText: '',
     ...(source.gist ? { gist: source.gist } : {}),
     ...(project.waveViews ? { waveViews: project.waveViews } : {}),
+    ...(project.displaySettings ? { displaySettings: project.displaySettings } : {}),
   };
   // Saved state is the project as it reads opened, so an untouched project shows no changes.
   return { project: withSaved(opened, files), files };
@@ -629,6 +638,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
       : undefined;
   const onDiskFileName = typeof r.onDiskFileName === 'string' ? r.onDiskFileName : undefined;
   const waveViews = parseWaveViews(r.waveViews, []);
+  const displaySettings = parseDisplaySettings(r.displaySettings, []);
   // A workspace stored before boards were configurable holds a version-1 project: it is on the Default board.
   return {
     version: CURRENT_PROJECT_VERSION,
@@ -649,6 +659,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     ...(excluded.length > 0 ? { excluded } : {}),
     ...(savedFiles ? { savedFiles } : {}),
     ...(waveViews ? { waveViews } : {}),
+    ...(displaySettings ? { displaySettings } : {}),
   };
 }
 

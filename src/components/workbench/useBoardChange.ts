@@ -14,6 +14,9 @@ import type { ConsoleLink } from './ConsoleOutput';
 import type { VhdlFile } from './files';
 import type { SavedWaveViews } from '../../project/types';
 import type { OpenProject } from './projectFile';
+import { displayCount } from '../../boards/boardShape';
+import { withVisibilityCounts } from '../../project/displaySettings';
+import { projectBoard } from '../../boards/projectBoard';
 
 /** What the board-change dialog shows (docs/board_io_config_spec.md § 3.3, § 3.5). */
 export type PendingBoardChange =
@@ -114,11 +117,12 @@ type ViewsUpdate = (current: SavedWaveViews | undefined) => SavedWaveViews | und
  * renaming the files to a shared project's board is not a choice of board for the
  * student's own new projects.
  */
-function applyBoardState(latest: Latest, next: Pick<BoardChangeState<VhdlFile[]>, 'files' | 'board'>, viewsOf: ViewsUpdate): void {
+function applyBoardState(latest: Latest, next: Pick<BoardChangeState<VhdlFile[]>, 'files' | 'board' | 'boardConfig'>, viewsOf: ViewsUpdate): void {
   const { project, setFiles, setProject, stopSimulation } = latest.current;
+  const ports = activeBoardOf(latest).ports;
   stopSimulation();
   setFiles(next.files);
-  setProject((p) => withWaveViews({ ...p, board: next.board, boardConfig: latest.current.boardConfigFor?.(next.board) }, viewsOf(p.waveViews)));
+  setProject((p) => withWaveViews({ ...p, board: next.board, boardConfig: next.boardConfig, displaySettings: withVisibilityCounts(p.displaySettings, { leds: ports.leds.count, switches: ports.switches.count, sevenSegment: displayCount(ports) }) }, viewsOf(p.waveViews)));
   if (next.board !== project.board) savePreferredBoard(next.board);
 }
 
@@ -134,14 +138,14 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
         log(BOARD_TEXT.undoWhenFree);
         return;
       }
-      if (record.current !== done || !canUndo(done, { project: projectKey, files, board: project.board })) {
+      if (record.current !== done || !canUndo(done, { project: projectKey, files, board: project.board, boardConfig: project.boardConfig })) {
         log(BOARD_TEXT.nothingToUndo);
         return;
       }
       record.current = null;
       const languageOf = testbenchLanguageIn(done.before.files);
       applyBoardState(latest, done.before, (current) => viewsAfterUndo(done, current, languageOf));
-      log(boardUndoneLog(findBoard(catalog, done.before.board).board));
+      log(boardUndoneLog(projectBoard(done.before.boardConfig).board ?? findBoard(catalog, done.before.board).board));
     },
     [latest],
   );
@@ -154,8 +158,8 @@ function useUndoableCommit(latest: Latest): (change: BoardChangeResult) => void 
       const afterViews = renamed(project.waveViews);
       const done: ChangeRecord = {
         project: projectKey,
-        before: { files, board: project.board, waveViews: project.waveViews },
-        after: { files: change.files, board: change.boardId, waveViews: afterViews },
+        before: { files, board: project.board, boardConfig: project.boardConfig, waveViews: project.waveViews },
+        after: { files: change.files, board: change.boardId, boardConfig: change.boardId === project.board ? project.boardConfig : latest.current.boardConfigFor?.(change.boardId), waveViews: afterViews },
         renames: change.renames,
       };
       record.current = done;

@@ -2,9 +2,11 @@
 import { expect, it } from 'vitest';
 import { initialBoardDocument } from '../../boards/boardEditorStorage';
 import { changeAt, valueAt } from '../../boards/boardEditorModel';
-import { projectBoard, withProjectBoard } from '../../boards/projectBoard';
+import { catalogWithProjectBoard, projectBoard, withProjectBoard } from '../../boards/projectBoard';
+import { findBoard } from '../../boards/boardCatalog';
+import { editorCatalog } from '../../boards/boardEditorCatalog';
 import { parseProject } from '../../project/parseProject';
-import { hasUnsavedChanges, newProject, openProject, parseStoredProject, projectFileText, withSaved } from './projectFile';
+import { defaultProject, hasUnsavedChanges, newProject, openProject, parseStoredProject, projectFileText, withSaved } from './projectFile';
 import { projectSnapshot } from './projectGitHub';
 import { newFileContent } from './newFile';
 
@@ -60,4 +62,34 @@ it.each(['vhdl', 'verilog'] as const)('creates empty %s designs with every custo
 it('rejects a boardConfig that is not a JSON object', () => {
   const text = projectFileText(newProject('Lab', [], 'default'), []);
   expect(() => parseProject(JSON.stringify({ ...JSON.parse(text), boardConfig: [] }))).toThrow('boardConfig');
+});
+
+it('warns when an embedded board is invalid and does not substitute an installed board with the same ID', async () => {
+  const installed = custom();
+  const broken = changeAt(installed, ['ports', 'switches', 'count'], 99) as Record<string, unknown>;
+  const file = initialBoardDocument();
+  const catalog = editorCatalog({ ...file, boards: [...file.boards, installed] }, []);
+  const safeCatalog = catalogWithProjectBoard(catalog, broken, 'my-lab');
+  expect(findBoard(catalog, 'my-lab').installed).toBe(true);
+  expect(findBoard(safeCatalog, 'my-lab').installed).toBe(false);
+  const source = { ...newProject('Bad board', [], 'my-lab'), boardConfig: broken };
+  const opened = await openProject({ location: 'bad.hdlboard.json', text: projectFileText(source, []) });
+  expect(opened.project.warnings.join(' ')).toContain('Project boardConfig');
+  expect(opened.project.warnings.join(' ')).toContain('Default board');
+  expect(opened.project.boardConfig).toEqual(broken);
+});
+
+it('warns when the embedded board ID differs from the project board ID', () => {
+  const result = projectBoard(custom(), 'other-lab');
+  expect(result.board).toBeUndefined();
+  expect(result.warnings.join(' ')).toContain('other-lab');
+});
+
+it('keeps the embedded board in the default project when the project is closed', () => {
+  const boardConfig = custom();
+  const files = [{ name: 'lab.vhd', content: 'entity lab is end;' }];
+  const closed = defaultProject(files, 'my-lab', {}, boardConfig);
+  expect(closed.boardConfig).toEqual(boardConfig);
+  expect(projectBoard(closed.boardConfig, closed.board).board?.id).toBe('my-lab');
+  expect(hasUnsavedChanges(closed, files)).toBe(false);
 });

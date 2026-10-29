@@ -145,6 +145,15 @@ describe('the project follows Files', () => {
   });
 });
 
+it('records the saved snapshot even if settings changed while writing', () => {
+  const snapshot = newProject('Save race', [], 'default');
+  const current = { ...snapshot, displaySettings: { sevenSegment: { visible: [0, 2], visibilityCount: 6 } } };
+  const completed = withSaved(current, [], snapshot);
+  expect(completed.displaySettings).toEqual(current.displaySettings);
+  expect(completed.savedText).toBe(projectFileText(snapshot, []));
+  expect(hasUnsavedChanges(completed, [])).toBe(true);
+});
+
 describe('names', () => {
   it('makes a project file name from the project name', () => {
     expect(projectFileNameFor('4-bit Counter')).toBe('4-bit-counter.hdlboard.json');

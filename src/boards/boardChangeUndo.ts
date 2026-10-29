@@ -18,6 +18,7 @@ import { renameWaveViews, type TestbenchLanguage } from './renamePorts';
 export interface BoardChangeState<Files> {
   readonly files: Files;
   readonly board: string;
+  readonly boardConfig?: Record<string, unknown>;
   /** The saved waveform views; compared by identity, like the files. */
   readonly waveViews: SavedWaveViews | undefined;
 }
@@ -32,12 +33,12 @@ export interface BoardChangeRecord<Files> {
 }
 
 /** What Undo compares with the record: the open project's key, files and board. */
-export type CurrentBoardState<Files> = Pick<BoardChangeState<Files>, 'files' | 'board'> & { readonly project: string };
+export type CurrentBoardState<Files> = Pick<BoardChangeState<Files>, 'files' | 'board' | 'boardConfig'> & { readonly project: string };
 
 /** Undo is possible only in the same project, while the files and the board are exactly as the change left them. */
 export function canUndo<Files>(record: BoardChangeRecord<Files>, current: CurrentBoardState<Files>): boolean {
   const { after } = record;
-  return current.project === record.project && current.files === after.files && current.board === after.board;
+  return current.project === record.project && current.files === after.files && current.board === after.board && current.boardConfig === after.boardConfig;
 }
 
 /** The renames that take the names back. */

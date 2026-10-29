@@ -46,6 +46,20 @@ export interface HdlBoardProject {
   files: ProjectFileEntry[];
   /** How the waveform view of each testbench was set up, by testbench name (waveViews.ts); undefined → none saved. */
   waveViews?: SavedWaveViews;
+  displaySettings?: DisplaySettings;
+}
+
+export interface IoDisplaySettings {
+  groupSize: 4 | 8 | null;
+  visible: number[];
+  visibilityCount?: number;
+  readouts: { binary: boolean; hexadecimal: boolean; decimal: boolean };
+}
+
+export interface DisplaySettings {
+  leds?: IoDisplaySettings;
+  switches?: IoDisplaySettings;
+  sevenSegment?: { visible: number[]; visibilityCount?: number };
 }
 
 /** One signal of a saved waveform view. Among the shown, its order in the list is its place in the view. */

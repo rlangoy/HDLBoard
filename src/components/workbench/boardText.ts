@@ -100,12 +100,6 @@ export function displaysTitle(displays: SevenSegment): string {
   return `${noun} (${sevenSegmentHeading(displays)})`;
 }
 
-/** The line under a multiplexed display; none for independent displays. */
-export function multiplexedNote(displays: SevenSegment): string | undefined {
-  if (displays.kind !== 'multiplexed') return undefined;
-  return `Multiplexed: a digit shows the segments driven while its ${displays.digitEnables} bit is active.`;
-}
-
 /** `Board I/O · DE1-SoC`. */
 export function boardPaneTitle(paneTitle: string, board: BoardDefinition): string {
   return `${paneTitle} · ${board.name}`;

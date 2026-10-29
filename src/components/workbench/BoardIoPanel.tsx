@@ -5,11 +5,13 @@ import { useState } from 'react';
 import { Board, type BitVector } from '../board';
 import { PushbuttonCross, Pushbuttons, ResetButton, releasedLevel } from '../Pushbuttons';
 import { SevenSegmentDisplays } from '../SevenSegment';
-import { CollapsedPanelButton, CollapsePanelMenu, GroupedIoPanel } from './GroupedIoPanel';
+import { CollapsedPanelButton, CollapsePanelMenu, GroupedIoPanel, VisibilityDialog } from './GroupedIoPanel';
 import { buttonCount, displayCount, groupNames, hasDecimalPoint, type BoardInputs, type BoardOutputs } from '../../boards/boardShape';
 import type { BoardDefinition } from '../../boards/types';
 import type { BoardLayout } from './boardLayoutPreference';
-import { buttonsTitle, displaysTitle, ledsTitle, multiplexedNote, switchesTitle } from './boardText';
+import { buttonsTitle, displaysTitle, ledsTitle, switchesTitle } from './boardText';
+import type { DisplaySettings, IoDisplaySettings } from '../../project/types';
+import { visibleIndices, withVisibleIndices } from '../../project/displaySettings';
 
 export interface BoardIoPanelProps {
   /** The active board: its shape decides the parts, its names head the panels. */
@@ -19,6 +21,9 @@ export interface BoardIoPanelProps {
   inputs: BoardInputs;
   /** The inputs that changed; the others keep their latest values, even before the next render. */
   onInputsChange: (changed: Partial<BoardInputs>) => void;
+  displaySettings?: DisplaySettings;
+  onDisplaySettingsChange?: (kind: 'leds' | 'switches', settings: IoDisplaySettings) => void;
+  onDisplayVisibilityChange?: (settings: NonNullable<DisplaySettings['sevenSegment']>) => void;
 }
 
 /**
@@ -27,25 +32,17 @@ export interface BoardIoPanelProps {
  * reset button beside them. This maps the board to the parts' props; the parts
  * themselves know nothing about boards.
  */
-export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, onInputsChange }: BoardIoPanelProps) {
+export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, onInputsChange, displaySettings, onDisplaySettingsChange, onDisplayVisibilityChange }: BoardIoPanelProps) {
   const { ports, labels } = board;
-  const [displaysCollapsed, setDisplaysCollapsed] = useState(false);
   return (
     <Board size={24} className={layout === 'single-column' ? 'pb-board--single' : undefined}>
-      <GroupedIoPanel key={`${board.id}-leds-${ports.leds.count}`} kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} />
-      {displayCount(ports) > 0 && (displaysCollapsed ? <CollapsedPanelButton kind="sevenseg" label="7-Segment Displays" onExpand={() => setDisplaysCollapsed(false)} /> : <SevenSegmentDisplays
-        value={outputs.displays}
-        count={displayCount(ports)}
-        activeLow={ports.sevenSegment.activeLow}
-        decimalPoint={hasDecimalPoint(ports)}
-        name={labels.sevenSegment}
-        title={displaysTitle(ports.sevenSegment)}
-        note={multiplexedNote(ports.sevenSegment)}
-        headerAction={<CollapsePanelMenu kind="sevenseg" label="7-Segment Displays" onCollapse={() => setDisplaysCollapsed(true)} />}
-      />)}
+      <GroupedIoPanel key={`${board.id}-leds-${ports.leds.count}`} kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} settings={displaySettings?.leds} onSettingsChange={settingsHandler('leds', onDisplaySettingsChange)} />
+      <DisplaysPart board={board} outputs={outputs} settings={displaySettings?.sevenSegment} onChange={onDisplayVisibilityChange} />
       {ports.switches.count > 0 && <GroupedIoPanel
         key={`${board.id}-switches-${ports.switches.count}`}
         kind="switches"
+        settings={displaySettings?.switches}
+        onSettingsChange={settingsHandler('switches', onDisplaySettingsChange)}
         bits={inputs.switches}
         count={ports.switches.count}
         onChange={(switches) => onInputsChange({ switches })}
@@ -55,6 +52,34 @@ export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, o
       <ButtonsPart board={board} inputs={inputs} onInputsChange={onInputsChange} />
     </Board>
   );
+}
+
+function DisplaysPart({ board, outputs, settings, onChange }: { board: BoardDefinition; outputs: BoardOutputs; settings?: DisplaySettings['sevenSegment']; onChange?: BoardIoPanelProps['onDisplayVisibilityChange'] }) {
+  const { ports, labels } = board;
+  const [collapsed, setCollapsed] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [local, setLocal] = useState<DisplaySettings['sevenSegment']>();
+  const count = displayCount(ports);
+  const visible = visibleIndices(settings ?? local, count);
+  const hidden = Array.from({ length: count }, (_, i) => i).filter((i) => !visible.includes(i));
+  if (!count) return null;
+  if (collapsed) return <CollapsedPanelButton kind="sevenseg" label="7-Segment Displays" onExpand={() => setCollapsed(false)} />;
+  return <><SevenSegmentDisplays
+        value={outputs.displays}
+        count={count}
+        visibleIndices={visible}
+        activeLow={ports.sevenSegment.activeLow}
+        decimalPoint={hasDecimalPoint(ports)}
+        name={labels.sevenSegment}
+        title={displaysTitle(ports.sevenSegment)}
+        headerAction={<div className="pb-io-panel__actions">{hidden.length > 0 && <button type="button" className="pb-io-hidden" onClick={() => setChoosing(true)}>{hidden.length} displays hidden</button>}<CollapsePanelMenu kind="sevenseg" label="7-Segment Displays" onChoose={() => setChoosing(true)} onCollapse={() => setCollapsed(true)} /></div>}
+      />
+      {choosing && <VisibilityDialog kind="sevenseg" name={labels.sevenSegment} count={count} hidden={hidden} onCancel={() => setChoosing(false)} onApply={(next) => { const value = withVisibleIndices(settings ?? local ?? { visible: visibleIndices(undefined, count) }, count, Array.from({ length: count }, (_, i) => i).filter((i) => !next.includes(i))); if (onChange) onChange(value); else setLocal(value); setChoosing(false); }} />}
+  </>;
+}
+
+function settingsHandler(kind: 'leds' | 'switches', callback: BoardIoPanelProps['onDisplaySettingsChange']) {
+  return callback && ((next: IoDisplaySettings) => callback(kind, next));
 }
 
 type PartProps = Omit<BoardIoPanelProps, 'outputs'>;
