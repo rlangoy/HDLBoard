@@ -10,10 +10,9 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 **[Try it online](https://hdlboard.onrender.com/)** · **[Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
 
-<video controls style="width: 100%; max-width: 800px;">
-  <source src="assets/demo.webm" type="video/webm">
-  <source src="assets/demo.mp4" type="video/mp4">
-</video>
+[![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
+
+[Download the demonstration video (MP4)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4) · [WebM version](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.webm)
 
 ## Get started
 
