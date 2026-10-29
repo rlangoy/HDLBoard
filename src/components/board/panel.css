@@ -118,10 +118,9 @@
   text-indent: var(--pb-readout-tracking, calc(var(--pb-unit) * 0.17));
 }
 
-/* Keep the complete display readout without making hidden digits widen the card. */
-.pb-sevenseg .pb-readout {
-  width: 0;
-  min-width: 100%;
+/* The display readout stays on one line, like the LED and switch readouts. */
+.pb-sevenseg .pb-readout__value {
+  white-space: nowrap;
 }
 
 .pb-panel__hint {

@@ -172,8 +172,8 @@ describe('boards of another shape (docs/board_io_v2_spec.md § 5.3, § 5.4)', ()
   });
 
   it('heads the Board pane with the board\'s own names', () => {
-    expect(buttonsTitle(BASYS3.ports.pushbuttons)).toBe('Pushbuttons (btnC, btnU, btnL, btnR, btnD)');
-    expect(displaysTitle(builtInBoard('de10-lite').ports.sevenSegment)).toBe('7-Segment Displays (HEXn[7:0])');
+    expect(buttonsTitle(BASYS3.ports.pushbuttons)).toBe('Btn (btnC, btnU, btnL, btnR, btnD)');
+    expect(displaysTitle(builtInBoard('de10-lite').ports.sevenSegment)).toBe('7-seg (HEXn[7:0])');
   });
 });
 

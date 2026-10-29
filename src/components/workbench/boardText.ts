@@ -89,15 +89,14 @@ export function switchesTitle(switches: VectorPort): string {
   return `Switches (${vectorHeading(switches.port, switches.count)})`;
 }
 
-/** `Pushbuttons (KEY[1:0])`, or `Pushbuttons (btnC, btnU, btnL, btnR, btnD)`. */
+/** `Btn (KEY[1:0])`, or `Btn (btnC, btnU, btnL, btnR, btnD)`. */
 export function buttonsTitle(buttons: ButtonGroup): string {
-  return `Pushbuttons (${groupHeading(buttons.group)})`;
+  return `Btn (${groupHeading(buttons.group)})`;
 }
 
-/** `7-Segment Displays (HEXn[7:0])`, or `7-Segment Display (seg[6:0], dp, an[3:0])` for one multiplexed display. */
+/** `7-seg (HEXn[7:0])`, or `7-seg (seg[6:0], dp, an[3:0])` for one multiplexed display. */
 export function displaysTitle(displays: SevenSegment): string {
-  const noun = displays.kind === 'multiplexed' ? '7-Segment Display' : '7-Segment Displays';
-  return `${noun} (${sevenSegmentHeading(displays)})`;
+  return `7-seg (${sevenSegmentHeading(displays)})`;
 }
 
 /** `Board I/O · DE1-SoC`. */

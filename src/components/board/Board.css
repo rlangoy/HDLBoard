@@ -32,8 +32,9 @@
   justify-self: stretch;
 }
 
-/* The pushbutton card fills its column; the display card follows its visible digits. */
-.pb-board > .pb-pushbuttons {
+/* Every card fills its column, so the cards in a column share one width. */
+.pb-board > .pb-pushbuttons,
+.pb-board > .pb-sevenseg {
   justify-self: stretch;
 }
 
@@ -45,9 +46,5 @@
     row-gap: calc(var(--pb-unit) * 0.66);
   }
 
-  /* One column for all four cards: each keeps its own width. */
-  .pb-board > .pb-sevenseg,
-  .pb-board > .pb-pushbuttons {
-    justify-self: start;
-  }
+  /* One column: every card stretches to the widest (see the rules above). */
 }
