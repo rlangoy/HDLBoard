@@ -15,8 +15,9 @@ interface BoardSettingsTarget {
 
 export function useBoardSettings(catalog: EditableBoardCatalog, target: BoardSettingsTarget) {
   const [preview, setPreview] = useState<BoardDraftPreview | null>(null);
-  const save = (_document: BoardDocument, boardConfig: Record<string, unknown>) => {
+  const save = (document: BoardDocument, boardConfig: Record<string, unknown>) => {
     target.stopSimulation();
+    catalog.applyDocument(document);
     target.setProject((current) => {
       const ports = findBoard(catalog, current.board).board.ports;
       return { ...current, board: String(boardConfig.id), boardConfig, displaySettings: withVisibilityCounts(current.displaySettings, { leds: ports.leds.count, switches: ports.switches.count, sevenSegment: displayCount(ports) }) };

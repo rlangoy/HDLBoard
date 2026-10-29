@@ -513,7 +513,8 @@ async function findLocal(
  */
 export async function openProject(source: ProjectSource): Promise<OpenedProject> {
   const { project, warnings, skipped } = parseProject(source.text);
-  const boardWarnings = projectBoard(project.boardConfig, project.board).warnings;
+  const embeddedBoard = projectBoard(project.boardConfig, project.board);
+  const boardWarnings = embeddedBoard.board ? [] : embeddedBoard.warnings;
   const localFiles = source.localFiles ?? [];
   const byPath = new Map(localFiles.filter((file) => file.path !== undefined).map((file) => [nameKey(file.path!), file]));
   // By name: a file without a path, else the shallowest one with that name.

@@ -18,6 +18,8 @@ export interface EditableBoardCatalog extends BoardCatalog {
   builtInBoardIds: readonly string[];
   ready: boolean;
   boardConfigFor: (id: string) => Record<string, unknown> | undefined;
+  /** Keeps boards saved in the editor available for the rest of the session. */
+  applyDocument: (file: BoardDocument) => void;
 }
 
 export function useBoards(boardConfig?: Record<string, unknown>, selectedBoardId?: string): EditableBoardCatalog {
@@ -46,5 +48,5 @@ export function useBoards(boardConfig?: Record<string, unknown>, selectedBoardId
   }, [savedDocument, legacy, boardConfig, selectedBoardId]);
   const editorBoards = useMemo(() => parsedDocument(document).boards, [document]);
   const boardConfigFor = (id: string) => BUILT_IN_BOARD_IDS.includes(id) ? undefined : document.boards.find((board) => board.id === id);
-  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
+  return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument: setDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };
 }

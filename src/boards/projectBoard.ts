@@ -31,6 +31,6 @@ export function catalogWithProjectBoard(installed: BoardCatalog, boardConfig?: R
   const embedded = projectBoard(boardConfig, selectedId);
   const board = embedded.board;
   if (board) return { ...installed, boards: [...installed.boards.filter((candidate) => candidate.id !== board.id), board] };
-  if (boardConfig && selectedId !== undefined) return { ...installed, boards: installed.boards.filter((board) => board.id !== selectedId) };
+  if (boardConfig && selectedId !== undefined && !BUILT_IN_BOARDS.some((builtin) => builtin.id === selectedId)) return { ...installed, boards: installed.boards.filter((board) => board.id !== selectedId) };
   return installed;
 }

@@ -189,3 +189,10 @@ describe('the preferred board', () => {
     expect(preferredBoardIn(BUILT_IN_CATALOG, 'de1-soc')).toBe('de1-soc');
   });
 });
+
+describe('canUndo with equal board definitions', () => {
+  it('treats a structurally equal boardConfig as unchanged', () => {
+    const record = { project: '0', before: { files: 'a', board: 'x', waveViews: undefined }, after: { files: 'b', board: 'custom', boardConfig: { id: 'custom', ports: { clock: 'CLK' } }, waveViews: undefined }, renames: [] };
+    expect(canUndo(record as never, { project: '0', files: 'b', board: 'custom', boardConfig: { id: 'custom', ports: { clock: 'CLK' } } } as never)).toBe(true);
+  });
+});

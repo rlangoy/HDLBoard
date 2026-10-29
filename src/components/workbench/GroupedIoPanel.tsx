@@ -84,7 +84,7 @@ export function GroupedIoPanel({ kind, count, bits, name, title, onChange, setti
 }
 
 function selectedFormat(settings: IoDisplaySettings): ValueFormat {
-  return settings.readouts.binary ? 'binary' : settings.readouts.hexadecimal ? 'hex' : 'decimal';
+  return settings.readouts.binary ? 'binary' : settings.readouts.hexadecimal ? 'hex' : settings.readouts.decimal ? 'decimal' : 'binary';
 }
 
 function panelLabel(kind: Kind): string { return kind === 'switches' ? 'Switches' : 'LEDs'; }
