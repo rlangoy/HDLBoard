@@ -8,7 +8,7 @@
 
 A free online simulator with a virtual FPGA board. Flip the switches while your design runs, and watch the LEDs respond.
 
-**[Try it online](https://hdlboard.onrender.com/)** · **[Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
+**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows App](https://github.com/rlangoy/HDLBoard/releases)** 
 
 [![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
 
