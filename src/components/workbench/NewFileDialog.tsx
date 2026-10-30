@@ -88,11 +88,14 @@ export function NewFileDialog(props: NewFileDialogProps) {
         <LanguageChoice formId={formId} language={language} onLanguage={setLanguage} />
         {onCreateProject && (
           <label className="wb-newfile__radio wb-newfile__project">
-            <input type="checkbox" checked={asProject} onChange={(e) => setAsProject(e.target.checked)} />
+            <input type="checkbox" checked={asProject} onChange={(e) => {
+                setAsProject(e.target.checked);
+                if (!e.target.checked) setBoard(initialBoard);
+              }} />
             Create project <span className="wb-newfile__ext">.hdlboard.json</span>
           </label>
         )}
-        {boards !== undefined && <BoardChoice formId={formId} boards={boards} board={board} onBoard={setBoard} />}
+        {boards !== undefined && <BoardChoice formId={formId} boards={boards} board={board} onBoard={setBoard} locked={onCreateProject !== undefined && !asProject} />}
       </form>
     </Dialog>
   );
@@ -194,16 +197,18 @@ interface BoardChoiceProps {
   boards: BoardCatalog;
   board: string;
   onBoard: (board: string) => void;
+  /** A project has one board, so a new file takes the project's; only Create project may pick another. */
+  locked: boolean;
 }
 
-function BoardChoice({ formId, boards, board, onBoard }: BoardChoiceProps) {
+function BoardChoice({ formId, boards, board, onBoard, locked }: BoardChoiceProps) {
   return (
     <>
       <label className="wb-newfile__label wb-newfile__board-label" htmlFor={`${formId}-board`}>
         Board
       </label>
       {/* A native list: it opens over the dialog, where a drawn one would be clipped by the dialog's scroll area. */}
-      <select id={`${formId}-board`} className="wb-newfile__name wb-newfile__board" value={board} onChange={(e) => onBoard(e.target.value)}>
+      <select id={`${formId}-board`} className="wb-newfile__name wb-newfile__board" value={board} disabled={locked} onChange={(e) => onBoard(e.target.value)}>
         {boards.boards.map((candidate) => (
           <option key={candidate.id} value={candidate.id}>
             {candidate.name}
