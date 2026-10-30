@@ -179,7 +179,7 @@ export function Pushbuttons({
         />
         {aside}
       </div>
-      {showReadout && <Readout name={name} text={bitsToString(bits)} />}
+      {showReadout && <Readout name={name} format="Binary" text={bitsToString(bits)} />}
       {showHint && activeLow && (
         <p className="pb-panel__hint">(Active low – 0 when pressed)</p>
       )}

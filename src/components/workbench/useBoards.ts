@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { parsedDocument, type BoardDocument } from '../../boards/boardEditorModel';
 import { editorCatalog, loadEditorCatalog } from '../../boards/boardEditorCatalog';
 import { BUILT_IN_BOARD_IDS, initialBoardDocument } from '../../boards/boardEditorStorage';
-import { projectBoard, withProjectBoard } from '../../boards/projectBoard';
+import { catalogWithProjectBoard, projectBoard, withProjectBoard } from '../../boards/projectBoard';
 import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 
 /**
@@ -17,11 +17,12 @@ export interface EditableBoardCatalog extends BoardCatalog {
   editorBoards: readonly BoardDefinition[];
   builtInBoardIds: readonly string[];
   ready: boolean;
-  applyDocument: (file: BoardDocument) => void;
   boardConfigFor: (id: string) => Record<string, unknown> | undefined;
+  /** Keeps boards saved in the editor available for the rest of the session. */
+  applyDocument: (file: BoardDocument) => void;
 }
 
-export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardCatalog {
+export function useBoards(boardConfig?: Record<string, unknown>, selectedBoardId?: string): EditableBoardCatalog {
   const [savedDocument, setDocument] = useState(initialBoardDocument);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -39,12 +40,12 @@ export function useBoards(boardConfig?: Record<string, unknown>): EditableBoardC
       cancelled = true;
     };
   }, []);
-  const document = useMemo(() => withProjectBoard(savedDocument, boardConfig), [savedDocument, boardConfig]);
-  const embedded = useMemo(() => projectBoard(boardConfig), [boardConfig]);
+  const embedded = useMemo(() => projectBoard(boardConfig, selectedBoardId), [boardConfig, selectedBoardId]);
+  const document = useMemo(() => withProjectBoard(savedDocument, embedded.board ? boardConfig : undefined), [savedDocument, boardConfig, embedded]);
   const parsed = useMemo(() => {
     const installed = editorCatalog(savedDocument, legacy);
-    return embedded.board ? { ...installed, boards: [...installed.boards.filter((board) => board.id !== embedded.board.id), embedded.board] } : installed;
-  }, [savedDocument, legacy, embedded]);
+    return catalogWithProjectBoard(installed, boardConfig, selectedBoardId);
+  }, [savedDocument, legacy, boardConfig, selectedBoardId]);
   const editorBoards = useMemo(() => parsedDocument(document).boards, [document]);
   const boardConfigFor = (id: string) => BUILT_IN_BOARD_IDS.includes(id) ? undefined : document.boards.find((board) => board.id === id);
   return { document, editorBoards, builtInBoardIds: BUILT_IN_BOARD_IDS, ready, applyDocument: setDocument, boardConfigFor, boards: parsed.boards, warnings: [...warnings, ...parsed.warnings, ...embedded.warnings] };

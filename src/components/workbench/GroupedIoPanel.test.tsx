@@ -19,9 +19,10 @@ describe('grouped board I/O', () => {
   it('formats the complete value in binary, hexadecimal and decimal', () => {
     const bits = [1, 0, 1, 0, 1, 0, 0, 0, 1, 0] as const;
     expect(formatIoValue([...bits], 'binary')).toBe('0100010101');
-    expect(formatIoValue([...bits], 'hex')).toBe('0x115');
+    expect(formatIoValue([...bits], 'hex')).toBe('1 15');
     expect(formatIoValue([...bits], 'decimal')).toBe('277');
-    expect(formatIoValue([0, 0, 0, 0, 0], 'hex')).toBe('0x00');
+    expect(formatIoValue([0, 0, 0, 0, 0], 'hex')).toBe('00');
+    expect(formatIoValue([...Array(16).fill(0).map((_, i) => (i === 0 || i === 15 ? 1 : 0))], 'hex')).toBe('80 01');
     expect(formatIoValue(Array(60).fill(1), 'decimal')).toBe('1152921504606846975');
   });
 
@@ -29,15 +30,29 @@ describe('grouped board I/O', () => {
     const html = renderToStaticMarkup(<GroupedIoPanel kind="switches" count={4} bits={[1, 0, 1, 0]} name="SW" title="Switches" />);
     expect(html).toContain('aria-label="SW2"');
     expect(html).not.toContain('pb-io-hex');
-    expect(html).toContain('aria-label="SW value">0101</output>');
+    expect(html).toContain('aria-label="SW Binary value">0101</output>');
     expect(html).toContain('aria-label="Switch display options"');
     expect(html).toContain('aria-expanded="false"');
   });
 
   it('shows the full LED value alongside grouped values', () => {
     const html = renderToStaticMarkup(<GroupedIoPanel kind="leds" count={4} bits={[1, 1, 0, 0]} name="LEDR" title="LEDs" />);
-    expect(html).toContain('aria-label="LEDR value">0011</output>');
+    expect(html).toContain('aria-label="LEDR Binary value">0011</output>');
     expect(html).toContain('aria-label="LED display options"');
     expect(html).toContain('aria-expanded="false"');
+  });
+
+  it('renders only the selected readout, binary first if several are stored', () => {
+    const settings = (readouts: { binary: boolean; hexadecimal: boolean; decimal: boolean }) => ({ groupSize: 4 as const, visible: [0, 1, 2, 3], readouts });
+    const render = (readouts: { binary: boolean; hexadecimal: boolean; decimal: boolean }) => renderToStaticMarkup(<GroupedIoPanel kind="leds" count={4} bits={[1, 1, 0, 0]} name="LEDR" title="LEDs" settings={settings(readouts)} />);
+    const hex = render({ binary: false, hexadecimal: true, decimal: false });
+    expect(hex).toContain('LEDR Hex:');
+    expect(hex).toContain('aria-label="LEDR Hex value">3</output>');
+    expect(hex).not.toContain('Hexadecimal');
+    expect(render({ binary: false, hexadecimal: false, decimal: true })).toContain('LEDR Decimal value">3</output>');
+    const all = render({ binary: true, hexadecimal: true, decimal: true });
+    expect(all).toContain('LEDR Binary value">0011</output>');
+    expect(all).not.toContain('LEDR Hex:');
+    expect(all).not.toContain('LEDR Decimal:');
   });
 });

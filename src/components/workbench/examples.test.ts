@@ -112,12 +112,13 @@ describe('copyExample', () => {
 describe('examples written for Basys 3, Nexys A7 and DE10-Lite', () => {
   const boards = ['basys3', 'nexys-a7', 'de10-lite'].map((id) => builtInBoard(id));
 
-  test('the list is the original one without the examples that use the 7-segment displays', () => {
+  test('only boards with their own display files offer the display examples', () => {
     const original = EXAMPLES.filter((e) => !e.usesHex).map((e) => e.id);
     expect(original).not.toContain('key_counter_7seg_vhdl');
     for (const board of boards) {
       expect(hasExamples(board), board.name).toBe(true);
-      expect(examplesFor(board).map((e) => e.id), board.name).toEqual(original);
+      const expected = board.id === 'de10-lite' ? original : EXAMPLES.map((e) => e.id);
+      expect(examplesFor(board).map((e) => e.id), board.name).toEqual(expected);
     }
     expect(examplesFor(DEFAULT_BOARD)).toEqual(EXAMPLES);
   });
@@ -130,13 +131,25 @@ describe('examples written for Basys 3, Nexys A7 and DE10-Lite', () => {
 
   test("every example copies in the board's own names, and mentions no display", () => {
     for (const board of boards) {
-      for (const e of examplesFor(board)) {
+      for (const e of examplesFor(board).filter((entry) => !entry.usesHex)) {
         const result = copyExample(e, [], idSequence(), board);
         expect(result.untranslated).toEqual([]);
         for (const f of result.added) expect(f.content, `${board.name}: ${f.name}`).not.toMatch(/\bHEX|\bseg\b|\bsegment/i);
         const names = result.added.map((f) => f.name);
         expect(new Set(names).size).toBe(names.length);
       }
+    }
+  });
+
+  test.each(['basys3', 'nexys-a7'])('%s copies its display counters', (id) => {
+    const board = builtInBoard(id);
+    for (const language of ['vhdl', 'verilog']) {
+      const e = examplesFor(board).find((entry) => entry.id === `key_counter_7seg_${language}`);
+      expect(e).toBeDefined();
+      const file = copyExample(e!, [], idSequence(), board).added[0];
+      expect(file.name).toBe(`keyCounter7Seg.${language === 'vhdl' ? 'vhdl' : 'v'}`);
+      expect(file.content).toContain('CLOCK_500Hz');
+      expect(e?.description).toContain(id === 'basys3' ? 'btnC' : 'BTNC');
     }
   });
 

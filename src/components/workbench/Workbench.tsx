@@ -16,6 +16,7 @@ import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
+import { defaultIoDisplaySettings } from '../../project/displaySettings';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
@@ -340,14 +341,16 @@ export function Workbench() {
   // The open project file (projectFile.ts): Files holds its files.
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(freshStart.project);
-  const catalog = useBoards(project.boardConfig);
+  const catalog = useBoards(project.boardConfig, project.board);
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
   // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
   const [projectGeneration, setProjectGeneration] = useState(0);
+  const projectGenerationRef = useRef(0);
   const replaceProject = useCallback((next: OpenProject) => {
+    projectGenerationRef.current += 1;
     setProject(next);
-    setProjectGeneration((n) => n + 1);
+    setProjectGeneration(projectGenerationRef.current);
   }, []);
   // What the project is busy with, e.g. downloading a file; shown on the project settings.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
@@ -1235,6 +1238,8 @@ export function Workbench() {
    * after asking.
    */
   const handleSaveProject = async () => {
+    const savingProjectGeneration = projectGenerationRef.current;
+    const projectIsCurrent = () => projectGenerationRef.current === savingProjectGeneration;
     const folderError = sourceDirectoryError(project.sourceDirectory);
     if (folderError) {
       appendLog(`Project not saved: ${folderError}`, 'error');
@@ -1271,7 +1276,7 @@ export function Workbench() {
       } else {
         // Firefox and Safari cannot write a folder: the project's .zip, laid out the same way (D16).
         const count = downloadOpenProject(project, current);
-        setProject((p) => withSaved(p, current));
+        setProject((p) => projectIsCurrent() ? withSaved(p, current, project) : p);
         appendLog(`Downloaded ${projectFile.name.replace(/\.hdlboard\.json$/i, '')}.zip: ${projectFile.name} and ${count} file(s) in ${sourceFolderOf(project)}. Unpack it to keep the project.`, 'success');
         return;
       }
@@ -1290,7 +1295,7 @@ export function Workbench() {
       } catch (err) {
         if (!(err instanceof SaveWriteError)) throw err;
         // What was written is the project's own now: the next save writes over it without asking.
-        setProject((p) => ({ ...p, ownWrites: [...(p.ownWrites ?? []), ...err.written] }));
+        setProject((p) => projectIsCurrent() ? { ...p, ownWrites: [...(p.ownWrites ?? []), ...err.written] } : p);
         const oldProjectFile = known.onDiskFileName ?? project.fileName;
         appendLog(
           `Project not saved: could not write ${err.path}: ${err.reason}. Nothing was deleted; ${oldProjectFile} still points to the old folder.` +
@@ -1300,13 +1305,13 @@ export function Workbench() {
         return;
       }
       if (picked) {
-        saveFolderRef.current = picked;
+        if (projectIsCurrent()) saveFolderRef.current = picked;
         // The picker granted access to this folder: Open Project lists it without asking again.
         void localProjects.adoptSavedFolder(picked as unknown as FolderHandle).catch(() => undefined);
       }
-      savedDiskRef.current = disk;
-      setProject((p) => withSaved(withOnDisk({ ...p, location }, plan.onDisk, projectFile.name), current));
-      setEmptiedFolders(outcome.emptiedFolders);
+      if (projectIsCurrent()) savedDiskRef.current = disk;
+      setProject((p) => projectIsCurrent() ? withSaved(withOnDisk({ ...p, location }, plan.onDisk, projectFile.name), current, project) : p);
+      if (projectIsCurrent()) setEmptiedFolders(outcome.emptiedFolders);
       appendLog(`Saved ${projectFile.name} and ${toSave.length} file(s) in ${sourceFolderOf(project)}, in ${where}.`, 'success');
       if (outcome.leftBehind.length > 0) {
         const list = outcome.leftBehind.map(({ path, reason }) => `${path} (${reason})`).join(', ');
@@ -1353,9 +1358,9 @@ export function Workbench() {
     // The files keep what they were described as.
     const descriptions = Object.fromEntries(projectEntries(project, filesRef.current.map((f) => f.name)).map((row) => [nameKey(row.name), row.description]));
     // The files are in the closed project's names, so the Default project keeps its board.
-    const closed = defaultProject(filesRef.current, project.board, descriptions);
+    const closed = defaultProject(filesRef.current, project.board, descriptions, project.boardConfig);
     // Changes not saved in the closed project are still not saved: the next open asks about them.
-    replaceProject(projectUnsaved ? { ...closed, savedFiles: project.savedFiles ?? {} } : closed);
+    replaceProject(projectUnsaved ? { ...closed, savedText: project.savedText, savedFiles: project.savedFiles ?? {} } : closed);
     setOverlay(null);
     setEmptiedFolders([]);
     saveFolderRef.current = null;
@@ -2104,6 +2109,14 @@ export function Workbench() {
               contentKey={overlay === 'boardSettings' && boardPreview ? boardPreview : activeBoard}>
               {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} /> : <BoardIoPanel
                 board={activeBoard}
+                key={projectGeneration}
+                displaySettings={project.displaySettings}
+                onDisplayVisibilityChange={(settings) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, sevenSegment: settings } }))}
+                onDisplaySettingsChange={(kind, settings) => setProject((current) => ({ ...current, displaySettings: {
+                  leds: defaultIoDisplaySettings(activeBoard.ports.leds.count),
+                  switches: defaultIoDisplaySettings(activeBoard.ports.switches.count),
+                  ...current.displaySettings, [kind]: settings,
+                } }))}
                 layout={boardLayout}
                 outputs={boardIo.outputs}
                 inputs={boardIo.inputs}

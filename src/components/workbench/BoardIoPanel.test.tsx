@@ -58,15 +58,26 @@ describe('BoardIoPanel', () => {
     const html = render(builtInBoard('basys3'));
     expect(html).toContain('LEDs (led[15:0])');
     expect(html).toContain('Switches (sw[15:0])');
-    expect(html).toContain('Pushbuttons (btnC, btnU, btnL, btnR, btnD)');
-    expect(html).toContain('7-Segment Display (seg[6:0], dp, an[3:0])');
-    expect(html).toContain('while its an bit is active');
-    expect(render(DEFAULT_BOARD)).toContain('7-Segment Displays (HEXn_N[6:0])');
+    expect(html).toContain('Btn (btnC, btnU, btnL, btnR, btnD)');
+    expect(html).toContain('7-seg (seg[6:0], dp, an[3:0])');
+    expect(html).not.toContain('AN &lt;=');
+    expect(render(builtInBoard('nexys-a7'))).not.toContain('AN &lt;=');
+    expect(render(DEFAULT_BOARD)).toContain('7-seg (HEXn_N[6:0])');
   });
 
   it('provides collapse menus for displays and pushbuttons', () => {
     const html = render(DEFAULT_BOARD);
     expect(html).toContain('aria-label="7-Segment Displays options"');
     expect(html).toContain('aria-label="Pushbuttons options"');
+  });
+
+  it('shows only the saved display indices while retaining their original labels', () => {
+    const board = builtInBoard('nexys-a7');
+    const html = renderToStaticMarkup(<BoardIoPanel board={board} outputs={outputsOff(board.ports)} inputs={restInputs(board.ports)} onInputsChange={() => {}} displaySettings={{ sevenSegment: { visible: [0, 3, 7], visibilityCount: 8 } }} />);
+    expect(displayCount(html)).toBe(3);
+    expect(html).toContain('AN7');
+    expect(html).toContain('AN3');
+    expect(html).not.toContain('aria-label="AN6 ');
+    expect(html).toContain('5 displays hidden');
   });
 });

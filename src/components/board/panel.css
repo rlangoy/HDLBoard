@@ -26,6 +26,7 @@
 
 .pb-panel--actions .pb-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pb-panel.pb-panel--actions .pb-panel__title { width: auto; min-width: 0; }
+.pb-sevenseg.pb-panel--actions .pb-panel__title { flex: 1 1 0; width: 0; }
 
 .pb-panel__title {
   margin: 0;
@@ -115,6 +116,11 @@
   /* letter-spacing adds a trailing gap; pull it back so the glyph run
      stays optically centred */
   text-indent: var(--pb-readout-tracking, calc(var(--pb-unit) * 0.17));
+}
+
+/* The display readout stays on one line, like the LED and switch readouts. */
+.pb-sevenseg .pb-readout__value {
+  white-space: nowrap;
 }
 
 .pb-panel__hint {

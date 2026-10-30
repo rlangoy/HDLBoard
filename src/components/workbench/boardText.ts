@@ -89,21 +89,14 @@ export function switchesTitle(switches: VectorPort): string {
   return `Switches (${vectorHeading(switches.port, switches.count)})`;
 }
 
-/** `Pushbuttons (KEY[1:0])`, or `Pushbuttons (btnC, btnU, btnL, btnR, btnD)`. */
+/** `Btn (KEY[1:0])`, or `Btn (btnC, btnU, btnL, btnR, btnD)`. */
 export function buttonsTitle(buttons: ButtonGroup): string {
-  return `Pushbuttons (${groupHeading(buttons.group)})`;
+  return `Btn (${groupHeading(buttons.group)})`;
 }
 
-/** `7-Segment Displays (HEXn[7:0])`, or `7-Segment Display (seg[6:0], dp, an[3:0])` for one multiplexed display. */
+/** `7-seg (HEXn[7:0])`, or `7-seg (seg[6:0], dp, an[3:0])` for one multiplexed display. */
 export function displaysTitle(displays: SevenSegment): string {
-  const noun = displays.kind === 'multiplexed' ? '7-Segment Display' : '7-Segment Displays';
-  return `${noun} (${sevenSegmentHeading(displays)})`;
-}
-
-/** The line under a multiplexed display; none for independent displays. */
-export function multiplexedNote(displays: SevenSegment): string | undefined {
-  if (displays.kind !== 'multiplexed') return undefined;
-  return `Multiplexed: a digit shows the segments driven while its ${displays.digitEnables} bit is active.`;
+  return `7-seg (${sevenSegmentHeading(displays)})`;
 }
 
 /** `Board I/O · DE1-SoC`. */
@@ -127,7 +120,7 @@ export function examplesNotice(defaultShapedBoards: readonly BoardDefinition[]):
 
 /** Beside the notice above: the boards of another shape that have examples written for them. */
 export function ownExamplesNotice(boards: readonly BoardDefinition[]): string {
-  return `Examples without the 7-segment displays are also built in for ${boards.map((board) => board.name).join(', ')}.`;
+  return `Examples are also built in for ${boards.map((board) => board.name).join(', ')}; available examples vary by board.`;
 }
 
 /** The lead of a change between boards of different shapes (§ 5.3). */

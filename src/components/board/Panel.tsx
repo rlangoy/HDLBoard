@@ -67,6 +67,7 @@ export function Panel({
 
 export interface BitRowProps {
   count: number;
+  visibleIndices?: readonly number[];
   /** Index label above each column. */
   showIndices?: boolean;
   /** Rendered per bit, MSB first. `index` is the VHDL index. */
@@ -79,12 +80,13 @@ export interface BitRowProps {
 /** The row of parts plus their index labels, MSB on the left. */
 export function BitRow({
   count,
+  visibleIndices,
   showIndices = true,
   renderBit,
   formatIndex,
   ariaLabel,
 }: BitRowProps) {
-  const indices = Array.from({ length: count }, (_, i) => count - 1 - i);
+  const indices = Array.from({ length: count }, (_, i) => count - 1 - i).filter((i) => !visibleIndices || visibleIndices.includes(i));
   return (
     <div className="pb-bank" role="group" aria-label={ariaLabel}>
       {indices.map((i) => (
@@ -104,17 +106,19 @@ export function BitRow({
 export interface ReadoutProps {
   name: string;
   text: string;
+  format?: string;
 }
 
 /** `NAME:  0101010101` under the row. */
-export function Readout({ name, text }: ReadoutProps) {
+export function Readout({ name, text, format }: ReadoutProps) {
+  const label = format ? `${name} ${format}` : name;
   return (
     <div className="pb-readout">
-      <span className="pb-readout__label">{name}:</span>
+      <span className="pb-readout__label">{label}:</span>
       <output
         className="pb-readout__value"
         aria-live="polite"
-        aria-label={`${name} value`}
+        aria-label={`${label} value`}
       >
         {text}
       </output>

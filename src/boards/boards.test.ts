@@ -121,6 +121,14 @@ describe('canUndo', () => {
     expect(canUndo(record, { project: '0', files: after, board: 'default' })).toBe(false);
   });
 
+  it('refuses undo when the selected board definition was edited', () => {
+    const config = { id: 'custom', ports: { clock: 'CLK' } };
+    const changed = { ...config, ports: { clock: 'NEW_CLK' } };
+    const customRecord = { ...record, after: { ...record.after, board: 'custom', boardConfig: config } };
+    expect(canUndo(customRecord, { project: '0', files: after, board: 'custom', boardConfig: config })).toBe(true);
+    expect(canUndo(customRecord, { project: '0', files: after, board: 'custom', boardConfig: changed })).toBe(false);
+  });
+
   it('is not possible in another project, even one with the same files and board (Close project)', () => {
     expect(canUndo(record, { project: '1', files: after, board: 'de1-soc' })).toBe(false);
   });
@@ -179,5 +187,12 @@ describe('the preferred board', () => {
   it('falls back to Default for an id that is not installed', () => {
     expect(preferredBoardIn(BUILT_IN_CATALOG, 'de0-nano')).toBe('default');
     expect(preferredBoardIn(BUILT_IN_CATALOG, 'de1-soc')).toBe('de1-soc');
+  });
+});
+
+describe('canUndo with equal board definitions', () => {
+  it('treats a structurally equal boardConfig as unchanged', () => {
+    const record = { project: '0', before: { files: 'a', board: 'x', waveViews: undefined }, after: { files: 'b', board: 'custom', boardConfig: { id: 'custom', ports: { clock: 'CLK' } }, waveViews: undefined }, renames: [] };
+    expect(canUndo(record as never, { project: '0', files: 'b', board: 'custom', boardConfig: { id: 'custom', ports: { clock: 'CLK' } } } as never)).toBe(true);
   });
 });

@@ -274,8 +274,8 @@
 
 /*
  * The board pane (a SidePanel titled Board I/O). The board's parts keep
- * their selected arrangement, with vertical scrolling in single-column mode,
- * and are scaled to fit whatever the drag/window leaves (BoardFit.tsx).
+ * their selected arrangement and scale to the pane width (BoardFit.tsx).
+ * A taller board scrolls vertically in either arrangement.
  * No border-left here — the .wb-resizer bar on this
  * pane's left edge is that border.
  */
@@ -294,17 +294,12 @@
   flex: 1;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .wb-board-fit__spacer { width: 1px; }
-
-/* A tall single-column board can scroll without shrinking its controls. */
-.wb-board-fit--single {
-  overflow-x: hidden;
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-}
 
 /* Out of flow, so the board's natural (pre-scale) size can't push the
    pane's own scroll size around. */
@@ -331,9 +326,9 @@
 
 .pb-board--single > .pb-leds { order: 0; }
 .pb-board--single > .pb-switches { order: 1; }
-.pb-board--single > .pb-sevenseg { order: 2; justify-self: start; }
+.pb-board--single > .pb-sevenseg { order: 2; }
 .pb-board--single > .pb-pushbuttons,
-.pb-board--single > .pb-reset { order: 3; justify-self: start; }
+.pb-board--single > .pb-reset { order: 3; }
 
 .wb-files__hidden-input {
   position: absolute;

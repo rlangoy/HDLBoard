@@ -21,6 +21,7 @@ export interface SevenSegmentDisplaysProps extends NativeProps {
   headerAction?: ReactNode;
   /** Number of displays. Default `6` (HEX[5:0]). */
   count?: number;
+  visibleIndices?: readonly number[];
   /**
    * One segment word per display, **display 0 first** — `value[0]` is
    * `HEX0`. Each word is 7 bits LSB first, so `value[0][6]` is
@@ -62,6 +63,7 @@ export interface SevenSegmentDisplaysProps extends NativeProps {
  */
 export function SevenSegmentDisplays({
   count = 6,
+  visibleIndices,
   value,
   activeLow = true,
   decimalPoint = false,
@@ -122,6 +124,7 @@ export function SevenSegmentDisplays({
     >
       <BitRow
         count={count}
+        visibleIndices={visibleIndices}
         showIndices={showIndices}
         ariaLabel={heading}
         formatIndex={(i) => `${name}${i}`}

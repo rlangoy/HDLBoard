@@ -7,15 +7,14 @@ export function paneWidthForScale(naturalWidth: number, scale: number, paneWidth
 }
 
 /** Update the transform and scroll extent from the same measurements. */
-export function fitBoard(viewport: HTMLDivElement, scaler: HTMLDivElement, spacer: HTMLDivElement | null, single: boolean, maxScale = Infinity): number | undefined {
+export function fitBoard(viewport: HTMLDivElement, scaler: HTMLDivElement, spacer: HTMLDivElement | null): number | undefined {
   const naturalWidth = scaler.offsetWidth;
   const naturalHeight = scaler.offsetHeight;
   const width = viewport.clientWidth;
-  const height = viewport.clientHeight;
-  if (!naturalWidth || !naturalHeight || !width || !height) return undefined;
-  const scale = Math.min(maxScale, single ? width / naturalWidth : Math.min(width / naturalWidth, height / naturalHeight));
+  if (!naturalWidth || !naturalHeight || !width || !viewport.clientHeight) return undefined;
+  const scale = width / naturalWidth;
   scaler.style.transform = `scale(${scale})`;
-  if (spacer) spacer.style.height = `${single ? naturalHeight * scale : 0}px`;
+  if (spacer) spacer.style.height = `${naturalHeight * scale}px`;
   return scale;
 }
 
@@ -37,7 +36,6 @@ export function BoardFit({ single, collapsed, contentKey, paneWidth, onResize, c
   const pendingWidth = useRef<number>();
   const widthByLayout = useRef<{ single?: number; double?: number }>({});
   const awaitingWidth = useRef<number>();
-  const preserved = useRef<{ scale: number; width: number; content: unknown }>();
   const resizeRef = useRef(onResize);
   const fitRef = useRef(() => {});
 
@@ -66,7 +64,6 @@ export function BoardFit({ single, collapsed, contentKey, paneWidth, onResize, c
         if (width === undefined) return;
         pendingScale.current = undefined;
         pendingWidth.current = undefined;
-        preserved.current = scale === undefined ? undefined : { scale, width, content: contentKey };
         // React must commit the fitted pane width before it can be measured.
         if (width !== paneWidth) {
           awaitingWidth.current = paneWidth;
@@ -79,10 +76,7 @@ export function BoardFit({ single, collapsed, contentKey, paneWidth, onResize, c
           return;
         }
       }
-      const keep = preserved.current;
-      if (keep && (keep.width !== paneWidth || keep.content !== contentKey)) preserved.current = undefined;
-      // A minimum pane width may leave extra space; it must not enlarge controls.
-      lastScale.current = fitBoard(viewport, scaler, spacerRef.current, single, preserved.current?.scale);
+      lastScale.current = fitBoard(viewport, scaler, spacerRef.current);
     };
     fitRef.current = fit;
     fit();

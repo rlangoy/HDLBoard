@@ -10,7 +10,9 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 **[Try it online](https://hdlboard.onrender.com/)** · **[Download for Windows](https://github.com/rlangoy/HDLBoard/releases)** · **[Host it yourself](docs/HOSTING.md)**
 
-![HDLBoard, an online VHDL and Verilog simulator, running a Verilog design: the simulation card and file list on the left, the editor in the middle, and the virtual DE1-SoC FPGA board on the right; four switches are up and their LEDs are lit.](docs/images/workbench.png)
+[![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
+
+[Download the demonstration video (MP4)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4) · [WebM version](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.webm)
 
 ## Get started
 
