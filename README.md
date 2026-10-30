@@ -12,8 +12,6 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 [![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
 
-[Download the demonstration video (MP4)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4) · [WebM version](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.webm)
-
 ## Get started
 
 ### Try it in one minute
