@@ -27,6 +27,7 @@ await page.addInitScript(() => {
 page.setDefaultTimeout(12000);
 const button = (name) => page.getByRole('button', { name, exact: true });
 const click = async (locator) => { await locator.scrollIntoViewIfNeeded(); await locator.hover(); await pause(500); await locator.click(); await pause(); };
+const fastDialogClick = async (locator) => { await locator.scrollIntoViewIfNeeded(); await locator.hover(); await pause(250); await locator.click(); await pause(600); };
 // The repeated checkbox clicks take about one tenth of a normal narrated click.
 const quickClick = async (locator, delay = 170) => { await locator.scrollIntoViewIfNeeded(); await locator.hover(); await locator.click(); await page.waitForTimeout(fast ? 20 : delay); };
 const check = async (condition, message) => { if (!condition) throw new Error(message); };
@@ -55,8 +56,8 @@ try {
   await click(button('Remove files'));
   await page.getByRole('complementary', { name: 'Board I/O · Nexys A7' }).waitFor();
   await click(button('Show Nexys_A7.vhdl'));
-  // Begin the delivered video with the newly created project already open.
-  presentationStart = (Date.now() - recordingStarted) / 1000;
+  // Skip the first six seconds of the project-open sequence in the delivered video.
+  presentationStart = (Date.now() - recordingStarted) / 1000 + 6;
   await pause(1000);
   await drag(page.getByRole('separator', { name: 'Resize board panel' }), 180, 0);
   const editor = page.getByRole('textbox', { name: /Design \(RTL\) editor/ });
@@ -81,6 +82,8 @@ try {
   }
   await click(button('Stop'));
   await click(button('Settings'));
+  const boardDivider = page.getByRole('separator', { name: 'Resize board panel' });
+  const originalBoardWidth = Number(await boardDivider.getAttribute('aria-valuenow'));
   const singleColumn = page.locator('label').filter({ hasText: 'Single column' });
   await singleColumn.hover();
   await singleColumn.click();
@@ -88,16 +91,19 @@ try {
   await pause(1000);
   await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close', exact: true }).click();
   await pause();
+  const singleColumnWidth = Number(await boardDivider.getAttribute('aria-valuenow'));
+  await drag(boardDivider, singleColumnWidth - originalBoardWidth, 0);
+  await check(Math.abs(Number(await boardDivider.getAttribute('aria-valuenow')) - originalBoardWidth) <= 1, 'Board pane width was not restored');
   for (const name of ['LED', 'Switch']) {
     await click(button(`${name} display options`));
     await click(page.getByRole('menuitemradio', { name: 'Group by 4' }));
   }
   await check(await page.getByLabel('LD bits 15 to 12').count() === 1 && await page.getByLabel('SW bits 15 to 12').count() === 1, 'Grouping by four failed');
   for (const [name, label] of [['LED', 'LD'], ['Switch', 'SW']]) {
-    await click(button(`${name} display options`));
-    await click(page.getByRole('menuitem', { name: /Choose visible/ }));
-    for (let i = 15; i >= 8; i--) await quickClick(page.getByRole('checkbox', { name: `${label}${i}`, exact: true }), 57);
-    await click(button('Apply'));
+    await fastDialogClick(button(`${name} display options`));
+    await fastDialogClick(page.getByRole('menuitem', { name: /Choose visible/ }));
+    for (let i = 15; i >= 8; i--) await quickClick(page.getByRole('checkbox', { name: `${label}${i}`, exact: true }), 28.5);
+    await fastDialogClick(button('Apply'));
     await check(await page.getByRole(name === 'LED' ? 'img' : 'switch', { name: new RegExp(`^${label}15`) }).count() === 0, `${label}15 still visible`);
   }
   await click(button('Hide Explorer'));
@@ -107,7 +113,6 @@ try {
   const oldConsoleHeight = (await consolePane.boundingBox()).height;
   await drag(page.getByRole('separator', { name: 'Resize console' }), 0, 250);
   await check((await consolePane.boundingBox()).height < oldConsoleHeight, 'Simulator output did not shrink');
-  const boardDivider = page.getByRole('separator', { name: 'Resize board panel' });
   const boardWidth = Number(await boardDivider.getAttribute('aria-valuenow'));
   // At the recording's 1280 x 720 viewport, 490 px keeps both panels readable.
   const targetWidth = 490;
@@ -128,19 +133,8 @@ try {
     await click(sw);
     await page.getByRole('img', { name: `LD${i} ${next ? 'on' : 'off'}`, exact: true }).waitFor();
   }
-  await pause(2500);
-  await click(button('Stop simulation'));
+  await button('Stop simulation').click();
   await click(button('Show Explorer'));
-  await click(button('Examples'));
-  await click(button('Open Blink LED (VHDL)'));
-  await button('Start').hover();
-  await pause(500);
-  await button('Start').click();
-  await page.getByText('Simulation running ...', { exact: false }).last().waitFor();
-  await page.waitForTimeout(fast ? 1000 : 3000);
-  await button('Stop').hover();
-  await button('Stop').click();
-  await pause();
   await click(button('Examples'));
   await click(button('Open UART Tx Testbench (VHDL)'));
   await check(await button('UART_Tx_tb.vhd is the top-level file').isDisabled(), 'UART testbench was not selected as top');
