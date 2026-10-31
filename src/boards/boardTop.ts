@@ -11,7 +11,7 @@
 
 import { DEFAULT_BOARD_ID } from './boardCatalog';
 import { SEGMENT_COUNT } from './boardLimits';
-import { portNameProblem } from './boardNames';
+import { MAX_PORT_NAME_LENGTH, portNameProblem } from './boardNames';
 import { groupNames, portList } from './boardShape';
 import type { BoardDefinition, BoardPorts, MultiplexedDisplays, SevenSegment } from './types';
 
@@ -246,24 +246,46 @@ const DEFAULT_BOARD_TOP = 'DE1_SoC';
 const FALLBACK_TOP = 'board_top';
 
 /**
+ * `text` made a name valid in both languages, or undefined when nothing of it is left:
+ * runs of other characters become `_`, a leading digit gets `prefix_`, and a name that is
+ * a keyword, too long or one of the board's ports gets `_top` added.
+ */
+function topNameFrom(text: string, prefix: string, board: BoardDefinition): string | undefined {
+  const words = text.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (words === '') return undefined;
+  const stem = (/^[A-Za-z]/.test(words) ? words : `${prefix}_${words}`).slice(0, MAX_PORT_NAME_LENGTH - 4).replace(/_+$/, '');
+  const ports = new Set(topPorts(board.ports).map((port) => port.name.toLowerCase()));
+  const usable = (name: string) => portNameProblem(name) === undefined && !ports.has(name.toLowerCase());
+  if (usable(stem)) return stem;
+  return usable(`${stem}_top`) ? `${stem}_top` : undefined;
+}
+
+/**
  * The entity or module name of a board's top file, from the board's name: `Nexys_A7`,
  * `Basys_3`, `DE10_Lite`. Valid in both languages: a name that is a keyword or starts
  * with a digit gets `_top` or `board_` added.
  */
 export function boardTopName(board: BoardDefinition): string {
   if (board.id === DEFAULT_BOARD_ID) return DEFAULT_BOARD_TOP;
-  const words = board.name.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  const stem = /^[A-Za-z]/.test(words) ? words : `board_${words}`;
-  if (portNameProblem(stem) === undefined) return stem;
-  return portNameProblem(`${stem}_top`) === undefined ? `${stem}_top` : FALLBACK_TOP;
+  return topNameFrom(board.name, 'board', board) ?? FALLBACK_TOP;
 }
 
 /**
- * A free file name for the top of `board`, named as the entity or module inside it:
- * `Nexys_A7.vhdl`, then `Nexys_A7_2.vhdl` when that is taken (ignoring case).
+ * The entity or module name of a new project's top file, from the project's name:
+ * `Traffic light` gives `Traffic_light`, `4-bit counter` gives `top_4_bit_counter`.
+ * The board's top name when the project name has no letters or digits.
  */
-export function starterTopFileName(board: BoardDefinition, language: TopLanguage, takenNames: readonly string[]): string {
-  const stem = boardTopName(board);
+export function projectTopName(projectName: string, board: BoardDefinition): string {
+  return topNameFrom(projectName, 'top', board) ?? boardTopName(board);
+}
+
+/**
+ * A free file name for a top file on `board`, named as the entity or module inside it:
+ * after the project when `projectName` is given (`Traffic_light.vhdl`), else after the
+ * board (`Nexys_A7.vhdl`); then `_2` when that is taken (ignoring case).
+ */
+export function starterTopFileName(board: BoardDefinition, language: TopLanguage, takenNames: readonly string[], projectName?: string): string {
+  const stem = projectName === undefined ? boardTopName(board) : projectTopName(projectName, board);
   const taken = new Set(takenNames.map((name) => name.toLowerCase()));
   const candidate = (n: number): string => `${n === 1 ? stem : `${stem}_${n}`}${FILE_EXTENSION[language]}`;
   let n = 1;

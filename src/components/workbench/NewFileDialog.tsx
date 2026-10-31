@@ -53,7 +53,7 @@ export interface NewFileDialogProps {
  * Verilog, and the board. The extension follows the language, and the name has to be a
  * legal identifier of that language, since the file is created as a module or entity of
  * the same name (newFile.ts). With Create project ticked, the name is the project's and
- * its top file is named after the board instead.
+ * its top file (and the entity or module in it) is named after the project.
  *
  * Mounted only while it is open, so every opening starts over with the suggested
  * name and VHDL.
@@ -161,7 +161,7 @@ function Hint({ name, language, board, asProject, error, kind = 'design', boards
   if (asProject && chosen !== undefined) {
     return (
       <>
-        Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, [])}</strong>, a top file
+        Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, [], name)}</strong>, a top file
         for the {chosen.name} board, and opens the project settings.{existingNames.length > 0 && ' You are asked what to do with your files.'}
         {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
       </>

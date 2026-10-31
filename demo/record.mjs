@@ -55,7 +55,7 @@ try {
   await click(button('Create'));
   await click(button('Remove files'));
   await page.getByRole('complementary', { name: 'Board I/O · Nexys A7' }).waitFor();
-  await click(button('Show Nexys_A7.vhdl'));
+  await click(button('Show switchTest.vhdl'));
   // Skip the first six seconds of the project-open sequence in the delivered video.
   presentationStart = (Date.now() - recordingStarted) / 1000 + 6;
   await pause(1000);
