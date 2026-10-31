@@ -276,7 +276,81 @@
   content: '!';
 }
 
+/* ---- extra rows under a marked line (extraRows.ts) -------------------
+ * The message, when it would not fit after the code, and the Quick Fix.
+ * The textarea has no such rows, so each is exactly one line high, and the
+ * textarea's bottom padding grows by them (--wb-extra-rows) so both scroll
+ * equally far. They stay at the left edge of the view (--wb-scroll-left,
+ * set on scroll), so they are never scrolled out of reach. */
+
+.wb-editor__extra-row {
+  height: var(--wb-code-line-h);
+  margin-inline: calc(-1 * var(--wb-code-pad-x));
+  padding-inline: var(--wb-code-pad-x);
+  overflow: hidden;
+  transform: translateX(var(--wb-scroll-left, 0px));
+}
+/* The transform makes each row a stacking context, so the button's own z-index
+   counts only inside it: the row itself goes above the textarea. It stays
+   pointer-transparent (the highlight layer's pointer-events), all but the button. */
+.wb-editor__extra-row.is-fix {
+  position: relative;
+  z-index: 1;
+}
+.wb-editor__extra-row.is-error {
+  background: var(--wb-diag-error-bg);
+}
+.wb-editor__extra-row.is-warning {
+  background: var(--wb-diag-warning-bg);
+}
+/* Starts where the code starts, not 3ch after it. */
+.wb-editor__diag-inline.is-below {
+  margin-left: 0;
+}
+.wb-editor__diag-inline code {
+  font-style: normal;
+}
+
+/* The gutter beside an extra row: the marked line's edge, without its number or glyph. */
+.wb-editor__gutter-line.is-extra::before {
+  content: none;
+}
+
+/* Inside the aria-hidden, pointer-transparent highlight layer: it takes the pointer itself. */
+.wb-editor__quickfix {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--wb-code-line-h) - 2px);
+  margin-top: 1px;
+  padding: 0 8px;
+  border: 1px solid var(--wb-accent);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--wb-accent-dark);
+  font: 12px/1 var(--wb-code-font);
+  vertical-align: top;
+  cursor: pointer;
+}
+.wb-editor__quickfix:hover {
+  background: var(--wb-accent-soft);
+}
+.wb-editor__quickfix-bulb {
+  width: 15px;
+  height: 15px;
+  color: #ca8a04;
+}
+.wb-editor__quickfix kbd {
+  padding: 0 4px;
+  border: 1px solid var(--wb-border);
+  border-radius: 3px;
+  color: var(--wb-text-muted);
+  font: inherit;
+}
+
 .wb-editor__textarea {
+  padding-bottom: calc(12px + var(--wb-extra-rows, 0) * var(--wb-code-line-h));
   overflow: auto;
   resize: none;
   background: transparent;

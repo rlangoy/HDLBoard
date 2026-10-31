@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useEffect, useRef, type RefObject } from 'react';
-import { countLines, lineHeightOrFallback, offsetOfLine, scrollToShow, visualColumn } from './diagnosticLocation';
+import { countLines, offsetOfLine, scrollToShow, visualColumn } from './diagnosticLocation';
+import { measureText } from './symbols/textMetrics';
 
 let revealSeq = 0;
 
@@ -25,41 +26,26 @@ export interface RevealRequest {
   readonly highlight?: string;
 }
 
-/** The editor's tab width (CodeEditor.css `tab-size`). */
-const TAB_SIZE = 4;
 /** How much code stays visible left of a revealed word, in characters. */
 const LEFT_CONTEXT_CHARS = 8;
-
-/** The width of one character of the textarea's monospace font. */
-function charWidth(textarea: HTMLTextAreaElement): number {
-  const context = document.createElement('canvas').getContext('2d');
-  if (!context) return 0;
-  context.font = getComputedStyle(textarea).font;
-  return context.measureText('0').width;
-}
-
-/** Scrolls sideways just enough to show character `index` of `line`; a word already in view does not move. */
-function revealIndex(textarea: HTMLTextAreaElement, line: string, index: number): void {
-  const width = charWidth(textarea);
-  const x = parseFloat(getComputedStyle(textarea).paddingLeft) + visualColumn(line, index, TAB_SIZE) * width;
-  textarea.scrollLeft = scrollToShow(x, { scroll: textarea.scrollLeft, size: textarea.clientWidth }, LEFT_CONTEXT_CHARS * width);
-}
-
 /** Lines kept in view above and below the caret's line when it is scrolled to. */
 const CARET_CONTEXT_LINES = 2;
 
-function lineHeightOf(textarea: HTMLTextAreaElement): number {
-  return lineHeightOrFallback(getComputedStyle(textarea).lineHeight, textarea.scrollHeight, countLines(textarea.value));
+/** Scrolls sideways just enough to show character `index` of `line`; a word already in view does not move. */
+function revealIndex(textarea: HTMLTextAreaElement, line: string, index: number): void {
+  const { paddingLeft, charWidth, tabSize } = measureText(textarea);
+  const x = paddingLeft + visualColumn(line, index, tabSize) * charWidth;
+  const view = { scroll: textarea.scrollLeft, size: textarea.clientWidth };
+  textarea.scrollLeft = scrollToShow(x, view, LEFT_CONTEXT_CHARS * charWidth);
 }
 
 /** Scrolls just enough to show the caret, with a little code around it. */
 export function showCaret(textarea: HTMLTextAreaElement): void {
   const { value, selectionStart } = textarea;
   const line = countLines(value.slice(0, selectionStart));
-  const lineHeight = lineHeightOf(textarea);
-  const y = parseFloat(getComputedStyle(textarea).paddingTop) + (line - 1) * lineHeight;
+  const { paddingTop, lineHeight } = measureText(textarea);
   const view = { scroll: textarea.scrollTop, size: textarea.clientHeight };
-  textarea.scrollTop = scrollToShow(y, view, CARET_CONTEXT_LINES * lineHeight);
+  textarea.scrollTop = scrollToShow(paddingTop + (line - 1) * lineHeight, view, CARET_CONTEXT_LINES * lineHeight);
   revealIndex(textarea, lineText(value, line), selectionStart - offsetOfLine(value, line));
 }
 
@@ -86,7 +72,7 @@ export function useRevealLine(
     if (reveal.fileId !== active.id || handledId.current === reveal.id) return;
     handledId.current = reveal.id;
 
-    const lineHeight = lineHeightOf(textarea);
+    const { lineHeight } = measureText(textarea);
     textarea.scrollTop = Math.max(0, (reveal.line - 1) * lineHeight - textarea.clientHeight / 2);
     if (reveal.index !== undefined) revealIndex(textarea, lineText(active.content, reveal.line), reveal.index);
     if (reveal.focus === false) return;

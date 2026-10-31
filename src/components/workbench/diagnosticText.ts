@@ -13,6 +13,7 @@ import {
   countSeverities,
   isMuted,
   isMutedLine,
+  quickFixOf,
   type LineDiagnostic,
   type LineMessage,
 } from './diagnosticStore';
@@ -81,11 +82,6 @@ export function quickFixTitle(fix: QuickFix): string {
   return `Add ${code(useClauseText(fix.addUseClause))}`;
 }
 
-/** Shown once the Quick Fix is applied, until the student goes on editing. */
-export function quickFixDone(fix: QuickFix): string {
-  return `Added ${code(useClauseText(fix.addUseClause))} — start the simulation again to check.`;
-}
-
 /** The keyboard shortcut of the Quick Fix, as VS Code has it. */
 export const QUICK_FIX_SHORTCUT = 'Ctrl+.';
 
@@ -137,31 +133,22 @@ export function describeHint(from: LineDiagnostic): string {
  * not counted, and a line of only muted follow-ons has no inline text.
  */
 export function inlineText(line: LineDiagnostic): string {
-  const [first, ...others] = visibleInDisplayOrder(line);
-  if (first === undefined) return '';
-  return `${truncate(headlineOf(first))}${others.length > 0 ? ` (+${others.length} more)` : ''}`;
+  return messageText(line, truncate);
 }
 
-/** What the problem bar under the code shows: one line's problem in full, and its Quick Fix. */
-export interface BarProblem {
-  readonly line: number;
-  readonly severity: LineDiagnostic['severity'];
-  /** The whole text, never truncated: the inline text may run past the edge of the editor. */
-  readonly text: string;
-  readonly fix?: QuickFix;
+/** The line's first visible message, shaped by `shape`, and how many more there are. */
+function messageText(line: LineDiagnostic, shape: (headline: string) => string): string {
+  const [first, ...others] = visibleInDisplayOrder(line);
+  if (first === undefined) return '';
+  return `${shape(headlineOf(first))}${others.length > 0 ? ` (+${others.length} more)` : ''}`;
 }
 
 /**
- * The first marked line that is not muted — the one a run takes the student to —
- * with its first message's headline and the line's first Quick Fix.
+ * The text of a line's message drawn on rows of its own: as the inline text, but
+ * whole, because it is wrapped instead of cut.
  */
-export function barProblem(lines: readonly LineDiagnostic[]): BarProblem | undefined {
-  const first = lines.find((line) => !isMutedLine(line));
-  if (first === undefined) return undefined;
-  const [message, ...others] = visibleInDisplayOrder(first);
-  const more = others.length > 0 ? ` (+${others.length} more)` : '';
-  const fix = first.messages.find((m) => m.advice?.fix)?.advice?.fix;
-  return { line: first.line, severity: first.severity, text: `${headlineOf(message)}${more}`, ...(fix && { fix }) };
+export function fullMessageText(line: LineDiagnostic): string {
+  return messageText(line, (headline) => headline);
 }
 
 function count(n: number, noun: string): string {
@@ -178,7 +165,9 @@ export function summarize(fileName: string, lines: readonly LineDiagnostic[]): s
   if (shown.length === 0) return '';
   const first = [...shown].sort((a, b) => a.line - b.line)[0];
   const [message] = visibleInDisplayOrder(first);
-  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))} ${CLEAR_HINT}`;
+  const fix = quickFixOf(first);
+  const offer = fix ? ` Quick Fix, ${QUICK_FIX_SHORTCUT}: ${quickFixTitle(fix)}.` : '';
+  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))}${offer} ${CLEAR_HINT}`;
 }
 
 /** "2 errors, 1 warning" — the counts a file's problem mark stands for; `''` for none. */

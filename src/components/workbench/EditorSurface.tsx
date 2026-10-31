@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { memo, useId, useLayoutEffect, useMemo, useRef, type RefObject, type UIEvent } from 'react';
+import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
@@ -11,8 +11,11 @@ import { applyEdit } from './find/applyEdit';
 import { unwrapCodeFence } from './pasteFence';
 import { tabEdit } from './tabIndent';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
-import { ProblemBar } from './ProblemBar';
 import { useQuickFix } from './useQuickFix';
+import { countExtraRows, drawnRows, extraRowsByLine, hasMessageRows, type ExtraRow, type ExtraRowsByLine } from './extraRows';
+import { ExtraRowLine } from './ExtraRowLine';
+import { useEditorWidth } from './useEditorWidth';
+import { useExtraRowClicks } from './useExtraRowClicks';
 import type { CharRange, Token } from './vhdlHighlight';
 import type { FindDecor } from './find/useFind';
 import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
@@ -30,7 +33,7 @@ export interface EditorTab {
   content: string;
 }
 
-/** Ctrl+. (Cmd+. on a Mac) applies the problem bar's Quick Fix, as in VS Code. */
+/** Ctrl+. (Cmd+. on a Mac) applies the Quick Fix of the caret's line, as in VS Code. */
 function isQuickFixKey(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
   return e.key === '.' && (e.ctrlKey || e.metaKey);
 }
@@ -40,6 +43,7 @@ const MODIFIER_KEYS: readonly string[] = ['Shift', 'Control', 'Alt', 'Meta', 'Ta
 
 const NO_RANGES: readonly CharRange[] = [];
 const NO_OCCURRENCES: readonly Occurrence[] = [];
+const NO_EXTRA_ROWS: readonly ExtraRow[] = [];
 
 const OCCURRENCE_CLASS: Record<OccurrenceKind, string> = {
   declaration: 'wb-editor__occ-decl',
@@ -87,6 +91,7 @@ const HighlightedLine = memo(function HighlightedLine({
   occurrences,
   findRanges,
   currentFind,
+  messageBelow,
 }: {
   line: string;
   /** The line's tokens (`tokenizeSource`); together they are `line`. */
@@ -99,9 +104,11 @@ const HighlightedLine = memo(function HighlightedLine({
   /** Search matches on this line (docs/impl_search.md § 5.4), and the current one if it is here. */
   findRanges: readonly CharRange[];
   currentFind?: CharRange;
+  /** The message is drawn on rows of its own below the line (extraRows.ts), not after the code. */
+  messageBelow: boolean;
 }) {
   const pieces = decorateLine(tokens, diagnostic ? visibleSpans(diagnostic) : NO_RANGES, occurrences, findRanges, currentFind);
-  const inline = diagnostic ? inlineText(diagnostic) : '';
+  const inline = diagnostic && !messageBelow ? inlineText(diagnostic) : '';
   return (
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
       {line.length === 0 ? ' ' : pieces.map((piece, i) => <TokenPiece key={i} piece={piece} />)}
@@ -120,11 +127,13 @@ const EditorGutter = memo(function EditorGutter({
   lines,
   linesByNumber,
   hints,
+  extraRows,
   gutterRef,
 }: {
   lines: readonly string[];
   linesByNumber: ReadonlyMap<number, LineDiagnostic>;
   hints: ReadonlyMap<number, LineDiagnostic>;
+  extraRows: ExtraRowsByLine;
   gutterRef: RefObject<HTMLDivElement>;
 }) {
   return (
@@ -134,9 +143,14 @@ const EditorGutter = memo(function EditorGutter({
         const hintFrom = hints.get(i + 1);
         const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom);
         return (
-          <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} key={i} title={title}>
-            {i + 1}
-          </div>
+          <Fragment key={i}>
+            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title}>
+              {i + 1}
+            </div>
+            {(extraRows.get(i + 1) ?? NO_EXTRA_ROWS).map((row, r) => (
+              <div className={cx('wb-editor__gutter-line', 'is-extra', row.kind === 'message' && `is-${row.severity}`)} key={r} />
+            ))}
+          </Fragment>
         );
       })}
     </div>
@@ -232,7 +246,16 @@ export function EditorSurface({
   const { lines, tokenLines, index: symbolIndex } = symbols;
   // Symbol occurrence highlighting: looked up on hover or at the text cursor.
   // The pointer wins while it rests on a name.
-  const hovered = useHoveredSymbol(file.id, lines, symbolIndex);
+  const editorWidth = useEditorWidth(textareaRef, lines, scroll.x.viewSize);
+  const extraRows = useMemo(() => extraRowsByLine(diagnostics, lines, editorWidth), [diagnostics, lines, editorWidth]);
+  const extraRowCount = countExtraRows(extraRows);
+  // Where each line is drawn, once extra rows push the lines below them down.
+  const textRows = useMemo(
+    () => ({ lines, rows: extraRowCount > 0 ? drawnRows(lines.length, extraRows) : undefined }),
+    [lines, extraRows, extraRowCount],
+  );
+  const extraRowClicks = useExtraRowClicks(textRows);
+  const hovered = useHoveredSymbol(file.id, textRows, symbolIndex);
   const atCaret = useCaretSymbol(file.id, file.content, symbolIndex);
   // A declaration that Go to declaration jumped to stays highlighted until the next click.
   const pinned = usePinnedSymbol(file.id, symbolIndex, reveal, hovered.symbol);
@@ -248,7 +271,7 @@ export function EditorSurface({
   const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
   const statusId = useId();
   useRevealLine(textareaRef, file, reveal);
-  const quickFix = useQuickFix(textareaRef, file, diagnostics);
+  const quickFix = useQuickFix(textareaRef, diagnostics);
   useLayoutEffect(() => {
     findAttach?.(textareaRef.current);
     return () => findAttach?.(null);
@@ -260,6 +283,8 @@ export function EditorSurface({
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop;
       preRef.current.scrollLeft = scrollLeft;
+      // Extra rows stay at the left edge of the view (CodeEditor.css).
+      preRef.current.style.setProperty('--wb-scroll-left', `${scrollLeft}px`);
     }
     if (gutterRef.current) {
       gutterRef.current.scrollTop = scrollTop;
@@ -267,85 +292,96 @@ export function EditorSurface({
   };
 
   return (
-    <>
-      <div
-        className="wb-editor__body"
-        // A click in the text or on a line number clears this file's markers
-        // (hovering does not). The reveal's own focus and scroll are not clicks.
-        onPointerDown={() => {
-          onFocusWithin?.();
-          if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
-        }}
-        onFocus={onFocusWithin}
-      >
-        <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
-          {announces ? status : ''}
-        </p>
-        <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} gutterRef={gutterRef} />
-        <div className="wb-editor__surface">
-          <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
-            {lines.map((line, i) => (
-              <HighlightedLine
-                line={line}
-                tokens={tokenLines[i] ?? []}
-                key={i}
-                diagnostic={linesByNumber.get(i + 1)}
-                hintFrom={hints.get(i + 1)}
-                occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
-                findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
-                currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}
-              />
-            ))}
-          </pre>
-          <textarea
-            ref={textareaRef}
-            className="wb-editor__textarea wb-scrollbar-host"
-            value={file.content}
-            spellCheck={false}
-            wrap="off"
-            onScroll={handleScroll}
-            onChange={(e) => onChange(file.id, e.target.value)}
-            onPaste={(e) => {
-              // A Markdown code block (```vhdl … ```) goes in without its fence lines.
-              const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
-              if (code === null) return;
+    <div
+      className="wb-editor__body"
+      // A click in the text or on a line number clears this file's markers
+      // (hovering does not). The reveal's own focus and scroll are not clicks.
+      onPointerDown={() => {
+        onFocusWithin?.();
+        if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+      }}
+      onFocus={onFocusWithin}
+    >
+      <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
+        {announces ? status : ''}
+      </p>
+      <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} extraRows={extraRows} gutterRef={gutterRef} />
+      <div className="wb-editor__surface">
+        <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
+          {lines.map((line, i) => {
+            const below = extraRows.get(i + 1) ?? NO_EXTRA_ROWS;
+            return (
+              <Fragment key={i}>
+                <HighlightedLine
+                  line={line}
+                  tokens={tokenLines[i] ?? []}
+                  diagnostic={linesByNumber.get(i + 1)}
+                  hintFrom={hints.get(i + 1)}
+                  occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
+                  findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
+                  currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}
+                  messageBelow={hasMessageRows(below)}
+                />
+                {below.map((row, r) => (
+                  <ExtraRowLine row={row} onApplyFix={quickFix.apply} key={r} />
+                ))}
+              </Fragment>
+            );
+          })}
+        </pre>
+        <textarea
+          ref={textareaRef}
+          className="wb-editor__textarea wb-scrollbar-host"
+          value={file.content}
+          spellCheck={false}
+          wrap="off"
+          // The textarea scrolls as far as the drawn text, extra rows included.
+          style={{ '--wb-extra-rows': extraRowCount } as CSSProperties}
+          onScroll={handleScroll}
+          onChange={(e) => onChange(file.id, e.target.value)}
+          onPaste={(e) => {
+            // A Markdown code block (```vhdl … ```) goes in without its fence lines.
+            const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
+            if (code === null) return;
+            e.preventDefault();
+            const ta = e.currentTarget;
+            applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
+          }}
+          {...hovered.handlers}
+          onSelect={atCaret.onSelect}
+          onPointerDown={(e) => {
+            tabLeaves.current = false;
+            onFindDismiss?.();
+            extraRowClicks.onPointerDown(e);
+          }}
+          onMouseDown={extraRowClicks.onMouseDown}
+          onBlur={() => {
+            tabLeaves.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (isQuickFixKey(e) && quickFix.applyAtCaret()) {
               e.preventDefault();
-              const ta = e.currentTarget;
-              applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
-            }}
-            {...hovered.handlers}
-            onSelect={atCaret.onSelect}
-            onPointerDown={() => {
-              tabLeaves.current = false;
-              onFindDismiss?.();
-            }}
-            onBlur={() => {
-              tabLeaves.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (isQuickFixKey(e) && quickFix.apply()) {
-                e.preventDefault();
-                return;
-              }
-              if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
-                e.preventDefault();
-                return;
-              }
-              if (MODIFIER_KEYS.includes(e.key)) return; // Esc, Shift, Tab: the Shift of Shift+Tab must not undo the Esc
-              const closedFind = e.key === 'Escape' && onFindEscape?.();
-              if (closedFind) e.preventDefault();
-              // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
-              tabLeaves.current = e.key === 'Escape' && !closedFind;
-            }}
-            aria-label={label ?? `${file.name} source`}
-            aria-describedby={statusId}
-          />
-          <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
-          <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
-        </div>
+              return;
+            }
+            // A key that may move the caret clears the extra rows first: below them the
+            // drawn text is not where the textarea's caret is.
+            if (extraRowCount > 0 && !MODIFIER_KEYS.includes(e.key)) onDismissDiagnostics?.(file.id);
+            if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
+              e.preventDefault();
+              return;
+            }
+            if (MODIFIER_KEYS.includes(e.key)) return; // Esc, Shift, Tab: the Shift of Shift+Tab must not undo the Esc
+            const closedFind = e.key === 'Escape' && onFindEscape?.();
+            if (closedFind) e.preventDefault();
+            // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
+            tabLeaves.current = e.key === 'Escape' && !closedFind;
+          }}
+          aria-label={label ?? `${file.name} source`}
+          aria-describedby={statusId}
+        />
+        <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
+        <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
       </div>
-      {/* Outside the body: a click on the bar must not clear the markers it explains. */}
-      <ProblemBar problem={quickFix.problem} applied={quickFix.applied} onApplyFix={quickFix.apply} />
-    </>
+    </div>
   );
 }

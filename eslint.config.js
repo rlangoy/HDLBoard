@@ -51,7 +51,12 @@ const NEW_CODE = [
   'src/components/workbench/useClauseFix.ts',
   'src/components/workbench/useClauseFix.test.ts',
   'src/components/workbench/useQuickFix.ts',
-  'src/components/workbench/ProblemBar.tsx',
+  'src/components/workbench/extraRows.ts',
+  'src/components/workbench/extraRows.test.ts',
+  'src/components/workbench/ExtraRowLine.tsx',
+  'src/components/workbench/useEditorWidth.ts',
+  'src/components/workbench/useExtraRowClicks.ts',
+  'src/components/workbench/symbols/textMetrics.ts',
   'src/components/workbench/quickFix.test.tsx',
   'src/components/workbench/quickFix.testSupport.ts',
 ];

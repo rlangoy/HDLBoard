@@ -12,12 +12,16 @@ import { adviseDiagnostics, revealTarget, type AdvisedDiagnostic } from './diagn
 import { locateDiagnostics, type RunSnapshot } from './diagnosticLocation';
 import { parseDiagnostics } from './diagnostics';
 import { addToFiles, NO_DIAGNOSTICS } from './diagnosticStore';
-import { barProblem, inlineText } from './diagnosticText';
-import { ProblemBar } from './ProblemBar';
+import { quickFixOf } from './diagnosticStore';
+import { inlineText, summarize } from './diagnosticText';
+import { ExtraRowLine } from './ExtraRowLine';
+import { extraRowsByLine, type EditorWidth } from './extraRows';
 import { ADDER_LINE, GHDL_OUTPUT, starterWithAdder } from './quickFix.testSupport';
 import { addUseClause, applyInsertion } from './useClauseFix';
 
 const FILE_ID = 'de1';
+/** The editor as narrow as in the bug report: the adder line is 95 characters wide. */
+const NARROW: EditorWidth = { visibleColumns: 60, widestColumns: 95, tabSize: 4 };
 const ADDER_LINE_NUMBER = 27;
 
 function snapshotOf(content: string): RunSnapshot {
@@ -62,14 +66,10 @@ describe('no declaration for "unsigned" (the bug report)', () => {
     expect(revealTarget(advised)).toEqual({ fileId: FILE_ID, line: ADDER_LINE_NUMBER, index: ADDER_LINE.indexOf('unsigned') });
   });
 
-  test('the problem bar shows the whole message once (the two `unsigned` errors are the same) and the fix', () => {
-    const problem = barProblem(storedLines(advised));
-    expect(problem).toEqual({
-      line: ADDER_LINE_NUMBER,
-      severity: 'error',
-      text: '`unsigned` comes from the package `ieee.numeric_std`, which this file does not use yet.',
-      fix: first.advice?.fix,
-    });
+  test('the two `unsigned` errors are one message on the line, with the fix', () => {
+    const [line] = storedLines(advised);
+    expect(line.messages).toHaveLength(1);
+    expect(quickFixOf(line)).toEqual(first.advice?.fix);
   });
 
   test('the inline text after the code says the same', () => {
@@ -77,8 +77,8 @@ describe('no declaration for "unsigned" (the bug report)', () => {
   });
 
   test('applying the fix adds the use clause below the existing one, and nothing else', () => {
-    const problem = barProblem(storedLines(advised));
-    const insertion = problem?.fix && addUseClause(content, problem.fix.addUseClause, problem.line);
+    const fix = quickFixOf(storedLines(advised)[0]);
+    const insertion = fix && addUseClause(content, fix.addUseClause, ADDER_LINE_NUMBER);
     const after = insertion && applyInsertion(content, insertion);
     expect(after?.split('\n').slice(0, 3)).toEqual(['library ieee;', 'use ieee.std_logic_1164.all;', 'use ieee.numeric_std.all;']);
     expect(after?.replace('use ieee.numeric_std.all;\n', '')).toBe(content);
@@ -116,31 +116,42 @@ describe('other missing packages', () => {
   });
 });
 
-describe('ProblemBar', () => {
-  const problem = barProblem(storedLines(advise(starterWithAdder())));
+describe('the rows under the adder line', () => {
+  const marked = storedLines(advise(starterWithAdder()));
+  const lines = starterWithAdder().split('\n');
+  const rows = extraRowsByLine(marked, lines, NARROW).get(ADDER_LINE_NUMBER) ?? [];
 
-  test('shows the line, the message and a Quick Fix button with its shortcut', () => {
-    const html = renderToStaticMarkup(<ProblemBar problem={problem} applied={undefined} onApplyFix={() => {}} />);
-    expect(html).toContain('Line 27:');
-    expect(html).toContain('<code>ieee.numeric_std</code>');
+  test('the message, which cannot be scrolled to after the widest line, gets rows of its own, wrapped', () => {
+    const messages = rows.filter((row) => row.kind === 'message');
+    expect(messages.map((row) => row.kind === 'message' && row.text)).toEqual([
+      '`unsigned` comes from the package `ieee.numeric_std`,',
+      'which this file does not use yet.',
+    ]);
+  });
+
+  test('then the Quick Fix, last', () => {
+    expect(rows.map((row) => row.kind)).toEqual(['message', 'message', 'fix']);
+  });
+
+  test('all indented like the code', () => {
+    expect(rows.every((row) => row.indent === 4)).toBe(true);
+  });
+
+  test('the fix row draws the 💡 button with its shortcut', () => {
+    const fixRow = rows[rows.length - 1];
+    const html = renderToStaticMarkup(<ExtraRowLine row={fixRow} onApplyFix={() => {}} />);
     expect(html).toMatch(/<button[^>]*title="Quick Fix \(Ctrl\+\.\)"/);
     expect(html).toContain('Add <code>use ieee.numeric_std.all;</code>');
+    expect(html).toContain('<kbd>Ctrl+.</kbd>');
   });
 
-  test('has no button for a problem without a fix', () => {
-    const html = renderToStaticMarkup(
-      <ProblemBar problem={{ line: 3, severity: 'error', text: 'oops' }} applied={undefined} onApplyFix={() => {}} />,
-    );
-    expect(html).not.toContain('<button');
+  test('a message row draws the text, with code in code font', () => {
+    const html = renderToStaticMarkup(<ExtraRowLine row={rows[0]} onApplyFix={() => {}} />);
+    expect(html).toContain('wb-editor__extra-row is-error');
+    expect(html).toContain('<code>unsigned</code> comes from');
   });
 
-  test('confirms an applied fix while there is no problem left', () => {
-    const html = renderToStaticMarkup(<ProblemBar problem={undefined} applied="Added `x`." onApplyFix={() => {}} />);
-    expect(html).toContain('role="status"');
-    expect(html).toContain('Added <code>x</code>.');
-  });
-
-  test('shows nothing with nothing to say', () => {
-    expect(renderToStaticMarkup(<ProblemBar problem={undefined} applied={undefined} onApplyFix={() => {}} />)).toBe('');
+  test('a screen reader hears of the Quick Fix and its shortcut', () => {
+    expect(summarize('DE1_SoC.vhdl', marked)).toContain('Quick Fix, Ctrl+.: Add `use ieee.numeric_std.all;`.');
   });
 });
