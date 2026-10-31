@@ -19,11 +19,20 @@ import type { RunWaveStatus, WaveFormat } from '../waveform/model';
 import { BOARD_VERB, encodeBoardFrame, encodeV1BoardFrame, fitsV1BoardFrame } from '../../boards/boardFrame';
 import type { BoardPorts } from '../../boards/types';
 import { BOARD_TEXT } from './boardText';
+import type { TimedStim } from './bouncyButtons';
+
+/** `<bits>`, or `<bits>/<holdNs>` for a step that holds a set time. */
+function stimStepText({ bits, holdNs }: TimedStim): string {
+  return holdNs === undefined ? bits : `${bits}/${holdNs}`;
+}
 
 // 3: board shapes, a JSON BOARD body and STIM/STATE lengths per board (docs/board_io_v2_spec.md § 6).
-const PROTOCOL_VERSION = '3';
+// 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
+const PROTOCOL_VERSION = '4';
 /** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
 const SHAPED_BOARD_PROTOCOL = 3;
+/** The first protocol that takes timed STIM steps; an older backend gets the final state alone. */
+const TIMED_STIM_PROTOCOL = 4;
 /** A backend that answers WELCOME without a number is the oldest one. */
 const OLDEST_PROTOCOL = 1;
 /** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
@@ -300,6 +309,21 @@ export class HdlClient {
   stim(bits: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(`STIM ${bits}`);
+  }
+
+  /**
+   * Sends timed steps — a bouncing button — as one `STIM`, so the backend has them all
+   * before the first is applied. A backend older than protocol 4 gets the last state alone.
+   */
+  stimSteps(steps: readonly TimedStim[]): void {
+    const last = steps[steps.length - 1];
+    if (last === undefined) return;
+    if ((this.backendVersion ?? OLDEST_PROTOCOL) < TIMED_STIM_PROTOCOL) {
+      this.stim(last.bits);
+      return;
+    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(`STIM ${steps.map(stimStepText).join(' ')}`);
   }
 
   /** Asks for the waveform of `run` (`WAVE-GET`); it arrives through `handlers.wave`. */

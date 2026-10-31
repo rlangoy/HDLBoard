@@ -108,20 +108,30 @@ const PACING = `  // Real-time pacing: after every 20 ms of simulated time, repo
  * The same file protocol as the VHDL testbench: apply at most one queued
  * "<seq> <STIM bits>" line per poll (and not before the previous one has held for
  * min_dwell_ns), and publish "<STATE bits> <last applied seq>" whenever either changes.
+ * A line may end in a hold time, "<seq> <bits> <hold_ns>": a bouncing button's step,
+ * held exactly that long (shorter than min_dwell_ns if it says so) before the next.
+ * Each line is read whole, so a line without a hold cannot borrow the next line's seq.
  */
 /** Opens the input queue and applies its oldest new line, if the last one has held long enough. */
 function applyInput(board: BoardIo): string {
-  return `      if (input_file != 0 && ($time - applied_at) >= min_dwell_ns) begin
+  return `      if (input_file != 0 && ($time - applied_at) >= dwell_ns) begin
         fin = $fopen(input_file, "r");
         if (fin != 0) begin
           applied_one = 0;
-          while (!applied_one && !$feof(fin)) begin
-            scan_count = $fscanf(fin, "%d %b", seq, rec);
-            if (scan_count == 2 && seq > applied_seq) begin
+          while (!applied_one && $fgets(in_line, fin) != 0) begin
+            hold_ns = 0;
+            scan_count = $sscanf(in_line, "%d %b %d", seq, rec, hold_ns);
+            if (scan_count >= 2 && seq > applied_seq) begin
 ${stimSlices(board)}
               applied_seq = seq;
               applied_at = $time;
               applied_one = 1;
+              if (hold_ns > 0) begin
+                dwell_ns = hold_ns;
+                wait_ns = hold_ns;
+              end else begin
+                dwell_ns = min_dwell_ns;
+              end
             end
           end
           $fclose(fin);
@@ -136,14 +146,19 @@ function boardIo(board: BoardIo): string {
   // ${state}-bit board state whenever it (or the applied sequence number) changes.
 ${boardBitsDeclaration(board)}
   integer fin, fout, scan_count, seq, applied_seq = 0, last_seq = -1;
+  integer hold_ns, dwell_ns, wait_ns;
   reg [${stim - 1}:0] rec;
+  reg [8*80-1:0] in_line;
   reg [${state - 1}:0] last_bits = ${state}'bx;
   time applied_at = 0;
   reg applied_one;
   initial begin
     #1;
+    dwell_ns = min_dwell_ns;
+    wait_ns = poll_interval_ns;
     forever begin
-      #(poll_interval_ns * 1);
+      #(wait_ns * 1);
+      wait_ns = poll_interval_ns;
 ${applyInput(board)}
 ${boardBitsUpdate(board)}      if (output_file != 0 && (board_bits !== last_bits || applied_seq != last_seq)) begin
         fout = $fopen(output_file, "w");

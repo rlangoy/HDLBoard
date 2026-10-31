@@ -62,7 +62,7 @@ const PROJECT: VhdlFile[] = [
 ];
 
 /** What a backend of this release answers HELLO with; a run waits for it. */
-const WELCOME_CURRENT = 'WELCOME 3';
+const WELCOME_CURRENT = 'WELCOME 4';
 
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
@@ -255,5 +255,36 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
     new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
     FakeSocket.last!.receive('ERROR protocol\nRUN refused: the last BOARD frame was not valid.');
     expect(handlers.onError).toHaveBeenCalledWith('protocol', 'RUN refused: the last BOARD frame was not valid.');
+  });
+});
+
+describe('HdlClient.stimSteps (a bouncing pushbutton)', () => {
+  const STEPS = [{ bits: '1110', holdNs: 20000 }, { bits: '1111', holdNs: 150000 }, { bits: '1110' }];
+
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function clientWelcomedBy(welcome: string): HdlClient {
+    const client = new HdlClient('ws://test', recordingHandlers());
+    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    FakeSocket.last?.receive(welcome);
+    return client;
+  }
+
+  test('sends all the timed steps as one STIM, each but the last with its hold', () => {
+    clientWelcomedBy(WELCOME_CURRENT).stimSteps(STEPS);
+    expect(lastFrame()).toBe('STIM 1110/20000 1111/150000 1110');
+  });
+
+  test('a backend older than protocol 4 gets the final state alone', () => {
+    clientWelcomedBy('WELCOME 3').stimSteps(STEPS);
+    expect(lastFrame()).toBe('STIM 1110');
   });
 });

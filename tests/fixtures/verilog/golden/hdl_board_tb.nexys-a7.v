@@ -81,27 +81,39 @@ module hdl_board_tb;
   // 80-bit board state whenever it (or the applied sequence number) changes.
   reg [79:0] board_bits;
   integer fin, fout, scan_count, seq, applied_seq = 0, last_seq = -1;
+  integer hold_ns, dwell_ns, wait_ns;
   reg [21:0] rec;
+  reg [8*80-1:0] in_line;
   reg [79:0] last_bits = 80'bx;
   time applied_at = 0;
   reg applied_one;
   initial begin
     #1;
+    dwell_ns = min_dwell_ns;
+    wait_ns = poll_interval_ns;
     forever begin
-      #(poll_interval_ns * 1);
-      if (input_file != 0 && ($time - applied_at) >= min_dwell_ns) begin
+      #(wait_ns * 1);
+      wait_ns = poll_interval_ns;
+      if (input_file != 0 && ($time - applied_at) >= dwell_ns) begin
         fin = $fopen(input_file, "r");
         if (fin != 0) begin
           applied_one = 0;
-          while (!applied_one && !$feof(fin)) begin
-            scan_count = $fscanf(fin, "%d %b", seq, rec);
-            if (scan_count == 2 && seq > applied_seq) begin
+          while (!applied_one && $fgets(in_line, fin) != 0) begin
+            hold_ns = 0;
+            scan_count = $sscanf(in_line, "%d %b %d", seq, rec, hold_ns);
+            if (scan_count >= 2 && seq > applied_seq) begin
               sw_sig = rec[21:6];
               key_sig = rec[5:1];
               rstbtn_sig = rec[0];
               applied_seq = seq;
               applied_at = $time;
               applied_one = 1;
+              if (hold_ns > 0) begin
+                dwell_ns = hold_ns;
+                wait_ns = hold_ns;
+              end else begin
+                dwell_ns = min_dwell_ns;
+              end
             end
           end
           $fclose(fin);

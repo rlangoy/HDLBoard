@@ -57,6 +57,11 @@ const NEW_CODE = [
   'src/components/workbench/useEditorWidth.ts',
   'src/components/workbench/useExtraRowClicks.ts',
   'src/components/workbench/symbols/textMetrics.ts',
+  // Bouncy pushbuttons (contact bounce as timed STIM steps).
+  'src/components/Pushbuttons/bounce.ts',
+  'src/components/Pushbuttons/bounce.test.ts',
+  'src/components/workbench/bouncyButtons.ts',
+  'src/components/workbench/bouncyButtons.test.ts',
   'src/components/workbench/quickFix.test.tsx',
   'src/components/workbench/quickFix.testSupport.ts',
 ];

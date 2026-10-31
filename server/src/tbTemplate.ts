@@ -248,6 +248,11 @@ ${pacingOpen}    loop
     variable ok  : boolean;
     variable applied_seq : integer := 0;
     variable applied_at  : time := 0 ns;
+    -- A timed queue entry (a bouncing button's step) holds exactly hold_ns,
+    -- shorter than min_dwell_ns if it says so, and the next poll comes then.
+    variable hold_ns  : integer;
+    variable dwell_ns : integer := min_dwell_ns;
+    variable wait_ns  : integer := poll_interval_ns;
     variable last : string(1 to ${state}) := (others => ' ');
     variable last_seq : integer := -1;
     variable now_bits : string(1 to ${state});${ioVariables(board)}
@@ -257,7 +262,8 @@ ${pacingOpen}    loop
       -- has nothing to do with whatever clock, if any, the DUT itself
       -- runs on; tying it to CLOCK_50's own 20 ns period was what made a
       -- CLOCK_500Hz-only (or clockless) design pay CLOCK_50's cost anyway.
-      wait for poll_interval_ns * 1 ns;
+      wait for wait_ns * 1 ns;
+      wait_ns := poll_interval_ns;
 
       -- A queue of \`<seq> <SW9..SW0 KEY3..KEY0>\` lines, oldest first
       -- (§ 5.13). At most one is applied per poll, and not before the
@@ -265,9 +271,11 @@ ${pacingOpen}    loop
       -- that reached the Node side together (a stalled event loop, a slow
       -- machine) still arrive here as two transitions with a real, visible
       -- gap between them, instead of the release overwriting the press
-      -- before it was ever sampled. A missing file (no STIM sent yet this
+      -- before it was ever sampled. A line may end in a hold time
+      -- (\`<seq> <bits> <hold_ns>\`): a bouncing button's step, applied
+      -- exactly that long before the next. A missing file (no STIM sent yet this
       -- session) is not an error — inputs keep their declared defaults.
-      if input_file'length > 0 and now - applied_at >= min_dwell_ns * 1 ns then
+      if input_file'length > 0 and now - applied_at >= dwell_ns * 1 ns then
         file_open(status, fin, input_file, read_mode);
         if status = open_ok then
           while not endfile(fin) loop
@@ -277,9 +285,19 @@ ${pacingOpen}    loop
             read(lin, sep, ok);
             next when not ok or lin'length < ${stim};
             read(lin, rec);
+            read(lin, hold_ns, ok);
+            if not ok then
+              hold_ns := 0;
+            end if;
 ${stimApply(board)}
             applied_seq := seq;
             applied_at := now;
+            if hold_ns > 0 then
+              dwell_ns := hold_ns;
+              wait_ns := hold_ns;
+            else
+              dwell_ns := min_dwell_ns;
+            end if;
             exit;
           end loop;
           file_close(fin);

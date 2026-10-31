@@ -19,11 +19,21 @@
  */
 
 import { decodeBoardBody, encodeBoardBody, type DecodedBoard } from './boardFrame.js';
-import { MAX_STATE_BITS, MAX_STIM_BITS } from './engines/boardLimits.js';
+import { MAX_STATE_BITS, MAX_STIM_BITS, MAX_STIM_HOLD_NS, MAX_STIM_STEPS } from './engines/boardLimits.js';
 
 export interface VhdlFileInput {
   name: string;
   content: string;
+}
+
+/**
+ * One input state of a `STIM`. `holdNs`: how long, in simulated time, it stays before
+ * the next queued state is applied — a bouncing button's steps, timed exactly. Without
+ * it the testbench's own minimum dwell applies, as it always has.
+ */
+export interface StimStep {
+  readonly bits: string;
+  readonly holdNs?: number;
 }
 
 export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal';
@@ -52,7 +62,8 @@ export type ClientFrame =
   // The board's port names for the next runs (docs/board_io_config_spec.md § 8). Always
   // decoded to this verb, valid or not, so the session learns about an invalid board too.
   | { verb: 'BOARD'; board: DecodedBoard }
-  | { verb: 'STIM'; bits: string }
+  // One input state, or several timed ones applied in turn (a bouncing button).
+  | { verb: 'STIM'; steps: readonly StimStep[] }
   // Whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1).
   | { verb: 'WAVE'; on: boolean }
   // Asks for the waveform of run `run`; answered with WAVE-BEGIN … WAVE-END, or WAVE-NONE (§ 7.4).
@@ -86,10 +97,31 @@ export interface ProtocolError {
  * grammar bounds them by the largest board, and the session checks the exact length
  * against the board of the run (`engines/boardShape.ts`).
  */
-const STIM_PAYLOAD = new RegExp(`^[01]{1,${MAX_STIM_BITS}}$`);
+const STIM_STEP = new RegExp(`^(?<bits>[01]{1,${MAX_STIM_BITS}})(?:/(?<hold>[1-9][0-9]*))?$`);
 const STATE_PAYLOAD = new RegExp(`^[01X]{1,${MAX_STATE_BITS}}$`);
 
 const FILE_MARKER = /^@@FILE (.+)@@$/;
+
+/**
+ * `STIM`'s inline args: `<bits>`, or timed steps `<bits>/<holdNs> <bits>/<holdNs> … <bits>`
+ * (protocol 4). Undefined when any step is malformed or there are too many.
+ */
+function parseStimSteps(inline: string): StimStep[] | undefined {
+  const words = inline.split(' ');
+  if (words.length > MAX_STIM_STEPS) return undefined;
+  const steps = words.map((word): StimStep | undefined => {
+    const groups = STIM_STEP.exec(word)?.groups;
+    if (groups === undefined) return undefined;
+    if (groups.hold === undefined) return { bits: groups.bits };
+    const holdNs = Number(groups.hold);
+    return holdNs <= MAX_STIM_HOLD_NS ? { bits: groups.bits, holdNs } : undefined;
+  });
+  return steps.every((step) => step !== undefined) ? steps : undefined;
+}
+
+function encodeStimStep({ bits, holdNs }: StimStep): string {
+  return holdNs === undefined ? bits : `${bits}/${holdNs}`;
+}
 
 function isProtocolError(v: VhdlFileInput[] | ProtocolError): v is ProtocolError {
   return 'message' in v;
@@ -172,12 +204,13 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       return { verb: 'BOARD', board };
     }
     case 'STIM': {
-      if (!STIM_PAYLOAD.test(inline)) {
+      const steps = parseStimSteps(inline);
+      if (steps === undefined) {
         return {
-          message: `STIM requires 1 to ${MAX_STIM_BITS} bits ('0'/'1'), got: ${JSON.stringify(inline)}`,
+          message: `STIM requires 1 to ${MAX_STIM_STEPS} steps of 1 to ${MAX_STIM_BITS} bits ('0'/'1'), each optionally /<hold ns> up to ${MAX_STIM_HOLD_NS}, got: ${JSON.stringify(inline)}`,
         };
       }
-      return { verb: 'STIM', bits: inline };
+      return { verb: 'STIM', steps };
     }
     case 'WAVE': {
       if (inline !== 'on' && inline !== 'off') return { message: `WAVE requires on or off, got: ${JSON.stringify(inline)}` };
@@ -231,7 +264,7 @@ export function encodeClientFrame(frame: ClientFrame): string {
       if (!frame.board.ok) throw new Error(`An invalid board cannot be encoded: ${frame.board.reason}`);
       return `BOARD\n${encodeBoardBody(frame.board.board)}`;
     case 'STIM':
-      return `STIM ${frame.bits}`;
+      return `STIM ${frame.steps.map(encodeStimStep).join(' ')}`;
     case 'WAVE':
       return `WAVE ${frame.on ? 'on' : 'off'}`;
     case 'WAVE-GET':

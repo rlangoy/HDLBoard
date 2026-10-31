@@ -23,6 +23,10 @@ export const SEGMENT_COUNT_WITH_POINT = 8;
 
 /** The longest `STIM` any board sends: every switch, every button and a reset button. */
 export const MAX_STIM_BITS = SWITCH_LIMIT.max + BUTTON_LIMIT.max + 1;
+/** Most steps in one `STIM`: a bouncing button's press, 1 + 2 × its bounce pairs, with room to spare. */
+export const MAX_STIM_STEPS = 32;
+/** The longest a `STIM` step may be held: 1 s of simulated time, far longer than any bounce. */
+export const MAX_STIM_HOLD_NS = 1_000_000_000;
 /** The longest `STATE` any board publishes: every LED and every display with its point. */
 export const MAX_STATE_BITS = LED_LIMIT.max + DISPLAY_LIMIT.max * SEGMENT_COUNT_WITH_POINT;
 

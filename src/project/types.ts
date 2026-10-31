@@ -56,10 +56,17 @@ export interface IoDisplaySettings {
   readouts: { binary: boolean; hexadecimal: boolean; decimal: boolean };
 }
 
+/** How the Board pane's pushbuttons behave: ideal contacts, or contacts that bounce as real ones do. */
+export type ButtonBounce = 'none' | 'bouncy';
+
+export const BUTTON_BOUNCES: readonly ButtonBounce[] = ['none', 'bouncy'];
+
 export interface DisplaySettings {
   leds?: IoDisplaySettings;
   switches?: IoDisplaySettings;
   sevenSegment?: { visible: number[]; visibilityCount?: number };
+  /** Absent: `none`, the buttons as they always were. */
+  pushbuttons?: { bounce: ButtonBounce };
 }
 
 /** One signal of a saved waveform view. Among the shown, its order in the list is its place in the view. */

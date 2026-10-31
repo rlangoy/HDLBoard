@@ -60,7 +60,8 @@ const LEGACY_WSPATH = '/ghdlsim';
 // informational: any version a client names is accepted, and answered with this one.
 // 3: board shapes — a JSON BOARD body, STIM and STATE lengths per board
 // (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
-const PROTOCOL_VERSION = '3';
+// 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
+const PROTOCOL_VERSION = '4';
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
@@ -322,7 +323,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
           });
           break;
         case 'STIM':
-          session.handleStim(frame.bits);
+          session.handleStim(frame.steps);
           break;
         case 'WAVE':
           session.handleWave(frame.on);

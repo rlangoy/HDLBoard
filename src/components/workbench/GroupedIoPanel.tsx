@@ -7,7 +7,7 @@ import { Panel, Readout, bitsToString, type BitVector } from '../board';
 import { Led } from '../Leds/Led';
 import { ToggleSwitch } from '../Switches/ToggleSwitch';
 import './GroupedIoPanel.css';
-import type { IoDisplaySettings } from '../../project/types';
+import type { ButtonBounce, IoDisplaySettings } from '../../project/types';
 import { defaultIoDisplaySettings, visibleIndices, withVisibleIndices } from '../../project/displaySettings';
 
 const NIBBLE = 4;
@@ -147,6 +147,35 @@ interface DisplayMenuProps {
   onCollapse: () => void;
   collapseOnly?: boolean;
   allowVisibility?: boolean;
+  /** The pushbuttons' contacts: ideal or bouncing (only the pushbutton panel has this). */
+  bounce?: BounceChoice;
+}
+
+/** The pushbutton menu's choice of contacts, and what to call when the student picks one. */
+export interface BounceChoice {
+  readonly mode: ButtonBounce;
+  readonly onChange: (mode: ButtonBounce) => void;
+}
+
+const BOUNCE_OPTIONS: ReadonlyArray<{ readonly mode: ButtonBounce; readonly label: string; readonly hint: string }> = [
+  { mode: 'none', label: 'No Bounce', hint: 'Ideal contacts: each press and release is one clean edge.' },
+  { mode: 'bouncy', label: 'Bouncy', hint: 'Real contacts: a press or release can bounce, giving several edges within a few milliseconds.' },
+];
+
+/** "No Bounce" and "Bouncy", each with a waveform of what the input does; nothing on a panel without the choice. */
+function BounceItems({ bounce, labelId, onChosen }: { bounce: BounceChoice | undefined; labelId: string; onChosen: () => void }) {
+  if (bounce === undefined) return null;
+  return <>
+    <div className="pb-display-menu__format-label" id={labelId}>Button contacts</div>
+    <div role="group" aria-labelledby={labelId}>
+      {BOUNCE_OPTIONS.map(({ mode, label, hint }) => <button key={mode} type="button" role="menuitemradio" aria-checked={bounce.mode === mode} title={hint} className="pb-display-menu__item" onClick={() => { bounce.onChange(mode); onChosen(); }}>
+        <span className="pb-display-menu__check" aria-hidden="true">{bounce.mode === mode ? '✓' : ''}</span>
+        <MenuIcon kind={mode === 'none' ? 'clean-edge' : 'bouncy-edge'} />
+        <span>{label}</span>
+      </button>)}
+    </div>
+    <div className="pb-display-menu__divider" role="separator" />
+  </>;
 }
 
 function useDisplayMenu() {
@@ -214,7 +243,7 @@ function moveFormatFocus(event: KeyboardEvent<HTMLDivElement>): boolean {
   return true;
 }
 
-function DisplayMenu({ kind, name, view, format, onFormat, onView, onChoose, onCollapse, collapseOnly = false, allowVisibility = false }: DisplayMenuProps) {
+function DisplayMenu({ kind, name, view, format, onFormat, onView, onChoose, onCollapse, collapseOnly = false, allowVisibility = false, bounce }: DisplayMenuProps) {
   const { open, setOpen, position, trigger, menu, id, onMenuKey } = useDisplayMenu();
   const menuLabel = displayMenuLabel(kind, name);
 
@@ -235,6 +264,7 @@ function DisplayMenu({ kind, name, view, format, onFormat, onView, onChoose, onC
         <div className="pb-display-menu__divider" role="separator" />
       <button type="button" role="menuitem" className="pb-display-menu__item" onClick={() => { setOpen(false); onChoose(); }}><span className="pb-display-menu__check" /><MenuIcon kind="eye" /><span>Choose visible {kind === 'leds' ? 'LEDs' : 'switches'}…</span></button>
       </>}
+      <BounceItems bounce={bounce} labelId={`${id}-bounce`} onChosen={() => { setOpen(false); trigger.current?.focus(); }} />
       {allowVisibility && <button type="button" role="menuitem" className="pb-display-menu__item" onClick={() => { setOpen(false); onChoose(); }}><span className="pb-display-menu__check" /><MenuIcon kind="eye" /><span>Choose visible displays…</span></button>}
       <button type="button" role="menuitem" className="pb-display-menu__item" onClick={() => { setOpen(false); onCollapse(); }}><span className="pb-display-menu__check" /><MenuIcon kind="collapse" /><span>Collapse to icon</span></button>
     </div>, document.body)}
@@ -248,12 +278,38 @@ function displayMenuLabel(kind: PanelKind, name: string) {
 }
 function formatLabel(option: ValueFormat) { return option === 'hex' ? 'Hex' : option === 'binary' ? 'Binary' : 'Decimal'; }
 
-export function CollapsePanelMenu({ kind, label, onCollapse, onChoose }: { kind: 'sevenseg' | 'pushbuttons'; label: string; onCollapse: () => void; onChoose?: () => void }) {
-  return <DisplayMenu kind={kind} name={label} view="default" format="binary" onFormat={() => {}} onView={() => {}} onChoose={() => onChoose?.()} onCollapse={onCollapse} collapseOnly allowVisibility={!!onChoose} />;
+interface CollapsePanelMenuProps {
+  kind: 'sevenseg' | 'pushbuttons';
+  label: string;
+  onCollapse: () => void;
+  onChoose?: () => void;
+  bounce?: BounceChoice;
 }
 
-function MenuIcon({ kind }: { kind: 'grid' | 'eye' | 'collapse' }) {
-  return <span className="pb-display-menu__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{kind === 'grid' ? <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></> : kind === 'eye' ? <><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></> : <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12h8" /></>}</svg></span>;
+export function CollapsePanelMenu({ kind, label, onCollapse, onChoose, bounce }: CollapsePanelMenuProps) {
+  return <DisplayMenu kind={kind} name={label} view="default" format="binary" onFormat={() => {}} onView={() => {}} onChoose={() => onChoose?.()} onCollapse={onCollapse} collapseOnly allowVisibility={!!onChoose} bounce={bounce} />;
+}
+
+type MenuIconKind = 'grid' | 'eye' | 'collapse' | 'clean-edge' | 'bouncy-edge';
+
+/** The drawing of each menu icon, on a 24 × 24 grid. */
+const MENU_ICON_SHAPES: Record<MenuIconKind, JSX.Element> = {
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+  eye: <><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></>,
+  collapse: <><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 12h8" /></>,
+  // A press as an input sees it: high, then one clean step down.
+  'clean-edge': <path d="M2 6h9v12h11" />,
+  // The same press with contact bounce: the input flicks back up a few times before it stays down.
+  'bouncy-edge': <path d="M2 6h5v12h3V8h3v10h3v-5h3v5h3" />,
+};
+
+function MenuIcon({ kind }: { kind: MenuIconKind }) {
+  return <span className="pb-display-menu__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{MENU_ICON_SHAPES[kind]}</svg></span>;
+}
+
+/** Shown in the pushbutton panel's header while its contacts bounce, so the choice is never forgotten. */
+export function BouncyBadge() {
+  return <span className="pb-io-bouncy" title={BOUNCE_OPTIONS[1].hint}><MenuIcon kind="bouncy-edge" />Bouncy</span>;
 }
 
 interface DialogProps extends Pick<Props, 'name' | 'count'> {
