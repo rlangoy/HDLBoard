@@ -12,7 +12,7 @@ import { unwrapCodeFence } from './pasteFence';
 import { tabEdit } from './tabIndent';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import { useQuickFix } from './useQuickFix';
-import { countExtraRows, drawnRows, extraRowsByLine, hasMessageRows, type ExtraRow, type ExtraRowsByLine } from './extraRows';
+import { countExtraRows, drawnRows, extraRowsAbove, extraRowsByLine, hasMessageRows, type ExtraRow, type ExtraRowsByLine } from './extraRows';
 import { ExtraRowLine } from './ExtraRowLine';
 import { useEditorWidth } from './useEditorWidth';
 import { useExtraRowClicks } from './useExtraRowClicks';
@@ -270,8 +270,8 @@ export function EditorSurface({
   // nothing leaves the text unchanged and the live region silent.
   const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
   const statusId = useId();
-  useRevealLine(textareaRef, file, reveal);
-  const quickFix = useQuickFix(textareaRef, diagnostics);
+  useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
+  const quickFix = useQuickFix(textareaRef, diagnostics, () => onDismissDiagnostics?.(file.id));
   useLayoutEffect(() => {
     findAttach?.(textareaRef.current);
     return () => findAttach?.(null);

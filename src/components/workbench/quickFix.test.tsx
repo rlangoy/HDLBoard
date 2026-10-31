@@ -114,6 +114,13 @@ describe('other missing packages', () => {
     expect(advised.advice?.headline).toBe('`coutn` is not declared — did you mean `count`?');
     expect(advised.advice?.fix).toBeUndefined();
   });
+
+  test('a near miss of a declared name is a typo, even when a package declares the word', () => {
+    const content = 'architecture a of e is\n  signal inputs : bit;\nbegin\n  q <= input;\nend;';
+    const [advised] = advise(content, 'DE1_SoC.vhdl:4:8:error: no declaration for "input"');
+    expect(advised.advice?.headline).toBe('`input` is not declared — did you mean `inputs`?');
+    expect(advised.advice?.fix).toBeUndefined();
+  });
 });
 
 describe('the rows under the adder line', () => {

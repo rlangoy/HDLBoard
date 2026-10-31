@@ -61,12 +61,19 @@ export type ButtonBounce = 'none' | 'bouncy';
 
 export const BUTTON_BOUNCES: readonly ButtonBounce[] = ['none', 'bouncy'];
 
+/** The panels of the Board pane, by the name their settings have in `DisplaySettings`. */
+export type BoardPanel = 'leds' | 'sevenSegment' | 'switches' | 'pushbuttons';
+
+export const BOARD_PANELS: readonly BoardPanel[] = ['leds', 'sevenSegment', 'switches', 'pushbuttons'];
+
 export interface DisplaySettings {
   leds?: IoDisplaySettings;
   switches?: IoDisplaySettings;
   sevenSegment?: { visible: number[]; visibilityCount?: number };
   /** Absent: `none`, the buttons as they always were. */
   pushbuttons?: { bounce: ButtonBounce };
+  /** The panels in the order the student dragged them into, every panel once; absent: the layout's own order. */
+  panelOrder?: BoardPanel[];
 }
 
 /** One signal of a saved waveform view. Among the shown, its order in the list is its place in the view. */

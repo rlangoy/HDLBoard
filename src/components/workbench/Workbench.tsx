@@ -16,7 +16,7 @@ import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
-import { buttonBounce, defaultIoDisplaySettings } from '../../project/displaySettings';
+import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
@@ -750,7 +750,7 @@ export function Workbench() {
   // starter top instead (docs/board_io_v2_spec.md § 5.4), in the first language ticked.
   const handleNewStarterFile = () => {
     const language = preferredLanguages.has('vhdl') ? 'vhdl' : 'verilog';
-    const name = starterTopFileName(activeBoard, language, files.map((f) => f.name));
+    const name = starterTopFileName(activeBoard, language, { takenNames: files.map((f) => f.name) });
     addFile(name, generateBoardTop(activeBoard, language, baseName(name)), folderForUpload(name) ?? 'vhdl');
     appendLog(`Added ${name}: a starter top file for the ${activeBoard.name} board.`, 'success');
   };
@@ -1385,7 +1385,7 @@ export function Workbench() {
   /** A new project's top file: the chosen board's generated top, named after the project, in the language chosen. */
   const boardTopFile = ({ name: projectName, board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
     const definition = findBoard(catalog, board).board;
-    const name = starterTopFileName(definition, language, takenNames, projectName);
+    const name = starterTopFileName(definition, language, { takenNames, projectName });
     const content = definition.origin === 'user'
       ? newFileContent(name, language, definition).text
       : generateBoardTop(definition, language, baseName(name));
@@ -1874,8 +1874,8 @@ export function Workbench() {
         <RemoveFilesDialog
           projectName={projectToCreate.name}
           fileNames={fileNames}
-          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, fileNames, projectToCreate.name)}
-          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [], projectToCreate.name)}
+          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, { takenNames: fileNames, projectName: projectToCreate.name })}
+          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, { projectName: projectToCreate.name })}
           onKeep={() => keepFilesInNewProject(projectToCreate)}
           onRemove={() => removeFilesForNewProject(projectToCreate)}
           onCancel={() => setProjectToCreate(null)}
@@ -2116,7 +2116,7 @@ export function Workbench() {
             <BoardFit single={isSingle} collapsed={collapsed.board} paneWidth={layout.boardWidth}
               onResize={(width) => layout.resizeOpenPane('board', width)}
               contentKey={overlay === 'boardSettings' && boardPreview ? boardPreview : activeBoard}>
-              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} /> : <BoardIoPanel
+              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} panelOrder={project.displaySettings?.panelOrder} buttonBounce={buttonBounce(project.displaySettings)} /> : <BoardIoPanel
                 board={activeBoard}
                 key={projectGeneration}
                 displaySettings={project.displaySettings}
@@ -2132,6 +2132,8 @@ export function Workbench() {
                 onInputsChange={handleBoardInputsChange}
                 buttonBounce={buttonBounce(project.displaySettings)}
                 onButtonBounceChange={(bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))}
+                panelOrder={project.displaySettings?.panelOrder}
+                onPanelOrderChange={(panelOrder) => setProject((current) => ({ ...current, displaySettings: withPanelOrder(current.displaySettings, panelOrder) }))}
               />}
             </BoardFit>
           </SidePanel>

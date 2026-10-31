@@ -101,6 +101,13 @@ export function drawnRows(lineCount: number, extra: ExtraRowsByLine): DrawnRow[]
   return rows;
 }
 
+/** The extra rows drawn above a 1-based line: the drawn line is that many rows lower than the textarea's. */
+export function extraRowsAbove(line: number, extra: ExtraRowsByLine): number {
+  let count = 0;
+  for (const [marked, rows] of extra) if (marked < line) count += rows.length;
+  return count;
+}
+
 export function countExtraRows(extra: ExtraRowsByLine): number {
   return [...extra.values()].reduce((count, rows) => count + rows.length, 0);
 }

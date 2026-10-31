@@ -18,9 +18,10 @@ export interface QuickFixActions {
 /**
  * Applies a Quick Fix to the file in the textarea: as one native edit, so Ctrl+Z
  * takes it out again, with the caret left on the new line, so the student sees
- * what was added.
+ * what was added. The added lines move the code below them, so the file's markers
+ * would point at the wrong lines: `onApplied` clears them, as an edit by hand does.
  */
-export function useQuickFix(textareaRef: RefObject<HTMLTextAreaElement>, marked: readonly LineDiagnostic[]): QuickFixActions {
+export function useQuickFix(textareaRef: RefObject<HTMLTextAreaElement>, marked: readonly LineDiagnostic[], onApplied: () => void): QuickFixActions {
   const apply = useCallback(
     (line: number): boolean => {
       const textarea = textareaRef.current;
@@ -32,9 +33,10 @@ export function useQuickFix(textareaRef: RefObject<HTMLTextAreaElement>, marked:
       applyEdit(textarea, insertion.offset, insertion.offset, insertion.text, { caret: insertion.caret });
       textarea.focus({ preventScroll: true });
       showCaret(textarea);
+      onApplied();
       return true;
     },
-    [textareaRef, marked],
+    [textareaRef, marked, onApplied],
   );
 
   const applyAtCaret = useCallback((): boolean => {
