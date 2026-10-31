@@ -13,18 +13,25 @@
 ## 1. What the student does
 
 Grab a panel of the **Board I/O** pane by its frame – the coloured title bar, or the
-button of a collapsed panel – and drop it on another panel. **The two change places.**
+button of a collapsed panel – and move it. **The board shows the new order while you
+drag; release, and that is the order.**
 
 | Moment | What is seen |
 |---|---|
+| Any time | A six-dot grip before each panel title (and in a collapsed panel's button), stronger when the pointer is over the frame and always plain on a touch screen. |
 | Over a title bar | `grab` cursor. The controls in the bar (`•••`, *n hidden*) keep their own meaning. |
 | Pressed, moved < 4 px | Nothing: it is a click (a collapsed panel still expands). |
-| Dragging | The panel lifts (shadow, slightly see-through) and follows the pointer. The panel it would change places with has a dashed blue outline. |
-| Release on a panel | The two panels change places. |
-| Release elsewhere, or **Esc** | Nothing changes; the panel goes back. After Esc the release does nothing either (a collapsed panel does not expand). |
+| Dragging | A copy of the panel, lifted with a soft shadow and a blue border, follows the pointer (`grabbing` cursor). Where the panel was is a pale blue space of its size with a dashed blue edge and a blue line along its top. |
+| Past the middle of another panel | The dragged panel takes that panel's place; the panels between slide one step to make room (180 ms). |
+| Release | The panel settles into the blue space, its shadow fading, and its border flashes blue once. |
+| **Esc**, or the window loses the pointer | Every panel glides back; the release changes nothing (a collapsed panel does not expand). |
 
-Swapping, not inserting, was chosen because it is the easiest rule to predict in a
-2 × 2 grid: *the panel you drop on goes to where yours was*.
+The order is **reading order**: one column top to bottom, two columns row by row. The
+same rule in both layouts – *the panel goes where the blue space is* – and the board
+already shows the result, so there is nothing to predict. A panel only moves once the
+pointer has passed the other panel's middle, and a panel still sliding is ignored, so
+panels of different sizes do not flicker back and forth. With *reduced motion* set in
+the system, the panels jump instead of sliding.
 
 ## 2. Saved in the project file
 
@@ -59,13 +66,13 @@ The order is kept in the project's display settings, beside the other panel opti
 | File | Role |
 |---|---|
 | `src/project/types.ts` | `BoardPanel`, `BOARD_PANELS`, `DisplaySettings.panelOrder`. |
-| `src/project/panelOrder.ts` | Pure: `parsePanelOrder`, `swapPanels`. |
+| `src/project/panelOrder.ts` | Pure: `parsePanelOrder`, `withShownOrder` (the panels on show in their new order; absent ones keep their places). |
 | `src/project/displaySettings.ts` | Reads `panelOrder` with the other display settings. |
-| `src/components/workbench/boardArrangement.ts` | Pure: each layout's own order, and which panel a board cell shows. |
-| `src/components/workbench/usePanelDrag.ts` | The pointer gesture. It only sets `data-board-drag` attributes and two CSS variables, so nothing re-renders until the drop. |
+| `src/components/workbench/boardArrangement.ts` | Pure: each layout's own order, which panel a board cell shows, `moveItem`, and `passesMiddle` (when the pointer has passed a panel). |
+| `src/components/workbench/usePanelDrag.ts` | The pointer gesture. The preview is CSS `order` on the cells plus a copy of the panel, slid with the Web Animations API; nothing re-renders until the drop. The board keeps its width while dragging, so the Board pane's scale stays put. |
 | `src/components/dragGesture.ts` | The 4 px drag threshold and the click swallowed after a drag, shared with the waveform's signal drag. |
 | `src/components/workbench/BoardIoPanel.tsx` | Draws the parts in the arranged order; the DOM order is the grid order. |
-| `src/components/board/Board.css` | Grab cursor, lifted panel, drop outline. |
+| `src/components/board/Board.css` | Grip, cursors, placeholder, lifted copy, drop flash. |
 
 The single-column order used to be CSS `order` rules in `Workbench.css`; it is now the
 DOM order from `arrangedPanels`, so one mechanism decides where a panel goes.
@@ -73,13 +80,13 @@ DOM order from `arrangedPanels`, so one mechanism decides where a panel goes.
 ## 4. Tests
 
 * `src/project/panelOrder.test.ts` – saved and restored through `serializeProject` /
-  `parseProject` with the version unchanged; forgiving reading; swapping.
-* `src/components/workbench/boardArrangement.test.ts` – each layout's order; panels of cells.
+  `parseProject` with the version unchanged; forgiving reading; the shown order.
+* `src/components/workbench/boardArrangement.test.ts` – each layout's order; panels of cells; moving; passing the middle.
 * `src/components/workbench/BoardIoPanel.test.tsx` – the panels are drawn in the saved
   order in both layouts, and are draggable only when a move can be kept.
-* In Chrome: drag, cancel with Esc, drop on a collapsed panel, save, reopen.
+* In Chrome: dragging in both layouts step by step, Esc, a real mouse drag, save, reopen.
 
 ## 5. Not in this version
 
-* Moving a panel with the keyboard.
+* Moving a panel with the keyboard (left out by choice).
 * A *Reset arrangement* command; dragging the panels back does the same.

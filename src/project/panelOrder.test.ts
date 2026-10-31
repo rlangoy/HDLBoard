@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parseProject, serializeProject } from './parseProject';
-import { parsePanelOrder, swapPanels } from './panelOrder';
+import { parsePanelOrder, withShownOrder } from './panelOrder';
 import { withPanelOrder } from './displaySettings';
 import { CURRENT_PROJECT_VERSION, type BoardPanel, type Diagnostic, type HdlBoardProject } from './types';
 
@@ -49,13 +49,13 @@ describe('parsePanelOrder', () => {
   });
 });
 
-describe('swapPanels', () => {
-  it('changes the places of two panels and leaves the others', () => {
-    expect(swapPanels(['leds', 'sevenSegment', 'switches', 'pushbuttons'], 'leds', 'pushbuttons')).toEqual(['pushbuttons', 'sevenSegment', 'switches', 'leds']);
+describe('withShownOrder', () => {
+  it('takes the order the panels are shown in', () => {
+    expect(withShownOrder(ARRANGED, ['leds', 'switches', 'sevenSegment', 'pushbuttons'])).toEqual(['leds', 'switches', 'sevenSegment', 'pushbuttons']);
   });
 
-  it('changes nothing when a panel is dropped on itself', () => {
-    expect(swapPanels(ARRANGED, 'leds', 'leds')).toEqual(ARRANGED);
+  it('a panel the board does not have keeps its place in the list', () => {
+    expect(withShownOrder(['leds', 'switches', 'sevenSegment', 'pushbuttons'], ['pushbuttons', 'leds', 'sevenSegment'])).toEqual(['pushbuttons', 'switches', 'leds', 'sevenSegment']);
   });
 });
 

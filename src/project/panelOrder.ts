@@ -25,13 +25,13 @@ export function parsePanelOrder(raw: unknown, warnings: Diagnostic[]): BoardPane
   return named.length ? completeOrder(named) : undefined;
 }
 
-/** The order with two panels changing places; the others stay where they are. */
-export function swapPanels(order: readonly BoardPanel[], first: BoardPanel, second: BoardPanel): BoardPanel[] {
-  return order.map((panel) => {
-    if (panel === first) return second;
-    if (panel === second) return first;
-    return panel;
-  });
+/**
+ * The order with the panels on show put in the order they are shown in; the panels
+ * the board does not have keep their places, so the order survives a change of board.
+ */
+export function withShownOrder(order: readonly BoardPanel[], shown: readonly BoardPanel[]): BoardPanel[] {
+  const next = [...shown];
+  return order.map((panel) => (shown.includes(panel) ? next.shift() ?? panel : panel));
 }
 
 function completeOrder(panels: readonly BoardPanel[]): BoardPanel[] {

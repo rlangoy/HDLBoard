@@ -51,8 +51,8 @@
 
 /* ------------------------------------------------------------------ *
  * Arranging the panels (docs/imp_rearrange_board_io.md): a panel is
- * dragged by its frame onto another one and the two change places.
- * usePanelDrag sets the data attributes and the offset variables.
+ * dragged by its frame to another place. usePanelDrag sets the data
+ * attributes, the cells' order and the copy's position.
  * ------------------------------------------------------------------ */
 
 .pb-board--arrangeable .pb-panel__header {
@@ -66,24 +66,77 @@
   touch-action: none;
 }
 
+/* The grip: six dots before the title, stronger when the frame is under the pointer. */
+.pb-board--arrangeable .pb-panel__title::before,
+.pb-board--arrangeable > .pb-io-collapsed::before {
+  content: '';
+  display: inline-block;
+  flex: none;
+  width: 0.5em;
+  height: 0.75em;
+  margin-right: 0.45em;
+  vertical-align: -0.05em;
+  background-image: radial-gradient(circle closest-side, currentColor 70%, transparent 80%);
+  background-size: 50% 33.34%;
+  opacity: 0.4;
+  transition: opacity 150ms;
+}
+
+.pb-board--arrangeable .pb-panel__header:hover .pb-panel__title::before,
+.pb-board--arrangeable > .pb-io-collapsed:hover::before {
+  opacity: 0.85;
+}
+
+/* No hover on a touch screen: the grip is always plain to see. */
+@media (hover: none) {
+  .pb-board--arrangeable .pb-panel__title::before,
+  .pb-board--arrangeable > .pb-io-collapsed::before {
+    opacity: 0.75;
+  }
+}
+
+.pb-board[data-board-dragging] {
+  position: relative;
+}
+
 .pb-board[data-board-dragging],
 .pb-board[data-board-dragging] * {
   cursor: grabbing !important;
   user-select: none;
 }
 
-/* The lifted panel follows the pointer and lets it through to the panel below. */
-.pb-board > [data-board-drag="source"] {
-  position: relative;
-  z-index: 2;
-  translate: var(--pb-drag-x, 0) var(--pb-drag-y, 0);
-  opacity: 0.85;
-  box-shadow: 0 12px 28px var(--pb-dialog-shadow);
+/* Where the panel lands: a pale blue space of its size, a blue line along its top. */
+.pb-board > [data-board-drag="placeholder"] {
+  border-style: dashed;
+  border-color: var(--pb-focus);
+  background: color-mix(in srgb, var(--pb-focus) 10%, var(--pb-card-bg));
+  box-shadow: inset 0 3px 0 var(--pb-focus);
+}
+
+.pb-board > [data-board-drag="placeholder"] > *,
+.pb-board > [data-board-drag="placeholder"]::before {
+  visibility: hidden;
+}
+
+/* The copy that follows the pointer, lifted: a soft shadow and a blue border. */
+.pb-board > .pb-board__ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  margin: 0;
+  scale: 1.02;
+  border-color: var(--pb-focus);
+  box-shadow: 0 14px 32px var(--pb-dialog-shadow), 0 2px 6px var(--pb-dialog-shadow);
   pointer-events: none;
 }
 
-/* Where it lands: the panel it changes places with. */
-.pb-board > [data-board-drag="target"] {
-  outline: 3px dashed var(--pb-focus);
-  outline-offset: 3px;
+/* Dropped: the border flashes blue once. */
+.pb-board > [data-board-dropped] {
+  animation: pb-board-dropped 700ms ease-out;
+}
+
+@keyframes pb-board-dropped {
+  from { outline: 3px solid var(--pb-focus); outline-offset: 2px; }
+  to { outline: 3px solid transparent; outline-offset: 2px; }
 }

@@ -12,7 +12,7 @@ import type { BoardLayout } from './boardLayoutPreference';
 import { buttonsTitle, displaysTitle, ledsTitle, switchesTitle } from './boardText';
 import type { BoardPanel, ButtonBounce, DisplaySettings, IoDisplaySettings } from '../../project/types';
 import { visibleIndices, withVisibleIndices } from '../../project/displaySettings';
-import { swapPanels } from '../../project/panelOrder';
+import { withShownOrder } from '../../project/panelOrder';
 import { arrangedPanels, orderToSave } from './boardArrangement';
 import { usePanelDrag } from './usePanelDrag';
 
@@ -32,7 +32,7 @@ export interface BoardIoPanelProps {
   onButtonBounceChange?: (bounce: ButtonBounce) => void;
   /** Where the student dragged the panels; absent: the layout's own order. */
   panelOrder?: readonly BoardPanel[];
-  /** Given: a panel dragged by its frame onto another one changes places with it; undefined is the layout's own order. */
+  /** Given: a panel can be dragged by its frame to another place; undefined is the layout's own order. */
   onPanelOrderChange?: (order: BoardPanel[] | undefined) => void;
 }
 
@@ -45,7 +45,7 @@ export interface BoardIoPanelProps {
 export function BoardIoPanel(props: BoardIoPanelProps) {
   const { board, layout = 'two-columns', panelOrder, onPanelOrderChange } = props;
   const order = arrangedPanels(panelOrder, layout);
-  const onPointerDown = usePanelDrag(onPanelOrderChange && ((from, to) => onPanelOrderChange(orderToSave(swapPanels(order, from, to), layout))));
+  const onPointerDown = usePanelDrag(onPanelOrderChange && ((shown) => onPanelOrderChange(orderToSave(withShownOrder(order, shown), layout))));
   const parts = boardParts(props);
   const className = [layout === 'single-column' && 'pb-board--single', onPointerDown && 'pb-board--arrangeable'].filter(Boolean).join(' ');
   return (

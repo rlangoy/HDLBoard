@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
-import { arrangedPanels, orderToSave, panelOfCell } from './boardArrangement';
+import { arrangedPanels, moveItem, orderToSave, panelOfCell, passesMiddle } from './boardArrangement';
 
 /** A board cell with these classes, as far as panelOfCell looks at it. */
 const cell = (...classes: string[]) => ({ classList: { contains: (name: string) => classes.includes(name) } }) as unknown as Element;
@@ -37,5 +37,43 @@ describe('panelOfCell', () => {
     expect(panelOfCell(cell('pb-io-collapsed', 'pb-leds'))).toBe('leds');
     expect(panelOfCell(cell('pb-reset'))).toBe('pushbuttons');
     expect(panelOfCell(cell('pb-io-dialog'))).toBeUndefined();
+  });
+});
+
+describe('moveItem', () => {
+  it("moving down: the item takes the target's place, those between move up", () => {
+    expect(moveItem(['a', 'b', 'c', 'd'], 'a', 'c')).toEqual(['b', 'c', 'a', 'd']);
+  });
+
+  it("moving up: the item takes the target's place, those between move down", () => {
+    expect(moveItem(['a', 'b', 'c', 'd'], 'd', 'b')).toEqual(['a', 'd', 'b', 'c']);
+  });
+
+  it('an item or target not in the list changes nothing', () => {
+    expect(moveItem(['a', 'b'], 'x', 'a')).toEqual(['a', 'b']);
+    expect(moveItem(['a', 'b'], 'a', 'x')).toEqual(['a', 'b']);
+  });
+});
+
+describe('passesMiddle', () => {
+  const placeholder = { left: 0, top: 0, width: 100, height: 20 };
+  const below = { left: 0, top: 30, width: 100, height: 80 };
+  const beside = { left: 120, top: 0, width: 100, height: 20 };
+
+  it('a panel below is passed once the pointer is under its middle', () => {
+    expect(passesMiddle({ x: 50, y: 60 }, below, placeholder)).toBe(false);
+    expect(passesMiddle({ x: 50, y: 80 }, below, placeholder)).toBe(true);
+  });
+
+  it('in the same row it is sideways that counts', () => {
+    expect(passesMiddle({ x: 160, y: 10 }, beside, placeholder)).toBe(false);
+    expect(passesMiddle({ x: 180, y: 10 }, beside, placeholder)).toBe(true);
+  });
+
+  it('after a tall panel moved up, the still pointer does not move it back', () => {
+    const tallAbove = { left: 0, top: 0, width: 100, height: 80 };
+    const placeholderBelow = { left: 0, top: 90, width: 100, height: 20 };
+    expect(passesMiddle({ x: 50, y: 80 }, tallAbove, placeholderBelow)).toBe(false);
+    expect(passesMiddle({ x: 50, y: 30 }, tallAbove, placeholderBelow)).toBe(true);
   });
 });
