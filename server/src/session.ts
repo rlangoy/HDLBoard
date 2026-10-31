@@ -35,7 +35,7 @@ import type { BoardFiles, PrepareRequest, PrepareResult, RunPlan, SimEngine, Wav
 import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
-import { type ErrorStage, type ServerFrame, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile } from './wave/waveTransfer.js';
@@ -61,6 +61,21 @@ const OUTPUT_FILE_NAME = 'output.txt';
  * a stalled simulation can't make input.txt grow without limit.
  */
 const MAX_STIM_QUEUE = 256;
+
+/** A `STIM` step the running testbench has not acknowledged yet. */
+interface QueuedStim extends StimStep {
+  readonly seq: number;
+}
+
+/** A line of the testbench's input queue: `<seq> <bits>`, then ` <holdNs>` for a timed step. */
+function queueLine({ seq, bits, holdNs }: QueuedStim): string {
+  return holdNs === undefined ? `${seq} ${bits}\n` : `${seq} ${bits} ${holdNs}\n`;
+}
+
+/** A single untimed state equal to the last one queued changes nothing; timed steps always count. */
+function isUnchanged(steps: readonly StimStep[], lastBits: string | null): boolean {
+  return steps.length === 1 && steps[0].holdNs === undefined && steps[0].bits === lastBits;
+}
 /**
  * How often the Node side re-reads output.txt for a change (§ 7.2). Once
  * § 5.12 cut the VHDL side's own sampling to milliseconds, this became the
@@ -204,7 +219,7 @@ export class Session {
    * (§ 5.13). `stimSeq` is per session, never per run, so an ack from a
    * just-killed process can't be mistaken for one from its replacement.
    */
-  private stimQueue: Array<{ seq: number; bits: string }> = [];
+  private stimQueue: QueuedStim[] = [];
   private stimSeq = 0;
   private lastStimBits: string | null = null;
   private lastSentState: string | null = null;
@@ -746,19 +761,24 @@ export class Session {
     }
   }
 
-  handleStim(bits: string): void {
+  /**
+   * Queues a `STIM`'s steps: one input state, or a bouncing button's timed steps,
+   * which the testbench applies exactly `holdNs` apart in simulated time.
+   */
+  handleStim(steps: readonly StimStep[]): void {
     if (this.state !== 'running' || this.plan?.mode !== 'board') return;
-    if (bits.length !== stimLength(this.runBoard)) {
-      this.send({ verb: 'ERROR', stage: 'protocol', text: stimLengthMessage(this.runBoard, bits.length) });
+    const wrong = steps.find((step) => step.bits.length !== stimLength(this.runBoard));
+    if (wrong !== undefined) {
+      this.send({ verb: 'ERROR', stage: 'protocol', text: stimLengthMessage(this.runBoard, wrong.bits.length) });
       return;
     }
-    if (bits === this.lastStimBits) return;
-    this.lastStimBits = bits;
+    if (isUnchanged(steps, this.lastStimBits)) return;
+    this.lastStimBits = steps[steps.length - 1].bits;
     // Queued, not overwritten (§ 5.13): a press and its release can reach
     // this process in the same event-loop turn on a loaded machine, and a
     // snapshot file would let the release replace the press before GHDL
     // ever sampled it — a lost click.
-    this.stimQueue.push({ seq: ++this.stimSeq, bits });
+    for (const step of steps) this.stimQueue.push({ seq: ++this.stimSeq, ...step });
     if (this.stimQueue.length > MAX_STIM_QUEUE) this.stimQueue.splice(0, this.stimQueue.length - MAX_STIM_QUEUE);
     this.writeStimQueue();
   }
@@ -768,7 +788,7 @@ export class Session {
     // GHDL process, and a rename within the same directory is atomic on
     // POSIX, so the reader never observes a partially-written queue.
     const tmp = `${this.inputPath()}.tmp`;
-    writeFileSync(tmp, this.stimQueue.map((s) => `${s.seq} ${s.bits}\n`).join(''));
+    writeFileSync(tmp, this.stimQueue.map(queueLine).join(''));
     this.renameOverOpenFile(tmp, this.inputPath());
   }
 

@@ -11,6 +11,8 @@ import {
   locateLink,
   normalizeFileName,
   offsetOfLine,
+  scrollToShow,
+  visualColumn,
   type LocatedDiagnostic,
   type RunSnapshot,
 } from './diagnosticLocation';
@@ -167,5 +169,37 @@ describe('offsetOfLine and lineHeightOrFallback', () => {
 
   test('S-19: "normal" falls back to the measured height', () => {
     expect(lineHeightOrFallback('normal', 400, 10)).toBe(40);
+  });
+});
+
+describe('visualColumn', () => {
+  test('counts characters', () => {
+    expect(visualColumn('    q <= unsigned(d);', 9, 4)).toBe(9);
+  });
+
+  test('a tab advances to the next tab stop', () => {
+    expect(visualColumn('\tq', 1, 4)).toBe(4);
+    expect(visualColumn('ab\tq', 3, 4)).toBe(4);
+    expect(visualColumn('abcd\tq', 5, 4)).toBe(8);
+  });
+});
+
+describe('scrollToShow', () => {
+  const view = { scroll: 0, size: 400 };
+
+  test('a place already in view does not scroll', () => {
+    expect(scrollToShow(200, view, 50)).toBe(0);
+  });
+
+  test('a place past the far edge scrolls so it shows, with the margin before it', () => {
+    expect(scrollToShow(700, view, 50)).toBe(650);
+  });
+
+  test('a place before the view scrolls back to it', () => {
+    expect(scrollToShow(600, { scroll: 900, size: 400 }, 50)).toBe(550);
+  });
+
+  test('a place that fits at the start scrolls right back to the start', () => {
+    expect(scrollToShow(100, { scroll: 300, size: 400 }, 50)).toBe(0);
   });
 });

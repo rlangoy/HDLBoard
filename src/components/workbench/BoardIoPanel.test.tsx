@@ -81,3 +81,19 @@ describe('BoardIoPanel', () => {
     expect(html).toContain('5 displays hidden');
   });
 });
+
+describe('BoardIoPanel pushbutton bounce', () => {
+  const panel = (buttonBounce?: 'none' | 'bouncy') => {
+    const board = builtInBoard('de1-soc');
+    return renderToStaticMarkup(<BoardIoPanel board={board} outputs={outputsOff(board.ports)} inputs={restInputs(board.ports)} onInputsChange={() => {}} buttonBounce={buttonBounce} />);
+  };
+
+  it('shows no badge by default: the buttons act as they always did', () => {
+    expect(panel()).not.toContain('pb-io-bouncy');
+    expect(panel('none')).not.toContain('pb-io-bouncy');
+  });
+
+  it('marks the pushbutton panel "Bouncy" while the contacts bounce', () => {
+    expect(panel('bouncy')).toMatch(/class="pb-io-bouncy"[^>]*>.*Bouncy<\/span>/);
+  });
+});

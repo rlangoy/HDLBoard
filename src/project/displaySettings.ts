@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { isObject } from './jsonValue';
-import type { Diagnostic, DisplaySettings, IoDisplaySettings } from './types';
+import { BUTTON_BOUNCES, type ButtonBounce, type Diagnostic, type DisplaySettings, type IoDisplaySettings } from './types';
 
 export function defaultIoDisplaySettings(count: number): IoDisplaySettings {
   return { groupSize: null, visible: Array.from({ length: count }, (_, i) => i), visibilityCount: count, readouts: { binary: true, hexadecimal: false, decimal: false } };
@@ -53,7 +53,17 @@ export function parseDisplaySettings(raw: unknown, warnings: Diagnostic[]): Disp
       result.sevenSegment = { visible: [...new Set(value.visible as number[])], ...(validCount(value.visibilityCount) ? { visibilityCount: value.visibilityCount as number } : {}) };
     } else warnings.push({ severity: 'warning', message: 'Invalid displaySettings.sevenSegment; using default display settings.' });
   }
+  if (raw.pushbuttons !== undefined) {
+    const value = raw.pushbuttons;
+    if (isObject(value) && BUTTON_BOUNCES.includes(value.bounce as ButtonBounce)) result.pushbuttons = { bounce: value.bounce as ButtonBounce };
+    else warnings.push({ severity: 'warning', message: 'Invalid displaySettings.pushbuttons; the pushbuttons do not bounce.' });
+  }
   return Object.keys(result).length ? result : undefined;
+}
+
+/** How the pushbuttons behave in a project: `none` unless it says otherwise. */
+export function buttonBounce(settings: DisplaySettings | undefined): ButtonBounce {
+  return settings?.pushbuttons?.bounce ?? 'none';
 }
 
 function validCount(value: unknown): boolean { return Number.isSafeInteger(value) && (value as number) >= 0; }

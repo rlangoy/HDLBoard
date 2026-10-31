@@ -23,6 +23,8 @@ import type { BoardDefinition } from '../../boards/types';
 export interface BoardIo {
   readonly inputs: BoardInputs;
   readonly outputs: BoardOutputs;
+  /** The latest inputs, which may be newer than the last render's. */
+  latestInputs(): BoardInputs;
   /** Merges `changed` into the latest inputs (not the last render's) and returns the result. */
   setInputs(changed: Partial<BoardInputs>): BoardInputs;
   /** The `STIM` payload for the inputs as they are now. */
@@ -60,6 +62,8 @@ export function useBoardIo(board: BoardDefinition): BoardIo {
     setOutputs(outputsOff(board.ports));
   }, [board, setInputs]);
 
+  const latestInputs = useCallback(() => inputsRef.current, []);
+
   const stimBits = useCallback(() => encodeStim(boardRef.current.ports, inputsRef.current), []);
 
   const showState = useCallback((bits: string) => {
@@ -78,5 +82,5 @@ export function useBoardIo(board: BoardDefinition): BoardIo {
     setOutputs(outputsOff(boardRef.current.ports));
   }, []);
 
-  return { inputs, outputs, setInputs, stimBits, showState, blank };
+  return { inputs, outputs, latestInputs, setInputs, stimBits, showState, blank };
 }

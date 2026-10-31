@@ -12,6 +12,7 @@
 export interface TextMetrics {
   readonly paddingTop: number;
   readonly paddingLeft: number;
+  readonly paddingRight: number;
   readonly lineHeight: number;
   /** Width of one character of the monospace font, in px. */
   readonly charWidth: number;
@@ -32,19 +33,72 @@ export interface TextCell {
   readonly offset: number;
 }
 
-/** The character under the pointer, or undefined over padding, past a line's end, or below the last line. */
-export function cellAtPointer(
-  pointer: PointerInText,
-  metrics: TextMetrics,
-  lines: readonly string[],
-): TextCell | undefined {
+/**
+ * One row the editor draws: a line of the file, or an extra row the editor adds
+ * under it (an error message that would not fit after the code, a Quick Fix).
+ * The textarea has no extra rows, so below one its text is a row higher than drawn.
+ */
+export interface DrawnRow {
+  /** 0-based: the line shown, or the line an extra row sits under. */
+  readonly line: number;
+  readonly extra: boolean;
+}
+
+/** The file's lines, and the rows they are drawn on; without `rows`, row n shows line n. */
+export interface TextRows {
+  readonly lines: readonly string[];
+  readonly rows?: readonly DrawnRow[];
+}
+
+/** Where the pointer is in the drawn text: which row, and how many columns from the left. */
+interface DrawnPlace {
+  readonly row: DrawnRow;
+  /** 0-based. */
+  readonly rowIndex: number;
+  readonly column: number;
+}
+
+function drawnPlace(pointer: PointerInText, metrics: TextMetrics, text: TextRows): DrawnPlace | undefined {
   const top = pointer.y + pointer.scrollTop - metrics.paddingTop;
   const left = pointer.x + pointer.scrollLeft - metrics.paddingLeft;
-  if (top < 0 || left < 0 || metrics.lineHeight <= 0 || metrics.charWidth <= 0) return undefined;
-  const line = Math.floor(top / metrics.lineHeight);
-  if (line >= lines.length) return undefined;
-  const offset = offsetAtColumn(lines[line], Math.floor(left / metrics.charWidth), metrics.tabSize);
+  if (top < 0 || metrics.lineHeight <= 0 || metrics.charWidth <= 0) return undefined;
+  const rowIndex = Math.floor(top / metrics.lineHeight);
+  const row = text.rows ? text.rows[rowIndex] : rowIndex < text.lines.length ? { line: rowIndex, extra: false } : undefined;
+  return row && { row, rowIndex, column: Math.floor(left / metrics.charWidth) };
+}
+
+/** The character under the pointer, or undefined over padding, past a line's end, on an extra row, or below the last line. */
+export function cellAtPointer(pointer: PointerInText, metrics: TextMetrics, text: TextRows): TextCell | undefined {
+  const place = drawnPlace(pointer, metrics, text);
+  if (place === undefined || place.row.extra || place.column < 0) return undefined;
+  const { line } = place.row;
+  const offset = offsetAtColumn(text.lines[line], place.column, metrics.tabSize);
   return offset === undefined ? undefined : { line, offset };
+}
+
+/** Where a click puts the caret, and how many extra rows are drawn above its line. */
+export interface CaretPlace extends TextCell {
+  readonly extraRowsAbove: number;
+}
+
+/** How many extra rows are drawn above a line: how far below its textarea row it shows. */
+function extraRowsAbove(line: number, text: TextRows): number {
+  const drawnAt = text.rows?.findIndex((row) => !row.extra && row.line === line) ?? line;
+  return Math.max(0, drawnAt - line);
+}
+
+/**
+ * Where a click on the drawn text puts the caret, as the textarea would without
+ * extra rows: on the character clicked, at the end of a line clicked past, and at
+ * the end of the line above for an extra row. Undefined below the last row.
+ */
+export function caretAtPointer(pointer: PointerInText, metrics: TextMetrics, text: TextRows): CaretPlace | undefined {
+  const place = drawnPlace(pointer, metrics, text);
+  if (place === undefined) return undefined;
+  const { line, extra } = place.row;
+  const length = text.lines[line].length;
+  const clicked = extra ? length : offsetAtColumn(text.lines[line], Math.max(0, place.column), metrics.tabSize);
+  return { line, offset: clicked ?? length, extraRowsAbove: extraRowsAbove(line, text) };
 }
 
 /** The character drawn at a visual column, counting a tab as reaching the next tab stop. */

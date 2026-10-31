@@ -16,7 +16,8 @@ import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
-import { defaultIoDisplaySettings } from '../../project/displaySettings';
+import { buttonBounce, defaultIoDisplaySettings } from '../../project/displaySettings';
+import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
@@ -76,7 +77,7 @@ import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
 import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
-import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
+import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
@@ -398,6 +399,8 @@ export function Workbench() {
   // The Board pane: inputs the student sets, outputs the simulation drives (useBoardIo).
   // Outputs stay off whenever no simulation is running (Design_Description.md § 5 convention 11).
   const boardIo = useBoardIo(activeBoard);
+  // Each pushbutton's bounce generator: kept from press to press, started afresh by each run.
+  const buttonRandoms = useRef(createButtonRandoms()).current;
   const activeBoardName = useRef(activeBoard.name);
   activeBoardName.current = activeBoard.name;
 
@@ -474,10 +477,10 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>, highlight?: string) => navigate(() => {
+  const revealLocation = useCallback((target: RevealTarget, highlight?: string) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId(), highlight });
+    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight });
   }), [navigate, setOverlay]);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
   const openConsoleDiagnostic = useCallback(
@@ -535,6 +538,7 @@ export function Workbench() {
           // that reacts combinationally shows the right thing before the
           // user touches anything.
           clientRef.current?.stim(boardIo.stimBits());
+          buttonRandoms.reset();
         },
         onState: (bits) => {
           boardIo.showState(bits);
@@ -1469,9 +1473,15 @@ export function Workbench() {
 
   // The next value is sent, never the inputs state variable: React state isn't updated
   // synchronously, so the stale value would leave the board one flip behind (§ 8.3).
+  // With bouncy pushbuttons a press or release is sent as the timed steps of its bounce.
   const handleBoardInputsChange = (changed: Partial<BoardInputs>) => {
+    const before = boardIo.latestInputs();
     const next = boardIo.setInputs(changed);
-    getClient().stim(encodeStim(activeBoard.ports, next));
+    if (buttonBounce(project.displaySettings) === 'bouncy') {
+      getClient().stimSteps(bouncingStims(activeBoard.ports, { before, after: next }, buttonRandoms));
+    } else {
+      getClient().stim(encodeStim(activeBoard.ports, next));
+    }
   };
 
   // A new run starts with an empty console, so what it shows is this run's output only.
@@ -2120,6 +2130,8 @@ export function Workbench() {
                 outputs={boardIo.outputs}
                 inputs={boardIo.inputs}
                 onInputsChange={handleBoardInputsChange}
+                buttonBounce={buttonBounce(project.displaySettings)}
+                onButtonBounceChange={(bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))}
               />}
             </BoardFit>
           </SidePanel>

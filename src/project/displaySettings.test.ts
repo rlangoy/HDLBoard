@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseProject, serializeProject } from './parseProject';
 import type { HdlBoardProject } from './types';
-import { visibleIndices, withVisibilityCounts, withVisibleIndices } from './displaySettings';
+import { buttonBounce, visibleIndices, withVisibilityCounts, withVisibleIndices } from './displaySettings';
 
 describe('project display settings', () => {
   const base: HdlBoardProject = { version: 2, name: 'Test', board: 'default', description: '', files: [] };
@@ -45,5 +45,27 @@ describe('project display settings', () => {
     expect(visibleIndices(edited, 16)).toEqual([0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     expect(visibleIndices(edited, 18).slice(-2)).toEqual([16, 17]);
     expect(visibleIndices(parseProject(serializeProject({ ...base, displaySettings: { sevenSegment: edited } })).project.displaySettings?.sevenSegment, 16)).toEqual(visibleIndices(edited, 16));
+  });
+});
+
+describe('pushbutton bounce setting', () => {
+  const base: HdlBoardProject = { version: 2, name: 'Test', board: 'default', description: '', files: [] };
+
+  it('is stored in the project and restored from it', () => {
+    const saved = serializeProject({ ...base, displaySettings: { pushbuttons: { bounce: 'bouncy' } } });
+    const restored = parseProject(saved).project.displaySettings;
+    expect(restored).toEqual({ pushbuttons: { bounce: 'bouncy' } });
+    expect(buttonBounce(restored)).toBe('bouncy');
+  });
+
+  it('is No Bounce when a project does not say, as the buttons always were', () => {
+    expect(buttonBounce(parseProject(serializeProject(base)).project.displaySettings)).toBe('none');
+    expect(buttonBounce({ leds: undefined })).toBe('none');
+  });
+
+  it('ignores an unknown value with a warning, and the buttons do not bounce', () => {
+    const parsed = parseProject(JSON.stringify({ ...base, displaySettings: { pushbuttons: { bounce: 'springy' } } }));
+    expect(buttonBounce(parsed.project.displaySettings)).toBe('none');
+    expect(parsed.warnings.some((warning) => warning.message.includes('displaySettings.pushbuttons'))).toBe(true);
   });
 });

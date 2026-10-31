@@ -35,3 +35,29 @@ describe('the RUN header', () => {
     assert.equal('runTarget' in (decodeClientFrame(`RUN alu.vhd\n${BODY}`) as object), false);
   });
 });
+
+describe('STIM', () => {
+  test('one state, as always', () => {
+    assert.deepEqual(decodeClientFrame('STIM 00000000001111'), { verb: 'STIM', steps: [{ bits: '00000000001111' }] });
+  });
+
+  test('timed steps: a bouncing button, each held its ns before the next', () => {
+    assert.deepEqual(decodeClientFrame('STIM 1110/20000 1111/150 1110'), {
+      verb: 'STIM',
+      steps: [{ bits: '1110', holdNs: 20000 }, { bits: '1111', holdNs: 150 }, { bits: '1110' }],
+    });
+  });
+
+  test('decode and encode round-trip', () => {
+    for (const text of ['STIM 1111', 'STIM 1110/20000 1111/150 1110']) {
+      const frame = decodeClientFrame(text);
+      assert.equal(encodeClientFrame(frame as Parameters<typeof encodeClientFrame>[0]), text);
+    }
+  });
+
+  test('refuses a hold of zero, a hold past 1 s, a malformed step and too many steps', () => {
+    for (const text of ['STIM 1110/0', 'STIM 1110/1000000001', 'STIM 1110/ 1111', 'STIM 11x0', `STIM ${Array(33).fill('1').join(' ')}`]) {
+      assert.ok('message' in decodeClientFrame(text), text);
+    }
+  });
+});

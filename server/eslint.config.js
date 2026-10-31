@@ -37,6 +37,7 @@ const NEW_CODE = [
   'src/boardFrameFields.ts',
   'src/boardNames.ts',
   'src/integration/boardShapes.test.ts',
+  'src/integration/bounceTrain.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

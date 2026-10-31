@@ -13,9 +13,12 @@ import {
   countSeverities,
   isMuted,
   isMutedLine,
+  quickFixOf,
   type LineDiagnostic,
   type LineMessage,
 } from './diagnosticStore';
+import type { QuickFix } from './diagnosticAdvice';
+import { packagePath, useClauseText, type VhdlPackage } from './vhdlPackages';
 
 export const INLINE_MESSAGE_MAX_CHARS = 120;
 const ELLIPSIS = '…';
@@ -40,6 +43,12 @@ export const adviceText = {
   /** Rule B for Icarus, which often reports a misspelled keyword on the next line of code. */
   keywordTypoOnLine: (word: string, line: number, keyword: string, language: string): string =>
     `${code(word)} (line ${line}) is not a ${language} keyword — did you mean ${code(keyword)}?`,
+  /** The missing package, offered as a Quick Fix. */
+  missingPackage: (word: string, pkg: VhdlPackage): string =>
+    `${code(word)} comes from the package ${code(packagePath(pkg))}, which this file does not use yet.`,
+  /** The missing package, when the file uses one that cannot be used with it. */
+  packageClash: (word: string, pkg: VhdlPackage, clash: VhdlPackage): string =>
+    `${code(word)} comes from ${code(packagePath(pkg))}, but this file uses ${code(packagePath(clash))}, which clashes with it — use only one of them.`,
   /** Rule C. */
   undeclared: (word: string, suggestion: string): string =>
     `${code(word)} is not declared — did you mean ${code(suggestion)}?`,
@@ -67,6 +76,14 @@ export const adviceText = {
   /** Rule F, on the line of the first error itself. */
   followOnSameLine: (): string => 'Probably caused by the first error on this line — fix that one first and run again.',
 };
+
+/** The Quick Fix button: what it will add. */
+export function quickFixTitle(fix: QuickFix): string {
+  return `Add ${code(useClauseText(fix.addUseClause))}`;
+}
+
+/** The keyboard shortcut of the Quick Fix, as VS Code has it. */
+export const QUICK_FIX_SHORTCUT = 'Ctrl+.';
 
 function inDisplayOrder(line: LineDiagnostic): LineMessage[] {
   return [...line.messages].sort(byDisplayOrder);
@@ -116,9 +133,22 @@ export function describeHint(from: LineDiagnostic): string {
  * not counted, and a line of only muted follow-ons has no inline text.
  */
 export function inlineText(line: LineDiagnostic): string {
+  return messageText(line, truncate);
+}
+
+/** The line's first visible message, shaped by `shape`, and how many more there are. */
+function messageText(line: LineDiagnostic, shape: (headline: string) => string): string {
   const [first, ...others] = visibleInDisplayOrder(line);
   if (first === undefined) return '';
-  return `${truncate(headlineOf(first))}${others.length > 0 ? ` (+${others.length} more)` : ''}`;
+  return `${shape(headlineOf(first))}${others.length > 0 ? ` (+${others.length} more)` : ''}`;
+}
+
+/**
+ * The text of a line's message drawn on rows of its own: as the inline text, but
+ * whole, because it is wrapped instead of cut.
+ */
+export function fullMessageText(line: LineDiagnostic): string {
+  return messageText(line, (headline) => headline);
 }
 
 function count(n: number, noun: string): string {
@@ -135,7 +165,9 @@ export function summarize(fileName: string, lines: readonly LineDiagnostic[]): s
   if (shown.length === 0) return '';
   const first = [...shown].sort((a, b) => a.line - b.line)[0];
   const [message] = visibleInDisplayOrder(first);
-  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))} ${CLEAR_HINT}`;
+  const fix = quickFixOf(first);
+  const offer = fix ? ` Quick Fix, ${QUICK_FIX_SHORTCUT}: ${quickFixTitle(fix)}.` : '';
+  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))}${offer} ${CLEAR_HINT}`;
 }
 
 /** "2 errors, 1 warning" — the counts a file's problem mark stands for; `''` for none. */

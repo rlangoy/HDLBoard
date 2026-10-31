@@ -17,6 +17,7 @@ import {
   encodeClientFrame,
   type ClientFrame,
   type ServerFrame,
+  type StimStep,
   type VhdlFileInput,
 } from '../protocol.js';
 import type { BoardIo } from '../engines/boardPorts.js';
@@ -77,7 +78,12 @@ export class WsTestClient {
   }
 
   stim(bits: string): void {
-    this.sendFrame({ verb: 'STIM', bits });
+    this.sendFrame({ verb: 'STIM', steps: [{ bits }] });
+  }
+
+  /** A `STIM` of timed steps, as a bouncing button sends it (protocol 4). */
+  stimSteps(steps: readonly StimStep[]): void {
+    this.sendFrame({ verb: 'STIM', steps });
   }
 
   stop(): void {

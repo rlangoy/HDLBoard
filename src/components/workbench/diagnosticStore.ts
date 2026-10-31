@@ -8,7 +8,7 @@
  * (that is `diagnosticText.ts`).
  */
 
-import type { Advice, AdvisedDiagnostic, Span } from './diagnosticAdvice';
+import type { Advice, AdvisedDiagnostic, QuickFix, Span } from './diagnosticAdvice';
 import type { DiagnosticSeverity } from './diagnostics';
 
 /** A runtime assertion with a changing text ($error("count=%0d", i)) would otherwise grow without bound. */
@@ -83,6 +83,11 @@ export function countSeverities(lines: readonly LineDiagnostic[]): { errors: num
   const messages = lines.flatMap((line) => line.messages).filter((m) => !isMuted(m));
   const errors = messages.filter((m) => m.severity === 'error').length;
   return { errors, warnings: messages.length - errors };
+}
+
+/** The Quick Fix offered on a line: that of its first message that has one and is not muted. */
+export function quickFixOf(line: LineDiagnostic): QuickFix | undefined {
+  return line.messages.find((m) => m.advice?.fix && !isMuted(m))?.advice?.fix;
 }
 
 /** The words to underline on a line: those of its messages that are not muted. */
