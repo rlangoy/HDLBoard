@@ -1378,17 +1378,17 @@ export function Workbench() {
     else setProjectToCreate(choice);
   };
 
-  /** A new project's top file: the chosen board's generated top, named after the board, in the language chosen. */
-  const boardTopFile = ({ board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
+  /** A new project's top file: the chosen board's generated top, named after the project, in the language chosen. */
+  const boardTopFile = ({ name: projectName, board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
     const definition = findBoard(catalog, board).board;
-    const name = starterTopFileName(definition, language, takenNames);
+    const name = starterTopFileName(definition, language, takenNames, projectName);
     const content = definition.origin === 'user'
       ? newFileContent(name, language, definition).text
       : generateBoardTop(definition, language, baseName(name));
     return { id: nextFileId(), name, folder: folderForUpload(name) ?? 'vhdl', content };
   };
 
-  /** A new project on `board`, listing `listed`, with `top` as its Top File, shown on the project settings. */
+  /** A new project on `board`, listing `listed`, with `top` as its Top File, open in the editor. */
   const createProject = (name: string, board: string, listed: readonly string[], top: VhdlFile) => {
     const created = withBoardConfig(newProject(name, listed, board), catalog.boardConfigFor(board));
     saveFolderRef.current = null;
@@ -1396,8 +1396,7 @@ export function Workbench() {
     showNewFile(top.id);
     setTopFileId(top.id);
     setTopUnit(null);
-    setOverlay('project');
-    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings.`, 'success');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings (click the project in Files).`, 'success');
   };
 
   /**
@@ -1865,8 +1864,8 @@ export function Workbench() {
         <RemoveFilesDialog
           projectName={projectToCreate.name}
           fileNames={fileNames}
-          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, fileNames)}
-          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [])}
+          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, fileNames, projectToCreate.name)}
+          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, [], projectToCreate.name)}
           onKeep={() => keepFilesInNewProject(projectToCreate)}
           onRemove={() => removeFilesForNewProject(projectToCreate)}
           onCancel={() => setProjectToCreate(null)}

@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_BOARDS, builtInBoard, DEFAULT_BOARD } from './boardCatalog';
-import { boardTopName, generateBoardTop, starterTopFileName, type TopLanguage } from './boardTop';
+import { boardTopName, generateBoardTop, projectTopName, starterTopFileName, type TopLanguage } from './boardTop';
 import type { BoardDefinition } from './types';
 
 const BASYS3 = builtInBoard('basys3');
@@ -87,5 +87,18 @@ describe('starterTopFileName', () => {
     const named = (name: string) => boardTopName({ ...BASYS3, id: 'x', name });
     expect(named('9 Lab — rev B')).toBe('board_9_Lab_rev_B');
     expect(named('Signal')).toBe('Signal_top');
+  });
+
+  it('is named after the project when one is given', () => {
+    expect(starterTopFileName(BASYS3, 'vhdl', [], 'Traffic light')).toBe('Traffic_light.vhdl');
+    expect(starterTopFileName(DEFAULT_BOARD, 'verilog', ['counter.v'], 'Counter')).toBe('Counter_2.v');
+    expect(starterTopFileName(DEFAULT_BOARD, 'vhdl', [], '4-bit counter')).toBe('top_4_bit_counter.vhdl');
+  });
+
+  it('makes a valid identifier of any project name', () => {
+    expect(projectTopName('process', DEFAULT_BOARD)).toBe('process_top');
+    expect(projectTopName('LEDR', DEFAULT_BOARD)).toBe('LEDR_top');
+    expect(projectTopName('!!!', DEFAULT_BOARD)).toBe('DE1_SoC');
+    expect(projectTopName('a'.repeat(40), DEFAULT_BOARD)).toHaveLength(28);
   });
 });

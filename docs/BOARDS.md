@@ -87,8 +87,9 @@ and the displays off.
 
 **New File** (the **+** in Files) asks for a name, a language (VHDL or Verilog) and a **Board**; the new file
 declares that board's ports. Ticking **Create project** (`.hdlboard.json`) makes the name the project's and gives
-it one top file for the chosen board, named after the board like the entity or module inside it: `Nexys_A7.vhdl`
-with `entity Nexys_A7`, `Basys_3.v` with `module Basys_3` (`DE1_SoC` for Default). If Files already holds files,
+it one top file declaring the chosen board's ports, named after the project like the entity or module inside it:
+project `switchTest` gives `switchTest.vhdl` with `entity switchTest`, or `switchTest.v` with `module switchTest`.
+A project name that is not a legal identifier is made one (`4-bit counter` gives `top_4_bit_counter`). If Files already holds files,
 HDLBoard asks:
 
 - **Keep files**: the project lists them and a new top file in *their* board's names; when you chose another
