@@ -64,6 +64,13 @@ const NEW_CODE = [
   'src/components/workbench/bouncyButtons.test.ts',
   'src/components/workbench/quickFix.test.tsx',
   'src/components/workbench/quickFix.testSupport.ts',
+  // Arranging the Board panels by dragging (docs/imp_rearrange_board_io.md).
+  'src/project/panelOrder.ts',
+  'src/project/panelOrder.test.ts',
+  'src/components/workbench/boardArrangement.ts',
+  'src/components/workbench/boardArrangement.test.ts',
+  'src/components/workbench/usePanelDrag.ts',
+  'src/components/dragGesture.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

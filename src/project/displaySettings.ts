@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { isObject } from './jsonValue';
-import { BUTTON_BOUNCES, type ButtonBounce, type Diagnostic, type DisplaySettings, type IoDisplaySettings } from './types';
+import { parsePanelOrder } from './panelOrder';
+import { BUTTON_BOUNCES, type BoardPanel, type ButtonBounce, type Diagnostic, type DisplaySettings, type IoDisplaySettings } from './types';
 
 export function defaultIoDisplaySettings(count: number): IoDisplaySettings {
   return { groupSize: null, visible: Array.from({ length: count }, (_, i) => i), visibilityCount: count, readouts: { binary: true, hexadecimal: false, decimal: false } };
@@ -58,7 +59,18 @@ export function parseDisplaySettings(raw: unknown, warnings: Diagnostic[]): Disp
     if (isObject(value) && BUTTON_BOUNCES.includes(value.bounce as ButtonBounce)) result.pushbuttons = { bounce: value.bounce as ButtonBounce };
     else warnings.push({ severity: 'warning', message: 'Invalid displaySettings.pushbuttons; the pushbuttons do not bounce.' });
   }
+  if (raw.panelOrder !== undefined) {
+    const panelOrder = parsePanelOrder(raw.panelOrder, warnings);
+    if (panelOrder) result.panelOrder = panelOrder;
+  }
   return Object.keys(result).length ? result : undefined;
+}
+
+/** The settings with the Board panels in a new order, or in their own (undefined); no settings left → undefined. */
+export function withPanelOrder(settings: DisplaySettings | undefined, panelOrder: BoardPanel[] | undefined): DisplaySettings | undefined {
+  const { panelOrder: _previous, ...others } = settings ?? {};
+  const next: DisplaySettings = panelOrder ? { ...others, panelOrder } : others;
+  return Object.keys(next).length ? next : undefined;
 }
 
 /** How the pushbuttons behave in a project: `none` unless it says otherwise. */

@@ -48,3 +48,42 @@
 
   /* One column: every card stretches to the widest (see the rules above). */
 }
+
+/* ------------------------------------------------------------------ *
+ * Arranging the panels (docs/imp_rearrange_board_io.md): a panel is
+ * dragged by its frame onto another one and the two change places.
+ * usePanelDrag sets the data attributes and the offset variables.
+ * ------------------------------------------------------------------ */
+
+.pb-board--arrangeable .pb-panel__header {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+/* A collapsed panel is dragged by its button; a tap still expands it. */
+.pb-board--arrangeable > .pb-io-collapsed {
+  touch-action: none;
+}
+
+.pb-board[data-board-dragging],
+.pb-board[data-board-dragging] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* The lifted panel follows the pointer and lets it through to the panel below. */
+.pb-board > [data-board-drag="source"] {
+  position: relative;
+  z-index: 2;
+  translate: var(--pb-drag-x, 0) var(--pb-drag-y, 0);
+  opacity: 0.85;
+  box-shadow: 0 12px 28px var(--pb-dialog-shadow);
+  pointer-events: none;
+}
+
+/* Where it lands: the panel it changes places with. */
+.pb-board > [data-board-drag="target"] {
+  outline: 3px dashed var(--pb-focus);
+  outline-offset: 3px;
+}

@@ -13,7 +13,7 @@
 
 import { IDLE, type DragStore, type Dragged } from './dragStore';
 import { dropTargetAt, type DropTarget, type Move, type Section } from './signalOrder';
-import { DRAG_THRESHOLD_PX } from './useTimeGestures';
+import { DRAG_THRESHOLD_PX, swallowNextClick } from '../dragGesture';
 import { AXIS_HEIGHT, ROW_HEIGHT } from './waveDraw';
 
 /** How close to the list's top or bottom edge the pointer scrolls it. */
@@ -191,14 +191,4 @@ function showDragCursor(cursor: 'moving' | 'refused' | null): void {
   if (root.getAttribute(DRAG_ATTRIBUTE) === cursor) return;
   if (cursor === null) root.removeAttribute(DRAG_ATTRIBUTE);
   else root.setAttribute(DRAG_ATTRIBUTE, cursor);
-}
-
-/** The click a browser sends after the release of a drag would act on whatever is under the pointer. */
-function swallowNextClick(): void {
-  const swallow = (event: MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-  };
-  window.addEventListener('click', swallow, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener('click', swallow, true), 0);
 }

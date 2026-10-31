@@ -324,11 +324,7 @@
   row-gap: calc(var(--pb-unit) * 0.66);
 }
 
-.pb-board--single > .pb-leds { order: 0; }
-.pb-board--single > .pb-switches { order: 1; }
-.pb-board--single > .pb-sevenseg { order: 2; }
-.pb-board--single > .pb-pushbuttons,
-.pb-board--single > .pb-reset { order: 3; }
+/* The panels' order, the layout's own or the student's, is the DOM order (boardArrangement.ts). */
 
 .wb-files__hidden-input {
   position: absolute;

@@ -15,9 +15,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 import type { Ticks } from './model';
-
-/** A press that moves less than this is a click, not a drag – on the canvas and in the signal list alike. */
-export const DRAG_THRESHOLD_PX = 4;
+import { DRAG_THRESHOLD_PX } from '../dragGesture';
 const WHEEL_ZOOM_RATE = 0.002;
 const MAIN_BUTTON = 0;
 

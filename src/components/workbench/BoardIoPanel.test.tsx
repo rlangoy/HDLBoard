@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { decodeState, outputsOff, restInputs } from '../../boards/boardShape';
 import type { BoardDefinition } from '../../boards/types';
-import { BoardIoPanel } from './BoardIoPanel';
+import { BoardIoPanel, type BoardIoPanelProps } from './BoardIoPanel';
 
 function render(board: BoardDefinition, outputs = outputsOff(board.ports)): string {
   return renderToStaticMarkup(<BoardIoPanel board={board} outputs={outputs} inputs={restInputs(board.ports)} onInputsChange={() => {}} />);
@@ -95,5 +95,29 @@ describe('BoardIoPanel pushbutton bounce', () => {
 
   it('marks the pushbutton panel "Bouncy" while the contacts bounce', () => {
     expect(panel('bouncy')).toMatch(/class="pb-io-bouncy"[^>]*>.*Bouncy<\/span>/);
+  });
+});
+
+describe('BoardIoPanel panel order (docs/imp_rearrange_board_io.md)', () => {
+  const board = builtInBoard('de1-soc');
+  const panel = (props: Partial<BoardIoPanelProps> = {}) =>
+    renderToStaticMarkup(<BoardIoPanel board={board} outputs={outputsOff(board.ports)} inputs={restInputs(board.ports)} onInputsChange={() => {}} {...props} />);
+  /** The panels as they appear in the markup, by their root class. */
+  const drawnOrder = (html: string) => [...html.matchAll(/<section\b[^>]*\bclass="[^"]*\bpb-(leds|sevenseg|switches|pushbuttons)\b/g)].map((match) => match[1]);
+
+  it('draws each layout in its own order when nothing is saved', () => {
+    expect(drawnOrder(panel())).toEqual(['leds', 'sevenseg', 'switches', 'pushbuttons']);
+    expect(drawnOrder(panel({ layout: 'single-column' }))).toEqual(['leds', 'switches', 'sevenseg', 'pushbuttons']);
+  });
+
+  it('draws the saved order in both layouts', () => {
+    const panelOrder = ['pushbuttons', 'switches', 'sevenSegment', 'leds'] as const;
+    expect(drawnOrder(panel({ panelOrder }))).toEqual(['pushbuttons', 'switches', 'sevenseg', 'leds']);
+    expect(drawnOrder(panel({ panelOrder, layout: 'single-column' }))).toEqual(['pushbuttons', 'switches', 'sevenseg', 'leds']);
+  });
+
+  it('shows the panels as draggable only when a move can be kept', () => {
+    expect(panel()).not.toContain('pb-board--arrangeable');
+    expect(panel({ onPanelOrderChange: () => {} })).toContain('pb-board--arrangeable');
   });
 });

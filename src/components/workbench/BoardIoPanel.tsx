@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Board, type BitVector } from '../board';
 import { PushbuttonCross, Pushbuttons, ResetButton, releasedLevel } from '../Pushbuttons';
 import { SevenSegmentDisplays } from '../SevenSegment';
@@ -10,8 +10,11 @@ import { buttonCount, displayCount, groupNames, hasDecimalPoint, type BoardInput
 import type { BoardDefinition } from '../../boards/types';
 import type { BoardLayout } from './boardLayoutPreference';
 import { buttonsTitle, displaysTitle, ledsTitle, switchesTitle } from './boardText';
-import type { ButtonBounce, DisplaySettings, IoDisplaySettings } from '../../project/types';
+import type { BoardPanel, ButtonBounce, DisplaySettings, IoDisplaySettings } from '../../project/types';
 import { visibleIndices, withVisibleIndices } from '../../project/displaySettings';
+import { swapPanels } from '../../project/panelOrder';
+import { arrangedPanels, orderToSave } from './boardArrangement';
+import { usePanelDrag } from './usePanelDrag';
 
 export interface BoardIoPanelProps {
   /** The active board: its shape decides the parts, its names head the panels. */
@@ -27,6 +30,10 @@ export interface BoardIoPanelProps {
   /** Whether the pushbuttons bounce like real contacts; default `none`. */
   buttonBounce?: ButtonBounce;
   onButtonBounceChange?: (bounce: ButtonBounce) => void;
+  /** Where the student dragged the panels; absent: the layout's own order. */
+  panelOrder?: readonly BoardPanel[];
+  /** Given: a panel dragged by its frame onto another one changes places with it; undefined is the layout's own order. */
+  onPanelOrderChange?: (order: BoardPanel[] | undefined) => void;
 }
 
 /**
@@ -35,26 +42,37 @@ export interface BoardIoPanelProps {
  * reset button beside them. This maps the board to the parts' props; the parts
  * themselves know nothing about boards.
  */
-export function BoardIoPanel({ board, layout = 'two-columns', outputs, inputs, onInputsChange, displaySettings, onDisplaySettingsChange, onDisplayVisibilityChange, buttonBounce, onButtonBounceChange }: BoardIoPanelProps) {
-  const { ports, labels } = board;
+export function BoardIoPanel(props: BoardIoPanelProps) {
+  const { board, layout = 'two-columns', panelOrder, onPanelOrderChange } = props;
+  const order = arrangedPanels(panelOrder, layout);
+  const onPointerDown = usePanelDrag(onPanelOrderChange && ((from, to) => onPanelOrderChange(orderToSave(swapPanels(order, from, to), layout))));
+  const parts = boardParts(props);
+  const className = [layout === 'single-column' && 'pb-board--single', onPointerDown && 'pb-board--arrangeable'].filter(Boolean).join(' ');
   return (
-    <Board size={24} className={layout === 'single-column' ? 'pb-board--single' : undefined}>
-      <GroupedIoPanel key={`${board.id}-leds-${ports.leds.count}`} kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} settings={displaySettings?.leds} onSettingsChange={settingsHandler('leds', onDisplaySettingsChange)} />
-      <DisplaysPart board={board} outputs={outputs} settings={displaySettings?.sevenSegment} onChange={onDisplayVisibilityChange} />
-      {ports.switches.count > 0 && <GroupedIoPanel
-        key={`${board.id}-switches-${ports.switches.count}`}
-        kind="switches"
-        settings={displaySettings?.switches}
-        onSettingsChange={settingsHandler('switches', onDisplaySettingsChange)}
-        bits={inputs.switches}
-        count={ports.switches.count}
-        onChange={(switches) => onInputsChange({ switches })}
-        name={labels.switches}
-        title={switchesTitle(ports.switches)}
-      />}
-      <ButtonsPart board={board} inputs={inputs} onInputsChange={onInputsChange} buttonBounce={buttonBounce} onButtonBounceChange={onButtonBounceChange} />
+    <Board size={24} className={className || undefined} onPointerDown={onPointerDown}>
+      {order.map((panel) => <Fragment key={`${board.id}-${panel}`}>{parts[panel]}</Fragment>)}
     </Board>
   );
+}
+
+function boardParts({ board, outputs, inputs, onInputsChange, displaySettings, onDisplaySettingsChange, onDisplayVisibilityChange, buttonBounce, onButtonBounceChange }: BoardIoPanelProps): Record<BoardPanel, ReactNode> {
+  const { ports, labels } = board;
+  return {
+    leds: <GroupedIoPanel key={`leds-${ports.leds.count}`} kind="leds" bits={outputs.leds} count={ports.leds.count} name={labels.leds} title={ledsTitle(ports.leds)} settings={displaySettings?.leds} onSettingsChange={settingsHandler('leds', onDisplaySettingsChange)} />,
+    sevenSegment: <DisplaysPart board={board} outputs={outputs} settings={displaySettings?.sevenSegment} onChange={onDisplayVisibilityChange} />,
+    switches: ports.switches.count > 0 && <GroupedIoPanel
+      key={`switches-${ports.switches.count}`}
+      kind="switches"
+      settings={displaySettings?.switches}
+      onSettingsChange={settingsHandler('switches', onDisplaySettingsChange)}
+      bits={inputs.switches}
+      count={ports.switches.count}
+      onChange={(switches) => onInputsChange({ switches })}
+      name={labels.switches}
+      title={switchesTitle(ports.switches)}
+    />,
+    pushbuttons: <ButtonsPart board={board} inputs={inputs} onInputsChange={onInputsChange} buttonBounce={buttonBounce} onButtonBounceChange={onButtonBounceChange} />,
+  };
 }
 
 function DisplaysPart({ board, outputs, settings, onChange }: { board: BoardDefinition; outputs: BoardOutputs; settings?: DisplaySettings['sevenSegment']; onChange?: BoardIoPanelProps['onDisplayVisibilityChange'] }) {
@@ -92,8 +110,7 @@ function ButtonsPart({ board, inputs, onInputsChange, buttonBounce, onButtonBoun
   const { ports, labels } = board;
   const { pushbuttons } = ports;
   const [collapsed, setCollapsed] = useState(false);
-  const [localBounce, setLocalBounce] = useState<ButtonBounce>('none');
-  const bounce = { mode: buttonBounce ?? localBounce, onChange: onButtonBounceChange ?? setLocalBounce };
+  const bounce = onButtonBounceChange && { mode: buttonBounce ?? 'none', onChange: onButtonBounceChange };
   if (buttonCount(ports) === 0) return <ResetPart board={board} inputs={inputs} onInputsChange={onInputsChange} />;
   if (collapsed) return <CollapsedPanelButton kind="pushbuttons" label="Pushbuttons" onExpand={() => setCollapsed(false)} />;
   const shared = {
@@ -104,7 +121,7 @@ function ButtonsPart({ board, inputs, onInputsChange, buttonBounce, onButtonBoun
     title: buttonsTitle(pushbuttons),
     aside: <ResetPart board={board} inputs={inputs} onInputsChange={onInputsChange} />,
     headerAction: <div className="pb-io-panel__actions">
-      {bounce.mode === 'bouncy' && <BouncyBadge />}
+      {buttonBounce === 'bouncy' && <BouncyBadge />}
       <CollapsePanelMenu kind="pushbuttons" label="Pushbuttons" onCollapse={() => setCollapsed(true)} bounce={bounce} />
     </div>,
   };

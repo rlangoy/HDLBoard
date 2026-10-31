@@ -16,7 +16,7 @@ import { foreignBoardNames } from '../../boards/boardMatch';
 import { boardDesignPortNames } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
-import { buttonBounce, defaultIoDisplaySettings } from '../../project/displaySettings';
+import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
@@ -2115,7 +2115,7 @@ export function Workbench() {
             <BoardFit single={isSingle} collapsed={collapsed.board} paneWidth={layout.boardWidth}
               onResize={(width) => layout.resizeOpenPane('board', width)}
               contentKey={overlay === 'boardSettings' && boardPreview ? boardPreview : activeBoard}>
-              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} /> : <BoardIoPanel
+              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} panelOrder={project.displaySettings?.panelOrder} buttonBounce={buttonBounce(project.displaySettings)} /> : <BoardIoPanel
                 board={activeBoard}
                 key={projectGeneration}
                 displaySettings={project.displaySettings}
@@ -2131,6 +2131,8 @@ export function Workbench() {
                 onInputsChange={handleBoardInputsChange}
                 buttonBounce={buttonBounce(project.displaySettings)}
                 onButtonBounceChange={(bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))}
+                panelOrder={project.displaySettings?.panelOrder}
+                onPanelOrderChange={(panelOrder) => setProject((current) => ({ ...current, displaySettings: withPanelOrder(current.displaySettings, panelOrder) }))}
               />}
             </BoardFit>
           </SidePanel>
