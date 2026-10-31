@@ -246,7 +246,7 @@ export function EditorSurface({
   const { lines, tokenLines, index: symbolIndex } = symbols;
   // Symbol occurrence highlighting: looked up on hover or at the text cursor.
   // The pointer wins while it rests on a name.
-  const editorWidth = useEditorWidth(textareaRef, lines, scroll.x.viewSize);
+  const editorWidth = useEditorWidth(textareaRef, scroll.x.viewSize);
   const extraRows = useMemo(() => extraRowsByLine(diagnostics, lines, editorWidth), [diagnostics, lines, editorWidth]);
   const extraRowCount = countExtraRows(extraRows);
   // Where each line is drawn, once extra rows push the lines below them down.

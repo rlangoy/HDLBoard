@@ -327,14 +327,14 @@
   padding: 0 8px;
   border: 1px solid var(--wb-accent);
   border-radius: 5px;
-  background: #ffffff;
+  background: var(--wb-accent-soft);
   color: var(--wb-accent-dark);
   font: 12px/1 var(--wb-code-font);
   vertical-align: top;
   cursor: pointer;
 }
 .wb-editor__quickfix:hover {
-  background: var(--wb-accent-soft);
+  background: color-mix(in srgb, var(--wb-accent) 22%, #ffffff);
 }
 .wb-editor__quickfix-bulb {
   width: 15px;

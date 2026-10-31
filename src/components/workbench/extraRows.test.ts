@@ -8,7 +8,6 @@ import {
   drawnRows,
   extraRowsByLine,
   hasMessageRows,
-  widestColumns,
   wrapWords,
   type EditorWidth,
 } from './extraRows';
@@ -20,8 +19,8 @@ function marked(line: number, message: string, options: { fix?: boolean; followO
   return { line, severity: 'error', messages: [{ severity: 'error', message, details: [], advice }] };
 }
 
-const WIDE: EditorWidth = { visibleColumns: 200, widestColumns: 40, tabSize: 4 };
-const NARROW: EditorWidth = { visibleColumns: 30, widestColumns: 40, tabSize: 4 };
+const WIDE: EditorWidth = { visibleColumns: 200, tabSize: 4 };
+const NARROW: EditorWidth = { visibleColumns: 30, tabSize: 4 };
 
 describe('wrapWords', () => {
   test('keeps a short text on one row', () => {
@@ -44,7 +43,7 @@ describe('extraRowsByLine', () => {
     expect(extraRowsByLine([marked(1, 'short')], lines, WIDE).size).toBe(0);
   });
 
-  test('a message that reaches past the widest line goes on rows below it, indented like the code and wrapped to the view', () => {
+  test('a message that does not fit in the view goes on rows below its line, indented like the code and wrapped to the view', () => {
     const rows = extraRowsByLine([marked(1, 'a message far too long to fit after this line')], lines, NARROW).get(1);
     expect(rows).toEqual([
       { kind: 'message', severity: 'error', indent: 4, text: 'a message far too long to' },
@@ -52,9 +51,13 @@ describe('extraRowsByLine', () => {
     ]);
   });
 
-  test('a message within the widest line stays inline: it can be scrolled to', () => {
-    const rows = extraRowsByLine([marked(2, 'fits up to forty')], lines, { ...NARROW, visibleColumns: 10 });
-    expect(rows.size).toBe(0);
+  test('a message that could be scrolled to, but is not seen whole, goes below too', () => {
+    const longLines = ['end;', 'x'.repeat(100)];
+    expect(extraRowsByLine([marked(1, 'twenty-six characters long')], longLines, NARROW).get(1)?.[0]?.kind).toBe('message');
+  });
+
+  test('a message seen whole after the code stays there', () => {
+    expect(extraRowsByLine([marked(2, 'fits in the view')], lines, NARROW).size).toBe(0);
   });
 
   test('a Quick Fix gets a row under the line, after the message rows', () => {
@@ -92,8 +95,3 @@ describe('drawn rows', () => {
   });
 });
 
-describe('widestColumns', () => {
-  test('counts a tab to the next tab stop', () => {
-    expect(widestColumns(['ab', '\tabc'], 4)).toBe(7);
-  });
-});

@@ -20,8 +20,8 @@ import { ADDER_LINE, GHDL_OUTPUT, starterWithAdder } from './quickFix.testSuppor
 import { addUseClause, applyInsertion } from './useClauseFix';
 
 const FILE_ID = 'de1';
-/** The editor as narrow as in the bug report: the adder line is 95 characters wide. */
-const NARROW: EditorWidth = { visibleColumns: 60, widestColumns: 95, tabSize: 4 };
+/** The editor as narrow as in the bug report: narrower than the 95 characters of the adder line. */
+const NARROW: EditorWidth = { visibleColumns: 60, tabSize: 4 };
 const ADDER_LINE_NUMBER = 27;
 
 function snapshotOf(content: string): RunSnapshot {
@@ -121,7 +121,7 @@ describe('the rows under the adder line', () => {
   const lines = starterWithAdder().split('\n');
   const rows = extraRowsByLine(marked, lines, NARROW).get(ADDER_LINE_NUMBER) ?? [];
 
-  test('the message, which cannot be scrolled to after the widest line, gets rows of its own, wrapped', () => {
+  test('the message, which is not seen whole after the line, gets rows of its own, wrapped', () => {
     const messages = rows.filter((row) => row.kind === 'message');
     expect(messages.map((row) => row.kind === 'message' && row.text)).toEqual([
       '`unsigned` comes from the package `ieee.numeric_std`,',

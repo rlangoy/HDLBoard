@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The rows the editor adds under a marked line: the message, when it would not
- * fit after the code (the textarea scrolls only as far as its widest line, so a
- * message past that is out of reach), and the Quick Fix button. Pure.
+ * The rows the editor adds under a marked line: the message, when it would not be
+ * seen whole after the code without scrolling (and past the widest line no scrolling
+ * reaches it), and the Quick Fix button. Pure.
  */
 
 import type { QuickFix } from './diagnosticAdvice';
@@ -27,11 +27,10 @@ export type ExtraRow =
 /** Per 1-based line number, the rows drawn under it. */
 export type ExtraRowsByLine = ReadonlyMap<number, readonly ExtraRow[]>;
 
-/** The room the editor has, in characters: what it shows, and what it can scroll to. */
+/** The room the editor has, in characters. */
 export interface EditorWidth {
+  /** How many columns show without scrolling sideways. */
   readonly visibleColumns: number;
-  /** The widest line: the textarea scrolls no further. */
-  readonly widestColumns: number;
   readonly tabSize: number;
 }
 
@@ -57,15 +56,10 @@ function cutToWidth(text: string, width: number): string[] {
   return pieces.length > 0 ? pieces : [''];
 }
 
-/** The widest of `lines`, in columns. */
-export function widestColumns(lines: readonly string[], tabSize: number): number {
-  return lines.reduce((widest, line) => Math.max(widest, visualColumn(line, line.length, tabSize)), 0);
-}
-
-/** Whether the inline message after `code` can be seen, if need be by scrolling. */
-function inlineIsReachable(code: string, inline: string, width: EditorWidth): boolean {
+/** Whether the inline message after `code` is seen whole without scrolling sideways. */
+function inlineFitsInView(code: string, inline: string, width: EditorWidth): boolean {
   const end = visualColumn(code, code.length, width.tabSize) + INLINE_GAP_COLUMNS + inline.length;
-  return end <= Math.max(width.visibleColumns, width.widestColumns);
+  return end <= width.visibleColumns;
 }
 
 function messageRows(marked: LineDiagnostic, indent: number, width: EditorWidth): ExtraRow[] {
@@ -77,7 +71,7 @@ function messageRows(marked: LineDiagnostic, indent: number, width: EditorWidth)
 function rowsUnder(marked: LineDiagnostic, code: string, width: EditorWidth): ExtraRow[] {
   const indent = visualColumn(code, LEADING_WHITESPACE.exec(code)?.[0].length ?? 0, width.tabSize);
   const inline = inlineText(marked);
-  const messages = inline && !inlineIsReachable(code, inline, width) ? messageRows(marked, indent, width) : [];
+  const messages = inline && !inlineFitsInView(code, inline, width) ? messageRows(marked, indent, width) : [];
   const fix = quickFixOf(marked);
   return fix ? [...messages, { kind: 'fix', indent, fix, line: marked.line }] : messages;
 }
