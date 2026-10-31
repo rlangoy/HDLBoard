@@ -77,10 +77,10 @@ describe('generateBoardTop', () => {
 
 describe('starterTopFileName', () => {
   it('is named after the board, and free', () => {
-    expect(starterTopFileName(BASYS3, 'vhdl', [])).toBe('Basys_3.vhdl');
-    expect(starterTopFileName(builtInBoard('nexys-a7'), 'verilog', ['nexys_a7.v'])).toBe('Nexys_A7_2.v');
-    expect(starterTopFileName(builtInBoard('de10-lite'), 'vhdl', [])).toBe('DE10_Lite.vhdl');
-    expect(starterTopFileName(DEFAULT_BOARD, 'verilog', [])).toBe('DE1_SoC.v');
+    expect(starterTopFileName(BASYS3, 'vhdl')).toBe('Basys_3.vhdl');
+    expect(starterTopFileName(builtInBoard('nexys-a7'), 'verilog', { takenNames: ['nexys_a7.v'] })).toBe('Nexys_A7_2.v');
+    expect(starterTopFileName(builtInBoard('de10-lite'), 'vhdl')).toBe('DE10_Lite.vhdl');
+    expect(starterTopFileName(DEFAULT_BOARD, 'verilog')).toBe('DE1_SoC.v');
   });
 
   it('makes a valid identifier of any board name', () => {
@@ -90,9 +90,9 @@ describe('starterTopFileName', () => {
   });
 
   it('is named after the project when one is given', () => {
-    expect(starterTopFileName(BASYS3, 'vhdl', [], 'Traffic light')).toBe('Traffic_light.vhdl');
-    expect(starterTopFileName(DEFAULT_BOARD, 'verilog', ['counter.v'], 'Counter')).toBe('Counter_2.v');
-    expect(starterTopFileName(DEFAULT_BOARD, 'vhdl', [], '4-bit counter')).toBe('top_4_bit_counter.vhdl');
+    expect(starterTopFileName(BASYS3, 'vhdl', { projectName: 'Traffic light' })).toBe('Traffic_light.vhdl');
+    expect(starterTopFileName(DEFAULT_BOARD, 'verilog', { takenNames: ['counter.v'], projectName: 'Counter' })).toBe('Counter_2.v');
+    expect(starterTopFileName(DEFAULT_BOARD, 'vhdl', { projectName: '4-bit counter' })).toBe('top_4_bit_counter.vhdl');
   });
 
   it('makes a valid identifier of any project name', () => {

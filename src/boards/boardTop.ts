@@ -244,6 +244,14 @@ const FILE_EXTENSION: Readonly<Record<TopLanguage, string>> = { vhdl: '.vhdl', v
 /** The Default board's top keeps the starter files' name: `Default` is a Verilog keyword. */
 const DEFAULT_BOARD_TOP = 'DE1_SoC';
 const FALLBACK_TOP = 'board_top';
+/** Added to a top name that would clash with a keyword or a board port. */
+const TOP_SUFFIX = '_top';
+
+/** What a starter top file's name must avoid, and the project it is named after, if any. */
+export interface StarterTopNaming {
+  takenNames?: readonly string[];
+  projectName?: string;
+}
 
 /**
  * `text` made a name valid in both languages, or undefined when nothing of it is left:
@@ -253,11 +261,11 @@ const FALLBACK_TOP = 'board_top';
 function topNameFrom(text: string, prefix: string, board: BoardDefinition): string | undefined {
   const words = text.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   if (words === '') return undefined;
-  const stem = (/^[A-Za-z]/.test(words) ? words : `${prefix}_${words}`).slice(0, MAX_PORT_NAME_LENGTH - 4).replace(/_+$/, '');
+  const stem = (/^[A-Za-z]/.test(words) ? words : `${prefix}_${words}`).slice(0, MAX_PORT_NAME_LENGTH - TOP_SUFFIX.length).replace(/_+$/, '');
   const ports = new Set(topPorts(board.ports).map((port) => port.name.toLowerCase()));
   const usable = (name: string) => portNameProblem(name) === undefined && !ports.has(name.toLowerCase());
   if (usable(stem)) return stem;
-  return usable(`${stem}_top`) ? `${stem}_top` : undefined;
+  return usable(`${stem}${TOP_SUFFIX}`) ? `${stem}${TOP_SUFFIX}` : undefined;
 }
 
 /**
@@ -284,7 +292,7 @@ export function projectTopName(projectName: string, board: BoardDefinition): str
  * after the project when `projectName` is given (`Traffic_light.vhdl`), else after the
  * board (`Nexys_A7.vhdl`); then `_2` when that is taken (ignoring case).
  */
-export function starterTopFileName(board: BoardDefinition, language: TopLanguage, takenNames: readonly string[], projectName?: string): string {
+export function starterTopFileName(board: BoardDefinition, language: TopLanguage, { takenNames = [], projectName }: StarterTopNaming = {}): string {
   const stem = projectName === undefined ? boardTopName(board) : projectTopName(projectName, board);
   const taken = new Set(takenNames.map((name) => name.toLowerCase()));
   const candidate = (n: number): string => `${n === 1 ? stem : `${stem}_${n}`}${FILE_EXTENSION[language]}`;

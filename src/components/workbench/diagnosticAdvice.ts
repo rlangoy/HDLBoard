@@ -248,6 +248,14 @@ function suggestedKeyword(token: PositionedToken, project: Project): string | un
  * the keywords. A tie between groups goes to the earlier group; a tie inside the
  * winning group gives no suggestion.
  */
+/**
+ * The package table holds everyday words (`input`, `width`, `line`): a near miss of a
+ * name the student declared (`input` for `inputs`) is a typo, not a forgotten `use`.
+ */
+function isNearDeclaredName(word: string, file: SourceFile): boolean {
+  return word.length >= MIN_UNDECLARED_TYPO_LENGTH && nearestInGroups(word, [file.declared]) !== undefined;
+}
+
 function suggestedName(word: string, file: SourceFile): string | undefined {
   if (word.length < MIN_UNDECLARED_TYPO_LENGTH) return undefined;
   return nearestInGroups(word, [file.declared, LIBRARY_NAMES, SUGGESTED_KEYWORDS]);
@@ -310,7 +318,7 @@ function undeclaredWord(place: Place): { readonly word: string; readonly span?: 
 const missingPackage: Rule = (place) => {
   const undeclared = undeclaredWord(place);
   const pkg = undeclared && packageDeclaring(undeclared.word);
-  if (undeclared === undefined || pkg === undefined) return undefined;
+  if (undeclared === undefined || pkg === undefined || isNearDeclaredName(undeclared.word, place.file)) return undefined;
   const { word, span } = undeclared;
   const { line } = place.diagnostic;
   const content = place.file.lines.join('\n');

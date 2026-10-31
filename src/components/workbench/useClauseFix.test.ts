@@ -127,6 +127,47 @@ describe('addUseClause', () => {
     ]);
   });
 
+  test('a later design unit gets the clause in its own context, not the first unit\'s', () => {
+    const content = [
+      'library ieee;',
+      'use ieee.std_logic_1164.all;',
+      'entity a is end;',
+      'architecture rtl of a is begin end;',
+      'library ieee;',
+      'use ieee.std_logic_1164.all;',
+      'entity b is port (x : in unsigned(3 downto 0)); end;',
+    ].join('\n');
+    expect(fixed(content, 'entity b')?.split('\n').slice(4, 8)).toEqual([
+      'library ieee;',
+      'use ieee.std_logic_1164.all;',
+      'use ieee.numeric_std.all;',
+      'entity b is port (x : in unsigned(3 downto 0)); end;',
+    ]);
+  });
+
+  test('a later design unit without clauses gets them just before it', () => {
+    const content = [
+      'library ieee;',
+      'use ieee.numeric_std.all;',
+      'entity a is end;',
+      '',
+      'entity b is port (x : in unsigned(3 downto 0)); end;',
+    ].join('\n');
+    expect(fixed(content, 'entity b')?.split('\n').slice(3)).toEqual([
+      '',
+      'library ieee;',
+      'use ieee.numeric_std.all;',
+      '',
+      'entity b is port (x : in unsigned(3 downto 0)); end;',
+    ]);
+  });
+
+  test('a clash in an earlier unit\'s context does not stop the fix for a later unit', () => {
+    const content = 'library ieee;\nuse ieee.std_logic_arith.all;\nentity a is end;\nlibrary ieee;\nentity b is port (x : in unsigned(3 downto 0)); end;';
+    expect(clashingPackageInUse(content, NUMERIC_STD, 5)).toBeUndefined();
+    expect(addUseClause(content, NUMERIC_STD, 5)).toBeDefined();
+  });
+
   test('offers nothing when the file uses std_logic_arith, which clashes with numeric_std', () => {
     const content = 'library ieee;\nuse ieee.std_logic_arith.all;\narchitecture a of e is begin\n  q <= to_unsigned(d, 4);\nend;';
     expect(addUseClause(content, NUMERIC_STD, 4)).toBeUndefined();

@@ -53,15 +53,23 @@ function lineText(content: string, line: number): string {
   return content.split('\n')[line - 1] ?? '';
 }
 
+/** The file shown; `extraRowsAbove` counts the rows drawn above a line (extraRows.ts), none when absent. */
+export interface RevealedFile {
+  readonly id: string;
+  readonly content: string;
+  readonly extraRowsAbove?: (line: number) => number;
+}
+
 /**
- * Scrolls the textarea so `reveal.line` is in the middle, and sideways so its
- * `index` shows, and puts the caret there (at the line's start without one).
+ * Scrolls the textarea so `reveal.line`, as drawn below any extra rows, is in the
+ * middle, and sideways so its `index` shows, and puts the caret there (at the line's
+ * start without one).
  * Neither the scroll nor `focus({ preventScroll })` fires `pointerdown`, so the
  * reveal never clears the markers it is showing (§ 4.5.2).
  */
 export function useRevealLine(
   textareaRef: RefObject<HTMLTextAreaElement>,
-  active: { readonly id: string; readonly content: string } | null,
+  active: RevealedFile | null,
   reveal: RevealRequest | null | undefined,
 ): void {
   const handledId = useRef<number | null>(null);
@@ -73,7 +81,8 @@ export function useRevealLine(
     handledId.current = reveal.id;
 
     const { lineHeight } = measureText(textarea);
-    textarea.scrollTop = Math.max(0, (reveal.line - 1) * lineHeight - textarea.clientHeight / 2);
+    const drawnRow = reveal.line - 1 + (active.extraRowsAbove?.(reveal.line) ?? 0);
+    textarea.scrollTop = Math.max(0, drawnRow * lineHeight - textarea.clientHeight / 2);
     if (reveal.index !== undefined) revealIndex(textarea, lineText(active.content, reveal.line), reveal.index);
     if (reveal.focus === false) return;
     const caret = offsetOfLine(active.content, reveal.line) + (reveal.index ?? 0);

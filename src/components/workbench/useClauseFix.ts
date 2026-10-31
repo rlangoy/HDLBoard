@@ -36,6 +36,8 @@ interface ContextClause {
 }
 
 const CLAUSE = /^(?<keyword>library|use)\s+(?<names>.+)$/i;
+/** The words that start a primary design unit: each gets the context clauses written just before it. */
+const PRIMARY_UNIT_KEYWORDS: ReadonlySet<string> = new Set(['entity', 'package', 'configuration']);
 const LEADING_WHITESPACE = /^[ \t]*/;
 const CRLF = '\r\n';
 const LF = '\n';
@@ -60,9 +62,31 @@ function clausesOnLine(text: string, line: number): ContextClause[] {
     });
 }
 
-/** The `library` and `use` clauses above `line`: those that can apply to the code on it. */
-function clausesAbove(lines: readonly string[], line: number): ContextClause[] {
-  return lines.slice(0, line - 1).flatMap((text, i) => clausesOnLine(text, i + 1));
+/** The 1-based lines that start a primary design unit (`entity`, `package`, `package body`, `configuration`). */
+function primaryUnitStarts(lines: readonly string[]): number[] {
+  const firstWord = (text: string) => codeOf(text).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  return lines.flatMap((text, i) => (PRIMARY_UNIT_KEYWORDS.has(firstWord(text)) ? [i + 1] : []));
+}
+
+/** The context of the code on a line: the clauses that apply to it, and where its design unit starts. */
+interface Context {
+  readonly clauses: readonly ContextClause[];
+  /** The first line of the primary unit the line belongs to; undefined when none is above it. */
+  readonly unitStart?: number;
+}
+
+/**
+ * A context clause applies to the next design unit only (and that unit's architecture or
+ * body), so the clauses that apply to `line` are those between the unit before its own
+ * and its own. With no unit above the line, every clause above it counts.
+ */
+function contextOf(lines: readonly string[], line: number): Context {
+  const starts = primaryUnitStarts(lines).filter((start) => start <= line);
+  const unitStart = starts[starts.length - 1];
+  const after = starts[starts.length - 2] ?? 0;
+  const end = unitStart ?? line;
+  const clauses = lines.slice(after, end - 1).flatMap((text, i) => clausesOnLine(text, after + i + 1));
+  return { clauses, unitStart };
 }
 
 function usesPackage(clauses: readonly ContextClause[], pkg: VhdlPackage): boolean {
@@ -87,7 +111,7 @@ function splitLines(content: string): string[] {
 
 /** The package already used above `line` that cannot be used together with `pkg` (`std_logic_arith` for `numeric_std`). */
 export function clashingPackageInUse(content: string, pkg: VhdlPackage, line: number): VhdlPackage | undefined {
-  const clauses = clausesAbove(splitLines(content), line);
+  const { clauses } = contextOf(splitLines(content), line);
   return packagesClashingWith(pkg).find((other) => usesPackage(clauses, other));
 }
 
@@ -125,26 +149,26 @@ function insertBelow({ content, lines, eol }: Source, anchor: number, added: rea
   return { offset, text: `${block}${eol}`, caret: offset + block.length };
 }
 
-/** A file with no clauses yet: the new ones go before its first code, with a blank line after them. */
-function insertAtTop({ content, lines, eol }: Source, added: readonly string[]): TextInsertion {
-  const offset = offsetOfLine(content, firstCodeLine(lines));
+/** A unit with no clauses yet: the new ones go before it (or the file's first code), with a blank line after them. */
+function insertBefore({ content, lines, eol }: Source, unitStart: number | undefined, added: readonly string[]): TextInsertion {
+  const offset = offsetOfLine(content, unitStart ?? firstCodeLine(lines));
   const block = added.join(eol);
   return { offset, text: `${block}${eol}${eol}`, caret: offset + block.length };
 }
 
 /**
  * Where `use <pkg>.all;` goes so that the code on `line` sees it: right below the
- * last `library`/`use` clause above that line (adding `library ieee;` when it is
- * missing), else at the top of the file. `undefined` when the package is already
- * used there, or a package that clashes with it is.
+ * last `library`/`use` clause in front of that line's design unit (adding
+ * `library ieee;` when it is missing), else just before the unit. `undefined` when
+ * the package is already used there, or a package that clashes with it is.
  */
 export function addUseClause(content: string, pkg: VhdlPackage, line: number): TextInsertion | undefined {
   const source = sourceOf(content);
-  const clauses = clausesAbove(source.lines, line);
+  const { clauses, unitStart } = contextOf(source.lines, line);
   if (usesPackage(clauses, pkg) || clashingPackageInUse(content, pkg, line)) return undefined;
   const added = newClauses(clauses, pkg);
   const anchor = clauses[clauses.length - 1]?.line;
-  return anchor === undefined ? insertAtTop(source, added) : insertBelow(source, anchor, added);
+  return anchor === undefined ? insertBefore(source, unitStart, added) : insertBelow(source, anchor, added);
 }
 
 /** The file with the insertion made. */

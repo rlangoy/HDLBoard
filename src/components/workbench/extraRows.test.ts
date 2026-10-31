@@ -6,10 +6,13 @@ import type { LineDiagnostic } from './diagnosticStore';
 import {
   countExtraRows,
   drawnRows,
+  extraRowsAbove,
   extraRowsByLine,
   hasMessageRows,
   wrapWords,
   type EditorWidth,
+  type ExtraRow,
+  type ExtraRowsByLine,
 } from './extraRows';
 
 const FIX = { addUseClause: { library: 'ieee', name: 'numeric_std' } };
@@ -95,3 +98,15 @@ describe('drawn rows', () => {
   });
 });
 
+
+describe('extraRowsAbove', () => {
+  const message = { kind: 'message' } as unknown as ExtraRow;
+  const extra: ExtraRowsByLine = new Map([[3, [message, message]], [7, [message]]]);
+
+  test('counts the rows drawn above a line, not those under it', () => {
+    expect(extraRowsAbove(3, extra)).toBe(0);
+    expect(extraRowsAbove(4, extra)).toBe(2);
+    expect(extraRowsAbove(7, extra)).toBe(2);
+    expect(extraRowsAbove(8, extra)).toBe(3);
+  });
+});
