@@ -1,0 +1,87 @@
+/* The problem under the code, and its Quick Fix (ProblemBar.tsx). */
+
+.wb-problembar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--wb-border);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--wb-text);
+}
+.wb-problembar.is-error {
+  background: var(--wb-diag-error-bg);
+  border-top-color: var(--wb-diag-error);
+}
+.wb-problembar.is-warning {
+  background: var(--wb-diag-warning-bg);
+  border-top-color: var(--wb-diag-warning);
+}
+.wb-problembar.is-done {
+  background: color-mix(in srgb, var(--wb-success) 10%, #ffffff);
+  border-top-color: var(--wb-success);
+}
+
+.wb-problembar__glyph {
+  flex: none;
+  font-weight: 700;
+}
+.wb-problembar.is-error .wb-problembar__glyph {
+  color: var(--wb-diag-error);
+}
+.wb-problembar.is-warning .wb-problembar__glyph {
+  color: var(--wb-diag-warning);
+}
+.wb-problembar.is-done .wb-problembar__glyph {
+  color: var(--wb-success-dark);
+}
+
+.wb-problembar__text {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.wb-problembar__line {
+  font-weight: 600;
+}
+
+.wb-problembar code,
+.wb-problembar kbd {
+  font-family: var(--wb-code-font);
+  font-size: 12px;
+}
+
+.wb-problembar__fix {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--wb-accent);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--wb-accent-dark);
+  font: inherit;
+  cursor: pointer;
+}
+.wb-problembar__fix:hover {
+  background: var(--wb-accent-soft);
+}
+.wb-problembar__fix:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+.wb-problembar__bulb {
+  width: 18px;
+  height: 18px;
+  color: #ca8a04;
+}
+.wb-problembar__fix kbd {
+  padding: 0 4px;
+  border: 1px solid var(--wb-border);
+  border-radius: 4px;
+  color: var(--wb-text-muted);
+}

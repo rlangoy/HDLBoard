@@ -21,7 +21,9 @@ import { languageOfName } from './fileKinds';
 import { ghdlColumnToIndex } from './ghdlColumn';
 import { adviseIcarusDiagnostics, adviseIcarusLog } from './icarusAdvice';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
+import { addUseClause, clashingPackageInUse } from './useClauseFix';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
+import { packageDeclaring, type VhdlPackage } from './vhdlPackages';
 import {
   isLibraryName,
   isReservedWord,
@@ -36,6 +38,11 @@ export interface Span {
   readonly end: number;
 }
 
+/** A change HDLBoard can make for the student, like VS Code's Quick Fix: add the missing `use` clause. */
+export interface QuickFix {
+  readonly addUseClause: VhdlPackage;
+}
+
 /** What HDLBoard adds to a compiler message. */
 export interface Advice {
   /** One sentence shown after the line in place of the compiler's text (§ 4.9). Absent: underline only. */
@@ -48,6 +55,8 @@ export interface Advice {
   readonly followOnOf?: number;
   /** Who printed the message, as the tooltip names it (`Icarus`); absent for GHDL, whose advice came first. */
   readonly compiler?: string;
+  /** Offered next to the message; applied only when the student asks. */
+  readonly fix?: QuickFix;
 }
 
 export interface AdvisedDiagnostic extends LocatedDiagnostic {
@@ -284,14 +293,38 @@ const misspelledKeyword: Rule = (place, project) => {
 
 const NO_DECLARATION = /^no declaration for "(?<name>.+)"$/;
 
-/** Rule C (§ 4.5): "did you mean" for an undeclared name, named as the student wrote it. */
-const undeclaredName: Rule = (place) => {
+/** The name GHDL could not find, as the student wrote it, and where (when it is near GHDL's caret). */
+function undeclaredWord(place: Place): { readonly word: string; readonly span?: Span } | undefined {
   const name = NO_DECLARATION.exec(place.diagnostic.message)?.groups?.name;
   if (name === undefined) return undefined;
   const written = aroundAnchor(place).find((token) => token.text.toLowerCase() === name.toLowerCase());
-  const word = written?.text ?? name;
-  const suggestion = suggestedName(word, place.file);
-  return suggestion ? { headline: adviceText.undeclared(word, suggestion), span: spanOf(written) } : undefined;
+  return { word: written?.text ?? name, span: spanOf(written) };
+}
+
+/**
+ * The missing package: `unsigned` without `use ieee.numeric_std.all;`. Offers the
+ * `use` clause as a Quick Fix, or, when the file uses a package that clashes with
+ * it (`std_logic_arith`), says so instead. No advice when the package is used
+ * already: then the name is missing for another reason.
+ */
+const missingPackage: Rule = (place) => {
+  const undeclared = undeclaredWord(place);
+  const pkg = undeclared && packageDeclaring(undeclared.word);
+  if (undeclared === undefined || pkg === undefined) return undefined;
+  const { word, span } = undeclared;
+  const { line } = place.diagnostic;
+  const content = place.file.lines.join('\n');
+  const clash = clashingPackageInUse(content, pkg, line);
+  if (clash) return { headline: adviceText.packageClash(word, pkg, clash), span };
+  if (addUseClause(content, pkg, line) === undefined) return undefined;
+  return { headline: adviceText.missingPackage(word, pkg), span, fix: { addUseClause: pkg } };
+};
+
+/** Rule C (§ 4.5): "did you mean" for an undeclared name, named as the student wrote it. */
+const undeclaredName: Rule = (place) => {
+  const undeclared = undeclaredWord(place);
+  const suggestion = undeclared && suggestedName(undeclared.word, place.file);
+  return suggestion ? { headline: adviceText.undeclared(undeclared.word, suggestion), span: undeclared.span } : undefined;
 };
 
 /**
@@ -347,8 +380,11 @@ const causeOnPreviousLine: Rule = ({ diagnostic, file, tokens, index }) => {
   return { headline: previousLineHeadline(diagnostic.message, previous), relatedLine: previous };
 };
 
-/** Tried in order; the first advice wins. The table is certain where distance is a guess, so E is first. */
-const RULES: readonly Rule[] = [joinedKeyword, misspelledKeyword, undeclaredName, causeOnPreviousLine];
+/**
+ * Tried in order; the first advice wins. The tables are certain where distance is a
+ * guess, so E is first, and the missing package comes before Rule C's "did you mean".
+ */
+const RULES: readonly Rule[] = [joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
 
 // ------------------------------------------------------------ public
 
@@ -428,10 +464,17 @@ export function adviseLogDiagnostics(located: readonly LocatedDiagnostic[], snap
  * (muted follow-ons never lead), or the line Rules D and E name when it is close
  * enough that both stay in view (§ 4.10).
  */
-export function revealTarget(advised: readonly AdvisedDiagnostic[]): Pick<LocatedDiagnostic, 'fileId' | 'line'> | undefined {
+export function revealTarget(advised: readonly AdvisedDiagnostic[]): RevealTarget | undefined {
   const target = firstRevealTarget(advised.filter((d) => !isMuted(d)));
   if (target === undefined) return undefined;
   const related = target.advice?.relatedLine;
   const bothInView = related !== undefined && Math.abs(target.line - related) <= REVEAL_RELATED_WITHIN_LINES;
-  return { fileId: target.fileId, line: bothInView ? related : target.line };
+  if (bothInView) return { fileId: target.fileId, line: related };
+  const index = target.advice?.span?.start;
+  return { fileId: target.fileId, line: target.line, ...(index !== undefined && { index }) };
+}
+
+/** A line to show, and on it the underlined word (0-based), which may be past the right edge of the editor. */
+export interface RevealTarget extends Pick<LocatedDiagnostic, 'fileId' | 'line'> {
+  readonly index?: number;
 }

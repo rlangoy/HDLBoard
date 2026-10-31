@@ -16,6 +16,8 @@ import {
   type LineDiagnostic,
   type LineMessage,
 } from './diagnosticStore';
+import type { QuickFix } from './diagnosticAdvice';
+import { packagePath, useClauseText, type VhdlPackage } from './vhdlPackages';
 
 export const INLINE_MESSAGE_MAX_CHARS = 120;
 const ELLIPSIS = '…';
@@ -40,6 +42,12 @@ export const adviceText = {
   /** Rule B for Icarus, which often reports a misspelled keyword on the next line of code. */
   keywordTypoOnLine: (word: string, line: number, keyword: string, language: string): string =>
     `${code(word)} (line ${line}) is not a ${language} keyword — did you mean ${code(keyword)}?`,
+  /** The missing package, offered as a Quick Fix. */
+  missingPackage: (word: string, pkg: VhdlPackage): string =>
+    `${code(word)} comes from the package ${code(packagePath(pkg))}, which this file does not use yet.`,
+  /** The missing package, when the file uses one that cannot be used with it. */
+  packageClash: (word: string, pkg: VhdlPackage, clash: VhdlPackage): string =>
+    `${code(word)} comes from ${code(packagePath(pkg))}, but this file uses ${code(packagePath(clash))}, which clashes with it — use only one of them.`,
   /** Rule C. */
   undeclared: (word: string, suggestion: string): string =>
     `${code(word)} is not declared — did you mean ${code(suggestion)}?`,
@@ -67,6 +75,19 @@ export const adviceText = {
   /** Rule F, on the line of the first error itself. */
   followOnSameLine: (): string => 'Probably caused by the first error on this line — fix that one first and run again.',
 };
+
+/** The Quick Fix button: what it will add. */
+export function quickFixTitle(fix: QuickFix): string {
+  return `Add ${code(useClauseText(fix.addUseClause))}`;
+}
+
+/** Shown once the Quick Fix is applied, until the student goes on editing. */
+export function quickFixDone(fix: QuickFix): string {
+  return `Added ${code(useClauseText(fix.addUseClause))} — start the simulation again to check.`;
+}
+
+/** The keyboard shortcut of the Quick Fix, as VS Code has it. */
+export const QUICK_FIX_SHORTCUT = 'Ctrl+.';
 
 function inDisplayOrder(line: LineDiagnostic): LineMessage[] {
   return [...line.messages].sort(byDisplayOrder);
@@ -119,6 +140,28 @@ export function inlineText(line: LineDiagnostic): string {
   const [first, ...others] = visibleInDisplayOrder(line);
   if (first === undefined) return '';
   return `${truncate(headlineOf(first))}${others.length > 0 ? ` (+${others.length} more)` : ''}`;
+}
+
+/** What the problem bar under the code shows: one line's problem in full, and its Quick Fix. */
+export interface BarProblem {
+  readonly line: number;
+  readonly severity: LineDiagnostic['severity'];
+  /** The whole text, never truncated: the inline text may run past the edge of the editor. */
+  readonly text: string;
+  readonly fix?: QuickFix;
+}
+
+/**
+ * The first marked line that is not muted — the one a run takes the student to —
+ * with its first message's headline and the line's first Quick Fix.
+ */
+export function barProblem(lines: readonly LineDiagnostic[]): BarProblem | undefined {
+  const first = lines.find((line) => !isMutedLine(line));
+  if (first === undefined) return undefined;
+  const [message, ...others] = visibleInDisplayOrder(first);
+  const more = others.length > 0 ? ` (+${others.length} more)` : '';
+  const fix = first.messages.find((m) => m.advice?.fix)?.advice?.fix;
+  return { line: first.line, severity: first.severity, text: `${headlineOf(message)}${more}`, ...(fix && { fix }) };
 }
 
 function count(n: number, noun: string): string {

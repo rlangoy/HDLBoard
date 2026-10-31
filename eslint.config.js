@@ -46,6 +46,14 @@ const NEW_CODE = [
   'src/components/Pushbuttons/ResetButton.tsx',
   'src/components/Pushbuttons/levels.ts',
   'src/components/workbench/RemoveFilesDialog.tsx',
+  // Quick Fix for a missing package (`use ieee.numeric_std.all;`).
+  'src/components/workbench/vhdlPackages.ts',
+  'src/components/workbench/useClauseFix.ts',
+  'src/components/workbench/useClauseFix.test.ts',
+  'src/components/workbench/useQuickFix.ts',
+  'src/components/workbench/ProblemBar.tsx',
+  'src/components/workbench/quickFix.test.tsx',
+  'src/components/workbench/quickFix.testSupport.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

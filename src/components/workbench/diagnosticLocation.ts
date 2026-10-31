@@ -54,6 +54,32 @@ export function lineHeightOrFallback(computed: string, scrollHeight: number, lin
   return Number.isFinite(height) && height > 0 ? height : scrollHeight / lineCount;
 }
 
+/** The on-screen column (0-based) of character `index`: a tab advances to the next multiple of `tabSize`. */
+export function visualColumn(line: string, index: number, tabSize: number): number {
+  let column = 0;
+  for (const char of line.slice(0, index)) column = char === '\t' ? (Math.floor(column / tabSize) + 1) * tabSize : column + 1;
+  return column;
+}
+
+/** A scroll position along one axis, and how much of the content it shows. */
+export interface ScrollView {
+  readonly scroll: number;
+  readonly size: number;
+}
+
+/**
+ * The scroll position that shows `offset` (pixels into the content, along the
+ * same axis) with `margin` pixels before and after it: unchanged when it is in
+ * view already, so nothing moves needlessly; back at the start when it fits
+ * there, so the start of the line shows too. Never negative.
+ */
+export function scrollToShow(offset: number, view: ScrollView, margin: number): number {
+  const visible = offset - margin >= view.scroll && offset + margin <= view.scroll + view.size;
+  if (visible) return view.scroll;
+  const fitsAtStart = offset + margin <= view.size;
+  return fitsAtStart ? 0 : Math.max(0, offset - margin);
+}
+
 /**
  * Finds the one snapshot file a printed name means, or `undefined`. An exact
  * match wins; else a case-insensitive one (Windows file systems ignore case).

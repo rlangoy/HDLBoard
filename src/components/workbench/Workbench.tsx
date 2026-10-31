@@ -76,7 +76,7 @@ import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
 import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
-import { revealTarget, type AdvisedDiagnostic } from './diagnosticAdvice';
+import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagnosticAdvice';
 import type { LocatedDiagnostic } from './diagnosticLocation';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
@@ -473,10 +473,10 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: Pick<LocatedDiagnostic, 'fileId' | 'line'>, highlight?: string) => navigate(() => {
+  const revealLocation = useCallback((target: RevealTarget, highlight?: string) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, id: nextRevealId(), highlight });
+    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight });
   }), [navigate, setOverlay]);
   // A console link marks just its own message, as a run marks errors, and jumps to it.
   const openConsoleDiagnostic = useCallback(

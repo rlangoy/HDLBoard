@@ -11,6 +11,8 @@ import { applyEdit } from './find/applyEdit';
 import { unwrapCodeFence } from './pasteFence';
 import { tabEdit } from './tabIndent';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
+import { ProblemBar } from './ProblemBar';
+import { useQuickFix } from './useQuickFix';
 import type { CharRange, Token } from './vhdlHighlight';
 import type { FindDecor } from './find/useFind';
 import { decorateLine, type DecoratedPiece } from './symbols/decorateLine';
@@ -26,6 +28,11 @@ export interface EditorTab {
   id: string;
   name: string;
   content: string;
+}
+
+/** Ctrl+. (Cmd+. on a Mac) applies the problem bar's Quick Fix, as in VS Code. */
+function isQuickFixKey(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
+  return e.key === '.' && (e.ctrlKey || e.metaKey);
 }
 
 /** Keys that only modify another: they neither end nor start the Esc-then-Tab escape. */
@@ -241,6 +248,7 @@ export function EditorSurface({
   const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
   const statusId = useId();
   useRevealLine(textareaRef, file, reveal);
+  const quickFix = useQuickFix(textareaRef, file, diagnostics);
   useLayoutEffect(() => {
     findAttach?.(textareaRef.current);
     return () => findAttach?.(null);
@@ -259,77 +267,85 @@ export function EditorSurface({
   };
 
   return (
-    <div
-      className="wb-editor__body"
-      // A click in the text or on a line number clears this file's markers
-      // (hovering does not). The reveal's own focus and scroll are not clicks.
-      onPointerDown={() => {
-        onFocusWithin?.();
-        if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
-      }}
-      onFocus={onFocusWithin}
-    >
-      <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
-        {announces ? status : ''}
-      </p>
-      <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} gutterRef={gutterRef} />
-      <div className="wb-editor__surface">
-        <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
-          {lines.map((line, i) => (
-            <HighlightedLine
-              line={line}
-              tokens={tokenLines[i] ?? []}
-              key={i}
-              diagnostic={linesByNumber.get(i + 1)}
-              hintFrom={hints.get(i + 1)}
-              occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
-              findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
-              currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}
-            />
-          ))}
-        </pre>
-        <textarea
-          ref={textareaRef}
-          className="wb-editor__textarea wb-scrollbar-host"
-          value={file.content}
-          spellCheck={false}
-          wrap="off"
-          onScroll={handleScroll}
-          onChange={(e) => onChange(file.id, e.target.value)}
-          onPaste={(e) => {
-            // A Markdown code block (```vhdl … ```) goes in without its fence lines.
-            const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
-            if (code === null) return;
-            e.preventDefault();
-            const ta = e.currentTarget;
-            applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
-          }}
-          {...hovered.handlers}
-          onSelect={atCaret.onSelect}
-          onPointerDown={() => {
-            tabLeaves.current = false;
-            onFindDismiss?.();
-          }}
-          onBlur={() => {
-            tabLeaves.current = false;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
+    <>
+      <div
+        className="wb-editor__body"
+        // A click in the text or on a line number clears this file's markers
+        // (hovering does not). The reveal's own focus and scroll are not clicks.
+        onPointerDown={() => {
+          onFocusWithin?.();
+          if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+        }}
+        onFocus={onFocusWithin}
+      >
+        <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
+          {announces ? status : ''}
+        </p>
+        <EditorGutter lines={lines} linesByNumber={linesByNumber} hints={hints} gutterRef={gutterRef} />
+        <div className="wb-editor__surface">
+          <pre className="wb-editor__highlight" ref={preRef} aria-hidden="true">
+            {lines.map((line, i) => (
+              <HighlightedLine
+                line={line}
+                tokens={tokenLines[i] ?? []}
+                key={i}
+                diagnostic={linesByNumber.get(i + 1)}
+                hintFrom={hints.get(i + 1)}
+                occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
+                findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
+                currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}
+              />
+            ))}
+          </pre>
+          <textarea
+            ref={textareaRef}
+            className="wb-editor__textarea wb-scrollbar-host"
+            value={file.content}
+            spellCheck={false}
+            wrap="off"
+            onScroll={handleScroll}
+            onChange={(e) => onChange(file.id, e.target.value)}
+            onPaste={(e) => {
+              // A Markdown code block (```vhdl … ```) goes in without its fence lines.
+              const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
+              if (code === null) return;
               e.preventDefault();
-              return;
-            }
-            if (MODIFIER_KEYS.includes(e.key)) return; // Esc, Shift, Tab: the Shift of Shift+Tab must not undo the Esc
-            const closedFind = e.key === 'Escape' && onFindEscape?.();
-            if (closedFind) e.preventDefault();
-            // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
-            tabLeaves.current = e.key === 'Escape' && !closedFind;
-          }}
-          aria-label={label ?? `${file.name} source`}
-          aria-describedby={statusId}
-        />
-        <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
-        <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
+              const ta = e.currentTarget;
+              applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
+            }}
+            {...hovered.handlers}
+            onSelect={atCaret.onSelect}
+            onPointerDown={() => {
+              tabLeaves.current = false;
+              onFindDismiss?.();
+            }}
+            onBlur={() => {
+              tabLeaves.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (isQuickFixKey(e) && quickFix.apply()) {
+                e.preventDefault();
+                return;
+              }
+              if (e.key === 'Tab' && handleTab(e.currentTarget, e.shiftKey, e.ctrlKey || e.altKey || e.metaKey)) {
+                e.preventDefault();
+                return;
+              }
+              if (MODIFIER_KEYS.includes(e.key)) return; // Esc, Shift, Tab: the Shift of Shift+Tab must not undo the Esc
+              const closedFind = e.key === 'Escape' && onFindEscape?.();
+              if (closedFind) e.preventDefault();
+              // After Esc, the next Tab leaves the editor, so the keyboard is never trapped in it.
+              tabLeaves.current = e.key === 'Escape' && !closedFind;
+            }}
+            aria-label={label ?? `${file.name} source`}
+            aria-describedby={statusId}
+          />
+          <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
+          <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
+        </div>
       </div>
-    </div>
+      {/* Outside the body: a click on the bar must not clear the markers it explains. */}
+      <ProblemBar problem={quickFix.problem} applied={quickFix.applied} onApplyFix={quickFix.apply} />
+    </>
   );
 }
