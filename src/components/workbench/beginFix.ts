@@ -10,7 +10,7 @@
 import { offsetOfLine } from './diagnosticLocation';
 import { indentOf, lineEnding, splitLines, type TextEdit } from './textLines';
 import { tokenizeVhdlLine } from './vhdlHighlight';
-import { architectureMissingBegin } from './vhdlStructure';
+import { architectureMissingBegin, loneWord } from './vhdlStructure';
 
 const BEGIN = 'begin';
 
@@ -33,15 +33,6 @@ export function insertBegin(content: string, line: number): TextEdit | undefined
   const indent = indentOf(lines[header - 1]);
   const offset = offsetOfLine(content, before);
   return { offset, removed: 0, text: `${indent}${BEGIN}${lineEnding(content)}`, caret: offset + indent.length + BEGIN.length };
-}
-
-/** A line that holds one word and nothing else but a comment: `begisasa`. */
-const LONE_WORD = /^(?<indent>[ \t]*)(?<word>\w+)[ \t]*(--.*)?$/;
-
-/** The word alone on `line`, and where it starts; undefined when the line holds more (or less). */
-export function loneWord(line: string): { readonly word: string; readonly start: number } | undefined {
-  const groups = LONE_WORD.exec(line)?.groups;
-  return groups && { word: groups.word, start: groups.indent.length };
 }
 
 /**

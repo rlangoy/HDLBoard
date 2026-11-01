@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { architectureAbove, architectureBegin, designUnitEnd, statementRegionHome } from './vhdlStructure';
+import { architectureAbove, architectureBegin, designUnitEnd, loneWord, statementRegionHome } from './vhdlStructure';
 
 const lines = (text: string): string[] => text.split('\n');
 
@@ -132,4 +132,17 @@ describe('designUnitEnd', () => {
       expect(designUnitEnd(line)).toBeUndefined();
     },
   );
+});
+
+describe('loneWord', () => {
+  test.each([
+    ['begisasa', { word: 'begisasa', start: 0 }],
+    ['   begn   -- typo', { word: 'begn', start: 3 }],
+  ])('%s', (line, expected) => {
+    expect(loneWord(line)).toEqual(expected);
+  });
+
+  test.each(['', '-- only a comment', 'LED <= SW;', 'two words'])('none in %j', (line) => {
+    expect(loneWord(line)).toBeUndefined();
+  });
 });

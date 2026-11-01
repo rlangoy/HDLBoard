@@ -13,7 +13,6 @@
  * implicit-wire warning (`adviseLogDiagnostics`).
  */
 
-import { loneWord } from './beginFix';
 import { declaredNames } from './declaredNames';
 import { firstRevealTarget, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { isMuted } from './diagnosticStore';
@@ -27,6 +26,7 @@ import {
   architectureMissingBegin,
   DECLARATION_WORDS,
   designUnitEnd,
+  loneWord,
   statementRegionHome,
 } from './vhdlStructure';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
@@ -54,9 +54,9 @@ export interface Span {
  * or put it in place of the misspelled word written there.
  */
 export type QuickFix =
-  | { readonly addUseClause: VhdlPackage }
-  | { readonly insertBegin: true }
-  | { readonly replaceWithBegin: true };
+  | { readonly kind: 'addUseClause'; readonly pkg: VhdlPackage }
+  | { readonly kind: 'insertBegin' }
+  | { readonly kind: 'replaceWithBegin' };
 
 /** What HDLBoard adds to a compiler message. */
 export interface Advice {
@@ -431,7 +431,7 @@ const missingPackage: Rule = (place) => {
   const clash = clashingPackageInUse(content, pkg, line);
   if (clash) return { headline: adviceText.packageClash(word, pkg, clash), span };
   if (addUseClause(content, pkg, line) === undefined) return undefined;
-  return { headline: adviceText.missingPackage(word, pkg), span, fix: { addUseClause: pkg } };
+  return { headline: adviceText.missingPackage(word, pkg), span, fix: { kind: 'addUseClause', pkg } };
 };
 
 /** Rule C (§ 4.5): "did you mean" for an undeclared name, named as the student wrote it. */
@@ -576,7 +576,12 @@ const ANY_LINE = 'line';
  * How an architecture's `begin` went missing: never written before the first
  * statement (`assignment`, `process` …), or written wrong (`begisasa`).
  */
-type MissingBegin = { readonly beforeStatement: string } | { readonly misspelledAs: string };
+type MissingBegin =
+  | { readonly kind: 'notWritten'; readonly beforeStatement: string }
+  | { readonly kind: 'misspelled'; readonly word: string };
+
+/** A line that ends what is open: here, the architecture with no statements yet. */
+const STARTS_WITH_END = /^\s*end\b/i;
 
 /**
  * The word alone on `line` where `begin` belongs: the next code line starts a
@@ -587,7 +592,7 @@ function misspelledBeginOn(lines: readonly string[], line: number): string | und
   if (lone === undefined || isReservedWord(lone.word)) return undefined;
   const next = nextCodeLine({ lines }, line);
   const nextText = next === undefined ? '' : lines[next - 1];
-  const beginBelongsHere = statementKind(nextText) !== undefined || /^\s*end\b/i.test(nextText);
+  const beginBelongsHere = statementKind(nextText) !== undefined || STARTS_WITH_END.test(nextText);
   return beginBelongsHere ? lone.word : undefined;
 }
 
@@ -608,20 +613,22 @@ function missingBeginAt(
   const header = architectureMissingBegin(lines, error.line);
   if (header === undefined || earlier.some((d) => d.line >= header)) return undefined;
   const statement = statementKind(lines[error.line - 1] ?? '');
-  if (statement !== undefined) return { beforeStatement: statement };
+  if (statement !== undefined) return { kind: 'notWritten', beforeStatement: statement };
   const misspelled = misspelledBeginOn(lines, error.line);
-  if (misspelled !== undefined) return { misspelledAs: misspelled };
-  return asksForBegin ? { beforeStatement: ANY_LINE } : undefined;
+  if (misspelled !== undefined) return { kind: 'misspelled', word: misspelled };
+  return asksForBegin ? { kind: 'notWritten', beforeStatement: ANY_LINE } : undefined;
 }
 
 /** The missing `begin`, with a Quick Fix that inserts it, or puts it in place of the misspelled word. */
 const missingArchitectureBegin: Rule = ({ diagnostic }, project) => {
   const missing = project.own.missingBegins.get(diagnostic);
   if (missing === undefined) return undefined;
-  if ('misspelledAs' in missing) {
-    return { headline: adviceText.misspelledBegin(missing.misspelledAs), fix: { replaceWithBegin: true } };
+  switch (missing.kind) {
+    case 'misspelled':
+      return { headline: adviceText.misspelledBegin(missing.word), fix: { kind: 'replaceWithBegin' } };
+    case 'notWritten':
+      return { headline: adviceText.missingBegin(missing.beforeStatement), fix: { kind: 'insertBegin' } };
   }
-  return { headline: adviceText.missingBegin(missing.beforeStatement), fix: { insertBegin: true } };
 };
 
 /**

@@ -8,6 +8,12 @@ import { addUseClause } from './useClauseFix';
 
 /** The change applying `fix`, offered on 1-based `line`, makes to the file; `undefined` when it no longer applies. */
 export function quickFixEdit(content: string, fix: QuickFix, line: number): TextEdit | undefined {
-  if ('addUseClause' in fix) return addUseClause(content, fix.addUseClause, line);
-  return 'insertBegin' in fix ? insertBegin(content, line) : replaceWithBegin(content, line);
+  switch (fix.kind) {
+    case 'addUseClause':
+      return addUseClause(content, fix.pkg, line);
+    case 'insertBegin':
+      return insertBegin(content, line);
+    case 'replaceWithBegin':
+      return replaceWithBegin(content, line);
+  }
 }

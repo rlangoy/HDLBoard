@@ -15,7 +15,7 @@ import {
   type ExtraRowsByLine,
 } from './extraRows';
 
-const FIX = { addUseClause: { library: 'ieee', name: 'numeric_std' } };
+const FIX = { kind: 'addUseClause', pkg: { library: 'ieee', name: 'numeric_std' } } as const;
 
 function marked(line: number, message: string, options: { fix?: boolean; followOnOf?: number } = {}): LineDiagnostic {
   const advice = { ...(options.fix && { fix: FIX }), ...(options.followOnOf && { followOnOf: options.followOnOf }) };

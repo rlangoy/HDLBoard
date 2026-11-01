@@ -56,7 +56,7 @@ describe('no declaration for "unsigned" (the bug report)', () => {
   });
 
   test('offers the use clause as a Quick Fix', () => {
-    expect(first.advice?.fix).toEqual({ addUseClause: { library: 'ieee', name: 'numeric_std' } });
+    expect(first.advice?.fix).toEqual({ kind: 'addUseClause', pkg: { library: 'ieee', name: 'numeric_std' } });
   });
 
   test('underlines each `unsigned`', () => {
@@ -98,7 +98,7 @@ describe('other missing packages', () => {
   test('std_logic without `use ieee.std_logic_1164.all;` offers that package', () => {
     const content = 'library ieee;\nentity e is\n  port (a : in std_logic);\nend;';
     const [advised] = advise(content, 'DE1_SoC.vhdl:3:15:error: no declaration for "std_logic"');
-    expect(advised.advice?.fix).toEqual({ addUseClause: { library: 'ieee', name: 'std_logic_1164' } });
+    expect(advised.advice?.fix).toEqual({ kind: 'addUseClause', pkg: { library: 'ieee', name: 'std_logic_1164' } });
   });
 
   test('with std_logic_arith in use, it explains the clash and offers no fix', () => {

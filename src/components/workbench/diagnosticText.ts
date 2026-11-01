@@ -119,8 +119,14 @@ export const adviceText = {
 
 /** The Quick Fix button: what it will add. */
 export function quickFixTitle(fix: QuickFix): string {
-  if ('addUseClause' in fix) return `Add ${code(useClauseText(fix.addUseClause))}`;
-  return 'insertBegin' in fix ? `Insert ${BEGIN}` : `Replace with ${BEGIN}`;
+  switch (fix.kind) {
+    case 'addUseClause':
+      return `Add ${code(useClauseText(fix.pkg))}`;
+    case 'insertBegin':
+      return `Insert ${BEGIN}`;
+    case 'replaceWithBegin':
+      return `Replace with ${BEGIN}`;
+  }
 }
 
 /** The keyboard shortcut of the Quick Fix, as VS Code has it. */

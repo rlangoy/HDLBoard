@@ -282,7 +282,7 @@ end architecture;
   test('says begin is missing before the assignment, and offers to insert it', () => {
     expect(first.advice).toMatchObject({
       headline: 'Missing `begin` — insert `begin` before this assignment.',
-      fix: { insertBegin: true },
+      fix: { kind: 'insertBegin' },
     });
   });
 
@@ -332,7 +332,7 @@ end architecture;
     });
 
     test('underlines the word and offers to replace it', () => {
-      expect(first.advice).toMatchObject({ span: { start: 0, end: 'begisasa'.length }, fix: { replaceWithBegin: true } });
+      expect(first.advice).toMatchObject({ span: { start: 0, end: 'begisasa'.length }, fix: { kind: 'replaceWithBegin' } });
     });
 
     test('GHDL asking for begin later follows from it', () => {

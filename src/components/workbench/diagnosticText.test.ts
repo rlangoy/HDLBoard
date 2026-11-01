@@ -155,14 +155,14 @@ describe('problemCountText', () => {
 
 describe('quickFixTitle', () => {
   test('a use clause is named in full', () => {
-    expect(quickFixTitle({ addUseClause: { library: 'ieee', name: 'numeric_std' } })).toBe('Add `use ieee.numeric_std.all;`');
+    expect(quickFixTitle({ kind: 'addUseClause', pkg: { library: 'ieee', name: 'numeric_std' } })).toBe('Add `use ieee.numeric_std.all;`');
   });
 
   test('the missing begin', () => {
-    expect(quickFixTitle({ insertBegin: true })).toBe('Insert `begin`');
+    expect(quickFixTitle({ kind: 'insertBegin' })).toBe('Insert `begin`');
   });
 
   test('the misspelled begin', () => {
-    expect(quickFixTitle({ replaceWithBegin: true })).toBe('Replace with `begin`');
+    expect(quickFixTitle({ kind: 'replaceWithBegin' })).toBe('Replace with `begin`');
   });
 });

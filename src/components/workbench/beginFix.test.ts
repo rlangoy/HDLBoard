@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { insertBegin, loneWord, replaceWithBegin } from './beginFix';
+import { insertBegin, replaceWithBegin } from './beginFix';
 import { applyTextEdit } from './textLines';
 
 function fixed(content: string, line: number): string | undefined {
@@ -66,15 +66,3 @@ describe('replaceWithBegin', () => {
   });
 });
 
-describe('loneWord', () => {
-  test.each([
-    ['begisasa', { word: 'begisasa', start: 0 }],
-    ['   begn   -- typo', { word: 'begn', start: 3 }],
-  ])('%s', (line, expected) => {
-    expect(loneWord(line)).toEqual(expected);
-  });
-
-  test.each(['', '-- only a comment', 'LED <= SW;', 'two words'])('none in %j', (line) => {
-    expect(loneWord(line)).toBeUndefined();
-  });
-});

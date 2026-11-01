@@ -4,7 +4,8 @@
 /**
  * How VHDL code is nested, read from its words, for the advice on GHDL messages
  * a beginner cannot act on: which architecture, process or subprogram a line is
- * in, where that region's `begin` is, and whether a line ends a design unit.
+ * in, where that region's `begin` is, whether a line ends a design unit, and
+ * whether it holds a lone word (a misspelled `begin`).
  * Reads only words, `;` and parentheses, and gives up rather than guess. Pure.
  */
 
@@ -198,6 +199,17 @@ export function statementRegionHome(lines: readonly string[], line: number): Dec
   const declarationsStart = region === 'process' ? at + 1 : (subprogramBodyStart(words, at) ?? at) + 1;
   const beginLine = firstBegin(words.slice(declarationsStart));
   return { region, ...(beginLine !== undefined && { beginLine }) };
+}
+
+// ------------------------------------------------------------ lines
+
+/** A line that holds one word and nothing else but a comment: `begisasa`. */
+const LONE_WORD = /^(?<indent>[ \t]*)(?<word>\w+)[ \t]*(--.*)?$/;
+
+/** The word alone on `line`, and where it starts; undefined when the line holds more (or less). */
+export function loneWord(line: string): { readonly word: string; readonly start: number } | undefined {
+  const groups = LONE_WORD.exec(line)?.groups;
+  return groups && { word: groups.word, start: groups.indent.length };
 }
 
 // ------------------------------------------------------------ design units
