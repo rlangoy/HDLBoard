@@ -170,6 +170,62 @@ end architecture rtl;
   });
 });
 
+describe('an architecture of an entity no file declares', () => {
+  const HEADER = DE1_SOC.split('\n').slice(0, 23).join('\n');
+  const UNKNOWN = `${HEADER}
+architecture rtl of DE1_SdddoC is
+
+    signal a : std_logic;
+begin
+    a <= SW(0);
+end architecture rtl;
+`;
+  const OUTPUT =
+    'unk.vhd:24:21:error: entity "DE1_SdddoC" was not analysed\narchitecture rtl of DE1_SdddoC is\n                    ^\n';
+
+  test('says the entity is unknown, suggests the only one, and points at it', () => {
+    const [unknown] = advise('unk.vhd', UNKNOWN, OUTPUT);
+    expect(unknown.advice?.headline).toBe('Unknown entity `DE1_SdddoC` — did you mean `DE1_SoC` (line 9)?');
+    expect(unknown.advice?.relatedLine).toBe(9);
+    expect(unknown.advice?.span).toEqual({ start: 20, end: 30 });
+  });
+
+  test('with several entities, the nearest name; with none near, no guess', () => {
+    const source = 'entity counter is end;\nentity counter_tb is end;\narchitecture a of countr is begin end;';
+    const near = advise('c.vhd', source, 'c.vhd:3:19:error: entity "countr" was not analysed\n');
+    expect(near[0].advice?.headline).toBe('Unknown entity `countr` — did you mean `counter` (line 1)?');
+    const far = advise('c.vhd', source.replace('countr', 'blinker'), 'c.vhd:3:19:error: entity "blinker" was not analysed\n');
+    expect(far[0].advice?.headline).toBe('Unknown entity `blinker` — no file in the project declares an entity with that name.');
+  });
+
+  test('an entity in another file is named without a line', () => {
+    const snapshot: RunSnapshot = {
+      files: [
+        { id: 'a', name: 'a.vhd', content: 'architecture rtl of tope is begin end;' },
+        { id: 'b', name: 'b.vhd', content: 'entity top is end;' },
+      ],
+    };
+    const output = 'a.vhd:1:21:error: entity "tope" was not analysed\n';
+    const [advised] = adviseDiagnostics(locateDiagnostics(parseDiagnostics(output), snapshot, snapshot.files), snapshot);
+    expect(advised.advice?.headline).toBe('Unknown entity `tope` — did you mean `top`?');
+    expect(advised.advice?.relatedLine).toBeUndefined();
+  });
+
+  test('an entity that exists but has an error stays a muted follow-on', () => {
+    const source = 'entity e is port (a : inn bit); end;\narchitecture rtl of e is begin end;';
+    const output =
+      'm.vhd:1:23:error: no declaration for "inn"\nm.vhd:2:21:error: entity "e" was not analysed\n';
+    const advised = advise('m.vhd', source, output);
+    expect(advised[1].advice?.followOnOf).toBe(1);
+  });
+
+  test('not muted when another error comes first', () => {
+    const source = 'entity e is end;\narchitecture rtl of ee is begin x <= couter; end;';
+    const output = 'm.vhd:2:21:error: entity "ee" was not analysed\nm.vhd:2:31:error: no declaration for "couter"\n';
+    expect(advise('m.vhd', source, output)[0].advice?.followOnOf).toBeUndefined();
+  });
+});
+
 describe('declarations after a process’s begin', () => {
   const PROCESS = `entity e is end;
 architecture a of e is

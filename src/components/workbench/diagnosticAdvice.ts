@@ -107,8 +107,40 @@ const LOST_PLACE_PATTERNS: readonly RegExp[] = [
   /^"end" must be followed by /,
 ];
 
-/** Follows from an earlier error in the same file whatever that error is (mode-typo). */
-const NOT_ANALYSED = /^entity ".+" was not analysed$/;
+/**
+ * Follows from an earlier error in the same file whatever that error is
+ * (mode-typo) — unless no file declares that entity at all (`unknownEntity`).
+ */
+const NOT_ANALYSED = /^entity "(?<name>.+)" was not analysed$/;
+
+/** An entity declared in the project: `entity DE1_SoC is` on `line` of file `fileId`. */
+interface DeclaredEntity {
+  readonly name: string;
+  readonly fileId: string;
+  readonly line: number;
+}
+
+const ENTITY_HEADER = /^\s*entity\s+(?<name>\w+)\s+is\b/i;
+
+function entitiesOf(snapshot: RunSnapshot): DeclaredEntity[] {
+  return snapshot.files.flatMap(({ id, content }) =>
+    content.split('\n').flatMap((text, i) => {
+      const name = ENTITY_HEADER.exec(text.replace(/--.*$/, ''))?.groups?.name;
+      return name === undefined ? [] : [{ name, fileId: id, line: i + 1 }];
+    }),
+  );
+}
+
+/**
+ * `architecture rtl of DE1_SdddoC`: the entity GHDL names is declared nowhere in
+ * the project, so the name is the student's mistake, not a follow-on of an error
+ * in the entity. Undefined when the message is not that, or the entity exists.
+ */
+function unknownEntity(message: string, entities: readonly DeclaredEntity[]): string | undefined {
+  const name = NOT_ANALYSED.exec(message)?.groups?.name;
+  if (name === undefined) return undefined;
+  return entities.some((entity) => entity.name.toLowerCase() === name.toLowerCase()) ? undefined : name;
+}
 
 export function isSyntaxError(message: string): boolean {
   return SYNTAX_ERROR_PATTERNS.some((pattern) => pattern.test(message));
@@ -203,6 +235,8 @@ interface Project {
   readonly files: ReadonlyMap<string, SourceFile>;
   /** Every name declared anywhere in the project, lower case (Rule B's exclusions). */
   readonly declared: ReadonlySet<string>;
+  /** Every `entity … is` in the project. */
+  readonly entities: readonly DeclaredEntity[];
 }
 
 /** One error, with its line's tokens and the token GHDL's column points at. */
@@ -232,7 +266,7 @@ function projectOf(
     });
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { files, declared: new Set(declared) };
+  return { files, declared: new Set(declared), entities: entitiesOf(snapshot) };
 }
 
 function positionedTokens(line: string): PositionedToken[] {
@@ -482,11 +516,27 @@ const designUnitInsideArchitecture: Rule = ({ diagnostic, file }) => {
 };
 
 /**
+ * `architecture rtl of DE1_SdddoC` when no file declares that entity. Suggests
+ * the nearest entity name, or the project's only entity, and points at its
+ * declaration when it is in the same file.
+ */
+const entityNotFound: Rule = ({ diagnostic, tokens, anchor }, project) => {
+  const name = unknownEntity(diagnostic.message, project.entities);
+  if (name === undefined) return undefined;
+  const written = tokens[anchor]?.text.toLowerCase() === name.toLowerCase() ? tokens[anchor].text : name;
+  const names = project.entities.map((entity) => entity.name);
+  const suggestion = uniqueNearest(written, names) ?? (new Set(names.map((n) => n.toLowerCase())).size === 1 ? names[0] : undefined);
+  const declaration = project.entities.find((entity) => entity.name === suggestion);
+  const sameFile = declaration?.fileId === diagnostic.fileId ? declaration?.line : undefined;
+  return pointingAt(adviceText.unknownEntity(written, suggestion, sameFile), sameFile);
+};
+
+/**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
  * The rules read from GHDL's own words go before all.
  */
-const RULES: readonly Rule[] = [designUnitInsideArchitecture, declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
+const RULES: readonly Rule[] = [entityNotFound, designUnitInsideArchitecture, declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
 
 // ------------------------------------------------------------ public
 
@@ -548,7 +598,10 @@ function codeSpan(line: string): Span | undefined {
  */
 function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
   const extra = extraEnds(located, snapshot);
-  const ownMistakes = new Set([...located.filter((d) => isMisplacedDeclaration(d.message)), ...extra.keys()]);
+  const entities = entitiesOf(snapshot);
+  const isOwnMistake = (d: LocatedDiagnostic): boolean =>
+    isMisplacedDeclaration(d.message) || unknownEntity(d.message, entities) !== undefined;
+  const ownMistakes = new Set([...located.filter(isOwnMistake), ...extra.keys()]);
   const muted = followOns(located, ownMistakes);
   const project = projectOf(located, snapshot, muted);
   return located.map((diagnostic) => {

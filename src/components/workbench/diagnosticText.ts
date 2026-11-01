@@ -95,6 +95,12 @@ export const adviceText = {
     const end = outer === undefined ? 'end the one above' : `end ${code(outer)}`;
     return `${what} cannot be placed inside ${where} — ${end} with ${code('end architecture;')} before this line.`;
   },
+  /** `architecture rtl of X` where no file declares entity `X`; the suggestion's line when in the same file. */
+  unknownEntity: (name: string, suggestion?: string, line?: number): string => {
+    if (suggestion === undefined) return `Unknown entity ${code(name)} — no file in the project declares an entity with that name.`;
+    const where = line === undefined ? '' : ` (line ${line})`;
+    return `Unknown entity ${code(name)} — did you mean ${code(suggestion)}${where}?`;
+  },
   /** On the outer architecture's header. Plain words: it is drawn without code font. */
   alreadyInsideArchitecture: (): string => 'You are already inside this architecture.',
   /** An `end` after the design unit was already closed. */
