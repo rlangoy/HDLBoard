@@ -57,6 +57,14 @@ COPY public/ public/
 ARG VITE_HDL_WS_PORT=
 RUN VITE_HDL_WS_PORT=${VITE_HDL_WS_PORT} npm run build \
  && test -f dist/index.html
+# Start-up defaults (docs/SETTINGS.md), replacing public/settings.json. This
+# image does not offer bouncy pushbuttons (Settings › Pushbuttons); a student can
+# still turn them on, and `--build-arg HDLBOARD_BOUNCY_BUTTONS=true` makes on the default.
+ARG HDLBOARD_BOUNCY_BUTTONS=false
+RUN case "${HDLBOARD_BOUNCY_BUTTONS}" in true|false) ;; \
+      *) echo "HDLBOARD_BOUNCY_BUTTONS must be true or false, got '${HDLBOARD_BOUNCY_BUTTONS}'" >&2; exit 1 ;; esac \
+ && printf '{\n  "$comment": "Written by docker/Dockerfile. See docs/SETTINGS.md.",\n  "bouncyButtons": %s\n}\n' "${HDLBOARD_BOUNCY_BUTTONS}" > dist/settings.json \
+ && grep -q "\"bouncyButtons\": ${HDLBOARD_BOUNCY_BUTTONS}" dist/settings.json
 
 # --- backend ----------------------------------------------------------------
 FROM alpine:${ALPINE_VERSION} AS backend

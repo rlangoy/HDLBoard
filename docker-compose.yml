@@ -56,6 +56,8 @@ services:
         ALPINE_VERSION: ${ALPINE_VERSION:-3.24}
         # VITE_HDL_WS_PORT stays empty: the page connects back to its own
         # origin (nginx), whatever port or scheme it was loaded from.
+        # Settings › Pushbuttons › Offer bouncy pushbuttons, at start-up (docs/SETTINGS.md).
+        HDLBOARD_BOUNCY_BUTTONS: ${HDLBOARD_BOUNCY_BUTTONS:-false}
     image: hdlboard-web:latest
     restart: unless-stopped
     ports:

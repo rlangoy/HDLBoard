@@ -69,6 +69,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused (the older name `GHDL_MAX_SESSIONS` is still read) |
 | `GHDL_REF` | `master` | GHDL branch or tag to build, for example `v6.0.0` for a pinned release |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
+| `HDLBOARD_BOUNCY_BUTTONS` | `false` | Start-up default of Settings › Pushbuttons › *Offer bouncy pushbuttons*, written to the page's `settings.json` ([SETTINGS.md](../docs/SETTINGS.md)). `true` offers Bouncy contacts. A student's own choice in Settings still wins. Needs a rebuild (`--build`) |
 
 The internal backend port (9010) never has to change, because it isn't
 published.
@@ -104,6 +105,9 @@ and build context `.` (the repository root). Leave `PORT` unset, or set it to
   At roughly 150 MB and one core per active simulation, that is two or three
   students at once, so the stage sets `HDL_MAX_SESSIONS=4`. Raise it on a
   bigger instance. Fine for a demo, not for a full lab session.
+- **Bouncy pushbuttons are not offered** by default (`HDLBOARD_BOUNCY_BUTTONS`
+  in the Dockerfile's `page-build` stage). Change that default in the
+  Dockerfile to offer them.
 - **Cold starts.** Free instances spin down when idle; the first visit after a
   pause takes a while to come up.
 - **Security.** The same caveat as above: anyone who can load the page runs

@@ -33,7 +33,7 @@ the app's own browser storage, not the `settings.json` in its user-data folder, 
 | Build | Path |
 |---|---|
 | Development (`npm run dev`) and GitHub Pages | `public/settings.json` in the repository (rebuild or redeploy) |
-| Docker | `/usr/share/nginx/html/settings.json` in the `web` container, e.g. mounted with `- ./my-settings.json:/usr/share/nginx/html/settings.json:ro` |
+| Docker and Render | Written by `docker/Dockerfile` with `bouncyButtons: false`; set `HDLBOARD_BOUNCY_BUTTONS=true` in `.env` (compose) or as a build argument to change it. At run time it is `/usr/share/nginx/html/settings.json`, which a mount such as `- ./my-settings.json:/usr/share/nginx/html/settings.json:ro` replaces |
 | Windows app | `<install folder>\resources\frontend\settings.json` — a reinstall or an upgrade overwrites it, so keep a copy |
 
 ## Trying a default yourself
