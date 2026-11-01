@@ -186,11 +186,13 @@ function byPosition(a: LocatedDiagnostic, b: LocatedDiagnostic): number {
 
 /**
  * One file's muted follow-on errors (`errors` in position order), each with the
- * line of the error it follows from. Only what cannot be an independent mistake
- * is muted: a later error on a line that already has one, and a lost-place
- * message — measured on 29 captures, this hides no second mistake (§ 2.6).
- * Everything after a design unit started inside an architecture is muted too:
- * GHDL reads the rest of the file wrongly. `ownMistakes` are never muted otherwise.
+ * line of the error it follows from: the nearest earlier cause, so
+ * that after two mistakes a cascade names the second. Only what cannot be an
+ * independent mistake is muted: a later error on a line that already has one,
+ * and a lost-place message — measured on 29 captures, this hides no second
+ * mistake (§ 2.6). Everything after a design unit started inside an
+ * architecture is muted too: GHDL reads the rest of the file wrongly.
+ * `ownMistakes` are never muted otherwise.
  */
 function followOnsInFile(
   errors: readonly LocatedDiagnostic[],
@@ -202,17 +204,21 @@ function followOnsInFile(
   const afterSyntaxError = isSyntaxError(primary.message);
   // After an earlier syntax error, GHDL may meet `architecture` only because it lost its place.
   const nested = errors.find((d) => nestedDesignUnit(d.message) !== undefined && (d === primary || !afterSyntaxError));
+  // A cause is the first error or a mistake of its own after it; other errors left shown are no cause:
+  // in a cascade GHDL prints some that no pattern mutes. An unknown entity before `primary` is none either.
+  let cause: LocatedDiagnostic = primary;
   errors.forEach((error, i) => {
-    const afterNested = nested !== undefined && byPosition(nested, error) < 0;
-    if (afterNested) {
-      muted.set(error, nested.line);
-      return;
-    }
-    if (error === primary || ownMistakes.has(error)) return;
+    if (isFollowOnOf(error, i)) muted.set(error, cause.line);
+    else if (ownMistakes.has(error) && byPosition(error, primary) > 0) cause = error;
+  });
+
+  function isFollowOnOf(error: LocatedDiagnostic, i: number): boolean {
+    if (nested !== undefined && byPosition(nested, error) < 0) return true;
+    if (error === primary || ownMistakes.has(error)) return false;
     const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
     const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
-    if (cascade || NOT_ANALYSED.test(error.message)) muted.set(error, primary.line);
-  });
+    return cascade || NOT_ANALYSED.test(error.message);
+  }
 }
 
 /**

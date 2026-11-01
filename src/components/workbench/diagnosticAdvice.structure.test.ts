@@ -250,6 +250,11 @@ end;
     );
   });
 
+  test('the end; the misplaced function leaves unmatched is caused by that function, not the first mistake', () => {
+    const [last] = advise('va.vhd', SOURCE, OUTPUT).slice(-1);
+    expect(last.advice?.headline).toBe('Probably caused by the error on line 6 — fix that one first and run again.');
+  });
+
   test('shared variable and impure function are named in full', () => {
     expect([advised[5], advised[6]]).toEqual([
       '`shared variable` declarations go between `is` and `begin` — move this line above the `begin` on line 3.',
