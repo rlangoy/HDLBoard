@@ -18,6 +18,7 @@ import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
+import { useBouncyOption } from './useBouncyOption';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
@@ -342,6 +343,9 @@ export function Workbench() {
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(freshStart.project);
   const catalog = useBoards(project.boardConfig, project.board);
+  // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
+  const bouncyOption = useBouncyOption();
+  const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
   // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
@@ -1476,7 +1480,7 @@ export function Workbench() {
   const handleBoardInputsChange = (changed: Partial<BoardInputs>) => {
     const before = boardIo.latestInputs();
     const next = boardIo.setInputs(changed);
-    if (buttonBounce(project.displaySettings) === 'bouncy') {
+    if (activeBounce === 'bouncy') {
       getClient().stimSteps(bouncingStims(activeBoard.ports, { before, after: next }, buttonRandoms));
     } else {
       getClient().stim(encodeStim(activeBoard.ports, next));
@@ -1819,6 +1823,8 @@ export function Workbench() {
         onSplitPreferenceChange={tb.split.setPreference}
         recordWaves={waveView.waveform.recording}
         onRecordWavesChange={waveView.waveform.setRecording}
+        bouncyButtons={bouncyOption.enabled}
+        onBouncyButtonsChange={bouncyOption.setEnabled}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} board={activeBoard} />
       {boardChange.pending && (
@@ -2115,7 +2121,7 @@ export function Workbench() {
             <BoardFit single={isSingle} collapsed={collapsed.board} paneWidth={layout.boardWidth}
               onResize={(width) => layout.resizeOpenPane('board', width)}
               contentKey={overlay === 'boardSettings' && boardPreview ? boardPreview : activeBoard}>
-              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} panelOrder={project.displaySettings?.panelOrder} buttonBounce={buttonBounce(project.displaySettings)} /> : <BoardIoPanel
+              {overlay === 'boardSettings' && boardPreview ? <BoardDraftIo preview={boardPreview} layout={boardLayout} panelOrder={project.displaySettings?.panelOrder} buttonBounce={activeBounce} /> : <BoardIoPanel
                 board={activeBoard}
                 key={projectGeneration}
                 displaySettings={project.displaySettings}
@@ -2129,8 +2135,10 @@ export function Workbench() {
                 outputs={boardIo.outputs}
                 inputs={boardIo.inputs}
                 onInputsChange={handleBoardInputsChange}
-                buttonBounce={buttonBounce(project.displaySettings)}
-                onButtonBounceChange={(bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))}
+                buttonBounce={activeBounce}
+                onButtonBounceChange={bouncyOption.enabled
+                  ? (bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))
+                  : undefined}
                 panelOrder={project.displaySettings?.panelOrder}
                 onPanelOrderChange={(panelOrder) => setProject((current) => ({ ...current, displaySettings: withPanelOrder(current.displaySettings, panelOrder) }))}
               />}

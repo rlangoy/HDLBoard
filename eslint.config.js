@@ -62,6 +62,11 @@ const NEW_CODE = [
   'src/components/Pushbuttons/bounce.test.ts',
   'src/components/workbench/bouncyButtons.ts',
   'src/components/workbench/bouncyButtons.test.ts',
+  // Settings › Pushbuttons and the start-up defaults in settings.json.
+  'src/components/workbench/appDefaults.ts',
+  'src/components/workbench/appDefaults.test.ts',
+  'src/components/workbench/useBouncyOption.ts',
+  'src/components/workbench/useBouncyOption.test.ts',
   'src/components/workbench/quickFix.test.tsx',
   'src/components/workbench/quickFix.testSupport.ts',
   // Arranging the Board panels by dragging (docs/imp_rearrange_board_io.md).

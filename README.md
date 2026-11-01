@@ -155,6 +155,7 @@ HDLBoard does not do synthesis. Because it uses the board's real pin names, thou
 ## Documentation
 
 - [BOARDS.md](docs/BOARDS.md) — built-in boards and custom board configuration
+- [SETTINGS.md](docs/SETTINGS.md) — start-up defaults for a course or host (`settings.json`)
 - [BUILDING.md](docs/BUILDING.md) — build from source, run the dev server, package the Windows app
 - [HOSTING.md](docs/HOSTING.md) — self-host with Docker on Linux, macOS or Windows (WSL)
 - [PROJECTS.md](docs/PROJECTS.md) — create, open, edit, save and publish projects
