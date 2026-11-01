@@ -30,7 +30,8 @@ const DEFAULT_LANGUAGE = 'VHDL';
 const ENDS_A_SENTENCE = /[.?!]$/;
 
 const code = (text: string): string => `\`${text}\``;
-const begin = 'begin';
+/** `begin` in code font: the advice on misplaced declarations names it often. */
+const BEGIN = code('begin');
 
 /**
  * The advice headlines (improvement plan § 4.9): the student's own word in code
@@ -78,16 +79,16 @@ export const adviceText = {
    */
   declarationAfterBegin: (word: string, opener: string, beginLine?: number): string =>
     beginLine === undefined
-      ? `${code(word)} declarations go between ${code(opener)} and ${code(begin)}, not after ${code(begin)}.`
-      : `${code(word)} declarations go between ${code(opener)} and ${code(begin)} — move this line above the ${code(begin)} on line ${beginLine}.`,
+      ? `${code(word)} declarations go between ${code(opener)} and ${BEGIN}, not after ${BEGIN}.`
+      : `${code(word)} declarations go between ${code(opener)} and ${BEGIN} — move this line above the ${BEGIN} on line ${beginLine}.`,
   /** A `variable` among an architecture's statements: only a process (or subprogram) has variables. */
   variableInArchitecture: (): string =>
-    `A ${code('variable')} can only be declared in a process, between ${code('process')} and ${code(begin)} — in the architecture, use a ${code('signal')}.`,
+    `A ${code('variable')} can only be declared in a process, between ${code('process')} and ${BEGIN} — in the architecture, use a ${code('signal')}.`,
   /** A `signal` in a process: signals belong to the architecture. */
   signalInProcess: (architectureBeginLine?: number): string =>
     architectureBeginLine === undefined
-      ? `A ${code('signal')} cannot be declared in a process — declare it in the architecture, between ${code('is')} and ${code(begin)}.`
-      : `A ${code('signal')} cannot be declared in a process — declare it in the architecture, above the ${code(begin)} on line ${architectureBeginLine}.`,
+      ? `A ${code('signal')} cannot be declared in a process — declare it in the architecture, between ${code('is')} and ${BEGIN}.`
+      : `A ${code('signal')} cannot be declared in a process — declare it in the architecture, above the ${BEGIN} on line ${architectureBeginLine}.`,
   /** `architecture rtl2 of …` (or an entity, package …) started before the open architecture `outer` was ended. */
   unitInsideArchitecture: (unit: string, outer?: string): string => {
     const what = unit === 'architecture' ? 'An architecture' : `${unit === 'entity' ? 'An' : 'A'} ${unit}`;
@@ -162,11 +163,11 @@ export function hintNote(from: LineDiagnostic, line: number): string | undefined
   return pointing?.advice?.relatedNote;
 }
 
-/** The tooltip of a line that a message on `from` points at: its note, if any, then that message. */
-export function describeHint(from: LineDiagnostic, line?: number): string {
+/** The tooltip of `line`, which a message on `from` points at: its note, if any, then that message. */
+export function describeHint(from: LineDiagnostic, line: number): string {
   const [first] = visibleInDisplayOrder(from);
   if (first === undefined) return '';
-  const note = line === undefined ? undefined : hintNote(from, line);
+  const note = hintNote(from, line);
   const pointer = `Line ${from.line}: ${headlineOf(first)}`;
   return note === undefined ? pointer : `${note}\n\n${pointer}`;
 }

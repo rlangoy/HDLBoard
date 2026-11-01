@@ -26,7 +26,7 @@ import {
   DECLARATION_WORDS,
   designUnitEnd,
   statementRegionHome,
-} from './misplacedDeclaration';
+} from './vhdlStructure';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
 import { addUseClause, clashingPackageInUse } from './useClauseFix';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
@@ -120,11 +120,16 @@ interface DeclaredEntity {
   readonly line: number;
 }
 
+/** A file as GHDL saw it, one entry per line, without a trailing `\r`. */
+function linesOf(content: string): string[] {
+  return content.split('\n').map((line) => line.replace(/\r$/, ''));
+}
+
 const ENTITY_HEADER = /^\s*entity\s+(?<name>\w+)\s+is\b/i;
 
 function entitiesOf(snapshot: RunSnapshot): DeclaredEntity[] {
   return snapshot.files.flatMap(({ id, content }) =>
-    content.split('\n').flatMap((text, i) => {
+    linesOf(content).flatMap((text, i) => {
       const name = ENTITY_HEADER.exec(text.replace(/--.*$/, ''))?.groups?.name;
       return name === undefined ? [] : [{ name, fileId: id, line: i + 1 }];
     }),
@@ -180,12 +185,40 @@ function byPosition(a: LocatedDiagnostic, b: LocatedDiagnostic): number {
 }
 
 /**
- * The muted follow-on errors, each with the line of its file's first error.
- * GHDL does not print errors in position order (downto-typo prints 13:52 before
- * 13:44), so each file's errors are sorted first. Only what cannot be an
- * independent mistake is muted: a later error on a line that already has one,
- * and a lost-place message — measured on 29 captures, this hides no second
- * mistake (§ 2.6).
+ * One file's muted follow-on errors (`errors` in position order), each with the
+ * line of the error it follows from. Only what cannot be an independent mistake
+ * is muted: a later error on a line that already has one, and a lost-place
+ * message — measured on 29 captures, this hides no second mistake (§ 2.6).
+ * Everything after a design unit started inside an architecture is muted too:
+ * GHDL reads the rest of the file wrongly. `ownMistakes` are never muted otherwise.
+ */
+function followOnsInFile(
+  errors: readonly LocatedDiagnostic[],
+  ownMistakes: ReadonlySet<LocatedDiagnostic>,
+  muted: Map<LocatedDiagnostic, number>,
+): void {
+  const primary = errors.find((d) => !NOT_ANALYSED.test(d.message));
+  if (primary === undefined) return;
+  const afterSyntaxError = isSyntaxError(primary.message);
+  // After an earlier syntax error, GHDL may meet `architecture` only because it lost its place.
+  const nested = errors.find((d) => nestedDesignUnit(d.message) !== undefined && (d === primary || !afterSyntaxError));
+  errors.forEach((error, i) => {
+    const afterNested = nested !== undefined && byPosition(nested, error) < 0;
+    if (afterNested) {
+      muted.set(error, nested.line);
+      return;
+    }
+    if (error === primary || ownMistakes.has(error)) return;
+    const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
+    const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
+    if (cascade || NOT_ANALYSED.test(error.message)) muted.set(error, primary.line);
+  });
+}
+
+/**
+ * The muted follow-on errors of every file. GHDL does not print errors in
+ * position order (downto-typo prints 13:52 before 13:44), so each file's errors
+ * are sorted first.
  */
 function followOns(
   located: readonly LocatedDiagnostic[],
@@ -194,21 +227,7 @@ function followOns(
   const muted = new Map<LocatedDiagnostic, number>();
   for (const fileId of new Set(located.map((d) => d.fileId))) {
     const errors = located.filter((d) => d.fileId === fileId && isAdvisable(d)).sort(byPosition);
-    const primary = errors.find((d) => !NOT_ANALYSED.test(d.message));
-    if (primary === undefined) continue;
-    const afterSyntaxError = isSyntaxError(primary.message);
-    // After an earlier syntax error, GHDL may meet `architecture` only because it lost its place.
-    const nested = errors.find((d) => nestedDesignUnit(d.message) !== undefined && (d === primary || !afterSyntaxError));
-    errors.forEach((error, i) => {
-      if (nested !== undefined && error !== nested && byPosition(nested, error) < 0) {
-        muted.set(error, nested.line);
-        return;
-      }
-      if (error === primary || ownMistakes.has(error)) return;
-      const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
-      const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
-      if (cascade || NOT_ANALYSED.test(error.message)) muted.set(error, primary.line);
-    });
+    followOnsInFile(errors, ownMistakes, muted);
   }
   return muted;
 }
@@ -255,18 +274,19 @@ function projectOf(
   located: readonly LocatedDiagnostic[],
   snapshot: RunSnapshot,
   muted: ReadonlyMap<LocatedDiagnostic, number>,
+  entities: readonly DeclaredEntity[],
 ): Project {
   const files = new Map<string, SourceFile>();
   for (const file of snapshot.files) {
     const errorLines = located.filter((d) => d.fileId === file.id && isAdvisable(d) && !muted.has(d));
     files.set(file.id, {
-      lines: file.content.split('\n').map((line) => line.replace(/\r$/, '')),
+      lines: linesOf(file.content),
       declared: declaredNames(file.content),
       errorLines: new Set(errorLines.map((d) => d.line)),
     });
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { files, declared: new Set(declared), entities: entitiesOf(snapshot) };
+  return { files, declared: new Set(declared), entities };
 }
 
 function positionedTokens(line: string): PositionedToken[] {
@@ -474,23 +494,32 @@ function pointingAt(headline: string, line: number | undefined): Advice {
   return line === undefined ? { headline } : { headline, relatedLine: line };
 }
 
-/**
- * A declaration written after `begin` — in the architecture (`unexpected token
- * 'signal' in a concurrent statement list`) or in a process or subprogram
- * (`declaration not allowed within statements`). Says where it goes, and points
- * at the `begin` to move it above.
- */
-const declarationAfterBegin: Rule = ({ diagnostic, file, tokens, anchor }) => {
+// ------------------------------------------------- how the code is nested
+// A declaration after `begin`, a design unit inside an architecture, an unknown
+// entity: read from GHDL's own words and the shape of the code (vhdlStructure.ts).
+
+/** `word` as the student wrote it, when GHDL's caret is on it; else `word` as GHDL printed it. */
+function asWritten({ tokens, anchor }: Place, word: string): string {
+  const atCaret = tokens[anchor]?.text;
+  return atCaret?.toLowerCase() === word.toLowerCase() ? atCaret : word;
+}
+
+/** A declaration among an architecture's statements (`unexpected token 'signal' in a concurrent statement list`). */
+const declarationInArchitectureBody: Rule = (place) => {
+  const word = UNEXPECTED_IN_CONCURRENT.exec(place.diagnostic.message)?.groups?.word;
+  if (word === undefined || !isMisplacedDeclaration(place.diagnostic.message)) return undefined;
+  const written = asWritten(place, word);
+  if (written.toLowerCase() === 'variable') return { headline: adviceText.variableInArchitecture() };
+  const begin = architectureBegin(place.file.lines, place.diagnostic.line);
+  return pointingAt(adviceText.declarationAfterBegin(declarationKind(written), 'is', begin), begin);
+};
+
+const DECLARATION_IN_STATEMENTS = 'declaration not allowed within statements';
+
+/** A declaration among a process's or subprogram's statements. */
+const declarationInStatements: Rule = ({ diagnostic, file, tokens, anchor }) => {
   const written = tokens[anchor]?.text;
-  const concurrent = UNEXPECTED_IN_CONCURRENT.exec(diagnostic.message)?.groups?.word;
-  if (concurrent !== undefined) {
-    if (!isMisplacedDeclaration(diagnostic.message)) return undefined;
-    const word = written?.toLowerCase() === concurrent.toLowerCase() ? written : concurrent;
-    if (word.toLowerCase() === 'variable') return { headline: adviceText.variableInArchitecture() };
-    const begin = architectureBegin(file.lines, diagnostic.line);
-    return pointingAt(adviceText.declarationAfterBegin(declarationKind(word), 'is', begin), begin);
-  }
-  if (diagnostic.message !== 'declaration not allowed within statements' || written === undefined) return undefined;
+  if (diagnostic.message !== DECLARATION_IN_STATEMENTS || written === undefined) return undefined;
   if (!DECLARATION_WORDS.has(written.toLowerCase())) return undefined;
   const home = statementRegionHome(file.lines, diagnostic.line);
   if (home === undefined) return undefined;
@@ -520,23 +549,39 @@ const designUnitInsideArchitecture: Rule = ({ diagnostic, file }) => {
  * the nearest entity name, or the project's only entity, and points at its
  * declaration when it is in the same file.
  */
-const entityNotFound: Rule = ({ diagnostic, tokens, anchor }, project) => {
-  const name = unknownEntity(diagnostic.message, project.entities);
+const entityNotFound: Rule = (place, project) => {
+  const name = unknownEntity(place.diagnostic.message, project.entities);
   if (name === undefined) return undefined;
-  const written = tokens[anchor]?.text.toLowerCase() === name.toLowerCase() ? tokens[anchor].text : name;
-  const names = project.entities.map((entity) => entity.name);
-  const suggestion = uniqueNearest(written, names) ?? (new Set(names.map((n) => n.toLowerCase())).size === 1 ? names[0] : undefined);
-  const declaration = project.entities.find((entity) => entity.name === suggestion);
-  const sameFile = declaration?.fileId === diagnostic.fileId ? declaration?.line : undefined;
-  return pointingAt(adviceText.unknownEntity(written, suggestion, sameFile), sameFile);
+  const written = asWritten(place, name);
+  const entity = suggestedEntity(written, project.entities);
+  const lineInThisFile = entity?.fileId === place.diagnostic.fileId ? entity.line : undefined;
+  return pointingAt(adviceText.unknownEntity(written, entity?.name, lineInThisFile), lineInThisFile);
 };
+
+/** The entity the student probably meant: the nearest name, else the project's only entity. */
+function suggestedEntity(written: string, entities: readonly DeclaredEntity[]): DeclaredEntity | undefined {
+  const nearestName = uniqueNearest(written, entities.map((entity) => entity.name));
+  if (nearestName !== undefined) return entities.find((entity) => entity.name === nearestName);
+  const onlyEntity = new Set(entities.map((entity) => entity.name.toLowerCase())).size === 1;
+  return onlyEntity ? entities[0] : undefined;
+}
 
 /**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
  * The rules read from GHDL's own words go before all.
  */
-const RULES: readonly Rule[] = [entityNotFound, designUnitInsideArchitecture, declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
+const RULES: readonly Rule[] = [
+  entityNotFound,
+  designUnitInsideArchitecture,
+  declarationInArchitectureBody,
+  declarationInStatements,
+  joinedKeyword,
+  misspelledKeyword,
+  missingPackage,
+  undeclaredName,
+  causeOnPreviousLine,
+];
 
 // ------------------------------------------------------------ public
 
@@ -566,7 +611,7 @@ interface ExtraEnd {
 function extraEnds(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): Map<LocatedDiagnostic, ExtraEnd> {
   const found = new Map<LocatedDiagnostic, ExtraEnd>();
   for (const { id, content } of snapshot.files) {
-    const file = { lines: content.split('\n').map((line) => line.replace(/\r$/, '')) };
+    const file = { lines: linesOf(content) };
     const errors = located.filter((d) => d.fileId === id && isAdvisable(d)).sort(byPosition);
     const errorLines = new Set(errors.map((d) => d.line));
     const extraByLine = new Map<number, ExtraEnd>();
@@ -603,7 +648,7 @@ function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: 
     isMisplacedDeclaration(d.message) || unknownEntity(d.message, entities) !== undefined;
   const ownMistakes = new Set([...located.filter(isOwnMistake), ...extra.keys()]);
   const muted = followOns(located, ownMistakes);
-  const project = projectOf(located, snapshot, muted);
+  const project = projectOf(located, snapshot, muted, entities);
   return located.map((diagnostic) => {
     const file = project.files.get(diagnostic.fileId);
     if (!isAdvisable(diagnostic) || file === undefined) return diagnostic;

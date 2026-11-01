@@ -112,7 +112,7 @@ describe('advice wording', () => {
 
   test('the hint tooltip names the line that points here', () => {
     const from = lineOf(advised("'then' is expected here", { headline: 'Probably a missing `then` at the end of line 12.' }));
-    expect(describeHint(from)).toBe('Line 13: Probably a missing `then` at the end of line 12.');
+    expect(describeHint(from, 12)).toBe('Line 13: Probably a missing `then` at the end of line 12.');
   });
 
   test('a note for the line it points at comes first, and only on that line', () => {

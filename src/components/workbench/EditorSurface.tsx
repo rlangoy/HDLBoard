@@ -3,6 +3,7 @@
 
 import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
+import { CodeText } from './CodeText';
 import { describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
@@ -121,9 +122,11 @@ const HighlightedLine = memo(function HighlightedLine({
     <div className={cx('wb-editor__line', markerClasses(diagnostic, hintFrom))}>
       {line.length === 0 ? ' ' : pieces.map((piece, i) => <TokenPiece key={i} piece={piece} />)}
       {diagnostic && inline && (
-        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inline}</span>
+        <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>
+          <CodeText text={inline} />
+        </span>
       )}
-      {!diagnostic && hintFrom && note && <span className="wb-editor__diag-inline is-hint">{note}</span>}
+      {!diagnostic && note && <span className="wb-editor__diag-inline is-hint">{note}</span>}
     </div>
   );
 });
