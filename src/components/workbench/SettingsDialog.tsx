@@ -37,6 +37,28 @@ export interface SettingsDialogProps {
   /** Waveforms are recorded for testbench runs (docs/waveform_viewer_spec.md FR-1). */
   recordWaves: boolean;
   onRecordWavesChange: (on: boolean) => void;
+  /** The Pushbuttons panel offers "Bouncy" contacts (useBouncyOption.ts); on by default. */
+  bouncyButtons: boolean;
+  onBouncyButtonsChange: (on: boolean) => void;
+}
+
+/** One switch, on by default: whether the Pushbuttons panel's menu offers bouncing contacts. */
+function BouncySetting({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">Pushbuttons</legend>
+      <label className="wb-settings__option">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span>
+          <strong>Offer bouncy pushbuttons</strong>
+          <span className="wb-settings__note">
+            The Pushbuttons panel's menu lets you pick Bouncy contacts, which give several edges per press like real buttons.
+            Off: the choice is hidden and every press is one clean edge.
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  );
 }
 
 /** One switch, on by default (FR-1): a typical testbench writes kilobytes, sent only when opened. */
@@ -160,6 +182,8 @@ export function SettingsDialog({
   onSplitPreferenceChange,
   recordWaves,
   onRecordWavesChange,
+  bouncyButtons,
+  onBouncyButtonsChange,
 }: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
@@ -186,6 +210,7 @@ export function SettingsDialog({
     >
       <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} onViewSettings={onViewBoardSettings} />
       <BoardLayoutSetting value={boardLayout} onChange={onBoardLayoutChange} />
+      <BouncySetting value={bouncyButtons} onChange={onBouncyButtonsChange} />
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />

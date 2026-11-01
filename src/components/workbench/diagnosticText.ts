@@ -30,6 +30,8 @@ const DEFAULT_LANGUAGE = 'VHDL';
 const ENDS_A_SENTENCE = /[.?!]$/;
 
 const code = (text: string): string => `\`${text}\``;
+/** `begin` in code font: the advice on misplaced declarations names it often. */
+const BEGIN = code('begin');
 
 /**
  * The advice headlines (improvement plan § 4.9): the student's own word in code
@@ -71,6 +73,44 @@ export const adviceText = {
   /** Rule H (Icarus): a `wire` assigned inside an `always` block. */
   wireAssignedInAlways: (name: string): string =>
     `${code(name)} is a ${code('wire')}: only a ${code('reg')} can be assigned inside an ${code('always')} block — declare it as ${code('reg')}.`,
+  /**
+   * A declaration written after `begin`: it belongs between `opener` (`is`,
+   * `process`) and `begin`, and above the `begin` on `beginLine` when known.
+   */
+  declarationAfterBegin: (word: string, opener: string, beginLine?: number): string =>
+    beginLine === undefined
+      ? `${code(word)} declarations go between ${code(opener)} and ${BEGIN}, not after ${BEGIN}.`
+      : `${code(word)} declarations go between ${code(opener)} and ${BEGIN} — move this line above the ${BEGIN} on line ${beginLine}.`,
+  /** A `variable` among an architecture's statements: only a process (or subprogram) has variables. */
+  variableInArchitecture: (): string =>
+    `A ${code('variable')} can only be declared in a process, between ${code('process')} and ${BEGIN} — in the architecture, use a ${code('signal')}.`,
+  /** A `signal` in a process: signals belong to the architecture. */
+  signalInProcess: (architectureBeginLine?: number): string =>
+    architectureBeginLine === undefined
+      ? `A ${code('signal')} cannot be declared in a process — declare it in the architecture, between ${code('is')} and ${BEGIN}.`
+      : `A ${code('signal')} cannot be declared in a process — declare it in the architecture, above the ${BEGIN} on line ${architectureBeginLine}.`,
+  /** `architecture rtl2 of …` (or an entity, package …) started before the open architecture `outer` was ended. */
+  unitInsideArchitecture: (unit: string, outer?: string): string => {
+    const what = unit === 'architecture' ? 'An architecture' : `${unit === 'entity' ? 'An' : 'A'} ${unit}`;
+    const where = unit === 'architecture' ? 'another architecture' : 'an architecture';
+    const end = outer === undefined ? 'end the one above' : `end ${code(outer)}`;
+    return `${what} cannot be placed inside ${where} — ${end} with ${code('end architecture;')} before this line.`;
+  },
+  /** `architecture rtl of X` where no file declares entity `X`; the suggestion's line when in the same file. */
+  unknownEntity: (name: string, suggestion?: string, line?: number): string => {
+    if (suggestion === undefined) return `Unknown entity ${code(name)} — no file in the project declares an entity with that name.`;
+    const where = line === undefined ? '' : ` (line ${line})`;
+    return `Unknown entity ${code(name)} — did you mean ${code(suggestion)}${where}?`;
+  },
+  /** On the outer architecture's header. Plain words: it is drawn without code font. */
+  alreadyInsideArchitecture: (): string => 'You are already inside this architecture.',
+  /** An `end` after the design unit was already closed. */
+  extraEnd: (closedLine: number, kind = 'design unit'): string =>
+    `Extra ${code('end')} — line ${closedLine} already closed the ${kind}. Delete this line.`,
+  /** An architecture's statements started without `begin`: `statement` names the first (`assignment`, `process` …). */
+  missingBegin: (statement: string): string => `Missing ${BEGIN} — insert ${BEGIN} before this ${statement}.`,
+  /** The word written where the architecture's `begin` belongs (`begisasa`). */
+  misspelledBegin: (word: string): string => `Missing ${BEGIN} — ${code(word)} is probably a misspelled ${BEGIN}.`,
   /** Rule F. */
   followOn: (line: number): string => `Probably caused by the error on line ${line} — fix that one first and run again.`,
   /** Rule F, on the line of the first error itself. */
@@ -79,7 +119,14 @@ export const adviceText = {
 
 /** The Quick Fix button: what it will add. */
 export function quickFixTitle(fix: QuickFix): string {
-  return `Add ${code(useClauseText(fix.addUseClause))}`;
+  switch (fix.kind) {
+    case 'addUseClause':
+      return `Add ${code(useClauseText(fix.pkg))}`;
+    case 'insertBegin':
+      return `Insert ${BEGIN}`;
+    case 'replaceWithBegin':
+      return `Replace with ${BEGIN}`;
+  }
 }
 
 /** The keyboard shortcut of the Quick Fix, as VS Code has it. */
@@ -121,10 +168,19 @@ export function describeLine(line: LineDiagnostic): string {
   return inDisplayOrder(line).map(describeMessage).join(hasAdvice ? '\n\n' : '\n');
 }
 
-/** The tooltip of a line that Rules D or E point at from `from`. */
-export function describeHint(from: LineDiagnostic): string {
+/** The note a visible message of `from` puts on `line`, the line it points at (`relatedNote`). */
+export function hintNote(from: LineDiagnostic, line: number): string | undefined {
+  const pointing = visibleInDisplayOrder(from).find((m) => m.advice?.relatedLine === line && m.advice.relatedNote);
+  return pointing?.advice?.relatedNote;
+}
+
+/** The tooltip of `line`, which a message on `from` points at: its note, if any, then that message. */
+export function describeHint(from: LineDiagnostic, line: number): string {
   const [first] = visibleInDisplayOrder(from);
-  return first ? `Line ${from.line}: ${headlineOf(first)}` : '';
+  if (first === undefined) return '';
+  const note = hintNote(from, line);
+  const pointer = `Line ${from.line}: ${headlineOf(first)}`;
+  return note === undefined ? pointer : `${note}\n\n${pointer}`;
 }
 
 /**

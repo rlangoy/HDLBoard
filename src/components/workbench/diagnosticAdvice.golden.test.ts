@@ -90,7 +90,7 @@ const EXPECTED: Readonly<Record<string, Outcome>> = {
   'downto-typo': { line: 13, underlined: 'dwonto', headline: keyword('dwonto', 'downto'), relatedLine: undefined, muted: 11, visible: 3 },
   'signal-typo': { line: 34, underlined: 'signl', headline: keyword('signl', 'signal'), relatedLine: undefined, muted: 0, visible: 1 },
   'process-typo': { line: 38, underlined: 'proces', headline: keyword('proces', 'process'), relatedLine: undefined, muted: 17, visible: 3 },
-  'begin-typo': { line: 39, underlined: 'begn', headline: keyword('begn', 'begin'), relatedLine: undefined, muted: 9, visible: 3 },
+  'begin-typo': { line: 39, underlined: 'begn', headline: keyword('begn', 'begin'), relatedLine: undefined, muted: 10, visible: 2 },
   'then-typo': { line: 40, underlined: 'than', headline: keyword('than', 'then'), relatedLine: undefined, muted: 1, visible: 2 },
   'then-missing': { line: 41, underlined: 'if', headline: missingAtEnd('then', 40), relatedLine: 40, muted: 0, visible: 1 },
   'endif-joined': {
@@ -192,11 +192,11 @@ describe('§ 5: one mistake', () => {
     expect(headlines.length).toBe(19);
   });
 
-  test('62 of 93 errors are muted', () => {
+  test('63 of 93 errors are muted', () => {
     const totals = Object.keys(EXPECTED).map((id) => outcome(caseById(id)));
     const muted = totals.reduce((sum, o) => sum + o.muted, 0);
     const all = totals.reduce((sum, o) => sum + o.muted + o.visible, 0);
-    expect([muted, all]).toEqual([62, 93]);
+    expect([muted, all]).toEqual([63, 93]);
   });
 });
 

@@ -2,19 +2,11 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { cx } from '../board';
+import { CodeText } from './CodeText';
 import type { QuickFix } from './diagnosticAdvice';
 import { QUICK_FIX_SHORTCUT, quickFixTitle } from './diagnosticText';
 import type { ExtraRow } from './extraRows';
 import { LightbulbIcon } from './icons';
-
-/** Text with `code` in backticks, as the advice headlines write it. */
-function CodeText({ text }: { text: string }) {
-  return (
-    <>
-      {text.split('`').map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : part))}
-    </>
-  );
-}
 
 function QuickFixButton({ fix, onApply }: { fix: QuickFix; onApply: () => void }) {
   return (

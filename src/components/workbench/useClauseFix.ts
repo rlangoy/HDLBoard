@@ -8,6 +8,7 @@
  */
 
 import { offsetOfLine } from './diagnosticLocation';
+import { indentOf, lineEnding, splitLines, type TextEdit } from './textLines';
 import { tokenizeVhdlLine } from './vhdlHighlight';
 import {
   isSamePackage,
@@ -17,14 +18,6 @@ import {
   useClauseText,
   type VhdlPackage,
 } from './vhdlPackages';
-
-/** Text to insert at one offset of the file. */
-export interface TextInsertion {
-  readonly offset: number;
-  readonly text: string;
-  /** Where the caret goes once inserted: the end of the new `use` clause, so the student sees it. */
-  readonly caret: number;
-}
 
 /** One `library` or `use` clause: `use ieee.numeric_std.all, work.defs.all;` has two names. */
 interface ContextClause {
@@ -38,9 +31,6 @@ interface ContextClause {
 const CLAUSE = /^(?<keyword>library|use)\s+(?<names>.+)$/i;
 /** The words that start a primary design unit: each gets the context clauses written just before it. */
 const PRIMARY_UNIT_KEYWORDS: ReadonlySet<string> = new Set(['entity', 'package', 'configuration']);
-const LEADING_WHITESPACE = /^[ \t]*/;
-const CRLF = '\r\n';
-const LF = '\n';
 
 function codeOf(line: string): string {
   return tokenizeVhdlLine(line)
@@ -105,10 +95,6 @@ function declaresLibrary(clauses: readonly ContextClause[], library: string): bo
   return clauses.some((clause) => clause.keyword === 'library' && clause.names.includes(wanted));
 }
 
-function splitLines(content: string): string[] {
-  return content.split(LF).map((line) => line.replace(/\r$/, ''));
-}
-
 /** The package already used above `line` that cannot be used together with `pkg` (`std_logic_arith` for `numeric_std`). */
 export function clashingPackageInUse(content: string, pkg: VhdlPackage, line: number): VhdlPackage | undefined {
   const { clauses } = contextOf(splitLines(content), line);
@@ -135,25 +121,25 @@ interface Source {
 }
 
 function sourceOf(content: string): Source {
-  return { content, lines: splitLines(content), eol: content.includes(CRLF) ? CRLF : LF };
+  return { content, lines: splitLines(content), eol: lineEnding(content) };
 }
 
 /** Under the last clause above the error, indented like it. */
-function insertBelow({ content, lines, eol }: Source, anchor: number, added: readonly string[]): TextInsertion {
-  const indent = LEADING_WHITESPACE.exec(lines[anchor - 1])?.[0] ?? '';
+function insertBelow({ content, lines, eol }: Source, anchor: number, added: readonly string[]): TextEdit {
+  const indent = indentOf(lines[anchor - 1]);
   const block = added.map((clause) => `${indent}${clause}`).join(eol);
   if (anchor === lines.length) {
-    return { offset: content.length, text: `${eol}${block}`, caret: content.length + eol.length + block.length };
+    return { offset: content.length, removed: 0, text: `${eol}${block}`, caret: content.length + eol.length + block.length };
   }
   const offset = offsetOfLine(content, anchor + 1);
-  return { offset, text: `${block}${eol}`, caret: offset + block.length };
+  return { offset, removed: 0, text: `${block}${eol}`, caret: offset + block.length };
 }
 
 /** A unit with no clauses yet: the new ones go before it (or the file's first code), with a blank line after them. */
-function insertBefore({ content, lines, eol }: Source, unitStart: number | undefined, added: readonly string[]): TextInsertion {
+function insertBefore({ content, lines, eol }: Source, unitStart: number | undefined, added: readonly string[]): TextEdit {
   const offset = offsetOfLine(content, unitStart ?? firstCodeLine(lines));
   const block = added.join(eol);
-  return { offset, text: `${block}${eol}${eol}`, caret: offset + block.length };
+  return { offset, removed: 0, text: `${block}${eol}${eol}`, caret: offset + block.length };
 }
 
 /**
@@ -162,7 +148,7 @@ function insertBefore({ content, lines, eol }: Source, unitStart: number | undef
  * `library ieee;` when it is missing), else just before the unit. `undefined` when
  * the package is already used there, or a package that clashes with it is.
  */
-export function addUseClause(content: string, pkg: VhdlPackage, line: number): TextInsertion | undefined {
+export function addUseClause(content: string, pkg: VhdlPackage, line: number): TextEdit | undefined {
   const source = sourceOf(content);
   const { clauses, unitStart } = contextOf(source.lines, line);
   if (usesPackage(clauses, pkg) || clashingPackageInUse(content, pkg, line)) return undefined;
@@ -171,7 +157,3 @@ export function addUseClause(content: string, pkg: VhdlPackage, line: number): T
   return anchor === undefined ? insertBefore(source, unitStart, added) : insertBelow(source, anchor, added);
 }
 
-/** The file with the insertion made. */
-export function applyInsertion(content: string, insertion: TextInsertion): string {
-  return `${content.slice(0, insertion.offset)}${insertion.text}${content.slice(insertion.offset)}`;
-}
