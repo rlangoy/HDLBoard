@@ -99,6 +99,77 @@ describe('signals after the architecture’s begin, and extra ends', () => {
   });
 });
 
+describe('an architecture inside another architecture', () => {
+  const HEADER = DE1_SOC.split('\n').slice(0, 24).join('\n');
+  const NESTED = `${HEADER}
+
+    signal a : std_logic;
+    signal b : std_logic;
+    signal y : std_logic;
+begin
+
+
+architecture rtl2 of DE1_SoC is
+
+    signal a : std_logic;
+    signal b : std_logic;
+    signal y : std_logic;
+begin
+
+end architecture
+    a <= SW(0);
+    b <= SW(1);
+
+    y <= a and b;
+
+    LEDR(0) <= y;
+    LEDR(9 downto 1) <= (others => '0');
+end architecture rtl;
+
+
+
+
+
+`;
+  const OUTPUT =
+    "nest.vhd:32:1:error: unexpected token 'architecture' in a concurrent statement list\narchitecture rtl2 of DE1_SoC is\n^\nnest.vhd:35:5:error: unexpected token 'signal' in a concurrent statement list\n    signal b : std_logic;\n    ^\nnest.vhd:36:5:error: unexpected token 'signal' in a concurrent statement list\n    signal y : std_logic;\n    ^\nnest.vhd:37:1:error: unexpected token 'begin' in a concurrent statement list\nbegin\n^\nnest.vhd:40:5:error: misspelling, \"rtl\" expected\n    a <= SW(0);\n    ^\nnest.vhd:40:6:error: missing \";\" at end of architecture\n    a <= SW(0);\n     ^\nnest.vhd:41:5:error: missing entity, architecture, package or configuration\n    b <= SW(1);\n    ^\nnest.vhd:43:5:error: missing entity, architecture, package or configuration\n    y <= a and b;\n    ^\nnest.vhd:45:5:error: missing entity, architecture, package or configuration\n    LEDR(0) <= y;\n    ^\nnest.vhd:46:5:error: missing entity, architecture, package or configuration\n    LEDR(9 downto 1) <= (others => '0');\n    ^\nnest.vhd:47:1:error: missing entity, architecture, package or configuration\nend architecture rtl;\n^\n";
+  const advised = advise('nest.vhd', NESTED, OUTPUT);
+  const first = advised[0];
+
+  test('the inner architecture says what is wrong, on its own keyword', () => {
+    expect(first.line).toBe(32);
+    expect(first.advice?.headline).toBe(
+      'An architecture cannot be placed inside another architecture — end `rtl` with `end architecture;` before this line.',
+    );
+    expect(first.advice?.span).toEqual({ start: 0, end: 'architecture'.length });
+  });
+
+  test('it points at the outer architecture: you are already inside it', () => {
+    expect(first.advice?.relatedLine).toBe(24);
+    expect(first.advice?.relatedNote).toBe('You are already inside this architecture.');
+  });
+
+  test('every later error is muted as caused by it — the signals too', () => {
+    expect(advised.slice(1).map((d) => d.advice?.followOnOf)).toEqual(Array(advised.length - 1).fill(32));
+  });
+
+  test('without an architecture above, the headline names none', () => {
+    const lone = advise('x.vhd', 'architecture b of e is', "x.vhd:1:1:error: unexpected token 'architecture' in a concurrent statement list\n");
+    expect(lone[0].advice?.headline).toBe(
+      'An architecture cannot be placed inside another architecture — end the one above with `end architecture;` before this line.',
+    );
+    expect(lone[0].advice?.relatedLine).toBeUndefined();
+  });
+
+  test('an entity inside an architecture', () => {
+    const source = 'architecture rtl of e is\nbegin\nentity f is end;';
+    const entity = advise('y.vhd', source, "y.vhd:3:1:error: unexpected token 'entity' in a concurrent statement list\n");
+    expect(entity[0].advice?.headline).toBe(
+      'An entity cannot be placed inside an architecture — end `rtl` with `end architecture;` before this line.',
+    );
+  });
+});
+
 describe('declarations after a process’s begin', () => {
   const PROCESS = `entity e is end;
 architecture a of e is

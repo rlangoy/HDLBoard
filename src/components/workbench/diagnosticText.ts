@@ -88,6 +88,15 @@ export const adviceText = {
     architectureBeginLine === undefined
       ? `A ${code('signal')} cannot be declared in a process — declare it in the architecture, between ${code('is')} and ${code(begin)}.`
       : `A ${code('signal')} cannot be declared in a process — declare it in the architecture, above the ${code(begin)} on line ${architectureBeginLine}.`,
+  /** `architecture rtl2 of …` (or an entity, package …) started before the open architecture `outer` was ended. */
+  unitInsideArchitecture: (unit: string, outer?: string): string => {
+    const what = unit === 'architecture' ? 'An architecture' : `${unit === 'entity' ? 'An' : 'A'} ${unit}`;
+    const where = unit === 'architecture' ? 'another architecture' : 'an architecture';
+    const end = outer === undefined ? 'end the one above' : `end ${code(outer)}`;
+    return `${what} cannot be placed inside ${where} — ${end} with ${code('end architecture;')} before this line.`;
+  },
+  /** On the outer architecture's header. Plain words: it is drawn without code font. */
+  alreadyInsideArchitecture: (): string => 'You are already inside this architecture.',
   /** An `end` after the design unit was already closed. */
   extraEnd: (closedLine: number, kind = 'design unit'): string =>
     `Extra ${code('end')} — line ${closedLine} already closed the ${kind}. Delete this line.`,
@@ -141,10 +150,19 @@ export function describeLine(line: LineDiagnostic): string {
   return inDisplayOrder(line).map(describeMessage).join(hasAdvice ? '\n\n' : '\n');
 }
 
-/** The tooltip of a line that Rules D or E point at from `from`. */
-export function describeHint(from: LineDiagnostic): string {
+/** The note a visible message of `from` puts on `line`, the line it points at (`relatedNote`). */
+export function hintNote(from: LineDiagnostic, line: number): string | undefined {
+  const pointing = visibleInDisplayOrder(from).find((m) => m.advice?.relatedLine === line && m.advice.relatedNote);
+  return pointing?.advice?.relatedNote;
+}
+
+/** The tooltip of a line that a message on `from` points at: its note, if any, then that message. */
+export function describeHint(from: LineDiagnostic, line?: number): string {
   const [first] = visibleInDisplayOrder(from);
-  return first ? `Line ${from.line}: ${headlineOf(first)}` : '';
+  if (first === undefined) return '';
+  const note = line === undefined ? undefined : hintNote(from, line);
+  const pointer = `Line ${from.line}: ${headlineOf(first)}`;
+  return note === undefined ? pointer : `${note}\n\n${pointer}`;
 }
 
 /**

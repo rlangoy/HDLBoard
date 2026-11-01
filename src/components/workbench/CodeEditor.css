@@ -239,6 +239,9 @@
 .wb-editor__diag-inline.is-warning {
   color: var(--wb-diag-warning-text);
 }
+.wb-editor__diag-inline.is-hint {
+  color: var(--wb-diag-hint);
+}
 
 .wb-editor__gutter-line.is-error,
 .wb-editor__gutter-line.is-warning {

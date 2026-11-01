@@ -3,7 +3,7 @@
 
 import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
-import { describeHint, describeLine, inlineText, summarize } from './diagnosticText';
+import { describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
@@ -61,6 +61,11 @@ const TOKEN_CLASS: Partial<Record<Token['type'], string>> = {
   punctuation: 'wb-tok-punct',
 };
 
+/** A hint line's note: a string, so the memoised line is not redrawn for nothing. */
+function noteOf(hintFrom: LineDiagnostic | undefined, line: number): string | undefined {
+  return hintFrom && hintNote(hintFrom, line);
+}
+
 /** The marker classes of a line: its severity, muted when every message is a follow-on, untinted when every one is quiet; or a hint. */
 function markerClasses(diagnostic: LineDiagnostic | undefined, hintFrom: LineDiagnostic | undefined): string {
   if (diagnostic) {
@@ -88,6 +93,7 @@ const HighlightedLine = memo(function HighlightedLine({
   tokens,
   diagnostic,
   hintFrom,
+  note,
   occurrences,
   findRanges,
   currentFind,
@@ -99,6 +105,8 @@ const HighlightedLine = memo(function HighlightedLine({
   diagnostic?: LineDiagnostic;
   /** Rules D and E point at this line from that marked line. */
   hintFrom?: LineDiagnostic;
+  /** What the pointing message says about this line (`hintNote`), drawn after its code. */
+  note?: string;
   /** The hovered symbol's declaration and references on this line. */
   occurrences: readonly Occurrence[];
   /** Search matches on this line (docs/impl_search.md § 5.4), and the current one if it is here. */
@@ -115,6 +123,7 @@ const HighlightedLine = memo(function HighlightedLine({
       {diagnostic && inline && (
         <span className={cx('wb-editor__diag-inline', `is-${diagnostic.severity}`)}>{inline}</span>
       )}
+      {!diagnostic && hintFrom && note && <span className="wb-editor__diag-inline is-hint">{note}</span>}
     </div>
   );
 });
@@ -141,7 +150,7 @@ const EditorGutter = memo(function EditorGutter({
       {lines.map((_, i) => {
         const diagnostic = linesByNumber.get(i + 1);
         const hintFrom = hints.get(i + 1);
-        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom);
+        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom, i + 1);
         return (
           <Fragment key={i}>
             <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title}>
@@ -317,6 +326,7 @@ export function EditorSurface({
                   tokens={tokenLines[i] ?? []}
                   diagnostic={linesByNumber.get(i + 1)}
                   hintFrom={hints.get(i + 1)}
+                  note={noteOf(hints.get(i + 1), i + 1)}
                   occurrences={occurrences.get(i) ?? NO_OCCURRENCES}
                   findRanges={findDecor?.byLine.get(i) ?? NO_RANGES}
                   currentFind={findDecor?.currentLine === i ? findDecor.current : undefined}

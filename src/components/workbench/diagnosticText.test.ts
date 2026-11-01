@@ -8,6 +8,7 @@ import {
   CLEAR_HINT,
   describeHint,
   describeLine,
+  hintNote,
   INLINE_MESSAGE_MAX_CHARS,
   inlineText,
   problemCountText,
@@ -112,6 +113,14 @@ describe('advice wording', () => {
   test('the hint tooltip names the line that points here', () => {
     const from = lineOf(advised("'then' is expected here", { headline: 'Probably a missing `then` at the end of line 12.' }));
     expect(describeHint(from)).toBe('Line 13: Probably a missing `then` at the end of line 12.');
+  });
+
+  test('a note for the line it points at comes first, and only on that line', () => {
+    const headline = 'An architecture cannot be placed inside another architecture.';
+    const from = lineOf(advised('unexpected token', { headline, relatedLine: 4, relatedNote: 'You are already inside this architecture.' }));
+    expect(hintNote(from, 4)).toBe('You are already inside this architecture.');
+    expect(hintNote(from, 5)).toBeUndefined();
+    expect(describeHint(from, 4)).toBe(`You are already inside this architecture.\n\nLine 13: ${headline}`);
   });
 
   test.each([

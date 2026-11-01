@@ -85,6 +85,17 @@ function openerAbove(lines: readonly string[], line: number, openers: ReadonlySe
 }
 
 const ARCHITECTURE: ReadonlySet<string> = new Set(['architecture']);
+
+const ARCHITECTURE_HEADER = /^\s*architecture\s+(?<name>\w+)\s+of\b/i;
+
+/** The header of the architecture that is open above `line` (not counting `line` itself), and its name. */
+export function architectureAbove(lines: readonly string[], line: number): { readonly line: number; readonly name: string } | undefined {
+  for (let above = line - 1; above >= 1; above--) {
+    const name = ARCHITECTURE_HEADER.exec(lines[above - 1] ?? '')?.groups?.name;
+    if (name !== undefined) return { line: above, name };
+  }
+  return undefined;
+}
 const STATEMENT_OPENERS: ReadonlySet<string> = new Set(['process', 'function', 'procedure', 'architecture']);
 /** Between the architecture's `begin` and the error, these open a region with a `begin` of its own. */
 const NESTED_CONCURRENT: ReadonlySet<string> = new Set(['generate', 'block']);

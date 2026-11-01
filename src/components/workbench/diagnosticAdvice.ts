@@ -21,6 +21,7 @@ import { languageOfName } from './fileKinds';
 import { ghdlColumnToIndex } from './ghdlColumn';
 import { adviseIcarusDiagnostics, adviseIcarusLog } from './icarusAdvice';
 import {
+  architectureAbove,
   architectureBegin,
   DECLARATION_WORDS,
   designUnitEnd,
@@ -63,6 +64,8 @@ export interface Advice {
   readonly compiler?: string;
   /** Offered next to the message; applied only when the student asks. */
   readonly fix?: QuickFix;
+  /** A few words shown on `relatedLine` itself, saying why it is pointed at. */
+  readonly relatedNote?: string;
 }
 
 export interface AdvisedDiagnostic extends LocatedDiagnostic {
@@ -120,6 +123,18 @@ function isMisplacedDeclaration(message: string): boolean {
   return word !== undefined && DECLARATION_WORDS.has(word.toLowerCase());
 }
 
+/** `architecture rtl2 of …` written inside an open architecture: GHDL stops at its first word. */
+const NESTED_DESIGN_UNIT =
+  /^unexpected token '(?<unit>architecture|entity|package|configuration|context)' in a concurrent statement list$/;
+
+/**
+ * A design unit started inside an architecture. GHDL then reads the rest of the
+ * file as nonsense, so every later error in the file follows from this one.
+ */
+function nestedDesignUnit(message: string): string | undefined {
+  return NESTED_DESIGN_UNIT.exec(message)?.groups?.unit;
+}
+
 function isLostPlace(message: string): boolean {
   return !isMisplacedDeclaration(message) && LOST_PLACE_PATTERNS.some((pattern) => pattern.test(message));
 }
@@ -150,7 +165,13 @@ function followOns(
     const primary = errors.find((d) => !NOT_ANALYSED.test(d.message));
     if (primary === undefined) continue;
     const afterSyntaxError = isSyntaxError(primary.message);
+    // After an earlier syntax error, GHDL may meet `architecture` only because it lost its place.
+    const nested = errors.find((d) => nestedDesignUnit(d.message) !== undefined && (d === primary || !afterSyntaxError));
     errors.forEach((error, i) => {
+      if (nested !== undefined && error !== nested && byPosition(nested, error) < 0) {
+        muted.set(error, nested.line);
+        return;
+      }
       if (error === primary || ownMistakes.has(error)) return;
       const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
       const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
@@ -448,11 +469,24 @@ const declarationAfterBegin: Rule = ({ diagnostic, file, tokens, anchor }) => {
 };
 
 /**
+ * `architecture rtl2 of …` inside `rtl`, which has no `end architecture;` yet:
+ * says so on the inner `architecture`, and points at the outer one's header.
+ */
+const designUnitInsideArchitecture: Rule = ({ diagnostic, file }) => {
+  const unit = nestedDesignUnit(diagnostic.message);
+  if (unit === undefined) return undefined;
+  const outer = architectureAbove(file.lines, diagnostic.line);
+  const headline = adviceText.unitInsideArchitecture(unit.toLowerCase(), outer?.name);
+  if (outer === undefined) return { headline };
+  return { headline, relatedLine: outer.line, relatedNote: adviceText.alreadyInsideArchitecture() };
+};
+
+/**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
- * A declaration after `begin` is read from GHDL's own words, so it goes before all.
+ * The rules read from GHDL's own words go before all.
  */
-const RULES: readonly Rule[] = [declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
+const RULES: readonly Rule[] = [designUnitInsideArchitecture, declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
 
 // ------------------------------------------------------------ public
 
