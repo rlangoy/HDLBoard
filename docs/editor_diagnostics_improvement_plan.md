@@ -614,7 +614,7 @@ muted by § 4.8; "visible" is what is left.
 | downto-typo | 13 | `dwonto` | `dwonto` is not a VHDL keyword — did you mean `downto`? | B (1 token after the anchor) | 11 / 3 |
 | signal-typo | 34 | `signl` | `signl` is not a VHDL keyword — did you mean `signal`? | B | 0 / 1 |
 | process-typo | 38 | `proces` | `proces` is not a VHDL keyword — did you mean `process`? | B (3 tokens before the anchor) | 17 / 3 |
-| begin-typo | 39 | `begn` | `begn` is not a VHDL keyword — did you mean `begin`? | B | 9 / 3 |
+| begin-typo | 39 | `begn` | `begn` is not a VHDL keyword — did you mean `begin`? | B | 10 / 2 |
 | then-typo | 40 | `than` | `than` is not a VHDL keyword — did you mean `then`? | B | 1 / 2 |
 | then-missing | 41 (hint 40) | `if` | Probably a missing `then` at the end of line 40. | D | 0 / 1 |
 | endif-joined | 48 (hint 46) | `end` | `endif` (line 46) must be two words in VHDL: `end if`. | E | 2 / 1 |
@@ -632,7 +632,7 @@ muted by § 4.8; "visible" is what is left.
 | signal-name-typo | 45 | `couter` | `couter` is not declared — did you mean `counter`? | C | 0 / 1 |
 
 **19 of 22 get a headline naming the real mistake, and the other 3 keep GHDL's
-correct one. 62 of 93 errors are muted and 31 stay visible.** For the § 2.5 files:
+correct one. 63 of 93 errors are muted and 30 stay visible.** For the § 2.5 files:
 
 | File | Expected |
 |---|---|
@@ -854,7 +854,7 @@ signal-first-letter        (`signal` → `zignal` on 34)
 | Level | What | Result |
 |---|---|---|
 | Unit | `ghdlColumn`, `editDistance`, `declaredNames`, `vhdlHighlight` (`markRanges`), `diagnosticStore`, `diagnosticText`, and the § 6.2 guards in `diagnosticAdvice.test.ts` (all starter identifiers, even undeclared; 105 typical student names declared in another file; ties; Rules C–F edge cases) | pass |
-| Golden | `diagnosticAdvice.golden.test.ts`: every corpus case through parse → locate → advise → store against § 5 (marked line, underlined text, headline, related line, muted / visible) and § 2.5 (every visible error of the file); 19 of 22 headlines; 62 of 93 muted; the § 4.10 reveal | pass |
+| Golden | `diagnosticAdvice.golden.test.ts`: every corpus case through parse → locate → advise → store against § 5 (marked line, underlined text, headline, related line, muted / visible) and § 2.5 (every visible error of the file); 19 of 22 headlines; 63 of 93 muted; the § 4.10 reveal | pass |
 | Real backend | The frontend's own `HdlClient`, run in Node against `server/` with GHDL 5.0.1 and, separately, 6.0.0: all 39 `ERROR` frames equal the corpus byte for byte (stage `analyze`), and the same pipeline gives the § 5 results. Also the markers plan's E-D1 (`DE1_SoC.vhdl:27:15`, identical to its A.7) and a runtime assertion (`tb.vhdl:6:5:@0ms:(assertion error): values differ`, marked, no advice) | pass on both |
 | Browser | § 6.4 steps 1–6 in headless Chromium (Vite dev server, real backend, GHDL 5.0.1 and 6.0.0): underline, headline, tooltip `GHDL: …`, muted cascade, hint on line 25 with the reveal there, tab-indented line, both mistakes of `rttange` + `=<`, and fix + Start clears everything and runs. The underline's left edge is within 0.1 px of the same characters unmarked | pass on both |
 

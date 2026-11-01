@@ -16,6 +16,7 @@ import { quickFixOf } from './diagnosticStore';
 import { inlineText, summarize } from './diagnosticText';
 import { ExtraRowLine } from './ExtraRowLine';
 import { extraRowsByLine, type EditorWidth } from './extraRows';
+import { quickFixInsertion } from './quickFixEdit';
 import { ADDER_LINE, GHDL_OUTPUT, starterWithAdder } from './quickFix.testSupport';
 import { addUseClause, applyInsertion } from './useClauseFix';
 
@@ -78,7 +79,7 @@ describe('no declaration for "unsigned" (the bug report)', () => {
 
   test('applying the fix adds the use clause below the existing one, and nothing else', () => {
     const fix = quickFixOf(storedLines(advised)[0]);
-    const insertion = fix && addUseClause(content, fix.addUseClause, ADDER_LINE_NUMBER);
+    const insertion = fix && quickFixInsertion(content, fix, ADDER_LINE_NUMBER);
     const after = insertion && applyInsertion(content, insertion);
     expect(after?.split('\n').slice(0, 3)).toEqual(['library ieee;', 'use ieee.std_logic_1164.all;', 'use ieee.numeric_std.all;']);
     expect(after?.replace('use ieee.numeric_std.all;\n', '')).toBe(content);

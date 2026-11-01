@@ -22,7 +22,7 @@ import {
 export interface TextInsertion {
   readonly offset: number;
   readonly text: string;
-  /** Where the caret goes once inserted: the end of the new `use` clause, so the student sees it. */
+  /** Where the caret goes once inserted: the end of what was added (the `use` clause, the `begin`), so the student sees it. */
   readonly caret: number;
 }
 

@@ -107,6 +107,8 @@ export const adviceText = {
   /** An `end` after the design unit was already closed. */
   extraEnd: (closedLine: number, kind = 'design unit'): string =>
     `Extra ${code('end')} — line ${closedLine} already closed the ${kind}. Delete this line.`,
+  /** An architecture's statements started without `begin`: `statement` names the first (`assignment`, `process` …). */
+  missingBegin: (statement: string): string => `Missing ${BEGIN} — insert ${BEGIN} before this ${statement}.`,
   /** Rule F. */
   followOn: (line: number): string => `Probably caused by the error on line ${line} — fix that one first and run again.`,
   /** Rule F, on the line of the first error itself. */
@@ -115,7 +117,7 @@ export const adviceText = {
 
 /** The Quick Fix button: what it will add. */
 export function quickFixTitle(fix: QuickFix): string {
-  return `Add ${code(useClauseText(fix.addUseClause))}`;
+  return 'addUseClause' in fix ? `Add ${code(useClauseText(fix.addUseClause))}` : `Insert ${BEGIN}`;
 }
 
 /** The keyboard shortcut of the Quick Fix, as VS Code has it. */

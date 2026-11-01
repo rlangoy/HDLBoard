@@ -23,6 +23,7 @@ import { adviseIcarusDiagnostics, adviseIcarusLog } from './icarusAdvice';
 import {
   architectureAbove,
   architectureBegin,
+  architectureMissingBegin,
   DECLARATION_WORDS,
   designUnitEnd,
   statementRegionHome,
@@ -45,10 +46,11 @@ export interface Span {
   readonly end: number;
 }
 
-/** A change HDLBoard can make for the student, like VS Code's Quick Fix: add the missing `use` clause. */
-export interface QuickFix {
-  readonly addUseClause: VhdlPackage;
-}
+/**
+ * A change HDLBoard can make for the student, like VS Code's Quick Fix: add the
+ * missing `use` clause, or insert the `begin` an architecture's statements lack.
+ */
+export type QuickFix = { readonly addUseClause: VhdlPackage } | { readonly insertBegin: true };
 
 /** What HDLBoard adds to a compiler message. */
 export interface Advice {
@@ -105,6 +107,8 @@ const LOST_PLACE_PATTERNS: readonly RegExp[] = [
   /^'generate' is expected instead of /,
   /^missing ";" at end of (architecture|entity|generate statement body)$/,
   /^"end" must be followed by /,
+  // GHDL is still in the declarations because of the earlier error (a missing or misspelled `begin`).
+  /^'begin' is expected instead of /,
 ];
 
 /**
@@ -537,6 +541,43 @@ const declarationInStatements: Rule = ({ diagnostic, file, tokens, anchor }) => 
   return pointingAt(adviceText.declarationAfterBegin(declarationKind(written), opener, home.beginLine), home.beginLine);
 };
 
+const OBJECT_CLASS_EXPECTED = "object class keyword such as 'variable' is expected";
+/** GHDL still reads the architecture's declarations and meets a statement. */
+const BEGIN_EXPECTED = /^'begin' is expected instead of /;
+
+/** The first pattern a line's code matches names the statement it starts, in the advice's words. */
+const STATEMENT_KINDS: readonly (readonly [RegExp, string])[] = [
+  [/^\s*(\w+\s*:\s*)?(postponed\s+)?process\b/i, 'process'],
+  [/^\s*\w+\s*:\s*(entity|component|configuration)\b|\bport\s+map\b/i, 'instance'],
+  [/^\s*\w+\s*:\s*(if|for|case)\b|\bgenerate\b/i, 'generate statement'],
+  [/^\s*(\w+\s*:\s*)?(postponed\s+)?assert\b/i, 'assertion'],
+  [/^\s*(\w+\s*:\s*)?with\b|<=/, 'assignment'],
+];
+
+/** The statement a line starts (`assignment`, `process` …); undefined when the line does not look like one. */
+function statementKind(line: string): string | undefined {
+  const code = line.replace(/--.*$/, '');
+  return STATEMENT_KINDS.find(([pattern]) => pattern.test(code))?.[1];
+}
+
+/**
+ * An architecture's first statement written without `begin` above it: GHDL
+ * still reads declarations, so it asks for an object class keyword such as
+ * `variable`, or for `begin`. Offers to insert the `begin`. Only the first
+ * error in the architecture: after another one (`begn`), that one explains it.
+ */
+const missingArchitectureBegin: Rule = ({ diagnostic, file }) => {
+  const asksForBegin = BEGIN_EXPECTED.test(diagnostic.message);
+  if (!asksForBegin && diagnostic.message !== OBJECT_CLASS_EXPECTED) return undefined;
+  const line = file.lines[diagnostic.line - 1] ?? '';
+  const statement = statementKind(line) ?? (asksForBegin ? 'line' : undefined);
+  const header = architectureMissingBegin(file.lines, diagnostic.line);
+  if (statement === undefined || header === undefined) return undefined;
+  const earlierErrorInArchitecture = [...file.errorLines].some((l) => l >= header && l < diagnostic.line);
+  if (earlierErrorInArchitecture) return undefined;
+  return { headline: adviceText.missingBegin(statement), fix: { insertBegin: true } };
+};
+
 /**
  * `architecture rtl2 of …` inside `rtl`, which has no `end architecture;` yet:
  * says so on the inner `architecture`, and points at the outer one's header.
@@ -582,6 +623,7 @@ const RULES: readonly Rule[] = [
   designUnitInsideArchitecture,
   declarationInArchitectureBody,
   declarationInStatements,
+  missingArchitectureBegin,
   joinedKeyword,
   misspelledKeyword,
   missingPackage,

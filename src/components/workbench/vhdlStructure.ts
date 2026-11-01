@@ -174,6 +174,17 @@ export function architectureBegin(lines: readonly string[], line: number): numbe
 const STATEMENT_OPENERS: ReadonlySet<string> = new Set(['process', 'function', 'procedure', 'architecture']);
 
 /**
+ * The header line of the architecture `line` is directly in, when that
+ * architecture has no `begin` above `line`: its statements were started without one.
+ */
+export function architectureMissingBegin(lines: readonly string[], line: number): number | undefined {
+  const open = enclosingOpener(lines, line, STATEMENT_OPENERS);
+  if (open === undefined || open.words[open.at].text !== 'architecture') return undefined;
+  const hasBegin = firstBegin(open.words.slice(open.at + 1)) !== undefined;
+  return hasBegin ? undefined : open.words[open.at].line;
+}
+
+/**
  * Where a declaration that GHDL found among sequential statements belongs: the
  * process or subprogram it was written in, and that region's `begin`.
  */

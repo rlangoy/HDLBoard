@@ -263,6 +263,61 @@ end;
   });
 });
 
+describe('an architecture whose statements start without begin', () => {
+  const NO_BEGIN = `${DE1_SOC.split('\n').slice(0, 23).join('\n')}
+architecture rtl of DE1_SoC is
+
+    -- LEDR <= SW; the first thing every student wires up.
+    LED<= SW;
+
+    -- Blank until you add your own 7-segment logic — active low, so
+    -- all-ones is "off".
+    HEX0_N <= (others => '1');
+end architecture;
+`;
+  const OUTPUT =
+    "nb.vhd:27:5:error: object class keyword such as 'variable' is expected\n    LED<= SW;\n    ^\nnb.vhd:31:5:error: 'begin' is expected instead of \"hex0_n\"\n    HEX0_N <= (others => '1');\n    ^\n";
+  const [first, second] = advise('nb.vhd', NO_BEGIN, OUTPUT);
+
+  test('says begin is missing before the assignment, and offers to insert it', () => {
+    expect(first.advice).toMatchObject({
+      headline: 'Missing `begin` — insert `begin` before this assignment.',
+      fix: { insertBegin: true },
+    });
+  });
+
+  test('GHDL asking for begin further down follows from it', () => {
+    expect(second.advice?.followOnOf).toBe(27);
+  });
+
+  test.each([
+    ['  p1: process begin wait; end process;', "object class keyword such as 'variable' is expected", 'process'],
+    ['  u1: entity work.e port map (x => s, y => s);', "object class keyword such as 'variable' is expected", 'instance'],
+    ['  with s select y <= x when others;', "'begin' is expected instead of 'with'", 'assignment'],
+    ['  assert x = s;', "'begin' is expected instead of 'assert'", 'assertion'],
+  ])('%s is named as a %s', (statement, message, kind) => {
+    const source = `entity e is port (x : in bit; y : out bit); end;\narchitecture a of e is\n  signal s : bit;\n${statement}\nend;`;
+    const [advised] = advise('q.vhd', source, `q.vhd:4:3:error: ${message}\n`);
+    expect(advised.advice?.headline).toBe(`Missing \`begin\` — insert \`begin\` before this ${kind}.`);
+  });
+
+  test('a misspelled begn keeps its own advice, and GHDL asking for begin later follows from it', () => {
+    const source = "entity e is end;\narchitecture a of e is\n  signal s : bit;\n  begn\n  s <= '1';\nend;";
+    const output =
+      "nb5.vhd:4:3:error: object class keyword such as 'variable' is expected\n  begn\n  ^\nnb5.vhd:6:1:error: 'begin' is expected instead of 'end'\nend;\n^\n";
+    expect(headlines(advise('nb5.vhd', source, output))).toEqual({
+      4: '`begn` is not a VHDL keyword — did you mean `begin`?',
+      6: 'Probably caused by the error on line 4 — fix that one first and run again.',
+    });
+  });
+
+  test('a misspelled declaration keyword is not taken for a statement', () => {
+    const source = 'entity e is end;\narchitecture a of e is\n  sigal s : bit;\nbegin\nend;';
+    const [advised] = advise('d.vhd', source, "d.vhd:3:3:error: object class keyword such as 'variable' is expected\n");
+    expect(advised.advice?.headline).not.toContain('Missing `begin`');
+  });
+});
+
 describe('declarations after a process’s begin', () => {
   const PROCESS = `entity e is end;
 architecture a of e is
