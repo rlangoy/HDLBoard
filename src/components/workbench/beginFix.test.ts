@@ -2,12 +2,12 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { insertBegin } from './beginFix';
-import { applyInsertion } from './useClauseFix';
+import { insertBegin, loneWord, replaceWithBegin } from './beginFix';
+import { applyTextEdit } from './textLines';
 
 function fixed(content: string, line: number): string | undefined {
   const insertion = insertBegin(content, line);
-  return insertion && applyInsertion(content, insertion);
+  return insertion && applyTextEdit(content, insertion);
 }
 
 describe('insertBegin', () => {
@@ -42,5 +42,39 @@ end architecture;`);
 
   test('nothing when the architecture has a begin already', () => {
     expect(insertBegin('architecture a of e is\nbegin\n  s <= x;\nend;', 3)).toBeUndefined();
+  });
+});
+
+describe('replaceWithBegin', () => {
+  const SOURCE = 'architecture rtl of e is\n  begisasa  -- oops\n    LED <= SW;\nend architecture;';
+
+  test('puts begin in place of the word, keeping its indent and comment', () => {
+    const edit = replaceWithBegin(SOURCE, 2);
+    expect(edit && applyTextEdit(SOURCE, edit)).toBe('architecture rtl of e is\n  begin  -- oops\n    LED <= SW;\nend architecture;');
+  });
+
+  test('the caret ends up just after the new begin', () => {
+    expect(replaceWithBegin(SOURCE, 2)?.caret).toBe('architecture rtl of e is\n  begin'.length);
+  });
+
+  test('nothing when the line holds more than one word', () => {
+    expect(replaceWithBegin('architecture rtl of e is\n  begisasa x\nend;', 2)).toBeUndefined();
+  });
+
+  test('nothing when the architecture has a begin already', () => {
+    expect(replaceWithBegin('architecture rtl of e is\nbegin\n  begisasa\nend;', 3)).toBeUndefined();
+  });
+});
+
+describe('loneWord', () => {
+  test.each([
+    ['begisasa', { word: 'begisasa', start: 0 }],
+    ['   begn   -- typo', { word: 'begn', start: 3 }],
+  ])('%s', (line, expected) => {
+    expect(loneWord(line)).toEqual(expected);
+  });
+
+  test.each(['', '-- only a comment', 'LED <= SW;', 'two words'])('none in %j', (line) => {
+    expect(loneWord(line)).toBeUndefined();
   });
 });

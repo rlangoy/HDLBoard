@@ -13,6 +13,7 @@
  * implicit-wire warning (`adviseLogDiagnostics`).
  */
 
+import { loneWord } from './beginFix';
 import { declaredNames } from './declaredNames';
 import { firstRevealTarget, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { isMuted } from './diagnosticStore';
@@ -49,9 +50,13 @@ export interface Span {
 
 /**
  * A change HDLBoard can make for the student, like VS Code's Quick Fix: add the
- * missing `use` clause, or insert the `begin` an architecture's statements lack.
+ * missing `use` clause, or insert the `begin` an architecture's statements lack,
+ * or put it in place of the misspelled word written there.
  */
-export type QuickFix = { readonly addUseClause: VhdlPackage } | { readonly insertBegin: true };
+export type QuickFix =
+  | { readonly addUseClause: VhdlPackage }
+  | { readonly insertBegin: true }
+  | { readonly replaceWithBegin: true };
 
 /** What HDLBoard adds to a compiler message. */
 export interface Advice {
@@ -457,6 +462,12 @@ function previousCodeLine(file: Pick<SourceFile, 'lines'>, line: number): number
   return undefined;
 }
 
+/** The nearest line below `line` that holds code; comments and blank lines are skipped. */
+function nextCodeLine(file: Pick<SourceFile, 'lines'>, line: number): number | undefined {
+  for (let below = line + 1; below <= file.lines.length; below++) if (isCodeLine(file.lines[below - 1])) return below;
+  return undefined;
+}
+
 function looksUnfinished(line: string): boolean {
   const code = positionedTokens(line).filter((token) => token.type !== 'comment');
   const last = code[code.length - 1];
@@ -562,29 +573,55 @@ function statementKind(line: string): string | undefined {
 const ANY_LINE = 'line';
 
 /**
- * The statement an architecture's statements start with, when it was written
- * without `begin` above it: GHDL still reads declarations, so it asks for an
- * object class keyword such as `variable`, or for `begin`. Only the first error
- * in the architecture (`earlier`, all the file's errors before this one): after
- * another one (`begn`), that one explains it.
+ * How an architecture's `begin` went missing: never written before the first
+ * statement (`assignment`, `process` …), or written wrong (`begisasa`).
  */
-function statementWithoutBegin(
+type MissingBegin = { readonly beforeStatement: string } | { readonly misspelledAs: string };
+
+/**
+ * The word alone on `line` where `begin` belongs: the next code line starts a
+ * statement, or ends the architecture. Any word, however far from `begin`.
+ */
+function misspelledBeginOn(lines: readonly string[], line: number): string | undefined {
+  const lone = loneWord(lines[line - 1] ?? '');
+  if (lone === undefined || isReservedWord(lone.word)) return undefined;
+  const next = nextCodeLine({ lines }, line);
+  const nextText = next === undefined ? '' : lines[next - 1];
+  const beginBelongsHere = statementKind(nextText) !== undefined || /^\s*end\b/i.test(nextText);
+  return beginBelongsHere ? lone.word : undefined;
+}
+
+/**
+ * An architecture's `begin` that is missing where GHDL reports `error`: it still
+ * reads declarations, so it asks for an object class keyword such as
+ * `variable`, or for `begin`. Only the first error in the architecture
+ * (`earlier`, all the file's errors before this one): after another one, that
+ * one explains it.
+ */
+function missingBeginAt(
   error: LocatedDiagnostic,
   lines: readonly string[],
   earlier: readonly LocatedDiagnostic[],
-): string | undefined {
+): MissingBegin | undefined {
   const asksForBegin = BEGIN_EXPECTED.test(error.message);
   if (!asksForBegin && error.message !== OBJECT_CLASS_EXPECTED) return undefined;
-  const statement = statementKind(lines[error.line - 1] ?? '') ?? (asksForBegin ? ANY_LINE : undefined);
   const header = architectureMissingBegin(lines, error.line);
-  if (statement === undefined || header === undefined) return undefined;
-  return earlier.some((d) => d.line >= header) ? undefined : statement;
+  if (header === undefined || earlier.some((d) => d.line >= header)) return undefined;
+  const statement = statementKind(lines[error.line - 1] ?? '');
+  if (statement !== undefined) return { beforeStatement: statement };
+  const misspelled = misspelledBeginOn(lines, error.line);
+  if (misspelled !== undefined) return { misspelledAs: misspelled };
+  return asksForBegin ? { beforeStatement: ANY_LINE } : undefined;
 }
 
-/** The missing `begin`, with a Quick Fix that inserts it. */
+/** The missing `begin`, with a Quick Fix that inserts it, or puts it in place of the misspelled word. */
 const missingArchitectureBegin: Rule = ({ diagnostic }, project) => {
-  const statement = project.own.missingBegins.get(diagnostic);
-  return statement === undefined ? undefined : { headline: adviceText.missingBegin(statement), fix: { insertBegin: true } };
+  const missing = project.own.missingBegins.get(diagnostic);
+  if (missing === undefined) return undefined;
+  if ('misspelledAs' in missing) {
+    return { headline: adviceText.misspelledBegin(missing.misspelledAs), fix: { replaceWithBegin: true } };
+  }
+  return { headline: adviceText.missingBegin(missing.beforeStatement), fix: { insertBegin: true } };
 };
 
 /**
@@ -672,8 +709,8 @@ const extraEnd: Rule = ({ diagnostic, file }, project) => {
 interface OwnMistakes {
   /** The line each extra `end`'s design unit was closed on, and its kind. */
   readonly extraEnds: ReadonlyMap<LocatedDiagnostic, ExtraEnd>;
-  /** The statement each missing-`begin` error is on (`assignment` …). */
-  readonly missingBegins: ReadonlyMap<LocatedDiagnostic, string>;
+  /** How the `begin` went missing, for each error it explains. */
+  readonly missingBegins: ReadonlyMap<LocatedDiagnostic, MissingBegin>;
   /** These two, the misplaced declarations and the unknown entities. */
   readonly all: ReadonlySet<LocatedDiagnostic>;
 }
@@ -684,7 +721,7 @@ function ownMistakesOf(
   entities: readonly DeclaredEntity[],
 ): OwnMistakes {
   const extraEnds = new Map<LocatedDiagnostic, ExtraEnd>();
-  const missingBegins = new Map<LocatedDiagnostic, string>();
+  const missingBegins = new Map<LocatedDiagnostic, MissingBegin>();
   for (const { id, content } of snapshot.files) {
     const lines = splitLines(content);
     const errors = located.filter((d) => d.fileId === id && isAdvisable(d)).sort(byPosition);
@@ -696,8 +733,8 @@ function ownMistakesOf(
         extraByLine.set(error.line, extra);
         extraEnds.set(error, extra);
       }
-      const statement = statementWithoutBegin(error, lines, errors.slice(0, i));
-      if (statement !== undefined) missingBegins.set(error, statement);
+      const missing = missingBeginAt(error, lines, errors.slice(0, i));
+      if (missing !== undefined) missingBegins.set(error, missing);
     });
   }
   const isNamedFromMessage = (d: LocatedDiagnostic): boolean =>

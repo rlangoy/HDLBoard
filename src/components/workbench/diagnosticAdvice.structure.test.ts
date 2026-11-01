@@ -301,14 +301,49 @@ end architecture;
     expect(advised.advice?.headline).toBe(`Missing \`begin\` — insert \`begin\` before this ${kind}.`);
   });
 
-  test('a misspelled begn keeps its own advice, and GHDL asking for begin later follows from it', () => {
+  test('a misspelled begn says begin is missing, and GHDL asking for begin later follows from it', () => {
     const source = "entity e is end;\narchitecture a of e is\n  signal s : bit;\n  begn\n  s <= '1';\nend;";
     const output =
       "nb5.vhd:4:3:error: object class keyword such as 'variable' is expected\n  begn\n  ^\nnb5.vhd:6:1:error: 'begin' is expected instead of 'end'\nend;\n^\n";
     expect(headlines(advise('nb5.vhd', source, output))).toEqual({
-      4: '`begn` is not a VHDL keyword — did you mean `begin`?',
+      4: 'Missing `begin` — `begn` is probably a misspelled `begin`.',
       6: 'Probably caused by the error on line 4 — fix that one first and run again.',
     });
+  });
+
+  describe('a word far from begin where begin belongs (begisasa)', () => {
+    const SOURCE = `${DE1_SOC.split('\n').slice(0, 23).join('\n')}
+architecture rtl of DE1_SoC is
+begisasa
+    -- LEDR <= SW; the first thing every student wires up.
+    LEDR <= SW;
+
+    -- Blank until you add your own 7-segment logic — active low, so
+    -- all-ones is "off".
+    HEX0_N <= (others => '1');
+end architecture;
+`;
+    const OUTPUT =
+      "bg.vhd:25:1:error: object class keyword such as 'variable' is expected\nbegisasa\n^\nbg.vhd:31:5:error: 'begin' is expected instead of \"hex0_n\"\n    HEX0_N <= (others => '1');\n    ^\n";
+    const [first, second] = advise('bg.vhd', SOURCE, OUTPUT);
+
+    test('says begin is missing and the word is probably it, misspelled', () => {
+      expect(first.advice?.headline).toBe('Missing `begin` — `begisasa` is probably a misspelled `begin`.');
+    });
+
+    test('underlines the word and offers to replace it', () => {
+      expect(first.advice).toMatchObject({ span: { start: 0, end: 'begisasa'.length }, fix: { replaceWithBegin: true } });
+    });
+
+    test('GHDL asking for begin later follows from it', () => {
+      expect(second.advice?.followOnOf).toBe(25);
+    });
+  });
+
+  test('a lone word before more declarations is no begin', () => {
+    const source = 'entity e is end;\narchitecture a of e is\n  sgnal\n  signal t : bit;\nbegin\nend;';
+    const [advised] = advise('d.vhd', source, "d.vhd:3:3:error: object class keyword such as 'variable' is expected\n");
+    expect(advised.advice?.headline ?? '').not.toContain('Missing `begin`');
   });
 
   test('after a mistake in another architecture, GHDL asking for begin is named after the missing begin', () => {

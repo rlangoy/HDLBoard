@@ -17,3 +17,18 @@ export function lineEnding(content: string): '\r\n' | '\n' {
 export function indentOf(line: string): string {
   return /^[ \t]*/.exec(line)?.[0] ?? '';
 }
+
+/** A change to one place in the file: `removed` characters at `offset` become `text`. */
+export interface TextEdit {
+  readonly offset: number;
+  /** How many characters `text` replaces; 0 for an insertion. */
+  readonly removed: number;
+  readonly text: string;
+  /** Where the caret goes once the edit is made: the end of what was added, so the student sees it. */
+  readonly caret: number;
+}
+
+/** The file with the edit made. */
+export function applyTextEdit(content: string, edit: TextEdit): string {
+  return `${content.slice(0, edit.offset)}${edit.text}${content.slice(edit.offset + edit.removed)}`;
+}

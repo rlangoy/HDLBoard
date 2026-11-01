@@ -16,9 +16,10 @@ import { quickFixOf } from './diagnosticStore';
 import { inlineText, summarize } from './diagnosticText';
 import { ExtraRowLine } from './ExtraRowLine';
 import { extraRowsByLine, type EditorWidth } from './extraRows';
-import { quickFixInsertion } from './quickFixEdit';
+import { quickFixEdit } from './quickFixEdit';
 import { ADDER_LINE, GHDL_OUTPUT, starterWithAdder } from './quickFix.testSupport';
-import { addUseClause, applyInsertion } from './useClauseFix';
+import { applyTextEdit } from './textLines';
+import { addUseClause } from './useClauseFix';
 
 const FILE_ID = 'de1';
 /** The editor as narrow as in the bug report: narrower than the 95 characters of the adder line. */
@@ -79,15 +80,15 @@ describe('no declaration for "unsigned" (the bug report)', () => {
 
   test('applying the fix adds the use clause below the existing one, and nothing else', () => {
     const fix = quickFixOf(storedLines(advised)[0]);
-    const insertion = fix && quickFixInsertion(content, fix, ADDER_LINE_NUMBER);
-    const after = insertion && applyInsertion(content, insertion);
+    const insertion = fix && quickFixEdit(content, fix, ADDER_LINE_NUMBER);
+    const after = insertion && applyTextEdit(content, insertion);
     expect(after?.split('\n').slice(0, 3)).toEqual(['library ieee;', 'use ieee.std_logic_1164.all;', 'use ieee.numeric_std.all;']);
     expect(after?.replace('use ieee.numeric_std.all;\n', '')).toBe(content);
   });
 
   test('the fixed file no longer gets the advice: the name is missing for another reason', () => {
     const insertion = addUseClause(content, { library: 'ieee', name: 'numeric_std' }, ADDER_LINE_NUMBER);
-    const after = insertion && applyInsertion(content, insertion);
+    const after = insertion && applyTextEdit(content, insertion);
     const moved = GHDL_OUTPUT.replace(/:27:/g, ':28:');
     expect(after && advise(after, moved)[0].advice?.fix).toBeUndefined();
   });

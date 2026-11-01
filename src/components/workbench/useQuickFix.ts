@@ -5,7 +5,7 @@ import { useCallback, type RefObject } from 'react';
 import { countLines } from './diagnosticLocation';
 import { quickFixOf, type LineDiagnostic } from './diagnosticStore';
 import { applyEdit } from './find/applyEdit';
-import { quickFixInsertion } from './quickFixEdit';
+import { quickFixEdit } from './quickFixEdit';
 import { showCaret } from './useRevealLine';
 
 export interface QuickFixActions {
@@ -28,9 +28,9 @@ export function useQuickFix(textareaRef: RefObject<HTMLTextAreaElement>, marked:
       const marker = marked.find((m) => m.line === line);
       const fix = marker && quickFixOf(marker);
       if (!textarea || !fix) return false;
-      const insertion = quickFixInsertion(textarea.value, fix, line);
-      if (!insertion) return false;
-      applyEdit(textarea, insertion.offset, insertion.offset, insertion.text, { caret: insertion.caret });
+      const edit = quickFixEdit(textarea.value, fix, line);
+      if (!edit) return false;
+      applyEdit(textarea, edit.offset, edit.offset + edit.removed, edit.text, { caret: edit.caret });
       textarea.focus({ preventScroll: true });
       showCaret(textarea);
       onApplied();

@@ -3,7 +3,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { ADDER_LINE, starterWithAdder } from './quickFix.testSupport';
-import { addUseClause, applyInsertion, clashingPackageInUse } from './useClauseFix';
+import { applyTextEdit } from './textLines';
+import { addUseClause, clashingPackageInUse } from './useClauseFix';
 import { packageDeclaring, type VhdlPackage } from './vhdlPackages';
 
 const NUMERIC_STD: VhdlPackage = { library: 'ieee', name: 'numeric_std' };
@@ -16,7 +17,7 @@ function lineOf(content: string, text: string): number {
 /** The file after the fix for the code on the line holding `at`. */
 function fixed(content: string, at: string, pkg = NUMERIC_STD): string | undefined {
   const insertion = addUseClause(content, pkg, lineOf(content, at));
-  return insertion && applyInsertion(content, insertion);
+  return insertion && applyTextEdit(content, insertion);
 }
 
 describe('packageDeclaring', () => {
@@ -56,7 +57,7 @@ describe('addUseClause', () => {
   test('puts the caret at the end of the new line', () => {
     const content = starterWithAdder();
     const insertion = addUseClause(content, NUMERIC_STD, lineOf(content, ADDER_LINE));
-    const after = insertion && applyInsertion(content, insertion);
+    const after = insertion && applyTextEdit(content, insertion);
     expect(after?.slice(0, insertion?.caret).endsWith('use ieee.numeric_std.all;')).toBe(true);
   });
 

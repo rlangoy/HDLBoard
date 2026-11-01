@@ -161,4 +161,8 @@ describe('quickFixTitle', () => {
   test('the missing begin', () => {
     expect(quickFixTitle({ insertBegin: true })).toBe('Insert `begin`');
   });
+
+  test('the misspelled begin', () => {
+    expect(quickFixTitle({ replaceWithBegin: true })).toBe('Replace with `begin`');
+  });
 });
