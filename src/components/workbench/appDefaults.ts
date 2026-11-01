@@ -10,6 +10,8 @@
  *   { "bouncyButtons": false }
  */
 
+import { fetchBoardFile, type FetchedText } from '../../boards/boardCatalog';
+
 export interface AppDefaults {
   /** The Pushbuttons panel offers "Bouncy" contacts (on unless the file says otherwise). */
   readonly bouncyButtons: boolean;
@@ -19,15 +21,19 @@ export const BUILT_IN_DEFAULTS: AppDefaults = { bouncyButtons: true };
 
 /** Relative to the page, so every build (dev, GitHub Pages, Docker, Windows app) finds its own copy. */
 export const APP_DEFAULTS_FILE = 'settings.json';
-const HTTP_NOT_FOUND = 404;
 
 export interface ParsedDefaults {
   readonly defaults: AppDefaults;
   readonly warnings: readonly string[];
 }
 
+/** Each setting the file may hold, and the type its value must have. A new setting is one more line. */
+const SETTING_TYPES: { readonly [K in keyof AppDefaults]: 'boolean' } = { bouncyButtons: 'boolean' };
+const TYPE_TEXT = { boolean: 'true or false' } as const;
 const IGNORED_KEYS = new Set(['$schema', '$comment']);
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const builtIn = (warning: string): ParsedDefaults => ({ defaults: BUILT_IN_DEFAULTS, warnings: [warning] });
+const isSetting = (key: string): key is keyof AppDefaults => Object.prototype.hasOwnProperty.call(SETTING_TYPES, key);
 
 /** The file's settings over the built-in ones; anything unknown or mistyped is a warning, never an error. */
 export function parseAppDefaults(text: string): ParsedDefaults {
@@ -35,39 +41,38 @@ export function parseAppDefaults(text: string): ParsedDefaults {
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    return { defaults: BUILT_IN_DEFAULTS, warnings: [`${APP_DEFAULTS_FILE} is not valid JSON: ${errorText(error)}.`] };
+    return builtIn(`${APP_DEFAULTS_FILE} is not valid JSON: ${errorText(error)}.`);
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { defaults: BUILT_IN_DEFAULTS, warnings: [`${APP_DEFAULTS_FILE} must hold an object, such as { "bouncyButtons": true }.`] };
+    return builtIn(`${APP_DEFAULTS_FILE} must hold an object, such as { "bouncyButtons": true }.`);
   }
   return parseEntries(Object.entries(raw));
 }
 
 function parseEntries(entries: readonly [string, unknown][]): ParsedDefaults {
   const warnings: string[] = [];
-  let bouncyButtons = BUILT_IN_DEFAULTS.bouncyButtons;
+  const defaults: Record<string, unknown> = { ...BUILT_IN_DEFAULTS };
   for (const [key, value] of entries) {
     if (IGNORED_KEYS.has(key)) continue;
-    if (key !== 'bouncyButtons') warnings.push(`${APP_DEFAULTS_FILE}: unknown setting "${key}" was ignored.`);
-    else if (typeof value === 'boolean') bouncyButtons = value;
-    else warnings.push(`${APP_DEFAULTS_FILE}: bouncyButtons must be true or false.`);
+    if (!isSetting(key)) warnings.push(`${APP_DEFAULTS_FILE}: unknown setting "${key}" was ignored.`);
+    else if (typeof value === SETTING_TYPES[key]) defaults[key] = value;
+    else warnings.push(`${APP_DEFAULTS_FILE}: ${key} must be ${TYPE_TEXT[SETTING_TYPES[key]]}.`);
   }
-  return { defaults: { bouncyButtons }, warnings };
+  return { defaults: defaults as unknown as AppDefaults, warnings };
 }
 
-export type FetchDefaults = (url: string) => Promise<{ status: number; ok: boolean; text: () => Promise<string> }>;
-
 /** The defaults to start with; never throws. Not cached, so an edited file is read on the next start. */
-export async function loadAppDefaults(fetchFile: FetchDefaults = (url) => fetch(url, { cache: 'no-cache' })): Promise<ParsedDefaults> {
+export async function loadAppDefaults(fetchText: (url: string) => Promise<FetchedText> = fetchBoardFile): Promise<ParsedDefaults> {
+  let fetched: FetchedText;
   try {
-    const response = await fetchFile(APP_DEFAULTS_FILE);
-    if (response.status === HTTP_NOT_FOUND) return { defaults: BUILT_IN_DEFAULTS, warnings: [] };
-    if (!response.ok) return { defaults: BUILT_IN_DEFAULTS, warnings: [`${APP_DEFAULTS_FILE} could not be loaded: HTTP ${response.status}.`] };
-    const text = await response.text();
-    // A dev server or single-page host may answer a missing file with index.html.
-    if (text.trim() === '' || text.trimStart().startsWith('<')) return { defaults: BUILT_IN_DEFAULTS, warnings: [] };
-    return parseAppDefaults(text);
+    fetched = await fetchText(APP_DEFAULTS_FILE);
   } catch (error) {
-    return { defaults: BUILT_IN_DEFAULTS, warnings: [`${APP_DEFAULTS_FILE} could not be loaded: ${errorText(error)}.`] };
+    fetched = { kind: 'failed', reason: errorText(error) };
   }
+  if (fetched.kind === 'missing') return { defaults: BUILT_IN_DEFAULTS, warnings: [] };
+  if (fetched.kind === 'failed') return builtIn(`${APP_DEFAULTS_FILE} could not be loaded: ${fetched.reason}.`);
+  if (fetched.text.trim() === '') return builtIn(`${APP_DEFAULTS_FILE} could not be loaded: the file is empty.`);
+  // A single-page host (and the dev server) answers a file it does not have with index.html: that is a missing file.
+  if (/^\s*<!doctype html|^\s*<html/i.test(fetched.text)) return { defaults: BUILT_IN_DEFAULTS, warnings: [] };
+  return parseAppDefaults(fetched.text);
 }

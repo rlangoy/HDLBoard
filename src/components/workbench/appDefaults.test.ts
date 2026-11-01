@@ -2,9 +2,11 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
-import { APP_DEFAULTS_FILE, BUILT_IN_DEFAULTS, loadAppDefaults, parseAppDefaults, type FetchDefaults } from './appDefaults';
+import type { FetchedText } from '../../boards/boardCatalog';
+import { APP_DEFAULTS_FILE, BUILT_IN_DEFAULTS, loadAppDefaults, parseAppDefaults } from './appDefaults';
 
-const answer = (status: number, text = ''): FetchDefaults => async () => ({ status, ok: status >= 200 && status < 300, text: async () => text });
+const answer = (fetched: FetchedText) => async () => fetched;
+const text = (body: string) => answer({ kind: 'text', text: body });
 
 describe('parseAppDefaults', () => {
   it('has bouncy pushbuttons on unless the file says otherwise', () => {
@@ -36,18 +38,23 @@ describe('parseAppDefaults', () => {
 describe('loadAppDefaults', () => {
   it('reads the file next to the page', async () => {
     let asked = '';
-    const parsed = await loadAppDefaults(async (url) => { asked = url; return { status: 200, ok: true, text: async () => '{"bouncyButtons":false}' }; });
+    const parsed = await loadAppDefaults(async (url) => { asked = url; return { kind: 'text', text: '{"bouncyButtons":false}' }; });
     expect(asked).toBe('settings.json');
     expect(parsed).toEqual({ defaults: { bouncyButtons: false }, warnings: [] });
   });
 
-  it('is quiet when there is no file, or the host answers with a page instead', async () => {
-    expect(await loadAppDefaults(answer(404))).toEqual({ defaults: BUILT_IN_DEFAULTS, warnings: [] });
-    expect(await loadAppDefaults(answer(200, '<!doctype html><html></html>'))).toEqual({ defaults: BUILT_IN_DEFAULTS, warnings: [] });
+  it('is quiet when there is no file, or the host answers with its index page instead', async () => {
+    expect(await loadAppDefaults(answer({ kind: 'missing' }))).toEqual({ defaults: BUILT_IN_DEFAULTS, warnings: [] });
+    expect(await loadAppDefaults(text('<!doctype html><html></html>'))).toEqual({ defaults: BUILT_IN_DEFAULTS, warnings: [] });
+  });
+
+  it('warns about an empty file, or one that is not JSON', async () => {
+    expect((await loadAppDefaults(text('  \n'))).warnings).toEqual([`${APP_DEFAULTS_FILE} could not be loaded: the file is empty.`]);
+    expect((await loadAppDefaults(text('<settings/>'))).warnings[0]).toMatch(/is not valid JSON/);
   });
 
   it('warns, and never throws, when the file cannot be read', async () => {
-    expect((await loadAppDefaults(answer(500))).warnings).toEqual([`${APP_DEFAULTS_FILE} could not be loaded: HTTP 500.`]);
+    expect((await loadAppDefaults(answer({ kind: 'failed', reason: 'HTTP 500' }))).warnings).toEqual([`${APP_DEFAULTS_FILE} could not be loaded: HTTP 500.`]);
     const offline = await loadAppDefaults(async () => { throw new Error('offline'); });
     expect(offline).toEqual({ defaults: BUILT_IN_DEFAULTS, warnings: [`${APP_DEFAULTS_FILE} could not be loaded: offline.`] });
   });
