@@ -30,6 +30,7 @@ const DEFAULT_LANGUAGE = 'VHDL';
 const ENDS_A_SENTENCE = /[.?!]$/;
 
 const code = (text: string): string => `\`${text}\``;
+const begin = 'begin';
 
 /**
  * The advice headlines (improvement plan § 4.9): the student's own word in code
@@ -71,6 +72,25 @@ export const adviceText = {
   /** Rule H (Icarus): a `wire` assigned inside an `always` block. */
   wireAssignedInAlways: (name: string): string =>
     `${code(name)} is a ${code('wire')}: only a ${code('reg')} can be assigned inside an ${code('always')} block — declare it as ${code('reg')}.`,
+  /**
+   * A declaration written after `begin`: it belongs between `opener` (`is`,
+   * `process`) and `begin`, and above the `begin` on `beginLine` when known.
+   */
+  declarationAfterBegin: (word: string, opener: string, beginLine?: number): string =>
+    beginLine === undefined
+      ? `${code(word)} declarations go between ${code(opener)} and ${code(begin)}, not after ${code(begin)}.`
+      : `${code(word)} declarations go between ${code(opener)} and ${code(begin)} — move this line above the ${code(begin)} on line ${beginLine}.`,
+  /** A `variable` among an architecture's statements: only a process (or subprogram) has variables. */
+  variableInArchitecture: (): string =>
+    `A ${code('variable')} can only be declared in a process, between ${code('process')} and ${code(begin)} — in the architecture, use a ${code('signal')}.`,
+  /** A `signal` in a process: signals belong to the architecture. */
+  signalInProcess: (architectureBeginLine?: number): string =>
+    architectureBeginLine === undefined
+      ? `A ${code('signal')} cannot be declared in a process — declare it in the architecture, between ${code('is')} and ${code(begin)}.`
+      : `A ${code('signal')} cannot be declared in a process — declare it in the architecture, above the ${code(begin)} on line ${architectureBeginLine}.`,
+  /** An `end` after the design unit was already closed. */
+  extraEnd: (closedLine: number, kind = 'design unit'): string =>
+    `Extra ${code('end')} — line ${closedLine} already closed the ${kind}. Delete this line.`,
   /** Rule F. */
   followOn: (line: number): string => `Probably caused by the error on line ${line} — fix that one first and run again.`,
   /** Rule F, on the line of the first error itself. */

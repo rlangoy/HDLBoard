@@ -20,6 +20,12 @@ import { adviceText } from './diagnosticText';
 import { languageOfName } from './fileKinds';
 import { ghdlColumnToIndex } from './ghdlColumn';
 import { adviseIcarusDiagnostics, adviseIcarusLog } from './icarusAdvice';
+import {
+  architectureBegin,
+  DECLARATION_WORDS,
+  designUnitEnd,
+  statementRegionHome,
+} from './misplacedDeclaration';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
 import { addUseClause, clashingPackageInUse } from './useClauseFix';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
@@ -105,8 +111,17 @@ export function isSyntaxError(message: string): boolean {
   return SYNTAX_ERROR_PATTERNS.some((pattern) => pattern.test(message));
 }
 
+/** `unexpected token 'signal' in a concurrent statement list`: GHDL names the word it stopped at. */
+const UNEXPECTED_IN_CONCURRENT = /^unexpected token '(?<word>\w+)' in a concurrent statement list$/;
+
+/** A declaration after `begin`: each one is the student's own mistake, never GHDL losing its place. */
+function isMisplacedDeclaration(message: string): boolean {
+  const word = UNEXPECTED_IN_CONCURRENT.exec(message)?.groups?.word;
+  return word !== undefined && DECLARATION_WORDS.has(word.toLowerCase());
+}
+
 function isLostPlace(message: string): boolean {
-  return LOST_PLACE_PATTERNS.some((pattern) => pattern.test(message));
+  return !isMisplacedDeclaration(message) && LOST_PLACE_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 function isAdvisable(diagnostic: LocatedDiagnostic): boolean {
@@ -125,7 +140,10 @@ function byPosition(a: LocatedDiagnostic, b: LocatedDiagnostic): number {
  * and a lost-place message — measured on 29 captures, this hides no second
  * mistake (§ 2.6).
  */
-function followOns(located: readonly LocatedDiagnostic[]): ReadonlyMap<LocatedDiagnostic, number> {
+function followOns(
+  located: readonly LocatedDiagnostic[],
+  ownMistakes: ReadonlySet<LocatedDiagnostic>,
+): ReadonlyMap<LocatedDiagnostic, number> {
   const muted = new Map<LocatedDiagnostic, number>();
   for (const fileId of new Set(located.map((d) => d.fileId))) {
     const errors = located.filter((d) => d.fileId === fileId && isAdvisable(d)).sort(byPosition);
@@ -133,7 +151,7 @@ function followOns(located: readonly LocatedDiagnostic[]): ReadonlyMap<LocatedDi
     if (primary === undefined) continue;
     const afterSyntaxError = isSyntaxError(primary.message);
     errors.forEach((error, i) => {
-      if (error === primary) return;
+      if (error === primary || ownMistakes.has(error)) return;
       const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
       const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
       if (cascade || NOT_ANALYSED.test(error.message)) muted.set(error, primary.line);
@@ -351,7 +369,7 @@ function isCodeLine(line: string): boolean {
 }
 
 /** The nearest line above `line` that holds code; comments and blank lines are skipped, however many. */
-function previousCodeLine(file: SourceFile, line: number): number | undefined {
+function previousCodeLine(file: Pick<SourceFile, 'lines'>, line: number): number | undefined {
   for (let above = line - 1; above >= 1; above--) if (isCodeLine(file.lines[above - 1])) return above;
   return undefined;
 }
@@ -388,11 +406,53 @@ const causeOnPreviousLine: Rule = ({ diagnostic, file, tokens, index }) => {
   return { headline: previousLineHeadline(diagnostic.message, previous), relatedLine: previous };
 };
 
+/** How the advice names a declaration, from the word that starts it. */
+function declarationKind(word: string): string {
+  const lower = word.toLowerCase();
+  if (lower === 'shared') return 'shared variable';
+  if (lower === 'impure' || lower === 'pure') return `${word} function`;
+  return word;
+}
+
+/** The advice, pointing at `line` (the `begin`) when there is one. */
+function pointingAt(headline: string, line: number | undefined): Advice {
+  return line === undefined ? { headline } : { headline, relatedLine: line };
+}
+
+/**
+ * A declaration written after `begin` — in the architecture (`unexpected token
+ * 'signal' in a concurrent statement list`) or in a process or subprogram
+ * (`declaration not allowed within statements`). Says where it goes, and points
+ * at the `begin` to move it above.
+ */
+const declarationAfterBegin: Rule = ({ diagnostic, file, tokens, anchor }) => {
+  const written = tokens[anchor]?.text;
+  const concurrent = UNEXPECTED_IN_CONCURRENT.exec(diagnostic.message)?.groups?.word;
+  if (concurrent !== undefined) {
+    if (!isMisplacedDeclaration(diagnostic.message)) return undefined;
+    const word = written?.toLowerCase() === concurrent.toLowerCase() ? written : concurrent;
+    if (word.toLowerCase() === 'variable') return { headline: adviceText.variableInArchitecture() };
+    const begin = architectureBegin(file.lines, diagnostic.line);
+    return pointingAt(adviceText.declarationAfterBegin(declarationKind(word), 'is', begin), begin);
+  }
+  if (diagnostic.message !== 'declaration not allowed within statements' || written === undefined) return undefined;
+  if (!DECLARATION_WORDS.has(written.toLowerCase())) return undefined;
+  const home = statementRegionHome(file.lines, diagnostic.line);
+  if (home === undefined) return undefined;
+  if (written.toLowerCase() === 'signal' && home.region === 'process') {
+    const begin = architectureBegin(file.lines, diagnostic.line);
+    return pointingAt(adviceText.signalInProcess(begin), begin);
+  }
+  const opener = home.region === 'process' ? 'process' : 'is';
+  return pointingAt(adviceText.declarationAfterBegin(declarationKind(written), opener, home.beginLine), home.beginLine);
+};
+
 /**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
+ * A declaration after `begin` is read from GHDL's own words, so it goes before all.
  */
-const RULES: readonly Rule[] = [joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
+const RULES: readonly Rule[] = [declarationAfterBegin, joinedKeyword, misspelledKeyword, missingPackage, undeclaredName, causeOnPreviousLine];
 
 // ------------------------------------------------------------ public
 
@@ -405,13 +465,57 @@ function adviceFor(place: Place, project: Project): Advice | undefined {
   return underline && { span: underline };
 }
 
+const NO_DESIGN_UNIT = 'missing entity, architecture, package or configuration';
+
+interface ExtraEnd {
+  /** The line that closed the design unit. */
+  readonly closedLine: number;
+  /** What it closed, as that line says (`architecture`). */
+  readonly kind?: string;
+}
+
+/**
+ * An extra `end architecture;`: GHDL finds no design unit to close, and the code
+ * line before it is the error-free end of one — or another extra `end`. The
+ * student's own mistake, not GHDL losing its place, so never muted.
+ */
+function extraEnds(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): Map<LocatedDiagnostic, ExtraEnd> {
+  const found = new Map<LocatedDiagnostic, ExtraEnd>();
+  for (const { id, content } of snapshot.files) {
+    const file = { lines: content.split('\n').map((line) => line.replace(/\r$/, '')) };
+    const errors = located.filter((d) => d.fileId === id && isAdvisable(d)).sort(byPosition);
+    const errorLines = new Set(errors.map((d) => d.line));
+    const extraByLine = new Map<number, ExtraEnd>();
+    for (const error of errors) {
+      if (error.message !== NO_DESIGN_UNIT || designUnitEnd(file.lines[error.line - 1] ?? '') === undefined) continue;
+      const previous = previousCodeLine(file, error.line);
+      const closing = previous === undefined ? undefined : designUnitEnd(file.lines[previous - 1]);
+      if (previous === undefined || closing === undefined) continue;
+      const genuine = errorLines.has(previous) ? undefined : { closedLine: previous, kind: closing.kind };
+      const extra = extraByLine.get(previous) ?? genuine;
+      if (extra === undefined) continue;
+      extraByLine.set(error.line, extra);
+      found.set(error, extra);
+    }
+  }
+  return found;
+}
+
+/** The code of a line, without its comment, to underline. */
+function codeSpan(line: string): Span | undefined {
+  const code = positionedTokens(line).filter((token) => token.type !== 'comment');
+  return code.length === 0 ? undefined : { start: code[0].start, end: code[code.length - 1].end };
+}
+
 /**
  * Adds advice to GHDL compile errors (§ 4.1): the word to underline (Rule A),
  * a headline when a rule is confident (B–E), and the muting of follow-on errors
  * (F). Keeps the input order; diagnostics without advice come back unchanged.
  */
 function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
-  const muted = followOns(located);
+  const extra = extraEnds(located, snapshot);
+  const ownMistakes = new Set([...located.filter((d) => isMisplacedDeclaration(d.message)), ...extra.keys()]);
+  const muted = followOns(located, ownMistakes);
   const project = projectOf(located, snapshot, muted);
   return located.map((diagnostic) => {
     const file = project.files.get(diagnostic.fileId);
@@ -420,6 +524,12 @@ function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: 
     if (primaryLine !== undefined) {
       const headline = primaryLine === diagnostic.line ? adviceText.followOnSameLine() : adviceText.followOn(primaryLine);
       return { ...diagnostic, advice: { headline, followOnOf: primaryLine } };
+    }
+    const extraEnd = extra.get(diagnostic);
+    if (extraEnd !== undefined) {
+      const headline = adviceText.extraEnd(extraEnd.closedLine, extraEnd.kind);
+      const span = codeSpan(file.lines[diagnostic.line - 1] ?? '');
+      return { ...diagnostic, advice: { headline, relatedLine: extraEnd.closedLine, ...(span && { span }) } };
     }
     const advice = adviceFor(placeOf(diagnostic, file), project);
     return advice ? { ...diagnostic, advice } : diagnostic;
