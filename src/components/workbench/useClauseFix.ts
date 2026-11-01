@@ -8,6 +8,7 @@
  */
 
 import { offsetOfLine } from './diagnosticLocation';
+import { indentOf, lineEnding, splitLines } from './textLines';
 import { tokenizeVhdlLine } from './vhdlHighlight';
 import {
   isSamePackage,
@@ -38,9 +39,6 @@ interface ContextClause {
 const CLAUSE = /^(?<keyword>library|use)\s+(?<names>.+)$/i;
 /** The words that start a primary design unit: each gets the context clauses written just before it. */
 const PRIMARY_UNIT_KEYWORDS: ReadonlySet<string> = new Set(['entity', 'package', 'configuration']);
-const LEADING_WHITESPACE = /^[ \t]*/;
-const CRLF = '\r\n';
-const LF = '\n';
 
 function codeOf(line: string): string {
   return tokenizeVhdlLine(line)
@@ -105,10 +103,6 @@ function declaresLibrary(clauses: readonly ContextClause[], library: string): bo
   return clauses.some((clause) => clause.keyword === 'library' && clause.names.includes(wanted));
 }
 
-function splitLines(content: string): string[] {
-  return content.split(LF).map((line) => line.replace(/\r$/, ''));
-}
-
 /** The package already used above `line` that cannot be used together with `pkg` (`std_logic_arith` for `numeric_std`). */
 export function clashingPackageInUse(content: string, pkg: VhdlPackage, line: number): VhdlPackage | undefined {
   const { clauses } = contextOf(splitLines(content), line);
@@ -135,12 +129,12 @@ interface Source {
 }
 
 function sourceOf(content: string): Source {
-  return { content, lines: splitLines(content), eol: content.includes(CRLF) ? CRLF : LF };
+  return { content, lines: splitLines(content), eol: lineEnding(content) };
 }
 
 /** Under the last clause above the error, indented like it. */
 function insertBelow({ content, lines, eol }: Source, anchor: number, added: readonly string[]): TextInsertion {
-  const indent = LEADING_WHITESPACE.exec(lines[anchor - 1])?.[0] ?? '';
+  const indent = indentOf(lines[anchor - 1]);
   const block = added.map((clause) => `${indent}${clause}`).join(eol);
   if (anchor === lines.length) {
     return { offset: content.length, text: `${eol}${block}`, caret: content.length + eol.length + block.length };

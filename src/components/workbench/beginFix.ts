@@ -7,11 +7,12 @@
  */
 
 import { offsetOfLine } from './diagnosticLocation';
+import { indentOf, lineEnding, splitLines } from './textLines';
 import type { TextInsertion } from './useClauseFix';
 import { tokenizeVhdlLine } from './vhdlHighlight';
 import { architectureMissingBegin } from './vhdlStructure';
 
-const LEADING_WHITESPACE = /^[ \t]*/;
+const BEGIN = 'begin';
 
 function isCommentOnly(line: string): boolean {
   const tokens = tokenizeVhdlLine(line).filter((token) => token.type !== 'whitespace');
@@ -24,14 +25,12 @@ function isCommentOnly(line: string): boolean {
  * the statement. `undefined` when that architecture has a `begin` already.
  */
 export function insertBegin(content: string, line: number): TextInsertion | undefined {
-  const lines = content.split('\n').map((text) => text.replace(/\r$/, ''));
+  const lines = splitLines(content);
   const header = architectureMissingBegin(lines, line);
   if (header === undefined) return undefined;
   let before = line;
   while (before - 1 > header && isCommentOnly(lines[before - 2])) before--;
-  const indent = LEADING_WHITESPACE.exec(lines[header - 1])?.[0] ?? '';
-  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const indent = indentOf(lines[header - 1]);
   const offset = offsetOfLine(content, before);
-  const text = `${indent}begin${eol}`;
-  return { offset, text, caret: offset + indent.length + 'begin'.length };
+  return { offset, text: `${indent}${BEGIN}${lineEnding(content)}`, caret: offset + indent.length + BEGIN.length };
 }

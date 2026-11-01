@@ -16,16 +16,6 @@ import {
   summarize,
 } from './diagnosticText';
 
-describe('quickFixTitle', () => {
-  test('a use clause is named in full', () => {
-    expect(quickFixTitle({ addUseClause: { library: 'ieee', name: 'numeric_std' } })).toBe('Add `use ieee.numeric_std.all;`');
-  });
-
-  test('the missing begin', () => {
-    expect(quickFixTitle({ insertBegin: true })).toBe('Insert `begin`');
-  });
-});
-
 function message(text: string, severity: LineMessage['severity'] = 'error', details: string[] = []): LineMessage {
   return { severity, message: text, details };
 }
@@ -160,5 +150,15 @@ describe('problemCountText', () => {
 
   test('is empty with no problems', () => {
     expect(problemCountText({ errors: 0, warnings: 0 })).toBe('');
+  });
+});
+
+describe('quickFixTitle', () => {
+  test('a use clause is named in full', () => {
+    expect(quickFixTitle({ addUseClause: { library: 'ieee', name: 'numeric_std' } })).toBe('Add `use ieee.numeric_std.all;`');
+  });
+
+  test('the missing begin', () => {
+    expect(quickFixTitle({ insertBegin: true })).toBe('Insert `begin`');
   });
 });

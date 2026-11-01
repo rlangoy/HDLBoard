@@ -29,6 +29,7 @@ import {
   statementRegionHome,
 } from './vhdlStructure';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
+import { splitLines } from './textLines';
 import { addUseClause, clashingPackageInUse } from './useClauseFix';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import { packageDeclaring, type VhdlPackage } from './vhdlPackages';
@@ -124,16 +125,11 @@ interface DeclaredEntity {
   readonly line: number;
 }
 
-/** A file as GHDL saw it, one entry per line, without a trailing `\r`. */
-function linesOf(content: string): string[] {
-  return content.split('\n').map((line) => line.replace(/\r$/, ''));
-}
-
 const ENTITY_HEADER = /^\s*entity\s+(?<name>\w+)\s+is\b/i;
 
 function entitiesOf(snapshot: RunSnapshot): DeclaredEntity[] {
   return snapshot.files.flatMap(({ id, content }) =>
-    linesOf(content).flatMap((text, i) => {
+    splitLines(content).flatMap((text, i) => {
       const name = ENTITY_HEADER.exec(text.replace(/--.*$/, ''))?.groups?.name;
       return name === undefined ? [] : [{ name, fileId: id, line: i + 1 }];
     }),
@@ -210,19 +206,18 @@ function followOnsInFile(
   const nested = errors.find((d) => nestedDesignUnit(d.message) !== undefined && (d === primary || !afterSyntaxError));
   // A cause is the first error or a mistake of its own after it; other errors left shown are no cause:
   // in a cascade GHDL prints some that no pattern mutes. An unknown entity before `primary` is none either.
-  let cause: LocatedDiagnostic = primary;
-  errors.forEach((error, i) => {
-    if (isFollowOnOf(error, i)) muted.set(error, cause.line);
-    else if (ownMistakes.has(error) && byPosition(error, primary) > 0) cause = error;
-  });
-
-  function isFollowOnOf(error: LocatedDiagnostic, i: number): boolean {
+  const isFollowOn = (error: LocatedDiagnostic, i: number): boolean => {
     if (nested !== undefined && byPosition(nested, error) < 0) return true;
     if (error === primary || ownMistakes.has(error)) return false;
     const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
     const cascade = afterSyntaxError && (lineHasEarlierError || isLostPlace(error.message));
     return cascade || NOT_ANALYSED.test(error.message);
-  }
+  };
+  let cause: LocatedDiagnostic = primary;
+  errors.forEach((error, i) => {
+    if (isFollowOn(error, i)) muted.set(error, cause.line);
+    else if (ownMistakes.has(error) && byPosition(error, primary) > 0) cause = error;
+  });
 }
 
 /**
@@ -264,8 +259,10 @@ interface Project {
   readonly files: ReadonlyMap<string, SourceFile>;
   /** Every name declared anywhere in the project, lower case (Rule B's exclusions). */
   readonly declared: ReadonlySet<string>;
-  /** Every `entity … is` in the project. */
+  /** Every `entity … is` in the project: an architecture of another is an unknown entity. */
   readonly entities: readonly DeclaredEntity[];
+  /** Mistakes found from the source before any error was muted (`ownMistakesOf`). */
+  readonly own: OwnMistakes;
 }
 
 /** One error, with its line's tokens and the token GHDL's column points at. */
@@ -285,18 +282,19 @@ function projectOf(
   snapshot: RunSnapshot,
   muted: ReadonlyMap<LocatedDiagnostic, number>,
   entities: readonly DeclaredEntity[],
+  own: OwnMistakes,
 ): Project {
   const files = new Map<string, SourceFile>();
   for (const file of snapshot.files) {
     const errorLines = located.filter((d) => d.fileId === file.id && isAdvisable(d) && !muted.has(d));
     files.set(file.id, {
-      lines: linesOf(file.content),
+      lines: splitLines(file.content),
       declared: declaredNames(file.content),
       errorLines: new Set(errorLines.map((d) => d.line)),
     });
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { files, declared: new Set(declared), entities };
+  return { files, declared: new Set(declared), entities, own };
 }
 
 function positionedTokens(line: string): PositionedToken[] {
@@ -560,22 +558,33 @@ function statementKind(line: string): string | undefined {
   return STATEMENT_KINDS.find(([pattern]) => pattern.test(code))?.[1];
 }
 
+/** What the advice calls the line GHDL asked for `begin` on when it starts no statement it knows. */
+const ANY_LINE = 'line';
+
 /**
- * An architecture's first statement written without `begin` above it: GHDL
- * still reads declarations, so it asks for an object class keyword such as
- * `variable`, or for `begin`. Offers to insert the `begin`. Only the first
- * error in the architecture: after another one (`begn`), that one explains it.
+ * The statement an architecture's statements start with, when it was written
+ * without `begin` above it: GHDL still reads declarations, so it asks for an
+ * object class keyword such as `variable`, or for `begin`. Only the first error
+ * in the architecture (`earlier`, all the file's errors before this one): after
+ * another one (`begn`), that one explains it.
  */
-const missingArchitectureBegin: Rule = ({ diagnostic, file }) => {
-  const asksForBegin = BEGIN_EXPECTED.test(diagnostic.message);
-  if (!asksForBegin && diagnostic.message !== OBJECT_CLASS_EXPECTED) return undefined;
-  const line = file.lines[diagnostic.line - 1] ?? '';
-  const statement = statementKind(line) ?? (asksForBegin ? 'line' : undefined);
-  const header = architectureMissingBegin(file.lines, diagnostic.line);
+function statementWithoutBegin(
+  error: LocatedDiagnostic,
+  lines: readonly string[],
+  earlier: readonly LocatedDiagnostic[],
+): string | undefined {
+  const asksForBegin = BEGIN_EXPECTED.test(error.message);
+  if (!asksForBegin && error.message !== OBJECT_CLASS_EXPECTED) return undefined;
+  const statement = statementKind(lines[error.line - 1] ?? '') ?? (asksForBegin ? ANY_LINE : undefined);
+  const header = architectureMissingBegin(lines, error.line);
   if (statement === undefined || header === undefined) return undefined;
-  const earlierErrorInArchitecture = [...file.errorLines].some((l) => l >= header && l < diagnostic.line);
-  if (earlierErrorInArchitecture) return undefined;
-  return { headline: adviceText.missingBegin(statement), fix: { insertBegin: true } };
+  return earlier.some((d) => d.line >= header) ? undefined : statement;
+}
+
+/** The missing `begin`, with a Quick Fix that inserts it. */
+const missingArchitectureBegin: Rule = ({ diagnostic }, project) => {
+  const statement = project.own.missingBegins.get(diagnostic);
+  return statement === undefined ? undefined : { headline: adviceText.missingBegin(statement), fix: { insertBegin: true } };
 };
 
 /**
@@ -613,12 +622,97 @@ function suggestedEntity(written: string, entities: readonly DeclaredEntity[]): 
   return onlyEntity ? entities[0] : undefined;
 }
 
+const NO_DESIGN_UNIT = 'missing entity, architecture, package or configuration';
+
+interface ExtraEnd {
+  /** The line that closed the design unit. */
+  readonly closedLine: number;
+  /** What it closed, as that line says (`architecture`). */
+  readonly kind?: string;
+}
+
+/**
+ * An extra `end architecture;`: GHDL finds no design unit to close, and the code
+ * line before it is the error-free end of one — or another extra `end`
+ * (`extraBefore`, by line). `errorLines`: every line of the file with an error.
+ */
+function extraEndAt(
+  error: LocatedDiagnostic,
+  lines: readonly string[],
+  errorLines: ReadonlySet<number>,
+  extraBefore: ReadonlyMap<number, ExtraEnd>,
+): ExtraEnd | undefined {
+  if (error.message !== NO_DESIGN_UNIT || designUnitEnd(lines[error.line - 1] ?? '') === undefined) return undefined;
+  const previous = previousCodeLine({ lines }, error.line);
+  const closing = previous === undefined ? undefined : designUnitEnd(lines[previous - 1]);
+  if (previous === undefined || closing === undefined) return undefined;
+  const genuine = errorLines.has(previous) ? undefined : { closedLine: previous, kind: closing.kind };
+  return extraBefore.get(previous) ?? genuine;
+}
+
+/** The code of a line, without its comment, to underline. */
+function codeSpan(line: string): Span | undefined {
+  const code = positionedTokens(line).filter((token) => token.type !== 'comment');
+  return code.length === 0 ? undefined : { start: code[0].start, end: code[code.length - 1].end };
+}
+
+/** The extra `end`, underlined whole, pointing at the line that closed the design unit. */
+const extraEnd: Rule = ({ diagnostic, file }, project) => {
+  const extra = project.own.extraEnds.get(diagnostic);
+  if (extra === undefined) return undefined;
+  const span = codeSpan(file.lines[diagnostic.line - 1] ?? '');
+  return { headline: adviceText.extraEnd(extra.closedLine, extra.kind), relatedLine: extra.closedLine, ...(span && { span }) };
+};
+
+/**
+ * The student's own mistakes, read from the source before any error is muted:
+ * each is a cause the follow-ons after it are named after, and is never muted
+ * as a cascade itself.
+ */
+interface OwnMistakes {
+  /** The line each extra `end`'s design unit was closed on, and its kind. */
+  readonly extraEnds: ReadonlyMap<LocatedDiagnostic, ExtraEnd>;
+  /** The statement each missing-`begin` error is on (`assignment` …). */
+  readonly missingBegins: ReadonlyMap<LocatedDiagnostic, string>;
+  /** These two, the misplaced declarations and the unknown entities. */
+  readonly all: ReadonlySet<LocatedDiagnostic>;
+}
+
+function ownMistakesOf(
+  located: readonly LocatedDiagnostic[],
+  snapshot: RunSnapshot,
+  entities: readonly DeclaredEntity[],
+): OwnMistakes {
+  const extraEnds = new Map<LocatedDiagnostic, ExtraEnd>();
+  const missingBegins = new Map<LocatedDiagnostic, string>();
+  for (const { id, content } of snapshot.files) {
+    const lines = splitLines(content);
+    const errors = located.filter((d) => d.fileId === id && isAdvisable(d)).sort(byPosition);
+    const errorLines = new Set(errors.map((d) => d.line));
+    const extraByLine = new Map<number, ExtraEnd>();
+    errors.forEach((error, i) => {
+      const extra = extraEndAt(error, lines, errorLines, extraByLine);
+      if (extra !== undefined) {
+        extraByLine.set(error.line, extra);
+        extraEnds.set(error, extra);
+      }
+      const statement = statementWithoutBegin(error, lines, errors.slice(0, i));
+      if (statement !== undefined) missingBegins.set(error, statement);
+    });
+  }
+  const isNamedFromMessage = (d: LocatedDiagnostic): boolean =>
+    isMisplacedDeclaration(d.message) || unknownEntity(d.message, entities) !== undefined;
+  const all = new Set([...located.filter(isNamedFromMessage), ...extraEnds.keys(), ...missingBegins.keys()]);
+  return { extraEnds, missingBegins, all };
+}
+
 /**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
- * The rules read from GHDL's own words go before all.
+ * The rules read from GHDL's own words and the shape of the code go before all.
  */
 const RULES: readonly Rule[] = [
+  extraEnd,
   entityNotFound,
   designUnitInsideArchitecture,
   declarationInArchitectureBody,
@@ -642,74 +736,23 @@ function adviceFor(place: Place, project: Project): Advice | undefined {
   return underline && { span: underline };
 }
 
-const NO_DESIGN_UNIT = 'missing entity, architecture, package or configuration';
-
-interface ExtraEnd {
-  /** The line that closed the design unit. */
-  readonly closedLine: number;
-  /** What it closed, as that line says (`architecture`). */
-  readonly kind?: string;
-}
-
-/**
- * An extra `end architecture;`: GHDL finds no design unit to close, and the code
- * line before it is the error-free end of one — or another extra `end`. The
- * student's own mistake, not GHDL losing its place, so never muted.
- */
-function extraEnds(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): Map<LocatedDiagnostic, ExtraEnd> {
-  const found = new Map<LocatedDiagnostic, ExtraEnd>();
-  for (const { id, content } of snapshot.files) {
-    const file = { lines: linesOf(content) };
-    const errors = located.filter((d) => d.fileId === id && isAdvisable(d)).sort(byPosition);
-    const errorLines = new Set(errors.map((d) => d.line));
-    const extraByLine = new Map<number, ExtraEnd>();
-    for (const error of errors) {
-      if (error.message !== NO_DESIGN_UNIT || designUnitEnd(file.lines[error.line - 1] ?? '') === undefined) continue;
-      const previous = previousCodeLine(file, error.line);
-      const closing = previous === undefined ? undefined : designUnitEnd(file.lines[previous - 1]);
-      if (previous === undefined || closing === undefined) continue;
-      const genuine = errorLines.has(previous) ? undefined : { closedLine: previous, kind: closing.kind };
-      const extra = extraByLine.get(previous) ?? genuine;
-      if (extra === undefined) continue;
-      extraByLine.set(error.line, extra);
-      found.set(error, extra);
-    }
-  }
-  return found;
-}
-
-/** The code of a line, without its comment, to underline. */
-function codeSpan(line: string): Span | undefined {
-  const code = positionedTokens(line).filter((token) => token.type !== 'comment');
-  return code.length === 0 ? undefined : { start: code[0].start, end: code[code.length - 1].end };
-}
-
 /**
  * Adds advice to GHDL compile errors (§ 4.1): the word to underline (Rule A),
  * a headline when a rule is confident (B–E), and the muting of follow-on errors
  * (F). Keeps the input order; diagnostics without advice come back unchanged.
  */
 function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
-  const extra = extraEnds(located, snapshot);
   const entities = entitiesOf(snapshot);
-  const isOwnMistake = (d: LocatedDiagnostic): boolean =>
-    isMisplacedDeclaration(d.message) || unknownEntity(d.message, entities) !== undefined;
-  const ownMistakes = new Set([...located.filter(isOwnMistake), ...extra.keys()]);
-  const muted = followOns(located, ownMistakes);
-  const project = projectOf(located, snapshot, muted, entities);
+  const own = ownMistakesOf(located, snapshot, entities);
+  const muted = followOns(located, own.all);
+  const project = projectOf(located, snapshot, muted, entities, own);
   return located.map((diagnostic) => {
     const file = project.files.get(diagnostic.fileId);
     if (!isAdvisable(diagnostic) || file === undefined) return diagnostic;
-    const primaryLine = muted.get(diagnostic);
-    if (primaryLine !== undefined) {
-      const headline = primaryLine === diagnostic.line ? adviceText.followOnSameLine() : adviceText.followOn(primaryLine);
-      return { ...diagnostic, advice: { headline, followOnOf: primaryLine } };
-    }
-    const extraEnd = extra.get(diagnostic);
-    if (extraEnd !== undefined) {
-      const headline = adviceText.extraEnd(extraEnd.closedLine, extraEnd.kind);
-      const span = codeSpan(file.lines[diagnostic.line - 1] ?? '');
-      return { ...diagnostic, advice: { headline, relatedLine: extraEnd.closedLine, ...(span && { span }) } };
+    const causeLine = muted.get(diagnostic);
+    if (causeLine !== undefined) {
+      const headline = causeLine === diagnostic.line ? adviceText.followOnSameLine() : adviceText.followOn(causeLine);
+      return { ...diagnostic, advice: { headline, followOnOf: causeLine } };
     }
     const advice = adviceFor(placeOf(diagnostic, file), project);
     return advice ? { ...diagnostic, advice } : diagnostic;

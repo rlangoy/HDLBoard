@@ -27,8 +27,8 @@ end architecture;`);
   });
 
   test('the caret ends up just after the new begin', () => {
-    const insertion = insertBegin(SOURCE, 4);
-    expect(insertion && applyInsertion(SOURCE, insertion).slice(0, insertion.caret).endsWith('\nbegin')).toBe(true);
+    const startOfLine3 = 'architecture rtl of e is\n\n'.length;
+    expect(insertBegin(SOURCE, 4)?.caret).toBe(startOfLine3 + 'begin'.length);
   });
 
   test('keeps the file’s CRLF line endings', () => {

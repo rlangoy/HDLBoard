@@ -311,6 +311,17 @@ end architecture;
     });
   });
 
+  test('after a mistake in another architecture, GHDL asking for begin is named after the missing begin', () => {
+    const source =
+      'entity e is port (x : in bit; y : out bit); end;\narchitecture a of e is\nbegin\n  y <= x\nend;\n\narchitecture b of e is\n  signal s : bit;\n  s <= x;\n  y <= s;\nend;';
+    const output =
+      "two.vhd:4:9:error: ';' expected at end of signal assignment\n  y <= x\n        ^\ntwo.vhd:4:9:error: (found: 'end')\ntwo.vhd:9:3:error: object class keyword such as 'variable' is expected\n  s <= x;\n  ^\ntwo.vhd:10:3:error: 'begin' is expected instead of \"y\"\n  y <= s;\n  ^\n";
+    expect(headlines(advise('two.vhd', source, output))).toMatchObject({
+      9: 'Missing `begin` — insert `begin` before this assignment.',
+      10: 'Probably caused by the error on line 9 — fix that one first and run again.',
+    });
+  });
+
   test('a misspelled declaration keyword is not taken for a statement', () => {
     const source = 'entity e is end;\narchitecture a of e is\n  sigal s : bit;\nbegin\nend;';
     const [advised] = advise('d.vhd', source, "d.vhd:3:3:error: object class keyword such as 'variable' is expected\n");
