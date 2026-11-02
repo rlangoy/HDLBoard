@@ -906,7 +906,7 @@ When markers change:
 
 A pasted architecture is checked before it goes in (`pastedArchitecture.ts`,
 `usePastedArchitecture.ts`, `PasteArchitectureDialog.tsx`): when it is `of` an
-entity no file declares, the Paste architecture dialog offers the file's own
+entity no file declares, the Review pasted architecture dialog offers the file's own
 entity (or the nearest name); when the project already has an architecture of
 that entity with that name, it offers to replace it, in this file or another.
 This file changes in one edit, so Ctrl+Z undoes the paste. `vhdlUnits.ts` reads
