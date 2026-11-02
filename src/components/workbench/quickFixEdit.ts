@@ -17,6 +17,6 @@ export function quickFixEdit(content: string, fix: QuickFix, line: number): Text
     case 'replaceWithBegin':
       return replaceWithBegin(content, line);
     case 'replaceEntityName':
-      return replaceEntityName(content, line, fix.written, fix.entity);
+      return replaceEntityName(content, line, fix);
   }
 }

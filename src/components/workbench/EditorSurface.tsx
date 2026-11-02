@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject, type UIEvent } from 'react';
+import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type CSSProperties, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { CodeText } from './CodeText';
 import { describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
@@ -10,6 +10,9 @@ import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrol
 import { isOverflowing } from './scrollThumb';
 import { applyEdit } from './find/applyEdit';
 import { unwrapCodeFence } from './pasteFence';
+import { PasteArchitectureDialog } from './PasteArchitectureDialog';
+import { usePastedArchitecture } from './usePastedArchitecture';
+import type { VhdlFile } from './files';
 import { tabEdit } from './tabIndent';
 import { useRevealLine, type RevealRequest } from './useRevealLine';
 import { useQuickFix } from './useQuickFix';
@@ -45,6 +48,7 @@ const MODIFIER_KEYS: readonly string[] = ['Shift', 'Control', 'Alt', 'Meta', 'Ta
 const NO_RANGES: readonly CharRange[] = [];
 const NO_OCCURRENCES: readonly Occurrence[] = [];
 const NO_EXTRA_ROWS: readonly ExtraRow[] = [];
+const NO_FILES: readonly VhdlFile[] = [];
 
 const OCCURRENCE_CLASS: Record<OccurrenceKind, string> = {
   declaration: 'wb-editor__occ-decl',
@@ -206,6 +210,8 @@ export interface EditorSurfaceProps {
   onFindEscape?: () => boolean;
   /** A click in the code: hides the pane's Find bar and its marks; the query is kept for the next open. */
   onFindDismiss?: () => void;
+  /** Every file of the project, for the questions a pasted architecture raises (pastedArchitecture.ts). */
+  projectFiles?: readonly VhdlFile[];
 }
 
 /**
@@ -231,6 +237,7 @@ export function EditorSurface({
   findAttach,
   onFindEscape,
   onFindDismiss,
+  projectFiles = NO_FILES,
 }: EditorSurfaceProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -284,10 +291,26 @@ export function EditorSurface({
   const statusId = useId();
   useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
   const quickFix = useQuickFix(textareaRef, diagnostics, () => onDismissDiagnostics?.(file.id));
+  const pastedArchitecture = usePastedArchitecture(textareaRef, file.id, { files: projectFiles, onChange });
   useLayoutEffect(() => {
     findAttach?.(textareaRef.current);
     return () => findAttach?.(null);
   }, [findAttach]);
+
+  // A Markdown code block (```vhdl … ```) goes in without its fence lines; an
+  // architecture that needs a question waits for the Paste architecture dialog.
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData('text/plain');
+    const unfenced = unwrapCodeFence(pasted);
+    const ta = e.currentTarget;
+    if (pastedArchitecture.offer(unfenced ?? pasted, ta.selectionStart, ta.selectionEnd)) {
+      e.preventDefault();
+      return;
+    }
+    if (unfenced === null) return;
+    e.preventDefault();
+    applyEdit(ta, ta.selectionStart, ta.selectionEnd, unfenced);
+  };
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
@@ -304,6 +327,7 @@ export function EditorSurface({
   };
 
   return (
+    <>
     <div
       className="wb-editor__body"
       // A click in the text or on a line number clears this file's markers
@@ -352,14 +376,7 @@ export function EditorSurface({
           style={{ '--wb-extra-rows': extraRowCount } as CSSProperties}
           onScroll={handleScroll}
           onChange={(e) => onChange(file.id, e.target.value)}
-          onPaste={(e) => {
-            // A Markdown code block (```vhdl … ```) goes in without its fence lines.
-            const code = unwrapCodeFence(e.clipboardData.getData('text/plain'));
-            if (code === null) return;
-            e.preventDefault();
-            const ta = e.currentTarget;
-            applyEdit(ta, ta.selectionStart, ta.selectionEnd, code);
-          }}
+          onPaste={handlePaste}
           {...hovered.handlers}
           onSelect={atCaret.onSelect}
           onPointerDown={(e) => {
@@ -396,5 +413,15 @@ export function EditorSurface({
         <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
       </div>
     </div>
+    {/* Outside the body: a click in the dialog is not a click in the code. */}
+    {pastedArchitecture.pending && (
+      <PasteArchitectureDialog
+        questions={pastedArchitecture.pending.questions}
+        targetFileId={file.id}
+        onPaste={pastedArchitecture.paste}
+        onClose={pastedArchitecture.cancel}
+      />
+    )}
+    </>
   );
 }

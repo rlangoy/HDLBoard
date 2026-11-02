@@ -1,0 +1,30 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The Paste architecture dialog: one ticked choice per question. */
+
+.wb-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wb-paste__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--wb-text);
+  cursor: pointer;
+}
+
+.wb-paste__choice input {
+  margin: 3px 0 0;
+  accent-color: var(--wb-accent);
+}
+
+.wb-paste__choice code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+}

@@ -117,6 +117,24 @@ export const adviceText = {
   followOnSameLine: (): string => 'Probably caused by the first error on this line — fix that one first and run again.',
 };
 
+/** Where an earlier declaration is: a line of the same file, or of `fileName`. */
+export interface EarlierPlace {
+  readonly line: number;
+  readonly fileName?: string;
+}
+
+/**
+ * HDLBoard's own warnings about the project, checked at Start. Written as the
+ * compiler's message, which the console and the code window show as GHDL's.
+ */
+export const projectCheckText = {
+  /** Two architectures of one entity with one name: the later replaces the earlier in the library. */
+  duplicateArchitecture: (name: string, entity: string, earlier: EarlierPlace): string =>
+    earlier.fileName === undefined
+      ? `architecture "${name}" of "${entity}" is already defined on line ${earlier.line}, and this one replaces it – give each architecture its own name.`
+      : `architecture "${name}" of "${entity}" is already defined in ${earlier.fileName} (line ${earlier.line}), and only one of them is used – give each architecture its own name.`,
+};
+
 /** The Quick Fix button: what it will add. */
 export function quickFixTitle(fix: QuickFix): string {
   switch (fix.kind) {

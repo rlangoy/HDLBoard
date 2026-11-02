@@ -41,6 +41,7 @@ import {
   LIBRARY_NAMES,
   SUGGESTED_KEYWORDS,
 } from './vhdlWords';
+import { architectureHeaders, entityHeaders, sameName, suggestedEntityName } from './vhdlUnits';
 
 /** A range in one line of the snapshot: 0-based character offsets, end exclusive. */
 export interface Span {
@@ -132,15 +133,8 @@ interface DeclaredEntity {
   readonly line: number;
 }
 
-const ENTITY_HEADER = /^\s*entity\s+(?<name>\w+)\s+is\b/i;
-
 function entitiesOf(snapshot: RunSnapshot): DeclaredEntity[] {
-  return snapshot.files.flatMap(({ id, content }) =>
-    splitLines(content).flatMap((text, i) => {
-      const name = ENTITY_HEADER.exec(text.replace(/--.*$/, ''))?.groups?.name;
-      return name === undefined ? [] : [{ name, fileId: id, line: i + 1 }];
-    }),
-  );
+  return snapshot.files.flatMap(({ id, content }) => entityHeaders(content).map((entity) => ({ ...entity, fileId: id })));
 }
 
 /**
@@ -658,16 +652,19 @@ const entityNotFound: Rule = (place, project) => {
   const entity = suggestedEntity(written, project.entities);
   const lineInThisFile = entity?.fileId === place.diagnostic.fileId ? entity.line : undefined;
   const advice = pointingAt(adviceText.unknownEntity(written, entity?.name, lineInThisFile), lineInThisFile);
-  if (entity === undefined) return advice;
+  if (entity === undefined || !namesEntityAfterOf(place, written)) return advice;
   return { ...advice, fix: { kind: 'replaceEntityName', written, entity: entity.name } };
 };
 
+/** The Quick Fix's line holds the whole `architecture rtl of <written> is`: only there can it change the name. */
+function namesEntityAfterOf({ file, diagnostic }: Place, written: string): boolean {
+  return architectureHeaders(file.lines[diagnostic.line - 1] ?? '').some((header) => sameName(header.entity, written));
+}
+
 /** The entity the student probably meant: the nearest name, else the project's only entity. */
 function suggestedEntity(written: string, entities: readonly DeclaredEntity[]): DeclaredEntity | undefined {
-  const nearestName = uniqueNearest(written, entities.map((entity) => entity.name));
-  if (nearestName !== undefined) return entities.find((entity) => entity.name === nearestName);
-  const onlyEntity = new Set(entities.map((entity) => entity.name.toLowerCase())).size === 1;
-  return onlyEntity ? entities[0] : undefined;
+  const name = suggestedEntityName(written, entities.map((entity) => entity.name));
+  return entities.find((entity) => entity.name === name);
 }
 
 const NO_DESIGN_UNIT = 'missing entity, architecture, package or configuration';
@@ -794,7 +791,7 @@ function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: 
   const own = ownMistakesOf(located, snapshot, entities);
   const muted = followOns(located, own.all);
   const project = projectOf(located, snapshot, muted, entities, own);
-  return located.map((diagnostic) => {
+  return withQuietRedefinitions(located).map((diagnostic) => {
     const file = project.files.get(diagnostic.fileId);
     if (!isAdvisable(diagnostic) || file === undefined) return diagnostic;
     const causeLine = muted.get(diagnostic);
@@ -805,6 +802,23 @@ function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: 
     const advice = adviceFor(placeOf(diagnostic, file), project);
     return advice ? { ...diagnostic, advice } : diagnostic;
   });
+}
+
+/** GHDL's pair of warnings for a second architecture of one name in one file. */
+const ARCHITECTURE_REDEFINED = /^architecture ".+" of ".+" defined at line \d+:\d+ is now architecture /;
+const UNIT_REDEFINED = /^redefinition of a library unit in same design file/;
+
+/**
+ * GHDL's warnings about a second architecture of one name in one file, made
+ * quiet (tooltip only): HDLBoard's own check at Start (duplicateArchitectures.ts)
+ * already says it in plain words on the same line. The unit warning stays when
+ * it is about something else, an entity declared twice.
+ */
+function withQuietRedefinitions(located: readonly LocatedDiagnostic[]): LocatedDiagnostic[] {
+  const lineKey = (d: LocatedDiagnostic): string => `${d.fileId}:${d.line}`;
+  const redefinedArchitectures = new Set(located.filter((d) => ARCHITECTURE_REDEFINED.test(d.message)).map(lineKey));
+  const isRedefinition = (d: LocatedDiagnostic): boolean => ARCHITECTURE_REDEFINED.test(d.message) || UNIT_REDEFINED.test(d.message);
+  return located.map((d) => (redefinedArchitectures.has(lineKey(d)) && isRedefinition(d) ? { ...d, quiet: true } : d));
 }
 
 type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) => AdvisedDiagnostic[];

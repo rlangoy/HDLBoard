@@ -7,19 +7,22 @@
  */
 
 import { offsetOfLine } from './diagnosticLocation';
-import { splitLines, type TextEdit } from './textLines';
+import type { TextEdit } from './textLines';
+import { architectureHeaders, sameName } from './vhdlUnits';
 
-/** `architecture rtl of ` up to the entity name, which is the `name` group. */
-const ARCHITECTURE_OF = /^(?<before>\s*architecture\s+\w+\s+of\s+)(?<name>\w+)\b/i;
+/** The name the architecture was written with, and the entity to write instead. */
+export interface EntityNameChange {
+  readonly written: string;
+  readonly entity: string;
+}
 
 /**
  * `entity` in place of the name `written` after `of` on `line`. `undefined` when
  * that line no longer names `written` there.
  */
-export function replaceEntityName(content: string, line: number, written: string, entity: string): TextEdit | undefined {
-  const match = ARCHITECTURE_OF.exec(splitLines(content)[line - 1] ?? '');
-  const { before, name } = match?.groups ?? {};
-  if (before === undefined || name?.toLowerCase() !== written.toLowerCase()) return undefined;
-  const offset = offsetOfLine(content, line) + before.length;
-  return { offset, removed: name.length, text: entity, caret: offset + entity.length };
+export function replaceEntityName(content: string, line: number, { written, entity }: EntityNameChange): TextEdit | undefined {
+  const header = architectureHeaders(content).find((h) => h.line === line);
+  if (header === undefined || !sameName(header.entity, written)) return undefined;
+  const offset = offsetOfLine(content, line) + header.entityStart;
+  return { offset, removed: header.entity.length, text: entity, caret: offset + entity.length };
 }
