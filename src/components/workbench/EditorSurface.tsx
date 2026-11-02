@@ -298,18 +298,18 @@ export function EditorSurface({
   }, [findAttach]);
 
   // A Markdown code block (```vhdl … ```) goes in without its fence lines; an
-  // architecture that needs a question waits for the Paste architecture dialog.
+  // architecture that needs a question waits for the Review pasted architecture dialog.
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = e.clipboardData.getData('text/plain');
     const unfenced = unwrapCodeFence(pasted);
-    const ta = e.currentTarget;
-    if (pastedArchitecture.offer(unfenced ?? pasted, ta.selectionStart, ta.selectionEnd)) {
+    const textarea = e.currentTarget;
+    if (pastedArchitecture.offer(unfenced ?? pasted, textarea.selectionStart, textarea.selectionEnd)) {
       e.preventDefault();
       return;
     }
     if (unfenced === null) return;
     e.preventDefault();
-    applyEdit(ta, ta.selectionStart, ta.selectionEnd, unfenced);
+    applyEdit(textarea, textarea.selectionStart, textarea.selectionEnd, unfenced);
   };
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {

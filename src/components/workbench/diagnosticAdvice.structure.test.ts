@@ -209,10 +209,17 @@ end architecture rtl;
     expect(far.advice?.fix).toBeUndefined();
   });
 
-  test('no Quick Fix when the header is split over two lines: it could not change the name', () => {
+  describe('a header split over two lines', () => {
     const split = 'entity counter is end;\narchitecture a of countr\nis begin end;';
     const [near] = advise('c.vhd', split, 'c.vhd:2:19:error: entity "countr" was not analysed\n');
-    expect([near.advice?.headline, near.advice?.fix]).toEqual(['Unknown entity `countr` — did you mean `counter` (line 1)?', undefined]);
+
+    test('still gets the suggestion', () => {
+      expect(near.advice?.headline).toBe('Unknown entity `countr` — did you mean `counter` (line 1)?');
+    });
+
+    test('gets no Quick Fix: it could not change the name', () => {
+      expect(near.advice?.fix).toBeUndefined();
+    });
   });
 
   test('an entity in another file is named without a line', () => {

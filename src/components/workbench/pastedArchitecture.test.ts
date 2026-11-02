@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { RunSnapshot } from './diagnosticLocation';
-import { answeredPaste, pasteQuestions, removeAndInsert, renamePasted, type PasteTarget } from './pastedArchitecture';
+import { answeredPaste, pasteQuestions, removeAndInsert, renamePasted, withoutArchitectures, type PasteTarget } from './pastedArchitecture';
 import { applyTextEdit } from './textLines';
 
 /** The student's file: the board entity and an architecture with an AND gate in a block. */
@@ -52,10 +52,14 @@ describe('pasteQuestions', () => {
     expect(pasteQuestions(pasted, AT_END, ONE_FILE)?.rename).toEqual({ from: 'de1_soc_top', to: 'DE1_SoC' });
   });
 
-  test('after the rename, the pasted rtl is a duplicate too', () => {
+  test('as pasted, the rtl of an unknown entity duplicates nothing', () => {
     const pasted = PASS_THROUGH.replace('DE1_SoC', 'de1_soc_top');
-    const questions = pasteQuestions(pasted, AT_END, ONE_FILE);
-    expect([questions?.duplicates.asPasted.length, questions?.duplicates.renamed.length]).toEqual([0, 1]);
+    expect(pasteQuestions(pasted, AT_END, ONE_FILE)?.duplicates.asPasted).toEqual([]);
+  });
+
+  test('after the rename, the pasted rtl is a duplicate', () => {
+    const pasted = PASS_THROUGH.replace('DE1_SoC', 'de1_soc_top');
+    expect(pasteQuestions(pasted, AT_END, ONE_FILE)?.duplicates.renamed).toHaveLength(1);
   });
 
   test('an architecture under another name: offers the entity’s other one for deletion', () => {
@@ -99,14 +103,23 @@ describe('answeredPaste', () => {
   const pasted = PASS_THROUGH.replace('DE1_SoC', 'de1_soc_top');
   const questions = pasteQuestions(pasted, AT_END, ONE_FILE);
 
-  test('both ticked: renamed, and replaces the old rtl', () => {
-    const answer = questions && answeredPaste(pasted, questions, { rename: true, replace: true, deleteOthers: false });
-    expect([answer?.text, answer?.replaced.length]).toEqual([PASS_THROUGH, 1]);
+  const both = { rename: true, replace: true, deleteOthers: false };
+  const neither = { rename: false, replace: false, deleteOthers: false };
+
+  test('both ticked: the paste is renamed', () => {
+    expect(questions && answeredPaste(pasted, questions, both).text).toBe(PASS_THROUGH);
+  });
+
+  test('both ticked: the old rtl is deleted', () => {
+    expect(questions && answeredPaste(pasted, questions, both).deleted).toHaveLength(1);
   });
 
   test('neither ticked: the paste as copied', () => {
-    const answer = questions && answeredPaste(pasted, questions, { rename: false, replace: false, deleteOthers: false });
-    expect([answer?.text, answer?.replaced.length]).toEqual([pasted, 0]);
+    expect(questions && answeredPaste(pasted, questions, neither).text).toBe(pasted);
+  });
+
+  test('neither ticked: nothing is deleted', () => {
+    expect(questions && answeredPaste(pasted, questions, neither).deleted).toEqual([]);
   });
 });
 
@@ -129,7 +142,7 @@ describe('removeAndInsert', () => {
   });
 
   test('only removing, in another file', () => {
-    expect(applyTextEdit(DE1_SOC, removeAndInsert(DE1_SOC, [oldRtl]))).toBe(DE1_SOC.slice(0, DE1_SOC.indexOf('architecture')));
+    expect(withoutArchitectures(DE1_SOC, [oldRtl])).toBe(DE1_SOC.slice(0, DE1_SOC.indexOf('architecture')));
   });
 });
 
@@ -210,18 +223,22 @@ end architecture synth;
     expect(questions?.others.asPasted.map(({ name, line, lastLine }) => ({ name, line, lastLine }))).toEqual([{ name: 'rtl', line: 8, lastLine: 26 }]);
   });
 
-  test('nothing to rename, nothing to replace', () => {
-    expect([questions?.rename, questions?.duplicates.asPasted.length]).toEqual([undefined, 0]);
+  test('nothing to rename', () => {
+    expect(questions?.rename).toBeUndefined();
+  });
+
+  test('nothing to replace', () => {
+    expect(questions?.duplicates.asPasted).toEqual([]);
   });
 
   test('unticked, rtl stays and synth goes in below it', () => {
     const answer = questions && answeredPaste(SYNTH, questions, { rename: true, replace: true, deleteOthers: false });
-    expect(answer?.replaced).toEqual([]);
+    expect(answer?.deleted).toEqual([]);
   });
 
   test('ticked, rtl goes and synth takes the file’s architecture place', () => {
     const answer = questions && answeredPaste(SYNTH, questions, { rename: true, replace: true, deleteOthers: true });
-    const edit = removeAndInsert(ORIGINAL, answer?.replaced ?? [], { start: ORIGINAL.length, end: ORIGINAL.length, text: SYNTH });
+    const edit = removeAndInsert(ORIGINAL, answer?.deleted ?? [], { start: ORIGINAL.length, end: ORIGINAL.length, text: SYNTH });
     expect(applyTextEdit(ORIGINAL, edit)).toBe(`${ORIGINAL.slice(0, ORIGINAL.indexOf('architecture rtl'))}\n${SYNTH}`);
   });
 

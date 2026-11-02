@@ -816,9 +816,11 @@ const UNIT_REDEFINED = /^redefinition of a library unit in same design file/;
  */
 function withQuietRedefinitions(located: readonly LocatedDiagnostic[]): LocatedDiagnostic[] {
   const lineKey = (d: LocatedDiagnostic): string => `${d.fileId}:${d.line}`;
-  const redefinedArchitectures = new Set(located.filter((d) => ARCHITECTURE_REDEFINED.test(d.message)).map(lineKey));
-  const isRedefinition = (d: LocatedDiagnostic): boolean => ARCHITECTURE_REDEFINED.test(d.message) || UNIT_REDEFINED.test(d.message);
-  return located.map((d) => (redefinedArchitectures.has(lineKey(d)) && isRedefinition(d) ? { ...d, quiet: true } : d));
+  const isArchitectureRedefined = (d: LocatedDiagnostic): boolean => ARCHITECTURE_REDEFINED.test(d.message);
+  const isRedefinition = (d: LocatedDiagnostic): boolean => isArchitectureRedefined(d) || UNIT_REDEFINED.test(d.message);
+  const linesWithRedefinedArchitecture = new Set(located.filter(isArchitectureRedefined).map(lineKey));
+  const saidByHdlBoard = (d: LocatedDiagnostic): boolean => linesWithRedefinedArchitecture.has(lineKey(d)) && isRedefinition(d);
+  return located.map((d) => (saidByHdlBoard(d) ? { ...d, quiet: true } : d));
 }
 
 type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) => AdvisedDiagnostic[];

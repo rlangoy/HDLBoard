@@ -42,14 +42,16 @@ describe('PasteArchitectureDialog', () => {
     expect(markup(both)).toContain('wb-paste__card is-deleting');
   });
 
-  test('both changes start ticked, and the button applies them', () => {
-    const html = markup(both);
-    expect([html.match(/type="checkbox" checked=""/g)?.length, textOf(html).includes('Apply changes and paste')]).toEqual([2, true]);
+  test('both changes start ticked', () => {
+    expect(markup(both).match(/type="checkbox" checked=""/g)).toHaveLength(2);
+  });
+
+  test('with changes ticked, the button applies them', () => {
+    expect(textOf(markup(both))).toContain('Apply changes and paste');
   });
 
   test('what happens without a change is not said while it is ticked', () => {
-    const text = textOf(markup(both));
-    expect([text.includes('the next Start'), text.includes('Both are kept')]).toEqual([false, false]);
+    expect(markup(both)).not.toContain('wb-paste__note');
   });
 
   test('a duplicate in another file is named with its file', () => {
@@ -58,8 +60,11 @@ describe('PasteArchitectureDialog', () => {
   });
 
   test('only the replace card when the entity exists', () => {
-    const html = markup(replaceOnly);
-    expect([html.match(/type="checkbox"/g)?.length, textOf(html).includes('Check this before')]).toEqual([1, true]);
+    expect(markup(replaceOnly).match(/type="checkbox"/g)).toHaveLength(1);
+  });
+
+  test('one card: the subtitle says this, not these', () => {
+    expect(textOf(markup(replaceOnly))).toContain('Check this before the code goes in.');
   });
 });
 
@@ -92,8 +97,11 @@ describe('the Delete the other architecture card', () => {
     expect(markup(synthPasted)).toMatch(/class="wb-paste__warning"><svg[^]*Ticking this deletes lines 24–37\./);
   });
 
-  test('starts unticked, so the button pastes as copied', () => {
-    const html = markup(synthPasted);
-    expect([html.includes('checked=""'), textOf(html).includes('Paste as copied')]).toEqual([false, true]);
+  test('starts unticked', () => {
+    expect(markup(synthPasted)).not.toContain('checked=""');
+  });
+
+  test('unticked, the button pastes as copied', () => {
+    expect(textOf(markup(synthPasted))).toContain('Paste as copied');
   });
 });

@@ -6,7 +6,14 @@ import { cx } from '../board';
 import { CodeText } from './CodeText';
 import { Dialog } from './Dialog';
 import { AlertIcon } from './icons';
-import type { EntityRename, ExistingArchitecture, FoundBothWays, PasteAnswers, PasteQuestions } from './pastedArchitecture';
+import {
+  foundAsRenamed,
+  type EntityRename,
+  type ExistingArchitecture,
+  type FoundBothWays,
+  type PasteAnswers,
+  type PasteQuestions,
+} from './pastedArchitecture';
 import {
   PASTE_TEXT,
   choicesSubtitle,
@@ -82,9 +89,15 @@ interface CardArchitectures {
   readonly needed: boolean;
 }
 
-function asChosen(found: FoundBothWays, renamed: boolean): CardArchitectures {
-  const current = renamed ? found.renamed : found.asPasted;
-  return { shown: current.length > 0 ? current : found.renamed, needed: current.length > 0 };
+function cardArchitectures(found: FoundBothWays, renameApplied: boolean): CardArchitectures {
+  const current = foundAsRenamed(found, renameApplied);
+  const needed = current.length > 0;
+  return { shown: needed ? current : found.renamed, needed };
+}
+
+/** The note of a card greyed out because what it is about exists only after the rename. */
+function notNeededNote({ needed }: CardArchitectures, rename: EntityRename | undefined): string | undefined {
+  return !needed && rename !== undefined ? notNeededWithoutRename(rename) : undefined;
 }
 
 /**
@@ -97,9 +110,9 @@ function usePasteChoices(questions: PasteQuestions) {
   const [rename, setRename] = useState(true);
   const [replace, setReplace] = useState(true);
   const [deleteOthers, setDeleteOthers] = useState(false);
-  const renamed = rename && questions.rename !== undefined;
-  const duplicates = asChosen(questions.duplicates, renamed);
-  const others = asChosen(questions.others, renamed);
+  const renameApplied = rename && questions.rename !== undefined;
+  const duplicates = cardArchitectures(questions.duplicates, renameApplied);
+  const others = cardArchitectures(questions.others, renameApplied);
   const cards = [questions.rename !== undefined, duplicates.shown.length > 0, others.shown.length > 0];
   return {
     answers: { rename, replace, deleteOthers },
@@ -110,7 +123,7 @@ function usePasteChoices(questions: PasteQuestions) {
     others,
     cardCount: cards.filter(Boolean).length,
     /** Some change will be made: the button applies it, else it pastes the code as copied. */
-    applies: renamed || (duplicates.needed && replace) || (others.needed && deleteOthers),
+    applies: renameApplied || (duplicates.needed && replace) || (others.needed && deleteOthers),
   };
 }
 
@@ -135,13 +148,14 @@ interface DeletingCardProps {
   onChange: (checked: boolean) => void;
 }
 
-function ReplaceCard({ architectures: { shown, needed }, targetFileId, rename, checked, onChange }: DeletingCardProps) {
-  const notNeeded = !needed && rename !== undefined ? notNeededWithoutRename(rename) : undefined;
+function ReplaceCard({ architectures, targetFileId, rename, checked, onChange }: DeletingCardProps) {
+  const { shown, needed } = architectures;
+  const skipped = checked ? undefined : replaceSkipped(shown);
   return (
     <ChangeCard
       title={replaceTitle(shown)}
       detail={replaceDetail(shown, targetFileId)}
-      note={notNeeded ?? (checked ? undefined : replaceSkipped(shown))}
+      note={notNeededNote(architectures, rename) ?? skipped}
       checked={checked}
       onChange={onChange}
       disabled={!needed}
@@ -150,13 +164,14 @@ function ReplaceCard({ architectures: { shown, needed }, targetFileId, rename, c
   );
 }
 
-function DeleteOthersCard({ architectures: { shown, needed }, targetFileId, rename, checked, onChange }: DeletingCardProps) {
+function DeleteOthersCard({ architectures, targetFileId, rename, checked, onChange }: DeletingCardProps) {
+  const { shown, needed } = architectures;
   return (
     <ChangeCard
       title={deleteOthersTitle(shown)}
       detail={deleteOthersDetail(shown, targetFileId)}
       warning={deleteOthersWarning(shown, targetFileId)}
-      note={!needed && rename !== undefined ? notNeededWithoutRename(rename) : undefined}
+      note={notNeededNote(architectures, rename)}
       checked={checked}
       onChange={onChange}
       disabled={!needed}
@@ -174,7 +189,7 @@ function DeleteOthersCard({ architectures: { shown, needed }, targetFileId, rena
 export function PasteArchitectureDialog({ questions, targetFileId, onPaste, onClose }: PasteArchitectureDialogProps) {
   const choices = usePasteChoices(questions);
   const { answers, duplicates, others } = choices;
-  const deleting = { targetFileId, rename: questions.rename };
+  const deletingCardContext = { targetFileId, rename: questions.rename };
   return (
     <Dialog
       open
@@ -194,8 +209,12 @@ export function PasteArchitectureDialog({ questions, targetFileId, onPaste, onCl
             onChange={choices.setRename}
           />
         )}
-        {duplicates.shown.length > 0 && <ReplaceCard architectures={duplicates} {...deleting} checked={answers.replace} onChange={choices.setReplace} />}
-        {others.shown.length > 0 && <DeleteOthersCard architectures={others} {...deleting} checked={answers.deleteOthers} onChange={choices.setDeleteOthers} />}
+        {duplicates.shown.length > 0 && (
+          <ReplaceCard architectures={duplicates} {...deletingCardContext} checked={answers.replace} onChange={choices.setReplace} />
+        )}
+        {others.shown.length > 0 && (
+          <DeleteOthersCard architectures={others} {...deletingCardContext} checked={answers.deleteOthers} onChange={choices.setDeleteOthers} />
+        )}
       </div>
     </Dialog>
   );

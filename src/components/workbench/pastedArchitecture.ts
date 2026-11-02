@@ -2,14 +2,14 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * An architecture pasted into a VHDL file, from a chat or another project, is
- * often `of` an entity this project does not have, or has the name of an
- * architecture the project already has. These are the two questions asked
- * before it goes in, and the edits the answers make. Pure.
+ * An architecture pasted into a VHDL file, from a chat or another project, may
+ * be `of` an entity this project does not have, have the name of an
+ * architecture the project already has, or join others of its entity. These are
+ * the questions asked before it goes in, and the edits the answers make. Pure.
  */
 
 import { offsetOfLine, type RunSnapshot } from './diagnosticLocation';
-import { languageOfName } from './fileKinds';
+import { isVhdlFile } from './fileKinds';
 import { applyTextEdit, splitLines, type TextEdit } from './textLines';
 import {
   architectureHeaders,
@@ -21,11 +21,6 @@ import {
   type ArchitectureHeader,
 } from './vhdlUnits';
 
-/**
- * The files compiled with the target: the caller gives those of its run
- * (`filesForRun`), with the target's text exactly as the textarea holds it,
- * so the selection's offsets fit it.
- */
 type ProjectFile = RunSnapshot['files'][number];
 
 /** An architecture already in the project: its file and lines. */
@@ -75,6 +70,12 @@ export interface PasteTarget {
   readonly selectionEnd: number;
 }
 
+/** What the answers make of the paste: the text that goes in, and the architectures deleted. */
+export interface AnsweredPaste {
+  readonly text: string;
+  readonly deleted: readonly ExistingArchitecture[];
+}
+
 interface Range {
   readonly start: number;
   readonly end: number;
@@ -85,22 +86,20 @@ export interface Replacement extends Range {
   readonly text: string;
 }
 
-function isVhdl(file: ProjectFile): boolean {
-  return languageOfName(file.name) === 'vhdl';
-}
-
 /** The characters of an architecture's lines, from its header to the end of its `end architecture;` line. */
 function linesRange(content: string, { line, lastLine }: Lines): Range {
-  return { start: offsetOfLine(content, line), end: Math.min(offsetOfLine(content, lastLine + 1), content.length) };
+  const end = Math.min(offsetOfLine(content, lastLine + 1), content.length);
+  return { start: offsetOfLine(content, line), end };
 }
 
 /** Its lines and the blank line after them, so removing it leaves no gap — short of where the paste goes. */
-function removalRange(content: string, architecture: Lines, insert?: Range): Range {
+function removalRange(content: string, architecture: Lines, insert: Range): Range {
   const lines = linesRange(content, architecture);
-  const blankAfter = splitLines(content)[architecture.lastLine]?.trim() === '';
-  const end = blankAfter ? linesRange(content, { line: architecture.lastLine + 1, lastLine: architecture.lastLine + 1 }).end : lines.end;
-  const beforeInsert = insert && insert.start >= lines.end ? Math.min(end, insert.start) : end;
-  return { start: lines.start, end: beforeInsert };
+  const lineAfter = architecture.lastLine + 1;
+  const blankAfter = splitLines(content)[lineAfter - 1]?.trim() === '';
+  const end = blankAfter ? linesRange(content, { line: lineAfter, lastLine: lineAfter }).end : lines.end;
+  const insertIsBelow = insert.start >= lines.end;
+  return { start: lines.start, end: insertIsBelow ? Math.min(end, insert.start) : end };
 }
 
 function overlaps(a: Range, b: Range): boolean {
@@ -116,13 +115,20 @@ type HeaderTest = (header: ArchitectureHeader) => boolean;
 function existingWhere(wanted: HeaderTest, files: readonly ProjectFile[], target: PasteTarget): ExistingArchitecture[] {
   // A caret (an empty selection) touches only an architecture it is inside of, not one it stands just before or after.
   const selection = { start: target.selectionStart, end: target.selectionEnd };
-  return files.flatMap((file) => {
-    const lines = splitLines(file.content);
-    return architectureHeaders(file.content)
+  const isPastedOver = (file: ProjectFile, existing: Lines): boolean =>
+    file.id === target.fileId && overlaps(linesRange(file.content, existing), selection);
+  return files.flatMap((file) =>
+    architectureHeaders(file.content)
       .filter(wanted)
-      .map(({ name, entity, line }) => ({ fileId: file.id, fileName: file.name, name, entity, line, lastLine: architectureLastLine(lines, line) }))
-      .filter((existing) => existing.fileId !== target.fileId || !overlaps(linesRange(file.content, existing), selection));
-  });
+      .map(placedIn(file))
+      .filter((existing) => !isPastedOver(file, existing)),
+  );
+}
+
+/** A header of `file` as an existing architecture: where it is, and where it ends. */
+function placedIn(file: ProjectFile): (header: ArchitectureHeader) => ExistingArchitecture {
+  const lines = splitLines(file.content);
+  return ({ name, entity, line }) => ({ fileId: file.id, fileName: file.name, name, entity, line, lastLine: architectureLastLine(lines, line) });
 }
 
 /** An architecture one of `pasted` would define again. */
@@ -133,8 +139,12 @@ function isDuplicateOf(pasted: readonly ArchitectureHeader[]): HeaderTest {
 
 /** Another architecture of a pasted one's entity, under a name none of `pasted` has. */
 function isOtherOf(pasted: readonly ArchitectureHeader[]): HeaderTest {
-  const duplicate = isDuplicateOf(pasted);
-  return (header) => pasted.some((p) => sameName(p.entity, header.entity)) && !duplicate(header);
+  const isDuplicate = isDuplicateOf(pasted);
+  return (header) => pasted.some((p) => sameName(p.entity, header.entity)) && !isDuplicate(header);
+}
+
+function withEntityRenamed(headers: readonly ArchitectureHeader[], rename: EntityRename): ArchitectureHeader[] {
+  return headers.map((h) => (sameName(h.entity, rename.from) ? { ...h, entity: rename.to } : h));
 }
 
 /** The paste and where it goes, as the searches for existing architectures need them. */
@@ -148,12 +158,13 @@ interface PasteSearch {
 /** What `test` finds for the paste as copied and after `rename`. */
 function foundBothWays(test: (pasted: readonly ArchitectureHeader[]) => HeaderTest, { headers, rename, files, target }: PasteSearch): FoundBothWays {
   const asPasted = existingWhere(test(headers), files, target);
-  return { asPasted, renamed: rename ? existingWhere(test(renamed(headers, rename)), files, target) : asPasted };
+  if (rename === undefined) return { asPasted, renamed: asPasted };
+  return { asPasted, renamed: existingWhere(test(withEntityRenamed(headers, rename)), files, target) };
 }
 
-function renamed(headers: readonly ArchitectureHeader[], rename: EntityRename | undefined): ArchitectureHeader[] {
-  if (rename === undefined) return [...headers];
-  return headers.map((h) => (sameName(h.entity, rename.from) ? { ...h, entity: rename.to } : h));
+/** The architectures `found` names as the rename stands: applied or not. */
+export function foundAsRenamed(found: FoundBothWays, renameApplied: boolean): readonly ExistingArchitecture[] {
+  return renameApplied ? found.renamed : found.asPasted;
 }
 
 /** The entity to offer for an unknown one: the target file's own entity, else the one probably meant. */
@@ -168,7 +179,8 @@ function entityToOffer(unknown: string, targetFile: ProjectFile, declared: reado
  * paste is left as it is: one paste is one architecture, nearly always.
  */
 function renameFor(pasted: string, targetFile: ProjectFile, vhdlFiles: readonly ProjectFile[]): EntityRename | undefined {
-  const declared = [...vhdlFiles.map((file) => file.content), pasted].flatMap((content) => entityHeaders(content).map((e) => e.name));
+  const sources = [...vhdlFiles.map((file) => file.content), pasted];
+  const declared = sources.flatMap((content) => entityHeaders(content).map((e) => e.name));
   const unknown = architectureHeaders(pasted).find((h) => !declared.some((name) => sameName(name, h.entity)))?.entity;
   if (unknown === undefined) return undefined;
   const offered = entityToOffer(unknown, targetFile, declared);
@@ -178,12 +190,14 @@ function renameFor(pasted: string, targetFile: ProjectFile, vhdlFiles: readonly 
 /**
  * What to ask before `pasted` goes into the target file, or `undefined` when it
  * holds no architecture that needs a question (or the file is not VHDL).
+ * `files` are those compiled with the target (`filesForRun`), the target's text
+ * exactly as the textarea holds it, so the selection's offsets fit it.
  */
 export function pasteQuestions(pasted: string, target: PasteTarget, files: readonly ProjectFile[]): PasteQuestions | undefined {
   const targetFile = files.find((file) => file.id === target.fileId);
   const headers = architectureHeaders(pasted);
-  if (targetFile === undefined || !isVhdl(targetFile) || headers.length === 0) return undefined;
-  const vhdlFiles = files.filter(isVhdl);
+  if (targetFile === undefined || !isVhdlFile(targetFile) || headers.length === 0) return undefined;
+  const vhdlFiles = files.filter(isVhdlFile);
   const rename = renameFor(pasted, targetFile, vhdlFiles);
   const search = { headers, rename, files: vhdlFiles, target };
   const duplicates = foundBothWays(isDuplicateOf, search);
@@ -194,36 +208,36 @@ export function pasteQuestions(pasted: string, target: PasteTarget, files: reado
 
 /** `pasted` with `rename.from` after `of` in its architecture headers changed to `rename.to`. */
 export function renamePasted(pasted: string, rename: EntityRename): string {
-  const edits = architectureHeaders(pasted)
+  // From the last header up, so the offsets of the ones above stay true.
+  return architectureHeaders(pasted)
     .filter((h) => sameName(h.entity, rename.from))
-    .map((h) => ({ offset: offsetOfLine(pasted, h.line) + h.entityStart, removed: h.entity.length, text: rename.to, caret: 0 }));
-  return edits.reduceRight(applyTextEdit, pasted);
+    .reduceRight((text, h) => {
+      const at = offsetOfLine(text, h.line) + h.entityStart;
+      return text.slice(0, at) + rename.to + text.slice(at + h.entity.length);
+    }, pasted);
 }
 
-/** The text that goes in and the architectures it replaces, as answered. */
-export function answeredPaste(pasted: string, questions: PasteQuestions, answers: PasteAnswers): { text: string; replaced: readonly ExistingArchitecture[] } {
+/** The text that goes in and the architectures it deletes, as answered. */
+export function answeredPaste(pasted: string, questions: PasteQuestions, answers: PasteAnswers): AnsweredPaste {
   const rename = answers.rename ? questions.rename : undefined;
-  const text = rename ? renamePasted(pasted, rename) : pasted;
-  const asAnswered = (found: FoundBothWays) => (rename ? found.renamed : found.asPasted);
-  const replaced = [
-    ...(answers.replace ? asAnswered(questions.duplicates) : []),
-    ...(answers.deleteOthers ? asAnswered(questions.others) : []),
+  const renameApplied = rename !== undefined;
+  const deleted = [
+    ...(answers.replace ? foundAsRenamed(questions.duplicates, renameApplied) : []),
+    ...(answers.deleteOthers ? foundAsRenamed(questions.others, renameApplied) : []),
   ];
-  return { text, replaced };
+  return { text: rename ? renamePasted(pasted, rename) : pasted, deleted };
 }
 
 /**
- * One edit of `content` that removes the `removed` architectures and, when
- * given, puts `insert` in its range: one edit, so one Ctrl+Z undoes it all. The
- * caret goes to the end of the inserted text. `insert` must not overlap the
- * architectures' lines.
+ * One edit of `content` that removes the `removed` architectures and puts
+ * `insert` in its range: one edit, so one Ctrl+Z undoes it all. The caret goes
+ * to the end of the inserted text. `insert` must not overlap the architectures' lines.
  */
-export function removeAndInsert(content: string, removed: readonly Lines[], insert?: Replacement): TextEdit {
-  const pieces: Replacement[] = removed.map((architecture) => ({ ...removalRange(content, architecture, insert), text: '' }));
-  if (insert) pieces.push(insert);
+export function removeAndInsert(content: string, removed: readonly Lines[], insert: Replacement): TextEdit {
+  const pieces: Replacement[] = [...removed.map((architecture) => ({ ...removalRange(content, architecture, insert), text: '' })), insert];
   // An insert where a removal starts goes first: its range is empty.
   pieces.sort((a, b) => a.start - b.start || a.end - b.end);
-  const offset = pieces[0]?.start ?? 0;
+  const offset = pieces[0].start;
   let text = '';
   let at = offset;
   let caret = offset;
@@ -233,4 +247,10 @@ export function removeAndInsert(content: string, removed: readonly Lines[], inse
     if (piece === insert) caret = offset + text.length;
   }
   return { offset, removed: at - offset, text, caret };
+}
+
+/** `content` without the `removed` architectures: another file the paste deletes from. */
+export function withoutArchitectures(content: string, removed: readonly Lines[]): string {
+  const nothingInserted = { start: 0, end: 0, text: '' };
+  return applyTextEdit(content, removeAndInsert(content, removed, nothingInserted));
 }

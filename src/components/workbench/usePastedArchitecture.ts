@@ -5,14 +5,22 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { applyEdit } from './find/applyEdit';
 import type { VhdlFile } from './files';
 import { filesForRun } from './hdlClient';
-import { answeredPaste, pasteQuestions, removeAndInsert, type ExistingArchitecture, type PasteAnswers, type PasteQuestions } from './pastedArchitecture';
-import { applyTextEdit } from './textLines';
+import {
+  answeredPaste,
+  pasteQuestions,
+  removeAndInsert,
+  withoutArchitectures,
+  type AnsweredPaste,
+  type ExistingArchitecture,
+  type PasteAnswers,
+  type PasteQuestions,
+  type PasteTarget,
+} from './pastedArchitecture';
 
-/** A paste held back while the Paste architecture dialog asks about it. */
+/** A paste held back while the Review pasted architecture dialog asks about it. */
 export interface PendingPaste {
   readonly text: string;
-  readonly selectionStart: number;
-  readonly selectionEnd: number;
+  readonly target: PasteTarget;
   readonly questions: PasteQuestions;
 }
 
@@ -33,7 +41,10 @@ export interface PasteProject {
 
 function groupByFile(architectures: readonly ExistingArchitecture[]): Map<string, ExistingArchitecture[]> {
   const byFile = new Map<string, ExistingArchitecture[]>();
-  for (const architecture of architectures) byFile.set(architecture.fileId, [...(byFile.get(architecture.fileId) ?? []), architecture]);
+  for (const architecture of architectures) {
+    const inFile = byFile.get(architecture.fileId) ?? [];
+    byFile.set(architecture.fileId, [...inFile, architecture]);
+  }
   return byFile;
 }
 
@@ -50,10 +61,17 @@ function useFocusBackAfter(open: boolean, textareaRef: RefObject<HTMLTextAreaEle
   }, [open, textareaRef]);
 }
 
+/** The paste goes in where it was made, with this file's deleted architectures, as one native edit (Ctrl+Z). */
+function pasteIntoTextarea(textarea: HTMLTextAreaElement, target: PasteTarget, { text, deleted }: AnsweredPaste) {
+  const insert = { start: target.selectionStart, end: target.selectionEnd, text };
+  const edit = removeAndInsert(textarea.value, deleted, insert);
+  applyEdit(textarea, edit.offset, edit.offset + edit.removed, edit.text, { caret: edit.caret });
+}
+
 /**
  * The paste into `fileId`'s textarea, asked about first when it holds an
  * architecture (pastedArchitecture.ts), against the files compiled with it. This
- * file changes as one native edit, so Ctrl+Z undoes it; an architecture replaced
+ * file changes as one native edit, so Ctrl+Z undoes it; an architecture deleted
  * in another file is removed there through `onChange`.
  */
 export function usePastedArchitecture(
@@ -64,35 +82,38 @@ export function usePastedArchitecture(
   const [pending, setPending] = useState<PendingPaste | null>(null);
   useFocusBackAfter(pending !== null, textareaRef);
 
-  /** The files compiled with this one, this one as the textarea holds it (LF line ends, the selection's offsets). */
-  const filesWithThis = (content: string): VhdlFile[] => {
+  /** The files compiled with this one, this one as typed (LF line ends, the selection's offsets). */
+  const runFilesAsTyped = (typed: string): VhdlFile[] => {
     const name = projectFiles.find((file) => file.id === fileId)?.name;
-    const project = projectFiles.map((file) => (file.id === fileId ? { ...file, content } : file));
+    const project = projectFiles.map((file) => (file.id === fileId ? { ...file, content: typed } : file));
     return filesForRun(project, name);
   };
 
   const offer = (text: string, selectionStart: number, selectionEnd: number): boolean => {
-    const content = textareaRef.current?.value;
-    if (content === undefined) return false;
-    const questions = pasteQuestions(text, { fileId, selectionStart, selectionEnd }, filesWithThis(content));
+    const typed = textareaRef.current?.value;
+    if (typed === undefined) return false;
+    const target = { fileId, selectionStart, selectionEnd };
+    const questions = pasteQuestions(text, target, runFilesAsTyped(typed));
     if (questions === undefined) return false;
-    setPending({ text, selectionStart, selectionEnd, questions });
+    setPending({ text, target, questions });
     return true;
+  };
+
+  const deleteInOtherFiles = (deletedByFile: ReadonlyMap<string, readonly ExistingArchitecture[]>) => {
+    for (const file of projectFiles) {
+      const deleted = deletedByFile.get(file.id);
+      if (file.id !== fileId && deleted) onChange(file.id, withoutArchitectures(file.content, deleted));
+    }
   };
 
   const paste = (answers: PasteAnswers) => {
     const textarea = textareaRef.current;
     setPending(null);
     if (!pending || !textarea) return;
-    const { text, replaced } = answeredPaste(pending.text, pending.questions, answers);
-    const byFile = groupByFile(replaced);
-    const insert = { start: pending.selectionStart, end: pending.selectionEnd, text };
-    const edit = removeAndInsert(textarea.value, byFile.get(fileId) ?? [], insert);
-    applyEdit(textarea, edit.offset, edit.offset + edit.removed, edit.text, { caret: edit.caret });
-    for (const file of projectFiles) {
-      const removed = file.id === fileId ? undefined : byFile.get(file.id);
-      if (removed) onChange(file.id, applyTextEdit(file.content, removeAndInsert(file.content, removed)));
-    }
+    const { text, deleted } = answeredPaste(pending.text, pending.questions, answers);
+    const deletedByFile = groupByFile(deleted);
+    pasteIntoTextarea(textarea, pending.target, { text, deleted: deletedByFile.get(fileId) ?? [] });
+    deleteInOtherFiles(deletedByFile);
   };
 
   return { pending, offer, paste, cancel: () => setPending(null) };
