@@ -3,6 +3,7 @@
 
 import { insertBegin, replaceWithBegin } from './beginFix';
 import type { QuickFix } from './diagnosticAdvice';
+import { replaceEntityName } from './entityNameFix';
 import type { TextEdit } from './textLines';
 import { addUseClause } from './useClauseFix';
 
@@ -15,5 +16,7 @@ export function quickFixEdit(content: string, fix: QuickFix, line: number): Text
       return insertBegin(content, line);
     case 'replaceWithBegin':
       return replaceWithBegin(content, line);
+    case 'replaceEntityName':
+      return replaceEntityName(content, line, fix.written, fix.entity);
   }
 }

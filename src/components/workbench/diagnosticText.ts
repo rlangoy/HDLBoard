@@ -126,6 +126,8 @@ export function quickFixTitle(fix: QuickFix): string {
       return `Insert ${BEGIN}`;
     case 'replaceWithBegin':
       return `Replace with ${BEGIN}`;
+    case 'replaceEntityName':
+      return `Replace with ${code(fix.entity)}`;
   }
 }
 

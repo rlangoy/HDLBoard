@@ -165,4 +165,8 @@ describe('quickFixTitle', () => {
   test('the misspelled begin', () => {
     expect(quickFixTitle({ kind: 'replaceWithBegin' })).toBe('Replace with `begin`');
   });
+
+  test('the entity an architecture meant', () => {
+    expect(quickFixTitle({ kind: 'replaceEntityName', written: 'de1_soc_top', entity: 'DE1_SoC' })).toBe('Replace with `DE1_SoC`');
+  });
 });

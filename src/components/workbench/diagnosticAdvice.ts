@@ -51,12 +51,14 @@ export interface Span {
 /**
  * A change HDLBoard can make for the student, like VS Code's Quick Fix: add the
  * missing `use` clause, or insert the `begin` an architecture's statements lack,
- * or put it in place of the misspelled word written there.
+ * or put it in place of the misspelled word written there, or name the entity
+ * an architecture meant.
  */
 export type QuickFix =
   | { readonly kind: 'addUseClause'; readonly pkg: VhdlPackage }
   | { readonly kind: 'insertBegin' }
-  | { readonly kind: 'replaceWithBegin' };
+  | { readonly kind: 'replaceWithBegin' }
+  | { readonly kind: 'replaceEntityName'; readonly written: string; readonly entity: string };
 
 /** What HDLBoard adds to a compiler message. */
 export interface Advice {
@@ -647,7 +649,7 @@ const designUnitInsideArchitecture: Rule = ({ diagnostic, file }) => {
 /**
  * `architecture rtl of DE1_SdddoC` when no file declares that entity. Suggests
  * the nearest entity name, or the project's only entity, and points at its
- * declaration when it is in the same file.
+ * declaration when it is in the same file, with a Quick Fix that writes that name.
  */
 const entityNotFound: Rule = (place, project) => {
   const name = unknownEntity(place.diagnostic.message, project.entities);
@@ -655,7 +657,9 @@ const entityNotFound: Rule = (place, project) => {
   const written = asWritten(place, name);
   const entity = suggestedEntity(written, project.entities);
   const lineInThisFile = entity?.fileId === place.diagnostic.fileId ? entity.line : undefined;
-  return pointingAt(adviceText.unknownEntity(written, entity?.name, lineInThisFile), lineInThisFile);
+  const advice = pointingAt(adviceText.unknownEntity(written, entity?.name, lineInThisFile), lineInThisFile);
+  if (entity === undefined) return advice;
+  return { ...advice, fix: { kind: 'replaceEntityName', written, entity: entity.name } };
 };
 
 /** The entity the student probably meant: the nearest name, else the project's only entity. */
