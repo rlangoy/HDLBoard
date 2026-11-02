@@ -58,8 +58,9 @@ describe('pasteQuestions', () => {
     expect([questions?.duplicates.asPasted.length, questions?.duplicates.renamed.length]).toEqual([0, 1]);
   });
 
-  test('an architecture under another name: nothing to ask', () => {
-    expect(pasteQuestions(PASS_THROUGH.replace('rtl', 'pass'), AT_END, ONE_FILE)).toBeUndefined();
+  test('an architecture under another name: offers the entity’s other one for deletion', () => {
+    const questions = pasteQuestions(PASS_THROUGH.replace('rtl', 'pass'), AT_END, ONE_FILE);
+    expect(questions?.others.asPasted.map(({ name, line, lastLine }) => ({ name, line, lastLine }))).toEqual([{ name: 'rtl', line: 5, lastLine: 11 }]);
   });
 
   test('no architecture in the paste: nothing to ask', () => {
@@ -99,12 +100,12 @@ describe('answeredPaste', () => {
   const questions = pasteQuestions(pasted, AT_END, ONE_FILE);
 
   test('both ticked: renamed, and replaces the old rtl', () => {
-    const answer = questions && answeredPaste(pasted, questions, { rename: true, replace: true });
+    const answer = questions && answeredPaste(pasted, questions, { rename: true, replace: true, deleteOthers: false });
     expect([answer?.text, answer?.replaced.length]).toEqual([PASS_THROUGH, 1]);
   });
 
   test('neither ticked: the paste as copied', () => {
-    const answer = questions && answeredPaste(pasted, questions, { rename: false, replace: false });
+    const answer = questions && answeredPaste(pasted, questions, { rename: false, replace: false, deleteOthers: false });
     expect([answer?.text, answer?.replaced.length]).toEqual([pasted, 0]);
   });
 });
@@ -158,4 +159,74 @@ describe('review fixes', () => {
     expect(applyTextEdit(withBlankAfter, edit)).toBe(`${DE1_SOC.slice(0, headerAt)}${PASS_THROUGH}\n-- more\n`);
   });
 
+});
+
+/** The report: DE1_SoC.vhdl with `rtl` (an AND gate in a block), and `synth` of DE1_SoC pasted below it. */
+describe('another architecture of the same entity, under a new name', () => {
+  const ORIGINAL = `library ieee;
+use ieee.std_logic_1164.all;
+
+entity DE1_SoC is
+    port (SW : in std_logic_vector(9 downto 0); LEDR : out std_logic_vector(9 downto 0));
+end entity;
+
+architecture rtl of DE1_SoC is
+begin
+
+    -- En navngitt boks med litt logikk
+    and_gate : block
+        signal a : std_logic;
+        signal b : std_logic;
+        signal y : std_logic;
+    begin
+        a <= SW(0);
+        b <= SW(1);
+        y <= a and b;
+        LEDR(0) <= y;
+    end block and_gate;
+
+    -- Logikk utenfor boksen
+    LEDR(9 downto 1) <= (others => '0');
+
+end architecture rtl;
+
+
+`;
+  const SYNTH = `architecture synth of DE1_SoC is
+begin
+    and_gate : block
+        signal y : std_logic;
+    begin
+        LEDR(0) <= y;
+    end block and_gate;
+    LEDR(9 downto 1) <= (others => '0');
+end architecture synth;
+`;
+  const files = project(['top', 'DE1_SoC.vhdl', ORIGINAL]);
+  const atEnd: PasteTarget = { fileId: 'top', selectionStart: ORIGINAL.length, selectionEnd: ORIGINAL.length };
+  const questions = pasteQuestions(SYNTH, atEnd, files);
+
+  test('offers rtl, all of it, for deletion', () => {
+    expect(questions?.others.asPasted.map(({ name, line, lastLine }) => ({ name, line, lastLine }))).toEqual([{ name: 'rtl', line: 8, lastLine: 26 }]);
+  });
+
+  test('nothing to rename, nothing to replace', () => {
+    expect([questions?.rename, questions?.duplicates.asPasted.length]).toEqual([undefined, 0]);
+  });
+
+  test('unticked, rtl stays and synth goes in below it', () => {
+    const answer = questions && answeredPaste(SYNTH, questions, { rename: true, replace: true, deleteOthers: false });
+    expect(answer?.replaced).toEqual([]);
+  });
+
+  test('ticked, rtl goes and synth takes the file’s architecture place', () => {
+    const answer = questions && answeredPaste(SYNTH, questions, { rename: true, replace: true, deleteOthers: true });
+    const edit = removeAndInsert(ORIGINAL, answer?.replaced ?? [], { start: ORIGINAL.length, end: ORIGINAL.length, text: SYNTH });
+    expect(applyTextEdit(ORIGINAL, edit)).toBe(`${ORIGINAL.slice(0, ORIGINAL.indexOf('architecture rtl'))}\n${SYNTH}`);
+  });
+
+  test('another entity’s architecture is not offered', () => {
+    const elsewhere = pasteQuestions(SYNTH.replace(/DE1_SoC/g, 'counter'), atEnd, project(['top', 'DE1_SoC.vhdl', `${ORIGINAL}entity counter is end;\n`]));
+    expect(elsewhere).toBeUndefined();
+  });
 });

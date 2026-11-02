@@ -47,16 +47,25 @@ export interface EntityRename {
   readonly to: string;
 }
 
+/** Architectures found for the paste as it was copied, and after the rename. */
+export interface FoundBothWays {
+  readonly asPasted: readonly ExistingArchitecture[];
+  readonly renamed: readonly ExistingArchitecture[];
+}
+
 export interface PasteQuestions {
   /** The pasted architecture is of an entity no file declares: offer the one probably meant. */
   readonly rename?: EntityRename;
-  /** The architectures the paste would give a second definition, as pasted and after `rename`. */
-  readonly duplicates: { readonly asPasted: readonly ExistingArchitecture[]; readonly renamed: readonly ExistingArchitecture[] };
+  /** The architectures the paste would give a second definition. */
+  readonly duplicates: FoundBothWays;
+  /** The other architectures of the pasted one's entity, under other names: they may stay, or go. */
+  readonly others: FoundBothWays;
 }
 
 export interface PasteAnswers {
   readonly rename: boolean;
   readonly replace: boolean;
+  readonly deleteOthers: boolean;
 }
 
 /** Where the paste goes: a file and the selection it replaces. */
@@ -98,21 +107,48 @@ function overlaps(a: Range, b: Range): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
+type HeaderTest = (header: ArchitectureHeader) => boolean;
+
 /**
- * The architectures of `files` that one of `pasted` would define again,
- * leaving out one the selection touches: the paste goes over that one.
+ * The architectures of `files` that pass `wanted`, leaving out one the
+ * selection touches: the paste goes over that one.
  */
-function duplicatesOf(pasted: readonly ArchitectureHeader[], files: readonly ProjectFile[], target: PasteTarget): ExistingArchitecture[] {
-  const keys = new Set(pasted.map(architectureKey));
+function existingWhere(wanted: HeaderTest, files: readonly ProjectFile[], target: PasteTarget): ExistingArchitecture[] {
   // A caret (an empty selection) touches only an architecture it is inside of, not one it stands just before or after.
   const selection = { start: target.selectionStart, end: target.selectionEnd };
   return files.flatMap((file) => {
     const lines = splitLines(file.content);
     return architectureHeaders(file.content)
-      .filter((header) => keys.has(architectureKey(header)))
+      .filter(wanted)
       .map(({ name, entity, line }) => ({ fileId: file.id, fileName: file.name, name, entity, line, lastLine: architectureLastLine(lines, line) }))
       .filter((existing) => existing.fileId !== target.fileId || !overlaps(linesRange(file.content, existing), selection));
   });
+}
+
+/** An architecture one of `pasted` would define again. */
+function isDuplicateOf(pasted: readonly ArchitectureHeader[]): HeaderTest {
+  const keys = new Set(pasted.map(architectureKey));
+  return (header) => keys.has(architectureKey(header));
+}
+
+/** Another architecture of a pasted one's entity, under a name none of `pasted` has. */
+function isOtherOf(pasted: readonly ArchitectureHeader[]): HeaderTest {
+  const duplicate = isDuplicateOf(pasted);
+  return (header) => pasted.some((p) => sameName(p.entity, header.entity)) && !duplicate(header);
+}
+
+/** The paste and where it goes, as the searches for existing architectures need them. */
+interface PasteSearch {
+  readonly headers: readonly ArchitectureHeader[];
+  readonly rename: EntityRename | undefined;
+  readonly files: readonly ProjectFile[];
+  readonly target: PasteTarget;
+}
+
+/** What `test` finds for the paste as copied and after `rename`. */
+function foundBothWays(test: (pasted: readonly ArchitectureHeader[]) => HeaderTest, { headers, rename, files, target }: PasteSearch): FoundBothWays {
+  const asPasted = existingWhere(test(headers), files, target);
+  return { asPasted, renamed: rename ? existingWhere(test(renamed(headers, rename)), files, target) : asPasted };
 }
 
 function renamed(headers: readonly ArchitectureHeader[], rename: EntityRename | undefined): ArchitectureHeader[] {
@@ -149,10 +185,11 @@ export function pasteQuestions(pasted: string, target: PasteTarget, files: reado
   if (targetFile === undefined || !isVhdl(targetFile) || headers.length === 0) return undefined;
   const vhdlFiles = files.filter(isVhdl);
   const rename = renameFor(pasted, targetFile, vhdlFiles);
-  const asPasted = duplicatesOf(headers, vhdlFiles, target);
-  const duplicates = { asPasted, renamed: rename ? duplicatesOf(renamed(headers, rename), vhdlFiles, target) : asPasted };
-  if (rename === undefined && asPasted.length === 0) return undefined;
-  return { rename, duplicates };
+  const search = { headers, rename, files: vhdlFiles, target };
+  const duplicates = foundBothWays(isDuplicateOf, search);
+  const others = foundBothWays(isOtherOf, search);
+  const asksNothing = rename === undefined && duplicates.asPasted.length === 0 && others.asPasted.length === 0;
+  return asksNothing ? undefined : { rename, duplicates, others };
 }
 
 /** `pasted` with `rename.from` after `of` in its architecture headers changed to `rename.to`. */
@@ -167,8 +204,12 @@ export function renamePasted(pasted: string, rename: EntityRename): string {
 export function answeredPaste(pasted: string, questions: PasteQuestions, answers: PasteAnswers): { text: string; replaced: readonly ExistingArchitecture[] } {
   const rename = answers.rename ? questions.rename : undefined;
   const text = rename ? renamePasted(pasted, rename) : pasted;
-  const duplicates = rename ? questions.duplicates.renamed : questions.duplicates.asPasted;
-  return { text, replaced: answers.replace ? duplicates : [] };
+  const asAnswered = (found: FoundBothWays) => (rename ? found.renamed : found.asPasted);
+  const replaced = [
+    ...(answers.replace ? asAnswered(questions.duplicates) : []),
+    ...(answers.deleteOthers ? asAnswered(questions.others) : []),
+  ];
+  return { text, replaced };
 }
 
 /**

@@ -15,9 +15,9 @@ export const PASTE_TEXT = {
   pasteAsCopied: 'Paste as copied',
 };
 
-/** The subtitle: how many changes the dialog suggests (one or two). */
-export function changesSubtitle(count: number): string {
-  return count === 1 ? 'One change makes this code fit the project.' : 'Two changes make this code fit the project.';
+/** The subtitle: one card, or more. */
+export function choicesSubtitle(count: number): string {
+  return count === 1 ? 'Check this before the code goes in.' : 'Check these before the code goes in.';
 }
 
 export function renameDetail({ from, to }: EntityRename): string {
@@ -45,9 +45,24 @@ export function replaceDetail(architectures: readonly ExistingArchitecture[], ta
   return `${each.join(' ')} ${consequence}`;
 }
 
-/** Why the replace card is greyed out: the duplicate exists only under the name the rename gives. */
-export function replaceNotNeeded({ from }: EntityRename): string {
+/** Why a card is greyed out: what it is about exists only under the name the rename gives. */
+export function notNeededWithoutRename({ from }: EntityRename): string {
   return `Not needed while the pasted code keeps the name ${code(from)}.`;
+}
+
+export function deleteOthersTitle(architectures: readonly ExistingArchitecture[]): string {
+  return architectures.length === 1 ? 'Delete the other architecture' : 'Delete the other architectures';
+}
+
+/** The other architectures of the pasted one's entity: they may stay, so the card starts unticked. */
+export function deleteOthersDetail(architectures: readonly ExistingArchitecture[], targetFileId: string): string {
+  const each = architectures.map((a) => `${code(a.entity)} also has the architecture ${code(a.name)} (${placeOf(a, targetFileId)}).`);
+  return `${each.join(' ')} Both may stay: an entity can have several architectures, and the simulation runs the one GHDL reads last.`;
+}
+
+/** The small warning in the card: the code that ticking it deletes. */
+export function deleteOthersWarning(architectures: readonly ExistingArchitecture[], targetFileId: string): string {
+  return `Ticking this deletes ${architectures.map((a) => placeOf(a, targetFileId)).join(' and ')}.`;
 }
 
 /** What happens instead, while the replace is unticked. */

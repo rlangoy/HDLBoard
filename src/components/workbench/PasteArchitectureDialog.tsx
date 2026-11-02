@@ -6,14 +6,17 @@ import { cx } from '../board';
 import { CodeText } from './CodeText';
 import { Dialog } from './Dialog';
 import { AlertIcon } from './icons';
-import type { EntityRename, ExistingArchitecture, PasteAnswers, PasteQuestions } from './pastedArchitecture';
+import type { EntityRename, ExistingArchitecture, FoundBothWays, PasteAnswers, PasteQuestions } from './pastedArchitecture';
 import {
   PASTE_TEXT,
-  changesSubtitle,
+  choicesSubtitle,
+  deleteOthersDetail,
+  deleteOthersTitle,
+  deleteOthersWarning,
+  notNeededWithoutRename,
   renameDetail,
   renameSkipped,
   replaceDetail,
-  replaceNotNeeded,
   replaceSkipped,
   replaceTitle,
 } from './pasteText';
@@ -21,7 +24,7 @@ import './PasteArchitectureDialog.css';
 
 export interface PasteArchitectureDialogProps {
   questions: PasteQuestions;
-  /** The file pasted into: a duplicate there is named by its lines alone. */
+  /** The file pasted into: an architecture there is named by its lines alone. */
   targetFileId: string;
   onPaste: (answers: PasteAnswers) => void;
   onClose: () => void;
@@ -32,56 +35,82 @@ interface ChangeCardProps {
   detail: string;
   /** A smaller line under the detail: what happens without the change, or why it is not needed. */
   note?: string;
+  /** A small amber line, always shown: the code that ticking the card deletes. */
+  warning?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  /** Greyed out: the change does nothing as the other choice stands. */
+  /** Greyed out: the change does nothing as the other choices stand. */
   disabled?: boolean;
   /** Deletes code: tinted while it will, so that is seen before Paste. */
   deletes?: boolean;
 }
 
-function ChangeCard({ title, detail, note, checked, onChange, disabled = false, deletes = false }: ChangeCardProps) {
+/** A small line in a card: the amber warning (with its icon), or the grey note; nothing without text. */
+function CardLine({ kind, text }: { kind: 'warning' | 'note'; text?: string }) {
+  if (!text) return null;
   return (
-    <label className={cx('wb-paste__card', disabled && 'is-disabled', deletes && checked && !disabled && 'is-deleting')}>
+    <span className={`wb-paste__${kind}`}>
+      {kind === 'warning' && <AlertIcon aria-hidden="true" />}
+      <CodeText text={text} />
+    </span>
+  );
+}
+
+function cardClass({ disabled, deletes, checked }: Pick<ChangeCardProps, 'disabled' | 'deletes' | 'checked'>): string {
+  return cx('wb-paste__card', disabled && 'is-disabled', deletes && checked && !disabled && 'is-deleting');
+}
+
+function ChangeCard({ title, detail, note, warning, checked, onChange, disabled, deletes }: ChangeCardProps) {
+  return (
+    <label className={cardClass({ disabled, deletes, checked })}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="wb-paste__text">
         <strong className="wb-paste__title">{title}</strong>
         <span className="wb-paste__detail">
           <CodeText text={detail} />
         </span>
-        {note && (
-          <span className="wb-paste__note">
-            <CodeText text={note} />
-          </span>
-        )}
+        <CardLine kind="warning" text={warning} />
+        <CardLine kind="note" text={note} />
       </span>
     </label>
   );
 }
 
+/** Architectures a card names as the rename stands; greyed out (`needed` false) when they exist only after the rename. */
+interface CardArchitectures {
+  readonly shown: readonly ExistingArchitecture[];
+  readonly needed: boolean;
+}
+
+function asChosen(found: FoundBothWays, renamed: boolean): CardArchitectures {
+  const current = renamed ? found.renamed : found.asPasted;
+  return { shown: current.length > 0 ? current : found.renamed, needed: current.length > 0 };
+}
+
 /**
- * The two choices, both ticked at first, and what follows from them. A pasted
- * architecture may duplicate one only under the name the rename gives it: its
- * card then stays, greyed out while the rename is unticked, rather than vanish.
+ * The choices: the rename and the replace ticked at first, deleting other
+ * architectures not (they may stay). Which architectures a card is about
+ * depends on the name the paste ends up with; a card that matters only after
+ * the rename stays, greyed out, while the rename is unticked, rather than vanish.
  */
 function usePasteChoices(questions: PasteQuestions) {
   const [rename, setRename] = useState(true);
   const [replace, setReplace] = useState(true);
-  const { asPasted, renamed } = questions.duplicates;
-  const current = rename && questions.rename ? renamed : asPasted;
-  const shown = current.length > 0 ? current : renamed;
-  const replaceNeeded = current.length > 0;
+  const [deleteOthers, setDeleteOthers] = useState(false);
+  const renamed = rename && questions.rename !== undefined;
+  const duplicates = asChosen(questions.duplicates, renamed);
+  const others = asChosen(questions.others, renamed);
+  const cards = [questions.rename !== undefined, duplicates.shown.length > 0, others.shown.length > 0];
   return {
-    rename,
+    answers: { rename, replace, deleteOthers },
     setRename,
-    replace,
     setReplace,
-    /** The architectures the replace card names; none: no card. */
-    shown,
-    replaceNeeded,
-    offered: Number(questions.rename !== undefined) + Number(shown.length > 0),
+    setDeleteOthers,
+    duplicates,
+    others,
+    cardCount: cards.filter(Boolean).length,
     /** Some change will be made: the button applies it, else it pastes the code as copied. */
-    applies: (questions.rename !== undefined && rename) || (replaceNeeded && replace),
+    applies: renamed || (duplicates.needed && replace) || (others.needed && deleteOthers),
   };
 }
 
@@ -98,23 +127,36 @@ function PasteActions({ applies, onPaste, onClose }: { applies: boolean; onPaste
   );
 }
 
-interface ReplaceCardProps {
-  architectures: readonly ExistingArchitecture[];
+interface DeletingCardProps {
+  architectures: CardArchitectures;
   targetFileId: string;
-  /** False while the rename that makes the duplicate is unticked. */
-  needed: boolean;
   rename?: EntityRename;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }
 
-function ReplaceCard({ architectures, targetFileId, needed, rename, checked, onChange }: ReplaceCardProps) {
-  const notNeeded = !needed && rename !== undefined ? replaceNotNeeded(rename) : undefined;
+function ReplaceCard({ architectures: { shown, needed }, targetFileId, rename, checked, onChange }: DeletingCardProps) {
+  const notNeeded = !needed && rename !== undefined ? notNeededWithoutRename(rename) : undefined;
   return (
     <ChangeCard
-      title={replaceTitle(architectures)}
-      detail={replaceDetail(architectures, targetFileId)}
-      note={notNeeded ?? (checked ? undefined : replaceSkipped(architectures))}
+      title={replaceTitle(shown)}
+      detail={replaceDetail(shown, targetFileId)}
+      note={notNeeded ?? (checked ? undefined : replaceSkipped(shown))}
+      checked={checked}
+      onChange={onChange}
+      disabled={!needed}
+      deletes
+    />
+  );
+}
+
+function DeleteOthersCard({ architectures: { shown, needed }, targetFileId, rename, checked, onChange }: DeletingCardProps) {
+  return (
+    <ChangeCard
+      title={deleteOthersTitle(shown)}
+      detail={deleteOthersDetail(shown, targetFileId)}
+      warning={deleteOthersWarning(shown, targetFileId)}
+      note={!needed && rename !== undefined ? notNeededWithoutRename(rename) : undefined}
       checked={checked}
       onChange={onChange}
       disabled={!needed}
@@ -125,42 +167,35 @@ function ReplaceCard({ architectures, targetFileId, needed, rename, checked, onC
 
 /**
  * Asks before a pasted architecture goes in: match the entity it is `of` when no
- * file declares that one, and replace an architecture of the same name. Both are
- * suggestions, ticked: either may be left out, legal VHDL, and the card then
- * says what happens instead. The button names what it will do.
+ * file declares that one, replace an architecture of the same name, and delete
+ * the entity's other architectures. Each is a choice: the card of one left out
+ * says what happens instead, and the button names what it will do.
  */
 export function PasteArchitectureDialog({ questions, targetFileId, onPaste, onClose }: PasteArchitectureDialogProps) {
   const choices = usePasteChoices(questions);
-  const { rename, replace } = choices;
+  const { answers, duplicates, others } = choices;
+  const deleting = { targetFileId, rename: questions.rename };
   return (
     <Dialog
       open
       onClose={onClose}
       title={PASTE_TEXT.title}
-      subtitle={changesSubtitle(choices.offered)}
+      subtitle={choicesSubtitle(choices.cardCount)}
       icon={<AlertIcon className="wb-paste__icon" />}
-      footer={<PasteActions applies={choices.applies} onPaste={() => onPaste({ rename, replace })} onClose={onClose} />}
+      footer={<PasteActions applies={choices.applies} onPaste={() => onPaste(answers)} onClose={onClose} />}
     >
       <div className="wb-paste">
         {questions.rename && (
           <ChangeCard
             title={PASTE_TEXT.renameTitle}
             detail={renameDetail(questions.rename)}
-            note={rename ? undefined : renameSkipped(questions.rename)}
-            checked={rename}
+            note={answers.rename ? undefined : renameSkipped(questions.rename)}
+            checked={answers.rename}
             onChange={choices.setRename}
           />
         )}
-        {choices.shown.length > 0 && (
-          <ReplaceCard
-            architectures={choices.shown}
-            targetFileId={targetFileId}
-            needed={choices.replaceNeeded}
-            rename={questions.rename}
-            checked={replace}
-            onChange={choices.setReplace}
-          />
-        )}
+        {duplicates.shown.length > 0 && <ReplaceCard architectures={duplicates} {...deleting} checked={answers.replace} onChange={choices.setReplace} />}
+        {others.shown.length > 0 && <DeleteOthersCard architectures={others} {...deleting} checked={answers.deleteOthers} onChange={choices.setDeleteOthers} />}
       </div>
     </Dialog>
   );

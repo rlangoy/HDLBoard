@@ -105,3 +105,27 @@
 .wb-paste__card.is-disabled input {
   cursor: default;
 }
+
+/* Always in a card that deletes code when ticked: what it deletes. */
+.wb-paste__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--wb-diag-warning-text);
+}
+
+.wb-paste__warning svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--wb-diag-warning);
+}
+
+.wb-paste__card.is-disabled .wb-paste__warning,
+.wb-paste__card.is-disabled .wb-paste__warning svg {
+  color: var(--wb-text-muted);
+}

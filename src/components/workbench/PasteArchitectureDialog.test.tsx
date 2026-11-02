@@ -5,9 +5,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { PasteArchitectureDialog } from './PasteArchitectureDialog';
 import type { ExistingArchitecture, PasteQuestions } from './pastedArchitecture';
-import { renameSkipped, replaceNotNeeded, replaceSkipped } from './pasteText';
+import { renameSkipped, notNeededWithoutRename, replaceSkipped } from './pasteText';
 
 const OLD_RTL: ExistingArchitecture = { fileId: 'top', fileName: 'DE1_SoC.vhdl', name: 'rtl', entity: 'DE1_SoC', line: 24, lastLine: 37 };
+const NONE = { asPasted: [], renamed: [] };
 const RENAME = { from: 'de1_soc_top', to: 'DE1_SoC' };
 
 function markup(questions: PasteQuestions): string {
@@ -20,11 +21,11 @@ function textOf(html: string): string {
 }
 
 describe('PasteArchitectureDialog', () => {
-  const both: PasteQuestions = { rename: RENAME, duplicates: { asPasted: [], renamed: [OLD_RTL] } };
-  const replaceOnly: PasteQuestions = { duplicates: { asPasted: [OLD_RTL], renamed: [OLD_RTL] } };
+  const both: PasteQuestions = { rename: RENAME, duplicates: { asPasted: [], renamed: [OLD_RTL] }, others: NONE };
+  const replaceOnly: PasteQuestions = { duplicates: { asPasted: [OLD_RTL], renamed: [OLD_RTL] }, others: NONE };
 
   test('says how many changes it suggests', () => {
-    expect(textOf(markup(both))).toContain('Two changes make this code fit the project.');
+    expect(textOf(markup(both))).toContain('Check these before the code goes in.');
   });
 
   test('the rename card: its title and what it changes', () => {
@@ -53,12 +54,12 @@ describe('PasteArchitectureDialog', () => {
 
   test('a duplicate in another file is named with its file', () => {
     const elsewhere = { ...OLD_RTL, fileId: 'other', fileName: 'rtl.vhd' };
-    expect(textOf(markup({ duplicates: { asPasted: [elsewhere], renamed: [elsewhere] } }))).toContain('(rtl.vhd, lines 24–37)');
+    expect(textOf(markup({ duplicates: { asPasted: [elsewhere], renamed: [elsewhere] }, others: NONE }))).toContain('(rtl.vhd, lines 24–37)');
   });
 
   test('only the replace card when the entity exists', () => {
     const html = markup(replaceOnly);
-    expect([html.match(/type="checkbox"/g)?.length, textOf(html).includes('One change makes')]).toEqual([1, true]);
+    expect([html.match(/type="checkbox"/g)?.length, textOf(html).includes('Check this before')]).toEqual([1, true]);
   });
 });
 
@@ -74,6 +75,25 @@ describe('the words for a change left out', () => {
 
 describe('the replace card while the rename is unticked', () => {
   test('says why it is greyed out', () => {
-    expect(replaceNotNeeded(RENAME)).toBe('Not needed while the pasted code keeps the name `de1_soc_top`.');
+    expect(notNeededWithoutRename(RENAME)).toBe('Not needed while the pasted code keeps the name `de1_soc_top`.');
+  });
+});
+
+describe('the Delete the other architecture card', () => {
+  const synthPasted: PasteQuestions = { duplicates: NONE, others: { asPasted: [OLD_RTL], renamed: [OLD_RTL] } };
+
+  test('says both may stay, and names the other one', () => {
+    expect(textOf(markup(synthPasted))).toContain(
+      'Delete the other architectureDE1_SoC also has the architecture rtl (lines 24–37). Both may stay: an entity can have several architectures, and the simulation runs the one GHDL reads last.',
+    );
+  });
+
+  test('a small warning in the card says what ticking it deletes', () => {
+    expect(markup(synthPasted)).toMatch(/class="wb-paste__warning"><svg[^]*Ticking this deletes lines 24–37\./);
+  });
+
+  test('starts unticked, so the button pastes as copied', () => {
+    const html = markup(synthPasted);
+    expect([html.includes('checked=""'), textOf(html).includes('Paste as copied')]).toEqual([false, true]);
   });
 });
