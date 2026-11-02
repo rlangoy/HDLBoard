@@ -897,12 +897,21 @@ When markers change:
 
 | Event | Effect |
 |---|---|
-| Start pressed | all markers cleared; a new snapshot is taken |
+| Start pressed | all markers cleared; a new snapshot is taken; HDLBoard's own check adds a warning on each architecture whose entity and name an earlier one has (`duplicateArchitectures.ts`: GHDL warns only within one file, and the backend drops warnings when analysis succeeds) |
 | `ERROR` frame (`recordError`) | parse, locate, advise, add; a failed compile (`analyze`, `elaborate`) reveals the first error |
 | `LOG` frame | parse, locate, add (advice only for Icarus's implicit-wire warning); never moves the view |
 | click in the code pane (text or gutter) | the active file's markers are removed |
 | any edit of a file, or deleting it | that file's markers are removed |
 | console Clear, showing another file, Stop, rename | no effect |
+
+A pasted architecture is checked before it goes in (`pastedArchitecture.ts`,
+`usePastedArchitecture.ts`, `PasteArchitectureDialog.tsx`): when it is `of` an
+entity no file declares, the Review pasted architecture dialog offers the file's own
+entity (or the nearest name); when the project already has an architecture of
+that entity with that name, it offers to replace it, in this file or another; when it has one under another name, it offers to delete that one (unticked: several architectures are fine).
+This file changes in one edit, so Ctrl+Z undoes the paste. `vhdlUnits.ts` reads
+the entity and architecture headers for this, the duplicate check and the
+Unknown entity Quick Fix (`entityNameFix.ts`).
 
 A new message shape is one new entry in `RECOGNIZERS` plus a test row in
 `diagnostics.test.ts`; the real compiler output the tests use is in

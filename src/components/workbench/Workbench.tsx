@@ -79,7 +79,8 @@ import { findUnit } from './tbDetect/analyzeProject';
 import { BLOCKED_REASON, paneRunFor } from './paneRun';
 import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagnosticAdvice';
-import type { LocatedDiagnostic } from './diagnosticLocation';
+import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
+import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
@@ -1502,15 +1503,17 @@ export function Workbench() {
     blankBoard();
     const topFile = files.find((f) => f.id === fileId);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
-    startDiagnosticsRun({ files: filesForRun(files, topFile?.name) });
+    const runFiles = filesForRun(files, topFile?.name);
+    startDiagnosticsRun({ files: runFiles });
     lastRunError.current = null;
     waveView.runStarted({
-      sources: filesForRun(files, topFile?.name).map((f) => f.content),
+      sources: runFiles.map((f) => f.content),
       topFileName: topFile?.name,
       title: runTarget ?? topFile?.name.replace(/\.[^.]+$/, '') ?? 'testbench',
       source: runSource(fileId, unitName),
     });
     logRunBoard();
+    warnDuplicateArchitectures(runFiles);
     if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
     getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording, activeBoard.ports);
   };
@@ -1519,6 +1522,14 @@ export function Workbench() {
   const logRunBoard = () => {
     if (boardInstalled) appendLog(runBoardLog(activeBoard));
     else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => setDialog('settings') });
+  };
+
+  /** Two architectures of one entity with one name: in the console and the code, as a compiler warning. */
+  const warnDuplicateArchitectures = (runFiles: RunSnapshot['files']) => {
+    for (const warning of duplicateArchitectureWarnings({ files: runFiles })) {
+      appendLog(warning);
+      recordDiagnostics(warning, runFiles);
+    }
   };
 
   /**
@@ -2019,6 +2030,7 @@ export function Workbench() {
               onFilesDropped={handleFilesDropped}
               diagnostics={diagnostics.byFile}
               onDismissDiagnostics={dismissDiagnostics}
+              projectFiles={files}
               split={tb.editorSplit(fileMenu)}
               emptyProject={
                 files.length === 0 && (

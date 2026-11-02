@@ -1,0 +1,131 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * Review pasted architecture: one card per suggested change. The amber is the
+ * code window's warning colour: the dialog heads off the warning a run would give.
+ */
+
+.wb-paste__icon {
+  color: var(--wb-diag-warning);
+}
+
+.wb-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-paste__card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.wb-paste__card:hover {
+  border-color: var(--wb-accent-soft);
+  background: var(--wb-sidebar-bg);
+}
+
+/* Code will be deleted: seen before Paste is clicked. */
+.wb-paste__card.is-deleting,
+.wb-paste__card.is-deleting:hover {
+  border-color: var(--wb-diag-warning);
+  background: var(--wb-diag-warning-bg);
+}
+
+.wb-paste__card input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--wb-accent);
+  cursor: pointer;
+}
+
+.wb-paste__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wb-paste__title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--wb-text);
+}
+
+.wb-paste__detail {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--wb-text);
+}
+
+.wb-paste__note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--wb-text-muted);
+}
+
+.wb-paste__text code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--wb-hover);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.wb-paste__card.is-deleting code {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* The change does nothing as the other choice stands. */
+.wb-paste__card.is-disabled {
+  cursor: default;
+  background: var(--wb-sidebar-bg);
+}
+
+.wb-paste__card.is-disabled:hover {
+  border-color: var(--wb-border);
+}
+
+.wb-paste__card.is-disabled .wb-paste__title,
+.wb-paste__card.is-disabled .wb-paste__detail {
+  color: var(--wb-text-muted);
+}
+
+.wb-paste__card.is-disabled input {
+  cursor: default;
+}
+
+/* Always in a card that deletes code when ticked: what it deletes. */
+.wb-paste__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--wb-diag-warning-text);
+}
+
+.wb-paste__warning svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--wb-diag-warning);
+}
+
+.wb-paste__card.is-disabled .wb-paste__warning,
+.wb-paste__card.is-disabled .wb-paste__warning svg {
+  color: var(--wb-text-muted);
+}

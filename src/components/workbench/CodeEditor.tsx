@@ -3,6 +3,7 @@
 
 import { useState, type DragEvent, type ReactNode } from 'react';
 import { cx } from '../board';
+import type { VhdlFile } from './files';
 import { NO_DIAGNOSTICS, type DiagnosticsByFile } from './diagnosticStore';
 import type { EditorTab } from './EditorSurface';
 import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
@@ -27,6 +28,8 @@ export interface CodeEditorProps {
   split?: SplitEditorProps;
   /** Shown instead of panes while the project has no files (docs/cleanup_file_tabs.md § 5.6). */
   emptyProject?: ReactNode;
+  /** Every file of the project, for the questions a pasted architecture raises. */
+  projectFiles?: readonly VhdlFile[];
 }
 
 /**
@@ -83,13 +86,14 @@ export function CodeEditor({
   onDismissDiagnostics,
   split,
   emptyProject,
+  projectFiles,
 }: CodeEditorProps) {
   const drop = useFileDrop(onFilesDropped);
   return (
     <div className={cx('wb-editor', drop.dragging && 'is-drag-over')} {...drop.handlers}>
       {drop.dragging && <DropHint />}
       {split ? (
-        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} />
+        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} projectFiles={projectFiles} />
       ) : (
         emptyProject
       )}

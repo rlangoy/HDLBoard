@@ -45,6 +45,10 @@ export function languageOfName(name: string): Language | undefined {
   return undefined;
 }
 
+export function isVhdlFile({ name }: { readonly name: string }): boolean {
+  return languageOfName(name) === 'vhdl';
+}
+
 /** The language a folder's files are written in; a testbench in `work/` is VHDL. */
 function languageOfFolder(folder: Folder): Language {
   return folder === 'verilog' ? 'verilog' : 'vhdl';

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cx } from '../board';
+import type { VhdlFile } from './files';
 import type { DiagnosticsByFile, LineDiagnostic } from './diagnosticStore';
 import { EditorSurface, type EditorTab } from './EditorSurface';
 import { narrowView, type EditorView, type PaneRole } from './editorView';
@@ -50,6 +51,7 @@ interface SharedProps {
   diagnostics: DiagnosticsByFile;
   onChange: (id: string, content: string) => void;
   onDismissDiagnostics?: (fileId: string) => void;
+  projectFiles?: readonly VhdlFile[];
 }
 
 /**
@@ -154,6 +156,7 @@ function SplitPane({
   diagnostics,
   onChange,
   onDismissDiagnostics,
+  projectFiles,
   symbols,
   linkedOccurrences,
   onHighlightChange,
@@ -184,6 +187,7 @@ function SplitPane({
               diagnostics={diagnostics[model.file.id] ?? NO_LINES}
               onChange={onChange}
               onDismissDiagnostics={onDismissDiagnostics}
+              projectFiles={projectFiles}
               reveal={model.reveal}
               label={label}
               announces={focused}

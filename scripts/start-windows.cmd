@@ -87,8 +87,10 @@ if errorlevel 1 (
 )
 exit /b 0
 
+rem A listening socket is one with no remote end (RemotePort 0); its State is
+rem not trusted, see :wait_for_ports.
 :require_free_ports
-powershell -NoProfile -Command "$held = Get-NetTCPConnection -State Listen -LocalPort %STATIC_PORT%,%HDL_WS_PORT% -ErrorAction SilentlyContinue; if ($held) { $held | Select-Object -Unique LocalPort, OwningProcess | ForEach-Object { 'Port ' + $_.LocalPort + ' is already in use (pid ' + $_.OwningProcess + ').' }; exit 1 }; exit 0"
+powershell -NoProfile -Command "$held = Get-NetTCPConnection -LocalPort %STATIC_PORT%,%HDL_WS_PORT% -ErrorAction SilentlyContinue | Where-Object { $_.RemotePort -eq 0 }; if ($held) { $held | Select-Object -Unique LocalPort, OwningProcess | ForEach-Object { 'Port ' + $_.LocalPort + ' is already in use (pid ' + $_.OwningProcess + ').' }; exit 1 }; exit 0"
 if errorlevel 1 (
   echo Stop what holds the port first - scripts\stop-windows.cmd stops HDLBoard's own servers. 1>&2
   exit /b 1
@@ -123,6 +125,8 @@ if not exist "%IVERILOG_DIR%\iverilog.exe" (
 )
 exit /b 0
 
+rem Connects to each port rather than reading socket states: some Windows
+rem builds report Vite's listening socket as Closed or FinWait1, not Listen.
 :wait_for_ports
-powershell -NoProfile -Command "$until = (Get-Date).AddSeconds(30); while ((Get-Date) -lt $until) { $up = @(Get-NetTCPConnection -State Listen -LocalPort %STATIC_PORT%,%HDL_WS_PORT% -ErrorAction SilentlyContinue | Select-Object -Unique LocalPort); if ($up.Count -ge 2) { exit 0 }; Start-Sleep -Milliseconds 500 }; exit 1"
+powershell -NoProfile -Command "function Open($port) { $c = New-Object Net.Sockets.TcpClient; try { $c.Connect('127.0.0.1', $port); $true } catch { $false } finally { $c.Close() } }; $until = (Get-Date).AddSeconds(30); while ((Get-Date) -lt $until) { if ((Open %STATIC_PORT%) -and (Open %HDL_WS_PORT%)) { exit 0 }; Start-Sleep -Milliseconds 500 }; exit 1"
 exit /b %errorlevel%

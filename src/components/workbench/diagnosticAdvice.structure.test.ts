@@ -190,6 +190,11 @@ end architecture rtl;
     expect(unknown.advice?.span).toEqual({ start: 20, end: 30 });
   });
 
+  test('offers a Quick Fix that writes the suggested entity', () => {
+    const [unknown] = advise('unk.vhd', UNKNOWN, OUTPUT);
+    expect(unknown.advice?.fix).toEqual({ kind: 'replaceEntityName', written: 'DE1_SdddoC', entity: 'DE1_SoC' });
+  });
+
   const TWO_ENTITIES = 'entity counter is end;\nentity counter_tb is end;\narchitecture a of countr is begin end;';
 
   test('with several entities, the nearest name', () => {
@@ -201,6 +206,20 @@ end architecture rtl;
     const source = TWO_ENTITIES.replace('countr', 'blinker');
     const [far] = advise('c.vhd', source, 'c.vhd:3:19:error: entity "blinker" was not analysed\n');
     expect(far.advice?.headline).toBe('Unknown entity `blinker` — no file in the project declares an entity with that name.');
+    expect(far.advice?.fix).toBeUndefined();
+  });
+
+  describe('a header split over two lines', () => {
+    const split = 'entity counter is end;\narchitecture a of countr\nis begin end;';
+    const [near] = advise('c.vhd', split, 'c.vhd:2:19:error: entity "countr" was not analysed\n');
+
+    test('still gets the suggestion', () => {
+      expect(near.advice?.headline).toBe('Unknown entity `countr` — did you mean `counter` (line 1)?');
+    });
+
+    test('gets no Quick Fix: it could not change the name', () => {
+      expect(near.advice?.fix).toBeUndefined();
+    });
   });
 
   test('an entity in another file is named without a line', () => {
