@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { loadAppDefaults } from './appDefaults';
+import { loadStoredChoice, saveStoredChoice } from './storedChoice';
 
 /**
  * Whether the Pushbuttons panel offers "Bouncy" contacts (Settings › Pushbuttons).
@@ -16,20 +17,11 @@ const STORAGE_KEY = 'hdlboard.pushbuttons.bouncy';
 
 /** The stored choice, or null when the student has not made one. Never throws. */
 export function loadBouncyChoice(): boolean | null {
-  try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
-    return value === 'on' ? true : value === 'off' ? false : null;
-  } catch {
-    return null;
-  }
+  return loadStoredChoice(STORAGE_KEY);
 }
 
 export function saveBouncyChoice(on: boolean): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, on ? 'on' : 'off');
-  } catch {
-    // The choice holds for this page only.
-  }
+  saveStoredChoice(STORAGE_KEY, on);
 }
 
 /** The option in effect: the student's choice, else the start-up default, else off while that loads. */

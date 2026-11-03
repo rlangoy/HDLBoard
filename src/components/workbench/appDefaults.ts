@@ -11,6 +11,7 @@
  */
 
 import { fetchBoardFile, type FetchedText } from '../../boards/boardCatalog';
+import { errorText } from './errorText';
 
 export interface AppDefaults {
   /** The Pushbuttons panel offers "Bouncy" contacts (on unless the file says otherwise). */
@@ -31,7 +32,6 @@ export interface ParsedDefaults {
 const SETTING_TYPES: { readonly [K in keyof AppDefaults]: 'boolean' } = { bouncyButtons: 'boolean' };
 const TYPE_TEXT = { boolean: 'true or false' } as const;
 const IGNORED_KEYS = new Set(['$schema', '$comment']);
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const builtIn = (warning: string): ParsedDefaults => ({ defaults: BUILT_IN_DEFAULTS, warnings: [warning] });
 const isSetting = (key: string): key is keyof AppDefaults => Object.prototype.hasOwnProperty.call(SETTING_TYPES, key);
 

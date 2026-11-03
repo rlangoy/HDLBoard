@@ -112,6 +112,7 @@ When you open a testbench, the editor splits: the testbench is on the left and t
 - Rest the mouse on a signal or port, or click it, to highlight its declaration and every use.
 - Syntax highlighting for VHDL and Verilog, one file list with upload and drag-and-drop, and resizable panes.
 - Download a single file, or the whole project as a ZIP.
+- **Update notice:** when a newer HDLBoard release is out on GitHub, a bell with a red badge appears in the top bar; click it for the release page. **Settings › Updates › Check for updates** turns the check at start-up on or off (on in the Windows app, off in a browser, until you choose), and **About** shows whether you have the latest version.
 
 ### Projects and sharing
 - A `.hdlboard.json` project file holds the project's name, board and files, with a description for each file.

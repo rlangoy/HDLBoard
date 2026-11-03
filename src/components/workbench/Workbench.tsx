@@ -19,6 +19,8 @@ import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayou
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { useBouncyOption } from './useBouncyOption';
+import { useUpdateCheck } from './useUpdateCheck';
+import { UpdateBell } from './UpdateBell';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
@@ -346,6 +348,8 @@ export function Workbench() {
   const catalog = useBoards(project.boardConfig, project.board);
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
   const bouncyOption = useBouncyOption();
+  // Settings › Updates: the bell in the header while a newer release is out.
+  const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
@@ -1801,6 +1805,13 @@ export function Workbench() {
         onAbout={() => setDialog('about')}
         onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
+        notifications={
+          <UpdateBell
+            release={updateCheck.newerRelease}
+            checkEnabled={updateCheck.enabled}
+            onCheckEnabledChange={updateCheck.setEnabled}
+          />
+        }
         gitHubActions={
           gitHubShare.visible && (
             <GitHubSplitButton
@@ -1836,6 +1847,8 @@ export function Workbench() {
         onRecordWavesChange={waveView.waveform.setRecording}
         bouncyButtons={bouncyOption.enabled}
         onBouncyButtonsChange={bouncyOption.setEnabled}
+        checkForUpdates={updateCheck.enabled}
+        onCheckForUpdatesChange={updateCheck.setEnabled}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} board={activeBoard} />
       {boardChange.pending && (
@@ -1851,7 +1864,11 @@ export function Workbench() {
       )}
       <NoWaveformDialog {...waveView.dialog} />
       <PickerWaitNotice phase={pickerWait.phase} />
-      <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
+      <AboutDialog
+        open={dialog === 'about'}
+        onClose={() => setDialog(null)}
+        updates={{ status: updateCheck.status, onCheck: updateCheck.checkNow }}
+      />
       {overwriteAsk && (
         <OverwriteDialog
           paths={overwriteAsk.paths}

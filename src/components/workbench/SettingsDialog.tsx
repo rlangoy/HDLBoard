@@ -40,6 +40,9 @@ export interface SettingsDialogProps {
   /** The Pushbuttons panel offers "Bouncy" contacts (useBouncyOption.ts); on by default. */
   bouncyButtons: boolean;
   onBouncyButtonsChange: (on: boolean) => void;
+  /** Ask GitHub for a newer release at start-up (useUpdateCheck.ts); on by default in the Windows app only. */
+  checkForUpdates: boolean;
+  onCheckForUpdatesChange: (on: boolean) => void;
 }
 
 /** One switch, on by default: whether the Pushbuttons panel's menu offers bouncing contacts. */
@@ -54,6 +57,25 @@ function BouncySetting({ value, onChange }: { value: boolean; onChange: (on: boo
           <span className="wb-settings__note">
             The Pushbuttons panel's menu lets you pick Bouncy contacts, which give several edges per press like real buttons.
             Off: the choice is hidden and every press is one clean edge.
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  );
+}
+
+/** One switch: whether HDLBoard asks GitHub for a newer release when it starts. Turning it on asks at once. */
+function UpdateSetting({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <fieldset className="wb-settings__group">
+      <legend className="wb-settings__heading">Updates</legend>
+      <label className="wb-settings__option">
+        <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span>
+          <strong>Check for updates</strong>
+          <span className="wb-settings__note">
+            When {APP_NAME} starts, it asks GitHub for its latest release, and a bell appears in the top bar when a newer
+            version is out. Turning this on checks now. About shows what the last check found.
           </span>
         </span>
       </label>
@@ -184,6 +206,8 @@ export function SettingsDialog({
   onRecordWavesChange,
   bouncyButtons,
   onBouncyButtonsChange,
+  checkForUpdates,
+  onCheckForUpdatesChange,
 }: SettingsDialogProps) {
   const bridge = desktopBridge();
   // What is stored for the next launch, not what this launch is running with.
@@ -214,6 +238,7 @@ export function SettingsDialog({
       <LanguageSetting value={preferredLanguages} onChange={onPreferredLanguagesChange} />
       <SplitSetting value={splitPreference} onChange={onSplitPreferenceChange} />
       <WaveformSetting value={recordWaves} onChange={onRecordWavesChange} />
+      <UpdateSetting value={checkForUpdates} onChange={onCheckForUpdatesChange} />
       {bridge && (
         <div className="wb-settings__empty">
           <label className="wb-settings__option">

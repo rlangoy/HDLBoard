@@ -20,6 +20,8 @@ export interface HeaderProps {
   gitHubUser?: GitHubUser | null;
   /** Shown left of the GitHub account button, with a divider: the save/share split button. */
   gitHubActions?: ReactNode;
+  /** Shown between Help and About: the update bell (UpdateBell), when there is something to tell. */
+  notifications?: ReactNode;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface HeaderProps {
  * chrome actions (Settings, Help, About), each of which opens a dialog
  * owned by `<Workbench>`.
  */
-export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitHubActions }: HeaderProps) {
+export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitHubActions, notifications }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
@@ -66,6 +68,7 @@ export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitH
           </span>
           Help
         </button>
+        {notifications}
         <button type="button" className="wb-header__action" onClick={onAbout}>
           <span className="wb-icon wb-icon--help" aria-hidden="true">
             i

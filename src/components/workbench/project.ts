@@ -7,8 +7,11 @@ export const APP_NAME = 'HDLBoard';
 /** The one-liner that follows the name — title bar, README, installer. */
 export const APP_TAGLINE = 'Write VHDL or Verilog and watch it run';
 
+/** The project's GitHub repository, `owner/name`: its page and its API address (latestRelease.ts) both follow it. */
+export const REPO_PATH = 'rlangoy/HDLBoard';
+
 /** Where the project lives — shown in the dialogs, opened in the user's browser. */
-export const REPO_URL = 'https://github.com/rlangoy/HDLBoard';
+export const REPO_URL = `https://github.com/${REPO_PATH}`;
 
 /** Where suggestions and bug reports go. */
 export const ISSUES_URL = `${REPO_URL}/issues`;

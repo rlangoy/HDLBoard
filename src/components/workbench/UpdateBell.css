@@ -1,0 +1,188 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The header's bell and its notice (UpdateBell.tsx). */
+
+.wb-update {
+  position: relative;
+  display: flex;
+}
+
+.wb-update__bell {
+  position: relative;
+}
+
+.wb-update__bell svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+/* The red badge on the bell's top right, counting the one notice. */
+.wb-update__badge {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--wb-danger-dark);
+  box-shadow: 0 0 0 2px var(--wb-header-bg);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* The notice: a card below the bell, its right edge under the header's About button. */
+.wb-update__notice {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -60px;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  padding: 16px 14px 14px 16px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--wb-text);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  animation: wb-update-rise 140ms ease-out;
+}
+
+.wb-update__icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--wb-accent);
+  color: #ffffff;
+}
+
+.wb-update__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.wb-update__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-update__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.wb-update__text {
+  margin: 2px 0 12px;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+.wb-update__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-update__view,
+.wb-update__later {
+  border-radius: 8px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-update__view {
+  background: var(--wb-accent);
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.wb-update__view:hover {
+  background: var(--wb-accent-dark);
+}
+
+.wb-update__later {
+  border: none;
+  background: transparent;
+  color: var(--wb-text-muted);
+}
+
+.wb-update__later:hover {
+  background: var(--wb-hover);
+}
+
+.wb-update__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wb-border);
+  font-size: 12px;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-update__close {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: -4px -2px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-update__close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-update__close:hover {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+
+.wb-update__view:focus-visible,
+.wb-update__later:focus-visible,
+.wb-update__close:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+@keyframes wb-update-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-update__notice {
+    animation: none;
+  }
+}
