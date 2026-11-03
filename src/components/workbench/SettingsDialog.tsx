@@ -73,10 +73,7 @@ function UpdateSetting({ value, onChange }: { value: boolean; onChange: (on: boo
         <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span>
           <strong>Check for updates</strong>
-          <span className="wb-settings__note">
-            When {APP_NAME} starts, it asks GitHub for its latest release, and a bell appears in the top bar when a newer
-            version is out. Turning this on checks now. About shows what the last check found.
-          </span>
+          <span className="wb-settings__note">Check GitHub for a new release at startup.</span>
         </span>
       </label>
     </fieldset>
