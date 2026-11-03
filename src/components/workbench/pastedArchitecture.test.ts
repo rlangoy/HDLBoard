@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { RunSnapshot } from './diagnosticLocation';
-import { answeredPaste, pasteQuestions, removeAndInsert, renamePasted, withoutArchitectures, type PasteTarget } from './pastedArchitecture';
+import { answeredPaste, inAnotherFile, pasteQuestions, removeAndInsert, renamePasted, withoutArchitectures, type PasteTarget } from './pastedArchitecture';
 import { applyTextEdit } from './textLines';
 
 /** The student's file: the board entity and an architecture with an AND gate in a block. */
@@ -245,5 +245,32 @@ end architecture synth;
   test('another entity’s architecture is not offered', () => {
     const elsewhere = pasteQuestions(SYNTH.replace(/DE1_SoC/g, 'counter'), atEnd, project(['top', 'DE1_SoC.vhdl', `${ORIGINAL}entity counter is end;\n`]));
     expect(elsewhere).toBeUndefined();
+  });
+});
+
+describe('the entity offered for an unknown one', () => {
+  const COUNTER = 'entity counter is end entity;';
+  const TOP = 'entity top is end entity;';
+  const atEndOfTop: PasteTarget = { fileId: 'top', selectionStart: TOP.length, selectionEnd: TOP.length };
+  const files = project(['counter', 'counter.vhd', COUNTER], ['top', 'top.vhd', TOP]);
+
+  test("is a near spelling of a declared entity, over the file's own", () => {
+    expect(pasteQuestions('architecture rtl of countr is begin end;', atEndOfTop, files)?.rename).toEqual({ from: 'countr', to: 'counter' });
+  });
+
+  test("is the file's own entity when no name is near", () => {
+    expect(pasteQuestions('architecture rtl of de1_soc_top is begin end;', atEndOfTop, files)?.rename).toEqual({ from: 'de1_soc_top', to: 'top' });
+  });
+});
+
+describe('inAnotherFile', () => {
+  const rtl = { fileId: 'top', fileName: 'top.vhd', name: 'rtl', entity: 'top', line: 4, lastLine: 6 };
+
+  test('is false when everything deleted is in the file pasted into', () => {
+    expect(inAnotherFile([rtl], 'top')).toBe(false);
+  });
+
+  test('is true when something deleted is in another file', () => {
+    expect(inAnotherFile([rtl], 'new')).toBe(true);
   });
 });

@@ -4,8 +4,7 @@
 /** The words of the Review pasted architecture dialog, with `code` in backticks (CodeText). Pure. */
 
 import type { EntityRename, ExistingArchitecture } from './pastedArchitecture';
-
-const code = (text: string): string => `\`${text}\``;
+import { code } from './codeMarkup';
 
 export const PASTE_TEXT = {
   title: 'Review pasted architecture',
@@ -24,6 +23,15 @@ export function choicesSubtitle(cardCount: number): string {
 function placeOf({ fileId, fileName, line, lastLine }: ExistingArchitecture, targetFileId: string): string {
   const lines = lastLine > line ? `lines ${line}–${lastLine}` : `line ${line}`;
   return fileId === targetFileId ? lines : `${fileName}, ${lines}`;
+}
+
+/**
+ * Code deleted in another file goes through the project, not this editor's undo:
+ * said in the card, before it is ticked. None when everything deleted is in this file.
+ */
+export function noUndoWarning(architectures: readonly ExistingArchitecture[], targetFileId: string): string | undefined {
+  const files = [...new Set(architectures.filter((a) => a.fileId !== targetFileId).map((a) => a.fileName))];
+  return files.length === 0 ? undefined : `Ctrl+Z does not bring back what is deleted in ${files.join(' and ')}.`;
 }
 
 // ------------------------------------------------------------ rename
@@ -75,7 +83,9 @@ export function deleteOthersDetail(architectures: readonly ExistingArchitecture[
   return `${each.join(' ')} Both may stay: an entity can have several architectures, and the simulation runs the one GHDL reads last.`;
 }
 
-/** The small warning in the card: the code that ticking it deletes. */
+/** The small warning in the card: the code that ticking it deletes, and when Ctrl+Z cannot bring it back. */
 export function deleteOthersWarning(architectures: readonly ExistingArchitecture[], targetFileId: string): string {
-  return `Ticking this deletes ${architectures.map((a) => placeOf(a, targetFileId)).join(' and ')}.`;
+  const deletes = `Ticking this deletes ${architectures.map((a) => placeOf(a, targetFileId)).join(' and ')}.`;
+  const noUndo = noUndoWarning(architectures, targetFileId);
+  return noUndo === undefined ? deletes : `${deletes} ${noUndo}`;
 }

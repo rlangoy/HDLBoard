@@ -8,6 +8,7 @@ import { Dialog } from './Dialog';
 import { AlertIcon } from './icons';
 import {
   foundAsRenamed,
+  inAnotherFile,
   type EntityRename,
   type ExistingArchitecture,
   type FoundBothWays,
@@ -20,6 +21,7 @@ import {
   deleteOthersDetail,
   deleteOthersTitle,
   deleteOthersWarning,
+  noUndoWarning,
   notNeededWithoutRename,
   renameDetail,
   renameSkipped,
@@ -101,14 +103,15 @@ function notNeededNote({ needed }: CardArchitectures, rename: EntityRename | und
 }
 
 /**
- * The choices: the rename and the replace ticked at first, deleting other
+ * The choices: the rename ticked at first; the replace too, unless it deletes in
+ * another file, where Ctrl+Z cannot bring the code back; deleting other
  * architectures not (they may stay). Which architectures a card is about
  * depends on the name the paste ends up with; a card that matters only after
  * the rename stays, greyed out, while the rename is unticked, rather than vanish.
  */
-function usePasteChoices(questions: PasteQuestions) {
+function usePasteChoices(questions: PasteQuestions, targetFileId: string) {
   const [rename, setRename] = useState(true);
-  const [replace, setReplace] = useState(true);
+  const [replace, setReplace] = useState(() => !inAnotherFile(foundAsRenamed(questions.duplicates, questions.rename !== undefined), targetFileId));
   const [deleteOthers, setDeleteOthers] = useState(false);
   const renameApplied = rename && questions.rename !== undefined;
   const duplicates = cardArchitectures(questions.duplicates, renameApplied);
@@ -155,6 +158,7 @@ function ReplaceCard({ architectures, targetFileId, rename, checked, onChange }:
     <ChangeCard
       title={replaceTitle(shown)}
       detail={replaceDetail(shown, targetFileId)}
+      warning={noUndoWarning(shown, targetFileId)}
       note={notNeededNote(architectures, rename) ?? skipped}
       checked={checked}
       onChange={onChange}
@@ -187,7 +191,7 @@ function DeleteOthersCard({ architectures, targetFileId, rename, checked, onChan
  * says what happens instead, and the button names what it will do.
  */
 export function PasteArchitectureDialog({ questions, targetFileId, onPaste, onClose }: PasteArchitectureDialogProps) {
-  const choices = usePasteChoices(questions);
+  const choices = usePasteChoices(questions, targetFileId);
   const { answers, duplicates, others } = choices;
   const deletingCardContext = { targetFileId, rename: questions.rename };
   return (

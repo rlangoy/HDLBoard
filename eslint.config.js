@@ -78,6 +78,7 @@ const NEW_CODE = [
   'src/components/workbench/UpdateBell.test.tsx',
   'src/components/workbench/storedChoice.ts',
   'src/components/workbench/errorText.ts',
+  'src/components/workbench/codeMarkup.ts',
   // Unknown entity Quick Fix, duplicate architectures and the Paste architecture dialog.
   'src/components/workbench/entityNameFix.ts',
   'src/components/workbench/entityNameFix.test.ts',

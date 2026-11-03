@@ -22,10 +22,18 @@ export interface UpdateBellProps {
  * counting the one notice it can have. A click opens the notice: which version
  * is out, a link to its release page, and the start-up check's own switch.
  */
-export function UpdateBell({ release, checkEnabled, onCheckEnabledChange }: UpdateBellProps) {
+export function UpdateBell({ release, ...notice }: UpdateBellProps) {
+  // Mounted only with a release, so a bell that goes and comes back starts closed.
+  return release ? <BellWithNotice release={release} {...notice} /> : null;
+}
+
+interface BellWithNoticeProps extends UpdateBellProps {
+  readonly release: Release;
+}
+
+function BellWithNotice({ release, checkEnabled, onCheckEnabledChange }: BellWithNoticeProps) {
   const { open, setOpen, rootRef } = usePopover<HTMLDivElement>();
   const bellRef = useRef<HTMLButtonElement>(null);
-  if (!release) return null;
   // Later, ✕ and View release hand the focus back to the bell, as Escape does.
   const closeNotice = () => {
     setOpen(false);
@@ -58,8 +66,7 @@ export function UpdateBell({ release, checkEnabled, onCheckEnabledChange }: Upda
   );
 }
 
-interface UpdateNoticeProps extends UpdateBellProps {
-  readonly release: Release;
+interface UpdateNoticeProps extends BellWithNoticeProps {
   readonly onClose: () => void;
 }
 
