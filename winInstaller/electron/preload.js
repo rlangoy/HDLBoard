@@ -17,8 +17,16 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const enabled = process.argv.includes('--hdlboard-persist');
 
+/** The port this copy's backend listens on: 9010, or the next free one when another copy has it. */
+function backendPortArgument() {
+  const prefix = '--hdlboard-backend-port=';
+  const arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg === undefined ? undefined : Number(arg.slice(prefix.length));
+}
+
 const api = {
   enabled,
+  backendPort: backendPortArgument(),
   /** Stored in <userData>/settings.json; takes effect on the next launch. */
   setEnabled: (value) => ipcRenderer.invoke('hdlboard:set-enabled', value === true),
 };

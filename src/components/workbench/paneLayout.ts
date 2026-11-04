@@ -6,8 +6,9 @@
  * with the editor (fitSidePanes), when a dragged divider snaps a pane
  * shut (collapsesAt), and where the dividers were last left — kept in
  * localStorage so the app reopens looking the way it was closed. The
- * desktop app always serves the page from the same origin
- * (http://127.0.0.1:9010), so its storage survives restarts; in a browser
+ * desktop app serves the page from the same origin each time
+ * (http://127.0.0.1:9010; a second copy running alongside it uses 9011,
+ * and so on), so its storage survives restarts; in a browser
  * it is simply per-site. The stored sizes are the *requested* ones — the
  * Workbench still clamps them to whatever the window allows.
  * ------------------------------------------------------------------ */

@@ -84,7 +84,7 @@ import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagn
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { downloadProjectArchive, downloadSourceFile } from './download';
-import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
+import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
 import { BoardSettingsPage } from './BoardSettingsPage';
 import { BoardDraftIo } from './boardEditor/BoardDraftIo';
@@ -166,9 +166,11 @@ import './Workbench.css';
 // VITE_GHDL_WS_PORT is the setting's name from when GHDL was the only
 // simulator, still honoured so an older build script keeps working.
 // The default must match the backend's own (server/src/settings.ts).
+// The Windows app says which port its own backend got, as a second copy
+// of the app running at the same time gets the next free one.
 const DEFAULT_WS_PORT = 9010;
-const HDL_WS_PORT = Number(
-  import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT,
+const HDL_WS_PORT = backendPort(
+  Number(import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT),
 );
 
 /** Which testbench a run runs, as the waveform view keeps it: its file and unit. */

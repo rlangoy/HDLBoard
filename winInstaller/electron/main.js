@@ -12,22 +12,14 @@
  * socket share an origin and a port. See the plan's finding F2 for why
  * `loadFile()` cannot work here: under `file://`,
  * `window.location.hostname` is empty and the renderer's derived
- * `ws://…:9010/hdlsim` URL comes out malformed.
+ * `ws://…:<port>/hdlsim` URL comes out malformed.
  */
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
-
-/**
- * Fixed, not ephemeral. The renderer reads its WebSocket port from a Vite
- * build-time constant (`VITE_HDL_WS_PORT`, defaulting to 9010), so the
- * port is baked into the bundle and cannot be discovered at runtime.
- * A collision is therefore reported, not worked around — see
- * `showPortInUseDialog`.
- */
-const PORT = 9010;
+const { BACKEND_PORTS, isPortInUse, startOnFirstFreePort } = require('./backendPort');
 
 let backend = null;
 let mainWindow = null;
@@ -215,7 +207,16 @@ const MAX_WORKSPACE_BYTES = 16 * 1024 * 1024;
 /** Only the app's own page may use these — never a frame from anywhere else. */
 function fromApp(event) {
   const url = event.senderFrame ? event.senderFrame.url : '';
-  if (!url.startsWith(`http://127.0.0.1:${PORT}/`)) throw new Error(`IPC refused from ${url}`);
+  if (!isAppUrl(url)) throw new Error(`IPC refused from ${url}`);
+}
+
+/** The page this copy of the app serves itself, on the port its backend got (backendPort.js). */
+function appOrigin() {
+  return `http://127.0.0.1:${backend.port}/`;
+}
+
+function isAppUrl(url) {
+  return backend !== null && url.startsWith(appOrigin());
 }
 
 // Open Project / Save project by path: only project and source files, only by a full
@@ -446,7 +447,7 @@ let gitHubWindow = null;
 function openGitHubWindow(url, options) {
   if (typeof url !== 'string' || !url.startsWith(GITHUB_PAGE_PREFIX)) throw new Error(`not a GitHub page: ${url}`);
   const { title, callbackUrl } = options ?? {};
-  if (callbackUrl !== undefined && (typeof callbackUrl !== 'string' || !callbackUrl.startsWith(`http://127.0.0.1:${PORT}/`))) {
+  if (callbackUrl !== undefined && (typeof callbackUrl !== 'string' || !isAppUrl(callbackUrl))) {
     throw new Error(`not a callback of this app: ${callbackUrl}`);
   }
   closeGitHubWindow();
@@ -614,14 +615,16 @@ function openInBrowser(url) {
   if (/^https:\/\//i.test(url)) shell.openExternal(url);
 }
 
-function showPortInUseDialog() {
+function showPortsInUseDialog() {
+  const first = BACKEND_PORTS[0];
+  const last = BACKEND_PORTS[BACKEND_PORTS.length - 1];
   dialog.showErrorBox(
-    `Port ${PORT} is already in use`,
-    `HDLBoard needs port ${PORT}, but something else is already listening on it.\n\n` +
+    `Ports ${first}–${last} are all in use`,
+    `HDLBoard needs one of the ports ${first}–${last}, but something else is listening on every one of them.\n\n` +
       'The usual causes are:\n' +
-      `  • another copy of this app is already running — look for it in the taskbar;\n` +
-      `  • a development server (scripts/start.sh, or "node server/dist/server.js") is running.\n\n` +
-      'Close whichever applies and start the app again.',
+      `  • ${BACKEND_PORTS.length} copies of this app are already running — look for them in the taskbar;\n` +
+      `  • development servers (scripts/start.sh, or "node server/dist/server.js") are running.\n\n` +
+      'Close one of them and start the app again.',
   );
 }
 
@@ -665,20 +668,20 @@ async function startBackendOrDie(paths) {
   applyToolArgs(paths, mod.parseToolArgs);
   console.log(`ghdl:     ${paths.ghdlDir ?? paths.ghdlExe ?? '(dev: GHDL_DIR / GHDL_EXE / PATH)'}`);
   console.log(`iverilog: ${paths.iverilogDir ?? '(dev: IVERILOG_DIR / PATH)'}`);
-  const handle = mod.startBackend({
-    port: PORT,
-    serveDir: paths.frontend,
-    ghdlDir: paths.ghdlDir,
-    ghdlExe: paths.ghdlExe,
-    iverilogDir: paths.iverilogDir,
-    // One window, one user, one machine: the multi-student bound that
-    // matters on a shared LAN server is irrelevant here.
-    maxSessions: 4,
-  });
-  // `listen()` reports a busy port (EADDRINUSE) asynchronously, after
-  // `startBackend` has returned; `ready` is where it surfaces, so the caller's
-  // try/catch sees it like any other startup failure.
-  await handle.ready;
+  // A second copy of the app finds 9010 taken and moves on to 9011, and so on.
+  const handle = await startOnFirstFreePort((port) =>
+    mod.startBackend({
+      port,
+      serveDir: paths.frontend,
+      ghdlDir: paths.ghdlDir,
+      ghdlExe: paths.ghdlExe,
+      iverilogDir: paths.iverilogDir,
+      // One window, one user, one machine: the multi-student bound that
+      // matters on a shared LAN server is irrelevant here.
+      maxSessions: 4,
+    }),
+  );
+  console.log(`backend port: ${handle.port}`);
   return handle;
 }
 
@@ -698,7 +701,7 @@ app.whenReady().then(async () => {
     backend = await startBackendOrDie(paths);
   } catch (err) {
     console.error(`backend failed to start: ${err && err.stack ? err.stack : String(err)}`);
-    if (err && err.code === 'EADDRINUSE') showPortInUseDialog();
+    if (isPortInUse(err)) showPortsInUseDialog();
     else dialog.showErrorBox('HDLBoard could not start', `${String(err)}\n\nLog: ${logPath}`);
     app.quit();
     return;
@@ -720,10 +723,11 @@ app.whenReady().then(async () => {
       // no need for Node, and giving it none keeps that true.
       nodeIntegration: false,
       contextIsolation: true,
-      // window.hdlboard — see preload.js. The switch is how the preload
-      // learns whether project storage is on this launch.
+      // window.hdlboard — see preload.js. The switches tell the preload
+      // whether project storage is on this launch, and which port this
+      // copy's backend got.
       preload: paths.preload,
-      additionalArguments: persistProjects ? ['--hdlboard-persist'] : [],
+      additionalArguments: [`--hdlboard-backend-port=${backend.port}`, ...(persistProjects ? ['--hdlboard-persist'] : [])],
     },
   });
 
@@ -744,13 +748,13 @@ app.whenReady().then(async () => {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}/`)) {
+    if (!isAppUrl(url)) {
       event.preventDefault();
       openInBrowser(url);
     }
   });
 
-  await mainWindow.loadURL(`http://127.0.0.1:${PORT}/`);
+  await mainWindow.loadURL(appOrigin());
   console.log('window loaded');
 });
 

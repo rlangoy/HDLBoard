@@ -40,12 +40,12 @@ with `-Force` to refetch).
 
 ```
 Electron main process (main.js)
- ├─ startBackend({ port: 9010, serveDir, ghdlExe, iverilogDir })   ← in-process, no child node
+ ├─ startBackend({ port: 9010…9019, serveDir, ghdlExe, iverilogDir })   ← in-process, no child node
  │    ├─ http.createServer()  → serves resources/frontend/
  │    └─ WebSocketServer({ noServer: true }) on upgrade "/hdlsim"
  │         ├─ spawns resources/ghdl/bin/ghdl.exe            (VHDL)
  │         └─ spawns resources/iverilog/{iverilog,vvp}.exe  (Verilog)
- └─ BrowserWindow → loadURL("http://127.0.0.1:9010/")
+ └─ BrowserWindow → loadURL("http://127.0.0.1:<that port>/")
       └─ renderer = the existing src/ React app, UNMODIFIED
 ```
 
@@ -56,9 +56,15 @@ renderer builds its WebSocket URL from `window.location.hostname`, which
 is the empty string under `file://` — producing a malformed
 `ws://:9010/hdlsim`. Serving the page from the backend means page and
 socket share an origin and a port, so `src/**` needs no changes at all.
-That is also why the port is **fixed**: the renderer's port is a Vite
-build-time constant, so it cannot be discovered at runtime. A collision
-is reported in a dialog rather than worked around.
+
+**Several copies can run at once.** The first copy gets port 9010; a
+second copy finds it taken and gets 9011, and so on up to 9019
+(`backendPort.js`). The preload hands the port to the page
+(`window.hdlboard.backendPort`), which uses it instead of its built-in
+9010. A short fixed list rather than any free port, because the page's
+stored settings belong to its origin, port included: a second copy comes
+back to the same origin each time. Only when all ten are taken does the
+app stop with a dialog.
 
 **The backend is esbuild-bundled with `ws` inlined.** `extraResources`
 sits outside `app.asar`, so a backend shipped there cannot resolve `ws`

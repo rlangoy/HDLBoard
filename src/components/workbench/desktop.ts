@@ -27,6 +27,11 @@ export interface LocalProjectsListing {
 export interface HdlBoardBridge {
   /** Whether project storage is on for this launch. */
   readonly enabled: boolean;
+  /**
+   * The port this copy of the Windows app's backend listens on: 9010, or the next free
+   * one when another copy already has it (winInstaller/electron/backendPort.js).
+   */
+  readonly backendPort?: number;
   /** Takes effect after a restart. */
   setEnabled(enabled: boolean): Promise<boolean>;
   /** Present only while storage is enabled — feature-detect on these. */
@@ -75,6 +80,12 @@ declare global {
 
 export function desktopBridge(): HdlBoardBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.hdlboard;
+}
+
+/** The backend's port: the one the Windows app's backend got, else `builtInPort` (the page's build setting). */
+export function backendPort(builtInPort: number): number {
+  const port = desktopBridge()?.backendPort;
+  return Number.isInteger(port) ? (port as number) : builtInPort;
 }
 
 /**
