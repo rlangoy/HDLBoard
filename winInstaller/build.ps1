@@ -129,6 +129,9 @@ Push-Location $ElectronDir
 try {
   & node "build-backend.mjs"
   if ($LASTEXITCODE -ne 0) { throw "backend bundling failed" }
+  # The shell's own tests: which port a copy of the app takes (backendPort.js).
+  & npm test
+  if ($LASTEXITCODE -ne 0) { throw "the desktop shell's tests failed" }
 } finally {
   Pop-Location
 }

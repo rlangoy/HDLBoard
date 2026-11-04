@@ -19,6 +19,7 @@ import {
 } from './diagnosticStore';
 import type { QuickFix } from './diagnosticAdvice';
 import { packagePath, useClauseText, type VhdlPackage } from './vhdlPackages';
+import { code } from './codeMarkup';
 
 export const INLINE_MESSAGE_MAX_CHARS = 120;
 const ELLIPSIS = '…';
@@ -29,7 +30,6 @@ const DEFAULT_COMPILER = 'GHDL';
 const DEFAULT_LANGUAGE = 'VHDL';
 const ENDS_A_SENTENCE = /[.?!]$/;
 
-const code = (text: string): string => `\`${text}\``;
 /** `begin` in code font: the advice on misplaced declarations names it often. */
 const BEGIN = code('begin');
 

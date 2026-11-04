@@ -11,8 +11,8 @@ const OLD_RTL: ExistingArchitecture = { fileId: 'top', fileName: 'DE1_SoC.vhdl',
 const NONE = { asPasted: [], renamed: [] };
 const RENAME = { from: 'de1_soc_top', to: 'DE1_SoC' };
 
-function markup(questions: PasteQuestions): string {
-  return renderToStaticMarkup(<PasteArchitectureDialog questions={questions} targetFileId="top" onPaste={() => undefined} onClose={() => undefined} />);
+function markup(questions: PasteQuestions, targetFileId = 'top'): string {
+  return renderToStaticMarkup(<PasteArchitectureDialog questions={questions} targetFileId={targetFileId} onPaste={() => undefined} onClose={() => undefined} />);
 }
 
 /** The visible text, without tags. */
@@ -103,5 +103,17 @@ describe('the Delete the other architecture card', () => {
 
   test('unticked, the button pastes as copied', () => {
     expect(textOf(markup(synthPasted))).toContain('Paste as copied');
+  });
+});
+
+describe('an architecture to replace in another file', () => {
+  const html = markup({ duplicates: { asPasted: [OLD_RTL], renamed: [OLD_RTL] }, others: NONE }, 'new');
+
+  test('starts unticked: Ctrl+Z cannot bring it back', () => {
+    expect(html).toContain('Paste as copied');
+  });
+
+  test('says so in the card', () => {
+    expect(textOf(html)).toContain('Ctrl+Z does not bring back what is deleted in DE1_SoC.vhdl.');
   });
 });

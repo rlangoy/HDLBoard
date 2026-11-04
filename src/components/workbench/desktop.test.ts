@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmDialog, parseWorkspace, serializeWorkspace, type Workspace } from './desktop';
+import { backendPort, confirmDialog, parseWorkspace, serializeWorkspace, type Workspace } from './desktop';
 import { newProject, withEntryEdited } from './projectFile';
 
 const ws: Workspace = {
@@ -103,5 +103,25 @@ describe('confirmDialog', () => {
   it('falls back to window.confirm in a browser', () => {
     vi.stubGlobal('window', { confirm: (message: string) => message === 'Open it?' });
     expect(confirmDialog('Open it?')).toBe(true);
+  });
+});
+
+describe('backendPort', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // A second copy of the Windows app gets the next free port (winInstaller/electron/backendPort.js).
+  it("is the port the Windows app's backend got", () => {
+    vi.stubGlobal('window', { hdlboard: { enabled: false, backendPort: 9011 } });
+    expect(backendPort(9010)).toBe(9011);
+  });
+
+  it("is the page's built-in port in a browser", () => {
+    vi.stubGlobal('window', {});
+    expect(backendPort(9010)).toBe(9010);
+  });
+
+  it('is the built-in port when the Windows app sends no usable one', () => {
+    vi.stubGlobal('window', { hdlboard: { enabled: false, backendPort: Number.NaN } });
+    expect(backendPort(9010)).toBe(9010);
   });
 });

@@ -10,6 +10,7 @@
 
 import { offsetOfLine, type RunSnapshot } from './diagnosticLocation';
 import { isVhdlFile } from './fileKinds';
+import { uniqueNearest } from './nearestWord';
 import { applyTextEdit, splitLines, type TextEdit } from './textLines';
 import {
   architectureHeaders,
@@ -68,6 +69,11 @@ export interface PasteTarget {
   readonly fileId: string;
   readonly selectionStart: number;
   readonly selectionEnd: number;
+}
+
+/** Whether one of `architectures` is in a file other than the one pasted into: deleting it there cannot be undone with Ctrl+Z. */
+export function inAnotherFile(architectures: readonly ExistingArchitecture[], targetFileId: string): boolean {
+  return architectures.some((a) => a.fileId !== targetFileId);
 }
 
 /** What the answers make of the paste: the text that goes in, and the architectures deleted. */
@@ -167,10 +173,15 @@ export function foundAsRenamed(found: FoundBothWays, renameApplied: boolean): re
   return renameApplied ? found.renamed : found.asPasted;
 }
 
-/** The entity to offer for an unknown one: the target file's own entity, else the one probably meant. */
+/**
+ * The entity to offer for an unknown one: a near spelling of a declared entity
+ * (`countr` → `counter`), else the target file's own entity (a chat's
+ * `de1_soc_top` pasted into DE1_SoC.vhd), else the only entity there is.
+ */
 function entityToOffer(unknown: string, targetFile: ProjectFile, declared: readonly string[]): string | undefined {
   const own = entityHeaders(targetFile.content);
-  return own.length === 1 ? own[0].name : suggestedEntityName(unknown, declared);
+  const ownEntity = own.length === 1 ? own[0].name : undefined;
+  return uniqueNearest(unknown, declared) ?? ownEntity ?? suggestedEntityName(unknown, declared);
 }
 
 /**

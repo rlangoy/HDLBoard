@@ -16,6 +16,7 @@ directories:
 # GHDL and Icarus are extraResources instead — see below.
 files:
   - main.js
+  - backendPort.js
   - package.json
 
 # These sit next to app.asar rather than inside it, under

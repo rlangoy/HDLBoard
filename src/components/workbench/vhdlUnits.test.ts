@@ -48,6 +48,17 @@ describe('architectureLastLine', () => {
   test('is the header itself for an architecture on one line', () => {
     expect(architectureLastLine(lines, 12)).toBe(12);
   });
+
+  test('ends one still missing its end before the next architecture', () => {
+    const unfinished = splitLines(`architecture a of e is
+begin
+
+architecture b of e is
+begin
+end architecture;
+`);
+    expect(architectureLastLine(unfinished, 1)).toBe(3);
+  });
 });
 
 describe('sameName', () => {

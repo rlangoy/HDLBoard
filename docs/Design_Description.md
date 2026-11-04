@@ -976,7 +976,8 @@ component work in §§ 1–7 is one half of it; this is the other.
   reference renders, at the `#gallery` route.
 - **Windows desktop build** — a one-file installer that bundles the
   frontend, the backend, GHDL and Icarus Verilog (`winInstaller/README.md`). The desktop app
-  serves the same frontend to itself on `127.0.0.1:9010`; nothing is
+  serves the same frontend to itself on `127.0.0.1:9010` (a second copy running
+  at the same time on 9011, and so on); nothing is
   reimplemented and nothing is exposed to the network.
 - **LAN access** — in the browser build both servers bind to `0.0.0.0`, and
   the backend host is resolved relative to the hostname the page was loaded

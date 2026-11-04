@@ -19,6 +19,8 @@ import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayou
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { useBouncyOption } from './useBouncyOption';
+import { useUpdateCheck } from './useUpdateCheck';
+import { UpdateBell } from './UpdateBell';
 import { BoardFit } from './BoardFit';
 import { loadPreferredBoard, preferredBoardIn } from '../../boards/preferredBoard';
 import { BoardIoPanel } from './BoardIoPanel';
@@ -82,7 +84,7 @@ import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagn
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { downloadProjectArchive, downloadSourceFile } from './download';
-import { confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
+import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { ProjectPage } from './ProjectPage';
 import { BoardSettingsPage } from './BoardSettingsPage';
 import { BoardDraftIo } from './boardEditor/BoardDraftIo';
@@ -166,9 +168,12 @@ import './Workbench.css';
 // The default must match the backend's own (server/src/settings.ts).
 // Built with it set but empty (Docker, Render), Number('') is 0 and the page
 // connects to its own origin, where a reverse proxy forwards /hdlsim.
+// The Windows app says which port its own backend got, as a second copy
+// of the app running at the same time gets the next free one.
 const DEFAULT_WS_PORT = 9010;
 const HDL_WS_PORT =
-  Number(import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT) || undefined;
+  backendPort(Number(import.meta.env.VITE_HDL_WS_PORT ?? import.meta.env.VITE_GHDL_WS_PORT ?? DEFAULT_WS_PORT)) ||
+  undefined;
 
 /** Which testbench a run runs, as the waveform view keeps it: its file and unit. */
 const runSource = (fileId: string | null, unitName: string | null): string => `${fileId ?? ''}|${unitName ?? ''}`;
@@ -347,6 +352,8 @@ export function Workbench() {
   const catalog = useBoards(project.boardConfig, project.board);
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
   const bouncyOption = useBouncyOption();
+  // Settings › Updates: the bell in the header while a newer release is out.
+  const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
@@ -1802,6 +1809,13 @@ export function Workbench() {
         onAbout={() => setDialog('about')}
         onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
+        notifications={
+          <UpdateBell
+            release={updateCheck.newerRelease}
+            checkEnabled={updateCheck.enabled}
+            onCheckEnabledChange={updateCheck.setEnabled}
+          />
+        }
         gitHubActions={
           gitHubShare.visible && (
             <GitHubSplitButton
@@ -1837,6 +1851,8 @@ export function Workbench() {
         onRecordWavesChange={waveView.waveform.setRecording}
         bouncyButtons={bouncyOption.enabled}
         onBouncyButtonsChange={bouncyOption.setEnabled}
+        checkForUpdates={updateCheck.enabled}
+        onCheckForUpdatesChange={updateCheck.setEnabled}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} board={activeBoard} />
       {boardChange.pending && (
@@ -1852,7 +1868,11 @@ export function Workbench() {
       )}
       <NoWaveformDialog {...waveView.dialog} />
       <PickerWaitNotice phase={pickerWait.phase} />
-      <AboutDialog open={dialog === 'about'} onClose={() => setDialog(null)} />
+      <AboutDialog
+        open={dialog === 'about'}
+        onClose={() => setDialog(null)}
+        updates={{ status: updateCheck.status, onCheck: updateCheck.checkNow }}
+      />
       {overwriteAsk && (
         <OverwriteDialog
           paths={overwriteAsk.paths}

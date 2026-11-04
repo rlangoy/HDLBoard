@@ -14,6 +14,8 @@ import { architectureAbove } from './vhdlStructure';
 const ENTITY_HEADER = /^\s*entity\s+(?<name>\w+)\s+is\b/i;
 /** `before` runs up to the entity name, so its length is where that name starts. */
 const ARCHITECTURE_HEADER = /^(?<before>\s*architecture\s+(?<name>\w+)\s+of\s+)(?<entity>\w+)\s+is\b/i;
+const PACKAGE_HEADER = /^\s*package\s+(?:body\s+)?\w+\s+is\b/i;
+const UNIT_HEADERS = [ENTITY_HEADER, ARCHITECTURE_HEADER, PACKAGE_HEADER];
 
 export interface EntityHeader {
   readonly name: string;
@@ -60,14 +62,26 @@ export function architectureHeaders(content: string): ArchitectureHeader[] {
   });
 }
 
+function startsDesignUnit(text: string): boolean {
+  const code = codeOf(text);
+  return UNIT_HEADERS.some((header) => header.test(code));
+}
+
+/** The first line after `headerLine` that starts another entity, architecture or package; past the end when none. */
+function nextDesignUnitLine(lines: readonly string[], headerLine: number): number {
+  const index = lines.findIndex((text, i) => i >= headerLine && startsDesignUnit(text));
+  return index === -1 ? lines.length + 1 : index + 1;
+}
+
 /**
  * The last line of the architecture whose header is on `headerLine` (its
- * `end architecture;`). An architecture is open from its header to its end and
- * never again, so the first line it no longer encloses is found by halving.
+ * `end architecture;`). Up to the next design unit, an architecture is open from
+ * its header to its end and never again, so the first line it no longer encloses
+ * is found by halving. One still missing its `end` ends before the next unit.
  */
 export function architectureLastLine(lines: readonly string[], headerLine: number): number {
   let inside = headerLine;
-  let outside = lines.length + 1;
+  let outside = nextDesignUnitLine(lines, headerLine);
   while (outside - inside > 1) {
     const middle = Math.floor((inside + outside) / 2);
     if (architectureAbove(lines, middle)?.line === headerLine) inside = middle;

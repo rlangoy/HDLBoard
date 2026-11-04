@@ -67,6 +67,18 @@ const NEW_CODE = [
   'src/components/workbench/appDefaults.test.ts',
   'src/components/workbench/useBouncyOption.ts',
   'src/components/workbench/useBouncyOption.test.ts',
+  // Settings › Updates: the update check, the header's bell and About › Updates.
+  'src/components/workbench/releaseVersion.ts',
+  'src/components/workbench/releaseVersion.test.ts',
+  'src/components/workbench/latestRelease.ts',
+  'src/components/workbench/latestRelease.test.ts',
+  'src/components/workbench/useUpdateCheck.ts',
+  'src/components/workbench/useUpdateCheck.test.ts',
+  'src/components/workbench/UpdateBell.tsx',
+  'src/components/workbench/UpdateBell.test.tsx',
+  'src/components/workbench/storedChoice.ts',
+  'src/components/workbench/errorText.ts',
+  'src/components/workbench/codeMarkup.ts',
   // Unknown entity Quick Fix, duplicate architectures and the Paste architecture dialog.
   'src/components/workbench/entityNameFix.ts',
   'src/components/workbench/entityNameFix.test.ts',

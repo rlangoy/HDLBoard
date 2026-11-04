@@ -2,13 +2,67 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { Dialog } from './Dialog';
+import { ExternalLink } from './ExternalLink';
 import { LOGO_DATA_URI } from './logo';
 import { APP_NAME, ELECTRON_URL, GHDL_URL, ICARUS_URL, REACT_URL, REPO_URL, TYPESCRIPT_URL, VITE_URL, WS_URL } from './project';
+import type { UpdateStatus } from './useUpdateCheck';
 import './AboutDialog.css';
 
 export interface AboutDialogProps {
   open: boolean;
   onClose: () => void;
+  /** About › Updates: what the last update check found, and a way to check again (useUpdateCheck.ts). Left out: no Updates row. */
+  updates?: UpdateCheckView;
+}
+
+export interface UpdateCheckView {
+  readonly status: UpdateStatus;
+  /** Asks GitHub now, even with the start-up check off: the user asked. */
+  readonly onCheck: () => void;
+}
+
+const CHECK_LABEL: Record<UpdateStatus['kind'], string> = {
+  unchecked: 'Check now',
+  checking: 'Checking…',
+  upToDate: 'Check again',
+  available: 'Check again',
+  failed: 'Try again',
+};
+
+function UpdateStatusMessage({ status }: { status: UpdateStatus }) {
+  switch (status.kind) {
+    case 'unchecked':
+      return <>Not checked yet.</>;
+    case 'checking':
+      return <>Asking GitHub for the latest release.</>;
+    case 'upToDate':
+      return <>Up to date &mdash; the latest release is v{status.latest.version}.</>;
+    case 'available':
+      return (
+        <>
+          <strong>v{status.latest.version} is available.</strong>{' '}
+          <ExternalLink href={status.latest.url}>View release</ExternalLink>
+        </>
+      );
+    case 'failed':
+      return <>Could not check for updates ({status.reason}).</>;
+  }
+}
+
+/**
+ * Whether this is the latest version, and a button to find out (again). The button
+ * stays while a check runs, inert, so a keyboard user's focus stays on it.
+ */
+export function UpdateStatusText({ status, onCheck }: UpdateCheckView) {
+  const checking = status.kind === 'checking';
+  return (
+    <>
+      <UpdateStatusMessage status={status} />{' '}
+      <button type="button" className="wb-about__check" aria-disabled={checking || undefined} onClick={checking ? undefined : onCheck}>
+        {CHECK_LABEL[status.kind]}
+      </button>
+    </>
+  );
 }
 
 /**
@@ -16,7 +70,7 @@ export interface AboutDialogProps {
  * it, under what terms, and — expected of a GPL program with an
  * interactive interface — that it comes with no warranty.
  */
-export function AboutDialog({ open, onClose }: AboutDialogProps) {
+export function AboutDialog({ open, onClose, updates }: AboutDialogProps) {
   return (
     <Dialog
       open={open}
@@ -33,6 +87,14 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       </p>
 
       <dl className="wb-about__facts">
+        {updates && (
+          <div className="wb-about__fact">
+            <dt>Updates</dt>
+            <dd aria-live="polite">
+              <UpdateStatusText {...updates} />
+            </dd>
+          </div>
+        )}
         <div className="wb-about__fact">
           <dt>Source code</dt>
           <dd>

@@ -89,9 +89,11 @@ export function usePastedArchitecture(
     return filesForRun(project, name);
   };
 
-  const offer = (text: string, selectionStart: number, selectionEnd: number): boolean => {
+  const offer = (pasted: string, selectionStart: number, selectionEnd: number): boolean => {
     const typed = textareaRef.current?.value;
     if (typed === undefined) return false;
+    // The textarea holds LF line ends only; clipboard CRLF (Windows) would shift every offset after it.
+    const text = pasted.replace(/\r\n?/g, '\n');
     const target = { fileId, selectionStart, selectionEnd };
     const questions = pasteQuestions(text, target, runFilesAsTyped(typed));
     if (questions === undefined) return false;
