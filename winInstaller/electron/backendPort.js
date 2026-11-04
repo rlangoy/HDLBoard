@@ -15,8 +15,13 @@ const BACKEND_PORT_COUNT = 10;
 
 const BACKEND_PORTS = Array.from({ length: BACKEND_PORT_COUNT }, (_, i) => FIRST_BACKEND_PORT + i);
 
-function isPortInUse(err) {
-  return Boolean(err) && err.code === 'EADDRINUSE';
+/**
+ * Taken by another program (EADDRINUSE), or reserved by Windows (EACCES): Hyper-V and
+ * WSL reserve port ranges that no program may listen on (`netsh int ipv4 show
+ * excludedportrange protocol=tcp`).
+ */
+function isPortUnavailable(err) {
+  return Boolean(err) && (err.code === 'EADDRINUSE' || err.code === 'EACCES');
 }
 
 /** Resolves once the failed backend has let go of everything it opened. */
@@ -26,12 +31,12 @@ function stopped(handle) {
 
 /**
  * Starts the backend on the first of `ports` that is free and returns its handle.
- * `start(port)` starts one and returns a handle whose `ready` rejects with
- * EADDRINUSE when that port is taken. Any other error ends the search at once;
- * when every port is taken, the last EADDRINUSE is the answer.
+ * `start(port)` starts one and returns a handle whose `ready` rejects when it cannot
+ * listen. A port that is unavailable is skipped; any other error ends the search at
+ * once. When no port is available, the last port's error is the answer.
  */
 async function startOnFirstFreePort(start, ports = BACKEND_PORTS) {
-  let portInUse = new Error('no ports to try');
+  let unavailable = new Error('no ports to try');
   for (const port of ports) {
     const handle = start(port);
     try {
@@ -39,11 +44,11 @@ async function startOnFirstFreePort(start, ports = BACKEND_PORTS) {
       return handle;
     } catch (err) {
       await stopped(handle);
-      if (!isPortInUse(err)) throw err;
-      portInUse = err;
+      if (!isPortUnavailable(err)) throw err;
+      unavailable = err;
     }
   }
-  throw portInUse;
+  throw unavailable;
 }
 
-module.exports = { BACKEND_PORTS, isPortInUse, startOnFirstFreePort };
+module.exports = { BACKEND_PORTS, isPortUnavailable, startOnFirstFreePort };

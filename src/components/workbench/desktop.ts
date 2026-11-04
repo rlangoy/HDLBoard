@@ -85,7 +85,7 @@ export function desktopBridge(): HdlBoardBridge | undefined {
 /** The backend's port: the one the Windows app's backend got, else `builtInPort` (the page's build setting). */
 export function backendPort(builtInPort: number): number {
   const port = desktopBridge()?.backendPort;
-  return Number.isInteger(port) ? (port as number) : builtInPort;
+  return typeof port === 'number' && Number.isInteger(port) ? port : builtInPort;
 }
 
 /**

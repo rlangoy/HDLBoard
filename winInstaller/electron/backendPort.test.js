@@ -37,9 +37,11 @@ function closed(handle) {
   return new Promise((resolve) => handle.stop(resolve));
 }
 
+const FREE_PORT_ATTEMPTS = 20;
+
 /** `count` free ports in a row, starting where the system finds a free one. */
 async function freePortsInARow(count) {
-  for (;;) {
+  for (let attempt = 0; attempt < FREE_PORT_ATTEMPTS; attempt++) {
     const probe = await listening(0);
     await closed(probe);
     const ports = Array.from({ length: count }, (_, i) => probe.port + i);
@@ -53,11 +55,12 @@ async function freePortsInARow(count) {
       await Promise.all(held.map(closed));
     }
   }
+  throw new Error(`found no ${count} free ports in a row`);
 }
 
-/** A handle that fails the way a backend on a taken port does. */
-function portInUseHandle(port, onStop) {
-  const err = Object.assign(new Error(`listen EADDRINUSE ${port}`), { code: 'EADDRINUSE' });
+/** A handle whose listen failed with `code`, as a backend's does. */
+function failedHandle(port, code, onStop = () => {}) {
+  const err = Object.assign(new Error(`listen ${code} ${port}`), { code });
   return { port, ready: Promise.reject(err), stop: (onClosed) => (onStop(port), onClosed()) };
 }
 
@@ -95,11 +98,19 @@ describe('startOnFirstFreePort', () => {
 
   test('stops each backend that could not get its port', async () => {
     const stoppedPorts = [];
-    const start = (port) => (port === 2 ? { port, ready: Promise.resolve() } : portInUseHandle(port, (p) => stoppedPorts.push(p)));
+    const start = (port) => (port === 2 ? { port, ready: Promise.resolve() } : failedHandle(port, 'EADDRINUSE', (p) => stoppedPorts.push(p)));
 
     await startOnFirstFreePort(start, [0, 1, 2]);
 
     assert.deepEqual(stoppedPorts, [0, 1]);
+  });
+
+  test('skips a port Windows has reserved', async () => {
+    const start = (port) => (port === 2 ? { port, ready: Promise.resolve() } : failedHandle(port, 'EACCES'));
+
+    const backend = await startOnFirstFreePort(start, [1, 2]);
+
+    assert.equal(backend.port, 2);
   });
 
   test('gives up at once on any other startup error', async () => {

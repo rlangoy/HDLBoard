@@ -19,9 +19,11 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, session,
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
-const { BACKEND_PORTS, isPortInUse, startOnFirstFreePort } = require('./backendPort');
+const { BACKEND_PORTS, isPortUnavailable, startOnFirstFreePort } = require('./backendPort');
 
 let backend = null;
+// Set once the backend listens, and kept after it stops: the page still saves on its way out.
+let appOrigin = null;
 let mainWindow = null;
 let logStream = null;
 
@@ -210,13 +212,9 @@ function fromApp(event) {
   if (!isAppUrl(url)) throw new Error(`IPC refused from ${url}`);
 }
 
-/** The page this copy of the app serves itself, on the port its backend got (backendPort.js). */
-function appOrigin() {
-  return `http://127.0.0.1:${backend.port}/`;
-}
-
+/** Whether `url` is on the page this copy of the app serves itself, on the port its backend got (backendPort.js). */
 function isAppUrl(url) {
-  return backend !== null && url.startsWith(appOrigin());
+  return appOrigin !== null && url.startsWith(appOrigin);
 }
 
 // Open Project / Save project by path: only project and source files, only by a full
@@ -615,16 +613,17 @@ function openInBrowser(url) {
   if (/^https:\/\//i.test(url)) shell.openExternal(url);
 }
 
-function showPortsInUseDialog() {
+function showNoFreePortDialog() {
   const first = BACKEND_PORTS[0];
   const last = BACKEND_PORTS[BACKEND_PORTS.length - 1];
   dialog.showErrorBox(
-    `Ports ${first}–${last} are all in use`,
-    `HDLBoard needs one of the ports ${first}–${last}, but something else is listening on every one of them.\n\n` +
+    `No free port for HDLBoard (${first}–${last})`,
+    `HDLBoard needs one of the ports ${first}–${last}, but none of them is free.\n\n` +
       'The usual causes are:\n' +
       `  • ${BACKEND_PORTS.length} copies of this app are already running — look for them in the taskbar;\n` +
-      `  • development servers (scripts/start.sh, or "node server/dist/server.js") are running.\n\n` +
-      'Close one of them and start the app again.',
+      `  • development servers (scripts/start.sh, or "node server/dist/server.js") are running;\n` +
+      '  • Windows has reserved the ports (for Hyper-V or WSL).\n\n' +
+      'Close a copy or a server and start the app again.',
   );
 }
 
@@ -699,9 +698,10 @@ app.whenReady().then(async () => {
 
   try {
     backend = await startBackendOrDie(paths);
+    appOrigin = `http://127.0.0.1:${backend.port}/`;
   } catch (err) {
     console.error(`backend failed to start: ${err && err.stack ? err.stack : String(err)}`);
-    if (isPortInUse(err)) showPortsInUseDialog();
+    if (isPortUnavailable(err)) showNoFreePortDialog();
     else dialog.showErrorBox('HDLBoard could not start', `${String(err)}\n\nLog: ${logPath}`);
     app.quit();
     return;
@@ -754,7 +754,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  await mainWindow.loadURL(appOrigin());
+  await mainWindow.loadURL(appOrigin);
   console.log('window loaded');
 });
 
