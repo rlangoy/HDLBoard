@@ -31,8 +31,8 @@ import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
 import { resolveGhdlExe } from './ghdlPath.js';
 import { setToolPaths } from './verilog/tools.js';
-import { resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
-import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
+import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
+import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
 import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
@@ -208,12 +208,19 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   // Before anything can spawn.
   const ghdlExe = resolveGhdlExe(process.env, opts);
   setGhdlExe(ghdlExe);
-  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), windowsShortPath);
+  const shorten = process.platform === 'win32' ? windowsShortPath : posixLinkPath;
+  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), shorten);
   setToolPaths(iverilogTools);
   if (process.platform === 'win32' && iverilogTools.bundledDir !== undefined && hasSpace(iverilogTools.bundledDir)) {
     console.warn(
       `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space and has no 8.3 short name; ` +
         'Verilog compiles will fail. Install HDLBoard to a folder without spaces.',
+    );
+  }
+  if (process.platform !== 'win32' && iverilogTools.bundledDir !== undefined && hasShellSpecial(iverilogTools.bundledDir)) {
+    console.warn(
+      `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space or shell character and no link ` +
+        'to it could be made in the temporary directory; Verilog compiles will fail. Move HDLBoard to a plainer folder.',
     );
   }
 

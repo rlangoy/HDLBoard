@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test backendPort.test.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "dist:linux": "electron-builder --linux dir"
   },
   "devDependencies": {
     "electron": "^33.2.1",

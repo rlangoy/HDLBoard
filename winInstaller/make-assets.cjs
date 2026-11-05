@@ -6,6 +6,7 @@
  * chip/pins + "H" split as src/Images/hdlboard_logo.svg, see LOGO_*_PATH):
  *
  *   electron/build/icon.ico            app + installer icon, 7 sizes
+ *   electron/build/icon.png            Linux AppImage icon, 512x512
  *   electron/build/installerSidebar.bmp  NSIS welcome/finish panel, 164x314
  *
  * Run with Electron, not Node:
@@ -34,12 +35,15 @@ const { pathToFileURL } = require('node:url');
 const here = __dirname;
 const buildDir = join(here, 'electron', 'build');
 const icoPath = join(buildDir, 'icon.ico');
+const pngPath = join(buildDir, 'icon.png');
 const bmpPath = join(buildDir, 'installerSidebar.bmp');
 
 // Windows picks the nearest size for each context: 16 in title bars, 32 in
 // the taskbar, 48 in Explorer lists, 256 for the large-icon view and the
 // installer. Supplying them all means none of them is a scaled blur.
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
+// The size the AppImage and its .desktop entry carry; desktops scale it down.
+const LINUX_ICON_SIZE = 512;
 const MASTER = 1024;
 
 // Fixed by NSIS's MUI welcome/finish page bitmap slot.
@@ -206,8 +210,10 @@ app.whenReady().then(async () => {
     data: master.resize({ width: size, height: size, quality: 'best' }).toPNG(),
   }));
   writeFileSync(icoPath, buildIco(pngs));
-  iconWin.destroy();
   console.log(`icon.ico             (${SIZES.join(', ')} px)`);
+  writeFileSync(pngPath, master.resize({ width: LINUX_ICON_SIZE, height: LINUX_ICON_SIZE, quality: 'best' }).toPNG());
+  iconWin.destroy();
+  console.log(`icon.png             (${LINUX_ICON_SIZE} px)`);
 
   // --- installerSidebar.bmp --------------------------------------------
   const w = SIDEBAR_W * SIDEBAR_SCALE;

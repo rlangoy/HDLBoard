@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { createBatchHandle, createRunHandle, lineSplitter, runCommand } from './runtime.js';
+import { createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, runCommand } from './runtime.js';
 import { makeTempDir } from './testSupport/sessionDir.js';
 
 const SHORT_TIMEOUT_MS = 300;
@@ -148,5 +148,26 @@ describe('run handles', () => {
     );
     assert.notEqual(exit.code, 0);
     assert.match(exit.stderr, /ENOENT|no-such-program/);
+  });
+
+  /** Like `vvp` on a board: it ignores SIGTERM while blocked reading its next pacing grant. */
+  const IGNORES_TERM_WHILE_READING =
+    "process.on('SIGTERM', () => {}); process.stdin.on('end', () => process.exit(0)); process.stdin.resume();";
+
+  test('kill ends a persistent run that ignores SIGTERM while it waits on stdin, as vvp does', async () => {
+    const child = spawn(node, ['-e', IGNORES_TERM_WHILE_READING]);
+    const handle = createRunHandle(child);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    handle.kill();
+    assert.ok(await gone(child.pid as number), 'the run outlived kill()');
+  });
+
+  test('kill ends a run that ignores SIGTERM and stdin, after the grace period', { timeout: KILL_GRACE_MS + GONE_WAIT_MS * 2 }, async () => {
+    const child = spawn(node, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"]);
+    const handle = createRunHandle(child);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    handle.kill();
+    await new Promise((resolve) => setTimeout(resolve, KILL_GRACE_MS));
+    assert.ok(await gone(child.pid as number), 'the run outlived kill() and its grace period');
   });
 });

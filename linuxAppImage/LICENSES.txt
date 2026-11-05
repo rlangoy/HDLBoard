@@ -1,0 +1,25 @@
+HDLBoard for Linux (AppImage) - where the license texts are
+=============================================================
+
+Paths are relative to the AppImage's resources/ directory. To read them:
+  ./HDLBoard-*.AppImage --appimage-extract
+then look in squashfs-root/resources/.
+
+  HDLBoard                licenses/HDLBoard-LICENSE.txt
+                          GPL-2.0-only. Source: https://github.com/rlangoy/HDLBoard
+
+  GHDL 6.0.0 (mcode)      ghdl/COPYING
+                          GPL-2.0-or-later. Source: https://github.com/ghdl/ghdl/tree/v6.0.0
+  IEEE VHDL libraries     ghdl/lib/ghdl/src/ieee2008/LICENSE (and the header of each
+                          file under ghdl/lib/ghdl/src/)
+
+  Icarus Verilog 13.0     iverilog/COPYING
+                          GPL-2.0-or-later. Built from the unmodified source tarball
+                          named in iverilog/VERSION.txt; the same tarball is attached
+                          to each HDLBoard release on GitHub.
+
+  Electron, Chromium,     ../LICENSE.electron.txt and ../LICENSES.chromium.html
+  Node.js                 (beside the hdlboard program)
+
+The simulators are run as separate programs; no other library is bundled
+with them (see ghdl/VERSION.txt and iverilog/VERSION.txt).

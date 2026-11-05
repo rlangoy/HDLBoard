@@ -72,17 +72,31 @@ export function resolveToolPaths(
   return dir === undefined ? explicitTools(env, options, platform) : bundled(dir, platform);
 }
 
+/** What `sh` would split or expand in a word that is not quoted. */
+const SHELL_SPECIAL = /[\s"'\\$`;&|<>()*?[\]#~!{}]/;
+
+export function hasShellSpecial(path: string): boolean {
+  return SHELL_SPECIAL.test(path);
+}
+
+/** Whether `iverilog` can run its compiler from `dir`, which it passes on unquoted. */
+function isUsableAsBase(dir: string, platform: NodeJS.Platform): boolean {
+  return platform === 'win32' ? !/\s/.test(dir) : !hasShellSpecial(dir);
+}
+
 /**
- * The same bundled tree, named by a path `iverilog` can use: on Windows, `shorten`
- * (the 8.3 short form, `shortPath.ts`) replaces a directory containing a space, because
- * `iverilog` passes `-B` unquoted to `cmd.exe`. Anything else comes back unchanged.
+ * The same bundled tree, named by a path `iverilog` can use. `iverilog` passes `-B`
+ * unquoted to `cmd.exe` on Windows and to `sh` elsewhere, so `shorten` (`shortPath.ts`:
+ * the 8.3 short form, or a symbolic link on Linux) replaces a directory with a space,
+ * or on Linux any other character the shell would split or expand. Anything else comes
+ * back unchanged.
  */
 export function withUsableBundledDir(
   paths: ToolPaths,
   shorten: (dir: string) => string,
   platform: NodeJS.Platform = process.platform,
 ): ToolPaths {
-  if (platform !== 'win32' || paths.bundledDir === undefined || !/\s/.test(paths.bundledDir)) return paths;
+  if (paths.bundledDir === undefined || isUsableAsBase(paths.bundledDir, platform)) return paths;
   const short = shorten(paths.bundledDir);
   return short === paths.bundledDir ? paths : bundled(short, platform);
 }

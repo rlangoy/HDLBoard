@@ -150,6 +150,28 @@ function stopDelivering(child: ChildProcessWithoutNullStreams): void {
   child.stderr.removeAllListeners('data');
 }
 
+/** How long a stopped simulation gets to end by itself before it is killed outright. */
+export const KILL_GRACE_MS = 2_000;
+
+/**
+ * Stops a simulation for good. SIGTERM alone is not enough on POSIX: `vvp` catches it
+ * and only finishes once its scheduler next runs (Icarus `vvp/schedule.cc`), which
+ * never happens while a paced board run sits blocked reading its next grant from
+ * stdin, so it would outlive its session. Closing stdin ends that read; a process
+ * still alive after KILL_GRACE_MS (a design looping without delay) gets SIGKILL. On
+ * Windows `kill()` already ends the process outright.
+ */
+function terminate(child: ChildProcessWithoutNullStreams): void {
+  stopDelivering(child);
+  child.stdin.destroy();
+  child.kill('SIGTERM');
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const backstop = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+  // Never what keeps the backend (or a test) running.
+  backstop.unref();
+  child.once('exit', () => clearTimeout(backstop));
+}
+
 /**
  * Wraps a running child as a `RunHandle` — the persistent, free-running simulation
  * that lives until `kill()` (Stop, Reset, session teardown).
@@ -176,10 +198,7 @@ export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandl
   child.on('close', (code) => exitCallbacks.forEach((callback) => callback(code, stderr)));
 
   return {
-    kill: () => {
-      stopDelivering(child);
-      child.kill('SIGTERM');
-    },
+    kill: () => terminate(child),
     onExit: (callback) => exitCallbacks.push(callback),
     onOutput: (callback) => outputCallbacks.push(callback),
     grantPacing: (lines) => {
@@ -223,8 +242,7 @@ export function createBatchHandle(
   return {
     kill: () => {
       clearTimeout(timer);
-      stopDelivering(child);
-      child.kill('SIGTERM');
+      terminate(child);
     },
     done,
   };

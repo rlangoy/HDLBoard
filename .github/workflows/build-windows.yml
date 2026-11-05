@@ -15,7 +15,8 @@
 #
 # A new release is created as a DRAFT: check the installer, edit the notes,
 # then press "Publish release". If the release already exists (it was made in
-# the GitHub UI first), the installer is uploaded to it and nothing else changes.
+# the GitHub UI first, or by build-linux.yml on the same tag), the installer is
+# uploaded to it and nothing else changes.
 
 name: Build Windows installer
 
@@ -140,5 +141,12 @@ jobs:
             $flags = @("--draft", "--verify-tag", "--generate-notes", "--title", "HDLBoard $env:VERSION")
             if ($env:PRERELEASE -eq "true") { $flags += "--prerelease" }
             gh release create $env:TAG $exe @flags
+            # build-linux.yml runs on the same tag; if it made the draft first,
+            # this create fails and the installer goes into that draft instead.
+            for ($attempt = 1; $LASTEXITCODE -ne 0 -and $attempt -le 5; $attempt++) {
+              Write-Host "Release not created (attempt $attempt) - it probably exists now; uploading into it"
+              Start-Sleep -Seconds (5 * $attempt)
+              gh release upload $env:TAG $exe --clobber
+            }
           }
           if ($LASTEXITCODE -ne 0) { throw "gh release failed (exit $LASTEXITCODE)" }
