@@ -219,6 +219,8 @@ p { margin: 0; }
   color: var(--muted);
 }
 .hero .actions { padding-top: 8px; }
+.hero-action { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 0.9375rem; }
+.hero-action .btn { justify-content: center; }
 .hero-note { max-width: 620px; margin-top: -12px; font-size: 1rem; color: var(--muted); }
 .hero-sub { margin-top: -10px; font-size: 0.9375rem; color: var(--muted); }
 .btn .live-dot { margin-right: 2px; }
@@ -573,7 +575,7 @@ p { margin: 0; }
 .classroom-intro p { max-width: 720px; font-size: 1.25rem; line-height: 1.6; color: var(--band-text); }
 .paths {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 20px;
   margin: 56px 0 0;
   padding: 0;
