@@ -61,7 +61,7 @@ import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } fro
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { HdlClient, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { BUSY_STAGE, HdlClient, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
 import { useWaveformView } from '../waveform/useWaveformView';
 import { useProjectWaveViews } from './useProjectWaveViews';
@@ -563,7 +563,13 @@ export function Workbench() {
           if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
         onError: (stage, text) => {
-          if (!takeFlag(quietEnd)) {
+          const quiet = takeFlag(quietEnd);
+          if (stage === BUSY_STAGE) {
+            // The server is full (refused, or closed for another student): its own words, and the download as a link.
+            const notice = busyNotice(text);
+            const url = notice.url;
+            logWithLink(notice.text, url === undefined ? undefined : { label: 'Download HDLBoard', onClick: () => window.open(url, '_blank', 'noopener') }, 'error');
+          } else if (!quiet) {
             appendLog(`${stage} error:\n${withBoardName(text, activeBoardName.current)}`, 'error');
             const advised = recordErrorDiagnostics(text, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
@@ -598,7 +604,7 @@ export function Workbench() {
       });
     }
     return clientRef.current;
-  }, [appendLog, blankBoard, boardIo.stimBits, boardIo.showState, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
+  }, [appendLog, logWithLink, blankBoard, boardIo.stimBits, boardIo.showState, recordDiagnostics, recordErrorDiagnostics, revealFirstError, waveHandlers, endRunWaveform, boardStateSeen]);
 
   useEffect(
     () => () => {

@@ -36,7 +36,9 @@ export interface StimStep {
   readonly holdNs?: number;
 }
 
-export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal';
+// 'busy': the server is full — this connection was refused, or closed to make room for a
+// new one (sessionLimit.ts). The server closes the socket right after it.
+export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'internal' | 'busy';
 // 'completed': a batch-mode (portless-entity) run reached its own natural
 // end on its own — distinct from 'stopped' (the user clicked Stop) so the
 // frontend can tell "your design finished" from "you ended the session".
@@ -303,7 +305,7 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
       return { verb: 'LOG', text: body };
     case 'ERROR': {
       const stage = inline as ErrorStage;
-      if (!['analyze', 'elaborate', 'runtime', 'protocol', 'internal'].includes(stage)) {
+      if (!['analyze', 'elaborate', 'runtime', 'protocol', 'internal', 'busy'].includes(stage)) {
         return { message: `ERROR has an unknown stage: ${JSON.stringify(inline)}` };
       }
       return { verb: 'ERROR', stage, text: body };

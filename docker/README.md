@@ -67,6 +67,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 |---|---|---|
 | `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. The page connects back to whatever origin it was loaded from, so no rebuild is needed |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused (the older name `GHDL_MAX_SESSIONS` is still read) |
+| `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server, a session open this long is closed to make room for a new one, and its student told why; `0` refuses the new one instead |
 | `GHDL_REF` | `master` | GHDL branch or tag to build, for example `v6.0.0` for a pinned release |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 | `HDLBOARD_BOUNCY_BUTTONS` | `false` | Start-up default of Settings › Pushbuttons › *Offer bouncy pushbuttons*, written to the page's `settings.json` ([SETTINGS.md](../docs/SETTINGS.md)). `true` offers Bouncy contacts. A student's own choice in Settings still wins. Needs a rebuild (`--build`) |
@@ -105,6 +106,10 @@ and build context `.` (the repository root). Leave `PORT` unset, or set it to
   At roughly 150 MB and one core per active simulation, that is two or three
   students at once, so the stage sets `HDL_MAX_SESSIONS=4`. Raise it on a
   bigger instance. Fine for a demo, not for a full lab session.
+- **A full instance.** A fifth student does not wait for a tab to close: a
+  session open 9 minutes or more (`HDL_REPLACE_AFTER_MINUTES`) is closed to
+  make room, an idle one first, and its student is told the server is under
+  heavy load, with a link to download the offline version.
 - **Bouncy pushbuttons are not offered** by default (`HDLBOARD_BOUNCY_BUTTONS`
   in the Dockerfile's `page-build` stage). Change that default in the
   Dockerfile to offer them.

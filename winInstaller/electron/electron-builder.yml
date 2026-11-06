@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 Rune Langøy
 #
-# Packaging for the Windows desktop build. Everything under `resources/`
+# Packaging for the desktop builds (Windows installer, Linux AppImage). Everything under `resources/`
 # is produced by ../build.ps1 and is gitignored — never hand-edited.
 
 appId: no.usn.hdl-board
@@ -46,6 +46,22 @@ extraResources:
 extraFiles:
   - from: ../../LICENSE
     to: LICENSE
+
+# Linux: electron-builder lays the app out (`dir`, in linux-unpacked/) and
+# linuxAppImage/build.sh packs that into the AppImage itself, for two things
+# electron-builder 25's AppImage target cannot do: its own AppRun, which turns
+# the Chromium sandbox off only where Ubuntu 24.04 forbids it, and a static
+# AppImage runtime that needs no libfuse2. See linuxAppImage/README.md.
+linux:
+  target: dir
+  executableName: hdlboard
+  icon: build/icon.png
+  category: Development
+  # There is no installer page to show licenses on, so they sit beside the
+  # simulators' own (ghdl/COPYING, iverilog/COPYING) under resources/.
+  extraResources:
+    - from: ../../LICENSE
+      to: licenses/HDLBoard-LICENSE.txt
 
 win:
   target: nsis

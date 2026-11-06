@@ -18,8 +18,14 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { BACKEND_PORTS, isPortUnavailable, startOnFirstFreePort } = require('./backendPort');
+
+// Linux: ~/.config/HDLBoard (or $XDG_CONFIG_HOME/HDLBoard), the folder the
+// README names, rather than one named after the npm package. Windows keeps
+// the folder it has always used, so no installed copy loses its settings.
+if (process.platform === 'linux') app.setPath('userData', path.join(app.getPath('appData'), 'HDLBoard'));
 
 let backend = null;
 // Set once the backend listens, and kept after it stops: the page still saves on its way out.
@@ -686,6 +692,7 @@ async function startBackendOrDie(paths) {
 
 app.whenReady().then(async () => {
   const logPath = initLogging();
+  if (process.platform === 'linux') logLinuxSandbox();
   const paths = resolvePaths();
   console.log(`frontend: ${paths.frontend}`);
   console.log(`backend:  ${paths.backend}`);
@@ -756,7 +763,64 @@ app.whenReady().then(async () => {
 
   await mainWindow.loadURL(appOrigin);
   console.log('window loaded');
+
+  if (process.platform === 'linux' && app.isPackaged) {
+    checkLinuxSimulators(paths, logPath).catch((err) => console.error(`simulator check failed: ${err && err.stack ? err.stack : err}`));
+  }
 });
+
+/**
+ * The AppImage's AppRun (linuxAppImage/AppRun) adds --no-sandbox only where
+ * user namespaces are unavailable, as on a default Ubuntu 24.04 desktop.
+ * Logged so a bug report shows which way this launch went.
+ */
+function logLinuxSandbox() {
+  const off = app.commandLine.hasSwitch('no-sandbox');
+  const reason = process.env.HDLBOARD_SANDBOX_REASON;
+  console.log(`chromium sandbox: ${off ? 'off (--no-sandbox)' : 'on'}${reason ? ` - ${reason}` : ''}`);
+}
+
+/** Runs `exe args`; resolves to null when it exits 0, else to what went wrong. */
+function failureOf(exe, args) {
+  return new Promise((resolve) => {
+    execFile(exe, args, { timeout: 15000 }, (err, stdout, stderr) => {
+      if (!err) return resolve(null);
+      const detail = String(stderr || stdout).trim().split('\n').slice(0, 3).join('\n');
+      resolve(`${exe} ${args.join(' ')}: ${err.code ?? err.signal ?? err.message}${detail ? `\n${detail}` : ''}`);
+    });
+  });
+}
+
+/**
+ * Starts each bundled simulator once (`--version`) after the window is up,
+ * and names the one that cannot run: a tree that lost its execute bits, or a
+ * library missing on this distribution, would otherwise only show as an
+ * obscure failure on the first RUN. Never falls back to a system copy.
+ * `vvp` stands in for Icarus: `iverilog -V` runs its compiler through `sh`
+ * and needs the backend's own handling of an awkward install path.
+ */
+async function checkLinuxSimulators(paths, logPath) {
+  // What the backend will run: the bundled trees, unless --ghdl-exe / --iverilog-dir said otherwise.
+  const ghdl = paths.ghdlDir ? path.join(paths.ghdlDir, 'bin', 'ghdl') : paths.ghdlExe;
+  const vvp = paths.iverilogDir ? path.join(paths.iverilogDir, 'vvp') : undefined;
+  const checks = [
+    { name: 'GHDL', language: 'VHDL', exe: ghdl, args: ['--version'] },
+    { name: 'Icarus Verilog', language: 'Verilog', exe: vvp, args: ['-V'] },
+  ].filter((check) => check.exe);
+  for (const check of checks) {
+    const failure = await failureOf(check.exe, check.args);
+    if (failure === null) continue;
+    console.error(`${check.name} cannot start: ${failure}`);
+    if (!mainWindow) return;
+    await dialog.showMessageBox(mainWindow, {
+      type: 'error',
+      title: 'HDLBoard',
+      message: `${check.name} could not be started, so ${check.language} designs will not simulate.`,
+      detail: `${failure}\n\nLog: ${logPath}`,
+      noLink: true,
+    });
+  }
+}
 
 app.on('window-all-closed', () => app.quit());
 
@@ -764,7 +828,9 @@ app.on('window-all-closed', () => app.quit());
  * The backend's GHDL children are the reason this matters: the persistent
  * simulation loops forever by design (§ 5), so nothing ends it on its own
  * and a missed teardown leaves `ghdl.exe` spinning at 100 % CPU after the
- * window is gone.
+ * window is gone. On Linux, Chromium's own handler turns SIGTERM, SIGINT
+ * and SIGHUP (logout, a closed terminal, Ctrl+C) into a normal quit, so
+ * those reach this too (linuxAppImage/smoke-test.sh checks it).
  */
 app.on('before-quit', () => {
   if (backend) {

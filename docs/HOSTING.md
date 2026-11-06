@@ -63,7 +63,13 @@ Nothing else, and no external services or accounts: everything stays on your
 machine and your network.
 
 **Sizing.** The backend accepts 32 concurrent sessions by default
-(`HDL_MAX_SESSIONS`) and refuses the 33rd with a clear message rather than
+(`HDL_MAX_SESSIONS`). A session is one open browser tab that has clicked
+Start, running or not. When the server is full, the next student
+still gets in if some session has been open 9 minutes or more
+(`HDL_REPLACE_AFTER_MINUTES`): the oldest such session is closed, one that is
+not simulating first, and its student is told the server is under heavy load,
+with a link to download the offline version. When every session is younger,
+the new one is refused with that message instead, rather than the server
 melting. A session only costs CPU while its simulation is actually running,
 so a 4-core machine comfortably serves a class of 20–30 students editing and
 running in bursts. Raise or lower the cap to match the hardware.
@@ -163,6 +169,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All are optional.
 |---|---|---|
 | `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. It is compiled into the page, so rebuild after changing it (`up -d --build`) |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
+| `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server, a session open this long is closed to make room for a new one; `0` refuses the new one instead |
 | `GHDL_REF` | `master` | GHDL branch or tag to build. Set a release tag such as `v6.0.0` for a reproducible build |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 
@@ -872,6 +879,7 @@ Backend, read at startup:
 |---|---|---|
 | `HDL_WS_PORT` | `9010` | Port the backend listens on |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
+| `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server, the oldest session open at least this long (one not simulating first) is closed to make room for a new one, and its student told why. `0`: never; the new one is refused |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
 | `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |
@@ -992,7 +1000,8 @@ same set through nginx, so it tests the WebSocket proxy too.
 | `Icarus Verilog (iverilog) was not found, so Verilog designs cannot run` | Icarus isn't installed, or isn't on the service user's `PATH` — install it (`apt install iverilog`, `apk add iverilog`, `brew install icarus-verilog`) or set `IVERILOG_EXE`; VHDL is unaffected |
 | Verilog console starts with a warning about an untested Icarus version | The installed Icarus is neither 12.x nor 13.x. It usually still works; install 13.0 if compiling or running misbehaves |
 | `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
-| `Too many concurrent sessions` | The `HDL_MAX_SESSIONS` cap; raise it if the hardware can take it |
+| `The server is busy: all … simulation sessions are in use` | The `HDL_MAX_SESSIONS` cap, with every session younger than `HDL_REPLACE_AFTER_MINUTES`; raise the cap if the hardware can take it (older backends said `Too many concurrent sessions`) |
+| `Your simulation session was closed because the server is under heavy load` | The server was full and this session had been open `HDL_REPLACE_AFTER_MINUTES` or more, so it made room for a new student. Click Start to try again |
 | Simulation stops after 60 s | A batch run (a testbench with no ports) hit its timeout — usually a process with no `wait` (VHDL) or no `$finish`/delay (Verilog), not a hosting problem |
 | Docker: `failed to connect to the docker API` | The Docker daemon isn't running. Start Docker Desktop, or `systemctl start docker` / `rc-service docker start` |
 | Docker: `web` never starts, `backend` is `unhealthy` | `docker compose logs backend`. The healthcheck expects `426` from the backend, and `web` waits for it by design |

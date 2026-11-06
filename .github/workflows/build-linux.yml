@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# Builds the Linux AppImage (linuxAppImage/build.sh), tests it, and attaches
+# it to a GitHub release. The twin of build-windows.yml.
+#
+#   git tag v1.2.4        && git push origin v1.2.4         -> draft release
+#   git tag v1.2.4-rc1   && git push origin v1.2.4-rc1    -> draft pre-release
+#   Actions -> "Build Linux AppImage" -> Run workflow       -> artifacts only
+#
+# The version comes from the tag (v1.2.4 -> 1.2.4) and is stamped into every
+# package.json by tools/bump-version.mjs before the build, so the file is
+# HDLBoard-1.2.4-linux-x86_64.AppImage and the app reports 1.2.4. That change
+# is made on the runner only and is never committed.
+#
+# A release is only ever created as a DRAFT and never published here: check
+# the files, edit the notes, then press "Publish release". The Windows
+# workflow runs on the same tag at the same time; whichever creates the draft
+# first wins, and the other uploads into it.
+
+name: Build Linux AppImage
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (x.y.z or x.y.z-pre). Empty: package.json's own version."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-linux:
+    name: Build Linux AppImage
+    # Pinned, not ubuntu-latest: the simulators are built here and must run
+    # on Ubuntu 24.04's glibc, the oldest the AppImage supports.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Commit
+        run: echo "Building ${GITHUB_SHA} (${GITHUB_REF})"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            winInstaller/electron/package-lock.json
+
+      - name: Determine version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${REF_TYPE}" == tag ]]; then
+            version="${REF_NAME#v}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="$(node -p "require('./package.json').version")"
+          fi
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'${version}' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc1"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$([[ "${version}" == *-* ]] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "appimage=HDLBoard-${version}-linux-x86_64.AppImage" >> "${GITHUB_OUTPUT}"
+          echo "HDLBoard version: ${version}"
+
+      - name: Stamp version into package.json files
+        run: node tools/bump-version.mjs "${{ steps.version.outputs.version }}"
+
+      # GHDL and the Icarus source are pinned and checksum-verified, and the
+      # Icarus build is deterministic in its inputs, so the cache key is the
+      # scripts themselves (and the build base, named in build.sh).
+      - name: Cache GHDL, Icarus Verilog and the AppImage runtime
+        uses: actions/cache@v6
+        with:
+          path: linuxAppImage/vendor
+          key: linux-vendor-${{ hashFiles('linuxAppImage/fetch-ghdl.sh', 'linuxAppImage/build-iverilog.sh', 'linuxAppImage/build.sh') }}
+
+      - name: Install build packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential autoconf gperf bison flex zlib1g-dev libbz2-dev \
+            squashfs-tools xvfb
+          # libreadline-dev may be preinstalled on the runner; Icarus must not link it.
+          sudo apt-get remove -y -qq libreadline-dev || true
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      # Natively on this 24.04 runner; build.sh then checks the trees again in
+      # a clean ubuntu:24.04 container (B3), since the runner has far more
+      # libraries installed than a student's desktop.
+      - name: Build AppImage
+        run: linuxAppImage/build.sh --simulators native
+
+      - name: Simulator versions
+        run: |
+          echo "Commit: ${GITHUB_SHA}"
+          echo "--- GHDL ---";   cat linuxAppImage/vendor/ghdl/VERSION.txt
+          echo "--- Icarus ---"; cat linuxAppImage/vendor/iverilog/VERSION.txt
+          ls -l linuxAppImage/output/*.AppImage*
+
+      - name: Extract the AppImage for testing
+        working-directory: linuxAppImage/output
+        run: |
+          sha256sum -c "${{ steps.version.outputs.appimage }}.sha256"
+          "./${{ steps.version.outputs.appimage }}" --appimage-extract > /dev/null
+
+      # Acceptance check 3: the backend's tests against the trees inside the
+      # AppImage, with a skipped simulator test counting as a failure.
+      - name: Backend tests against the packaged simulators
+        working-directory: server
+        # A simulator that outlives its test keeps the runner alive; fail instead of hanging.
+        timeout-minutes: 20
+        env:
+          GHDL_DIR: ${{ github.workspace }}/linuxAppImage/output/squashfs-root/resources/ghdl
+          IVERILOG_DIR: ${{ github.workspace }}/linuxAppImage/output/squashfs-root/resources/iverilog
+          HDLBOARD_REQUIRE_SIMULATORS: "1"
+        # ulimit: Icarus reports a circular `include only after running out of
+        # file descriptors, which takes ~1 s at the runner's 65536 and is quick
+        # at Windows' 512; I-V19 expects it within 1 s (linuxAppImage/README.md, Known gaps).
+        run: |
+          ulimit -n 4096
+          npm test
+          npm run test:integration
+
+      # Acceptance check 4: the app itself, under Xvfb.
+      - name: Packaged smoke test
+        run: linuxAppImage/smoke-test.sh "linuxAppImage/output/${{ steps.version.outputs.appimage }}"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.appimage }}
+          path: |
+            linuxAppImage/output/${{ steps.version.outputs.appimage }}
+            linuxAppImage/output/${{ steps.version.outputs.appimage }}.sha256
+          if-no-files-found: error
+          # Already a compressed squashfs; zipping it again only costs time.
+          compression-level: 0
+
+      # Both workflows may reach this at once on one tag. Create the draft if
+      # it is missing; if that create loses the race, the release now exists
+      # and the upload is retried into it.
+      - name: Attach AppImage to GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          APPIMAGE: ${{ steps.version.outputs.appimage }}
+        run: |
+          out=linuxAppImage/output
+          # GPL: the exact Icarus source the shipped binaries were built from.
+          files=("${out}/${APPIMAGE}" "${out}/${APPIMAGE}.sha256" linuxAppImage/vendor/downloads/iverilog-v13_0.tar.gz)
+          if ! gh release view "${TAG}" > /dev/null 2>&1; then
+            flags=(--draft --verify-tag --generate-notes --title "HDLBoard ${VERSION}")
+            [[ "${PRERELEASE}" == true ]] && flags+=(--prerelease)
+            if gh release create "${TAG}" "${files[@]}" "${flags[@]}"; then
+              echo "Created draft release ${TAG}"
+              exit 0
+            fi
+            echo "Creating the release failed - the Windows workflow probably made it first; uploading into it"
+          fi
+          for attempt in 1 2 3 4 5; do
+            gh release upload "${TAG}" "${files[@]}" --clobber && exit 0
+            echo "Upload attempt ${attempt} failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not upload to release ${TAG}"
+          exit 1

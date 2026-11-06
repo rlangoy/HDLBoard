@@ -77,8 +77,17 @@ const ENVIRONMENT_HINT: Record<ToolName, string> = {
   iverilog: 'IVERILOG_DIR or IVERILOG_EXE',
 };
 
+/**
+ * Set to `1` where a skipped simulator test would hide a broken build — the Linux
+ * AppImage workflow tests against the trees it is about to ship. A missing tool then
+ * throws as the test file loads, which fails the file instead of skipping it.
+ */
+export const REQUIRE_SIMULATORS = 'HDLBOARD_REQUIRE_SIMULATORS';
+
 export function requireTool(name: ToolName, env: NodeJS.ProcessEnv = process.env, vendoredRoot: string = repoRoot()): ToolLookup {
   const exe = fromEnvironment(name, env) ?? fromVendoredTree(name, vendoredRoot) ?? findOnPath(name, env);
   if (exe) return { exe, skip: false };
-  return { exe: null, skip: `${name} not found: put it on PATH or set ${ENVIRONMENT_HINT[name]}` };
+  const reason = `${name} not found: put it on PATH or set ${ENVIRONMENT_HINT[name]}`;
+  if (env[REQUIRE_SIMULATORS] === '1') throw new Error(`${reason} (${REQUIRE_SIMULATORS}=1 forbids skipping)`);
+  return { exe: null, skip: reason };
 }

@@ -6,7 +6,9 @@
  * the location the installer offers when a student installs for all users. `iverilog`
  * hands its `-B` directory unquoted to `cmd.exe`, so without the backend's 8.3
  * short-path conversion every compile there failed with "'C:\Program' is not
- * recognized as an internal or external command". Windows and a bundled tree only.
+ * recognized as an internal or external command". On Linux it hands it to `sh`, which
+ * splits it the same way; there the backend links to the tree from the temporary
+ * directory (an AppImage extracted into `~/Nedlastinger/HDL Board ø/`). A bundled tree only.
  */
 
 import assert from 'node:assert/strict';
@@ -20,17 +22,16 @@ import { startTestBackend, type TestBackend } from '../testSupport/testBackend.j
 import { startRun, withSession } from '../testSupport/withSession.js';
 
 const icarus = icarusForTests();
-const skip =
-  process.platform !== 'win32'
-    ? 'the unquoted -B path is a Windows (cmd.exe) problem'
-    : icarus.skip || (icarus.tools.bundledDir === undefined ? 'needs the bundled Icarus tree (IVERILOG_DIR)' : false);
+const skip = icarus.skip || (icarus.tools.bundledDir === undefined ? 'needs the bundled Icarus tree (IVERILOG_DIR)' : false);
+/** Where the installer or a student puts it: `C:\Program Files\…`, or an extracted AppImage. */
+const INSTALL_DIR = process.platform === 'win32' ? ['Program Files', 'HDLBoard'] : ['Nedlastinger', 'HDL Board ø', 'squashfs-root'];
 
 describe('Icarus installed under a path with a space', { skip }, () => {
   const install = makeTempDir('hdlboard-install-');
   let backend: TestBackend;
 
   before(async () => {
-    const tree = join(install.path, 'Program Files', 'HDLBoard', 'resources', 'iverilog');
+    const tree = join(install.path, ...INSTALL_DIR, 'resources', 'iverilog');
     cpSync(icarus.tools.bundledDir as string, tree, { recursive: true });
     backend = await startTestBackend({ iverilogDir: tree });
   });

@@ -1,0 +1,3 @@
+# Produced by fetch-ghdl.sh, build-iverilog.sh and build.sh - never committed.
+vendor/
+output/

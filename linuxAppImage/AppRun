@@ -1,0 +1,45 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# The AppImage's entry point: the runtime mounts the image and runs this,
+# whether the file was double-clicked or started from a terminal.
+#
+# Chromium's sandbox needs unprivileged user namespaces, or else a root-owned
+# setuid chrome-sandbox helper, which an AppImage cannot ship. Ubuntu 24.04
+# and Mint 22 restrict user namespaces through AppArmor
+# (kernel.apparmor_restrict_unprivileged_userns=1), so there Electron aborts
+# at startup unless it is given --no-sandbox. Elsewhere the sandbox works and
+# stays on.
+#
+# The probe asks for exactly what Chromium asks for: a new user namespace with
+# this user mapped to root inside it. Under the AppArmor restriction the
+# mapping is refused; on a system without the restriction, or where a lab
+# administrator installed the AppArmor profile from linuxAppImage/README.md
+# for this file, it succeeds and the sandbox stays on.
+#
+# HDLBOARD_SANDBOX=on|off overrides the probe (on: never add --no-sandbox).
+#
+# Renderer restrictions do not depend on this: the window's own
+# webPreferences (sandbox: true, contextIsolation, no Node) and its
+# navigation guards in main.js are unchanged either way.
+
+HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+
+case "${HDLBOARD_SANDBOX:-auto}" in
+  on)  sandbox_ok=1; HDLBOARD_SANDBOX_REASON="HDLBOARD_SANDBOX=on" ;;
+  off) sandbox_ok=0; HDLBOARD_SANDBOX_REASON="HDLBOARD_SANDBOX=off" ;;
+  *)
+    if unshare --user --map-root-user /bin/true 2> /dev/null; then
+      sandbox_ok=1; HDLBOARD_SANDBOX_REASON="user namespaces available"
+    else
+      sandbox_ok=0; HDLBOARD_SANDBOX_REASON="user namespaces unavailable (unshare --user --map-root-user failed)"
+    fi
+    ;;
+esac
+export HDLBOARD_SANDBOX_REASON
+
+if [ "${sandbox_ok}" = 1 ]; then
+  exec "${HERE}/hdlboard" "$@"
+fi
+exec "${HERE}/hdlboard" --no-sandbox "$@"

@@ -31,11 +31,12 @@ import { Session } from './session.js';
 import { setGhdlExe } from './ghdl.js';
 import { resolveGhdlExe } from './ghdlPath.js';
 import { setToolPaths } from './verilog/tools.js';
-import { resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
-import { hasSpace, windowsShortPath } from './verilog/shortPath.js';
+import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
+import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
-import { MAX_SESSIONS, WS_PORT, readIntSetting } from './settings.js';
+import { MAX_SESSIONS, REPLACE_AFTER_MINUTES, WS_PORT, readIntSetting } from './settings.js';
+import { MS_PER_MINUTE, fullText, replacedText, sessionToReplace } from './sessionLimit.js';
 import {
   GitHubAuthForwarder,
   credentialsFromEnv,
@@ -61,7 +62,16 @@ const LEGACY_WSPATH = '/ghdlsim';
 // 3: board shapes — a JSON BOARD body, STIM and STATE lengths per board
 // (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
-const PROTOCOL_VERSION = '4';
+// 5: `ERROR busy` — the server is full; this connection was refused, or closed for a new one.
+const PROTOCOL_VERSION = '5';
+/**
+ * How long a socket told `ERROR busy` gets to close before it is cut. A proxy may hold the
+ * close frame back (Render's did: the tab kept a dead socket open), and cutting the
+ * connection ends it there too.
+ */
+const BUSY_CLOSE_GRACE_MS = 1000;
+/** RFC 6455's "Try Again Later". */
+const CLOSE_TRY_AGAIN_LATER = 1013;
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
@@ -92,6 +102,13 @@ export interface BackendOptions {
    * `HDL_MAX_SESSIONS` (or the legacy `GHDL_MAX_SESSIONS`), then 32.
    */
   maxSessions?: number;
+  /**
+   * On a full server, a session open at least this many minutes is closed for a new one
+   * (sessionLimit.ts); 0 refuses the new one instead. Defaults to `HDL_REPLACE_AFTER_MINUTES`, then 9.
+   */
+  replaceAfterMinutes?: number;
+  /** The clock sessions' ages are measured on, in ms. Defaults to `Date.now`; tests move it. */
+  now?: () => number;
   /**
    * The GitHub OAuth App the sign-in routes forward for (githubAuth.ts). Defaults to
    * `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, then HDLBoard's own app without a secret.
@@ -196,6 +213,19 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
   }
 }
 
+/** One open WebSocket and its session, as the choice of which to close for a new one sees it. */
+class Connection {
+  constructor(
+    readonly ws: WebSocket,
+    readonly session: Session,
+    readonly openedAt: number,
+  ) {}
+
+  get simulating(): boolean {
+    return this.session.simulating;
+  }
+}
+
 /**
  * Starts the backend. Returns a handle rather than running to process
  * exit, so Electron can own the lifecycle — it calls `stop()` from
@@ -204,16 +234,25 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
 export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const port = opts.port ?? readIntSetting(WS_PORT);
   const maxSessions = opts.maxSessions ?? readIntSetting(MAX_SESSIONS);
+  const replaceAfterMs = (opts.replaceAfterMinutes ?? readIntSetting(REPLACE_AFTER_MINUTES)) * MS_PER_MINUTE;
+  const now = opts.now ?? Date.now;
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
   const ghdlExe = resolveGhdlExe(process.env, opts);
   setGhdlExe(ghdlExe);
-  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), windowsShortPath);
+  const shorten = process.platform === 'win32' ? windowsShortPath : posixLinkPath;
+  const iverilogTools = withUsableBundledDir(resolveToolPaths(process.env, opts), shorten);
   setToolPaths(iverilogTools);
   if (process.platform === 'win32' && iverilogTools.bundledDir !== undefined && hasSpace(iverilogTools.bundledDir)) {
     console.warn(
       `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space and has no 8.3 short name; ` +
         'Verilog compiles will fail. Install HDLBoard to a folder without spaces.',
+    );
+  }
+  if (process.platform !== 'win32' && iverilogTools.bundledDir !== undefined && hasShellSpecial(iverilogTools.bundledDir)) {
+    console.warn(
+      `hdl-board: the Icarus Verilog folder "${iverilogTools.bundledDir}" contains a space or shell character and no link ` +
+        'to it could be made in the temporary directory; Verilog compiles will fail. Move HDLBoard to a plainer folder.',
     );
   }
 
@@ -269,19 +308,38 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
    * purpose (§ 5), so nothing ever ends it on its own, and § 7.2's teardown
    * only ever fired on a WebSocket close. Real incident, § 5.10.
    */
-  const sessions = new Set<Session>();
+  const sessions = new Map<Session, Connection>();
+
+  // `error` is normally followed by `close`, so this runs twice for one socket: `delete`
+  // returning false is what tells the second call there is nothing left to tear down.
+  const endSession = (session: Session) => {
+    if (!sessions.delete(session)) return;
+    session.destroy();
+  };
+
+  /** Tells the student why (`ERROR busy`), then closes — and cuts, if the close is held up. */
+  const closeBusy = (ws: WebSocket, text: string) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(encodeServerFrame({ verb: 'ERROR', stage: 'busy', text }));
+    ws.close(CLOSE_TRY_AGAIN_LATER, 'server busy');
+    setTimeout(() => ws.terminate(), BUSY_CLOSE_GRACE_MS).unref();
+  };
 
   wss.on('connection', (ws: WebSocket) => {
     if (sessions.size >= maxSessions) {
-      ws.send(
-        encodeServerFrame({
-          verb: 'ERROR',
-          stage: 'internal',
-          text: 'Too many concurrent sessions on this server. Try again shortly.',
-        }),
+      const t = now();
+      const replaced = sessionToReplace(sessions.values(), t, replaceAfterMs);
+      if (replaced === undefined) {
+        console.log(`hdl-board: refused a session, all ${maxSessions} in use`);
+        closeBusy(ws, fullText(maxSessions));
+        return;
+      }
+      const minutes = Math.floor((t - replaced.openedAt) / MS_PER_MINUTE);
+      console.log(
+        `hdl-board: closed a session open ${minutes} min${replaced.simulating ? ' (simulating)' : ''} to make room for a new one`,
       );
-      ws.close();
-      return;
+      closeBusy(replaced.ws, replacedText());
+      // Now, not on its close: the place is the new connection's at once.
+      endSession(replaced.session);
     }
 
     let helloed = false;
@@ -292,9 +350,11 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk, { binary: true });
     };
     const session = new Session(send, undefined, { sendBinary });
-    sessions.add(session);
+    sessions.set(session, new Connection(ws, session, now()));
 
     ws.on('message', (data, isBinary) => {
+      // Closed to make room for another, it is only waiting for its socket to close.
+      if (!sessions.has(session)) return;
       if (isBinary) {
         // Binary frames only ever go to the client, with a waveform (docs/waveform_viewer_spec.md § 7.4).
         send({ verb: 'ERROR', stage: 'protocol', text: 'A client sends no binary frames.' });
@@ -347,13 +407,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
       }
     });
 
-    // `error` is normally followed by `close`, so this fires twice without
-    // the Set's own idempotence doing the work: `delete` returning false is
-    // what tells the second call there is nothing left to tear down.
-    const teardown = () => {
-      if (!sessions.delete(session)) return;
-      session.destroy();
-    };
+    const teardown = () => endSession(session);
     ws.on('close', teardown);
     ws.on('error', teardown);
   });
@@ -385,7 +439,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
         return;
       }
       stopped = true;
-      for (const session of sessions) session.destroy();
+      for (const session of sessions.keys()) session.destroy();
       sessions.clear();
       // An open WebSocket is a live connection as far as the HTTP server
       // is concerned, so `httpServer.close()` would wait forever on it —

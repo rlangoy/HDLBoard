@@ -36,8 +36,33 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 |---|---|---|
 | **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Linux app** | Working offline on Ubuntu 24.04 or Linux Mint 22 (64-bit x86). One AppImage file, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
+
+### Installing on Linux
+
+The Linux app is one file, `HDLBoard-<version>-linux-x86_64.AppImage`, on the [Releases page](https://github.com/rlangoy/HDLBoard/releases). It needs no installation and no administrator rights.
+
+1. Download the `.AppImage` file.
+2. Allow it to run. In the file manager, open *Properties → Permissions* and tick *Allow executing file as program* (the wording differs between desktops). Or, in a terminal: `chmod +x HDLBoard-*.AppImage`.
+3. Double-click it.
+
+**If it does not start**
+
+- Start it from a terminal (`./HDLBoard-*.AppImage`) to see the error message.
+- On a system where AppImages cannot be mounted, extract it and run the extracted copy instead: `./HDLBoard-*.AppImage --appimage-extract`, then `./squashfs-root/AppRun`.
+- The AppImage carries its own FUSE runtime and does not need `libfuse2`. If an AppImage tool tells you to install FUSE anyway, the package on Ubuntu 24.04 and Mint 22 is `libfuse2t64` (`sudo apt install libfuse2t64`, which needs administrator rights). **Do not** install the package named `fuse`: on these releases it conflicts with FUSE 3 and can remove parts of the desktop.
+
+**Good to know**
+
+- **Made for:** Ubuntu 24.04 LTS and Linux Mint 22.x on 64-bit x86. Other distributions and ARM are not supported yet. [linuxAppImage/README.md](linuxAppImage/README.md#tested-on) lists what has been tested.
+- **Offline:** Once downloaded, it needs no network, and nothing else to install. It includes GHDL 6.0.0 and Icarus Verilog 13.0, and never uses a GHDL or Icarus installed on the system.
+- **Check the download:** Put the `.sha256` file from the release beside the AppImage and run `sha256sum -c HDLBoard-*.AppImage.sha256`. It should print `OK`.
+- **Your files:** Settings, saved projects and the log (`logs/backend.log`) are in `~/.config/HDLBoard`.
+- **Updating:** Download the new file and delete the old one. Deleting the AppImage leaves your settings and projects in place.
+- **Sandbox:** On a default Ubuntu 24.04 or Mint 22 desktop the app starts without Chromium's OS sandbox, because Ubuntu blocks what it needs for programs that are not installed as packages. The window still shows only HDLBoard's own page. [linuxAppImage/README.md](linuxAppImage/README.md#the-chromium-sandbox) explains this and has an AppArmor profile for lab administrators.
+- **No menu entry and no automatic updates.** To add HDLBoard to the application menu, use a tool such as Gear Lever or AppImageLauncher.
 
 ## What is HDLBoard?
 
@@ -167,6 +192,7 @@ HDLBoard does not do synthesis. Because it uses the board's real pin names, thou
 - [Impl_project_file_and_online_storage.md](docs/Impl_project_file_and_online_storage.md) — the `.hdlboard.json` project format
 - [waveform_viewer_spec.md](docs/waveform_viewer_spec.md) — the waveform viewer: requirements, formats and implementation
 - [winInstaller/README.md](winInstaller/README.md) — the Windows desktop build
+- [linuxAppImage/README.md](linuxAppImage/README.md) — the Linux AppImage build
 
 ## Support and contributing
 
@@ -181,14 +207,15 @@ HDLBoard builds on the work of many open-source projects. Thank you to all of th
 | Component | Used for | License |
 |---|---|---|
 | [GHDL](https://github.com/ghdl/ghdl) | Analyses, elaborates and simulates VHDL | GPL-2.0 |
-| [Icarus Verilog](https://github.com/steveicarus/iverilog) | Compiles and simulates Verilog. The Windows build uses the [MSYS2](https://www.msys2.org/) packages, with GNU Readline, zlib, bzip2, termcap, winpthreads and the GCC runtime | GPL-2.0-or-later (Readline GPL-3.0-or-later; GCC runtime with the Runtime Library Exception) |
+| [Icarus Verilog](https://github.com/steveicarus/iverilog) | Compiles and simulates Verilog. The Windows build uses the [MSYS2](https://www.msys2.org/) packages, with GNU Readline, zlib, bzip2, termcap, winpthreads and the GCC runtime. The Linux build is compiled from the upstream source | GPL-2.0-or-later (Readline GPL-3.0-or-later; GCC runtime with the Runtime Library Exception) |
 | [React](https://react.dev/) | The user interface | MIT |
 | [ws](https://github.com/websockets/ws) | The WebSocket link between browser and simulator | MIT |
-| [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows desktop app | MIT (Chromium: BSD-style) |
+| [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows and Linux desktop apps | MIT (Chromium: BSD-style) |
+| [AppImage type2-runtime](https://github.com/AppImage/type2-runtime) | Starts the Linux AppImage | MIT |
 | [electron-builder](https://www.electron.build/) and [NSIS](https://nsis.sourceforge.io/) | The Windows installer | MIT; zlib/libpng-style |
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |
 
-The license texts of the bundled simulators are installed with the Windows app and shown by its installer.
+The license texts of the bundled simulators are installed with the Windows app and shown by its installer. In the Linux AppImage they are under `resources/` (`resources/licenses/README.txt` lists them); run `./HDLBoard-*.AppImage --appimage-extract` to read them.
 
 DE1-SoC and DE10-Lite are products of [Terasic Technologies](https://www.terasic.com.tw/). Basys 3 and Nexys A7 are products of [Digilent](https://digilent.com/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic or Digilent.
 

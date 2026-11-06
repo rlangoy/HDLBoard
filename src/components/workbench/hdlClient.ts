@@ -28,7 +28,13 @@ function stimStepText({ bits, holdNs }: TimedStim): string {
 
 // 3: board shapes, a JSON BOARD body and STIM/STATE lengths per board (docs/board_io_v2_spec.md § 6).
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
-const PROTOCOL_VERSION = '4';
+// 5: `ERROR busy` — the server is full; the socket was refused, or closed for a new one.
+const PROTOCOL_VERSION = '5';
+/**
+ * The `ERROR` stage of a full server (server/src/sessionLimit.ts): this connection was
+ * refused, or closed to make room for another student. The server closes the socket next.
+ */
+export const BUSY_STAGE = 'busy';
 /** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
 const SHAPED_BOARD_PROTOCOL = 3;
 /** The first protocol that takes timed STIM steps; an older backend gets the final state alone. */
@@ -84,6 +90,21 @@ export function parseWaveReady(inline: string): WaveReady | undefined {
   if (!RUN_NUMBER.test(run) || !RUN_NUMBER.test(bytes)) return undefined;
   if (!WAVE_FORMATS.includes(format) || !WAVE_STATUSES.includes(status)) return undefined;
   return { run: Number(run), format: format as WaveFormat, bytes: Number(bytes), status: status as RunWaveStatus };
+}
+
+/** A busy message, split into its text and the download link it ends in, if any. */
+export interface BusyNotice {
+  readonly text: string;
+  readonly url?: string;
+}
+
+const TRAILING_URL = /:?\s*(https:\/\/\S+)$/;
+
+/** The text of an `ERROR busy` frame, with the URL it ends in taken out to show as a link. */
+export function busyNotice(text: string): BusyNotice {
+  const found = TRAILING_URL.exec(text);
+  if (found === null || found[1] === undefined) return { text };
+  return { text: `${text.slice(0, found.index)}.`, url: found[1] };
 }
 
 /**
@@ -210,6 +231,7 @@ export class HdlClient {
       case 'ERROR':
         if (this.isOldBackendAnswer(inline, body)) this.noteOldBackend();
         else this.handlers.onError(inline, body);
+        if (inline === BUSY_STAGE) this.letGoOfSocket();
         break;
       case 'DONE':
         this.handlers.onDone(inline);
@@ -226,6 +248,21 @@ export class HdlClient {
         // Unknown verb: ignore, per § 6.2 — never disconnect on this.
         break;
     }
+  }
+
+  /**
+   * The server is full and closes this socket (`ERROR busy`). Let go of it now rather
+   * than wait for the close: a proxy can hold that back (Render's did), and until then
+   * every Start would go to the dead socket. The next Start opens a fresh one.
+   */
+  private letGoOfSocket(): void {
+    const ws = this.ws;
+    if (ws === null) return;
+    ws.onclose = null;
+    ws.onmessage = null;
+    ws.close();
+    this.ws = null;
+    this.handlers.onClosed();
   }
 
   private welcome(version: string): void {

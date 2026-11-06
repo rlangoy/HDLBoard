@@ -20,13 +20,27 @@ describe('withUsableBundledDir', () => {
     });
   });
 
-  test('leaves a path without a space, tools from PATH, and Linux alone', () => {
+  test('leaves a path without a space, and tools from PATH, alone', () => {
     const plain = resolveToolPaths({ IVERILOG_DIR: 'C:\\HDLBoard\\iverilog' }, {}, WINDOWS);
     assert.equal(withUsableBundledDir(plain, shorten, WINDOWS), plain);
     const onPath = resolveToolPaths({}, {}, WINDOWS);
     assert.equal(withUsableBundledDir(onPath, shorten, WINDOWS), onPath);
-    const linux = resolveToolPaths({ IVERILOG_DIR: '/opt/Program Files/iverilog' }, {}, LINUX);
+    const linux = resolveToolPaths({ IVERILOG_DIR: '/tmp/.mount_HDLBoaX1/resources/iverilog' }, {}, LINUX);
     assert.equal(withUsableBundledDir(linux, shorten, LINUX), linux);
+  });
+
+  test('swaps a Linux tree path the shell would split, and keeps a non-ASCII one', () => {
+    const link = () => '/tmp/hdlboard-iverilog-a1/iverilog';
+    const spaced = resolveToolPaths({ IVERILOG_DIR: '/home/ola/Nedlastinger/HDL Board ø/resources/iverilog' }, {}, LINUX);
+    assert.deepEqual(withUsableBundledDir(spaced, link, LINUX), {
+      iverilog: '/tmp/hdlboard-iverilog-a1/iverilog/iverilog',
+      vvp: '/tmp/hdlboard-iverilog-a1/iverilog/vvp',
+      bundledDir: '/tmp/hdlboard-iverilog-a1/iverilog',
+    });
+    const quoted = resolveToolPaths({ IVERILOG_DIR: "/home/ola/Ola's/iverilog" }, {}, LINUX);
+    assert.equal(withUsableBundledDir(quoted, link, LINUX).bundledDir, '/tmp/hdlboard-iverilog-a1/iverilog');
+    const nonAscii = resolveToolPaths({ IVERILOG_DIR: '/home/ola/Nedlastinger/HDLBoard-ø/iverilog' }, {}, LINUX);
+    assert.equal(withUsableBundledDir(nonAscii, link, LINUX), nonAscii);
   });
 
   test('keeps the original when no short form exists', () => {

@@ -43,7 +43,9 @@ Two rules hold for every host:
 
 `HDL_MAX_SESSIONS` counts *open browser tabs* (WebSocket sessions), not only
 running simulations. An idle tab costs no CPU, so real load is usually lower
-than the worst case in the table.
+than the worst case in the table. A tab left open does not hold its place
+forever: on a full server, a session open `HDL_REPLACE_AFTER_MINUTES` (9) or
+more is closed for a new student, an idle one first.
 
 ---
 

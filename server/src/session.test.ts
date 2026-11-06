@@ -132,6 +132,7 @@ describe('Session runs that outlive their request', () => {
       engine.startBatchRun = () => ({ kill: () => {}, done: Promise.resolve({ code: null, timedOut: false, stderr: '' }) });
       const session = new Session((frame) => frames.push(frame), () => engine);
       const run = session.handleRun(FILES, 'top.vhdl');
+      await settle(); // the compile has started
       compiles[0].resolve({ ok: true, plan: batchPlan(tmpdir()) });
       await run;
       await settle();

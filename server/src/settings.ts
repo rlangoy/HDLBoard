@@ -17,6 +17,11 @@ export interface IntSetting {
 
 export const WS_PORT: IntSetting = { name: 'HDL_WS_PORT', legacyName: 'GHDL_WS_PORT', fallback: 9010 };
 export const MAX_SESSIONS: IntSetting = { name: 'HDL_MAX_SESSIONS', legacyName: 'GHDL_MAX_SESSIONS', fallback: 32 };
+/**
+ * On a full server, a session open at least this many minutes is closed to make room for a
+ * new one (sessionLimit.ts). 0: never — the new one is refused instead.
+ */
+export const REPLACE_AFTER_MINUTES: IntSetting = { name: 'HDL_REPLACE_AFTER_MINUTES', fallback: 9 };
 
 /** The largest waveform file a run may write, 16 MiB (docs/waveform_viewer_spec.md § 7.5, W6). */
 export const MAX_WAVE_BYTES: IntSetting = { name: 'HDL_MAX_WAVE_BYTES', fallback: 16_777_216 };

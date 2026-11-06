@@ -80,6 +80,10 @@ describe('requireTool', () => {
     assert.match(String(lookup.skip), /ghdl not found.*GHDL_EXE/);
   });
 
+  test('fails instead of skipping when HDLBOARD_REQUIRE_SIMULATORS=1', () => {
+    assert.throws(() => requireTool('ghdl', { ...NO_PATH, HDLBOARD_REQUIRE_SIMULATORS: '1' }, NO_VENDORED_TREE), /ghdl not found.*forbids skipping/);
+  });
+
   test('ignores an environment path that does not exist', () => {
     const lookup = requireTool('iverilog', { ...NO_PATH, IVERILOG_EXE: join(tempDir.path, 'missing') }, NO_VENDORED_TREE);
     assert.equal(lookup.exe, null);
