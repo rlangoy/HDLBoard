@@ -869,6 +869,11 @@ export class Session {
     }
   }
 
+  /** Compiling or running: what closing it to make room would interrupt (sessionLimit.ts). */
+  get simulating(): boolean {
+    return this.state === 'compiling' || this.state === 'running';
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.stopWaveWatchdog();

@@ -119,3 +119,94 @@ describe('the WebSocket endpoint path', () => {
   test("accepts the page's own host on another port (Vite, Docker)", async () =>
     assert.equal(await opens('/hdlsim', `http://${LOOPBACK}:5173`), true));
 });
+
+describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
+  const MINUTE = 60_000;
+  /** RFC 6455's "Try Again Later", what a busy close carries. */
+  const TRY_AGAIN_LATER = 1013;
+
+  interface Peer {
+    readonly ws: WebSocket;
+    readonly texts: string[];
+    readonly closed: Promise<number>;
+  }
+
+  /** An open socket on `/hdlsim`, keeping every text frame it receives. */
+  const connect = (port: number) =>
+    new Promise<Peer>((resolve, reject) => {
+      const ws = new WebSocket(`ws://${LOOPBACK}:${port}/hdlsim`);
+      const texts: string[] = [];
+      ws.on('message', (data) => texts.push(String(data)));
+      const closed = new Promise<number>((done) => ws.once('close', (code) => done(code)));
+      ws.once('open', () => resolve({ ws, texts, closed }));
+      ws.once('error', reject);
+    });
+
+  /** The first frame that answers `prefix`, waiting for it. */
+  const frame = async (peer: Peer, prefix: string) => {
+    for (let tries = 0; tries < 100; tries++) {
+      const found = peer.texts.find((t) => t.startsWith(prefix));
+      if (found !== undefined) return found;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error(`no ${prefix} frame; got ${JSON.stringify(peer.texts)}`);
+  };
+
+  /** A one-session backend on a clock the test moves. */
+  const fullBackend = async (replaceAfterMinutes: number) => {
+    const clock = { now: 1_000_000 };
+    const backend = startBackend({ port: await freePort(), maxSessions: 1, replaceAfterMinutes, now: () => clock.now });
+    await backend.ready;
+    return { backend, clock };
+  };
+
+  test('refuses a new session while the one there is younger than the limit', async () => {
+    const { backend, clock } = await fullBackend(9);
+    try {
+      const first = await connect(backend.port);
+      clock.now += 8 * MINUTE;
+      const second = await connect(backend.port);
+      assert.match(await frame(second, 'ERROR busy\n'), /all|only simulation session is in use/);
+      assert.equal(await second.closed, TRY_AGAIN_LATER);
+      // The first keeps its place.
+      first.ws.send('HELLO 5');
+      assert.equal(await frame(first, 'WELCOME'), 'WELCOME 5');
+      assert.equal(first.texts.filter((t) => t.startsWith('ERROR')).length, 0);
+      first.ws.close();
+    } finally {
+      await stopped(backend);
+    }
+  });
+
+  test('closes a session open past the limit and takes the new one', async () => {
+    const { backend, clock } = await fullBackend(9);
+    try {
+      const first = await connect(backend.port);
+      clock.now += 9 * MINUTE;
+      const second = await connect(backend.port);
+      assert.match(await frame(first, 'ERROR busy\n'), /closed because the server is under heavy load.*HDLBoard\/releases/s);
+      assert.equal(await first.closed, TRY_AGAIN_LATER);
+      second.ws.send('HELLO 5');
+      assert.equal(await frame(second, 'WELCOME'), 'WELCOME 5');
+      assert.equal(second.texts.filter((t) => t.startsWith('ERROR')).length, 0);
+      second.ws.close();
+    } finally {
+      await stopped(backend);
+    }
+  });
+
+  test('never closes one with a limit of 0', async () => {
+    const { backend, clock } = await fullBackend(0);
+    try {
+      const first = await connect(backend.port);
+      clock.now += 600 * MINUTE;
+      const second = await connect(backend.port);
+      await frame(second, 'ERROR busy\n');
+      assert.equal(await second.closed, TRY_AGAIN_LATER);
+      assert.equal(first.ws.readyState, WebSocket.OPEN);
+      first.ws.close();
+    } finally {
+      await stopped(backend);
+    }
+  });
+});

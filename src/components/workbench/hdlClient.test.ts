@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { HdlClient } from './hdlClient';
+import { HdlClient, busyNotice } from './hdlClient';
 import type { VhdlFile } from './files';
 import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { encodeBoardFrame, encodeV1BoardFrame } from '../../boards/boardFrame';
@@ -37,7 +37,11 @@ class FakeSocket {
     if (type === 'open') this.openListeners.push(listener);
   }
 
-  close(): void {}
+  closed = false;
+
+  close(): void {
+    this.closed = true;
+  }
 
   /** A text frame from the server. */
   receive(text: string): void {
@@ -62,7 +66,7 @@ const PROJECT: VhdlFile[] = [
 ];
 
 /** What a backend of this release answers HELLO with; a run waits for it. */
-const WELCOME_CURRENT = 'WELCOME 4';
+const WELCOME_CURRENT = 'WELCOME 5';
 
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
@@ -286,5 +290,56 @@ describe('HdlClient.stimSteps (a bouncing pushbutton)', () => {
   test('a backend older than protocol 4 gets the final state alone', () => {
     clientWelcomedBy('WELCOME 3').stimSteps(STEPS);
     expect(lastFrame()).toBe('STIM 1110');
+  });
+});
+
+describe('a full server (ERROR busy)', () => {
+  const RELEASES = 'https://github.com/rlangoy/HDLBoard/releases';
+  const BUSY = `ERROR busy\nThe server is busy: all 4 simulation sessions are in use. Try again in a few minutes, or download the offline version of HDLBoard to simulate on your own computer: ${RELEASES}`;
+
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test('reports it, closes the socket at once and says it is closed — not "Could not reach"', () => {
+    const handlers = recordingHandlers();
+    const client = new HdlClient('ws://test', handlers);
+    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    const refused = FakeSocket.last;
+    refused?.receive(BUSY);
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    expect(handlers.onError.mock.calls[0]?.[0]).toBe('busy');
+    expect(refused?.closed).toBe(true);
+    expect(handlers.onClosed).toHaveBeenCalledTimes(1);
+    // The close the server sends later is not reported again.
+    refused?.onclose?.();
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+  });
+
+  test('the next Start opens a fresh socket and runs on it', () => {
+    const client = new HdlClient('ws://test', recordingHandlers());
+    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    const refused = FakeSocket.last;
+    refused?.receive(BUSY);
+    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    expect(FakeSocket.last).not.toBe(refused);
+    FakeSocket.last?.receive(WELCOME_CURRENT);
+    expect(lastFrame().split('\n')[0]).toBe('RUN top.vhd');
+  });
+
+  test('busyNotice takes the download link off the end of the text', () => {
+    const notice = busyNotice(BUSY.slice('ERROR busy\n'.length));
+    expect(notice.url).toBe(RELEASES);
+    expect(notice.text).toMatch(/to simulate on your own computer\.$/);
+  });
+
+  test('busyNotice keeps a text without a link as it is', () => {
+    expect(busyNotice('The server is busy.')).toEqual({ text: 'The server is busy.' });
   });
 });
