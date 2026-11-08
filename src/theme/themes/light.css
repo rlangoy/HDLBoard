@@ -82,6 +82,75 @@
   --wb-board-setting-action-bg: #fafafa;
   --wb-board-setting-action-bg-hover: #f0f0f0;
   --wb-board-setting-note-border: #c7dafc;
+
+  /* --- CodeEditor.css --- */
+  --wb-code-bg: #ffffff;
+  --wb-editor-drop-hint-bg: rgba(229, 239, 255, 0.92);
+  --wb-gutter-fg: #94a3b8;
+  --wb-code-fg: #1e293b;
+  --wb-editor-quickfix-bg-hover: #ffffff;
+  --wb-editor-quickfix-bulb-fg: #ca8a04;
+  --wb-code-caret: #0f172a;
+  --wb-code-selection: rgba(37, 99, 235, 0.25);
+  --wb-editor-empty-btn-bg: #ffffff;
+  --wb-editor-empty-btn-primary-fg: #ffffff;
+  --wb-syn-keyword: #1d4ed8;
+  --wb-syn-type: #0f766e;
+  --wb-syn-comment: #16a34a;
+  --wb-syn-string: #b45309;
+  --wb-syn-number: #9333ea;
+  --wb-syn-punct: #475569;
+  --wb-syn-directive: #be185d;
+  --wb-syn-system: #0369a1;
+
+  /* --- SplitEditor.css --- */
+  --wb-focus-ring: #2563eb;
+  --wb-panehead-plain-bg: #ffffff;
+  --wb-panehead-unfocused-bg: #ffffff;
+  --wb-rolebadge-bg: #ffffff;
+  --wb-panehead-btn-bg-hover: rgba(15, 23, 42, 0.08);
+  --wb-split-note-bg: #fffbeb;
+  --wb-split-note-button-bg: #ffffff;
+  --wb-menu-bg: #ffffff;
+  --wb-split-empty-bg: #ffffff;
+  --wb-split-empty-btn-bg: #ffffff;
+  --wb-split-empty-btn-primary-fg: #ffffff;
+  --wb-tbchip-open-bg: #ffffff;
+
+  /* --- FindBar.css --- */
+  --wb-findbar-field-bg: #ffffff;
+  --wb-findbar-clear-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-findbar-steps-bg: #ffffff;
+  --wb-findbar-btn-bg: #ffffff;
+  --wb-findbar-btn-primary-fg: #ffffff;
+
+  /* --- ConsoleOutput.css --- */
+  --wb-console-header-border: #1e293b;
+  --wb-console-title-fg: #e2e8f0;
+  --wb-console-clear-border: #334155;
+  --wb-console-clear-fg: #cbd5e1;
+  --wb-console-clear-bg-hover: #1e293b;
+  --wb-console-line-fg: #cbd5e1;
+  --wb-console-line-success-fg: #4ade80;
+  --wb-console-line-error-fg: #f87171;
+  --wb-console-time-fg: #64748b;
+  --wb-console-reports-fg: #cbd5e1;
+  --wb-console-reports-th-border: #1e293b;
+  --wb-console-reports-th-fg: #64748b;
+  --wb-console-reports-tbody-tr-bg-hover: #1e293b;
+  --wb-console-report-line-fg: #64748b;
+  --wb-console-reports-tr-warning-fg: #fbbf24;
+  --wb-console-reports-tr-error-fg: #f87171;
+  --wb-console-link-outline-focus: #93c5fd;
+  --wb-console-wave-link-fg: #93c5fd;
+
+  /* --- OverlayScrollbar.css --- */
+  --wb-scrollbar-thumb-bg: #a3a3a3;
+  --wb-scrollbar-arrow-fg: #6b7280;
+  --wb-scrollbar-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-scrollbar-arrow-fg-hover: #1f2937;
+  --wb-scrollbar-thumb-bg-hover: #8a8a8a;
+  --wb-scrollbar-thumb-bg-active: #6b6b6b;
 }
 
 .wb {
