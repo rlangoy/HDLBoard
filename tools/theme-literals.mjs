@@ -13,7 +13,7 @@ const EXEMPT_PATHS = [
   'src/Images/',
 ];
 const EXEMPT_MARK = 'theme-exempt';
-const CSS_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\((?!\s*var\()|\b(?:white|black)\b/;
+const CSS_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\((?!\s*var\()|(?<![\w-])(?:white|black)(?![\w-])/; // not white-space
 const CODE_LITERAL = /['"`](?:#[0-9a-fA-F]{3,8}['"`]|(?:rgba?|hsla?)\()/; // hex or rgb() in TS/TSX strings and JSX attributes
 
 function listFiles(dir) {
