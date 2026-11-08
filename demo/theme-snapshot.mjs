@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Computed-colour snapshot (docs/HDLBoard_Black_Theme_Spec.md T0.2).
-// Usage (dev server running):  node theme-snapshot.mjs save|compare [url]
+// Usage (dev server running):  node theme-snapshot.mjs save|compare [url] [--allow-added]
+//   compare fails on any changed, removed or added element. --allow-added accepts added elements
+//   (only changed and removed ones fail): for comparing with a baseline saved before a feature
+//   added UI, such as the Phase 0 baseline and the Settings › Appearance section.
 //   THEME=dark node theme-snapshot.mjs save   → snapshot of the Dark theme for review
 // save also writes one screenshot per state (output/theme-snapshot/<theme>/<state>.png).
 import { chromium } from 'playwright';
@@ -8,7 +11,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [mode, url = 'http://localhost:5173/'] = process.argv.slice(2);
+const flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
+const [mode, url = 'http://localhost:5173/'] = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+const allowAdded = flags.includes('--allow-added');
 const theme = process.env.THEME ?? 'light';
 const outputDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'output', 'theme-snapshot', theme);
 const SETTLE_MS = 600;
@@ -102,7 +107,7 @@ async function compareState(name, lines) {
   console.log(`${name}: ${summary}`);
   removed.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`- ${line}`));
   added.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`+ ${line}`));
-  return removed.length;
+  return allowAdded ? removed.length : removed.length + added.length;
 }
 
 await mkdir(outputDir, { recursive: true });
