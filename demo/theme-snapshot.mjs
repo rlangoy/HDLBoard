@@ -2,6 +2,7 @@
 // Computed-colour snapshot (docs/HDLBoard_Black_Theme_Spec.md T0.2).
 // Usage (dev server running):  node theme-snapshot.mjs save|compare [url]
 //   THEME=dark node theme-snapshot.mjs save   → snapshot of the Dark theme for review
+// save also writes one screenshot per state (output/theme-snapshot/<theme>/<state>.png).
 import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -57,6 +58,7 @@ async function captureState(browser, state) {
   await state.open(page);
   await page.waitForTimeout(SETTLE_MS);
   const lines = await page.evaluate(readColours, COLOUR_PROPERTIES);
+  if (mode === 'save') await page.screenshot({ path: path.join(outputDir, `${state.name}.png`) });
   await context.close();
   return lines;
 }
