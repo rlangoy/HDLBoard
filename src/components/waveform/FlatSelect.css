@@ -25,7 +25,7 @@
 
 .wv-flat-select__button:hover,
 .wv-flat-select__button[aria-expanded='true'] {
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--wv-flat-select-button-bg-hover);
 }
 
 .wv-flat-select__button:focus-visible {
@@ -47,22 +47,22 @@
   margin: 0;
   padding: 4px;
   list-style: none;
-  border: 1px solid var(--wb-border, #e2e8f0);
+  border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  background: var(--wv-flat-select-list-bg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16); /* theme-exempt: shadow */
 }
 
 .wv-flat-select__list li {
   padding: 5px 10px;
   border-radius: 5px;
-  color: var(--wb-text, #0f172a);
+  color: var(--wb-text);
   font-size: 13px;
   cursor: pointer;
 }
 
 .wv-flat-select__list li.is-active {
-  background: var(--wb-hover, #eef2f7);
+  background: var(--wb-hover);
 }
 
 .wv-flat-select__list li[aria-selected='true'] {

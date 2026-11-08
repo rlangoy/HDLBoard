@@ -480,6 +480,60 @@
   --wb-bce-json-key-fg: #c5162b;
   --wb-bce-json-string-fg: #0064e8;
   --wb-bce-json-value-fg: #00832d;
+
+  /* --- Waveform.css --- */
+  --wv-cursor-field-bg-focus: #ffffff;
+  --wv-button-bg: #fff;
+  --wv-note-bg: #fff7ed;
+  --wv-note-fg: #9a3412;
+  --wv-note-bottom-border: #fed7aa;
+  --wv-sectiontip-bg: #1e293b;
+  --wv-sectiontip-fg: #f8fafc;
+  --wv-sectiontip-hint-fg: #cbd5e1;
+  --wv-tooltip-bg: #0f172a;
+  --wv-tooltip-fg: #e2e8f0;
+  --wv-tooltip-value-fg: #fff;
+  --wv-menu-bg: #fff;
+  --wv-launch-border: #334155;
+  --wv-launch-fg: #cbd5e1;
+  --wv-launch-bg-hover: #1e293b;
+  --wv-launch-new-border: #60a5fa;
+  --wv-launch-new-fg: #e0f2fe;
+  --wv-launch-bg-active: #1e3a8a;
+  --wv-launch-border-active: #3b82f6;
+  --wv-launch-fg-active: #fff;
+  --wv-launch-dot-bg: #60a5fa;
+  --wv-status-bg: #1e293b;
+  --wv-status-fg: #ffffff;
+  --wv-report-band-bg: #ffffff;
+  --wv-report-band-hero-fg: #ffffff;
+  --wv-report-band-badge-bg: #ffffff;
+  --wv-report-band-heading-p-fg: rgba(255, 255, 255, 0.8);
+  --wv-report-band-button-border: rgba(255, 255, 255, 0.55);
+  --wv-report-band-button-fg: #ffffff;
+  --wv-report-band-button-bg-hover: rgba(255, 255, 255, 0.14);
+  --wv-report-band-button-primary-border: #ffffff;
+  --wv-report-band-button-primary-bg: #ffffff;
+  --wv-report-band-button-primary-bg-hover: #e8f0fe;
+  --wv-report-band-button-outline-focus: #ffffff;
+  --wv-report-bg: #e9edf3;
+  --wv-report-page-bg: #ffffff;
+  --wv-report-selection-bg: rgba(37, 99, 235, 0.12);
+  --wv-report-selection-span-fg: #ffffff;
+  --wv-drag-hint-bg: #1e293b;
+  --wv-drag-hint-fg: #f8fafc;
+
+  /* --- FlatSelect.css --- */
+  --wv-flat-select-button-bg-hover: rgba(37, 99, 235, 0.1);
+  --wv-flat-select-list-bg: #ffffff;
+
+  /* --- ColumnDivider.css --- */
+  --hdl-divider-grip: #fff;
+
+  /* --- icons.tsx --- */
+  --wb-icon-muted: #6b7280;
+  --wb-icon-run: #0d9488;
+  --wb-icon-stop: #ef4444;
 }
 
 .wb {
