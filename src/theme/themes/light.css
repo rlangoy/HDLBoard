@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Light theme profile: today's colours, the default (docs/HDLBoard_Black_Theme_Spec.md § 4.2).
+   Colour declarations only. Edit a value here to change the Light appearance. */
+
+:root {
+  color-scheme: light;
+}

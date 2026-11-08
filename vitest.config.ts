@@ -14,7 +14,8 @@ export default defineConfig({
     environment: 'node',
     // Vitest stubs CSS imports to '' — even ?raw — unless included here. The
     // board settings test reads its stylesheet that way rather than through
-    // node:fs, which tsc -b cannot type without @types/node in the frontend.
-    css: { include: [/BoardSettingsPage\.css/] },
+    // node:fs, which tsc -b cannot type without @types/node in the frontend. The
+    // theme tests read the theme profiles the same way (docs/HDLBoard_Black_Theme_Spec.md T0.3).
+    css: { include: [/BoardSettingsPage\.css/, /theme\/themes\/.*\.css/] },
   },
 });

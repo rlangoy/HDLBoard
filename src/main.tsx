@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { LOGO_DATA_URI } from './components/workbench/logo';
 import './index.css';
+import './theme/themes/light.css';
+import './theme/themes/dark.css';
 
 // Set here, not in index.html: the logo is a data URI computed from the
 // actual SVG file (`logo.ts`), so this is the one place that needs to

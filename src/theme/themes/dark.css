@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Dark theme profile (docs/HDLBoard_Black_Theme_Spec.md § 4.2, § 8). Same blocks and
+   variables as light.css, each selector prefixed with :root[data-theme='dark']. */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
