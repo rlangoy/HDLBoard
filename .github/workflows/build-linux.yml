@@ -124,7 +124,9 @@ jobs:
       # a clean ubuntu:22.04 container (B3), since the runner has far more
       # libraries installed than a student's desktop.
       - name: Build AppImage
-        run: linuxAppImage/build.sh --simulators native
+        run: |
+          node --test linuxAppImage/install-electron-fallback.test.cjs
+          linuxAppImage/build.sh --simulators native
 
       - name: Simulator versions
         run: |

@@ -148,7 +148,10 @@ for attempt in 1 2 3 4; do
   if env -u ELECTRON_SKIP_BINARY_DOWNLOAD node "${ELECTRON_DIR}/node_modules/electron/install.js"; then
     break
   fi
-  (( attempt < 4 )) || die "Electron download failed after 4 attempts"
+  if (( attempt == 4 )); then
+    node "${HERE}/install-electron-fallback.cjs" || die "Electron download failed via both release and asset API endpoints"
+    break
+  fi
   echo "  Electron download failed; retrying in $((attempt * 10)) seconds (${attempt}/4)"
   sleep "$((attempt * 10))"
 done
