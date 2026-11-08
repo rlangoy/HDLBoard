@@ -12,6 +12,7 @@ const theme = process.env.THEME ?? 'light';
 const outputDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'output', 'theme-snapshot', theme);
 const SETTLE_MS = 600;
 const MAX_REPORTED_DIFFERENCES = 40;
+const HEAD_TAG = /^(HEAD|LINK|META|SCRIPT|STYLE|TITLE) /;
 const COLOUR_PROPERTIES = [
   'color', 'background-color', 'background-image', 'border-top-color', 'border-right-color',
   'border-bottom-color', 'border-left-color', 'outline-color', 'box-shadow', 'text-shadow',
@@ -60,7 +61,13 @@ async function captureState(browser, state) {
   return lines;
 }
 
-function differences(expected, actual) {
+/** Drops the element index and the <head> elements, whose number changes with the stylesheets loaded. */
+function rendered(lines) {
+  return lines.map((line) => line.slice(line.indexOf(' ') + 1)).filter((line) => !HEAD_TAG.test(line));
+}
+
+function differences(expectedLines, actualLines) {
+  const [expected, actual] = [rendered(expectedLines), rendered(actualLines)];
   const length = Math.max(expected.length, actual.length);
   return Array.from({ length }, (_, i) => i).filter((i) => expected[i] !== actual[i])
     .map((i) => `- ${expected[i] ?? '(missing)'}\n+ ${actual[i] ?? '(missing)'}`);
