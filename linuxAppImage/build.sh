@@ -192,7 +192,13 @@ done
 
 step "Running electron-builder (--linux dir)"
 rm -rf "${OUT_DIR}/builder"
+# electronDist: package the Electron installed above (checksum-verified by
+# install.js or the fallback) instead of letting electron-builder download
+# it again from the same GitHub URL that may be failing.
+electron_dist="${ELECTRON_DIR}/node_modules/electron/dist"
+[[ -x "${electron_dist}/electron" ]] || die "no Electron binary at ${electron_dist}"
 (cd "${ELECTRON_DIR}" && node_modules/.bin/electron-builder --linux dir --x64 --publish never \
+  -c.electronDist="${electron_dist}" \
   -c.directories.output="${OUT_DIR}/builder") || die "electron-builder failed"
 unpacked="${OUT_DIR}/builder/linux-unpacked"
 [[ -x "${unpacked}/hdlboard" ]] || die "electron-builder produced no ${unpacked}/hdlboard"
