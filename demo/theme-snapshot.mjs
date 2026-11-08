@@ -1,122 +1,140 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Computed-colour snapshot (docs/HDLBoard_Black_Theme_Spec.md T0.2).
 // Usage (dev server running):  node theme-snapshot.mjs save|compare [url] [--allow-added]
-//   compare fails on any changed, removed or added element. --allow-added accepts added elements
-//   (only changed and removed ones fail): for comparing with a baseline saved before a feature
-//   added UI, such as the Phase 0 baseline and the Settings › Appearance section.
+//   save      records every state, with one screenshot per state, under output/theme-snapshot/<theme>/.
+//   compare   fails on any changed, removed or added element. --allow-added accepts added
+//             elements (changed and removed ones still fail): for comparing with a baseline saved
+//             before a feature added UI, such as the Phase 0 baseline and Settings › Appearance.
 //   THEME=dark node theme-snapshot.mjs save   → snapshot of the Dark theme for review
-// save also writes one screenshot per state (output/theme-snapshot/<theme>/<state>.png).
 import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { differences, failureCount } from './snapshotDiff.mjs';
 
-const flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
-const [mode, url = 'http://localhost:5173/'] = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
-const allowAdded = flags.includes('--allow-added');
-const theme = process.env.THEME ?? 'light';
-const outputDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'output', 'theme-snapshot', theme);
+const DEFAULT_URL = 'http://localhost:5173/';
+/** Read by the app at start (src/theme/themePreference.ts THEME_STORAGE_KEY). */
+const THEME_STORAGE_KEY = 'hdlboard.theme.v1';
+const VIEWPORT = { width: 1280, height: 800 };
 const SETTLE_MS = 600;
 const MAX_REPORTED_DIFFERENCES = 40;
-const HEAD_TAG = /^(HEAD|LINK|META|SCRIPT|STYLE|TITLE) /;
+const USAGE = 'Usage: node theme-snapshot.mjs save|compare [url] [--allow-added]';
+const EXIT_USAGE = 2;
 const COLOUR_PROPERTIES = [
   'color', 'background-color', 'background-image', 'border-top-color', 'border-right-color',
   'border-bottom-color', 'border-left-color', 'outline-color', 'box-shadow', 'text-shadow',
   'text-decoration-color', 'caret-color', 'accent-color', 'fill', 'stroke', 'color-scheme',
 ];
+
 const clickButton = (name) => (page) => page.getByRole('button', { name, exact: true }).click();
 const clickLabel = (name) => (page) => page.getByLabel(name, { exact: true }).click();
 const clickCss = (selector) => (page) => page.locator(selector).click();
-const steps = (...actions) => async (page) => { for (const action of actions) await action(page); };
+const hoverLabel = (name) => (page) => page.getByLabel(name, { exact: true }).hover();
+/** Parks the mouse in a corner, so no hover style depends on where the last click was. */
+const parkMouse = (page) => page.mouse.move(1, 1);
+const steps = (...actions) => async (page) => {
+  for (const action of actions) await action(page);
+};
+
 const STATES = [
   { name: 'workbench', open: async () => {} },
   { name: 'settings', open: clickButton('Settings') },
   { name: 'help', open: clickButton('Help') },
   { name: 'about', open: clickButton('About') },
   { name: 'board-menu', open: clickButton('LED display options') },
-  { name: 'board-pressed', open: steps(clickLabel('SW3'), clickLabel('SW0'), (page) => page.getByLabel('KEY1', { exact: true }).hover()) },
+  { name: 'board-pressed', open: steps(clickLabel('SW3'), clickLabel('SW0'), hoverLabel('KEY1')) },
   { name: 'examples', open: clickButton('Examples') },
   { name: 'new-file', open: clickCss('.wb-files__new') },
   { name: 'find', open: clickButton('Search in DE1_SoC.vhdl') },
   { name: 'projects', open: clickCss('.wb-files__open-project') },
   { name: 'project-page', open: clickCss('.wb-files__project') },
-  { name: 'board-settings', open: steps(clickButton('Settings'), clickButton('Manage board'), (page) => page.mouse.move(1, 1)) },
+  { name: 'board-settings', open: steps(clickButton('Settings'), clickButton('Manage board'), parkMouse) },
   { name: 'github', open: clickButton('GitHub') },
 ];
 
+/** Runs in the page: one line per element with its own and its pseudo-elements' colours. */
 function readColours(properties) {
   const read = (element, pseudo) => {
     const style = getComputedStyle(element, pseudo);
     return properties.map((property) => style.getPropertyValue(property)).join('|');
   };
-  return [...document.querySelectorAll('*')].map((element, index) =>
-    `${index} ${element.tagName} .${element.getAttribute('class') ?? ''} ${read(element, null)} ${read(element, '::before')} ${read(element, '::after')}`,
-  );
+  const describe = (element, index) => {
+    const colours = [null, '::before', '::after'].map((pseudo) => read(element, pseudo)).join(' ');
+    return `${index} ${element.tagName} .${element.getAttribute('class') ?? ''} ${colours}`;
+  };
+  return [...document.querySelectorAll('*')].map(describe);
 }
 
-async function captureState(browser, state) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
-  await context.addInitScript((value) => localStorage.setItem('hdlboard.theme.v1', value), theme);
+/** Opens `state` in a fresh page with `theme` stored, runs `use(page)`, and closes the page. */
+async function withStatePage(browser, { theme, url, state }, use) {
+  const context = await browser.newContext({ viewport: VIEWPORT, reducedMotion: 'reduce' });
+  await context.addInitScript(([key, value]) => localStorage.setItem(key, value), [THEME_STORAGE_KEY, theme]);
   const page = await context.newPage();
   await page.goto(url);
   await page.locator('.wb').waitFor();
   await state.open(page);
   await page.waitForTimeout(SETTLE_MS);
-  const lines = await page.evaluate(readColours, COLOUR_PROPERTIES);
-  if (mode === 'save') await page.screenshot({ path: path.join(outputDir, `${state.name}.png`) });
-  await context.close();
-  return lines;
-}
-
-/** Drops the element index and the <head> elements, whose number changes with the stylesheets loaded. */
-function rendered(lines) {
-  return lines.map((line) => line.slice(line.indexOf(' ') + 1)).filter((line) => !HEAD_TAG.test(line));
-}
-
-/** Longest-common-subsequence table, so added or removed elements do not shift the rest. */
-function commonTable(expected, actual) {
-  const table = Array.from({ length: expected.length + 1 }, () => new Uint16Array(actual.length + 1));
-  for (let i = expected.length - 1; i >= 0; i--) {
-    for (let j = actual.length - 1; j >= 0; j--) {
-      table[i][j] = expected[i] === actual[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
-    }
+  try {
+    return await use(page);
+  } finally {
+    await context.close();
   }
-  return table;
 }
 
-/** Lines only in the baseline (changed or removed) and lines only in the new capture. */
-function differences(expectedLines, actualLines) {
-  const [expected, actual] = [rendered(expectedLines), rendered(actualLines)];
-  const table = commonTable(expected, actual);
-  const removed = [];
-  const added = [];
-  let [i, j] = [0, 0];
-  while (i < expected.length || j < actual.length) {
-    if (i < expected.length && j < actual.length && expected[i] === actual[j]) [i, j] = [i + 1, j + 1];
-    else if (j < actual.length && (i === expected.length || table[i][j + 1] >= table[i + 1][j])) added.push(actual[j++]);
-    else removed.push(expected[i++]);
-  }
-  return { removed, added };
+function captureColours(page) {
+  return page.evaluate(readColours, COLOUR_PROPERTIES);
 }
 
-async function compareState(name, lines) {
-  const expected = JSON.parse(await readFile(path.join(outputDir, `${name}.json`), 'utf8'));
-  const { removed, added } = differences(expected, lines);
-  const summary = removed.length === 0 && added.length === 0 ? 'identical'
-    : `${removed.length} changed or removed, ${added.length} added element(s)`;
+async function saveState(page, state, outputDir) {
+  const lines = await captureColours(page);
+  await writeFile(path.join(outputDir, `${state.name}.json`), JSON.stringify(lines, null, 1));
+  await page.screenshot({ path: path.join(outputDir, `${state.name}.png`) });
+  return 0;
+}
+
+function report(name, { removed, added }) {
+  const identical = removed.length === 0 && added.length === 0;
+  const summary = identical ? 'identical' : `${removed.length} changed or removed, ${added.length} added element(s)`;
   console.log(`${name}: ${summary}`);
   removed.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`- ${line}`));
   added.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`+ ${line}`));
-  return allowAdded ? removed.length : removed.length + added.length;
 }
 
-await mkdir(outputDir, { recursive: true });
-const browser = await chromium.launch();
-let total = 0;
-for (const state of STATES) {
-  const lines = await captureState(browser, state);
-  if (mode === 'save') await writeFile(path.join(outputDir, `${state.name}.json`), JSON.stringify(lines, null, 1));
-  else total += await compareState(state.name, lines);
+async function compareState(page, state, { outputDir, allowAdded }) {
+  const expected = JSON.parse(await readFile(path.join(outputDir, `${state.name}.json`), 'utf8'));
+  const found = differences(expected, await captureColours(page));
+  report(state.name, found);
+  return failureCount(found, allowAdded);
 }
-await browser.close();
-process.exitCode = total === 0 ? 0 : 1;
+
+/** The command line, or null when it is not a valid one. */
+function parseArguments(args) {
+  const flags = args.filter((arg) => arg.startsWith('--'));
+  const [mode, url = DEFAULT_URL] = args.filter((arg) => !arg.startsWith('--'));
+  const isKnownMode = mode === 'save' || mode === 'compare';
+  return isKnownMode ? { mode, url, allowAdded: flags.includes('--allow-added') } : null;
+}
+
+async function run({ mode, url, allowAdded }) {
+  const theme = process.env.THEME ?? 'light';
+  const outputDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'output', 'theme-snapshot', theme);
+  await mkdir(outputDir, { recursive: true });
+  const browser = await chromium.launch();
+  let failures = 0;
+  for (const state of STATES) {
+    const run = mode === 'save'
+      ? (page) => saveState(page, state, outputDir)
+      : (page) => compareState(page, state, { outputDir, allowAdded });
+    failures += await withStatePage(browser, { theme, url, state }, run);
+  }
+  await browser.close();
+  return failures;
+}
+
+const options = parseArguments(process.argv.slice(2));
+if (options === null) {
+  console.error(USAGE);
+  process.exitCode = EXIT_USAGE;
+} else {
+  process.exitCode = (await run(options)) === 0 ? 0 : 1;
+}
