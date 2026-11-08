@@ -13,10 +13,10 @@
   flex: 0 1 auto;
   min-height: 220px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--wb-files-bg);
   border: 1px solid var(--wb-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); /* theme-exempt: shadow */
 }
 
 /* Drag-and-drop: dropping anywhere on the panel imports the file(s),
@@ -34,8 +34,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(229, 239, 255, 0.92); /* --wb-accent-soft, translucent */
-  color: var(--wb-accent-dark);
+  background: var(--wb-files-drop-hint-bg); /* --wb-accent-soft, translucent */
+  color: var(--wb-accent-dark-ink);
   font-size: 13px;
   font-weight: 600;
   border-radius: 11px; /* one px inside the card's own 12px radius/border */
@@ -43,7 +43,7 @@
 }
 
 .wb-files__drop-hint .wb-icon--upload {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-files__header {
@@ -108,7 +108,7 @@
 .wb-files__upload {
   border: 1px solid var(--wb-accent-dark);
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-files-upload-fg);
 }
 
 .wb-files__upload:hover {
@@ -120,7 +120,7 @@
 .wb-files__open-project,
 .wb-files__download-all {
   border: 1px solid var(--wb-border);
-  background: #ffffff;
+  background: var(--wb-files-new-bg);
   color: var(--wb-text);
 }
 
@@ -143,10 +143,10 @@
   min-width: 0;
   margin-left: auto;
   padding: 5px 12px;
-  border: 1px solid #c7dafc;
+  border: 1px solid var(--wb-files-examples-border);
   border-radius: 999px;
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -155,14 +155,14 @@
 }
 
 .wb-files__examples:hover {
-  background: #d6e5ff;
+  background: var(--wb-files-examples-bg-hover);
   border-color: var(--wb-accent);
 }
 
 .wb-files__examples[aria-pressed='true'] {
   background: var(--wb-accent);
   border-color: var(--wb-accent-dark);
-  color: #ffffff;
+  color: var(--wb-files-examples-fg-active);
 }
 
 .wb-files__examples-icon {
@@ -263,12 +263,12 @@
 }
 
 .wb-files__row.is-shown .wb-files__file {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font-weight: 600;
 }
 
 .wb-files__row.is-shown .wb-roleicon.is-rtl {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 /* A `vhdl/` row's top-dot button (below) already supplies the row's
@@ -308,7 +308,7 @@
 }
 
 .wb-files__top-dot:not(:disabled):hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--wb-files-top-dot-bg-hover);
 }
 
 .wb-files__top-dot-glyph {
@@ -337,7 +337,7 @@
   font: inherit;
   font-size: 13.5px;
   color: var(--wb-text);
-  background: #ffffff;
+  background: var(--wb-files-rename-input-bg);
   border: 1px solid var(--wb-accent);
   border-radius: 4px;
   padding: 3px 6px;
@@ -382,13 +382,13 @@
 }
 
 .wb-files__row-action:hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--wb-files-row-action-bg-hover);
   color: var(--wb-text);
 }
 
 .wb-files__row-action--danger:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--wb-danger-dark);
+  background: var(--wb-files-row-action-danger-bg-hover);
+  color: var(--wb-danger-dark-ink);
 }
 
 /* ---- icons ---------------------------------------------------------- */
@@ -463,7 +463,7 @@
 .wb-icon--folder {
   width: 13px;
   height: 10px;
-  background: #e8b64c;
+  background: var(--wb-icon-folder-bg);
   border-radius: 0 2px 2px 2px;
   position: relative;
   flex: none;
@@ -475,7 +475,7 @@
   top: -2px;
   width: 6px;
   height: 2px;
-  background: #e8b64c;
+  background: var(--wb-icon-folder-before-bg);
   border-radius: 2px 2px 0 0;
 }
 
@@ -512,7 +512,7 @@
   padding: 8px 10px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-files-project-bg);
   font: inherit;
   text-align: left;
   color: var(--wb-text);
@@ -533,7 +533,7 @@
   width: 22px;
   height: 22px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-files__project-text {
@@ -568,7 +568,7 @@
   flex: none;
   padding: 4px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--wb-files-project-dot-bg);
   background-clip: content-box;
 }
 

@@ -101,6 +101,10 @@ const NEW_CODE = [
   'src/components/workbench/boardArrangement.test.ts',
   'src/components/workbench/usePanelDrag.ts',
   'src/components/dragGesture.ts',
+  // Theme profiles and switching (docs/HDLBoard_Black_Theme_Spec.md).
+  'src/theme/**/*.ts',
+  'src/theme/**/*.tsx',
+  'src/components/workbench/ThemeSetting.tsx',
 ];
 
 const MAX_FUNCTION_LINES = 40;

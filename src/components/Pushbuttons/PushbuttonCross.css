@@ -35,8 +35,3 @@
 .pb-cross__cell--down { grid-area: down; }
 
 /* The reset button stands apart from the others: a red cap. */
-.pb-ui.pb-key--reset {
-  --pb-key-cap-hi: #e0574c;
-  --pb-key-cap-body: #c0392b;
-  --pb-key-cap-lo: #922b21;
-}

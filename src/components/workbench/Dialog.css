@@ -15,7 +15,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--wb-dialog-backdrop);
   animation: wb-dialog-fade 140ms ease-out;
 }
 
@@ -25,12 +25,12 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--wb-dialog-bg);
   color: var(--wb-text);
   border-radius: 14px;
   box-shadow:
-    0 24px 60px rgba(15, 23, 42, 0.35),
-    0 0 0 1px rgba(15, 23, 42, 0.08);
+    0 24px 60px rgba(15, 23, 42, 0.35), /* theme-exempt: shadow */
+    0 0 0 1px var(--wb-dialog-edge);
   animation: wb-dialog-rise 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -47,7 +47,7 @@
   gap: 18px;
   padding: 22px 28px;
   background: linear-gradient(180deg, var(--wb-header-bg) 0%, var(--wb-header-bg-dark) 100%);
-  color: #ffffff;
+  color: var(--wb-on-header-fg);
 }
 
 .wb-dialog__badge {
@@ -59,10 +59,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--wb-dialog-badge-bg);
   border-radius: 14px;
-  color: var(--wb-header-bg-dark);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+  color: var(--wb-header-bg-dark-ink);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25); /* theme-exempt: shadow */
 }
 
 .wb-dialog__badge > img,
@@ -87,7 +87,7 @@
 .wb-dialog__subtitle {
   margin: 4px 0 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--wb-on-header-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -104,11 +104,11 @@
   margin: 0 0 18px;
   font-size: 14px;
   line-height: 1.55;
-  color: #334155;
+  color: var(--wb-text-body);
 }
 
 .wb-dialog a {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-decoration: none;
   border-radius: 2px;
 }
@@ -127,11 +127,11 @@
    a warning (About's no-warranty notice), blue for a hint. */
 .wb-dialog__callout {
   padding: 14px 16px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 4px solid #f59e0b;
+  background: var(--wb-dialog-callout-bg);
+  border: 1px solid var(--wb-dialog-callout-border);
+  border-left: 4px solid var(--wb-dialog-callout-left-border);
   border-radius: 8px;
-  color: #78350f;
+  color: var(--wb-dialog-callout-fg);
   font-size: 13.5px;
   line-height: 1.5;
 }
@@ -150,18 +150,18 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #b45309;
+  color: var(--wb-dialog-callout-title-fg);
 }
 
 .wb-dialog__callout--info {
   background: var(--wb-accent-soft);
-  border-color: #bfd5fb;
+  border-color: var(--wb-dialog-callout-info-border);
   border-left-color: var(--wb-accent);
-  color: #1e3a8a;
+  color: var(--wb-dialog-callout-info-fg);
 }
 
 .wb-dialog__callout--info .wb-dialog__callout-title {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 /* ------------------------------------------------------------ footer */
@@ -184,7 +184,7 @@
   border: 1px solid var(--wb-border);
   border-radius: 8px;
   padding: 9px 18px;
-  background: #ffffff;
+  background: var(--wb-dialog-secondary-bg);
   color: var(--wb-text);
   font: inherit;
   font-size: 14px;
@@ -212,7 +212,7 @@
   border-radius: 8px;
   padding: 9px 22px;
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-dialog-close-fg);
   font: inherit;
   font-size: 14px;
   font-weight: 600;

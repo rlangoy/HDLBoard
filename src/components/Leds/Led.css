@@ -47,10 +47,10 @@
      the reference lens only darkens by ~20/255 at those edges */
   box-shadow:
     inset calc(var(--pb-led-w) * -0.03) 0 calc(var(--pb-led-w) * 0.055)
-      rgba(0, 0, 0, 0.2),
+      rgba(0, 0, 0, 0.2), /* theme-exempt: shadow */
     inset 0 calc(var(--pb-led-w) * -0.03) calc(var(--pb-led-w) * 0.055)
-      rgba(0, 0, 0, 0.14),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+      rgba(0, 0, 0, 0.14), /* theme-exempt: shadow */
+    inset 0 0 0 1px var(--pb-led-lens-edge);
 
   transition:
     background-color 140ms ease,
@@ -78,29 +78,11 @@
   );
   box-shadow:
     inset 0 calc(var(--pb-led-w) * -0.06) calc(var(--pb-led-w) * 0.16)
-      rgba(90, 0, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      var(--pb-led-lens-shadow-on),
+    inset 0 0 0 1px var(--pb-led-lens-highlight-on);
 }
 
 /* ------------------------------------------------------ colour variants */
-
-.pb-led--green {
-  --pb-led-rim-on: #dcf5e0;
-  --pb-led-core: #f0fff2;
-  --pb-led-mid: #5cf07a;
-  --pb-led-body: #14c93a;
-  --pb-led-edge: #077a22;
-  --pb-led-glow: 40, 220, 80;
-}
-
-.pb-led--amber {
-  --pb-led-rim-on: #fbf0d6;
-  --pb-led-core: #fffaea;
-  --pb-led-mid: #ffcb52;
-  --pb-led-body: #f59d0b;
-  --pb-led-edge: #a35c04;
-  --pb-led-glow: 250, 170, 25;
-}
 
 /* ------------------------------------------------- interactive variant */
 
@@ -123,14 +105,14 @@ button.pb-led:disabled {
 button.pb-led:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px #fff,
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 
 button.pb-led.is-on:focus-visible {
   box-shadow:
     0 0 calc(var(--pb-led-w) * 0.5) rgba(var(--pb-led-glow), 0.7),
-    0 0 0 2px #fff,
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 

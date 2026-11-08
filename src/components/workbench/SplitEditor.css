@@ -35,7 +35,7 @@
 }
 
 .wb-split__divider:focus-visible {
-  outline: 2px solid var(--wb-focus-ring, #2563eb);
+  outline: 2px solid var(--wb-focus-ring);
   outline-offset: -1px;
 }
 
@@ -62,7 +62,7 @@
 /* One design file with no testbench: white like the code below, no tint or accent. */
 .wb-panehead.is-plain {
   border-top: 0;
-  background: #ffffff;
+  background: var(--wb-panehead-plain-bg);
 }
 
 /* Sets Play apart from the name, which is the header's main element. */
@@ -81,7 +81,7 @@
 .wb-searchtoggle.is-pressed,
 .wb-searchtoggle.is-pressed:hover {
   background: var(--wb-accent-soft);
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 /* The Find bar's slot under the header: no box of its own; focus in it marks the pane as the one with the cursor. */
@@ -114,7 +114,7 @@
 
 /* An unfocused pane's header is quieter, so the focused one (what runs) stands out. */
 .wb-split.is-both .wb-split__pane:not(.is-focused) .wb-panehead {
-  background: color-mix(in srgb, var(--wb-role-head) 45%, #ffffff);
+  background: color-mix(in srgb, var(--wb-role-head) 45%, var(--wb-panehead-unfocused-bg));
 }
 
 .wb-panehead__badge-wrap {
@@ -131,7 +131,7 @@
   padding: 0 7px 0 5px;
   border: 1px solid var(--wb-role-ink);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--wb-rolebadge-bg);
   color: var(--wb-role-ink);
   font: inherit;
   font-weight: 700;
@@ -167,7 +167,7 @@
 }
 
 .wb-panehead__btn:hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--wb-panehead-btn-bg-hover);
 }
 
 .wb-panehead__regions {
@@ -196,14 +196,14 @@
   gap: 8px;
   padding: 4px 10px;
   border-bottom: 1px solid var(--wb-border);
-  background: #fffbeb;
+  background: var(--wb-split-note-bg);
   font-size: 12px;
 }
 
 .wb-split__note button {
   border: 1px solid var(--wb-border);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--wb-split-note-button-bg);
   font: inherit;
   cursor: pointer;
 }
@@ -220,8 +220,8 @@
   padding: 4px;
   border: 1px solid var(--wb-border);
   border-radius: 6px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  background: var(--wb-menu-bg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16); /* theme-exempt: shadow */
   font-size: 12px;
   color: var(--wb-text);
 }
@@ -296,7 +296,7 @@
   justify-content: center;
   gap: 14px;
   padding: 24px;
-  background: #ffffff;
+  background: var(--wb-split-empty-bg);
   text-align: center;
 }
 
@@ -326,7 +326,7 @@
   padding: 0 12px;
   border: 1px solid var(--wb-border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--wb-split-empty-btn-bg);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -339,7 +339,7 @@
 .wb-split-empty__btn.is-primary {
   border-color: var(--wb-role-ink);
   background: var(--wb-role-ink);
-  color: #ffffff;
+  color: var(--wb-split-empty-btn-primary-fg);
 }
 
 /* ---- suggestion chip (§ 4.7) ----------------------------------------- */
@@ -370,7 +370,7 @@
   height: 20px;
   border: 0;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--wb-tbchip-open-bg);
   color: inherit;
   font: inherit;
   font-weight: 600;

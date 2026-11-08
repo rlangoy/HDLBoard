@@ -17,6 +17,7 @@ import type { TraceRow } from './signalRows';
 import { pixelResolutionFs, timeToX, xToTime } from './timeAxis';
 import { takesCursor, useCanvasGestures, type GestureHandlers } from './useCanvasGestures';
 import type { RangeGestures } from './useTimeGestures';
+import { useResolvedTheme } from '../../theme/useTheme';
 import { spanAt } from './valueAt';
 
 /** How close to the error marker the mouse must be to show its message. */
@@ -107,6 +108,7 @@ function useCanvasMouse(props: WaveCanvasProps, gestures: RangeGestures) {
 }
 
 export function WaveCanvas(props: WaveCanvasProps) {
+  useResolvedTheme(); // a theme change re-renders, and so repaints, the canvas in the new colours
   const { scene, error, handlers } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gestures = useCanvasGestures(canvasRef, scene, handlers);

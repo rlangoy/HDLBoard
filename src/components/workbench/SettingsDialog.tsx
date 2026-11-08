@@ -14,6 +14,7 @@ import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL, type ExampleLanguage } from './examp
 import type { PreferredLanguages } from './languagePrefs';
 import { APP_NAME, ISSUES_URL } from './project';
 import { TEXT } from './testbenchText';
+import { ThemeSetting } from './ThemeSetting';
 import './SettingsDialog.css';
 
 export interface SettingsDialogProps {
@@ -229,6 +230,7 @@ export function SettingsDialog({
       subtitle={APP_NAME}
       icon={<GearIcon />}
     >
+      <ThemeSetting />
       <BoardSetting boards={boards} boardId={boardId} locked={boardLocked} onChange={onBoardChange} onViewSettings={onViewBoardSettings} />
       <BoardLayoutSetting value={boardLayout} onChange={onBoardLayoutChange} />
       <BouncySetting value={bouncyButtons} onChange={onBouncyButtonsChange} />

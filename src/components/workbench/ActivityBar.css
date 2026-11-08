@@ -85,7 +85,7 @@
 }
 
 .wb-activitybar__item:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.07);
+  background: var(--wb-activitybar-item-bg-hover);
   color: var(--wb-text);
 }
 
@@ -132,7 +132,7 @@
 
 .wb-activitybar__run.is-compiling .wb-activitybar__badge {
   display: block;
-  background: #f59e0b;
+  background: var(--wb-activitybar-badge-compiling-bg);
   animation: wb-pulse 900ms ease-in-out infinite;
 }
 

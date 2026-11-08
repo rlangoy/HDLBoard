@@ -30,7 +30,7 @@
   border-radius: 8px;
   background: var(--wb-danger-dark);
   box-shadow: 0 0 0 2px var(--wb-header-bg);
-  color: #ffffff;
+  color: var(--wb-update-badge-fg);
   font-size: 10px;
   font-weight: 700;
   line-height: 16px;
@@ -52,9 +52,9 @@
   padding: 16px 14px 14px 16px;
   border: 1px solid var(--wb-border);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--wb-update-notice-bg);
   color: var(--wb-text);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); /* theme-exempt: shadow */
   animation: wb-update-rise 140ms ease-out;
 }
 
@@ -67,7 +67,7 @@
   justify-content: center;
   border-radius: 50%;
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-update-icon-fg);
 }
 
 .wb-update__icon svg {
@@ -111,7 +111,7 @@
 
 .wb-update__view {
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-update-view-fg);
   text-decoration: none;
 }
 

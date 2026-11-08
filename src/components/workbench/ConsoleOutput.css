@@ -18,7 +18,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--wb-console-header-border);
   flex: none;
 }
 
@@ -26,16 +26,16 @@
   margin: 0;
   font-size: 13px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: var(--wb-console-title-fg);
 }
 
 .wb-console__clear {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #334155;
+  border: 1px solid var(--wb-console-clear-border);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--wb-console-clear-fg);
   font: inherit;
   font-size: 12px;
   padding: 5px 10px;
@@ -44,7 +44,7 @@
 }
 
 .wb-console__clear:hover {
-  background: #1e293b;
+  background: var(--wb-console-clear-bg-hover);
 }
 
 .wb-console__body {
@@ -58,21 +58,21 @@
 }
 
 .wb-console__line {
-  color: #cbd5e1;
+  color: var(--wb-console-line-fg);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .wb-console__line.is-success {
-  color: #4ade80;
+  color: var(--wb-console-line-success-fg);
 }
 
 .wb-console__line.is-error {
-  color: #f87171;
+  color: var(--wb-console-line-error-fg);
 }
 
 .wb-console__time {
-  color: #64748b;
+  color: var(--wb-console-time-fg);
 }
 
 .wb-console__clear-icon {
@@ -85,15 +85,15 @@
 .wb-console__reports {
   border-collapse: collapse;
   margin: 2px 0 4px;
-  color: #cbd5e1;
+  color: var(--wb-console-reports-fg);
 }
 
 .wb-console__reports th {
   padding: 0 18px 2px 0;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--wb-console-reports-th-border);
   font-weight: 600;
   text-align: left;
-  color: #64748b;
+  color: var(--wb-console-reports-th-fg);
 }
 
 .wb-console__reports td {
@@ -109,20 +109,20 @@
 }
 
 .wb-console__reports tbody tr:hover {
-  background: #1e293b;
+  background: var(--wb-console-reports-tbody-tr-bg-hover);
 }
 
 .wb-console__report-line {
-  color: #64748b;
+  color: var(--wb-console-report-line-fg);
 }
 
 .wb-console__reports tr.is-warning {
-  color: #fbbf24;
+  color: var(--wb-console-reports-tr-warning-fg);
 }
 
 .wb-console__reports tr.is-error,
 .wb-console__reports tr.is-failure {
-  color: #f87171;
+  color: var(--wb-console-reports-tr-error-fg);
 }
 
 /* The severity of anything but a note, in words too: colour is never the only cue. */
@@ -147,7 +147,7 @@
   text-decoration-style: solid;
 }
 .wb-console__link:focus-visible {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid var(--wb-console-link-outline-focus);
 }
 
 .wb-console__actions {
@@ -165,7 +165,7 @@
 .wb-console__wave-link,
 .wb-console__line-link {
   margin-left: 2px;
-  color: #93c5fd;
+  color: var(--wb-console-wave-link-fg);
   text-decoration: underline;
 }
 

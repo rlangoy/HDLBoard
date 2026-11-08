@@ -699,6 +699,26 @@ Convention 7 already anticipated the end state: *"The simulator will drive
 them controlled."* That is the mechanism — `value` + no `onChange` on the
 output panels — and nothing in the components has to change to support it.
 
+### 5.1 Theming
+
+**Theming.** Colours live only in the theme profiles `src/theme/themes/light.css` (default)
+and `dark.css`. Components use `var(--…)` and never colour literals, theme-ID checks or
+`!important`. Geometry tokens (`--pb-unit`, sizes, radii, travel) stay in the component token
+files and are never themed.
+
+**To add a colour:** (1) name it with `--<wb|pb|wv|hdl>-<component>-<part>-<role>[-<state>]`;
+(2) declare it in the `:root` block of `light.css` **and** of `dark.css` (if the existing
+variable family lives on `.pb-ui` / `.wv-pane` / a variant, declare it in that block in both
+files); (3) use it with `var(--name)`; (4) run `npm test` (parity + contrast) and
+`node tools/theme-literals.mjs` (must report 0). Neutral blurred shadows may stay literal with
+`/* theme-exempt: shadow */`.
+
+**Board I/O:** only colours are themed. Unlit LEDs and segments must stay visible and clearly
+weaker than lit ones; hardware colours (red/green/amber LEDs, the red reset cap) do not change
+between themes.
+
+Full rules: `docs/HDLBoard_Black_Theme_Spec.md`.
+
 ---
 
 ## 6. Component APIs

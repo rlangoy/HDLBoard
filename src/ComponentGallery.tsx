@@ -20,6 +20,7 @@ import {
   patternToSegments,
 } from './components/SevenSegment';
 import { Board } from './components/board';
+import './ComponentGallery.css';
 
 /**
  * Every board component, every state, side by side with what the

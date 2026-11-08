@@ -30,10 +30,10 @@
 
 .wb-project__card {
   padding: 20px 22px;
-  background: #ffffff;
+  background: var(--wb-project-card-bg);
   border: 1px solid var(--wb-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); /* theme-exempt: shadow */
 }
 
 .wb-project__card-title {
@@ -62,8 +62,8 @@
   height: 52px;
   flex: none;
   border-radius: 12px;
-  background: linear-gradient(160deg, #4f8bff, var(--wb-accent-dark));
-  color: #ffffff;
+  background: linear-gradient(160deg, var(--wb-project-badge-bg), var(--wb-accent-dark));
+  color: var(--wb-project-badge-fg);
 }
 
 .wb-project__badge svg {
@@ -91,8 +91,8 @@
 .wb-project__unsaved {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--wb-project-unsaved-bg);
+  color: var(--wb-project-unsaved-fg);
   font-size: 11px;
   font-weight: 700;
 }
@@ -108,7 +108,7 @@
   padding: 2px 8px;
   border: 1px solid var(--wb-border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--wb-project-name-input-bg);
   font: inherit;
   font-size: 24px;
   font-weight: 700;
@@ -120,14 +120,14 @@
 }
 
 .wb-project__name-input:hover {
-  border-color: #cbd5e1;
+  border-color: var(--wb-project-name-input-border-hover);
 }
 
 .wb-project__name-input:focus-visible {
   outline: none;
   border-color: var(--wb-accent);
   box-shadow: 0 0 0 2px var(--wb-accent-soft);
-  background: #ffffff;
+  background: var(--wb-project-name-input-bg-focus);
 }
 
 .wb-project__actions {
@@ -147,7 +147,7 @@
   padding: 8px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-project-btn-bg);
   font: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -169,7 +169,7 @@
 .wb-project__btn--primary {
   border-color: var(--wb-accent);
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-project-btn-primary-fg);
 }
 
 .wb-project__btn--primary:hover:not(:disabled) {
@@ -247,7 +247,7 @@
   padding: 7px 10px;
   border: 1px solid var(--wb-border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--wb-project-field-bg);
   font: inherit;
   font-size: 14px;
   color: var(--wb-text);
@@ -264,7 +264,7 @@
 }
 
 .wb-project__field::placeholder {
-  color: #94a3b8;
+  color: var(--wb-project-field-placeholder-fg);
 }
 
 .wb-project__select {
@@ -296,7 +296,7 @@
   top: 50%;
   left: 9px;
   display: grid;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -313,7 +313,7 @@
 .wb-project__field-error {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 /* --- busy, warnings, missing files ---------------------------------- */
@@ -324,7 +324,7 @@
   gap: 10px;
   margin: 0;
   padding: 10px 14px;
-  border: 1px solid #c7dafc;
+  border: 1px solid var(--wb-project-busy-border);
   border-radius: 8px;
   background: var(--wb-accent-soft);
   font-size: 14px;
@@ -334,7 +334,7 @@
 .wb-project__spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid #b6cdf8;
+  border: 2px solid var(--wb-project-spinner-border);
   border-top-color: var(--wb-accent);
   border-radius: 50%;
   animation: wb-project-spin 0.8s linear infinite;
@@ -347,8 +347,8 @@
 }
 
 .wb-project__warnings {
-  border-color: #fde68a;
-  background: #fffbeb;
+  border-color: var(--wb-project-warnings-border);
+  background: var(--wb-project-warnings-bg);
 }
 
 .wb-project__warnings ul {
@@ -356,14 +356,14 @@
   padding-left: 22px;
   font-size: 13px;
   line-height: 1.55;
-  color: #78350f;
+  color: var(--wb-project-warnings-ul-fg);
 }
 
 .wb-project__warn-icon {
   width: 17px;
   height: 17px;
   flex: none;
-  color: #d97706;
+  color: var(--wb-project-warn-icon-fg);
 }
 
 .wb-project__missing {
@@ -371,7 +371,7 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  border-color: #c7dafc;
+  border-color: var(--wb-project-missing-border);
 }
 
 .wb-project__missing-text {
@@ -388,7 +388,7 @@
 .wb-project__missing-icon {
   width: 20px;
   height: 20px;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-project__hidden-input {
@@ -482,7 +482,7 @@
 }
 
 button.wb-project__file:hover {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-decoration: underline;
 }
 
@@ -509,7 +509,7 @@ button.wb-project__file:hover {
   margin: 2px 0 0 26px;
   font-size: 12px;
   line-height: 1.4;
-  color: #92400e;
+  color: var(--wb-project-problem-fg);
 }
 
 .wb-project__cell-actions {
@@ -538,11 +538,11 @@ button.wb-project__file:hover {
 
 .wb-project__icon-btn:hover:not(:disabled) {
   background: var(--wb-hover);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-project__icon-btn--danger:hover:not(:disabled) {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-project__icon-btn:disabled {
@@ -567,7 +567,7 @@ button.wb-project__file:hover {
   gap: 10px;
   margin: 0;
   padding: 12px 14px;
-  border: 1px solid #c7dafc;
+  border: 1px solid var(--wb-project-note-border);
   border-radius: 8px;
   background: var(--wb-accent-soft);
   font-size: 13px;
@@ -579,7 +579,7 @@ button.wb-project__file:hover {
   width: 20px;
   height: 20px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-project__footer {
@@ -597,7 +597,7 @@ button.wb-project__file:hover {
   background: none;
   font: inherit;
   font-weight: 600;
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
   cursor: pointer;
 }
 
@@ -647,7 +647,7 @@ button.wb-project__file:hover {
   align-items: stretch;
   border: 1px solid var(--wb-border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--wb-project-field-wrap-has-suffix-bg);
   overflow: hidden;
 }
 
@@ -778,7 +778,7 @@ button.wb-project__file:hover {
   z-index: 1;
   width: 16px;
   height: 16px;
-  color: #94a3b8;
+  color: var(--wb-project-name-icon-fg);
   pointer-events: none;
 }
 
@@ -787,7 +787,7 @@ button.wb-project__file:hover {
 }
 
 .wb-project__name-row.is-asking .wb-project__name-input::placeholder {
-  color: #64748b;
+  color: var(--wb-text-muted);
 }
 
 /* The helper under the field while it is empty; red after Save to GitHub was clicked without a name. */
@@ -799,7 +799,7 @@ button.wb-project__file:hover {
 }
 
 .wb-project__name-hint.is-error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-project__name-row.is-error .wb-project__name-input.is-asking {
@@ -809,7 +809,7 @@ button.wb-project__file:hover {
 }
 
 .wb-project__name-row.is-error .wb-project__name-icon {
-  color: var(--wb-danger);
+  color: var(--wb-danger-ink);
 }
 
 /* Save to GitHub waits for a name: dimmed, but clickable so it can say why. */
@@ -845,7 +845,7 @@ button.wb-project__file:hover {
   left: 10px;
   width: 16px;
   height: 16px;
-  color: #94a3b8;
+  color: var(--wb-project-pencil-fg);
   pointer-events: none;
 }
 
@@ -866,7 +866,7 @@ button.wb-project__file:hover {
   display: block;
   margin-top: 6px;
   font-size: 13px;
-  color: #92400e;
+  color: var(--wb-project-board-note-fg);
 }
 
 .wb-project__text-btn {
@@ -875,7 +875,7 @@ button.wb-project__file:hover {
   background: none;
   font: inherit;
   font-weight: 600;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
   cursor: pointer;
 }
 

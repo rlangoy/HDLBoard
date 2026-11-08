@@ -127,7 +127,7 @@
   margin: calc(var(--pb-unit) * 0.45) 0 0;
   font-size: calc(var(--pb-unit) * 0.45);
   font-style: italic;
-  color: #64748b;
+  color: var(--pb-panel-hint-fg);
 }
 
 /* The 7-segment and pushbutton cards are as narrow as their parts: a long heading
