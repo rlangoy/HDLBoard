@@ -7,11 +7,12 @@ it('the index.html bootstrap reads the same storage key as the app', () => {
   expect(indexHtml).toContain(`localStorage.getItem('${THEME_STORAGE_KEY}')`);
 });
 
-it('the index.html bootstrap runs before any stylesheet or module script', () => {
-  const bootstrap = indexHtml.indexOf('dataset.theme');
-  expect(bootstrap).toBeGreaterThan(0);
-  expect(indexHtml.indexOf('<link')).toBe(-1);
-  expect(bootstrap).toBeLessThan(indexHtml.indexOf('<script type="module"'));
+it('the index.html bootstrap runs before the module script', () => {
+  expect(indexHtml.indexOf('dataset.theme')).toBeLessThan(indexHtml.indexOf('<script type="module"'));
+});
+
+it('index.html loads no stylesheet ahead of the bootstrap', () => {
+  expect(indexHtml).not.toContain('<link');
 });
 
 /** Runs the inline script of index.html with the given storage and OS preference. */
@@ -24,8 +25,9 @@ function bootstrapTheme(stored: string | null, systemIsDark: boolean): string | 
   return html.dataset.theme;
 }
 
-it.each([null, '', 'light', 'dark', 'system', 'DARK', 'black'])('the bootstrap resolves %j as the app does', (stored) => {
-  for (const systemIsDark of [false, true]) {
-    expect(bootstrapTheme(stored, systemIsDark)).toBe(resolveTheme(parseThemePreference(stored), systemIsDark));
-  }
+const STORED_VALUES = [null, '', 'light', 'dark', 'system', 'DARK', 'black'];
+const CASES = STORED_VALUES.flatMap((stored) => [false, true].map((systemIsDark) => ({ stored, systemIsDark })));
+
+it.each(CASES)('the bootstrap resolves $stored (OS dark: $systemIsDark) as the app does', ({ stored, systemIsDark }) => {
+  expect(bootstrapTheme(stored, systemIsDark)).toBe(resolveTheme(parseThemePreference(stored), systemIsDark));
 });

@@ -2,16 +2,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   loadThemePreference, parseThemePreference, resolveTheme, saveThemePreference, THEME_STORAGE_KEY,
+  type ThemePreference,
 } from './themePreference';
 
 afterEach(() => vi.unstubAllGlobals());
 
-function stubStorage(values = new Map<string, string>()) {
+function stubStorage(values = new Map<string, string>()): Map<string, string> {
   vi.stubGlobal('window', { localStorage: {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => values.set(key, value),
   } });
   return values;
+}
+
+function blocked(): never {
+  throw new Error('blocked');
 }
 
 describe('parseThemePreference', () => {
@@ -25,26 +30,37 @@ describe('parseThemePreference', () => {
 });
 
 describe('resolveTheme', () => {
-  it('follows the OS in System mode', () => {
-    expect(resolveTheme('system', true)).toBe('dark');
-    expect(resolveTheme('system', false)).toBe('light');
-  });
-
-  it('ignores the OS for an explicit choice', () => {
-    expect(resolveTheme('light', true)).toBe('light');
-    expect(resolveTheme('dark', false)).toBe('dark');
+  it.each([
+    ['system', true, 'dark'],
+    ['system', false, 'light'],
+    ['light', true, 'light'],
+    ['dark', false, 'dark'],
+  ] as const)('resolves %s with the OS dark = %s to %s', (preference, systemIsDark, expected) => {
+    expect(resolveTheme(preference, systemIsDark)).toBe(expected);
   });
 });
 
 describe('stored preference', () => {
-  it('round-trips through localStorage under its own key', () => {
-    const values = stubStorage();
+  it('is Light when nothing is stored', () => {
+    stubStorage();
     expect(loadThemePreference()).toBe('light');
-    expect(saveThemePreference('dark')).toBe(true);
+  });
+
+  it('is saved under its own key', () => {
+    const values = stubStorage();
+    saveThemePreference('dark');
     expect(values.get(THEME_STORAGE_KEY)).toBe('dark');
-    expect(loadThemePreference()).toBe('dark');
-    saveThemePreference('system');
-    expect(loadThemePreference()).toBe('system');
+  });
+
+  it('reports a successful save', () => {
+    stubStorage();
+    expect(saveThemePreference('dark')).toBe(true);
+  });
+
+  it.each<ThemePreference>(['light', 'dark', 'system'])('loads %s after it was saved', (preference) => {
+    stubStorage();
+    saveThemePreference(preference);
+    expect(loadThemePreference()).toBe(preference);
   });
 
   it('is Light when the stored value is invalid', () => {
@@ -52,15 +68,16 @@ describe('stored preference', () => {
     expect(loadThemePreference()).toBe('light');
   });
 
-  it('is Light when reading storage throws', () => {
-    vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked'); } } });
-    expect(loadThemePreference()).toBe('light');
-    vi.stubGlobal('window', { get localStorage() { throw new Error('blocked'); } });
+  it.each([
+    ['getItem throws', { localStorage: { getItem: blocked } }],
+    ['localStorage itself throws', { get localStorage() { return blocked(); } }],
+  ])('is Light when %s', (_, window) => {
+    vi.stubGlobal('window', window);
     expect(loadThemePreference()).toBe('light');
   });
 
   it('reports a failed save instead of throwing', () => {
-    vi.stubGlobal('window', { localStorage: { setItem: () => { throw new Error('quota'); } } });
+    vi.stubGlobal('window', { localStorage: { setItem: blocked } });
     expect(saveThemePreference('dark')).toBe(false);
   });
 });

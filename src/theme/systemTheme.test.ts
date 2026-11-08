@@ -11,36 +11,40 @@ function stubMatchMedia(matches: boolean) {
   return query;
 }
 
-it('reads the OS dark preference', () => {
-  stubMatchMedia(true);
-  expect(systemPrefersDark()).toBe(true);
-  stubMatchMedia(false);
+it.each([true, false])('reads the OS dark preference %s', (dark) => {
+  stubMatchMedia(dark);
+  expect(systemPrefersDark()).toBe(dark);
+});
+
+it('is not dark when matchMedia is missing', () => {
+  vi.stubGlobal('window', {});
   expect(systemPrefersDark()).toBe(false);
 });
 
-it('is not dark when matchMedia is missing, so System resolves to Light', () => {
+it('resolves System to Light when matchMedia is missing', () => {
   vi.stubGlobal('window', {});
-  expect(systemPrefersDark()).toBe(false);
   expect(resolveTheme('system', systemPrefersDark())).toBe('light');
 });
 
-it('returns a no-op unsubscribe when matchMedia is missing', () => {
-  vi.stubGlobal('window', {});
+it.each([
+  ['matchMedia is missing', {}],
+  ['MediaQueryList has no events (Safari < 14)', { matchMedia: () => ({ matches: false }) }],
+])('returns a no-op unsubscribe when %s', (_, window) => {
+  vi.stubGlobal('window', window);
   const unsubscribe = subscribeSystemTheme(() => undefined);
   expect(() => unsubscribe()).not.toThrow();
 });
 
-it('returns a no-op unsubscribe when MediaQueryList has no events (Safari < 14)', () => {
-  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
-  const unsubscribe = subscribeSystemTheme(() => undefined);
-  expect(() => unsubscribe()).not.toThrow();
-});
-
-it('observes and stops observing OS changes', () => {
+it('observes OS changes', () => {
   const query = stubMatchMedia(false);
   const onChange = vi.fn();
-  const unsubscribe = subscribeSystemTheme(onChange);
+  subscribeSystemTheme(onChange);
   expect(query.addEventListener).toHaveBeenCalledWith('change', onChange);
-  unsubscribe();
+});
+
+it('stops observing OS changes after unsubscribing', () => {
+  const query = stubMatchMedia(false);
+  const onChange = vi.fn();
+  subscribeSystemTheme(onChange)();
   expect(query.removeEventListener).toHaveBeenCalledWith('change', onChange);
 });

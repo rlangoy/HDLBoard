@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 import { describe, expect, it } from 'vitest';
 import darkCss from './themes/dark.css?raw';
-import { DARK_PREFIX, findValue, findValueIn, parseThemeBlocks } from './themeCss.testSupport';
+import { DARK_PREFIX, findValueIn, parseThemeBlocks } from './themeCss.testSupport';
 
 const TEXT = 4.5;
 const CONTROL = 3;
@@ -10,6 +10,8 @@ const CONTROL = 3;
 const UNLIT_VISIBLE = 1.5;
 /** …and a lit one must stand out at least this many times more. */
 const LIT_OVER_UNLIT = 1.5;
+const OPAQUE_HEX_LENGTH = '#rrggbb'.length;
+const TRANSLUCENT_HEX_LENGTH = '#rrggbbaa'.length;
 const HEX_COLOUR = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 const dark = parseThemeBlocks(darkCss, DARK_PREFIX);
@@ -77,42 +79,58 @@ const LIT_UNLIT: readonly (readonly [lit: string, unlit: string, surface: string
   ['--pb-hex-seg-on', '--pb-hex-seg-off', '--pb-part-face'],
 ];
 
-function hexColour(name: string): string {
-  const value = findValue(dark, name);
-  if (value === undefined || !HEX_COLOUR.test(value)) throw new Error(`${name} must be #rrggbb or #rrggbbaa in dark.css`);
+/** A variable's Dark value, as `selector` sees it (its own block, else the block that sets it). */
+function hexColour(name: string, selector = ':root'): string {
+  const value = findValueIn(dark, selector, name);
+  if (value === undefined || !HEX_COLOUR.test(value)) throw new Error(`${name} must be #rrggbb or #rrggbbaa in ${selector}`);
   return value.toLowerCase();
 }
 
-function opaqueColour(name: string): string {
-  const value = hexColour(name);
-  if (value.length !== 7) throw new Error(`${name} must be opaque (#rrggbb) in dark.css`);
+function opaqueColour(name: string, selector = ':root'): string {
+  const value = hexColour(name, selector);
+  if (value.length !== OPAQUE_HEX_LENGTH) throw new Error(`${name} must be opaque (#rrggbb) in ${selector}`);
   return value;
 }
 
+/** Where each channel's two hex digits start in #rrggbbaa. */
+const RED = 1;
+const GREEN = 3;
+const BLUE = 5;
+const ALPHA = 7;
+const CHANNEL_MAX = 255;
+const HEX_BASE = 16;
+
 function byte(hex: string, offset: number): number {
-  return parseInt(hex.slice(offset, offset + 2), 16);
+  return parseInt(hex.slice(offset, offset + 2), HEX_BASE);
+}
+
+function alphaOf(hex: string): number {
+  return hex.length === TRANSLUCENT_HEX_LENGTH ? byte(hex, ALPHA) / CHANNEL_MAX : 1;
 }
 
 /** Alpha-composites `top` (#rrggbbaa or #rrggbb) over the opaque `base`. */
 function composite(top: string, base: string): string {
-  const alpha = top.length === 9 ? byte(top, 7) / 255 : 1;
+  const alpha = alphaOf(top);
   const mix = (offset: number) => Math.round(byte(top, offset) * alpha + byte(base, offset) * (1 - alpha));
-  return `#${[1, 3, 5].map((offset) => mix(offset).toString(16).padStart(2, '0')).join('')}`;
+  return `#${[RED, GREEN, BLUE].map((offset) => mix(offset).toString(HEX_BASE).padStart(2, '0')).join('')}`;
 }
 
 function rendered(background: Background): string {
-  return typeof background === 'string' ? opaqueColour(background) : composite(hexColour(background.name), opaqueColour(background.over));
+  if (typeof background === 'string') return opaqueColour(background);
+  return composite(hexColour(background.name), opaqueColour(background.over));
 }
 
+/** WCAG 2.2 relative luminance (https://www.w3.org/TR/WCAG22/#dfn-relative-luminance). */
 function channel(hex: string, offset: number): number {
-  const value = byte(hex, offset) / 255;
+  const value = byte(hex, offset) / CHANNEL_MAX;
   return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 }
 
 function luminance(hex: string): number {
-  return 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+  return 0.2126 * channel(hex, RED) + 0.7152 * channel(hex, GREEN) + 0.0722 * channel(hex, BLUE);
 }
 
+/** WCAG 2.2 contrast ratio (https://www.w3.org/TR/WCAG22/#dfn-contrast-ratio). */
 function contrast(a: string, b: string): number {
   const [brighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (brighter + 0.05) / (darker + 0.05);
@@ -123,11 +141,14 @@ describe('Dark contrast', () => {
     expect(contrast(opaqueColour(foreground), rendered(background))).toBeGreaterThanOrEqual(minimum);
   });
 
-  it.each(LIT_UNLIT)('%s is clearly stronger than %s, which stays visible', (lit, unlit, surface) => {
-    const unlitContrast = contrast(opaqueColour(unlit), opaqueColour(surface));
-    const litContrast = contrast(opaqueColour(lit), opaqueColour(surface));
-    expect(unlitContrast).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
-    expect(litContrast).toBeGreaterThanOrEqual(unlitContrast * LIT_OVER_UNLIT);
+  const onSurface = (name: string, surface: string) => contrast(opaqueColour(name), opaqueColour(surface));
+
+  it.each(LIT_UNLIT)('next to %s, the unlit %s stays visible on %s', (_, unlit, surface) => {
+    expect(onSurface(unlit, surface)).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
+  });
+
+  it.each(LIT_UNLIT)('%s is clearly stronger than %s', (lit, unlit, surface) => {
+    expect(onSurface(lit, surface)).toBeGreaterThanOrEqual(onSurface(unlit, surface) * LIT_OVER_UNLIT);
   });
 });
 
@@ -144,24 +165,22 @@ const BLOCK_PAIRS: readonly Pair[] = [
   ['--pb-menu-focus', '--pb-surface', CONTROL],
 ];
 
-function blockColour(selector: string, name: string): string {
-  const value = findValueIn(dark, selector, name);
-  if (value === undefined || !/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${name} must be #rrggbb in ${selector}`);
-  return value.toLowerCase();
-}
-
 describe('Dark contrast in every Board I/O variant', () => {
   const cases = ACCENT_BLOCKS.flatMap((selector) =>
     BLOCK_PAIRS.map(([foreground, background, minimum]) => ({ selector, foreground, background: background as string, minimum })));
   it.each(cases)('$selector: $foreground on $background', ({ selector, foreground, background, minimum }) => {
-    expect(contrast(blockColour(selector, foreground), blockColour(selector, background))).toBeGreaterThanOrEqual(minimum);
+    expect(contrast(opaqueColour(foreground, selector), opaqueColour(background, selector))).toBeGreaterThanOrEqual(minimum);
+  });
+
+  const ledContrast = (selector: string, name: string) =>
+    contrast(opaqueColour(name, selector), opaqueColour('--pb-card-bg', selector));
+
+  it.each(LED_BLOCKS)('%s: an unlit LED stays visible', (selector) => {
+    expect(ledContrast(selector, '--pb-led-off')).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
   });
 
   it.each(LED_BLOCKS)('%s: a lit LED is clearly stronger than an unlit one', (selector) => {
-    const surface = blockColour(selector, '--pb-card-bg');
-    const unlit = contrast(blockColour(selector, '--pb-led-off'), surface);
-    expect(unlit).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
-    expect(contrast(blockColour(selector, '--pb-led-body'), surface)).toBeGreaterThanOrEqual(unlit * LIT_OVER_UNLIT);
+    expect(ledContrast(selector, '--pb-led-body')).toBeGreaterThanOrEqual(ledContrast(selector, '--pb-led-off') * LIT_OVER_UNLIT);
   });
 
   it('the report selection label stays readable on the selection', () => {
