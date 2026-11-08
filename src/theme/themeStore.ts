@@ -39,7 +39,9 @@ export function startTheme(): () => void {
   return subscribeSystemTheme(onSystemThemeChange);
 }
 
+/** Applies and stores a choice. Choosing the current, stored theme again does nothing. */
 export function chooseTheme(preference: ThemePreference): void {
+  if (preference === state.preference && !state.saveFailed) return;
   const saved = saveThemePreference(preference);
   publish(stateFor(preference, !saved));
 }

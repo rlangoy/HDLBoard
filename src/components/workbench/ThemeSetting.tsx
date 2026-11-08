@@ -35,7 +35,8 @@ export function ThemeSetting() {
           </span>
         </label>
       ))}
-      {saveFailed && <p className="wb-settings__note" role="status">{THEME_SAVE_FAILED_TEXT}</p>}
+      {/* Always mounted: a live region that appears already filled is often not announced. */}
+      <p className="wb-settings__note" role="status">{saveFailed ? THEME_SAVE_FAILED_TEXT : ''}</p>
     </fieldset>
   );
 }

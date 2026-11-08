@@ -30,6 +30,12 @@ it('returns a no-op unsubscribe when matchMedia is missing', () => {
   expect(() => unsubscribe()).not.toThrow();
 });
 
+it('returns a no-op unsubscribe when MediaQueryList has no events (Safari < 14)', () => {
+  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+  const unsubscribe = subscribeSystemTheme(() => undefined);
+  expect(() => unsubscribe()).not.toThrow();
+});
+
 it('observes and stops observing OS changes', () => {
   const query = stubMatchMedia(false);
   const onChange = vi.fn();

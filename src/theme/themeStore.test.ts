@@ -83,6 +83,17 @@ it('follows the OS live in System mode only', async () => {
   expect(environment.html.dataset.theme).toBe('light');
 });
 
+it('does nothing when the current, stored theme is chosen again', async () => {
+  const { store, environment } = await loadStore({ stored: 'dark' });
+  store.startTheme();
+  const listener = vi.fn();
+  store.subscribeTheme(listener);
+  environment.values.delete(THEME_STORAGE_KEY);
+  store.chooseTheme('dark');
+  expect(listener).not.toHaveBeenCalled();
+  expect(environment.values.has(THEME_STORAGE_KEY)).toBe(false);
+});
+
 it('stops notifying a listener after it unsubscribes', async () => {
   const { store } = await loadStore();
   store.startTheme();
