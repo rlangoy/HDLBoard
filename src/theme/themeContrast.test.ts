@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 import { describe, expect, it } from 'vitest';
 import darkCss from './themes/dark.css?raw';
-import { DARK_PREFIX, findValue, parseThemeBlocks } from './themeCss.testSupport';
+import { DARK_PREFIX, findValue, findValueIn, parseThemeBlocks } from './themeCss.testSupport';
 
 const TEXT = 4.5;
 const CONTROL = 3;
@@ -128,5 +128,43 @@ describe('Dark contrast', () => {
     const litContrast = contrast(opaqueColour(lit), opaqueColour(surface));
     expect(unlitContrast).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
     expect(litContrast).toBeGreaterThanOrEqual(unlitContrast * LIT_OVER_UNLIT);
+  });
+});
+
+/** The Board I/O blocks whose variants override colours of the base .pb-ui block. */
+const ACCENT_BLOCKS = ['.pb-ui', '.pb-ui.pb-accent-switches', '.pb-ui.pb-accent-keys', '.pb-ui.pb-accent-hex, .pb-ui.pb-accent-leds'];
+const LED_BLOCKS = ['.pb-ui', '.pb-led--green', '.pb-led--amber'];
+
+/** [foreground, background, minimum], read from one block with the base block's values beneath. */
+const BLOCK_PAIRS: readonly Pair[] = [
+  ['--pb-accent-title', '--pb-accent-head', TEXT],
+  ['--pb-menu-selected-fg', '--pb-menu-selected', TEXT],
+  ['--pb-menu-trigger-fg', '--pb-card-bg', TEXT],
+  ['--wb-io-hidden-fg', '--pb-accent-title', TEXT],
+  ['--pb-menu-focus', '--pb-surface', CONTROL],
+];
+
+function blockColour(selector: string, name: string): string {
+  const value = findValueIn(dark, selector, name);
+  if (value === undefined || !/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${name} must be #rrggbb in ${selector}`);
+  return value.toLowerCase();
+}
+
+describe('Dark contrast in every Board I/O variant', () => {
+  const cases = ACCENT_BLOCKS.flatMap((selector) =>
+    BLOCK_PAIRS.map(([foreground, background, minimum]) => ({ selector, foreground, background: background as string, minimum })));
+  it.each(cases)('$selector: $foreground on $background', ({ selector, foreground, background, minimum }) => {
+    expect(contrast(blockColour(selector, foreground), blockColour(selector, background))).toBeGreaterThanOrEqual(minimum);
+  });
+
+  it.each(LED_BLOCKS)('%s: a lit LED is clearly stronger than an unlit one', (selector) => {
+    const surface = blockColour(selector, '--pb-card-bg');
+    const unlit = contrast(blockColour(selector, '--pb-led-off'), surface);
+    expect(unlit).toBeGreaterThanOrEqual(UNLIT_VISIBLE);
+    expect(contrast(blockColour(selector, '--pb-led-body'), surface)).toBeGreaterThanOrEqual(unlit * LIT_OVER_UNLIT);
+  });
+
+  it('the report selection label stays readable on the selection', () => {
+    expect(contrast(opaqueColour('--wv-report-selection-span-fg'), opaqueColour('--wv-selection'))).toBeGreaterThanOrEqual(TEXT);
   });
 });

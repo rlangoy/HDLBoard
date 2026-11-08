@@ -26,6 +26,11 @@ export function findValue(blocks: ThemeBlocks, name: string): string | undefined
   return undefined;
 }
 
+/** The value a variant block sets, else the one it inherits from the first block that sets it. */
+export function findValueIn(blocks: ThemeBlocks, selector: string, name: string): string | undefined {
+  return blocks.get(selector)?.get(name) ?? findValue(blocks, name);
+}
+
 function normaliseSelector(selector: string, prefix: string): string {
   return selector.split(',').map((part) => stripPrefix(part.trim(), prefix)).sort().join(', ');
 }

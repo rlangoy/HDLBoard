@@ -47,7 +47,7 @@
   --pb-panel-hint-fg: #abb4c0;
 
   /* --- GroupedIoPanel.css --- */
-  --wb-io-hidden-fg: #ffffff;
+  --wb-io-hidden-fg: #121416; /* chosen: dark text on the pale accent fill */
   --wb-io-dialog-bg: #262a30;
   --wb-io-dialog-fg: #eceff4;
   --wb-io-dialog-backdrop-bg: #000000a6;
@@ -406,6 +406,7 @@
   --wb-bce-preview-note-fg: #ffd27a;
   --wb-bce-icon-fg: #abb4c0;
   --wb-bce-icon-leds-fg: #8cdea3;
+  --wb-bce-icon-leds-highlight: #1c1f23; /* chosen: the dark highlight on a light glyph */
   --wb-bce-icon-reset-button-fg: #ff9a9a;
   --wb-bce-icon-pushbuttons-fg: #83b9ff;
   --wb-bce-icon-seven-segment-fg: #abb4c0;
@@ -518,7 +519,7 @@
   --wv-report-bg: #1c1f23;
   --wv-report-page-bg: #ffffff; /* print colours: the report page stays paper white */
   --wv-report-selection-bg: rgba(37, 99, 235, 0.12);
-  --wv-report-selection-span-fg: #ffffff;
+  --wv-report-selection-span-fg: #121416; /* chosen: dark text on the light selection */
   --wv-drag-hint-bg: #303640; /* chosen: dark fill becomes a raised step */
   --wv-drag-hint-fg: #ffffff;
 

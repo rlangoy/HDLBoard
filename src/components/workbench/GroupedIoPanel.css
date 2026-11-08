@@ -25,7 +25,7 @@
 .pb-display-menu__formats button + button { border-left: 0; }
 .pb-display-menu__formats button:first-child { border-radius: 6px 0 0 6px; }
 .pb-display-menu__formats button:last-child { border-radius: 0 6px 6px 0; }
-.pb-display-menu__formats button[aria-checked="true"] { border-color: var(--pb-menu-selected); background: var(--pb-menu-selected); color: var(--pb-surface); font-weight: 700; }
+.pb-display-menu__formats button[aria-checked="true"] { border-color: var(--pb-menu-selected); background: var(--pb-menu-selected); color: var(--pb-menu-selected-fg); font-weight: 700; }
 .pb-display-menu__formats button:focus-visible { position: relative; outline: 2px solid var(--pb-menu-focus); outline-offset: 2px; }
 .pb-display-menu__trigger.pb-display-menu--switches { border-color: var(--pb-menu-trigger-border); color: var(--pb-menu-trigger-fg); }
 .pb-display-menu__trigger.pb-display-menu--switches:hover, .pb-display-menu__trigger.pb-display-menu--switches[aria-expanded="true"] { background: var(--pb-menu-trigger-hover); }
