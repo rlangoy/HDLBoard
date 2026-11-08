@@ -10,6 +10,7 @@ then look in squashfs-root/resources/.
 
   GHDL 6.0.0 (mcode)      ghdl/COPYING
                           GPL-2.0-or-later. Source: https://github.com/ghdl/ghdl/tree/v6.0.0
+                          Built from ghdl-v6.0.0.tar.gz, attached to the release.
   IEEE VHDL libraries     ghdl/lib/ghdl/src/ieee2008/LICENSE (and the header of each
                           file under ghdl/lib/ghdl/src/)
 

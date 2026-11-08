@@ -2,44 +2,24 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 Rune Langøy
 #
-# Downloads the GHDL release the AppImage bundles, verifies it, and assembles
-# linuxAppImage/vendor/ghdl/ — the tree that ships as resources/ghdl/.
+# Builds GHDL 6.0.0 mcode from checksum-pinned source on Ubuntu 22.04.
+# Retains the historical script name for callers.
+# Usage: linuxAppImage/fetch-ghdl.sh [--force | --check]
+# Requires build-essential, gnat, zlib1g-dev, curl and ca-certificates.
+# libghdl (the Python/language-server library) is not needed by HDLBoard.
 #
-#   linuxAppImage/fetch-ghdl.sh [--force | --check]
-#
-# The same GHDL version and backend (6.0.0, mcode) as the Windows build. The
-# upstream Ubuntu 24.04 asset is used as-is, minus what HDLBoard never runs:
-#
-#   kept     bin/ghdl, bin/ghwdump, lib/ghdl/ (the analyzed std and IEEE
-#            libraries), lib/libghw.so, lib/libghdlvpi.so
-#   dropped  lib/libghdl-6_0_0.so, lib/libghdl.a, lib/libghdl.link, include/
-#
-# The dropped files are libghdl, the library form of GHDL for pyGHDL and
-# language servers. The `ghdl` program does not load it. It is also the only
-# file in the asset that needs the GNAT runtime (libgnat-13), which is not on
-# a default Ubuntu desktop: without it, nothing in the tree needs a library
-# outside glibc, libgcc_s and zlib. The check at the end proves that on every
-# run, so a future GHDL that links libgnat into the program fails here.
-#
-# Idempotent: a no-op while VERSION.txt matches the pin, unless --force.
-
 set -euo pipefail
 
 GHDL_TAG="v6.0.0"
-GHDL_ASSET="ghdl-mcode-6.0.0-ubuntu24.04-x86_64.tar.gz"
-# The digest GitHub publishes for the asset (releases API, "digest" field).
-GHDL_SHA256="30d6a977b8456d140bbafecbbe64b1947a3d92eeae8f5e6d9f528a174f9566e7"
-
-ASSET_URL="https://github.com/ghdl/ghdl/releases/download/${GHDL_TAG}/${GHDL_ASSET}"
-# The release archive carries no license text; GPL-2.0 distribution requires
-# it, so it comes from the repository at the same tag.
-COPYING_URL="https://raw.githubusercontent.com/ghdl/ghdl/${GHDL_TAG}/COPYING.md"
+GHDL_ASSET="ghdl-${GHDL_TAG}.tar.gz"
+GHDL_SHA256="2d84fbd0b238a26928e89a0256274072c6b40af1969a4f4c7be57ec3515bc622"
+ASSET_URL="https://github.com/ghdl/ghdl/archive/refs/tags/${GHDL_TAG}.tar.gz"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENDOR_DIR="${HERE}/vendor"
 GHDL_DIR="${VENDOR_DIR}/ghdl"
 DOWNLOAD_DIR="${VENDOR_DIR}/downloads"
-STAMP="ghdl ${GHDL_TAG} mcode ubuntu24.04-x86_64 (${GHDL_ASSET})"
+STAMP="ghdl ${GHDL_TAG} mcode ubuntu22.04-x86_64 source (${GHDL_SHA256}, --disable-libghdl)"
 
 force=false
 [[ "${1:-}" == "--force" ]] && force=true
@@ -51,7 +31,7 @@ if [[ "${1:-}" == "--check" ]]; then
 fi
 
 if [[ -f "${GHDL_DIR}/VERSION.txt" ]] && ! $force && grep -qF "${STAMP}" "${GHDL_DIR}/VERSION.txt"; then
-  echo "GHDL ${GHDL_TAG} already present in vendor/ghdl - nothing to do (use --force to refetch)."
+  echo "GHDL ${GHDL_TAG} already present in vendor/ghdl - nothing to do (use --force to rebuild)."
   exit 0
 fi
 
@@ -76,34 +56,50 @@ if [[ "${actual}" != "${GHDL_SHA256}" ]]; then
   exit 1
 fi
 
-unpack="$(mktemp -d "${VENDOR_DIR}/_unpack-ghdl.XXXXXX")"
-trap 'rm -rf "${unpack}"' EXIT
-
-echo "Unpacking ..."
-tar -xzf "${archive}" -C "${unpack}"
-src="${unpack}/${GHDL_ASSET%.tar.gz}"
-if [[ ! -x "${src}/bin/ghdl" || ! -d "${src}/lib/ghdl/ieee" ]]; then
-  echo "Unpacked archive has no bin/ghdl or lib/ghdl/ieee - the asset layout changed. Inspect ${unpack}." >&2
-  trap - EXIT
+# Reject a newer build host even when invoked directly.
+. /etc/os-release
+[[ "${ID}" == ubuntu && "${VERSION_ID}" == 22.04 && "$(uname -m)" == x86_64 ]] || {
+  echo "Build GHDL on Ubuntu 22.04 x86_64 (use build.sh --simulators container)." >&2
   exit 1
-fi
+}
+for tool in gcc gnatmake make; do
+  command -v "${tool}" > /dev/null || { echo "Missing build tool: ${tool}" >&2; exit 1; }
+done
 
+unpack="$(mktemp -d "${VENDOR_DIR}/_build-ghdl.XXXXXX")"
+trap 'rm -rf "${unpack}"' EXIT
+tar -xzf "${archive}" -C "${unpack}"
+src="${unpack}/ghdl-${GHDL_TAG#v}"
+mkdir -p "${unpack}/build"
+(
+  cd "${unpack}/build" || exit 1
+  "${src}/configure" --prefix=/opt/hdlboard-ghdl --disable-libghdl || exit 1
+  # GHDL uses gnatmake internally; parallelize that rather than make.
+  make GNATMAKE="gnatmake -j$(nproc)" || exit 1
+  make install DESTDIR="${unpack}/install"
+) > "${unpack}/build.log" 2>&1 || { tail -n 60 "${unpack}/build.log" >&2; exit 1; }
+
+prefix="${unpack}/install/opt/hdlboard-ghdl"
 tree="${unpack}/tree"
 mkdir -p "${tree}/bin" "${tree}/lib"
-cp -a "${src}/bin/ghdl" "${src}/bin/ghwdump" "${tree}/bin/"
-cp -a "${src}/lib/ghdl" "${src}/lib/libghw.so" "${src}/lib/libghdlvpi.so" "${tree}/lib/"
-
-echo "Fetching COPYING (GPL-2.0 text, from the repository at ${GHDL_TAG}) ..."
-curl -fsSL --retry 3 -o "${tree}/COPYING" "${COPYING_URL}"
-
+cp -a "${prefix}/bin/ghdl" "${prefix}/bin/ghwdump" "${tree}/bin/"
+cp -a "${prefix}/lib/ghdl" "${prefix}/lib/libghw.so" "${prefix}/lib/libghdlvpi.so" "${tree}/lib/"
+cp "${src}/COPYING.md" "${tree}/COPYING"
 cat > "${tree}/VERSION.txt" <<EOF
 ${STAMP}
-Source: https://github.com/ghdl/ghdl/releases/tag/${GHDL_TAG}
+Source: ${ASSET_URL}
 Repository at this tag: https://github.com/ghdl/ghdl/tree/${GHDL_TAG}
 SHA-256 (${GHDL_ASSET}): ${GHDL_SHA256}
-Left out (libghdl, not run by HDLBoard): lib/libghdl-6_0_0.so lib/libghdl.a lib/libghdl.link include/
-Bundled libraries: none (bin/ghdl needs only glibc, libgcc_s and zlib)
+Configure options: --prefix=/opt/hdlboard-ghdl --disable-libghdl
+Built on: ${PRETTY_NAME}, $(gnatmake --version | head -n 1)
+Bundled libraries: none (GNAT runtime linked statically by upstream build)
 EOF
+
+# GNAT is present on the build machine but not on a clean desktop.
+if ldd "${tree}/bin/ghdl" | grep -q libgnat; then
+  echo "GHDL unexpectedly links a shared GNAT runtime." >&2
+  exit 1
+fi
 
 echo "Checking shared-library dependencies ..."
 missing="$(find "${tree}/bin" "${tree}/lib" -maxdepth 1 -type f \( -perm -u+x -o -name '*.so' \) -exec ldd {} \; 2>&1 | grep 'not found' || true)"

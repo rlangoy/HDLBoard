@@ -9,9 +9,9 @@
 #
 #   linuxAppImage/build-iverilog.sh [--force | --check]
 #
-# Run it on Ubuntu 24.04, the oldest system the AppImage supports: a binary
+# Run it on Ubuntu 22.04, the oldest system the AppImage supports: a binary
 # built against a newer glibc does not start on an older one. build.sh runs
-# it in the pinned ubuntu:24.04 container when the host is something else.
+# it in the pinned ubuntu:22.04 container when the host is something else.
 #
 # Why build at all: Ubuntu 24.04 packages Icarus 12.0, upstream publishes no
 # Linux binaries, and the Windows build ships 13.0.
@@ -43,7 +43,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENDOR_DIR="${HERE}/vendor"
 TREE_DIR="${VENDOR_DIR}/iverilog"
 DOWNLOAD_DIR="${VENDOR_DIR}/downloads"
-STAMP="iverilog ${IVERILOG_VERSION} (${IVERILOG_TAG}, built from source, configure ${CONFIGURE_OPTIONS})"
+STAMP="iverilog ${IVERILOG_VERSION} (${IVERILOG_TAG}, built on ubuntu22.04-x86_64 from source, configure ${CONFIGURE_OPTIONS})"
 
 force=false
 [[ "${1:-}" == "--force" ]] && force=true
@@ -58,6 +58,13 @@ if [[ -f "${TREE_DIR}/VERSION.txt" ]] && ! $force && grep -qF "${STAMP}" "${TREE
   echo "Icarus Verilog ${IVERILOG_VERSION} already present in vendor/iverilog - nothing to do (use --force to rebuild)."
   exit 0
 fi
+
+# Keep the cache stamp truthful even when this script is called directly.
+. /etc/os-release
+[[ "${ID}" == ubuntu && "${VERSION_ID}" == 22.04 && "$(uname -m)" == x86_64 ]] || {
+  echo "Build Icarus on Ubuntu 22.04 x86_64 (use build.sh --simulators container)." >&2
+  exit 1
+}
 
 missing_tools=()
 for tool in gcc g++ make autoconf gperf bison flex curl; do

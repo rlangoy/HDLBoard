@@ -22,3 +22,7 @@ docker-compose.yml text eol=lf
 # Windows batch scripts: cmd.exe misreads labels and `call :label` in an LF file,
 # so they stay CRLF on every platform.
 *.cmd text eol=crlf
+
+# AppImage scripts also run from Windows bind mounts during Linux validation.
+linuxAppImage/*.sh text eol=lf
+linuxAppImage/AppRun text eol=lf
