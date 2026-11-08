@@ -12,10 +12,10 @@
   gap: 12px;
   min-width: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--wb-simcard-bg);
   border: 1px solid var(--wb-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); /* theme-exempt: shadow */
   padding: 14px 16px 16px;
 }
 
@@ -63,7 +63,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--wb-simcard-dot-bg);
 }
 
 .wb-simcard__status.is-running {
@@ -75,12 +75,12 @@
 }
 
 .wb-simcard__status.is-compiling .wb-simcard__dot {
-  background: #f59e0b;
+  background: var(--wb-simcard-dot-compiling-bg);
   animation: wb-pulse 900ms ease-in-out infinite;
 }
 
 .wb-simcard__status.is-stopped .wb-simcard__dot {
-  background: #94a3b8;
+  background: var(--wb-simcard-dot-stopped-bg);
 }
 
 @keyframes wb-pulse {
@@ -112,7 +112,7 @@
   padding: 11px 16px;
   border: 1px solid transparent;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--wb-simcard-button-fg);
   transition: background 140ms ease, opacity 140ms ease;
 }
 

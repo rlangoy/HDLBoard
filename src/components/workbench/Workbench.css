@@ -50,7 +50,7 @@
   grid-template-columns: minmax(0, 1fr);
   font-family: var(--pb-font, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif);
   color: var(--wb-text);
-  background: #ffffff;
+  background: var(--wb-surface-bg);
   /* The sidebar and board panel widths below are reconciled in JS against
      the body's measured width (see paneLayout.ts's fitSidePanes) so they
      always fit; this is the hard backstop in case they ever don't. */
@@ -231,7 +231,7 @@
  * pane's left edge is that border.
  */
 .wb-right {
-  background: #ffffff;
+  background: var(--wb-right-bg);
 }
 
 .wb-right__content {

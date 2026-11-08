@@ -21,10 +21,10 @@
   max-width: 760px;
   margin: 24px auto;
   padding: 22px 24px 24px;
-  background: #ffffff;
+  background: var(--wb-examples-inner-bg);
   border: 1px solid var(--wb-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); /* theme-exempt: shadow */
 }
 
 .wb-examples__header {
@@ -84,7 +84,7 @@
   padding: 0 12px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-examples-search-bg);
 }
 
 .wb-examples__search:focus-within {
@@ -169,14 +169,14 @@
   padding: 14px 16px 16px;
   border: 1px solid var(--wb-border);
   border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  background: var(--wb-examples-card-bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); /* theme-exempt: shadow */
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .wb-examples__card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  border-color: var(--wb-examples-card-border-hover);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); /* theme-exempt: shadow */
 }
 
 .wb-examples__card-title {
@@ -217,7 +217,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #ffffff;
+  color: var(--wb-examples-badge-fg);
   background: var(--wb-accent);
 }
 
@@ -232,7 +232,7 @@
   padding: 6px 12px;
   border: 1px solid var(--wb-border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--wb-examples-open-bg);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -265,7 +265,7 @@
   gap: 10px;
   margin: 18px 0 0;
   padding: 12px 14px;
-  border: 1px solid #c7dafc;
+  border: 1px solid var(--wb-examples-note-border);
   border-radius: 8px;
   background: var(--wb-accent-soft);
   font-size: 13px;
@@ -283,7 +283,7 @@
 .wb-examples__shape {
   margin: 16px 0;
   padding: 14px 16px;
-  border: 1px solid var(--wb-border, #d0d7de);
+  border: 1px solid var(--wb-border);
   border-radius: 8px;
   line-height: 1.5;
 }
