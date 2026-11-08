@@ -141,7 +141,17 @@ fi
 
 # --- 4. Electron shell, resources/, electron-builder ----------------------
 step "Installing desktop build dependencies"
-[[ -d "${ELECTRON_DIR}/node_modules" ]] || npm --prefix "${ELECTRON_DIR}" ci
+# npm's registry retries do not cover Electron's postinstall download from
+# GitHub. Install packages first, then retry that download independently.
+[[ -f "${ELECTRON_DIR}/node_modules/electron/install.js" ]] || ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm --prefix "${ELECTRON_DIR}" ci
+for attempt in 1 2 3 4; do
+  if env -u ELECTRON_SKIP_BINARY_DOWNLOAD node "${ELECTRON_DIR}/node_modules/electron/install.js"; then
+    break
+  fi
+  (( attempt < 4 )) || die "Electron download failed after 4 attempts"
+  echo "  Electron download failed; retrying in $((attempt * 10)) seconds (${attempt}/4)"
+  sleep "$((attempt * 10))"
+done
 
 step "Branding assets"
 icon="${ELECTRON_DIR}/build/icon.png"

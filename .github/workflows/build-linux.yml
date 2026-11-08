@@ -114,6 +114,12 @@ jobs:
           npm ci
           npm ci --prefix server
 
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/electron
+          key: electron-linux-x64-${{ hashFiles('winInstaller/electron/package-lock.json') }}
+
       # Natively on this 22.04 runner; build.sh then checks the trees again in
       # a clean ubuntu:22.04 container (B3), since the runner has far more
       # libraries installed than a student's desktop.
