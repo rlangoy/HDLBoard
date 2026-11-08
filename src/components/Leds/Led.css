@@ -47,10 +47,10 @@
      the reference lens only darkens by ~20/255 at those edges */
   box-shadow:
     inset calc(var(--pb-led-w) * -0.03) 0 calc(var(--pb-led-w) * 0.055)
-      rgba(0, 0, 0, 0.2),
+      rgba(0, 0, 0, 0.2), /* theme-exempt: shadow */
     inset 0 calc(var(--pb-led-w) * -0.03) calc(var(--pb-led-w) * 0.055)
-      rgba(0, 0, 0, 0.14),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+      rgba(0, 0, 0, 0.14), /* theme-exempt: shadow */
+    inset 0 0 0 1px var(--pb-led-lens-edge);
 
   transition:
     background-color 140ms ease,
@@ -78,8 +78,8 @@
   );
   box-shadow:
     inset 0 calc(var(--pb-led-w) * -0.06) calc(var(--pb-led-w) * 0.16)
-      rgba(90, 0, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      var(--pb-led-lens-shadow-on),
+    inset 0 0 0 1px var(--pb-led-lens-highlight-on);
 }
 
 /* ------------------------------------------------------ colour variants */
@@ -105,14 +105,14 @@ button.pb-led:disabled {
 button.pb-led:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px #fff,
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 
 button.pb-led.is-on:focus-visible {
   box-shadow:
     0 0 calc(var(--pb-led-w) * 0.5) rgba(var(--pb-led-glow), 0.7),
-    0 0 0 2px #fff,
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 

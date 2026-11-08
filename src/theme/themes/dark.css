@@ -16,6 +16,71 @@
   /* --- page (index.css) --- */
   --hdl-page-bg: #ffffff;
   --hdl-page-fg: #0f172a;
+
+  /* --- Led.css --- */
+  --pb-led-lens-edge: rgba(0, 0, 0, 0.05);
+  --pb-led-lens-shadow-on: rgba(90, 0, 0, 0.45);
+  --pb-led-lens-highlight-on: rgba(255, 255, 255, 0.18);
+  --pb-focus-gap: #fff;
+
+  /* --- Pushbutton.css --- */
+  --pb-key-top-highlight: rgba(255, 255, 255, 0.85);
+  --pb-key-left-highlight: rgba(255, 255, 255, 0.6);
+  --pb-key-cap-edge: rgba(0, 0, 0, 0.55);
+  --pb-key-top-highlight-hover: rgba(255, 255, 255, 0.7);
+  --pb-key-top-edge-active: rgba(15, 30, 48, 0.35);
+  --pb-key-bottom-highlight-active: rgba(255, 255, 255, 0.35);
+  --pb-key-cap-top-edge-active: rgba(134, 140, 144, 0.35);
+  --pb-key-cap-edge-active: rgba(0, 0, 0, 0.6);
+  --pb-key-top-edge-active-hover: rgba(15, 30, 48, 0.35);
+
+  /* --- ToggleSwitch.css --- */
+  --pb-switch-body-edge-hover: rgba(37, 99, 235, 0.3);
+  --pb-switch-track-bottom-highlight: rgba(255, 255, 255, 0.5);
+  --pb-switch-knob-edge: rgba(15, 23, 42, 0.5);
+
+  /* --- SevenSegmentDisplay.css --- */
+  --pb-hex-top-highlight: rgba(255, 255, 255, 0.85);
+  --pb-hex-left-highlight: rgba(255, 255, 255, 0.6);
+
+  /* --- panel.css --- */
+  --pb-panel-hint-fg: #64748b;
+
+  /* --- GroupedIoPanel.css --- */
+  --wb-io-hidden-fg: #fff;
+  --wb-io-dialog-bg: #fff;
+  --wb-io-dialog-fg: #102346;
+  --wb-io-dialog-backdrop-bg: #0f172a99;
+  --wb-io-dialog-hero-from-bg: #346cc6;
+  --wb-io-dialog-hero-to-bg: #29549a;
+  --wb-io-dialog-hero-fg: #fff;
+  --wb-io-dialog-badge-bg: #fff;
+  --wb-io-dialog-badge-fg: #2861bd;
+  --wb-io-dialog-badge-shadow: #10234640;
+  --wb-io-dialog-hero-p-fg: #dce9ff;
+  --wb-io-dialog-bits-label-fg: #102346;
+  --wb-io-dialog-bits-input-border: #a9bedb;
+  --wb-io-dialog-bits-input-bg: #fff;
+  --wb-io-dialog-bits-input-border-selected: #2869ed;
+  --wb-io-dialog-bits-input-bg-selected: #2869ed;
+  --wb-io-dialog-bits-input-before-bg-selected: #ffffff;
+  --wb-io-dialog-bits-input-outline-focus: #2869ed;
+  --wb-io-dialog-actions-button-border: #d5e3f5;
+  --wb-io-dialog-actions-button-bg: #fff;
+  --wb-io-dialog-actions-button-fg: #102346;
+  --wb-io-dialog-actions-button-submit-border: #2869ed;
+  --wb-io-dialog-actions-button-submit-bg: #2869ed;
+  --wb-io-dialog-actions-button-submit-fg: #ffffff;
+
+  /* --- BoardSetting.css --- */
+  --wb-board-select-button-border: #cbd5e1;
+  --wb-board-select-button-bg: #ffffff;
+  --wb-board-select-button-bg-hover: #ffffff;
+  --wb-board-select-button-bg-disabled: #f1f5f9;
+  --wb-board-setting-action-border: #d4d4d4;
+  --wb-board-setting-action-bg: #fafafa;
+  --wb-board-setting-action-bg-hover: #f0f0f0;
+  --wb-board-setting-note-border: #c7dafc;
 }
 
 :root[data-theme='dark'] .wb {

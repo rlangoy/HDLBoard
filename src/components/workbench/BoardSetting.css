@@ -12,9 +12,9 @@
   justify-content: space-between;
   height: 40px;
   padding: 0 14px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--wb-board-select-button-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-board-select-button-bg);
   color: var(--wb-text);
   font-size: 15px;
   font-weight: 500;
@@ -23,7 +23,7 @@
 .wb-board-select .wv-flat-select__button:hover,
 .wb-board-select .wv-flat-select__button[aria-expanded='true'] {
   border-color: var(--wb-accent);
-  background: #ffffff;
+  background: var(--wb-board-select-button-bg-hover);
 }
 
 .wb-board-select .wv-flat-select__button:focus-visible {
@@ -31,7 +31,7 @@
 }
 
 .wb-board-select .wv-flat-select__button:disabled {
-  background: #f1f5f9;
+  background: var(--wb-board-select-button-bg-disabled);
   color: var(--wb-text-muted);
   cursor: not-allowed;
 }
@@ -72,7 +72,7 @@
 }
 
 .wb-board-select .wv-flat-select__list li.is-active {
-  background: var(--wb-hover, #eef2f7);
+  background: var(--wb-hover);
 }
 
 .wb-board-setting__info {
@@ -106,16 +106,16 @@
 .wb-board-setting__action {
   justify-self: start;
   padding: 9px 14px;
-  border: 1px solid #d4d4d4;
+  border: 1px solid var(--wb-board-setting-action-border);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--wb-board-setting-action-bg);
   color: var(--wb-text);
   font: inherit;
   font-size: 14px;
   cursor: pointer;
 }
 
-.wb-board-setting__action:hover { background: #f0f0f0; }
+.wb-board-setting__action:hover { background: var(--wb-board-setting-action-bg-hover); }
 
 .wb-board-setting__action:focus-visible,
 .wb-board-setting__help:focus-visible { outline: 2px solid var(--wb-accent); outline-offset: 2px; }
@@ -127,7 +127,7 @@
   gap: 12px;
   align-items: flex-start;
   padding: 12px 14px;
-  border: 1px solid #c7dafc;
+  border: 1px solid var(--wb-board-setting-note-border);
   border-radius: 8px;
   background: var(--wb-accent-soft);
   font-size: 13.5px;

@@ -56,9 +56,9 @@
     var(--pb-key-face) 100%
   );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    inset 1px 0 0 rgba(255, 255, 255, 0.6),
-    0 1px 2px rgba(15, 23, 42, 0.12);
+    inset 0 1px 0 var(--pb-key-top-highlight),
+    inset 1px 0 0 var(--pb-key-left-highlight),
+    0 1px 2px rgba(15, 23, 42, 0.12); /* theme-exempt: shadow */
 
   transition:
     background-color 110ms ease,
@@ -97,11 +97,11 @@
     inset 0 1px 0 var(--pb-key-cap-rim),
     /* hard dark underside — the cap stands proud */
     inset 0 calc(var(--pb-key-cap) * -0.06) calc(var(--pb-key-cap) * 0.07)
-      rgba(0, 0, 0, 0.75),
+      rgba(0, 0, 0, 0.75), /* theme-exempt: shadow */
     /* crisp outer ring, then the shadow it drops down-right */
-    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 0 0 1px var(--pb-key-cap-edge),
     calc(var(--pb-key-cap) * 0.02) calc(var(--pb-key-cap) * 0.045)
-      calc(var(--pb-key-cap) * 0.07) rgba(15, 23, 42, 0.4);
+      calc(var(--pb-key-cap) * 0.07) rgba(15, 23, 42, 0.4); /* theme-exempt: shadow */
 
   transition:
     transform 90ms ease,
@@ -116,7 +116,7 @@
 .pb-key:hover:not(:disabled) {
   border-color: var(--pb-key-hover-edge);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 1px 0 var(--pb-key-top-highlight-hover),
     0 0 0 1px var(--pb-key-hover-edge),
     0 0 calc(var(--pb-unit) * 0.3) rgba(var(--pb-key-hover-glow), 0.55);
 }
@@ -144,9 +144,9 @@
   );
   box-shadow:
     inset 0 calc(var(--pb-unit) * 0.09) calc(var(--pb-unit) * 0.16)
-      rgba(15, 30, 48, 0.5),
-    inset 0 1px 0 rgba(15, 30, 48, 0.35),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.35);
+      rgba(15, 30, 48, 0.5), /* theme-exempt: shadow */
+    inset 0 1px 0 var(--pb-key-top-edge-active),
+    inset 0 -1px 0 var(--pb-key-bottom-highlight-active);
 }
 
 /* Sunk into the well: it drops, shrinks a hair, loses the specular rim
@@ -160,10 +160,10 @@
     var(--pb-key-cap-lo) 100%
   );
   box-shadow:
-    inset 0 1px 0 rgba(134, 140, 144, 0.35),
+    inset 0 1px 0 var(--pb-key-cap-top-edge-active),
     inset 0 calc(var(--pb-key-cap) * -0.04) calc(var(--pb-key-cap) * 0.05)
-      rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(0, 0, 0, 0.6);
+      rgba(0, 0, 0, 0.6), /* theme-exempt: shadow */
+    0 0 0 1px var(--pb-key-cap-edge-active);
 }
 
 /* ------------------------------------- state: pressed + mouse over
@@ -173,8 +173,8 @@
   border-color: var(--pb-key-hover-edge);
   box-shadow:
     inset 0 calc(var(--pb-unit) * 0.09) calc(var(--pb-unit) * 0.16)
-      rgba(15, 30, 48, 0.5),
-    inset 0 1px 0 rgba(15, 30, 48, 0.35),
+      rgba(15, 30, 48, 0.5), /* theme-exempt: shadow */
+    inset 0 1px 0 var(--pb-key-top-edge-active-hover),
     0 0 0 1px var(--pb-key-hover-edge),
     0 0 calc(var(--pb-unit) * 0.3) rgba(var(--pb-key-hover-glow), 0.55);
 }
@@ -184,15 +184,15 @@
 .pb-key:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px #fff,
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 
 .pb-key.is-pressed:focus-visible {
   box-shadow:
     inset 0 calc(var(--pb-unit) * 0.09) calc(var(--pb-unit) * 0.16)
-      rgba(15, 30, 48, 0.5),
-    0 0 0 2px #fff,
+      rgba(15, 30, 48, 0.5), /* theme-exempt: shadow */
+    0 0 0 2px var(--pb-focus-gap),
     0 0 0 4px var(--pb-focus);
 }
 
