@@ -4,6 +4,12 @@
 /* The component gallery (#gallery): demo page styles, not themed
    (docs/HDLBoard_Black_Theme_Spec.md § 2.2). */
 
+/* The demo text is drawn for a light page, so the gallery keeps one in every theme. */
+body:has(.demo) {
+  background: #ffffff;
+  color: #0f172a;
+}
+
 .demo {
   max-width: 1000px;
   margin: 0 auto;
