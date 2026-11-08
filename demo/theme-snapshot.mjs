@@ -34,7 +34,7 @@ const STATES = [
   { name: 'find', open: clickButton('Search in DE1_SoC.vhdl') },
   { name: 'projects', open: clickCss('.wb-files__open-project') },
   { name: 'project-page', open: clickCss('.wb-files__project') },
-  { name: 'board-settings', open: steps(clickButton('Settings'), clickButton('Manage board')) },
+  { name: 'board-settings', open: steps(clickButton('Settings'), clickButton('Manage board'), (page) => page.mouse.move(1, 1)) },
   { name: 'github', open: clickButton('GitHub') },
 ];
 
@@ -66,19 +66,41 @@ function rendered(lines) {
   return lines.map((line) => line.slice(line.indexOf(' ') + 1)).filter((line) => !HEAD_TAG.test(line));
 }
 
+/** Longest-common-subsequence table, so added or removed elements do not shift the rest. */
+function commonTable(expected, actual) {
+  const table = Array.from({ length: expected.length + 1 }, () => new Uint16Array(actual.length + 1));
+  for (let i = expected.length - 1; i >= 0; i--) {
+    for (let j = actual.length - 1; j >= 0; j--) {
+      table[i][j] = expected[i] === actual[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+    }
+  }
+  return table;
+}
+
+/** Lines only in the baseline (changed or removed) and lines only in the new capture. */
 function differences(expectedLines, actualLines) {
   const [expected, actual] = [rendered(expectedLines), rendered(actualLines)];
-  const length = Math.max(expected.length, actual.length);
-  return Array.from({ length }, (_, i) => i).filter((i) => expected[i] !== actual[i])
-    .map((i) => `- ${expected[i] ?? '(missing)'}\n+ ${actual[i] ?? '(missing)'}`);
+  const table = commonTable(expected, actual);
+  const removed = [];
+  const added = [];
+  let [i, j] = [0, 0];
+  while (i < expected.length || j < actual.length) {
+    if (i < expected.length && j < actual.length && expected[i] === actual[j]) [i, j] = [i + 1, j + 1];
+    else if (j < actual.length && (i === expected.length || table[i][j + 1] >= table[i + 1][j])) added.push(actual[j++]);
+    else removed.push(expected[i++]);
+  }
+  return { removed, added };
 }
 
 async function compareState(name, lines) {
   const expected = JSON.parse(await readFile(path.join(outputDir, `${name}.json`), 'utf8'));
-  const found = differences(expected, lines);
-  console.log(`${name}: ${found.length === 0 ? 'identical' : `${found.length} difference(s)`}`);
-  found.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(line));
-  return found.length;
+  const { removed, added } = differences(expected, lines);
+  const summary = removed.length === 0 && added.length === 0 ? 'identical'
+    : `${removed.length} changed or removed, ${added.length} added element(s)`;
+  console.log(`${name}: ${summary}`);
+  removed.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`- ${line}`));
+  added.slice(0, MAX_REPORTED_DIFFERENCES).forEach((line) => console.log(`+ ${line}`));
+  return removed.length;
 }
 
 await mkdir(outputDir, { recursive: true });
