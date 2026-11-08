@@ -23,7 +23,7 @@
   padding: 14px 16px;
   border: 1px solid var(--wb-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--wb-paste-card-bg);
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease;
 }
@@ -84,7 +84,7 @@
 }
 
 .wb-paste__card.is-deleting code {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--wb-paste-card-code-deleting-bg);
 }
 
 /* The change does nothing as the other choice stands. */

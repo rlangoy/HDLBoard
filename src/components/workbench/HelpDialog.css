@@ -31,8 +31,8 @@
 .wb-dialog code {
   padding: 1px 5px;
   border-radius: 4px;
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--wb-dialog-code-bg);
+  color: var(--wb-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.92em;
 }
@@ -65,7 +65,7 @@
 }
 
 .wb-help__table thead th {
-  background: #f8fafc;
+  background: var(--wb-help-table-thead-th-bg);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -81,7 +81,7 @@
 
 .wb-help__table td:nth-child(3) {
   white-space: nowrap;
-  color: #334155;
+  color: var(--wb-text-body);
 }
 
 .wb-help__dir {
@@ -101,8 +101,8 @@
 }
 
 .wb-help__dir--out {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--wb-help-dir-out-bg);
+  color: var(--wb-help-dir-out-fg);
 }
 
 /* -------------------------------------------------- reading the names */
@@ -134,7 +134,7 @@
   min-width: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: #334155;
+  color: var(--wb-text-body);
 }
 
 /* ------------------------------------------------ segment figure + code */
@@ -153,11 +153,11 @@
 }
 
 .wb-help__seg {
-  fill: #e5484d;
+  fill: var(--wb-help-seg-fg);
 }
 
 .wb-help__segnum {
-  fill: #ffffff;
+  fill: var(--wb-help-segnum-fg);
   font-size: 11px;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -167,7 +167,7 @@
   min-width: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: #334155;
+  color: var(--wb-text-body);
 }
 
 .wb-help__seg-text p {
@@ -178,8 +178,8 @@
   margin: 0;
   padding: 9px 12px;
   border-radius: 8px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--wb-help-code-bg);
+  color: var(--wb-help-code-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
   overflow-x: auto;
@@ -210,7 +210,7 @@
   padding: 12px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--wb-help-res-bg);
   color: var(--wb-text);
   text-decoration: none;
   transition:
@@ -233,7 +233,7 @@
   justify-content: center;
   border-radius: 50%;
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-help-rank-fg);
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -267,7 +267,7 @@
   margin-top: 3px;
   font-size: 13.5px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--wb-text-body);
 }
 
 @media (max-width: 560px) {

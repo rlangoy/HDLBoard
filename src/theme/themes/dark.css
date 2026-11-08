@@ -149,6 +149,100 @@
   --wb-scrollbar-arrow-fg-hover: #1f2937;
   --wb-scrollbar-thumb-bg-hover: #8a8a8a;
   --wb-scrollbar-thumb-bg-active: #6b6b6b;
+
+  /* --- Dialog.css --- */
+  --wb-dialog-backdrop: rgba(15, 23, 42, 0.55);
+  --wb-dialog-bg: #ffffff;
+  --wb-dialog-edge: rgba(15, 23, 42, 0.08);
+  --wb-on-header-fg: #ffffff;
+  --wb-dialog-badge-bg: #ffffff;
+  --wb-on-header-fg-muted: rgba(255, 255, 255, 0.8);
+  --wb-text-body: #334155;
+  --wb-dialog-callout-bg: #fffbeb;
+  --wb-dialog-callout-border: #fde68a;
+  --wb-dialog-callout-left-border: #f59e0b;
+  --wb-dialog-callout-fg: #78350f;
+  --wb-dialog-callout-title-fg: #b45309;
+  --wb-dialog-callout-info-border: #bfd5fb;
+  --wb-dialog-callout-info-fg: #1e3a8a;
+  --wb-dialog-secondary-bg: #ffffff;
+  --wb-dialog-close-fg: #ffffff;
+
+  /* --- SettingsDialog.css --- */
+  --wb-settings-action-bg: #ffffff;
+  --wb-settings-action-primary-fg: #ffffff;
+  --wb-settings-action-text-fg: rgba(255, 255, 255, 0.85);
+  --wb-settings-layout-border: #d4d9e0;
+  --wb-settings-layout-fg: #626b78;
+
+  /* --- HelpDialog.css --- */
+  --wb-dialog-code-bg: #f1f5f9;
+  --wb-help-table-thead-th-bg: #f8fafc;
+  --wb-help-dir-out-bg: #fef3c7;
+  --wb-help-dir-out-fg: #92400e;
+  --wb-help-seg-fg: #e5484d;
+  --wb-help-segnum-fg: #ffffff;
+  --wb-help-code-bg: #0f172a;
+  --wb-help-code-fg: #e2e8f0;
+  --wb-help-res-bg: #ffffff;
+  --wb-help-rank-fg: #ffffff;
+
+  /* --- NewFileDialog.css --- */
+  --wb-newfile-name-bg: #ffffff;
+  --wb-newfile-create-highlight: #fff;
+  --wb-openproject-folder-btn-bg-hover: #ffffff;
+
+  /* --- PasteArchitectureDialog.css --- */
+  --wb-paste-card-bg: #ffffff;
+  --wb-paste-card-code-deleting-bg: rgba(255, 255, 255, 0.7);
+
+  /* --- BoardChangeDialog.css --- */
+  --wb-boardchange-renames-bg: #f8fafc;
+
+  /* --- FileMenu.css --- */
+  --wb-filename-button-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-filename-button-open-border: #c7d7f7;
+
+  /* --- PickerWait.css --- */
+  --wb-picker-wait-reading-bg: rgba(15, 23, 42, 0.25);
+  --wb-picker-wait-card-bg: #ffffff;
+  --wb-picker-wait-card-edge: rgba(15, 23, 42, 0.08);
+
+  /* --- GitHub.css --- */
+  --wb-github-btn-bg: #ffffff;
+  --wb-github-btn-primary-fg: #ffffff;
+  --wb-github-btn-danger-fg: #ffffff;
+  --wb-github-message-error-bg: #fef2f2;
+  --wb-github-message-error-border: #fecaca;
+  --wb-github-message-success-bg: #f0fdf4;
+  --wb-github-message-success-border: #bbf7d0;
+  --wb-github-input-bg: #ffffff;
+  --wb-github-status-not-on-github-bg: #f1f5f9;
+  --wb-github-status-saved-bg: #f0fdf4;
+  --wb-github-status-changed-bg: #fffbeb;
+  --wb-github-status-changed-fg: #b45309;
+
+  /* --- GitHubSplitButton.css --- */
+  --wb-gh-split-main-bg: #ffffff;
+  --wb-gh-split-chevron-left-border: rgba(29, 78, 216, 0.22);
+  --wb-gh-split-main-bg-active: #d3e3ff;
+  --wb-gh-split-main-outline-focus: #ffffff;
+  --wb-gh-split-dot-bg: #f59e0b;
+  --wb-gh-split-dot-highlight: #ffffff;
+  --wb-gh-split-tip-bg: #0f172a;
+  --wb-gh-split-tip-fg: #ffffff;
+  --wb-gh-split-tip-before-bottom-border: #0f172a;
+  --wb-gh-split-main-quiet-bg: rgba(255, 255, 255, 0.16);
+  --wb-gh-split-main-quiet-fg: #ffffff;
+  --wb-gh-split-chevron-quiet-left-border: rgba(255, 255, 255, 0.22);
+  --wb-gh-split-spinner-border: rgba(255, 255, 255, 0.35);
+  --wb-gh-split-spinner-top-border: #ffffff;
+
+  /* --- UpdateBell.css --- */
+  --wb-update-badge-fg: #ffffff;
+  --wb-update-notice-bg: #ffffff;
+  --wb-update-icon-fg: #ffffff;
+  --wb-update-view-fg: #ffffff;
 }
 
 :root[data-theme='dark'] .wb {
