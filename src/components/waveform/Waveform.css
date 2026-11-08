@@ -5,47 +5,14 @@
    tokens here, read once per draw by the canvas (waveDraw.ts readColors). */
 
 .wv-pane {
-  --wv-bg: #ffffff;
-  --wv-grid: #e2e8f0;
-  --wv-axis-text: #64748b;
-  --wv-trace-high: #15803d;
-  --wv-trace-low: #15803d;
-  --wv-trace-bus: #1d4ed8;
-  --wv-trace-bus-text: #0f172a;
-  --wv-trace-undefined: #dc2626;
-  --wv-trace-z: #b45309;
-  --wv-trace-dont-care: #94a3b8;
-  --wv-cursor: #f59e0b;
-  /* Dark on the amber handle: white on it would be hard to read. */
-  --wv-cursor-text: #1f2937;
-  --wv-error-marker: #dc2626;
-  --wv-selection: #2563eb;
-  --wv-tool-bg: #eef1f6;
-  --wv-tool-bg-hover: #dfe6f1;
-  --wv-tool-ink: #1a56db;
-  --wv-row-hover: #f1f5f9;
-  --wv-row-selected: #e8f0fe;
-  /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
-  --wv-tb-ink: #1d4ed8;
   --wv-tb-head: var(--hdl-tb-head);
-  --wv-tb-tint: #f3f7fe;
-  --wv-tb-head-ink: #1e3a8a;
-  --wv-rtl-ink: #15803d;
   --wv-rtl-head: var(--hdl-rtl-head);
-  --wv-rtl-tint: #f1faf4;
-  --wv-rtl-head-ink: #14532d;
-  --wv-enum-ink: #7c3aed;
   --wv-value-font: var(--pb-font-mono, 'Cascadia Mono', Consolas, ui-monospace, monospace);
   /* The signal names' size; a copy of the view as on screen reads it from here. */
   --wv-name-font-size: 13px;
   /* Reordering signals (docs/imp_wave_rearange.md § 4.5). */
   --wv-drag-accent: var(--wb-accent, #2f6fed);
-  --wv-drag-grip: #94a3b8;
-  --wv-drag-veil: rgb(255 255 255 / 0.65);
-  --wv-drag-ghost-bg: #ffffff;
   --wv-drag-ghost-shadow: 0 8px 24px rgb(15 23 42 / 0.18), 0 1px 3px rgb(15 23 42 / 0.12);
-  --wv-drag-flash: rgb(47 111 237 / 0.18);
-  --wv-drag-muted: #cbd5e1;
 
   position: absolute;
   inset: 0;

@@ -1,7 +1,280 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Dark theme profile (docs/HDLBoard_Black_Theme_Spec.md § 4.2, § 8). Same blocks and
-   variables as light.css, each selector prefixed with :root[data-theme='dark']. */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* Dark theme profile (docs/HDLBoard_Black_Theme_Spec.md § 4.2, § 8). The same blocks and
+   variables as light.css, each selector prefixed with :root[data-theme='dark'].
+   Colour declarations only. Every variable must be defined here as well (themeFiles.test.ts). */
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+
+  /* The head colour of the testbench and of a design (RTL), shared by the editor's
+     pane headers and the waveform's sections, so the two read as the same thing. */
+  --hdl-tb-head: #dbe7fb;
+  --hdl-rtl-head: #d5f0dd;
+
+  /* --- page (index.css) --- */
+  --hdl-page-bg: #ffffff;
+  --hdl-page-fg: #0f172a;
+}
+
+:root[data-theme='dark'] .wb {
+  --wb-rail-bg: #f1f5f9;
+  /* Role colours (docs/impl_split_screen.md § 4.13): a tint for the badge, an ink
+     for its text and icon. Distinct from the diagnostics' red/amber so a role is
+     never read as a problem. */
+  --wb-role-tb-ink: #6d28d9;
+  --wb-role-tb-tint: #f3e8ff;
+  --wb-role-rtl-ink: #0f766e;
+  --wb-role-rtl-tint: #ccfbf1;
+  /* A design's chip in the file lists and the plain header (docs/cleanup_file_tabs.md
+     D6): quiet, so a testbench's flask stands out. >= 3:1 on every row background. */
+  --wb-role-quiet-ink: #7c8aa0;
+  --wb-border: #e2e8f0;
+  --wb-sidebar-bg: #f8fafc;
+  --wb-hover: #eef2f7;
+  --wb-text: #0f172a;
+  --wb-text-muted: #64748b;
+  --wb-accent: #2f6fed;
+  --wb-accent-dark: #1d4ed8;
+  --wb-accent-soft: #e5efff;
+  --wb-header-bg: #3f6fc4;
+  --wb-header-bg-dark: #315999;
+  --wb-success: #16a34a;
+  --wb-success-dark: #15803d;
+  --wb-danger: #ef4444;
+  --wb-danger-dark: #dc2626;
+  /* Editor error markers (CodeEditor). Every text colour is >= 4.5:1 on the
+     surface it is drawn on; the code text stays at 12.5:1 on the red tint. */
+  --wb-diag-error: #dc2626;
+  --wb-diag-error-bg: rgba(239, 68, 68, 0.12);
+  --wb-diag-error-text: #b91c1c;
+  --wb-diag-warning: #b45309;
+  --wb-diag-warning-bg: rgba(245, 158, 11, 0.14);
+  --wb-diag-warning-text: #92400e;
+  /* Advice (docs/editor_diagnostics_improvement_plan.md § 4.10): a muted
+     follow-on error, and the hint on a line another marker points at. */
+  --wb-diag-followon: #64748b;
+  --wb-diag-followon-bg: rgba(148, 163, 184, 0.14);
+  --wb-diag-hint: #1d4ed8;
+  --wb-diag-hint-bg: rgba(59, 130, 246, 0.1);
+  --wb-console-bg: #0f172a;
+  --wb-divider-bg: #e5e9f0;
+  --wb-divider-edge: #cbd5e1;
+}
+
+:root[data-theme='dark'] .wb-editor {
+  /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
+  --wb-occ-bg: rgba(100, 160, 255, 0.32);
+  --wb-occ-underline: #4a90e2;
+  /* Search matches (docs/impl_search.md § 5.4). */
+  --wb-find-current-bg: #ffd54a;
+  --wb-find-current-outline: #c99a00;
+}
+
+:root[data-theme='dark'] .hdl-close-button {
+  --hdl-close-bg: #e1e6ee;
+  --hdl-close-bg-hover: #d0d7e2;
+  --hdl-close-border: #c9d1dd;
+  --hdl-close-ink: #0f172a;
+}
+
+:root[data-theme='dark'] .hdl-column-divider {
+  --hdl-divider-accent: #2563eb;
+}
+
+:root[data-theme='dark'] .pb-ui {
+  /* --- switch housing ----------------------------------------------- */
+  --pb-sw-body-edge: #b9bdc4;
+  --pb-sw-body-top: #ffffff;
+  --pb-sw-body-upper: #f6f7f9;
+  --pb-sw-body-mid: #ebedf0;
+  --pb-sw-body-low: #e0e3e8;
+
+  /* --- switch track: the recessed slot the knob runs in -------------- */
+  --pb-sw-track-hi: #ccd0d5;
+  --pb-sw-track-lo: #d2d6db;
+
+  /* --- switch knob --------------------------------------------------- */
+  --pb-sw-knob-top: #212429;
+  --pb-sw-knob-mid: #2b2e32;
+  --pb-sw-knob-lo: #43464b;
+  --pb-sw-knob-bottom: #4f5257;
+
+  /* --- LED ---------------------------------------------------------- */
+  --pb-led-ring: #757d87;
+  --pb-led-rim: #e9ecef;
+  --pb-led-rim-on: #fbe2dc;
+  --pb-led-off: #7c8489;
+  --pb-led-off-hi: #9ba1a5;
+  --pb-led-off-lo: #6b7175;
+  /* lit colours — overridden by .pb-led--green / --amber */
+  --pb-led-core: #fff1ee;
+  --pb-led-mid: #ff6b52;
+  --pb-led-body: #f6210f;
+  --pb-led-edge: #a80b06;
+  --pb-led-glow: 255, 48, 28;
+
+  /* --- the moulded light package, shared by KEY and HEX -------------- */
+  /* Both parts are the same piece of moulded plastic on the board, so
+     they take their face and wall from one place. Measured from
+     PushButtons.png. */
+  --pb-part-face: #dee6ed;
+  --pb-part-face-hi: #eff4f9;
+  --pb-part-edge: #8d99a7;
+  --pb-part-edge-dark: #708094;
+
+  /* --- pushbutton (KEY) --------------------------------------------- */
+  --pb-key-face-down: #9fadba;
+  --pb-key-face-down-hi: #b8c4ce;
+  --pb-key-edge-down: #5d6d7e;
+  --pb-key-cap-hi: #4c555f;
+  --pb-key-cap-body: #3b444d;
+  --pb-key-cap-lo: #2f363d;
+  --pb-key-cap-rim: #868c90;
+  --pb-key-hover-face: #d2eafc;
+  --pb-key-hover-edge: #1c79ef;
+  --pb-key-hover-glow: 28, 121, 239;
+
+  /* --- 7-segment display (HEX) -------------------------------------- */
+  --pb-hex-seg-off: #f4f8fc;
+  /* Lit is a flat, deep red — no gradient and no halo. Sampled from a
+     photo of the real part, whose segment core sits around
+     rgb(194,29,25) at its darkest and rgb(234,32,30) at its brightest;
+     this is the dark end, because a shaded segment reads as plastic
+     rather than as an emitting die. */
+  --pb-hex-seg-on: #c8211c;
+
+  /* --- shared panel chrome ------------------------------------------ */
+  --pb-card-bg: #fafcfd;
+  --pb-label: #1e3a8a;
+  --pb-readout-bg: #f1f5fb;
+  --pb-readout-border: #dbe5f1;
+  --pb-readout-fg: #1e3a8a;
+  --pb-focus: #2563eb;
+  --pb-surface: #fff;
+  --pb-menu-text: #20345e;
+  --pb-menu-icon: #294b5b;
+  --pb-menu-muted: #587982;
+  --pb-menu-badge-bg: #f4f5f5;
+  --pb-menu-badge-border: #d9dfe1;
+  --pb-menu-badge-text: #25394c;
+  --pb-menu-border: #d7e6e3;
+  --pb-menu-rule: #e0e8eb;
+  --pb-menu-control-border: #cedde7;
+  --pb-menu-shadow: #183d3a2b;
+  --pb-control-shadow: #0002;
+  --pb-dialog-shadow: #0003;
+  --pb-dialog-backdrop: #0004;
+  --pb-dialog-button-border: #b4c5dc;
+  --pb-dialog-button-bg: #edf3fa;
+  --pb-dialog-button-text: #17315e;
+  --pb-chevron: #526171;
+  --pb-menu-selected-fg: #fff;
+  --pb-menu-selected: #2563eb;
+  --pb-menu-focus: #2563eb;
+  --pb-menu-trigger-border: #a9cbf3;
+  --pb-menu-trigger-fg: #1e40af;
+  --pb-menu-trigger-hover: #d4e9fc;
+  --pb-menu-row-selected: #dfedfc;
+  --pb-menu-row-hover: #eef6ff;
+  --pb-menu-row-selected-hover: #d4e7fb;
+  --pb-collapsed-bg: #e7f3ff;
+  --pb-collapsed-hover: #d4eaff;
+  /* default accent = Switches */
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+:root[data-theme='dark'] .pb-ui.pb-accent-switches {
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+:root[data-theme='dark'] .pb-ui.pb-accent-leds,
+:root[data-theme='dark'] .pb-ui.pb-accent-hex {
+  /* LEDR and HEX are the board's outputs, so they share one frame colour
+     (the LEDs' green); the two inputs — switches and keys — are the
+     blues. */
+  --pb-accent-head: #dbf0ee;
+  --pb-accent-border: #c5e5de;
+  --pb-accent-title: #166534;
+  --pb-menu-selected: #087d6c;
+  --pb-menu-focus: #087a60;
+  --pb-menu-trigger-border: #a8d9d0;
+  --pb-menu-trigger-fg: #174c52;
+  --pb-menu-trigger-hover: #c9eae2;
+  --pb-menu-row-selected: #def3ed;
+  --pb-menu-row-hover: #eaf7f3;
+  --pb-menu-row-selected-hover: #d3eee6;
+  --pb-collapsed-bg: #eff9f6;
+  --pb-collapsed-hover: #d9f1e9;
+}
+
+:root[data-theme='dark'] .pb-ui.pb-accent-keys {
+  --pb-accent-head: #daeefe;
+  --pb-accent-border: #b8dcfc;
+  --pb-accent-title: #1e40af;
+}
+
+:root[data-theme='dark'] .pb-led--green {
+  --pb-led-rim-on: #dcf5e0;
+  --pb-led-core: #f0fff2;
+  --pb-led-mid: #5cf07a;
+  --pb-led-body: #14c93a;
+  --pb-led-edge: #077a22;
+  --pb-led-glow: 40, 220, 80;
+}
+
+:root[data-theme='dark'] .pb-led--amber {
+  --pb-led-rim-on: #fbf0d6;
+  --pb-led-core: #fffaea;
+  --pb-led-mid: #ffcb52;
+  --pb-led-body: #f59d0b;
+  --pb-led-edge: #a35c04;
+  --pb-led-glow: 250, 170, 25;
+}
+
+:root[data-theme='dark'] .pb-ui.pb-key--reset {
+  --pb-key-cap-hi: #e0574c;
+  --pb-key-cap-body: #c0392b;
+  --pb-key-cap-lo: #922b21;
+}
+
+:root[data-theme='dark'] .wv-pane {
+  --wv-bg: #ffffff;
+  --wv-grid: #e2e8f0;
+  --wv-axis-text: #64748b;
+  --wv-trace-high: #15803d;
+  --wv-trace-low: #15803d;
+  --wv-trace-bus: #1d4ed8;
+  --wv-trace-bus-text: #0f172a;
+  --wv-trace-undefined: #dc2626;
+  --wv-trace-z: #b45309;
+  --wv-trace-dont-care: #94a3b8;
+  --wv-cursor: #f59e0b;
+  /* Dark on the amber handle: white on it would be hard to read. */
+  --wv-cursor-text: #1f2937;
+  --wv-error-marker: #dc2626;
+  --wv-selection: #2563eb;
+  --wv-tool-bg: #eef1f6;
+  --wv-tool-bg-hover: #dfe6f1;
+  --wv-tool-ink: #1a56db;
+  --wv-row-hover: #f1f5f9;
+  --wv-row-selected: #e8f0fe;
+  /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
+  --wv-tb-ink: #1d4ed8;
+  --wv-tb-tint: #f3f7fe;
+  --wv-tb-head-ink: #1e3a8a;
+  --wv-rtl-ink: #15803d;
+  --wv-rtl-tint: #f1faf4;
+  --wv-rtl-head-ink: #14532d;
+  --wv-enum-ink: #7c3aed;
+  --wv-drag-grip: #94a3b8;
+  --wv-drag-veil: rgb(255 255 255 / 0.65);
+  --wv-drag-ghost-bg: #ffffff;
+  --wv-drag-flash: rgb(47 111 237 / 0.18);
+  --wv-drag-muted: #cbd5e1;
 }

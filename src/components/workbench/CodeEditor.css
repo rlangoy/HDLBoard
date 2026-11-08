@@ -80,12 +80,6 @@
   --wb-code-line-h: 20px;
   --wb-code-pad-top: 12px;
   --wb-code-pad-x: 16px;
-  /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
-  --wb-occ-bg: rgba(100, 160, 255, 0.32);
-  --wb-occ-underline: #4a90e2;
-  /* Search matches (docs/impl_search.md § 5.4). */
-  --wb-find-current-bg: #ffd54a;
-  --wb-find-current-outline: #c99a00;
 }
 
 .wb-editor__body {

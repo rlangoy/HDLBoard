@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Shared by the waveform and the workbench's side pane dividers. */
 .hdl-column-divider {
-  --hdl-divider-accent: #2563eb;
   cursor: col-resize;
   touch-action: none;
   outline: none;

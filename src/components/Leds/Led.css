@@ -84,24 +84,6 @@
 
 /* ------------------------------------------------------ colour variants */
 
-.pb-led--green {
-  --pb-led-rim-on: #dcf5e0;
-  --pb-led-core: #f0fff2;
-  --pb-led-mid: #5cf07a;
-  --pb-led-body: #14c93a;
-  --pb-led-edge: #077a22;
-  --pb-led-glow: 40, 220, 80;
-}
-
-.pb-led--amber {
-  --pb-led-rim-on: #fbf0d6;
-  --pb-led-core: #fffaea;
-  --pb-led-mid: #ffcb52;
-  --pb-led-body: #f59d0b;
-  --pb-led-edge: #a35c04;
-  --pb-led-glow: 250, 170, 25;
-}
-
 /* ------------------------------------------------- interactive variant */
 
 button.pb-led {
