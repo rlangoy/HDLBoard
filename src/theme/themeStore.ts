@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
+/** The single source of truth for the current theme (docs/HDLBoard_Black_Theme_Spec.md T2.4). */
+
 import { applyTheme } from './applyTheme';
 import { subscribeSystemTheme, systemPrefersDark } from './systemTheme';
 import {
@@ -17,7 +19,12 @@ export interface ThemeState {
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
-let state: ThemeState = { preference: DEFAULT_THEME_PREFERENCE, resolved: 'light', saveFailed: false };
+/** Until startTheme() runs: the default, resolved as if the OS preference were unknown. */
+let state: ThemeState = {
+  preference: DEFAULT_THEME_PREFERENCE,
+  resolved: resolveTheme(DEFAULT_THEME_PREFERENCE, false),
+  saveFailed: false,
+};
 
 function stateFor(preference: ThemePreference, saveFailed: boolean): ThemeState {
   return { preference, resolved: resolveTheme(preference, systemPrefersDark()), saveFailed };
@@ -27,6 +34,11 @@ function publish(next: ThemeState): void {
   state = next;
   applyTheme(next.resolved);
   listeners.forEach((listener) => listener());
+}
+
+/** The preference in use, and it reached storage: choosing it again would change nothing. */
+function isStoredChoice(preference: ThemePreference): boolean {
+  return preference === state.preference && state.saveFailed === false;
 }
 
 function onSystemThemeChange(): void {
@@ -41,7 +53,7 @@ export function startTheme(): () => void {
 
 /** Applies and stores a choice. Choosing the current, stored theme again does nothing. */
 export function chooseTheme(preference: ThemePreference): void {
-  if (preference === state.preference && !state.saveFailed) return;
+  if (isStoredChoice(preference)) return;
   const saved = saveThemePreference(preference);
   publish(stateFor(preference, !saved));
 }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 /** The user's theme choice (docs/HDLBoard_Black_Theme_Spec.md § 7). Stored in this browser only. */
 
+
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 

@@ -28,7 +28,13 @@ export function ThemeSetting() {
       <legend className="wb-settings__heading">Appearance</legend>
       {THEME_CHOICES.map((choice) => (
         <label key={choice.value} className="wb-settings__option">
-          <input type="radio" name={groupName} value={choice.value} checked={preference === choice.value} onChange={() => chooseTheme(choice.value)} />
+          <input
+            type="radio"
+            name={groupName}
+            value={choice.value}
+            checked={preference === choice.value}
+            onChange={() => chooseTheme(choice.value)}
+          />
           <span>
             <strong>{choice.label}</strong>
             <span className="wb-settings__note">{choice.note}</span>
