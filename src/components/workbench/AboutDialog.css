@@ -49,7 +49,7 @@
   border: none;
   padding: 0;
   background: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

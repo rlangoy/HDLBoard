@@ -16,7 +16,7 @@
   align-items: center;
   border: 0;
   background: #ffffff;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   cursor: pointer;
   transition: background 140ms ease;

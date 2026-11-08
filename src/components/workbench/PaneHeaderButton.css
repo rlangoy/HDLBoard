@@ -41,6 +41,6 @@
 }
 
 .wb-copycode.is-failed {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 

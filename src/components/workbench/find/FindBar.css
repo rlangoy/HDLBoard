@@ -176,7 +176,7 @@
   border: 1px solid var(--wb-accent);
   border-radius: 6px;
   background: #ffffff;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   font-weight: 600;
   cursor: pointer;

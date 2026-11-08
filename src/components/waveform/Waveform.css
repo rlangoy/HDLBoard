@@ -652,7 +652,7 @@
   justify-content: center;
   border-radius: 10px;
   background: #ffffff;
-  color: var(--wb-header-bg-dark, #234a8f);
+  color: var(--wb-header-bg-dark-ink);
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
 }
 
@@ -704,7 +704,7 @@
 .wv-report-band__button.is-primary {
   border-color: #ffffff;
   background: #ffffff;
-  color: var(--wb-header-bg-dark, #234a8f);
+  color: var(--wb-header-bg-dark-ink);
 }
 
 .wv-report-band__button.is-primary:hover {

@@ -81,7 +81,7 @@
 .wb-searchtoggle.is-pressed,
 .wb-searchtoggle.is-pressed:hover {
   background: var(--wb-accent-soft);
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 /* The Find bar's slot under the header: no box of its own; focus in it marks the pane as the one with the cursor. */

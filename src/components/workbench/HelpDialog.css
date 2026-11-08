@@ -97,7 +97,7 @@
 
 .wb-help__dir--in {
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-help__dir--out {
@@ -249,7 +249,7 @@
 .wb-help__res-title {
   font-size: 14.5px;
   font-weight: 600;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-help__res-title::after {

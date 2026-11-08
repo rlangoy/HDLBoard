@@ -36,14 +36,21 @@
   --wb-text: #0f172a;
   --wb-text-muted: #64748b;
   --wb-accent: #2f6fed;
+  /* -ink twins: the same colour used for text and icons. A dark theme needs a
+     lighter ink than fill, so the two uses take separate variables. */
+  --wb-accent-ink: #2f6fed;
   --wb-accent-dark: #1d4ed8;
+  --wb-accent-dark-ink: #1d4ed8;
   --wb-accent-soft: #e5efff;
   --wb-header-bg: #3f6fc4;
   --wb-header-bg-dark: #315999;
+  --wb-header-bg-dark-ink: #315999;
   --wb-success: #16a34a;
   --wb-success-dark: #15803d;
   --wb-danger: #ef4444;
+  --wb-danger-ink: #ef4444;
   --wb-danger-dark: #dc2626;
+  --wb-danger-dark-ink: #dc2626;
   /* Editor error markers (CodeEditor). Every text colour is >= 4.5:1 on the
      surface it is drawn on; the code text stays at 12.5:1 on the red tint. */
   --wb-diag-error: #dc2626;

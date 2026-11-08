@@ -35,7 +35,7 @@
   justify-content: center;
   gap: 8px;
   background: rgba(229, 239, 255, 0.92); /* --wb-accent-soft, translucent */
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font-size: 13px;
   font-weight: 600;
   border-radius: 11px; /* one px inside the card's own 12px radius/border */
@@ -43,7 +43,7 @@
 }
 
 .wb-files__drop-hint .wb-icon--upload {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-files__header {
@@ -146,7 +146,7 @@
   border: 1px solid #c7dafc;
   border-radius: 999px;
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -263,12 +263,12 @@
 }
 
 .wb-files__row.is-shown .wb-files__file {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font-weight: 600;
 }
 
 .wb-files__row.is-shown .wb-roleicon.is-rtl {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 /* A `vhdl/` row's top-dot button (below) already supplies the row's
@@ -388,7 +388,7 @@
 
 .wb-files__row-action--danger:hover {
   background: rgba(239, 68, 68, 0.12);
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 /* ---- icons ---------------------------------------------------------- */
@@ -533,7 +533,7 @@
   width: 22px;
   height: 22px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-files__project-text {

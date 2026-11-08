@@ -37,7 +37,7 @@
   width: 30px;
   height: 30px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-examples__title {
@@ -249,7 +249,7 @@
 .wb-examples__open:hover {
   background: var(--wb-accent-soft);
   border-color: var(--wb-accent);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-examples__empty {
@@ -276,7 +276,7 @@
   width: 20px;
   height: 20px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 /* A board of another shape (docs/board_io_v2_spec.md § 5.4): a notice in place of the cards. */

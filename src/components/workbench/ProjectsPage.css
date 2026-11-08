@@ -100,7 +100,7 @@
 }
 
 .wb-projects__btn.is-open {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   border-color: #bcd3ff;
   background: #f5f9ff;
 }
@@ -115,7 +115,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-projects__btn.is-text:hover:not(:disabled) {
@@ -235,7 +235,7 @@
 }
 
 .wb-projects__small a {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-decoration: none;
 }
 
@@ -304,7 +304,7 @@
 
 .wb-projects__chip.is-open {
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-projects__chip.is-warn {
@@ -1125,7 +1125,7 @@
 
 .wb-projects__menu-item.is-danger,
 .wb-projects__menu-item.is-danger svg {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-projects__menu:has(.wb-projects__menu-detail) {

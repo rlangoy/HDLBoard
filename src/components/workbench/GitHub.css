@@ -111,7 +111,7 @@
 .wb-github__signin a,
 .wb-github__device a,
 .wb-github__address a {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-github__message {
@@ -126,7 +126,7 @@
 .wb-github__message.is-error {
   background: #fef2f2;
   border: 1px solid #fecaca;
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-github__message.is-success {

@@ -101,7 +101,7 @@
 
 .wb-filemenu .wb-menu__check {
   flex: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-filemenu__footer {

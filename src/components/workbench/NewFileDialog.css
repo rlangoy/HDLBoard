@@ -54,7 +54,7 @@
 }
 
 .wb-newfile__error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-newfile__languages {
@@ -117,7 +117,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-align: left;
   cursor: pointer;
 }
@@ -154,7 +154,7 @@
   font: inherit;
   font-size: 14px;
   font-weight: 600;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   cursor: pointer;
 }
 

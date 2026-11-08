@@ -28,14 +28,14 @@
   justify-content: center;
   gap: 8px;
   background: rgba(229, 239, 255, 0.92); /* --wb-accent-soft, translucent */
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font-size: 14px;
   font-weight: 600;
   pointer-events: none; /* drag events are handled on .wb-editor itself */
 }
 
 .wb-editor__drop-hint .wb-icon--upload {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-icon--upload {
@@ -325,7 +325,7 @@
   border: 1px solid var(--wb-accent);
   border-radius: 5px;
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: 12px/1 var(--wb-code-font);
   vertical-align: top;
   cursor: pointer;

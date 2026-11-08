@@ -296,7 +296,7 @@
   top: 50%;
   left: 9px;
   display: grid;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -313,7 +313,7 @@
 .wb-project__field-error {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 /* --- busy, warnings, missing files ---------------------------------- */
@@ -388,7 +388,7 @@
 .wb-project__missing-icon {
   width: 20px;
   height: 20px;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-project__hidden-input {
@@ -482,7 +482,7 @@
 }
 
 button.wb-project__file:hover {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-decoration: underline;
 }
 
@@ -538,11 +538,11 @@ button.wb-project__file:hover {
 
 .wb-project__icon-btn:hover:not(:disabled) {
   background: var(--wb-hover);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-project__icon-btn--danger:hover:not(:disabled) {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-project__icon-btn:disabled {
@@ -579,7 +579,7 @@ button.wb-project__file:hover {
   width: 20px;
   height: 20px;
   flex: none;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
 
 .wb-project__footer {
@@ -597,7 +597,7 @@ button.wb-project__file:hover {
   background: none;
   font: inherit;
   font-weight: 600;
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
   cursor: pointer;
 }
 
@@ -799,7 +799,7 @@ button.wb-project__file:hover {
 }
 
 .wb-project__name-hint.is-error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-project__name-row.is-error .wb-project__name-input.is-asking {
@@ -809,7 +809,7 @@ button.wb-project__file:hover {
 }
 
 .wb-project__name-row.is-error .wb-project__name-icon {
-  color: var(--wb-danger);
+  color: var(--wb-danger-ink);
 }
 
 /* Save to GitHub waits for a name: dimmed, but clickable so it can say why. */
@@ -875,7 +875,7 @@ button.wb-project__file:hover {
   background: none;
   font: inherit;
   font-weight: 600;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
   cursor: pointer;
 }
 

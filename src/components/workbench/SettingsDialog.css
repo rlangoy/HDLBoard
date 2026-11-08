@@ -39,7 +39,7 @@ div.wb-settings__empty {
 }
 
 .wb-settings__note--error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-settings__heading {
@@ -178,7 +178,7 @@ div.wb-settings__empty {
 .wb-settings__layout.is-selected {
   border-color: var(--wb-accent);
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-settings__layout:has(input:focus-visible) {

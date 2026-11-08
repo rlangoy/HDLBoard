@@ -94,7 +94,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   font-size: 13px;
   text-decoration: none;
@@ -144,5 +144,5 @@
   flex: none;
   width: 20px;
   height: 20px;
-  color: var(--wb-accent);
+  color: var(--wb-accent-ink);
 }
