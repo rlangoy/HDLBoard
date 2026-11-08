@@ -331,7 +331,7 @@
   cursor: pointer;
 }
 .wb-editor__quickfix:hover {
-  background: color-mix(in srgb, var(--wb-accent) 22%, var(--wb-editor-quickfix-bg-hover));
+  background: color-mix(in srgb, var(--wb-accent) 22%, var(--wb-code-bg));
 }
 .wb-editor__quickfix-bulb {
   width: 15px;
