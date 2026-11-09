@@ -65,3 +65,16 @@ describe('compileArguments (§ 5.4 step 2: build what will run)', () => {
     assert.equal(args[args.indexOf('-s') + 1], 'tb_counter8');
   });
 });
+
+describe('the project’s option flags (optionFlags.ts)', () => {
+  const WITH_OPTIONS = { ...REQUEST, optionFlags: ['-g2012', '-DWIDTH=8'] };
+  const EXPECTED_START = [`-B${BUNDLED.bundledDir}`, '-g2012', '-DWIDTH=8'];
+
+  test('go into the port-reading step, after -B', () => {
+    assert.deepEqual(stubArguments(BUNDLED, WITH_OPTIONS).slice(0, 3), EXPECTED_START);
+  });
+
+  test('go into the build step too, so both steps see the same language and macros', () => {
+    assert.deepEqual(compileArguments(BUNDLED, WITH_OPTIONS).slice(0, 3), EXPECTED_START);
+  });
+});

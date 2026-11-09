@@ -11,10 +11,12 @@
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_COMPILER_OPTIONS } from '../compilerOptions.js';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { standaloneHint, versionWarning } from '../verilog/diagnostics.js';
 import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE, validateSourceName } from '../verilog/fileNames.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, type Port } from '../verilog/ports.js';
+import { iverilogFlags } from '../verilog/optionFlags.js';
 import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '../verilog/process.js';
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
@@ -45,6 +47,8 @@ interface Build {
   readonly notes: readonly string[];
   /** The port names the design is matched against and the wrapper connects by. */
   readonly board: BoardIo;
+  /** The project's Icarus options as flags, for every compile step (optionFlags.ts). */
+  readonly optionFlags: readonly string[];
 }
 
 type Checked =
@@ -114,6 +118,7 @@ const compileRequest = (build: Build, target: string, extras: Extras = {}): Comp
   target,
   files: [...(extras.files ?? []), ...build.sources],
   extraRoots: extras.roots ?? [],
+  optionFlags: build.optionFlags,
 });
 
 function batchPlan(build: Build, messages: readonly string[], wave: PlannedWave | undefined): RunPlan {
@@ -196,7 +201,8 @@ async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
   return notes;
 }
 
-async function prepare({ dir, files, topFile, runTarget, wave, board }: PrepareRequest): Promise<PrepareResult> {
+async function prepare(request: PrepareRequest): Promise<PrepareResult> {
+  const { dir, files, topFile, runTarget, wave, board, compilerOptions = DEFAULT_COMPILER_OPTIONS } = request;
   const checked = checkProject(files, topFile, runTarget);
   if (!checked.ok) return failure(checked.stage, checked.text);
   writeProject(dir, files);
@@ -205,7 +211,7 @@ async function prepare({ dir, files, topFile, runTarget, wave, board }: PrepareR
   const sameNamed = sameNamedElsewhere(files, checked);
   const sources = checked.sources.filter((name) => !sameNamed.otherFiles.includes(name));
   const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
-  const build: Build = { tools, dir, top: checked.top, sources, notes, board };
+  const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags: iverilogFlags(compilerOptions.iverilog) };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);

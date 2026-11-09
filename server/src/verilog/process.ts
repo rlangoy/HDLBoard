@@ -33,6 +33,8 @@ export interface CompileRequest {
   readonly files: readonly string[];
   /** Further root modules beside `target`: HDLBoard's waveform helper (docs/waveform_viewer_spec.md § 7.3). */
   readonly extraRoots?: readonly string[];
+  /** The project's options as flags (optionFlags.ts); absent, none. Both steps get the same ones. */
+  readonly optionFlags?: readonly string[];
 }
 
 export type PortsOutcome =
@@ -50,6 +52,7 @@ const rootsOf = (request: CompileRequest): string[] => [request.target, ...(requ
 export function stubArguments(tools: ToolPaths, request: CompileRequest): string[] {
   return [
     ...compilerFlags(tools),
+    ...(request.optionFlags ?? []),
     '-Wno-timescale',
     '-I.',
     '-s',
@@ -65,6 +68,7 @@ export function stubArguments(tools: ToolPaths, request: CompileRequest): string
 export function compileArguments(tools: ToolPaths, request: CompileRequest): string[] {
   return [
     ...compilerFlags(tools),
+    ...(request.optionFlags ?? []),
     '-Wall',
     '-Wno-timescale',
     '-I.',

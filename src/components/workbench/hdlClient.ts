@@ -18,6 +18,7 @@ import type { VhdlFile } from './files';
 import type { RunWaveStatus, WaveFormat } from '../waveform/model';
 import { BOARD_VERB, encodeBoardFrame, encodeV1BoardFrame, fitsV1BoardFrame } from '../../boards/boardFrame';
 import type { BoardPorts } from '../../boards/types';
+import type { CompilerOptions } from '../../project/types';
 import { BOARD_TEXT } from './boardText';
 import type { TimedStim } from './bouncyButtons';
 
@@ -29,7 +30,8 @@ function stimStepText({ bits, holdNs }: TimedStim): string {
 // 3: board shapes, a JSON BOARD body and STIM/STATE lengths per board (docs/board_io_v2_spec.md § 6).
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
 // 5: `ERROR busy` — the server is full; the socket was refused, or closed for a new one.
-const PROTOCOL_VERSION = '5';
+// 6: `OPTIONS` — the project's compiler options, sent before RUN.
+const PROTOCOL_VERSION = '6';
 /**
  * The `ERROR` stage of a full server (server/src/sessionLimit.ts): this connection was
  * refused, or closed to make room for another student. The server closes the socket next.
@@ -37,10 +39,22 @@ const PROTOCOL_VERSION = '5';
 export const BUSY_STAGE = 'busy';
 /** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
 const SHAPED_BOARD_PROTOCOL = 3;
+/** The first protocol that takes the OPTIONS frame; an older backend compiles with its own defaults. */
+const OPTIONS_PROTOCOL = 6;
 /** The first protocol that takes timed STIM steps; an older backend gets the final state alone. */
 const TIMED_STIM_PROTOCOL = 4;
 /** A backend that answers WELCOME without a number is the oldest one. */
 const OLDEST_PROTOCOL = 1;
+/** What the frames sent before a RUN set for it. They go with every RUN, so a reconnect needs no state. */
+export interface RunSettings {
+  /** Whether a batch run records a waveform (WAVE). */
+  readonly recordWave: boolean;
+  /** The board's port names (BOARD). */
+  readonly board: BoardPorts;
+  /** The project file's compilerOptions (OPTIONS); omitted, every option at its default. */
+  readonly compilerOptions?: CompilerOptions;
+}
+
 /** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
 const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
 
@@ -310,6 +324,12 @@ export class HdlClient {
     else wave?.onNone(run);
   }
 
+  /** The OPTIONS frame for this backend: undefined for one that predates it. */
+  private optionsFrameFor(compilerOptions: CompilerOptions | undefined): string | undefined {
+    if ((this.backendVersion ?? OLDEST_PROTOCOL) < OPTIONS_PROTOCOL) return undefined;
+    return `OPTIONS\n${JSON.stringify(compilerOptions ?? {})}`;
+  }
+
   /**
    * Sends the files of one design folder — the folder of the top file
    * (`sourceFolderFor`: `verilog/` for a Verilog top, `vhdl/` otherwise) —
@@ -318,9 +338,10 @@ export class HdlClient {
    * (the file currently marked as top in the Files panel), is sent as
    * `RUN`'s inline arg so the backend elaborates that file's design
    * rather than guessing from board-port matches — see `portDetect.ts`'s
-   * `findTopEntity`. `board`'s port names go in a BOARD frame just before the RUN.
+   * `findTopEntity`. `settings` go in the WAVE, BOARD and OPTIONS frames just before the RUN.
    */
-  run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, recordWave: boolean, board: BoardPorts): void {
+  run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, settings: RunSettings): void {
+    const { recordWave, board, compilerOptions } = settings;
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
@@ -335,6 +356,9 @@ export class HdlClient {
       ws.send(`WAVE ${recordWave ? 'on' : 'off'}`);
       // BOARD too: settings for the next run, sent before every RUN, so a reconnect needs no state.
       if (this.backendKnowsBoard) ws.send(boardFrame);
+      // OPTIONS too, always: a project without options must not keep the last project's.
+      const optionsFrame = this.optionsFrameFor(compilerOptions);
+      if (optionsFrame !== undefined) ws.send(optionsFrame);
       ws.send(`${head}\n${body}`);
     };
     // Still connecting: `onopen` (ensureSocket) sends HELLO first; the run waits for WELCOME.

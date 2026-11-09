@@ -11,12 +11,14 @@
 
 import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getGhdlExe, runBatch, startPersistentRun } from '../ghdl.js';
+import { DEFAULT_COMPILER_OPTIONS } from '../compilerOptions.js';
+import { getGhdlExe, runBatch, startPersistentRun, type GhdlRunTarget } from '../ghdl.js';
 import { findEntityNames, findTopEntity, type TopEntity } from '../portDetect.js';
 import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { runCommand, type CmdResult } from '../runtime.js';
 import { generateTestbench } from '../tbTemplate.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
+import { planGhdlFlags } from './ghdlFlags.js';
 import { boardInputNames, boardOutputNames, declaresPort, type BoardIo } from './boardPorts.js';
 import { checkBoardPortShapes, shapeErrors, shapeNotes, type DeclaredPort } from './boardShapeCheck.js';
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
@@ -26,7 +28,6 @@ import type { BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResul
 import type { WaveFormat } from '../protocol.js';
 
 const TB_ENTITY = 'hdl_board_tb';
-const GHDL_STANDARD = '--std=08';
 
 /**
  * Where the testbench's real-time pacing grants come from on this platform. Windows has
@@ -35,14 +36,24 @@ const GHDL_STANDARD = '--std=08';
  */
 const PACING: RunPlan['pacing'] = process.platform === 'win32' ? 'stdin' : 'fifo';
 
-/** `ghdl -a` / `-e` are expected to finish in seconds, so they run under the shared build timeout (§ 7.4). */
-const ghdl = (args: string[], dir: string): Promise<CmdResult> => runCommand({ cmd: getGhdlExe(), args, cwd: dir });
+/** Where GHDL compiles this run, and the options each of its commands gets (ghdlFlags.ts). */
+interface Workspace {
+  readonly dir: string;
+  readonly flags: readonly string[];
+}
+
+/**
+ * `ghdl -a <file>` or `ghdl -e <unit>`, with the run's flags. Expected to finish in
+ * seconds, so they run under the shared build timeout (§ 7.4).
+ */
+const ghdl = (command: '-a' | '-e', fileOrUnit: string, { dir, flags }: Workspace): Promise<CmdResult> =>
+  runCommand({ cmd: getGhdlExe(), args: [command, ...flags, fileOrUnit], cwd: dir });
 
 const failure = (stage: ErrorStage, text: string): PrepareResult => ({ ok: false, stage, text });
 
 /** The error text if `ghdl -a` rejects the file, `undefined` if it is analysed. */
-async function analyzeFile(dir: string, name: string): Promise<string | undefined> {
-  const result = await ghdl(['-a', GHDL_STANDARD, name], dir);
+async function analyzeFile(workspace: Workspace, name: string): Promise<string | undefined> {
+  const result = await ghdl('-a', name, workspace);
   if (result.code === 0) return undefined;
   if (result.timedOut) return `Analysis of ${name} timed out.\n${result.err}`;
   return result.err || `ghdl -a failed on ${name} with no output.`;
@@ -58,13 +69,13 @@ async function analyzeFile(dir: string, name: string): Promise<string | undefine
  *
  * Returns the errors of the files that never analysed, or `undefined` when all did.
  */
-async function analyzeToFixedPoint(dir: string, files: readonly VhdlFileInput[]): Promise<string | undefined> {
+async function analyzeToFixedPoint(workspace: Workspace, files: readonly VhdlFileInput[]): Promise<string | undefined> {
   let pending = files.map((file) => file.name);
   const lastErrors = new Map<string, string>();
   while (pending.length > 0) {
     const stillFailing: string[] = [];
     for (const name of pending) {
-      const error = await analyzeFile(dir, name);
+      const error = await analyzeFile(workspace, name);
       if (error !== undefined) {
         lastErrors.set(name, error);
         stillFailing.push(name);
@@ -77,8 +88,8 @@ async function analyzeToFixedPoint(dir: string, files: readonly VhdlFileInput[])
 }
 
 /** A standalone testbench supplies its own stimuli, so its polling timing is never used. */
-function batchPlan(dir: string, entityName: string, messages: readonly string[]): RunPlan {
-  return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
+function batchPlan({ dir, flags }: Workspace, entityName: string, messages: readonly string[]): RunPlan {
+  return { mode: 'batch', dir, runTarget: entityName, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages, runFlags: flags };
 }
 
 /** A batch run records a waveform when one was asked for (docs/waveform_viewer_spec.md § 7.3). */
@@ -96,8 +107,8 @@ export function waveArguments(wave: PlannedWave | undefined, waveFile: string | 
 }
 
 /** `messages`: the GHDL banner, a note on a same-named entity, then the warnings about extra ports. */
-function boardPlan(dir: string, timing: BoardTiming, messages: readonly string[]): RunPlan {
-  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages };
+function boardPlan({ dir, flags }: Workspace, timing: BoardTiming, messages: readonly string[]): RunPlan {
+  return { mode: 'board', dir, runTarget: TB_ENTITY, timing, pacing: PACING, messages, runFlags: flags };
 }
 
 /**
@@ -113,7 +124,7 @@ async function ghdlBanner(dir: string): Promise<string | undefined> {
   const exe = getGhdlExe();
   const known = bannerByExe.get(exe);
   if (known !== undefined) return known;
-  const result = await ghdl(['--version'], dir);
+  const result = await runCommand({ cmd: exe, args: ['--version'], cwd: dir });
   const banner = result.code === 0 ? result.out.split(/\r?\n/)[0]?.trim() : undefined;
   if (!banner) return undefined;
   bannerByExe.set(exe, banner);
@@ -121,15 +132,15 @@ async function ghdlBanner(dir: string): Promise<string | undefined> {
 }
 
 /** A genuinely portless entity: no wrapper, run directly (see `runBatch`'s own doc comment). */
-async function prepareBatch(dir: string, entityName: string, notes: readonly string[]): Promise<PrepareResult> {
-  const elaborated = await ghdl(['-e', GHDL_STANDARD, entityName], dir);
+async function prepareBatch(workspace: Workspace, entityName: string, notes: readonly string[]): Promise<PrepareResult> {
+  const elaborated = await ghdl('-e', entityName, workspace);
   if (elaborated.code !== 0) return failure('elaborate', elaborated.err);
-  return { ok: true, plan: batchPlan(dir, entityName, notes) };
+  return { ok: true, plan: batchPlan(workspace, entityName, notes) };
 }
 
 /** The top entity of a board run, with its file's text, where the testbench is built. */
 interface BoardTop {
-  readonly dir: string;
+  readonly workspace: Workspace;
   readonly top: TopEntity;
   readonly topContent: string;
   readonly board: BoardIo;
@@ -145,7 +156,7 @@ function declaredPorts(source: TopSource): DeclaredPort[] {
 }
 
 /** A design with board ports: wrap it in the generated testbench, then elaborate that. */
-async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
+async function prepareBoard({ workspace, top, topContent, board }: BoardTop, notes: readonly string[]): Promise<PrepareResult> {
   // Ports the board does not have: the testbench holds an extra input at 0 or leaves it
   // open (`extraPorts.ts`), and GHDL's error about an open one is moved onto its declaration.
   const source: TopSource = { fileName: top.fileName, content: topContent, entityName: top.name, ports: top.ports, board };
@@ -158,16 +169,16 @@ async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: re
     pacingFromStdin: PACING === 'stdin',
     tiedInputs: extraPorts.tiedInputs,
   });
-  writeFileSync(join(dir, `${TB_ENTITY}.vhdl`), testbench);
+  writeFileSync(join(workspace.dir, `${TB_ENTITY}.vhdl`), testbench);
 
-  const analyzed = await ghdl(['-a', GHDL_STANDARD, `${TB_ENTITY}.vhdl`], dir);
+  const analyzed = await ghdl('-a', `${TB_ENTITY}.vhdl`, workspace);
   if (analyzed.code !== 0) {
     const explained = explainUnconnectedPorts(analyzed.err, source);
     if (explained !== undefined) return failure('elaborate', explained);
     return failure('internal', `Internal testbench build error:\n${analyzed.err}`);
   }
 
-  const elaborated = await ghdl(['-e', GHDL_STANDARD, TB_ENTITY], dir);
+  const elaborated = await ghdl('-e', TB_ENTITY, workspace);
   if (elaborated.code !== 0) {
     return failure(
       'elaborate',
@@ -179,9 +190,9 @@ async function prepareBoard({ dir, top, topContent, board }: BoardTop, notes: re
   // The same condition `tbTemplate.ts` uses to decide whether `clkgen` exists (§ 5.8),
   // which is what decides how fast simulated time runs, and so how finely to poll.
   const timing = boardTimingFor(declaresPort(top.ports, board.clock.port));
-  const banner = await ghdlBanner(dir);
+  const banner = await ghdlBanner(workspace.dir);
   const messages = [...(banner === undefined ? [] : [banner]), ...notes, ...shapeNotes(shapes), ...extraPorts.warnings];
-  return { ok: true, plan: boardPlan(dir, timing, messages) };
+  return { ok: true, plan: boardPlan(workspace, timing, messages) };
 }
 
 /**
@@ -195,7 +206,7 @@ function otherFilesDeclaring(files: readonly VhdlFileInput[], top: TopEntity): s
     .map((file) => file.name);
 }
 
-/** GHDL's library index files: `work-obj08.cf` for `--std=08`. */
+/** GHDL's library index files: `work-obj08.cf` for `--std=08` (ghdlFlags.ts). */
 const WORK_LIBRARY_FILE = /^work-obj\d*\.cf$/;
 
 /**
@@ -222,12 +233,21 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   return prepareAnalysed(request);
 }
 
+/** The run's folder with the GHDL flags its files and options call for, and the warnings that explain them. */
+function planWorkspace({ dir, files, compilerOptions = DEFAULT_COMPILER_OPTIONS }: PrepareRequest) {
+  const { flags, warnings } = planGhdlFlags(compilerOptions.ghdl, files);
+  const workspace: Workspace = { dir, flags };
+  return { workspace, warnings };
+}
+
 /** Analyses the student's files, then decides how the top runs. */
-async function prepareAnalysed({ dir, files, topFile, runTarget, wave, board }: PrepareRequest): Promise<PrepareResult> {
+async function prepareAnalysed(request: PrepareRequest): Promise<PrepareResult> {
+  const { files, topFile, runTarget, wave, board } = request;
+  const { workspace, warnings } = planWorkspace(request);
   // Every file is analysed before our own port scan, so a genuine syntax error gets
   // GHDL's real diagnosis under `analyze` instead of being intercepted early by
   // `findTopEntity`'s regex heuristic, which runs on source not yet known to be VHDL.
-  const analysisErrors = await analyzeToFixedPoint(dir, files);
+  const analysisErrors = await analyzeToFixedPoint(workspace, files);
   if (analysisErrors !== undefined) return failure('analyze', analysisErrors);
 
   const top = findTopEntity([...files], board, topFile, runTarget);
@@ -236,29 +256,30 @@ async function prepareAnalysed({ dir, files, topFile, runTarget, wave, board }: 
   // The library holds whichever same-named entity was analysed last: analysing the top's
   // file once more makes its own entity the one that is elaborated and run.
   const others = otherFilesDeclaring(files, top);
-  const reanalysisError = others.length > 0 ? await analyzeFile(dir, top.fileName) : undefined;
+  const reanalysisError = others.length > 0 ? await analyzeFile(workspace, top.fileName) : undefined;
   if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
-  const notes = sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others });
+  const notes = [...warnings, ...sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others })];
 
-  if (top.ports.size === 0) return withWave(await prepareBatch(dir, top.name, notes), wave);
+  if (top.ports.size === 0) return withWave(await prepareBatch(workspace, top.name, notes), wave);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
-  return prepareBoard({ dir, top, topContent, board }, notes);
+  return prepareBoard({ workspace, top, topContent, board }, notes);
 }
+
+/** What `ghdl -r` runs: the plan's target, with the options its units were compiled with. */
+const runTargetOf = (plan: RunPlan): GhdlRunTarget => ({ cwd: plan.dir, entityName: plan.runTarget, flags: plan.runFlags ?? [] });
 
 /** File names arrive relative to the session directory; GHDL has always been given absolute paths. */
 function startBoardRun(plan: RunPlan, files: BoardFiles) {
   const absolute = (name: string) => join(plan.dir, name);
-  return startPersistentRun(
-    plan.dir,
-    plan.runTarget,
-    absolute(files.input),
-    absolute(files.output),
-    plan.timing.pollIntervalNs,
-    plan.timing.minDwellNs,
-    absolute(files.heartbeat),
+  return startPersistentRun(runTargetOf(plan), {
+    inputFile: absolute(files.input),
+    outputFile: absolute(files.output),
+    pollIntervalNs: plan.timing.pollIntervalNs,
+    minDwellNs: plan.timing.minDwellNs,
+    heartbeatFile: absolute(files.heartbeat),
     // Empty when there is no FIFO (stdin pacing): see `startPersistentRun`.
-    files.pacing === undefined ? '' : absolute(files.pacing),
-  );
+    pacingFile: files.pacing === undefined ? '' : absolute(files.pacing),
+  });
 }
 
 export const ghdlEngine: SimEngine = {
@@ -266,5 +287,5 @@ export const ghdlEngine: SimEngine = {
   prepare,
   startBoardRun,
   startBatchRun: (plan, { onOutput, timeoutMs, waveFile }) =>
-    runBatch(plan.dir, plan.runTarget, onOutput, timeoutMs, waveArguments(plan.wave, waveFile)),
+    runBatch(runTargetOf(plan), onOutput, timeoutMs, waveArguments(plan.wave, waveFile)),
 };

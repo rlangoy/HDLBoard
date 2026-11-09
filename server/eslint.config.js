@@ -41,6 +41,11 @@ const NEW_CODE = [
   'src/boardNames.ts',
   'src/integration/boardShapes.test.ts',
   'src/integration/bounceTrain.test.ts',
+  // Compiler options and the legacy Synopsys packages (issue #37).
+  'src/compilerOptions.ts',
+  'src/compilerOptions.test.ts',
+  'src/session.options.test.ts',
+  'src/integration/compilerOptions.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

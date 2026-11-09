@@ -33,6 +33,7 @@ import { selectEngine } from './engines/selectEngine.js';
 import { firstUnsafeName } from './engines/sourceNames.js';
 import type { BoardFiles, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './engines/types.js';
 import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
+import { DEFAULT_COMPILER_OPTIONS, type CompilerOptions, type DecodedCompilerOptions } from './compilerOptions.js';
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
@@ -42,6 +43,8 @@ import { sendWaveFile } from './wave/waveTransfer.js';
 
 /** What a `RUN` after an invalid `BOARD` frame is told (docs/board_io_config_spec.md § 8.2). */
 export const RUN_REFUSED_FOR_BOARD = 'RUN refused: the last BOARD frame was not valid.';
+/** What a `RUN` after an invalid `OPTIONS` frame is told: the project file's `compilerOptions` need fixing. */
+export const RUN_REFUSED_FOR_OPTIONS = 'RUN refused: the compiler options (compilerOptions in the project file) are not valid.';
 
 /**
  * `STIM needs 21 bits for this board (switches 16 + buttons 5), got 14.` The backend
@@ -229,6 +232,8 @@ export class Session {
    * one, runs are refused with its reason until a valid one arrives.
    */
   private decodedBoard: DecodedBoard = { ok: true, board: DEFAULT_BOARD_IO };
+  /** The compiler options of the next runs: the defaults until an `OPTIONS` frame arrives, then those — sticky, like `BOARD`. */
+  private decodedOptions: DecodedCompilerOptions = { ok: true, options: DEFAULT_COMPILER_OPTIONS };
   /** The compile in progress, if any: the next one waits for it (`prepareInTurn`). */
   private compiling: Promise<void> = Promise.resolve();
   /** The board of the run in progress: what its `STIM` and `STATE` lengths are (§ 6.2). */
@@ -303,6 +308,11 @@ export class Session {
   /** `BOARD`: the port names of the next runs. An invalid one is not answered here: the next RUN is refused with its reason. */
   handleBoard(decoded: DecodedBoard): void {
     this.decodedBoard = decoded;
+  }
+
+  /** `OPTIONS`: the compiler options of the next runs. Like `BOARD`, an invalid one is reported by the next RUN. */
+  handleOptions(decoded: DecodedCompilerOptions): void {
+    this.decodedOptions = decoded;
   }
 
   /**
@@ -410,6 +420,8 @@ export class Session {
 
     const board = this.boardForRun();
     if (board === undefined) return;
+    const compilerOptions = this.optionsForRun();
+    if (compilerOptions === undefined) return;
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
@@ -418,7 +430,7 @@ export class Session {
       return;
     }
 
-    const prepared = await this.prepareInTurn(engine, request, { dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board });
+    const prepared = await this.prepareInTurn(engine, request, { dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board, compilerOptions });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (prepared === undefined || this.destroyed || request !== this.runRequest) return;
@@ -461,6 +473,14 @@ export class Session {
     }
     this.setRunBoard(decoded.board);
     return decoded.board;
+  }
+
+  /** The compiler options the run is for, or undefined after refusing the run, as `boardForRun` does. */
+  private optionsForRun(): CompilerOptions | undefined {
+    const decoded = this.decodedOptions;
+    if (decoded.ok) return decoded.options;
+    this.failRun('protocol', `${RUN_REFUSED_FOR_OPTIONS}\n${decoded.reason}`);
+    return undefined;
   }
 
   /**

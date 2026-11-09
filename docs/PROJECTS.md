@@ -25,6 +25,28 @@ The file format is described in [`Impl_project_file_and_online_storage.md`](Impl
 - A file with an **empty `url`** is stored with the project (below).
 - A file with a **`url`** is downloaded from that address (`http://` or `https://`; a GitHub gist page works too).
 
+### Compiler options
+
+A project can set a few options for GHDL and Icarus Verilog. There is no page for them yet: add `compilerOptions` to the project file by hand. Every option is optional; one left out keeps its default.
+
+```json
+"compilerOptions": {
+  "ghdl":     { "synopsys": "auto", "relaxed": false },
+  "iverilog": { "generation": "2012", "defines": { "WIDTH": "8", "SIMULATION": "" } }
+}
+```
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `ghdl.synopsys` | `"auto"`, `true`, `false` | `"auto"` | GHDL's `-fsynopsys`, needed for the legacy packages `IEEE.std_logic_arith`, `std_logic_signed` and `std_logic_unsigned`. On `"auto"` it is turned on for a run whose files use one of them, with a warning at each (issue #37). |
+| `ghdl.relaxed` | `true`, `false` | `false` | GHDL's `-frelaxed`: some rules of the standard are warnings instead of errors. |
+| `iverilog.generation` | `"2001"`, `"2005"`, `"2009"`, `"2012"` | Icarus's own | Icarus's `-g<generation>`; `"2012"` for SystemVerilog such as `typedef enum`. |
+| `iverilog.defines` | macro name → text | none | Icarus's `-D<name>=<value>`; an empty text defines the name alone. Up to 32, no backtick in a value. |
+
+- These are **named options, never raw flags**: a flag such as `--vpi=` could load a library into the simulator on a shared server. An option HDLBoard does not know, or a value it does not allow, is left out when the project opens, with a warning.
+- GHDL gets the same flags for analysis, elaboration and the run, as it requires. VHDL is always compiled as VHDL-2008.
+- The options are saved with the project and sent with every run. A backend from an earlier release (protocol 5 or older) is not sent them, and has no automatic `-fsynopsys` either.
+
 ### Where the files are on this computer
 
 On your computer each project keeps its files in its own folder next to the project file: the **project folder**, named after the project file, and inside it the **source folder**, `src`. Several projects can then share one folder, even with files of the same name:
