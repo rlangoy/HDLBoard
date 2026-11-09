@@ -38,7 +38,7 @@ describe('planGhdlFlags', () => {
     assert.deepEqual(planGhdlFlags(AUTO, [MODERN_FILE]).flags, ['--std=08']);
   });
 
-  test('auto warns once per legacy reference it turned the flag on for', () => {
+  test('auto warns at the first reference of each legacy package, where GHDL points', () => {
     assert.deepEqual(
       planGhdlFlags(AUTO, [LEGACY_FILE]).warnings.map((warning) => warning.split(':warning:')[0]),
       ['counter.vhd:2:10'],

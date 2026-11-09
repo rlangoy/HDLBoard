@@ -45,6 +45,9 @@ const OPTIONS_PROTOCOL = 6;
 const TIMED_STIM_PROTOCOL = 4;
 /** A backend that answers WELCOME without a number is the oldest one. */
 const OLDEST_PROTOCOL = 1;
+/** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
+const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
+
 /** What the frames sent before a RUN set for it. They go with every RUN, so a reconnect needs no state. */
 export interface RunSettings {
   /** Whether a batch run records a waveform (WAVE). */
@@ -54,9 +57,6 @@ export interface RunSettings {
   /** The project file's compilerOptions (OPTIONS); omitted, every option at its default. */
   readonly compilerOptions?: CompilerOptions;
 }
-
-/** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
-const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
 
 export interface HdlClientHandlers {
   onReady(): void;
