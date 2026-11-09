@@ -151,12 +151,41 @@ describe('Rule D: a missing `;` on the previous code line', () => {
   });
 
   test('no advice when the previous line shows an error of its own', () => {
-    const snapshot = snapshotOf('    assign a = b\n    assign c = d;');
-    const [, second] = adviseDiagnostics(
-      [errorOn(1, 'Syntax error in left side of continuous assignment.'), errorOn(2)],
-      snapshot,
-    );
+    const snapshot = snapshotOf('    led <= 1\n    assign c = d;');
+    const [, second] = adviseDiagnostics([errorOn(1, 'Syntax in assignment statement l-value.'), errorOn(2)], snapshot);
     expect(second.advice).toBeUndefined();
+  });
+});
+
+describe('Rule D: an `assign` without its `;`, which Icarus blames on its left side (issue #40)', () => {
+  const BROKEN_ASSIGNMENT = 'Syntax error in left side of continuous assignment.';
+
+  /** Icarus's order: the statement it ran into first, then the assignment on line 1. */
+  function adviseAssign(source: string, nextLine: number): AdvisedDiagnostic[] {
+    return adviseDiagnostics([errorOn(nextLine), errorOn(1, BROKEN_ASSIGNMENT)], snapshotOf(source));
+  }
+
+  test('the assignment line gets the advice, and the next statement’s error is its follow-on', () => {
+    const [next, assignment] = adviseAssign("    assign LEDR = SW\n\n    // blank the displays\n    assign HEX0_N = 7'b1111111;", 4);
+    expect(assignment.advice?.headline).toBe('Probably a missing `;` at the end of line 1.');
+    expect(assignment.advice?.relatedLine).toBeUndefined();
+    expect(isFollowOn(next)).toBe(true);
+  });
+
+  test.each([
+    ['ends in `;`: the left side is the mistake', '    assign 3 = SW;\n    assign b = c;'],
+    ['ends in an operator: the expression goes on', '    assign a = b |\n    assign c = d;'],
+    ['goes on on the next line', '    assign a = b\n      | c | ;'],
+  ])('Icarus’s text stays when the assignment %s', (_what, source) => {
+    const [next, assignment] = adviseAssign(source, 2);
+    expect(assignment.advice).toBeUndefined();
+    expect(isFollowOn(next)).toBe(false);
+  });
+
+  test('a later, independent mistake stays visible', () => {
+    const source = '    assign LEDR = SW\n    assign HEX0_N = 0;\n    assign HEX1_N = 0;\n    alwyas @(posedge clk) x <= 1;';
+    const advised = adviseDiagnostics([errorOn(2), errorOn(1, BROKEN_ASSIGNMENT), errorOn(4)], snapshotOf(source));
+    expect(advised.map(isFollowOn)).toEqual([true, false, false]);
   });
 });
 
