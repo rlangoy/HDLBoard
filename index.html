@@ -8,10 +8,11 @@
       (function () {
         var theme = 'light';
         try {
-          var preference = localStorage.getItem('hdlboard.theme.v1');
+          var preference = null;
+          try { preference = localStorage.getItem('hdlboard.theme.v1'); } catch (e) { /* storage blocked: System */ }
           var systemIsDark = !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (preference === 'dark' || (preference === 'system' && systemIsDark)) theme = 'dark';
-        } catch (e) { /* storage blocked: Light */ }
+          if (preference === 'dark' || (preference !== 'light' && systemIsDark)) theme = 'dark';
+        } catch (e) { /* OS preference unreadable: Light */ }
         document.documentElement.dataset.theme = theme;
       })();
     </script>

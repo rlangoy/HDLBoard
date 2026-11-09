@@ -51,9 +51,16 @@ async function startedStore(options: StoreOptions = {}) {
 beforeEach(() => vi.resetModules());
 afterEach(() => vi.unstubAllGlobals());
 
-it('starts in Light with nothing stored', async () => {
+it('starts in System with nothing stored', async () => {
   const { store } = await startedStore();
-  expect(store.getThemeState()).toEqual({ preference: 'light', resolved: 'light', saveFailed: false });
+  expect(store.getThemeState()).toEqual({ preference: 'system', resolved: 'light', saveFailed: false });
+});
+
+it('follows the OS with nothing stored', async () => {
+  const { store, environment } = await startedStore();
+  environment.setSystemDark(true);
+  expect(store.getThemeState().resolved).toBe('dark');
+  expect(environment.html.dataset.theme).toBe('dark');
 });
 
 it.each(['light', 'dark'])('applies the stored %s theme at start', async (stored) => {

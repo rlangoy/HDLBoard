@@ -20,8 +20,8 @@ function blocked(): never {
 }
 
 describe('parseThemePreference', () => {
-  it.each([null, '', 'black', 'DARK', ' dark'])('reads %j as Light', (value) => {
-    expect(parseThemePreference(value)).toBe('light');
+  it.each([null, '', 'black', 'DARK', ' dark'])('reads %j as System', (value) => {
+    expect(parseThemePreference(value)).toBe('system');
   });
 
   it.each(['light', 'dark', 'system'])('keeps %s', (value) => {
@@ -41,9 +41,9 @@ describe('resolveTheme', () => {
 });
 
 describe('stored preference', () => {
-  it('is Light when nothing is stored', () => {
+  it('is System when nothing is stored', () => {
     stubStorage();
-    expect(loadThemePreference()).toBe('light');
+    expect(loadThemePreference()).toBe('system');
   });
 
   it('is saved under its own key', () => {
@@ -63,17 +63,17 @@ describe('stored preference', () => {
     expect(loadThemePreference()).toBe(preference);
   });
 
-  it('is Light when the stored value is invalid', () => {
+  it('is System when the stored value is invalid', () => {
     stubStorage(new Map([[THEME_STORAGE_KEY, 'neon']]));
-    expect(loadThemePreference()).toBe('light');
+    expect(loadThemePreference()).toBe('system');
   });
 
   it.each([
     ['getItem throws', { localStorage: { getItem: blocked } }],
     ['localStorage itself throws', { get localStorage() { return blocked(); } }],
-  ])('is Light when %s', (_, window) => {
+  ])('is System when %s', (_, window) => {
     vi.stubGlobal('window', window);
-    expect(loadThemePreference()).toBe('light');
+    expect(loadThemePreference()).toBe('system');
   });
 
   it('reports a failed save instead of throwing', () => {

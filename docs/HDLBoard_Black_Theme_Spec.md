@@ -52,7 +52,7 @@ The theme preference is stored in `localStorage` under `hdlboard.theme.v1`, in t
 
 | ID | Requirement |
 | --- | --- |
-| T01 | Settings → **Appearance** offers **Light**, **Dark**, **System**. No saved value or an invalid value → Light. |
+| T01 | Settings → **Appearance** offers **Light**, **Dark**, **System**. No saved value or an invalid value → System. |
 | T02 | Dark covers the shell, editor, Board I/O panels and their menus, console, waveform, dialogs, menus, tooltips, forms, scrollbars and pages (Projects, Board settings). |
 | T03 | Changing theme does not change any Board I/O shape, size, position, spacing, border width, radius, segment path, switch travel or hit area. |
 | T04 | Changing theme keeps the editor text, cursor, selection, scroll, focus, simulation session, signal values, board configuration and panel layout. It does not remount components or reconnect to the simulator. |
@@ -530,7 +530,7 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'];
-export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'light';
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'system';
 /** Also read by the bootstrap script in index.html. */
 export const THEME_STORAGE_KEY = 'hdlboard.theme.v1';
 
@@ -755,10 +755,11 @@ Add this inside `<head>`, before any stylesheet or script:
   (function () {
     var theme = 'light';
     try {
-      var preference = localStorage.getItem('hdlboard.theme.v1');
+      var preference = null;
+      try { preference = localStorage.getItem('hdlboard.theme.v1'); } catch (e) { /* storage blocked: System */ }
       var systemIsDark = !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (preference === 'dark' || (preference === 'system' && systemIsDark)) theme = 'dark';
-    } catch (e) { /* storage blocked: Light */ }
+      if (preference === 'dark' || (preference !== 'light' && systemIsDark)) theme = 'dark';
+    } catch (e) { /* OS preference unreadable: Light */ }
     document.documentElement.dataset.theme = theme;
   })();
 </script>
@@ -993,7 +994,7 @@ Soft shadows are nearly invisible on near-black, so in Dark, hierarchy comes fro
 
 | ID | Scenario | Expected |
 | --- | --- | --- |
-| A01 | No saved preference, or an invalid one | Light; the app starts normally |
+| A01 | No saved preference, or an invalid one | System (follows the OS); the app starts normally |
 | A02 | Choose Dark; reload; restart the desktop app | Dark returns; production build shows no light flash |
 | A03 | System; switch the OS light ↔ dark | The app follows immediately |
 | A03b | System, where the OS preference cannot be read | Light (unit test, T2.9) |

@@ -7,7 +7,7 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'];
-export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'light';
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'system';
 /** Also read by the bootstrap script in index.html. */
 export const THEME_STORAGE_KEY = 'hdlboard.theme.v1';
 
