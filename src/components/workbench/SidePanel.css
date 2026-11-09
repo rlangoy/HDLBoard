@@ -101,7 +101,7 @@
 }
 
 .wb-sidepanel__hide:hover {
-  background: rgba(15, 23, 42, 0.07);
+  background: var(--wb-sidepanel-hide-bg-hover);
   color: var(--wb-text);
 }
 

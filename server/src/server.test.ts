@@ -170,7 +170,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
       assert.equal(await second.closed, TRY_AGAIN_LATER);
       // The first keeps its place.
       first.ws.send('HELLO 5');
-      assert.equal(await frame(first, 'WELCOME'), 'WELCOME 5');
+      assert.equal(await frame(first, 'WELCOME'), 'WELCOME 6');
       assert.equal(first.texts.filter((t) => t.startsWith('ERROR')).length, 0);
       first.ws.close();
     } finally {
@@ -187,7 +187,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
       assert.match(await frame(first, 'ERROR busy\n'), /closed because the server is under heavy load.*HDLBoard\/releases/s);
       assert.equal(await first.closed, TRY_AGAIN_LATER);
       second.ws.send('HELLO 5');
-      assert.equal(await frame(second, 'WELCOME'), 'WELCOME 5');
+      assert.equal(await frame(second, 'WELCOME'), 'WELCOME 6');
       assert.equal(second.texts.filter((t) => t.startsWith('ERROR')).length, 0);
       second.ws.close();
     } finally {

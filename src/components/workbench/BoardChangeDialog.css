@@ -12,7 +12,7 @@
   padding: 10px 16px;
   list-style: none;
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--wb-boardchange-renames-bg);
   border: 1px solid var(--wb-border);
 }
 

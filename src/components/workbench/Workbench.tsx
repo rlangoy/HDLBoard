@@ -1528,7 +1528,11 @@ export function Workbench() {
     logRunBoard();
     warnDuplicateArchitectures(runFiles);
     if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
-    getClient().run(files, topFile?.name, runTarget, waveView.waveform.recording, activeBoard.ports);
+    getClient().run(files, topFile?.name, runTarget, {
+      recordWave: waveView.waveform.recording,
+      board: activeBoard.ports,
+      compilerOptions: project.compilerOptions,
+    });
   };
 
   /** A run's first line names the board, so a screenshot shows which names were expected (§ 3.1). */

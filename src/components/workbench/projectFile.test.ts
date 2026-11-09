@@ -281,6 +281,28 @@ describe('the waveform views of a project', () => {
   });
 });
 
+describe('the compiler options of a project (edited in the project file only)', () => {
+  const compilerOptions = { ghdl: { synopsys: true }, iverilog: { generation: '2012' as const } };
+  const opened = () => openProject({ text: projectJson([], { compilerOptions }), location: 'counter.hdlboard.json' });
+
+  it('come with the opened project', async () => {
+    expect((await opened()).project.compilerOptions).toEqual(compilerOptions);
+  });
+
+  it('are no unsaved change of their own', async () => {
+    expect(hasUnsavedChanges((await opened()).project, [])).toBe(false);
+  });
+
+  it('are written to the project file when it is saved', async () => {
+    expect(JSON.parse(projectFileText((await opened()).project, [])).compilerOptions).toEqual(compilerOptions);
+  });
+
+  it('come back with the stored workspace', async () => {
+    const { project } = await opened();
+    expect(parseStoredProject(JSON.parse(JSON.stringify(project)))?.compilerOptions).toEqual(compilerOptions);
+  });
+});
+
 describe('a workspace stored by HDLBoard 1.5 (project version 1)', () => {
   const files = [file('a.vhd')];
   const asVersion1 = (text: string) => text.replace('"version": 2', '"version": 1').replace('"board": "default"', '"board": "DE1-SoC"');

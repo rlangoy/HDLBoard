@@ -16,8 +16,9 @@
 import { fetchText, type FetchFn } from '../../project/fetchText';
 import { baseName, fileNameProblem, folderNameProblem, isProjectFileName, nameKey, projectFolderName, sameFileName } from '../../project/fileName';
 import { boardIdOf, parseProject, serializeProject } from '../../project/parseProject';
-import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type DisplaySettings, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
+import { CURRENT_PROJECT_VERSION, DEFAULT_SOURCE_DIRECTORY, PROJECT_FILE_EXTENSION, type CompilerOptions, type DisplaySettings, type ProjectFileEntry, type SavedWaveView, type SavedWaveViews } from '../../project/types';
 import { parseDisplaySettings } from '../../project/displaySettings';
+import { parseCompilerOptions } from '../../project/compilerOptions';
 import { parseWaveViews, withWaveViewOf } from '../../project/waveViews';
 import { diskPath } from '../../project/resolveSource';
 import { projectDirectoryOf } from './projectLayout';
@@ -85,6 +86,8 @@ export interface OpenProject {
   /** How the waveform view of each testbench was set up, saved in the project file (docs/imp_wave_rearange.md § 11). */
   waveViews?: SavedWaveViews;
   displaySettings?: DisplaySettings;
+  /** The project file's options for GHDL and Icarus, as written; there is no page for them yet. */
+  compilerOptions?: CompilerOptions;
 }
 
 /** One row of the project settings' file table. */
@@ -154,6 +157,7 @@ export function projectFileText(project: OpenProject, fileNames: readonly string
     files: projectEntries(project, fileNames).map(({ name, url, description }) => ({ name, url, description })),
     waveViews: project.waveViews,
     displaySettings: project.displaySettings,
+    compilerOptions: project.compilerOptions,
   });
 }
 
@@ -593,6 +597,7 @@ export async function openProject(source: ProjectSource): Promise<OpenedProject>
     ...(source.gist ? { gist: source.gist } : {}),
     ...(project.waveViews ? { waveViews: project.waveViews } : {}),
     ...(project.displaySettings ? { displaySettings: project.displaySettings } : {}),
+    ...(project.compilerOptions ? { compilerOptions: project.compilerOptions } : {}),
   };
   // Saved state is the project as it reads opened, so an untouched project shows no changes.
   return { project: withSaved(opened, files), files };
@@ -640,6 +645,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
   const onDiskFileName = typeof r.onDiskFileName === 'string' ? r.onDiskFileName : undefined;
   const waveViews = parseWaveViews(r.waveViews, []);
   const displaySettings = parseDisplaySettings(r.displaySettings, []);
+  const compilerOptions = parseCompilerOptions(r.compilerOptions, []);
   // A workspace stored before boards were configurable holds a version-1 project: it is on the Default board.
   return {
     version: CURRENT_PROJECT_VERSION,
@@ -661,6 +667,7 @@ export function parseStoredProject(raw: unknown): OpenProject | undefined {
     ...(savedFiles ? { savedFiles } : {}),
     ...(waveViews ? { waveViews } : {}),
     ...(displaySettings ? { displaySettings } : {}),
+    ...(compilerOptions ? { compilerOptions } : {}),
   };
 }
 

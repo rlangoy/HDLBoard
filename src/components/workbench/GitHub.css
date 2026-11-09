@@ -14,7 +14,7 @@
   padding: 8px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-github-btn-bg);
   font: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -47,7 +47,7 @@
 .wb-github__btn--primary {
   border-color: var(--wb-accent);
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-github-btn-primary-fg);
 }
 
 .wb-github__btn--primary:hover:not(:disabled) {
@@ -57,7 +57,7 @@
 .wb-github__btn--danger {
   border-color: var(--wb-danger);
   background: var(--wb-danger);
-  color: #ffffff;
+  color: var(--wb-github-btn-danger-fg);
 }
 
 .wb-github__btn--danger:hover:not(:disabled) {
@@ -111,7 +111,7 @@
 .wb-github__signin a,
 .wb-github__device a,
 .wb-github__address a {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-github__message {
@@ -124,14 +124,14 @@
 }
 
 .wb-github__message.is-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: var(--wb-danger-dark);
+  background: var(--wb-github-message-error-bg);
+  border: 1px solid var(--wb-github-message-error-border);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-github__message.is-success {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: var(--wb-github-message-success-bg);
+  border: 1px solid var(--wb-github-message-success-border);
   color: var(--wb-success-dark);
 }
 
@@ -237,7 +237,7 @@
   font: inherit;
   font-size: 14px;
   color: var(--wb-text);
-  background: #ffffff;
+  background: var(--wb-github-input-bg);
 }
 
 .wb-github__input:focus-visible {
@@ -306,18 +306,18 @@
 }
 
 .wb-github__status.is-not-on-github {
-  background: #f1f5f9;
+  background: var(--wb-github-status-not-on-github-bg);
   color: var(--wb-text-muted);
 }
 
 .wb-github__status.is-saved {
-  background: #f0fdf4;
+  background: var(--wb-github-status-saved-bg);
   color: var(--wb-success-dark);
 }
 
 .wb-github__status.is-changed {
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--wb-github-status-changed-bg);
+  color: var(--wb-github-status-changed-fg);
 }
 
 /* ---- Project settings card ---- */

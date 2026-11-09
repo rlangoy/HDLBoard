@@ -39,7 +39,7 @@ div.wb-settings__empty {
 }
 
 .wb-settings__note--error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-settings__heading {
@@ -68,7 +68,7 @@ div.wb-settings__empty {
   padding: 12px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--wb-settings-action-bg);
   color: var(--wb-text);
   text-decoration: none;
   transition:
@@ -86,7 +86,7 @@ div.wb-settings__empty {
 .wb-dialog a.wb-settings__action--primary {
   border-color: var(--wb-accent);
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-settings-action-primary-fg);
 }
 
 .wb-dialog a.wb-settings__action--primary:hover {
@@ -106,7 +106,7 @@ div.wb-settings__empty {
 }
 
 .wb-dialog a.wb-settings__action--primary .wb-settings__action-text {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--wb-settings-action-text-fg);
 }
 
 .wb-settings__browse {
@@ -157,9 +157,9 @@ div.wb-settings__empty {
   justify-content: center;
   gap: 10px;
   padding: 16px;
-  border: 2px solid #d4d9e0;
+  border: 2px solid var(--wb-settings-layout-border);
   border-radius: 10px;
-  color: #626b78;
+  color: var(--wb-settings-layout-fg);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -178,7 +178,7 @@ div.wb-settings__empty {
 .wb-settings__layout.is-selected {
   border-color: var(--wb-accent);
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-settings__layout:has(input:focus-visible) {

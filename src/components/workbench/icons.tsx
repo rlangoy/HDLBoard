@@ -113,11 +113,12 @@ export function FileIcon(props: SVGProps<SVGSVGElement>) {
       height="24"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#6B7280"
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       {...props}
+      // A style, not the stroke attribute: SVG presentation attributes do not resolve var().
+      style={{ stroke: 'var(--wb-icon-muted)', ...props.style }}
     >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
@@ -183,7 +184,7 @@ export function PanelToggleIcon({
 export function PlayIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
-      <path d="M5.5 3.5L12.5 8L5.5 12.5V3.5Z" stroke="#0D9488" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+      <path d="M5.5 3.5L12.5 8L5.5 12.5V3.5Z" style={{ stroke: 'var(--wb-icon-run)' }} strokeWidth="1.5" strokeLinejoin="round" fill="none" />
     </svg>
   );
 }
@@ -192,7 +193,7 @@ export function PlayIcon(props: SVGProps<SVGSVGElement>) {
 export function StopIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" {...props}>
-      <rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.25" stroke="#EF4444" strokeWidth="1.5" fill="none" />
+      <rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.25" style={{ stroke: 'var(--wb-icon-stop)' }} strokeWidth="1.5" fill="none" />
     </svg>
   );
 }

@@ -34,40 +34,49 @@ export function getGhdlExe(): string {
   return ghdlExe;
 }
 
+/** What `ghdl -r` runs, where, and with which options: the same as the run's `-a` and `-e` (engines/ghdlFlags.ts). */
+export interface GhdlRunTarget {
+  readonly cwd: string;
+  readonly entityName: string;
+  readonly flags: readonly string[];
+}
+
+/** The generics that connect the generated board testbench to the session. */
+export interface BoardGenerics {
+  readonly inputFile: string;
+  readonly outputFile: string;
+  readonly pollIntervalNs: number;
+  readonly minDwellNs: number;
+  readonly heartbeatFile: string;
+  /** Empty when there is no FIFO (stdin pacing). */
+  readonly pacingFile: string;
+}
+
 /**
  * Starts the persistent, free-running simulation — Candidate A
  * (§ 5.4.1). Not awaited to completion: the process runs until `kill()`
  * is called (Stop/Reset/session teardown), which is the whole point of
  * this architecture over re-simulating from t=0.
  */
-export function startPersistentRun(
-  cwd: string,
-  entityName: string,
-  inputFile: string,
-  outputFile: string,
-  pollIntervalNs: number,
-  minDwellNs: number,
-  heartbeatFile: string,
-  pacingFile: string,
-): RunHandle {
+export function startPersistentRun({ cwd, entityName, flags }: GhdlRunTarget, generics: BoardGenerics): RunHandle {
   const child = spawn(
     ghdlExe,
     [
       '-r',
-      '--std=08',
+      ...flags,
       entityName,
-      `-ginput_file=${inputFile}`,
-      `-goutput_file=${outputFile}`,
-      `-gpoll_interval_ns=${pollIntervalNs}`,
-      `-gmin_dwell_ns=${minDwellNs}`,
-      `-gheartbeat_file=${heartbeatFile}`,
+      `-ginput_file=${generics.inputFile}`,
+      `-goutput_file=${generics.outputFile}`,
+      `-gpoll_interval_ns=${generics.pollIntervalNs}`,
+      `-gmin_dwell_ns=${generics.minDwellNs}`,
+      `-gheartbeat_file=${generics.heartbeatFile}`,
       // Omitted rather than passed empty when there is no FIFO (Windows,
       // which paces through stdin instead — see session.ts's PACING):
       // `-gpacing_file=` with no value is a hard "missing value in generic
       // override option" from GHDL, not an empty string. The generic's own
       // declared default in tbTemplate.ts is already `""`, which is exactly
       // the "no FIFO" state.
-      ...(pacingFile ? [`-gpacing_file=${pacingFile}`] : []),
+      ...(generics.pacingFile ? [`-gpacing_file=${generics.pacingFile}`] : []),
     ],
     { cwd },
   );
@@ -91,13 +100,12 @@ export function startPersistentRun(
  * loop with no `wait`) has nothing else to save it from a hang.
  */
 export function runBatch(
-  cwd: string,
-  entityName: string,
+  { cwd, entityName, flags }: GhdlRunTarget,
   onOutput: (line: string) => void,
   timeoutMs: number,
   runOptions: readonly string[] = [],
 ): BatchHandle {
   // Run options such as `--wave=` follow the entity name: they belong to the simulation, not to GHDL.
-  const child = spawn(ghdlExe, ['-r', '--std=08', entityName, ...runOptions], { cwd });
+  const child = spawn(ghdlExe, ['-r', ...flags, entityName, ...runOptions], { cwd });
   return createBatchHandle(child, onOutput, timeoutMs);
 }

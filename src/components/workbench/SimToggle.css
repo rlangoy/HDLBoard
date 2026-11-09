@@ -25,7 +25,7 @@
 }
 
 .wb-simtoggle:hover:not(:disabled, .is-blocked) {
-  background: rgba(15, 23, 42, 0.08); /* same tint as the tab's close button */
+  background: var(--wb-simtoggle-bg-hover); /* same tint as the tab's close button */
 }
 
 .wb-simtoggle:active:not(:disabled, .is-blocked) {

@@ -10,7 +10,7 @@
 #
 # The version comes from the tag (v1.2.4 -> 1.2.4) and is stamped into every
 # package.json by tools/bump-version.mjs before the build, so the file is
-# HDLBoard-1.2.4-linux-x86_64.AppImage and the app reports 1.2.4. That change
+# HDLBoard-1.2.4-x86_64.AppImage and the app reports 1.2.4. That change
 # is made on the runner only and is never committed.
 #
 # A release is only ever created as a DRAFT and never published here: check
@@ -42,9 +42,11 @@ jobs:
   build-linux:
     name: Build Linux AppImage
     # Pinned, not ubuntu-latest: the simulators are built here and must run
-    # on Ubuntu 24.04's glibc, the oldest the AppImage supports.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # on Ubuntu 22.04's glibc, the oldest the AppImage supports.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      appimage: ${{ steps.version.outputs.appimage }}
 
     steps:
       - name: Checkout repository
@@ -83,26 +85,26 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=$([[ "${version}" == *-* ]] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
-          echo "appimage=HDLBoard-${version}-linux-x86_64.AppImage" >> "${GITHUB_OUTPUT}"
+          echo "appimage=HDLBoard-${version}-x86_64.AppImage" >> "${GITHUB_OUTPUT}"
           echo "HDLBoard version: ${version}"
 
       - name: Stamp version into package.json files
         run: node tools/bump-version.mjs "${{ steps.version.outputs.version }}"
 
-      # GHDL and the Icarus source are pinned and checksum-verified, and the
+      # GHDL and Icarus sources are pinned and checksum-verified, and the
       # Icarus build is deterministic in its inputs, so the cache key is the
       # scripts themselves (and the build base, named in build.sh).
       - name: Cache GHDL, Icarus Verilog and the AppImage runtime
         uses: actions/cache@v6
         with:
           path: linuxAppImage/vendor
-          key: linux-vendor-${{ hashFiles('linuxAppImage/fetch-ghdl.sh', 'linuxAppImage/build-iverilog.sh', 'linuxAppImage/build.sh') }}
+          key: linux-vendor-ubuntu22.04-x86_64-${{ hashFiles('linuxAppImage/fetch-ghdl.sh', 'linuxAppImage/build-iverilog.sh', 'linuxAppImage/build.sh') }}
 
       - name: Install build packages
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            build-essential autoconf gperf bison flex zlib1g-dev libbz2-dev \
+            build-essential gnat autoconf gperf bison flex zlib1g-dev libbz2-dev \
             squashfs-tools xvfb
           # libreadline-dev may be preinstalled on the runner; Icarus must not link it.
           sudo apt-get remove -y -qq libreadline-dev || true
@@ -112,11 +114,19 @@ jobs:
           npm ci
           npm ci --prefix server
 
-      # Natively on this 24.04 runner; build.sh then checks the trees again in
-      # a clean ubuntu:24.04 container (B3), since the runner has far more
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/electron
+          key: electron-linux-x64-${{ hashFiles('winInstaller/electron/package-lock.json') }}
+
+      # Natively on this 22.04 runner; build.sh then checks the trees again in
+      # a clean ubuntu:22.04 container (B3), since the runner has far more
       # libraries installed than a student's desktop.
       - name: Build AppImage
-        run: linuxAppImage/build.sh --simulators native
+        run: |
+          node --test linuxAppImage/install-electron-fallback.test.cjs
+          linuxAppImage/build.sh --simulators native
 
       - name: Simulator versions
         run: |
@@ -177,8 +187,8 @@ jobs:
           APPIMAGE: ${{ steps.version.outputs.appimage }}
         run: |
           out=linuxAppImage/output
-          # GPL: the exact Icarus source the shipped binaries were built from.
-          files=("${out}/${APPIMAGE}" "${out}/${APPIMAGE}.sha256" linuxAppImage/vendor/downloads/iverilog-v13_0.tar.gz)
+          # Exact simulator sources used for the shipped binaries.
+          files=("${out}/${APPIMAGE}" "${out}/${APPIMAGE}.sha256" linuxAppImage/vendor/downloads/iverilog-v13_0.tar.gz linuxAppImage/vendor/downloads/ghdl-v6.0.0.tar.gz)
           if ! gh release view "${TAG}" > /dev/null 2>&1; then
             flags=(--draft --verify-tag --generate-notes --title "HDLBoard ${VERSION}")
             [[ "${PRERELEASE}" == true ]] && flags+=(--prerelease)
@@ -195,3 +205,35 @@ jobs:
           done
           echo "::error::could not upload to release ${TAG}"
           exit 1
+
+  test-ubuntu-2404:
+    name: Test Ubuntu 22.04 AppImage on Ubuntu 24.04
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build-linux.outputs.appimage }}
+          path: linuxAppImage/output
+      - name: Prepare smoke test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends xvfb
+          npm ci --prefix server
+          npm run build --prefix server
+          chmod +x linuxAppImage/output/*.AppImage
+      - name: Verify checksum and run packaged VHDL and Verilog
+        env:
+          APPIMAGE: ${{ needs.build-linux.outputs.appimage }}
+        run: |
+          (cd linuxAppImage/output && sha256sum -c "${APPIMAGE}.sha256")
+          linuxAppImage/smoke-test.sh "linuxAppImage/output/${APPIMAGE}"

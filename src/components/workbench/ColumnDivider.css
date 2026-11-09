@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Shared by the waveform and the workbench's side pane dividers. */
 .hdl-column-divider {
-  --hdl-divider-accent: #2563eb;
   cursor: col-resize;
   touch-action: none;
   outline: none;
@@ -28,7 +27,7 @@
   height: 28px;
   margin: 0 auto;
   border-radius: 4px;
-  background: var(--hdl-divider-accent) radial-gradient(circle, #fff 0.9px, transparent 1.3px) center / 8px 5px repeat-y;
+  background: var(--hdl-divider-accent) radial-gradient(circle, var(--hdl-divider-grip) 0.9px, transparent 1.3px) center / 8px 5px repeat-y;
   opacity: 0;
   transition: opacity 120ms ease;
   pointer-events: none;

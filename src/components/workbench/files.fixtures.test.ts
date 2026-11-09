@@ -18,7 +18,7 @@ const fixtureTexts = import.meta.glob<string>('../../../tests/fixtures/{vhdl,ver
 });
 
 /** Fixtures the tests use that are deliberately not part of the starter project. */
-const TEST_ONLY_FIXTURES: ReadonlySet<string> = new Set(['tb_counter8.v']);
+const TEST_ONLY_FIXTURES: ReadonlySet<string> = new Set(['tb_counter8.v', 'tb_libraries.vhd']);
 
 const withLfLineEndings = (text: string) => text.replace(/\r\n/g, '\n');
 

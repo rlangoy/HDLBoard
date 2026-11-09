@@ -26,7 +26,7 @@
   font: inherit;
   font-size: 14px;
   color: var(--wb-text);
-  background: #ffffff;
+  background: var(--wb-newfile-name-bg);
 }
 
 .wb-newfile__name:focus-visible {
@@ -54,7 +54,7 @@
 }
 
 .wb-newfile__error {
-  color: var(--wb-danger-dark);
+  color: var(--wb-danger-dark-ink);
 }
 
 .wb-newfile__languages {
@@ -93,7 +93,7 @@
 
 /* Keep the primary action's double border visible while the name field has focus. */
 .wb-newfile__create:not(:disabled) {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--wb-accent);
+  box-shadow: 0 0 0 2px var(--wb-newfile-create-highlight), 0 0 0 4px var(--wb-accent);
 }
 
 .wb-newfile__create:focus-visible {
@@ -117,7 +117,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   text-align: left;
   cursor: pointer;
 }
@@ -154,7 +154,7 @@
   font: inherit;
   font-size: 14px;
   font-weight: 600;
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   cursor: pointer;
 }
 
@@ -164,7 +164,7 @@
 }
 
 .wb-openproject__folder-btn:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--wb-openproject-folder-btn-bg-hover);
 }
 
 .wb-openproject__folder-btn:disabled {

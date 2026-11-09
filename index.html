@@ -2,6 +2,20 @@
 <html lang="no">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      /* Theme bootstrap (docs/HDLBoard_Black_Theme_Spec.md § 7): picks the profile before the
+         first frame. Mirrors resolveTheme() in src/theme/themePreference.ts; keep them in step. */
+      (function () {
+        var theme = 'light';
+        try {
+          var preference = null;
+          try { preference = localStorage.getItem('hdlboard.theme.v1'); } catch (e) { /* storage blocked: System */ }
+          var systemIsDark = !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (preference === 'dark' || (preference !== 'light' && systemIsDark)) theme = 'dark';
+        } catch (e) { /* OS preference unreadable: Light */ }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HDLBoard — Write VHDL or Verilog and watch it run</title>
   </head>

@@ -8,7 +8,7 @@
 
 A free online simulator with a virtual FPGA board. Flip the switches while your design runs, and watch the LEDs respond.
 
-**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows App](https://github.com/rlangoy/HDLBoard/releases)** 
+**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows/Linux App](https://github.com/rlangoy/HDLBoard/releases)** 
 
 [![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
 
@@ -16,7 +16,7 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 ### Try it in one minute
 
-1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows app.
+1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows or Linux app.
 2. The starter design already connects the switches to the LEDs:
 
    ```vhdl
@@ -36,13 +36,15 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 |---|---|---|
 | **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
-| **Linux app** | Working offline on Ubuntu 24.04 or Linux Mint 22 (64-bit x86). One AppImage file, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Linux app** | Working offline on Ubuntu 22.04/24.04 or Linux Mint 21/22 (64-bit x86). One AppImage file, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
 
 ### Installing on Linux
 
-The Linux app is one file, `HDLBoard-<version>-linux-x86_64.AppImage`, on the [Releases page](https://github.com/rlangoy/HDLBoard/releases). It needs no installation and no administrator rights.
+The Linux app is one file, `HDLBoard-<version>-x86_64.AppImage`, on the [Releases page](https://github.com/rlangoy/HDLBoard/releases). It needs no installation and no administrator rights.
+
+Ubuntu 22.04 compatibility applies to builds from the updated packaging in this repository. The published v1.6.2 AppImage still requires Ubuntu 24.04 or Linux Mint 22; use a release built with the new packaging for Ubuntu 22.04 or Mint 21.
 
 1. Download the `.AppImage` file.
 2. Allow it to run. In the file manager, open *Properties → Permissions* and tick *Allow executing file as program* (the wording differs between desktops). Or, in a terminal: `chmod +x HDLBoard-*.AppImage`.
@@ -52,11 +54,11 @@ The Linux app is one file, `HDLBoard-<version>-linux-x86_64.AppImage`, on the [R
 
 - Start it from a terminal (`./HDLBoard-*.AppImage`) to see the error message.
 - On a system where AppImages cannot be mounted, extract it and run the extracted copy instead: `./HDLBoard-*.AppImage --appimage-extract`, then `./squashfs-root/AppRun`.
-- The AppImage carries its own FUSE runtime and does not need `libfuse2`. If an AppImage tool tells you to install FUSE anyway, the package on Ubuntu 24.04 and Mint 22 is `libfuse2t64` (`sudo apt install libfuse2t64`, which needs administrator rights). **Do not** install the package named `fuse`: on these releases it conflicts with FUSE 3 and can remove parts of the desktop.
+- The AppImage embeds the static [type2-runtime](https://github.com/AppImage/type2-runtime), including libfuse. You do not need to install `libfuse2` or `libfuse2t64`. If kernel FUSE support is unavailable, use the extraction method above.
 
 **Good to know**
 
-- **Made for:** Ubuntu 24.04 LTS and Linux Mint 22.x on 64-bit x86. Other distributions and ARM are not supported yet. [linuxAppImage/README.md](linuxAppImage/README.md#tested-on) lists what has been tested.
+- **Made for:** Ubuntu 22.04/24.04 LTS and Linux Mint 21.x/22.x on 64-bit x86. Other distributions and ARM are not supported yet. [linuxAppImage/README.md](linuxAppImage/README.md#tested-on) lists what has been tested.
 - **Offline:** Once downloaded, it needs no network, and nothing else to install. It includes GHDL 6.0.0 and Icarus Verilog 13.0, and never uses a GHDL or Icarus installed on the system.
 - **Check the download:** Put the `.sha256` file from the release beside the AppImage and run `sha256sum -c HDLBoard-*.AppImage.sha256`. It should print `OK`.
 - **Your files:** Settings, saved projects and the log (`logs/backend.log`) are in `~/.config/HDLBoard`.

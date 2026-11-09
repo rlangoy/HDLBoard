@@ -7,7 +7,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--wb-code-bg);
 }
 
 /* Drag-and-drop: dropping anywhere on the editor pane (a header, the
@@ -27,15 +27,15 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(229, 239, 255, 0.92); /* --wb-accent-soft, translucent */
-  color: var(--wb-accent-dark);
+  background: var(--wb-editor-drop-hint-bg); /* --wb-accent-soft, translucent */
+  color: var(--wb-accent-dark-ink);
   font-size: 14px;
   font-weight: 600;
   pointer-events: none; /* drag events are handled on .wb-editor itself */
 }
 
 .wb-editor__drop-hint .wb-icon--upload {
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
 }
 
 .wb-icon--upload {
@@ -80,12 +80,6 @@
   --wb-code-line-h: 20px;
   --wb-code-pad-top: 12px;
   --wb-code-pad-x: 16px;
-  /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
-  --wb-occ-bg: rgba(100, 160, 255, 0.32);
-  --wb-occ-underline: #4a90e2;
-  /* Search matches (docs/impl_search.md § 5.4). */
-  --wb-find-current-bg: #ffd54a;
-  --wb-find-current-outline: #c99a00;
 }
 
 .wb-editor__body {
@@ -113,7 +107,7 @@
   line-height: var(--wb-code-line-h);
   font-family: var(--wb-code-font);
   font-size: var(--wb-code-size);
-  color: #94a3b8;
+  color: var(--wb-gutter-fg);
 }
 
 .wb-editor__surface {
@@ -137,7 +131,7 @@
 }
 
 .wb-editor__highlight {
-  color: #1e293b;
+  color: var(--wb-code-fg);
   pointer-events: none;
   /* Scrolled programmatically to track the textarea (CodeEditor's
      onScroll) — hidden, not auto, so it never grows a second,
@@ -331,18 +325,18 @@
   border: 1px solid var(--wb-accent);
   border-radius: 5px;
   background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark);
+  color: var(--wb-accent-dark-ink);
   font: 12px/1 var(--wb-code-font);
   vertical-align: top;
   cursor: pointer;
 }
 .wb-editor__quickfix:hover {
-  background: color-mix(in srgb, var(--wb-accent) 22%, #ffffff);
+  background: color-mix(in srgb, var(--wb-accent) 22%, var(--wb-code-bg));
 }
 .wb-editor__quickfix-bulb {
   width: 15px;
   height: 15px;
-  color: #ca8a04;
+  color: var(--wb-editor-quickfix-bulb-fg);
 }
 .wb-editor__quickfix kbd {
   padding: 0 4px;
@@ -358,7 +352,7 @@
   resize: none;
   background: transparent;
   color: transparent;
-  caret-color: #0f172a;
+  caret-color: var(--wb-code-caret);
 }
 
 /* The editor is the obvious focus target already; the browser's focus ring
@@ -369,7 +363,7 @@
 }
 
 .wb-editor__textarea::selection {
-  background: rgba(37, 99, 235, 0.25);
+  background: var(--wb-code-selection);
 }
 
 /* A project with no files (docs/cleanup_file_tabs.md § 5.6). */
@@ -421,7 +415,7 @@
   padding: 8px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--wb-editor-empty-btn-bg);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -436,7 +430,7 @@
 .wb-editor__empty-btn.is-primary {
   border-color: var(--wb-accent-dark);
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-editor-empty-btn-primary-fg);
 }
 
 .wb-editor__empty-btn.is-primary:hover {
@@ -453,36 +447,36 @@
  * this one place so retheming the editor is a handful of lines. */
 
 .wb-tok-keyword {
-  color: #1d4ed8;
+  color: var(--wb-syn-keyword);
   font-weight: 600;
 }
 
 .wb-tok-type {
-  color: #0f766e;
+  color: var(--wb-syn-type);
 }
 
 .wb-tok-comment {
-  color: #16a34a;
+  color: var(--wb-syn-comment);
   font-style: italic;
 }
 
 .wb-tok-string {
-  color: #b45309;
+  color: var(--wb-syn-string);
 }
 
 .wb-tok-number {
-  color: #9333ea;
+  color: var(--wb-syn-number);
 }
 
 .wb-tok-punct {
-  color: #475569;
+  color: var(--wb-syn-punct);
 }
 
 /* Verilog only: `timescale / `define / a macro use, and $display-style system tasks. */
 .wb-tok-directive {
-  color: #be185d;
+  color: var(--wb-syn-directive);
 }
 
 .wb-tok-system {
-  color: #0369a1;
+  color: var(--wb-syn-system);
 }

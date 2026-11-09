@@ -1,0 +1,806 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* Light theme profile: today's colours, and the default (docs/HDLBoard_Black_Theme_Spec.md § 4.2).
+   Colour declarations only; geometry stays in the component CSS. Each block uses the selector
+   the variables were declared on before; new variables live in :root. Edit a value here to
+   change the Light appearance. dark.css must define the same variables (src/theme/themeFiles.test.ts). */
+
+:root {
+  color-scheme: light;
+
+  /* The head colour of the testbench and of a design (RTL), shared by the editor's
+     pane headers and the waveform's sections, so the two read as the same thing. */
+  --hdl-tb-head: #dbe7fb;
+  --hdl-rtl-head: #d5f0dd;
+
+  /* --- page (index.css) --- */
+  --hdl-page-bg: #ffffff;
+  --hdl-page-fg: #0f172a;
+
+  /* --- Led.css --- */
+  --pb-led-lens-edge: rgba(0, 0, 0, 0.05);
+  --pb-led-lens-shadow-on: rgba(90, 0, 0, 0.45);
+  --pb-led-lens-highlight-on: rgba(255, 255, 255, 0.18);
+  --pb-focus-gap: #fff;
+
+  /* --- Pushbutton.css --- */
+  --pb-key-top-highlight: rgba(255, 255, 255, 0.85);
+  --pb-key-left-highlight: rgba(255, 255, 255, 0.6);
+  --pb-key-cap-edge: rgba(0, 0, 0, 0.55);
+  --pb-key-top-highlight-hover: rgba(255, 255, 255, 0.7);
+  --pb-key-top-edge-active: rgba(15, 30, 48, 0.35);
+  --pb-key-bottom-highlight-active: rgba(255, 255, 255, 0.35);
+  --pb-key-cap-top-edge-active: rgba(134, 140, 144, 0.35);
+  --pb-key-cap-edge-active: rgba(0, 0, 0, 0.6);
+  --pb-key-top-edge-active-hover: rgba(15, 30, 48, 0.35);
+
+  /* --- ToggleSwitch.css --- */
+  --pb-switch-body-edge-hover: rgba(37, 99, 235, 0.3);
+  --pb-switch-track-bottom-highlight: rgba(255, 255, 255, 0.5);
+  --pb-switch-knob-edge: rgba(15, 23, 42, 0.5);
+
+  /* --- SevenSegmentDisplay.css --- */
+  --pb-hex-top-highlight: rgba(255, 255, 255, 0.85);
+  --pb-hex-left-highlight: rgba(255, 255, 255, 0.6);
+
+  /* --- panel.css --- */
+  --pb-panel-hint-fg: #64748b;
+
+  /* --- GroupedIoPanel.css --- */
+  --wb-io-hidden-fg: #fff;
+  --wb-io-dialog-bg: #fff;
+  --wb-io-dialog-fg: #102346;
+  --wb-io-dialog-backdrop-bg: #0f172a99;
+  --wb-io-dialog-hero-from-bg: #346cc6;
+  --wb-io-dialog-hero-to-bg: #29549a;
+  --wb-io-dialog-hero-fg: #fff;
+  --wb-io-dialog-badge-bg: #fff;
+  --wb-io-dialog-badge-fg: #2861bd;
+  --wb-io-dialog-badge-shadow: #10234640;
+  --wb-io-dialog-hero-p-fg: #dce9ff;
+  --wb-io-dialog-bits-label-fg: #102346;
+  --wb-io-dialog-bits-input-border: #a9bedb;
+  --wb-io-dialog-bits-input-bg: #fff;
+  --wb-io-dialog-bits-input-border-selected: #2869ed;
+  --wb-io-dialog-bits-input-bg-selected: #2869ed;
+  --wb-io-dialog-bits-input-before-bg-selected: #ffffff;
+  --wb-io-dialog-bits-input-outline-focus: #2869ed;
+  --wb-io-dialog-actions-button-border: #d5e3f5;
+  --wb-io-dialog-actions-button-bg: #fff;
+  --wb-io-dialog-actions-button-fg: #102346;
+  --wb-io-dialog-actions-button-submit-border: #2869ed;
+  --wb-io-dialog-actions-button-submit-bg: #2869ed;
+  --wb-io-dialog-actions-button-submit-fg: #ffffff;
+
+  /* --- BoardSetting.css --- */
+  --wb-board-select-button-border: #cbd5e1;
+  --wb-board-select-button-bg: #ffffff;
+  --wb-board-select-button-bg-hover: #ffffff;
+  --wb-board-select-button-bg-disabled: #f1f5f9;
+  --wb-board-setting-action-border: #d4d4d4;
+  --wb-board-setting-action-bg: #fafafa;
+  --wb-board-setting-action-bg-hover: #f0f0f0;
+  --wb-board-setting-note-border: #c7dafc;
+
+  /* --- CodeEditor.css --- */
+  --wb-code-bg: #ffffff;
+  --wb-editor-drop-hint-bg: rgba(229, 239, 255, 0.92);
+  --wb-gutter-fg: #94a3b8;
+  --wb-code-fg: #1e293b;
+  --wb-editor-quickfix-bulb-fg: #ca8a04;
+  --wb-code-caret: #0f172a;
+  --wb-code-selection: rgba(37, 99, 235, 0.25);
+  --wb-editor-empty-btn-bg: #ffffff;
+  --wb-editor-empty-btn-primary-fg: #ffffff;
+  --wb-syn-keyword: #1d4ed8;
+  --wb-syn-type: #0f766e;
+  --wb-syn-comment: #16a34a;
+  --wb-syn-string: #b45309;
+  --wb-syn-number: #9333ea;
+  --wb-syn-punct: #475569;
+  --wb-syn-directive: #be185d;
+  --wb-syn-system: #0369a1;
+
+  /* --- SplitEditor.css --- */
+  --wb-focus-ring: #2563eb;
+  --wb-panehead-plain-bg: #ffffff;
+  --wb-panehead-unfocused-bg: #ffffff;
+  --wb-rolebadge-bg: #ffffff;
+  --wb-panehead-btn-bg-hover: rgba(15, 23, 42, 0.08);
+  --wb-split-note-bg: #fffbeb;
+  --wb-split-note-button-bg: #ffffff;
+  --wb-menu-bg: #ffffff;
+  --wb-split-empty-bg: #ffffff;
+  --wb-split-empty-btn-bg: #ffffff;
+  --wb-split-empty-btn-primary-fg: #ffffff;
+  --wb-tbchip-open-bg: #ffffff;
+
+  /* --- FindBar.css --- */
+  --wb-findbar-field-bg: #ffffff;
+  --wb-findbar-clear-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-findbar-steps-bg: #ffffff;
+  --wb-findbar-btn-bg: #ffffff;
+  --wb-findbar-btn-primary-fg: #ffffff;
+
+  /* --- ConsoleOutput.css --- */
+  --wb-console-header-border: #1e293b;
+  --wb-console-title-fg: #e2e8f0;
+  --wb-console-clear-border: #334155;
+  --wb-console-clear-fg: #cbd5e1;
+  --wb-console-clear-bg-hover: #1e293b;
+  --wb-console-line-fg: #cbd5e1;
+  --wb-console-line-success-fg: #4ade80;
+  --wb-console-line-error-fg: #f87171;
+  --wb-console-time-fg: #64748b;
+  --wb-console-reports-fg: #cbd5e1;
+  --wb-console-reports-th-border: #1e293b;
+  --wb-console-reports-th-fg: #64748b;
+  --wb-console-reports-tbody-tr-bg-hover: #1e293b;
+  --wb-console-report-line-fg: #64748b;
+  --wb-console-reports-tr-warning-fg: #fbbf24;
+  --wb-console-reports-tr-error-fg: #f87171;
+  --wb-console-link-outline-focus: #93c5fd;
+  --wb-console-wave-link-fg: #93c5fd;
+
+  /* --- OverlayScrollbar.css --- */
+  --wb-scrollbar-thumb-bg: #a3a3a3;
+  --wb-scrollbar-arrow-fg: #6b7280;
+  --wb-scrollbar-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-scrollbar-arrow-fg-hover: #1f2937;
+  --wb-scrollbar-thumb-bg-hover: #8a8a8a;
+  --wb-scrollbar-thumb-bg-active: #6b6b6b;
+
+  /* --- Dialog.css --- */
+  --wb-dialog-backdrop: rgba(15, 23, 42, 0.55);
+  --wb-dialog-bg: #ffffff;
+  --wb-dialog-edge: rgba(15, 23, 42, 0.08);
+  --wb-on-header-fg: #ffffff;
+  --wb-dialog-badge-bg: #ffffff;
+  --wb-on-header-fg-muted: rgba(255, 255, 255, 0.8);
+  --wb-text-body: #334155;
+  --wb-dialog-callout-bg: #fffbeb;
+  --wb-dialog-callout-border: #fde68a;
+  --wb-dialog-callout-left-border: #f59e0b;
+  --wb-dialog-callout-fg: #78350f;
+  --wb-dialog-callout-title-fg: #b45309;
+  --wb-dialog-callout-info-border: #bfd5fb;
+  --wb-dialog-callout-info-fg: #1e3a8a;
+  --wb-dialog-secondary-bg: #ffffff;
+  --wb-dialog-close-fg: #ffffff;
+
+  /* --- SettingsDialog.css --- */
+  --wb-settings-action-bg: #ffffff;
+  --wb-settings-action-primary-fg: #ffffff;
+  --wb-settings-action-text-fg: rgba(255, 255, 255, 0.85);
+  --wb-settings-layout-border: #d4d9e0;
+  --wb-settings-layout-fg: #626b78;
+
+  /* --- HelpDialog.css --- */
+  --wb-dialog-code-bg: #f1f5f9;
+  --wb-help-table-thead-th-bg: #f8fafc;
+  --wb-help-dir-out-bg: #fef3c7;
+  --wb-help-dir-out-fg: #92400e;
+  --wb-help-seg-fg: #e5484d;
+  --wb-help-segnum-fg: #ffffff;
+  --wb-help-code-bg: #0f172a;
+  --wb-help-code-fg: #e2e8f0;
+  --wb-help-res-bg: #ffffff;
+  --wb-help-rank-fg: #ffffff;
+
+  /* --- NewFileDialog.css --- */
+  --wb-newfile-name-bg: #ffffff;
+  --wb-newfile-create-highlight: #fff;
+  --wb-openproject-folder-btn-bg-hover: #ffffff;
+
+  /* --- PasteArchitectureDialog.css --- */
+  --wb-paste-card-bg: #ffffff;
+  --wb-paste-card-code-deleting-bg: rgba(255, 255, 255, 0.7);
+
+  /* --- BoardChangeDialog.css --- */
+  --wb-boardchange-renames-bg: #f8fafc;
+
+  /* --- FileMenu.css --- */
+  --wb-filename-button-bg-hover: rgba(15, 23, 42, 0.06);
+  --wb-filename-button-open-border: #c7d7f7;
+
+  /* --- PickerWait.css --- */
+  --wb-picker-wait-reading-bg: rgba(15, 23, 42, 0.25);
+  --wb-picker-wait-card-bg: #ffffff;
+  --wb-picker-wait-card-edge: rgba(15, 23, 42, 0.08);
+
+  /* --- GitHub.css --- */
+  --wb-github-btn-bg: #ffffff;
+  --wb-github-btn-primary-fg: #ffffff;
+  --wb-github-btn-danger-fg: #ffffff;
+  --wb-github-message-error-bg: #fef2f2;
+  --wb-github-message-error-border: #fecaca;
+  --wb-github-message-success-bg: #f0fdf4;
+  --wb-github-message-success-border: #bbf7d0;
+  --wb-github-input-bg: #ffffff;
+  --wb-github-status-not-on-github-bg: #f1f5f9;
+  --wb-github-status-saved-bg: #f0fdf4;
+  --wb-github-status-changed-bg: #fffbeb;
+  --wb-github-status-changed-fg: #b45309;
+
+  /* --- GitHubSplitButton.css --- */
+  --wb-gh-split-main-bg: #ffffff;
+  --wb-gh-split-chevron-left-border: rgba(29, 78, 216, 0.22);
+  --wb-gh-split-main-bg-active: #d3e3ff;
+  --wb-gh-split-main-outline-focus: #ffffff;
+  --wb-gh-split-dot-bg: #f59e0b;
+  --wb-gh-split-dot-highlight: #ffffff;
+  --wb-gh-split-tip-bg: #0f172a;
+  --wb-gh-split-tip-fg: #ffffff;
+  --wb-gh-split-tip-before-bottom-border: #0f172a;
+  --wb-gh-split-main-quiet-bg: rgba(255, 255, 255, 0.16);
+  --wb-gh-split-main-quiet-fg: #ffffff;
+  --wb-gh-split-chevron-quiet-left-border: rgba(255, 255, 255, 0.22);
+  --wb-gh-split-spinner-border: rgba(255, 255, 255, 0.35);
+  --wb-gh-split-spinner-top-border: #ffffff;
+
+  /* --- UpdateBell.css --- */
+  --wb-update-badge-fg: #ffffff;
+  --wb-update-notice-bg: #ffffff;
+  --wb-update-icon-fg: #ffffff;
+  --wb-update-view-fg: #ffffff;
+
+  /* --- Workbench.css --- */
+  --wb-surface-bg: #ffffff;
+  --wb-right-bg: #ffffff;
+
+  /* --- Header.css --- */
+  --wb-header-fg: #ffffff;
+  --wb-header-bottom-edge: rgba(15, 23, 42, 0.15);
+  --wb-header-tagline-fg: rgba(255, 255, 255, 0.78);
+  --wb-header-action-fg: rgba(255, 255, 255, 0.92);
+  --wb-header-action-bg-hover: rgba(255, 255, 255, 0.14);
+  --wb-header-action-outline-focus: #ffffff;
+  --wb-header-divider-bg: rgba(255, 255, 255, 0.25);
+
+  /* --- ActivityBar.css --- */
+  --wb-activitybar-item-bg-hover: rgba(15, 23, 42, 0.07);
+  --wb-activitybar-badge-compiling-bg: #f59e0b;
+
+  /* --- SidePanel.css --- */
+  --wb-sidepanel-hide-bg-hover: rgba(15, 23, 42, 0.07);
+
+  /* --- PaneHeaderButton.css --- */
+  --wb-copycode-bg-hover: rgba(15, 23, 42, 0.06);
+
+  /* --- SimToggle.css --- */
+  --wb-simtoggle-bg-hover: rgba(15, 23, 42, 0.08);
+
+  /* --- SimulationCard.css --- */
+  --wb-simcard-bg: #ffffff;
+  --wb-simcard-dot-bg: #94a3b8;
+  --wb-simcard-dot-compiling-bg: #f59e0b;
+  --wb-simcard-dot-stopped-bg: #94a3b8;
+  --wb-simcard-button-fg: #ffffff;
+
+  /* --- FileExplorer.css --- */
+  --wb-files-bg: #ffffff;
+  --wb-files-drop-hint-bg: rgba(229, 239, 255, 0.92);
+  --wb-files-upload-fg: #ffffff;
+  --wb-files-new-bg: #ffffff;
+  --wb-files-examples-border: #c7dafc;
+  --wb-files-examples-bg-hover: #d6e5ff;
+  --wb-files-examples-fg-active: #ffffff;
+  --wb-files-top-dot-bg-hover: rgba(15, 23, 42, 0.08);
+  --wb-files-rename-input-bg: #ffffff;
+  --wb-files-row-action-bg-hover: rgba(15, 23, 42, 0.08);
+  --wb-files-row-action-danger-bg-hover: rgba(239, 68, 68, 0.12);
+  --wb-icon-folder-bg: #e8b64c;
+  --wb-icon-folder-before-bg: #e8b64c;
+  --wb-files-project-bg: #ffffff;
+  --wb-files-project-dot-bg: #f59e0b;
+
+  /* --- ExamplesPane.css --- */
+  --wb-examples-inner-bg: #ffffff;
+  --wb-examples-search-bg: #ffffff;
+  --wb-examples-card-bg: #ffffff;
+  --wb-examples-card-border-hover: #cbd5e1;
+  --wb-examples-badge-fg: #ffffff;
+  --wb-examples-open-bg: #ffffff;
+  --wb-examples-note-border: #c7dafc;
+
+  /* --- ProjectPage.css --- */
+  --wb-project-card-bg: #ffffff;
+  --wb-project-badge-bg: #4f8bff;
+  --wb-project-badge-fg: #ffffff;
+  --wb-project-unsaved-bg: #fef3c7;
+  --wb-project-unsaved-fg: #92400e;
+  --wb-project-name-input-bg: #ffffff;
+  --wb-project-name-input-border-hover: #cbd5e1;
+  --wb-project-name-input-bg-focus: #ffffff;
+  --wb-project-btn-bg: #ffffff;
+  --wb-project-btn-primary-fg: #ffffff;
+  --wb-project-field-bg: #ffffff;
+  --wb-project-field-placeholder-fg: #94a3b8;
+  --wb-project-busy-border: #c7dafc;
+  --wb-project-spinner-border: #b6cdf8;
+  --wb-project-warnings-border: #fde68a;
+  --wb-project-warnings-bg: #fffbeb;
+  --wb-project-warnings-ul-fg: #78350f;
+  --wb-project-warn-icon-fg: #d97706;
+  --wb-project-missing-border: #c7dafc;
+  --wb-project-problem-fg: #92400e;
+  --wb-project-note-border: #c7dafc;
+  --wb-project-field-wrap-has-suffix-bg: #ffffff;
+  --wb-project-name-icon-fg: #94a3b8;
+  --wb-project-pencil-fg: #94a3b8;
+  --wb-project-board-note-fg: #92400e;
+
+  /* --- ProjectsPage.css --- */
+  --wb-projects-btn-bg: #ffffff;
+  --wb-projects-btn-primary-fg: #ffffff;
+  --wb-projects-btn-primary-shadow: rgba(29, 78, 216, 0.3);
+  --wb-projects-btn-dark-bg: #24292f;
+  --wb-projects-btn-dark-border: #24292f;
+  --wb-projects-btn-dark-fg: #ffffff;
+  --wb-projects-btn-dark-bg-hover: #1b1f24;
+  --wb-projects-btn-open-border: #bcd3ff;
+  --wb-projects-btn-open-bg: #f5f9ff;
+  --wb-projects-icon-btn-fg: #475569;
+  --wb-projects-icon-btn-boxed-bg: #ffffff;
+  --wb-projects-account-bg: #ffffff;
+  --wb-projects-avatar-bg: #e2e8f0;
+  --wb-projects-gh-tile-bg: #24292f;
+  --wb-projects-gh-tile-fg: #ffffff;
+  --wb-projects-current-border: #cfe0ff;
+  --wb-projects-chip-warn-bg: #fef3c7;
+  --wb-projects-chip-warn-fg: #92400e;
+  --wb-projects-search-input-border: #cbd5e1;
+  --wb-projects-search-input-bg: #ffffff;
+  --wb-projects-select-svg-fg: #475569;
+  --wb-projects-segmented-border: #cbd5e1;
+  --wb-projects-segmented-bg: #ffffff;
+  --wb-projects-segmented-button-fg: #475569;
+  --wb-projects-segmented-button-fg-selected: #ffffff;
+  --wb-projects-folder-code-bg: #eef2f7;
+  --wb-projects-error-border: #fecaca;
+  --wb-projects-error-bg: #fef2f2;
+  --wb-projects-error-fg: #991b1b;
+  --wb-projects-error-text-span-fg: #7f1d1d;
+  --wb-projects-item-bg: #ffffff;
+  --wb-projects-item-border-hover: #cbd5e1;
+  --wb-projects-tile-fg: #ffffff;
+  --wb-projects-tile-bottom-edge: rgba(0, 0, 0, 0.12);
+  --wb-projects-tile-vhdl-from-bg: #4f8bff;
+  --wb-projects-tile-vhdl-to-bg: #1d4ed8;
+  --wb-projects-tile-verilog-from-bg: #34d399;
+  --wb-projects-tile-verilog-to-bg: #15803d;
+  --wb-projects-tile-both-from-bg: #a78bfa;
+  --wb-projects-tile-both-to-bg: #6d28d9;
+  --wb-projects-tile-none-from-bg: #94a3b8;
+  --wb-projects-tile-none-to-bg: #475569;
+  --wb-projects-item-desc-fg: #475569;
+  --wb-projects-badge-local-bg: #f1f5f9;
+  --wb-projects-badge-github-fg: #1f2328;
+  --wb-projects-badge-github-bg: #f6f8fa;
+  --wb-projects-badge-github-border: #d0d7de;
+  --wb-projects-lang-bg: #f8fafc;
+  --wb-projects-table-wrap-bg: #ffffff;
+  --wb-projects-table-th-bg: #f8fafc;
+  --wb-projects-table-th-fg: #475569;
+  --wb-projects-table-td-bottom-border: #eef2f7;
+  --wb-projects-table-tbody-tr-bg-hover: #f8fafc;
+  --wb-projects-table-tbody-tr-open-bg: #f3f7ff;
+  --wb-projects-table-tbody-tr-expanded-bg: #f8fafc;
+  --wb-projects-detail-row-td-bg: #f8fafc;
+  --wb-projects-p-desc-fg: #475569;
+  --wb-projects-table-foot-bg: #f8fafc;
+  --wb-projects-menu-bg: #ffffff;
+  --wb-projects-menu-item-svg-fg: #475569;
+  --wb-projects-skeleton-bg: #ffffff;
+  --wb-projects-skeleton-i-stop1-bg: #eef2f7;
+  --wb-projects-skeleton-i-stop2-bg: #f8fafc;
+  --wb-projects-skeleton-i-stop3-bg: #eef2f7;
+  --wb-projects-empty-bg: #ffffff;
+  --wb-projects-empty-border: #cbd5e1;
+  --wb-projects-empty-svg-fg: #94a3b8;
+
+  /* --- BoardSettingsPage.css --- */
+  --wb-bce-bg: #f5f8fb;
+  --wb-bce-preview-note-border: #e4c875;
+  --wb-bce-preview-note-bg: #fff9e8;
+  --wb-bce-preview-note-fg: #684e10;
+  --wb-bce-icon-fg: #4b6483;
+  --wb-bce-icon-leds-fg: #299657;
+  --wb-bce-icon-leds-highlight: #ffffff;
+  --wb-bce-icon-reset-button-fg: #ce4b55;
+  --wb-bce-icon-pushbuttons-fg: #4274b6;
+  --wb-bce-icon-seven-segment-fg: #405774;
+  --wb-bce-button-border: #cbd5e1;
+  --wb-bce-button-bg: #ffffff;
+  --wb-bce-button-fg: #162338;
+  --wb-bce-button-bg-hover: #eff6ff;
+  --wb-bce-input-border: #cbd5e1;
+  --wb-bce-input-bg: #fff;
+  --wb-bce-input-border-invalid: #c52b32;
+  --wb-bce-control-outline-focus: #1670ff;
+  --wb-bce-input-readonly-bg: #f1f5f9;
+  --wb-bce-input-readonly-fg: #475569;
+  --wb-bce-optional-components-border: #dce4ef;
+  --wb-bce-optional-components-input-checkbox-accent: #1670ff;
+  --wb-bce-header-button-fg: #075fc7;
+  --wb-bce-header-button-border: #a8c9f2;
+  --wb-bce-panel-bg: #fff;
+  --wb-bce-panel-border: #dce4ee;
+  --wb-bce-card-border: #dce4ee;
+  --wb-bce-card-bg: #ffffff;
+  --wb-bce-card-border-selected: #80b6ff;
+  --wb-bce-card-left-edge-selected: #0866ff;
+  --wb-bce-card-bg-selected: #eff6ff;
+  --wb-bce-edit-link-fg: #0062e9;
+  --wb-bce-muted-fg: #52637c;
+  --wb-bce-error-fg: #ac202b;
+  --wb-bce-detail-heading-bottom-border: #dce4ee;
+  --wb-bce-cross-bg: #f5f8fc;
+  --wb-bce-cross-border: #e3eaf3;
+  --wb-bce-cross-summary-code-border: #cbd5e1;
+  --wb-bce-cross-summary-code-bg: #ffffff;
+  --wb-bce-polarity-top-border: #dce4ee;
+  --wb-bce-radio-row-label-border: #cbd5e1;
+  --wb-bce-radio-row-input-accent: #0866ff;
+  --wb-bce-radio-row-fg-selected: #005bd8;
+  --wb-bce-radio-row-bg-selected: #e8f2ff;
+  --wb-bce-radio-row-border-selected: #8abbff;
+  --wb-bce-note-bg: #f3f6fb;
+  --wb-bce-note-border: #dce4ee;
+  --wb-bce-note-fg: #52637c;
+  --wb-bce-note-button-fg: #0062e9;
+  --wb-bce-success-border: #b9ecd2;
+  --wb-bce-success-bg: #effcf5;
+  --wb-bce-success-fg: #087531;
+  --wb-bce-display-action-badge-border: #ffffff;
+  --wb-bce-display-action-badge-bg: #168343;
+  --wb-bce-display-action-badge-fg: #ffffff;
+  --wb-bce-display-action-icon-remove-bg: #c43c45;
+  --wb-bce-resource-bottom-border: #dce4ee;
+  --wb-bce-footer-bg: #ffffff;
+  --wb-bce-footer-border: #dce4ee;
+  --wb-bce-primary-bg: #0866ff;
+  --wb-bce-primary-border: #0866ff;
+  --wb-bce-primary-fg: #ffffff;
+  --wb-bce-primary-bg-hover: #0054d6;
+  --wb-dialog-hero-board-json-bg: #fff;
+  --wb-dialog-hero-board-json-fg: #10254a;
+  --wb-dialog-badge-board-json-bg: #e7f1ff;
+  --wb-dialog-badge-board-json-fg: #0756bd;
+  --wb-dialog-subtitle-board-json-fg: #60789f;
+  --wb-dialog-footer-board-json-top-border: #dce5f1;
+  --wb-dialog-close-board-json-border: #0866ff;
+  --wb-dialog-close-board-json-bg: #0866ff;
+  --wb-dialog-close-board-json-fg: #ffffff;
+  --wb-dialog-close-board-json-bg-hover: #0054d6;
+  --wb-bce-json-panel-border: #d9e4f2;
+  --wb-bce-json-panel-bg: #f3f6fa;
+  --wb-bce-json-fg: #10254a;
+  --wb-bce-json-number-fg: #8298b6;
+  --wb-bce-json-key-fg: #c5162b;
+  --wb-bce-json-string-fg: #0064e8;
+  --wb-bce-json-value-fg: #00832d;
+
+  /* --- Waveform.css --- */
+  --wv-cursor-field-bg-focus: #ffffff;
+  --wv-button-bg: #fff;
+  --wv-note-bg: #fff7ed;
+  --wv-note-fg: #9a3412;
+  --wv-note-bottom-border: #fed7aa;
+  --wv-sectiontip-bg: #1e293b;
+  --wv-sectiontip-fg: #f8fafc;
+  --wv-sectiontip-hint-fg: #cbd5e1;
+  --wv-tooltip-bg: #0f172a;
+  --wv-tooltip-fg: #e2e8f0;
+  --wv-tooltip-value-fg: #fff;
+  --wv-menu-bg: #fff;
+  --wv-launch-border: #334155;
+  --wv-launch-fg: #cbd5e1;
+  --wv-launch-bg-hover: #1e293b;
+  --wv-launch-new-border: #60a5fa;
+  --wv-launch-new-fg: #e0f2fe;
+  --wv-launch-bg-active: #1e3a8a;
+  --wv-launch-border-active: #3b82f6;
+  --wv-launch-fg-active: #fff;
+  --wv-launch-dot-bg: #60a5fa;
+  --wv-status-bg: #1e293b;
+  --wv-status-fg: #ffffff;
+  --wv-report-band-bg: #ffffff;
+  --wv-report-band-hero-fg: #ffffff;
+  --wv-report-band-badge-bg: #ffffff;
+  --wv-report-band-heading-p-fg: rgba(255, 255, 255, 0.8);
+  --wv-report-band-button-border: rgba(255, 255, 255, 0.55);
+  --wv-report-band-button-fg: #ffffff;
+  --wv-report-band-button-bg-hover: rgba(255, 255, 255, 0.14);
+  --wv-report-band-button-primary-border: #ffffff;
+  --wv-report-band-button-primary-bg: #ffffff;
+  --wv-report-band-button-primary-bg-hover: #e8f0fe;
+  --wv-report-band-button-outline-focus: #ffffff;
+  --wv-report-bg: #e9edf3;
+  --wv-report-page-bg: #ffffff;
+  --wv-report-selection-bg: rgba(37, 99, 235, 0.12);
+  --wv-report-selection-span-fg: #ffffff;
+  --wv-drag-hint-bg: #1e293b;
+  --wv-drag-hint-fg: #f8fafc;
+
+  /* --- FlatSelect.css --- */
+  --wv-flat-select-button-bg-hover: rgba(37, 99, 235, 0.1);
+  --wv-flat-select-list-bg: #ffffff;
+
+  /* --- ColumnDivider.css --- */
+  --hdl-divider-grip: #fff;
+
+  /* --- icons.tsx --- */
+  --wb-icon-muted: #6b7280;
+  --wb-icon-run: #0d9488;
+  --wb-icon-stop: #ef4444;
+}
+
+.wb {
+  --wb-rail-bg: #f1f5f9;
+  /* Role colours (docs/impl_split_screen.md § 4.13): a tint for the badge, an ink
+     for its text and icon. Distinct from the diagnostics' red/amber so a role is
+     never read as a problem. */
+  --wb-role-tb-ink: #6d28d9;
+  --wb-role-tb-tint: #f3e8ff;
+  --wb-role-rtl-ink: #0f766e;
+  --wb-role-rtl-tint: #ccfbf1;
+  /* A design's chip in the file lists and the plain header (docs/cleanup_file_tabs.md
+     D6): quiet, so a testbench's flask stands out. >= 3:1 on every row background. */
+  --wb-role-quiet-ink: #7c8aa0;
+  --wb-border: #e2e8f0;
+  --wb-sidebar-bg: #f8fafc;
+  --wb-hover: #eef2f7;
+  --wb-text: #0f172a;
+  --wb-text-muted: #64748b;
+  --wb-accent: #2f6fed;
+  /* -ink twins: the same colour used for text and icons. A dark theme needs a
+     lighter ink than fill, so the two uses take separate variables. */
+  --wb-accent-ink: #2f6fed;
+  --wb-accent-dark: #1d4ed8;
+  --wb-accent-dark-ink: #1d4ed8;
+  --wb-accent-soft: #e5efff;
+  --wb-header-bg: #3f6fc4;
+  --wb-header-bg-dark: #315999;
+  --wb-header-bg-dark-ink: #315999;
+  --wb-success: #16a34a;
+  --wb-success-dark: #15803d;
+  --wb-danger: #ef4444;
+  --wb-danger-ink: #ef4444;
+  --wb-danger-dark: #dc2626;
+  --wb-danger-dark-ink: #dc2626;
+  /* Editor error markers (CodeEditor). Every text colour is >= 4.5:1 on the
+     surface it is drawn on; the code text stays at 12.5:1 on the red tint. */
+  --wb-diag-error: #dc2626; /* gutter number, glyph, edge: 4.6:1 on the gutter */
+  --wb-diag-error-bg: rgba(239, 68, 68, 0.12); /* line tint (--wb-danger at 12 %) */
+  --wb-diag-error-text: #b91c1c; /* inline message: 5.5:1 on the tint */
+  --wb-diag-warning: #b45309; /* 4.8:1 on the gutter (#d97706 would be only 3.0:1) */
+  --wb-diag-warning-bg: rgba(245, 158, 11, 0.14);
+  --wb-diag-warning-text: #92400e; /* inline message: 6.4:1 on the tint */
+  /* Advice (docs/editor_diagnostics_improvement_plan.md § 4.10): a muted
+     follow-on error, and the hint on a line another marker points at. */
+  --wb-diag-followon: #64748b; /* gutter number, glyph, edge: 4.5:1 on the gutter */
+  --wb-diag-followon-bg: rgba(148, 163, 184, 0.14);
+  --wb-diag-hint: #1d4ed8; /* gutter number and edge: 6.4:1 on the gutter */
+  --wb-diag-hint-bg: rgba(59, 130, 246, 0.1);
+  --wb-console-bg: #0f172a;
+  --wb-divider-bg: #e5e9f0;
+  --wb-divider-edge: #cbd5e1;
+}
+
+.wb-editor {
+  /* Symbol occurrence highlighting (docs/symbol_occurrence_highlighting.md). */
+  --wb-occ-bg: rgba(100, 160, 255, 0.32);
+  --wb-occ-underline: #4a90e2;
+  /* Search matches (docs/impl_search.md § 5.4). */
+  --wb-find-current-bg: #ffd54a;
+  --wb-find-current-outline: #c99a00;
+}
+
+.hdl-close-button {
+  --hdl-close-bg: #e1e6ee;
+  --hdl-close-bg-hover: #d0d7e2;
+  --hdl-close-border: #c9d1dd;
+  --hdl-close-ink: #0f172a;
+}
+
+.hdl-column-divider {
+  --hdl-divider-accent: #2563eb;
+}
+
+.pb-ui {
+  /* --- switch housing ----------------------------------------------- */
+  --pb-sw-body-edge: #b9bdc4; /* the border, kept crisp at 1 px */
+  --pb-sw-body-top: #ffffff; /* face, lit top edge               */
+  --pb-sw-body-upper: #f6f7f9;
+  --pb-sw-body-mid: #ebedf0;
+  --pb-sw-body-low: #e0e3e8; /* face, shaded bottom edge         */
+
+  /* --- switch track: the recessed slot the knob runs in -------------- */
+  --pb-sw-track-hi: #ccd0d5; /* top of the slot, in its own shadow */
+  --pb-sw-track-lo: #d2d6db; /* bottom, catching more light        */
+
+  /* --- switch knob --------------------------------------------------- */
+  --pb-sw-knob-top: #212429;
+  --pb-sw-knob-mid: #2b2e32;
+  --pb-sw-knob-lo: #43464b;
+  --pb-sw-knob-bottom: #4f5257;
+
+  /* --- LED ---------------------------------------------------------- */
+  --pb-led-ring: #757d87; /* dark outer ring of the package   */
+  --pb-led-rim: #e9ecef; /* light plastic rim                */
+  --pb-led-rim-on: #fbe2dc; /* rim tints when the die is lit    */
+  --pb-led-off: #7c8489; /* unlit lens                       */
+  --pb-led-off-hi: #9ba1a5; /* top highlight on the unlit lens  */
+  --pb-led-off-lo: #6b7175; /* bottom / right shadow            */
+  /* lit colours — overridden by .pb-led--green / --amber */
+  --pb-led-core: #fff1ee;
+  --pb-led-mid: #ff6b52;
+  --pb-led-body: #f6210f;
+  --pb-led-edge: #a80b06;
+  --pb-led-glow: 255, 48, 28;
+
+  /* --- the moulded light package, shared by KEY and HEX -------------- */
+  /* Both parts are the same piece of moulded plastic on the board, so
+     they take their face and wall from one place. Measured from
+     PushButtons.png. */
+  --pb-part-face: #dee6ed;
+  --pb-part-face-hi: #eff4f9; /* inner bevel just inside the wall  */
+  --pb-part-edge: #8d99a7; /* wall, upper-left                     */
+  --pb-part-edge-dark: #708094; /* wall, lower-right               */
+
+  /* --- pushbutton (KEY) --------------------------------------------- */
+  --pb-key-face-down: #9fadba; /* recessed floor when pressed */
+  --pb-key-face-down-hi: #b8c4ce; /* bezel rim still lit      */
+  --pb-key-edge-down: #5d6d7e;
+  --pb-key-cap-hi: #4c555f; /* cap, lit side                  */
+  --pb-key-cap-body: #3b444d; /* cap, measured base           */
+  --pb-key-cap-lo: #2f363d; /* cap, shadow side               */
+  --pb-key-cap-rim: #868c90; /* specular line along the top   */
+  --pb-key-hover-face: #d2eafc;
+  --pb-key-hover-edge: #1c79ef;
+  --pb-key-hover-glow: 28, 121, 239;
+
+  /* --- 7-segment display (HEX) -------------------------------------- */
+  --pb-hex-seg-off: #f4f8fc; /* unlit window — near white, lighter than the package it sits in */
+  /* Lit is a flat, deep red — no gradient and no halo. Sampled from a
+     photo of the real part, whose segment core sits around
+     rgb(194,29,25) at its darkest and rgb(234,32,30) at its brightest;
+     this is the dark end, because a shaded segment reads as plastic
+     rather than as an emitting die. */
+  --pb-hex-seg-on: #c8211c;
+
+  /* --- shared panel chrome ------------------------------------------ */
+  --pb-card-bg: #fafcfd;
+  --pb-label: #1e3a8a;
+  --pb-readout-bg: #f1f5fb;
+  --pb-readout-border: #dbe5f1;
+  --pb-readout-fg: #1e3a8a;
+  --pb-focus: #2563eb;
+  --pb-surface: #fff;
+  --pb-menu-text: #20345e;
+  --pb-menu-icon: #294b5b;
+  --pb-menu-muted: #587982;
+  --pb-menu-badge-bg: #f4f5f5;
+  --pb-menu-badge-border: #d9dfe1;
+  --pb-menu-badge-text: #25394c;
+  --pb-menu-border: #d7e6e3;
+  --pb-menu-rule: #e0e8eb;
+  --pb-menu-control-border: #cedde7;
+  --pb-menu-shadow: #183d3a2b;
+  --pb-control-shadow: #0002;
+  --pb-dialog-shadow: #0003;
+  --pb-dialog-backdrop: #0004;
+  --pb-dialog-button-border: #b4c5dc;
+  --pb-dialog-button-bg: #edf3fa;
+  --pb-dialog-button-text: #17315e;
+  --pb-chevron: #526171;
+  --pb-menu-selected-fg: #fff;
+  --pb-menu-selected: #2563eb;
+  --pb-menu-focus: #2563eb;
+  --pb-menu-trigger-border: #a9cbf3;
+  --pb-menu-trigger-fg: #1e40af;
+  --pb-menu-trigger-hover: #d4e9fc;
+  --pb-menu-row-selected: #dfedfc;
+  --pb-menu-row-hover: #eef6ff;
+  --pb-menu-row-selected-hover: #d4e7fb;
+  --pb-collapsed-bg: #e7f3ff;
+  --pb-collapsed-hover: #d4eaff;
+  /* default accent = Switches */
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+.pb-ui.pb-accent-switches {
+  --pb-accent-head: #deeffd;
+  --pb-accent-border: #d5e9fd;
+  --pb-accent-title: #1e40af;
+}
+
+.pb-ui.pb-accent-leds,
+.pb-ui.pb-accent-hex {
+  /* LEDR and HEX are the board's outputs, so they share one frame colour
+     (the LEDs' green); the two inputs — switches and keys — are the
+     blues. */
+  --pb-accent-head: #dbf0ee;
+  --pb-accent-border: #c5e5de;
+  --pb-accent-title: #166534;
+  --pb-menu-selected: #087d6c;
+  --pb-menu-focus: #087a60;
+  --pb-menu-trigger-border: #a8d9d0;
+  --pb-menu-trigger-fg: #174c52;
+  --pb-menu-trigger-hover: #c9eae2;
+  --pb-menu-row-selected: #def3ed;
+  --pb-menu-row-hover: #eaf7f3;
+  --pb-menu-row-selected-hover: #d3eee6;
+  --pb-collapsed-bg: #eff9f6;
+  --pb-collapsed-hover: #d9f1e9;
+}
+
+.pb-ui.pb-accent-keys {
+  --pb-accent-head: #daeefe;
+  --pb-accent-border: #b8dcfc;
+  --pb-accent-title: #1e40af;
+}
+
+.pb-led--green {
+  --pb-led-rim-on: #dcf5e0;
+  --pb-led-core: #f0fff2;
+  --pb-led-mid: #5cf07a;
+  --pb-led-body: #14c93a;
+  --pb-led-edge: #077a22;
+  --pb-led-glow: 40, 220, 80;
+}
+
+.pb-led--amber {
+  --pb-led-rim-on: #fbf0d6;
+  --pb-led-core: #fffaea;
+  --pb-led-mid: #ffcb52;
+  --pb-led-body: #f59d0b;
+  --pb-led-edge: #a35c04;
+  --pb-led-glow: 250, 170, 25;
+}
+
+.pb-ui.pb-key--reset {
+  --pb-key-cap-hi: #e0574c;
+  --pb-key-cap-body: #c0392b;
+  --pb-key-cap-lo: #922b21;
+}
+
+.wv-pane {
+  --wv-bg: #ffffff;
+  --wv-grid: #e2e8f0;
+  --wv-axis-text: #64748b;
+  --wv-trace-high: #15803d;
+  --wv-trace-low: #15803d;
+  --wv-trace-bus: #1d4ed8;
+  --wv-trace-bus-text: #0f172a;
+  --wv-trace-undefined: #dc2626;
+  --wv-trace-z: #b45309;
+  --wv-trace-dont-care: #94a3b8;
+  --wv-cursor: #f59e0b;
+  /* Dark on the amber handle: white on it would be hard to read. */
+  --wv-cursor-text: #1f2937;
+  --wv-error-marker: #dc2626;
+  --wv-selection: #2563eb;
+  --wv-tool-bg: #eef1f6;
+  --wv-tool-bg-hover: #dfe6f1;
+  --wv-tool-ink: #1a56db;
+  --wv-row-hover: #f1f5f9;
+  --wv-row-selected: #e8f0fe;
+  /* The testbench section in blue, the design (RTL) sections in green, as the mockup. */
+  --wv-tb-ink: #1d4ed8;
+  --wv-tb-tint: #f3f7fe;
+  --wv-tb-head-ink: #1e3a8a;
+  --wv-rtl-ink: #15803d;
+  --wv-rtl-tint: #f1faf4;
+  --wv-rtl-head-ink: #14532d;
+  --wv-enum-ink: #7c3aed;
+  --wv-drag-grip: #94a3b8;
+  --wv-drag-veil: rgb(255 255 255 / 0.65);
+  --wv-drag-ghost-bg: #ffffff;
+  --wv-drag-flash: rgb(47 111 237 / 0.18);
+  --wv-drag-muted: #cbd5e1;
+}

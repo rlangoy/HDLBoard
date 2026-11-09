@@ -34,7 +34,7 @@
 .wb-scrollbar__thumb {
   position: absolute;
   border-radius: 999px;
-  background: #a3a3a3;
+  background: var(--wb-scrollbar-thumb-bg);
   transition: width 140ms ease, height 140ms ease, background 140ms ease;
 }
 
@@ -58,7 +58,7 @@
   justify-content: center;
   width: var(--wb-scrollbar-size);
   height: var(--wb-scrollbar-size);
-  fill: #6b7280;
+  fill: var(--wb-scrollbar-arrow-fg);
   opacity: 0;
   transition: opacity 140ms ease;
 }
@@ -70,7 +70,7 @@
 
 .wb-scrollbar:hover,
 .wb-scrollbar.is-dragging {
-  background: rgba(15, 23, 42, 0.06);
+  background: var(--wb-scrollbar-bg-hover);
 }
 
 .wb-scrollbar:hover .wb-scrollbar__arrow,
@@ -79,7 +79,7 @@
 }
 
 .wb-scrollbar__arrow:hover {
-  fill: #1f2937;
+  fill: var(--wb-scrollbar-arrow-fg-hover);
 }
 
 .wb-scrollbar--y:hover .wb-scrollbar__thumb,
@@ -94,12 +94,12 @@
 
 .wb-scrollbar:hover .wb-scrollbar__thumb,
 .wb-scrollbar.is-dragging .wb-scrollbar__thumb {
-  background: #8a8a8a;
+  background: var(--wb-scrollbar-thumb-bg-hover);
 }
 
 .wb-scrollbar .wb-scrollbar__thumb:hover,
 .wb-scrollbar.is-dragging .wb-scrollbar__thumb {
-  background: #6b6b6b;
+  background: var(--wb-scrollbar-thumb-bg-active);
 }
 
 /* For the element whose native bars these replace. */

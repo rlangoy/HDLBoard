@@ -3,11 +3,6 @@
 
 /* The close button of a full view (CloseButton.tsx): a dark X on a stronger grey circle. */
 .hdl-close-button {
-  --hdl-close-bg: #e1e6ee;
-  --hdl-close-bg-hover: #d0d7e2;
-  --hdl-close-border: #c9d1dd;
-  --hdl-close-ink: #0f172a;
-
   flex: none;
   display: inline-flex;
   align-items: center;

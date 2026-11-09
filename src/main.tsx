@@ -6,6 +6,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { LOGO_DATA_URI } from './components/workbench/logo';
 import './index.css';
+import './theme/themes/light.css';
+import './theme/themes/dark.css';
+import { startTheme } from './theme/themeStore';
 
 // Set here, not in index.html: the logo is a data URI computed from the
 // actual SVG file (`logo.ts`), so this is the one place that needs to
@@ -15,6 +18,8 @@ favicon.rel = 'icon';
 favicon.type = 'image/svg+xml';
 favicon.href = LOGO_DATA_URI;
 document.head.appendChild(favicon);
+
+startTheme(); // runs for the app's lifetime (docs/HDLBoard_Black_Theme_Spec.md § 7)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

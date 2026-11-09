@@ -37,7 +37,7 @@
   padding: 0 4px 0 8px;
   border: 1px solid var(--wb-border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--wb-findbar-field-bg);
 }
 
 .wb-findbar__row--replace .wb-findbar__field {
@@ -117,7 +117,7 @@
 .wb-findbar__clear:hover,
 .wb-findbar__close:hover,
 .wb-findbar__step:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.06);
+  background: var(--wb-findbar-clear-bg-hover);
   color: var(--wb-text);
 }
 
@@ -128,7 +128,7 @@
   border: 1px solid var(--wb-border);
   border-radius: 6px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--wb-findbar-steps-bg);
 }
 
 .wb-findbar__step {
@@ -175,8 +175,8 @@
   padding: 0 10px;
   border: 1px solid var(--wb-accent);
   border-radius: 6px;
-  background: #ffffff;
-  color: var(--wb-accent-dark);
+  background: var(--wb-findbar-btn-bg);
+  color: var(--wb-accent-dark-ink);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -198,7 +198,7 @@
 
 .wb-findbar__btn--primary {
   background: var(--wb-accent);
-  color: #ffffff;
+  color: var(--wb-findbar-btn-primary-fg);
 }
 
 .wb-findbar__btn--primary:hover {

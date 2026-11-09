@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Rune Langøy
 #
 # Smoke test for the assembled GHDL and Icarus Verilog trees. Run by build.sh
-# before anything is packaged, by CI inside a clean ubuntu:24.04 container,
+# before anything is packaged, by CI inside a clean ubuntu:22.04 container,
 # and by hand:
 #
 #   linuxAppImage/verify-simulators.sh [--ghdl <dir>] [--iverilog <dir>] [--fixtures <dir>]
@@ -59,7 +59,7 @@ clean() { env -i PATH="${CHILD_PATH}" HOME="${HOME:-/tmp}" LANG=C.UTF-8 timeout 
 
 check_libraries() {
   local tree="$1" name="$2" missing
-  # ELF files by their magic, not `file`: a clean ubuntu:24.04 has no `file`.
+  # ELF files by their magic, not `file`: a clean ubuntu:22.04 has no `file`.
   missing="$(find "${tree}" -type f -print0 |
     while IFS= read -r -d '' f; do
       [[ "$(head -c 4 "$f" | tr -d '\0')" == $'\x7fELF' ]] || continue

@@ -46,9 +46,17 @@ const STRING_OR_COMMENT = /"[^"\n]*"|--[^\n]*|\/\*[\s\S]*?\*\//g;
 const PORT_CLAUSE_OR_END = /\b(?:port\s*\(|end\b|begin\b)/gi;
 const MODE_AND_TYPE = /^\s*(?:(?<mode>in|out|inout|buffer|linkage)\b)?\s*(?<type>[\w.]+)\s*(?<constraint>\()?/i;
 
+/** Every character but a line break as a space, so offsets and line numbers stay as they were. */
+const blank = (text: string): string => text.replace(/[^\n]/g, ' ');
+
 /** Comments blanked to spaces, so every offset still points at the same character of the source. */
 function blankComments(src: string): string {
-  return src.replace(STRING_OR_COMMENT, (text) => (text.startsWith('"') ? text : text.replace(/[^\n]/g, ' ')));
+  return src.replace(STRING_OR_COMMENT, (text) => (text.startsWith('"') ? text : blank(text)));
+}
+
+/** Comments and string literals blanked to spaces: only code is left, every offset where it was. */
+export function blankCommentsAndStrings(src: string): string {
+  return src.replace(STRING_OR_COMMENT, blank);
 }
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

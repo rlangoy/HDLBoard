@@ -30,5 +30,5 @@
 
 .wb-refused__reason {
   font-size: 13px;
-  color: var(--wb-danger);
+  color: var(--wb-danger-ink);
 }
