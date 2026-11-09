@@ -37,13 +37,13 @@ export default function Page() {
   must define (`vite.config.ts` injects it from `package.json`; it is
   declared in `src/vite-env.d.ts`).
 - **Optionally, a host bridge.** If `window.hdlboard` exists
-  ([`desktop.ts`](#desktopts)), the Settings dialog offers project storage and
+  ([`desktop.ts`](#desktopts)), the Settings page offers project storage and
   the workspace is loaded on mount and auto-saved. In a plain browser it is
   absent and nothing is stored. Dispatching `ABOUT_EVENT` on `window` opens
   the About dialog from outside React (a native menu, for instance).
 
 The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
-`SettingsDialog`, `HelpDialog`, `FileExplorer`, `ExamplesPane`, `CodeEditor`,
+`SettingsPage`, `HelpDialog`, `FileExplorer`, `ExamplesPane`, `CodeEditor`,
 `SimulationCard`, `SimToggle`, `ConsoleOutput` and their prop types, plus `REPO_URL`,
 `ISSUES_URL`, `EXAMPLES`, `copyExample`, `filterExamples`, `Example`, `ExampleLanguage`,
 `EXAMPLE_FILES`, `STARTER_FILES`, `DEFAULT_SHOWN_FILE`, `TOP_LEVEL_ENTITY`, `VhdlFile`,
@@ -59,7 +59,8 @@ The barrel (`index.ts`) exports `Workbench`, `Header`, `AboutDialog`,
 - [Components](#components)
   - [`<Workbench>`](#workbench-1)
   - [`<Header>`](#header)
-  - [`<AboutDialog>`, `<SettingsDialog>` and `<HelpDialog>`](#aboutdialog-settingsdialog-and-helpdialog)
+  - [`<AboutDialog>` and `<HelpDialog>`](#aboutdialog-and-helpdialog)
+  - [`<SettingsPage>`](#settingspage)
   - [`<FileExplorer>`](#fileexplorer)
   - [`<CodeEditor>`](#codeeditor)
   - [`<SimulationCard>`](#simulationcard)
@@ -183,14 +184,14 @@ for exactly what it does.
 
 Chrome: logo, title, tagline, and the Settings, Help and About buttons. It
 owns no state; `<Workbench>` passes `onSettings`, `onHelp` and `onAbout` (all
-optional), which open the three dialogs below.
+optional), which open the Settings page and the two dialogs below; `settingsOpen`
+shows the Settings button as pressed while the page is open.
 
-### `<AboutDialog>`, `<SettingsDialog>` and `<HelpDialog>`
+### `<AboutDialog>` and `<HelpDialog>`
 
-Three modal dialogs, all `{ open, onClose }` and all built on the shared
+Modal dialogs, both `{ open, onClose }` and both built on the shared
 `<Dialog>` shell (see [`Dialog.tsx` and `project.ts`](#dialogtsx-and-projectts)).
-`<Workbench>` keeps a single `dialog: 'about' | 'settings' | 'help' | null`
-state, so at most one is open.
+`<Workbench>` keeps a single `dialog` state, so at most one is open.
 
 - **About** — the project's public face: the GitHub repository address
   (`REPO_URL`), the copyright notice (`Copyright © 2026 Rune Langøy`), the
@@ -200,16 +201,6 @@ state, so at most one is open.
   the **"ABSOLUTELY NO WARRANTY — use it at your own risk"** notice. Opened
   from the header's About button, or by dispatching `ABOUT_EVENT` on
   `window`, which `<Workbench>` listens for.
-- **Settings** — *Languages* (VHDL and Verilog, each ticked on its own; the Examples
-  pane opens with these ticked and never changes them: `languagePrefs.ts`) and
-  *Editor › Testbench split view* (`editorSplit.ts`), both in localStorage, which
-  the desktop app keeps between launches too. With a host bridge present it also
-  has "Keep my project between sessions" (applies after restart; see
-  [`desktop.ts`](#desktopts)). It also invites users to file suggestions and bug reports
-  as GitHub issues: "Report a bug" and "Suggest an improvement" open
-  `ISSUES_URL/new` with a prefilled title, and "Browse existing issues"
-  opens the issue list. The links open in a new tab (`target="_blank"`); an
-  Electron host should hand `https:` URLs to `shell.openExternal`.
 - **Help** — a wide dialog in two parts. First, *the board's signal names*:
   a table of the `DE1_SoC` entity's ports (`CLOCK_50`, `CLOCK_500Hz`, `SW`,
   `KEY_N`, `LEDR`, `HEXn_N`) with direction, the panel each is shown as and
@@ -222,6 +213,33 @@ state, so at most one is open.
   and GHDL). The port table and segment figure are in `HelpDialog.tsx` and
   must be kept in step with `DE1_SoC.vhdl` (`files.ts`) and
   `SevenSegment/segments.ts`; the links are data in `helpResources.ts`.
+
+### `<SettingsPage>`
+
+Settings as a page in the editor's place (`settings/`, issue #42), like the board
+settings: the Explorer folds to its icon rail while the page is open and comes back
+after if it was open (`explorerFolds.ts`, shared with the board settings and the
+waveform view, so going from one of them to another keeps it folded), and Board I/O stays in view, narrowed (its board scaled down)
+when the page needs the room (`PAGE_ROOM`, `setEditorRoom`), so a change to the
+board layout shows there at once. A sidebar has *Back to workspace*
+and one entry per section; `useSettingsPage` keeps which one is shown and puts the
+focus back where it was on closing. Another page there simply takes its place. Back to
+workspace and Esc close it. Every setting is saved the moment it changes, so there
+is no Save and no Done; the header shows "Saved" for a moment after each change
+(`useSavedNotice`).
+
+| Section | Cards |
+|---|---|
+| General | Appearance (Light, Dark, System, each with a preview), Languages (the Examples pane opens with these ticked: `languagePrefs.ts`), and in the desktop app *Keep my project between sessions* (applies after restart; see [`desktop.ts`](#desktopts)) |
+| Board & I/O | Board (`BoardSetting`, with *Manage boards*), Board simulator layout, Pushbuttons (*Offer bouncy pushbuttons*) |
+| Editor | Testbench split view (`editorSplit.ts`) |
+| Simulation | Waveforms (*Record waveforms for testbench runs*) |
+| Updates | *Check for updates* at start-up, the version running and *Check now* |
+| Help & feedback | "Report a bug" and "Suggest an improvement" open `ISSUES_URL/new` with a prefilled title; "Browse existing issues" opens the list |
+
+Each section component takes its own props object, and each setting in it is a
+`Setting<T>` (`{ value, onChange }`). Choosing a board shows the board-change
+question over the page; *Manage boards* closes the page and opens the board settings.
 
 ### `<FileExplorer>`
 

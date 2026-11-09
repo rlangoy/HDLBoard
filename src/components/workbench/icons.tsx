@@ -474,3 +474,13 @@ export function BellIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** A question mark in a circle: Settings › Help & feedback. */
+export function HelpCircleIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01']} {...props} />;
+}
+
+/** An arrow pointing left: Settings › Back to workspace. */
+export function ArrowLeftIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M19 12H5', 'm12 19-7-7 7-7']} {...props} />;
+}

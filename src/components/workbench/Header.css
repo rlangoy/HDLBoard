@@ -65,7 +65,8 @@
   transition: background 140ms ease;
 }
 
-.wb-header__action:hover {
+.wb-header__action:hover,
+.wb-header__action[aria-pressed='true'] {
   background: var(--wb-header-action-bg-hover);
 }
 

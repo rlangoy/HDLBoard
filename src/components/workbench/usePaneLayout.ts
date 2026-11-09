@@ -102,6 +102,11 @@ export interface PaneLayoutState {
   setPaneWidth: (pane: SidePane, width: number) => void;
   /** Resize an open pane, returning its fitted width; never opens a collapsed pane. */
   resizeOpenPane: (pane: SidePane, width: number) => number | undefined;
+  /**
+   * Room for a page in the editor's place (EDITOR_MIN_W, or more): the board pane gives
+   * way for it, the Explorer does not. The panes' own widths are kept, so they return after.
+   */
+  setEditorRoom: (width: number) => void;
   onSidebarDividerPointerDown: DividerPointerDown;
   onBoardDividerPointerDown: DividerPointerDown;
   onConsoleDividerPointerDown: DividerPointerDown;
@@ -177,12 +182,16 @@ export function usePaneLayout(): PaneLayoutState {
     });
 
   const bodyWidth = () => bodyRef.current?.getBoundingClientRect().width ?? 0;
+  const editorRoom = useRef(EDITOR_MIN_W);
 
   // Fits both side panes into a body `containerWidth` wide from the desired
   // widths and the collapsed flags (fitSidePanes also explains `shrinkFirst`).
   const applyLayout = useCallback((containerWidth: number, shrinkFirst: ShrinkFirst = 'proportional') => {
     if (containerWidth <= 0) return;
-    const fitted = fitSidePanes(containerWidth, desiredWidth.current, collapsedRef.current, shrinkFirst);
+    const fitted = fitSidePanes(containerWidth, desiredWidth.current, collapsedRef.current, {
+      shrinkFirst,
+      editorRoom: editorRoom.current,
+    });
     setSidebarWidth(fitted.sidebar);
     setBoardWidth(fitted.board);
     return fitted;
@@ -385,6 +394,12 @@ export function usePaneLayout(): PaneLayoutState {
     return fitted?.[pane];
   };
 
+  const setEditorRoom = useCallback((width: number) => {
+    if (editorRoom.current === width) return;
+    editorRoom.current = width;
+    applyLayout(bodyWidth(), 'board');
+  }, [applyLayout]);
+
   useEffect(
     () => () => {
       if (slideTimer.current !== null) window.clearTimeout(slideTimer.current);
@@ -416,13 +431,14 @@ export function usePaneLayout(): PaneLayoutState {
     sidebarWidth,
     boardWidth,
     sidebarMaxWidth: Math.max(SIDEBAR_MIN_W, bodyWidth() - CHROME_W - EDITOR_MIN_W - (collapsed.board ? 0 : BOARD_MIN_W)),
-    boardMaxWidth: Math.max(BOARD_MIN_W, bodyWidth() - CHROME_W - EDITOR_MIN_W - (collapsed.sidebar ? 0 : SIDEBAR_MIN_W)),
+    boardMaxWidth: Math.max(BOARD_MIN_W, bodyWidth() - CHROME_W - editorRoom.current - (collapsed.sidebar ? 0 : SIDEBAR_MIN_W)),
     consoleHeight,
     collapsed,
     togglePane,
     showPane,
     setPaneWidth,
     resizeOpenPane,
+    setEditorRoom,
     onSidebarDividerPointerDown: (e) => resizePane(e, 'sidebar'),
     onBoardDividerPointerDown: (e) => resizePane(e, 'board'),
     onConsoleDividerPointerDown: resizeConsole,

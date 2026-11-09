@@ -9,8 +9,10 @@ import { APP_NAME, APP_TAGLINE } from './project';
 import './Header.css';
 
 export interface HeaderProps {
-  /** Opens the Settings dialog. */
+  /** Opens the Settings page, or closes it again. */
   onSettings?: () => void;
+  /** The Settings page is shown: its button reads as pressed. */
+  settingsOpen?: boolean;
   /** Opens the Help dialog. */
   onHelp?: () => void;
   /** Opens the About dialog. */
@@ -27,10 +29,10 @@ export interface HeaderProps {
 /**
  * The workbench's top bar — the product name and tagline, reading as the
  * same one line the window title bar carries, and the always-present
- * chrome actions (Settings, Help, About), each of which opens a dialog
- * owned by `<Workbench>`.
+ * chrome actions: Settings, which opens the Settings page, and Help and
+ * About, which open dialogs; all owned by `<Workbench>`.
  */
-export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitHubActions, notifications }: HeaderProps) {
+export function Header({ onSettings, settingsOpen = false, onHelp, onAbout, onGitHub, gitHubUser, gitHubActions, notifications }: HeaderProps) {
   return (
     <header className="wb-header">
       <div className="wb-header__brand">
@@ -56,7 +58,7 @@ export function Header({ onSettings, onHelp, onAbout, onGitHub, gitHubUser, gitH
             {gitHubUser ? gitHubUser.login : 'GitHub'}
           </button>
         )}
-        <button type="button" className="wb-header__action" onClick={onSettings}>
+        <button type="button" className="wb-header__action" aria-pressed={settingsOpen} onClick={onSettings}>
           <span className="wb-icon wb-icon--gear" aria-hidden="true">
             <GearIcon />
           </span>

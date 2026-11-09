@@ -114,7 +114,7 @@ then **Tab** moves on to the next control.
 
 ## Edit board settings
 
-In **Settings › Board**, click **View board settings** to collapse Explorer and open the current board's
+In **Settings › Board & I/O**, click **Manage boards** to collapse Explorer and open the current board's
 editor. The left panel provides component selection and quick edits; the right panel shows all fields
 for the selected component. Both panels share one draft. **View JSON** previews the selected board's
 JSON node, including unsaved edits, without changing its original representations or omitted defaults.
@@ -149,7 +149,9 @@ Invalid fields block saving, and failed saves leave the draft available to retry
 
 Button layouts and display kinds have dropdown selectors. Review the generated ports before saving;
 switching back during the same editing session restores that layout's previous draft. Board settings
-replaces the code panel, collapses Explorer into its icon rail, and keeps Board I/O open. Version-1 user boards
+replaces the code panel, collapses Explorer into its icon rail, and keeps Board I/O open, narrowed and
+its board scaled down so the two panels fit; when you close them, Board I/O gets its own width back and
+Explorer comes back if it was open. Version-1 user boards
 remain available for simulation but are not migrated by this editor. If the selected board is unavailable
 for version-2 editing, the page explains the fallback. Code editors keep their contents and state.
 
@@ -226,7 +228,7 @@ separate pushbuttons and its own display names:
 }
 ```
 
-Reload HDLBoard: **Course board** is listed in Settings › Board.
+Reload HDLBoard: **Course board** is listed in Settings › Board & I/O.
 
 - `id` is what project files store. **Choose it once and never change it**: a project that names an id that
   is no longer there opens with the Default board.
