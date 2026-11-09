@@ -39,6 +39,7 @@ JSON, with the extension `.hdlboard.json` (e.g. `counter.hdlboard.json`).
 | `sourceDirectory` | string | no | The folder inside `projectDirectory` for the HDL files on local disk. Missing or invalid → `src`. One folder name only. |
 | `files` | array | yes | List of project files (see 4.3). |
 | `waveViews` | object | no | The waveform view saved for each testbench: the signals shown, in their order, with "Show as" and unfolded vectors. Read forgivingly – a broken entry is left out with a warning. See [`imp_wave_rearange.md`](imp_wave_rearange.md) § 11. |
+| `compilerOptions` | object | no | Options for GHDL and Icarus Verilog: named options, never raw flags. Missing → every option at its default. Read forgivingly, like `waveViews`. See 4.5. |
 
 ### 4.2 Board name
 
@@ -87,6 +88,33 @@ Where the content comes from:
   ]
 }
 ```
+
+### 4.5 Compiler options
+
+`compilerOptions` sets a few options for the simulators (issue #37). There is no page for them yet: they are written into the project file by hand. Every key is optional; one left out keeps its default, which the backend decides.
+
+| Key | Type | Values | Default | Becomes |
+|---|---|---|---|---|
+| `ghdl.synopsys` | string or boolean | `"auto"`, `true`, `false` | `"auto"` | GHDL's `-fsynopsys` |
+| `ghdl.relaxed` | boolean | `true`, `false` | `false` | GHDL's `-frelaxed` |
+| `iverilog.generation` | string | `"2001"`, `"2005"`, `"2009"`, `"2012"` | Icarus's own | `-g<generation>` |
+| `iverilog.defines` | object | macro name → text | none | `-D<name>=<value>` each; an empty text gives `-D<name>` |
+
+```json
+"compilerOptions": {
+  "ghdl":     { "synopsys": "auto", "relaxed": false },
+  "iverilog": { "generation": "2012", "defines": { "WIDTH": "8", "SIMULATION": "" } }
+}
+```
+
+Rules:
+
+- **Named options only.** A raw flag could load a library into the simulator (GHDL's `--vpi=`) or read the server's files (Icarus's `-y`, `-f`), so the file can only choose among the options above. Each one maps to its flag in one place (`server/src/engines/ghdlFlags.ts`, `server/src/verilog/optionFlags.ts`).
+- **`synopsys: "auto"`.** `-fsynopsys` is on for a run when one of its files names `IEEE.std_logic_arith`, `IEEE.std_logic_signed` or `IEEE.std_logic_unsigned` (a `use` clause or a qualified name; any case; white space and line breaks around the dot; not in comments or strings). Each file then gets a warning at the first reference of each package, in GHDL's `file:line:column:warning:` shape, so the console shows it and the editor marks the line. It is decided again for every run. `true` turns the flag on always, `false` never (GHDL's own error then names the package, and HDLBoard adds no warning).
+- **One flag list per run.** GHDL is given the same flags for analysis, elaboration and the run, as it requires. VHDL is always `--std=08`; the standard is not an option, because the generated board testbench is VHDL-2008.
+- **Macros.** A name is an identifier of up to 64 characters; a value is text of up to 64 characters with no backtick (so it cannot hold a compiler directive) and no control characters. At most 32 macros.
+- **Kept as written.** HDLBoard fills in no defaults: saving writes back only the keys that were valid when the project opened. The project file version is unchanged (2).
+- **Sent with every run.** The client sends the options in an `OPTIONS` frame (JSON body) before each `RUN`, `{}` when the project has none, so the options of an earlier project never stay. The backend checks them again and refuses the `RUN` with the reason when they are invalid. A backend that speaks protocol 5 or older is not sent the frame.
 
 ## 5. File Resolution
 
@@ -170,6 +198,10 @@ Only the chosen project file and the files it lists belong to the open project. 
 | Folder or gist with no `.hdlboard.json` file | Error: no project file found |
 | Non-empty `url` that is not `http(s)` | File skipped, warning |
 | File not found / fetch failed | Warning per file, others still load |
+| `compilerOptions` (or `ghdl`, `iverilog`, `iverilog.defines`) not an object | That part left out, warning |
+| Unknown key in `compilerOptions` | Key left out, warning naming it |
+| Option value not allowed (4.5) | Option left out, warning naming the allowed values; the other options are kept |
+| Macro with an invalid name or value, or past the first 32 | Macro left out, warning |
 
 ## 8. UI Behaviour
 

@@ -46,6 +46,7 @@ A project can set a few options for GHDL and Icarus Verilog. There is no page fo
 - These are **named options, never raw flags**: a flag such as `--vpi=` could load a library into the simulator on a shared server. An option HDLBoard does not know, or a value it does not allow, is left out when the project opens, with a warning.
 - GHDL gets the same flags for analysis, elaboration and the run, as it requires. VHDL is always compiled as VHDL-2008.
 - The options are saved with the project and sent with every run. A backend from an earlier release (protocol 5 or older) is not sent them, and has no automatic `-fsynopsys` either.
+- The exact rules: [`Impl_project_file_and_online_storage.md`](Impl_project_file_and_online_storage.md) § 4.5.
 
 ### Where the files are on this computer
 
