@@ -19,6 +19,7 @@
  */
 
 import { decodeBoardBody, encodeBoardBody, type DecodedBoard } from './boardFrame.js';
+import { decodeCompilerOptions, encodeCompilerOptions, type DecodedCompilerOptions } from './compilerOptions.js';
 import { MAX_STATE_BITS, MAX_STIM_BITS, MAX_STIM_HOLD_NS, MAX_STIM_STEPS } from './engines/boardLimits.js';
 
 export interface VhdlFileInput {
@@ -64,6 +65,9 @@ export type ClientFrame =
   // The board's port names for the next runs (docs/board_io_config_spec.md § 8). Always
   // decoded to this verb, valid or not, so the session learns about an invalid board too.
   | { verb: 'BOARD'; board: DecodedBoard }
+  // The project's compiler options for the next runs (compilerOptions.ts). Like BOARD,
+  // decoded to this verb valid or not, so the next RUN can say what was wrong.
+  | { verb: 'OPTIONS'; options: DecodedCompilerOptions }
   // One input state, or several timed ones applied in turn (a bouncing button).
   | { verb: 'STIM'; steps: readonly StimStep[] }
   // Whether the next batch run records a waveform (docs/waveform_viewer_spec.md § 7.1).
@@ -205,6 +209,11 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       const board: DecodedBoard = inline === '' ? decodeBoardBody(body) : { ok: false, reason: 'BOARD takes no inline arguments' };
       return { verb: 'BOARD', board };
     }
+    case 'OPTIONS': {
+      const options: DecodedCompilerOptions =
+        inline === '' ? decodeCompilerOptions(body) : { ok: false, reason: 'OPTIONS takes no inline arguments' };
+      return { verb: 'OPTIONS', options };
+    }
     case 'STIM': {
       const steps = parseStimSteps(inline);
       if (steps === undefined) {
@@ -265,6 +274,9 @@ export function encodeClientFrame(frame: ClientFrame): string {
       // An invalid board is sent as raw text by the tests that need one; there is nothing to encode.
       if (!frame.board.ok) throw new Error(`An invalid board cannot be encoded: ${frame.board.reason}`);
       return `BOARD\n${encodeBoardBody(frame.board.board)}`;
+    case 'OPTIONS':
+      if (!frame.options.ok) throw new Error(`Invalid compiler options cannot be encoded: ${frame.options.reason}`);
+      return `OPTIONS\n${encodeCompilerOptions(frame.options.options)}`;
     case 'STIM':
       return `STIM ${frame.steps.map(encodeStimStep).join(' ')}`;
     case 'WAVE':

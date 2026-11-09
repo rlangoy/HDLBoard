@@ -8,6 +8,7 @@
  * behind `SimEngine`.
  */
 
+import type { CompilerOptions } from '../compilerOptions.js';
 import type { ErrorStage, VhdlFileInput, WaveFormat } from '../protocol.js';
 import type { BatchHandle, RunHandle } from '../runtime.js';
 import type { BoardIo } from './boardPorts.js';
@@ -57,6 +58,11 @@ export interface RunPlan {
    * was asked for or the mode does not record (board runs, W1).
    */
   readonly wave?: PlannedWave;
+  /**
+   * Compile options the run step must repeat: GHDL's `-r` refuses units analysed with
+   * other options than its own. Absent: none (Icarus's `vvp` takes none).
+   */
+  readonly runFlags?: readonly string[];
 }
 
 /**
@@ -93,6 +99,8 @@ export interface PrepareRequest {
    * compile error, not a silent fallback to the Default names.
    */
   readonly board: BoardIo;
+  /** The project's compiler options (`OPTIONS`); omitted, every option at its default. */
+  readonly compilerOptions?: CompilerOptions;
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */

@@ -16,6 +16,7 @@ import {
 import { isPlainHttpUrl, urlProblem } from './url';
 import { parseWaveViews, serializableWaveViews } from './waveViews';
 import { parseDisplaySettings } from './displaySettings';
+import { parseCompilerOptions } from './compilerOptions';
 
 /** Thrown when a project file cannot be loaded at all (§ 7, "Error" rows). */
 export class ProjectError extends Error {
@@ -47,6 +48,7 @@ export function parseProject(json: string): ParsedProject {
   const sourceDirectory = folderField(raw, 'sourceDirectory', warnings);
   const waveViews = parseWaveViews(raw.waveViews, warnings);
   const displaySettings = parseDisplaySettings(raw.displaySettings, warnings);
+  const compilerOptions = parseCompilerOptions(raw.compilerOptions, warnings);
 
   const project: HdlBoardProject = {
     version: CURRENT_PROJECT_VERSION,
@@ -59,6 +61,7 @@ export function parseProject(json: string): ParsedProject {
     files,
     ...(waveViews !== undefined ? { waveViews } : {}),
     ...(displaySettings !== undefined ? { displaySettings } : {}),
+    ...(compilerOptions !== undefined ? { compilerOptions } : {}),
   };
   return { project, warnings, skipped };
 }
@@ -177,6 +180,7 @@ export function serializeProject(project: HdlBoardProject): string {
     files: project.files.map(({ name, url, description }) => ({ name, url, description })),
     ...(project.waveViews !== undefined ? { waveViews: serializableWaveViews(project.waveViews) } : {}),
     ...(project.displaySettings !== undefined ? { displaySettings: project.displaySettings } : {}),
+    ...(project.compilerOptions !== undefined ? { compilerOptions: project.compilerOptions } : {}),
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }

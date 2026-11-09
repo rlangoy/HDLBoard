@@ -61,3 +61,28 @@ describe('STIM', () => {
     }
   });
 });
+
+describe('OPTIONS', () => {
+  test('carries the decoded compiler options', () => {
+    assert.deepEqual(decodeClientFrame('OPTIONS\n{"ghdl":{"synopsys":true}}'), {
+      verb: 'OPTIONS',
+      options: { ok: true, options: { ghdl: { synopsys: true, relaxed: false }, iverilog: { defines: {} } } },
+    });
+  });
+
+  test('decodes invalid options to the verb too, so the next RUN can say why', () => {
+    assert.deepEqual(decodeClientFrame('OPTIONS\n{"ghdl":{"vpi":"x"}}'), {
+      verb: 'OPTIONS',
+      options: { ok: false, reason: 'Invalid compiler options: ghdl.vpi is not a known option' },
+    });
+  });
+
+  test('refuses inline arguments', () => {
+    assert.deepEqual(decodeClientFrame('OPTIONS x\n{}'), { verb: 'OPTIONS', options: { ok: false, reason: 'OPTIONS takes no inline arguments' } });
+  });
+
+  test('decode and encode round-trip', () => {
+    const text = 'OPTIONS\n{"ghdl":{"synopsys":"auto","relaxed":true},"iverilog":{"generation":"2012","defines":{"W":"8"}}}';
+    assert.equal(encodeClientFrame(decodeClientFrame(text) as Parameters<typeof encodeClientFrame>[0]), text);
+  });
+});

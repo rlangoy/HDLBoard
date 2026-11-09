@@ -47,6 +47,27 @@ export interface HdlBoardProject {
   /** How the waveform view of each testbench was set up, by testbench name (waveViews.ts); undefined → none saved. */
   waveViews?: SavedWaveViews;
   displaySettings?: DisplaySettings;
+  /** Options for GHDL and Icarus (compilerOptions.ts); undefined → every option at its default. */
+  compilerOptions?: CompilerOptions;
+}
+
+/** `auto`: GHDL's -fsynopsys is on when a file uses std_logic_arith, std_logic_signed or std_logic_unsigned. */
+export type SynopsysMode = 'auto' | boolean;
+
+export const SYNOPSYS_MODES: readonly SynopsysMode[] = ['auto', true, false];
+
+/** The Verilog standards Icarus can be told to compile (`-g2012`). */
+export type VerilogGeneration = '2001' | '2005' | '2009' | '2012';
+
+export const VERILOG_GENERATIONS: readonly VerilogGeneration[] = ['2001', '2005', '2009', '2012'];
+
+/**
+ * The project file's `compilerOptions`, as written: an option left out is at its
+ * default, which the backend decides (server/src/compilerOptions.ts).
+ */
+export interface CompilerOptions {
+  ghdl?: { synopsys?: SynopsysMode; relaxed?: boolean };
+  iverilog?: { generation?: VerilogGeneration; defines?: Record<string, string> };
 }
 
 export interface IoDisplaySettings {

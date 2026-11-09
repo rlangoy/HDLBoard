@@ -63,7 +63,8 @@ const LEGACY_WSPATH = '/ghdlsim';
 // (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
 // 5: `ERROR busy` — the server is full; this connection was refused, or closed for a new one.
-const PROTOCOL_VERSION = '5';
+// 6: `OPTIONS` — the project's compiler options (compilerOptions.ts), sent before RUN.
+const PROTOCOL_VERSION = '6';
 /**
  * How long a socket told `ERROR busy` gets to close before it is cut. A proxy may hold the
  * close frame back (Render's did: the tab kept a dead socket open), and cutting the
@@ -391,6 +392,10 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
         case 'BOARD':
           // An invalid board is reported once, by the RUN that follows it (session.ts).
           session.handleBoard(frame.board);
+          break;
+        case 'OPTIONS':
+          // Invalid options too: the RUN that follows says why.
+          session.handleOptions(frame.options);
           break;
         case 'WAVE-GET':
           void session.handleWaveGet(frame.run);

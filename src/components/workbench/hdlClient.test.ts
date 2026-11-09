@@ -7,6 +7,7 @@ import type { VhdlFile } from './files';
 import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { encodeBoardFrame, encodeV1BoardFrame } from '../../boards/boardFrame';
 import { BOARD_TEXT } from './boardText';
+import type { CompilerOptions } from '../../project/types';
 
 const DE1_SOC = builtInBoard('de1-soc');
 
@@ -66,7 +67,7 @@ const PROJECT: VhdlFile[] = [
 ];
 
 /** What a backend of this release answers HELLO with; a run waits for it. */
-const WELCOME_CURRENT = 'WELCOME 5';
+const WELCOME_CURRENT = 'WELCOME 6';
 
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
@@ -92,7 +93,7 @@ function recordingHandlers() {
 
 function runWith(topFileName?: string, runTarget?: string | null): string {
   const client = new HdlClient('ws://test', recordingHandlers());
-  client.run(PROJECT, topFileName, runTarget ?? null, false, DEFAULT_BOARD.ports);
+  client.run(PROJECT, topFileName, runTarget ?? null, { recordWave: false, board: DEFAULT_BOARD.ports });
   FakeSocket.last?.receive(WELCOME_CURRENT);
   return lastFrame();
 }
@@ -131,7 +132,7 @@ describe('HdlClient.run', () => {
     FakeSocket.last?.open();
     FakeSocket.last?.receive(WELCOME_CURRENT);
     const verbs = (FakeSocket.last?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
-    expect(verbs).toEqual(['HELLO', 'WAVE', 'BOARD', 'RUN']);
+    expect(verbs).toEqual(['HELLO', 'WAVE', 'BOARD', 'OPTIONS', 'RUN']);
   });
 
   test('R-1 / AC-6: no run target, the header is exactly as before', () => {
@@ -145,6 +146,38 @@ describe('HdlClient.run', () => {
   test('R-4 / D21: a work/ testbench as top is sent with the vhdl/ files, and no other work/ file', () => {
     expect(runWith('tb_top.vhd', 'top_tb').split('\n')[0]).toBe('RUN tb_top.vhd @top_tb');
     expect(sentNames()).toEqual(['top.vhd', 'tb_top.vhd']);
+  });
+});
+
+describe('HdlClient and the compiler options (OPTIONS)', () => {
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** The frame sent just before RUN, after the backend answered HELLO with `welcome`. */
+  function frameBeforeRun(compilerOptions: CompilerOptions | undefined, welcome = WELCOME_CURRENT): string {
+    new HdlClient('ws://test', recordingHandlers()).run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports, compilerOptions });
+    FakeSocket.last?.receive(welcome);
+    const sent = FakeSocket.last?.sent ?? [];
+    return sent[sent.length - 2] ?? '';
+  }
+
+  test('sends the project’s options as JSON, right before RUN', () => {
+    expect(frameBeforeRun({ ghdl: { synopsys: true } })).toBe('OPTIONS\n{"ghdl":{"synopsys":true}}');
+  });
+
+  test('sends an empty object without options, so the last project’s options do not stay', () => {
+    expect(frameBeforeRun(undefined)).toBe('OPTIONS\n{}');
+  });
+
+  test('sends no OPTIONS to a backend that predates it', () => {
+    expect(frameBeforeRun({ ghdl: { synopsys: true } }, 'WELCOME 5')).toMatch(/^BOARD/);
   });
 });
 
@@ -163,19 +196,19 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
 
   test('WAVE on/off and the board go right before every RUN', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
-    client.run(PROJECT, 'top.vhd', null, true, DE1_SOC.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DE1_SOC.ports });
     FakeSocket.last?.receive(WELCOME_CURRENT);
     const sent = FakeSocket.last?.sent ?? [];
-    expect(sent.slice(-3, -1)).toEqual(['WAVE on', encodeBoardFrame(DE1_SOC.ports)]);
-    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
-    expect(sent.slice(-3, -1)).toEqual(['WAVE off', encodeBoardFrame(DEFAULT_BOARD.ports)]);
+    expect(sent.slice(-4, -2)).toEqual(['WAVE on', encodeBoardFrame(DE1_SOC.ports)]);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
+    expect(sent.slice(-4, -2)).toEqual(['WAVE off', encodeBoardFrame(DEFAULT_BOARD.ports)]);
   });
 
   test('the WAVE frames reach their handlers; binary frames only inside a transfer', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const wave = waveHandlers();
     const client = new HdlClient('ws://test', { ...recordingHandlers(), wave });
-    client.run(PROJECT, 'top.vhd', null, true, DEFAULT_BOARD.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
     const socket = FakeSocket.last;
     if (socket === undefined) throw new Error('no socket was opened');
     socket.receive('WAVE-READY 3 ghw 2420 complete');
@@ -215,11 +248,11 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
   test('says so once, sends no more BOARD frames, and does not report the answer as an error', () => {
     const handlers = { ...recordingHandlers(), onOldBackend: vi.fn() };
     const client = new HdlClient('ws://test', handlers);
-    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DE1_SOC.ports });
     const socket = FakeSocket.last!;
     socket.receive('WELCOME 1');
     socket.receive(OLD_BACKEND_ANSWER);
-    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DE1_SOC.ports });
     socket.receive(OLD_BACKEND_ANSWER);
 
     expect(handlers.onOldBackend).toHaveBeenCalledTimes(1);
@@ -229,7 +262,7 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
 
   test('a protocol-2 backend gets the 1.6 frame for a board of the Default shape (§ 6.3)', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
-    client.run(PROJECT, 'top.vhd', null, false, DE1_SOC.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DE1_SOC.ports });
     const socket = FakeSocket.last!;
     socket.receive('WELCOME 2');
     expect(socket.sent).toContain(encodeV1BoardFrame(DE1_SOC.ports));
@@ -238,7 +271,7 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
 
   test('a protocol-2 backend runs no board of another shape, and says why', () => {
     const handlers = recordingHandlers();
-    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, false, builtInBoard('basys3').ports);
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, { recordWave: false, board: builtInBoard('basys3').ports });
     const socket = FakeSocket.last!;
     socket.receive('WELCOME 2');
     expect(socket.sent.filter((frame) => frame.startsWith('RUN') || frame.startsWith('BOARD'))).toEqual([]);
@@ -247,7 +280,7 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
   });
 
   test('a run waits for WELCOME, and sends nothing before it', () => {
-    new HdlClient('ws://test', recordingHandlers()).run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    new HdlClient('ws://test', recordingHandlers()).run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     const socket = FakeSocket.last!;
     expect(socket.sent).toEqual([]);
     socket.receive(WELCOME_CURRENT);
@@ -256,7 +289,7 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
 
   test('still reports any other protocol error', () => {
     const handlers = recordingHandlers();
-    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     FakeSocket.last!.receive('ERROR protocol\nRUN refused: the last BOARD frame was not valid.');
     expect(handlers.onError).toHaveBeenCalledWith('protocol', 'RUN refused: the last BOARD frame was not valid.');
   });
@@ -277,7 +310,7 @@ describe('HdlClient.stimSteps (a bouncing pushbutton)', () => {
 
   function clientWelcomedBy(welcome: string): HdlClient {
     const client = new HdlClient('ws://test', recordingHandlers());
-    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     FakeSocket.last?.receive(welcome);
     return client;
   }
@@ -310,7 +343,7 @@ describe('a full server (ERROR busy)', () => {
   test('reports it, closes the socket at once and says it is closed — not "Could not reach"', () => {
     const handlers = recordingHandlers();
     const client = new HdlClient('ws://test', handlers);
-    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     const refused = FakeSocket.last;
     refused?.receive(BUSY);
     expect(handlers.onError).toHaveBeenCalledTimes(1);
@@ -324,10 +357,10 @@ describe('a full server (ERROR busy)', () => {
 
   test('the next Start opens a fresh socket and runs on it', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
-    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     const refused = FakeSocket.last;
     refused?.receive(BUSY);
-    client.run(PROJECT, 'top.vhd', null, false, DEFAULT_BOARD.ports);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
     expect(FakeSocket.last).not.toBe(refused);
     FakeSocket.last?.receive(WELCOME_CURRENT);
     expect(lastFrame().split('\n')[0]).toBe('RUN top.vhd');

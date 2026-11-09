@@ -105,6 +105,9 @@ const NEW_CODE = [
   'src/theme/**/*.ts',
   'src/theme/**/*.tsx',
   'src/components/workbench/ThemeSetting.tsx',
+  // Compiler options in the project file (issue #37).
+  'src/project/compilerOptions.ts',
+  'src/project/compilerOptions.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;
