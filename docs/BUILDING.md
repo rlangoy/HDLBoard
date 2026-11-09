@@ -199,6 +199,25 @@ them with Electron, and writes
 `winInstaller\output\HDLBoard-Setup-<version>.exe`. Details:
 [`winInstaller/README.md`](../winInstaller/README.md).
 
+## Building the Linux AppImage
+
+On x86-64 Linux with Node 20+, `mksquashfs` (`squashfs-tools`), `curl` and
+Docker, from the repository root:
+
+```sh
+scripts/build-linux-appImage.sh
+```
+
+It checks those tools first and says how to install a missing one, then runs
+`linuxAppImage/build.sh` and prints the AppImage's path. It passes on the
+script's options: `--skip-app-build` to repackage only, and
+`--simulators native|container` to choose where GHDL and Icarus Verilog are
+built. Running `linuxAppImage/build.sh` directly does the same.
+
+The output is `linuxAppImage/output/HDLBoard-<version>-x86_64.AppImage` and its
+`.sha256`. Details:
+[`linuxAppImage/README.md`](../linuxAppImage/README.md).
+
 ### Bumping the version
 
 One command sets the version in all three `package.json` files and their lockfiles.
