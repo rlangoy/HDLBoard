@@ -146,6 +146,12 @@ function looksUnfinished(tokens: readonly PositionedToken[]): boolean {
   return !(last.text === ')' && HEADER_WORDS.has(first.text));
 }
 
+/** The nearest line below `line` that holds code. */
+function nextCodeLine(file: SourceFile, line: number): number | undefined {
+  for (let below = line + 1; below <= file.tokens.length; below++) if (codeTokens(file, below).length > 0) return below;
+  return undefined;
+}
+
 function previousLineUnfinished(file: SourceFile, line: number): boolean {
   const previous = previousCodeLine(file, line);
   return previous !== undefined && looksUnfinished(codeTokens(file, previous));
@@ -164,13 +170,29 @@ function startsStatement(tokens: readonly PositionedToken[]): boolean {
   return first.type === 'identifier' && second !== undefined && (ASSIGNMENT_START.has(second.text) || second.type === 'identifier');
 }
 
+/** Icarus's words for any continuous assignment it could not parse, whatever was wrong in it. */
+const BROKEN_ASSIGNMENT = /^Syntax error in left side of continuous assignment\.$/;
+
+/**
+ * The line of the statement an `assign` without its `;` ran into, when that is
+ * what Icarus is blaming on the assignment's "left side" (semicolon-assign,
+ * de1soc-semicolon): the assignment's line looks unfinished and the next code
+ * line starts a statement. Icarus reports that next line as a `syntax error`.
+ */
+function statementAfterUnterminatedAssign(diagnostic: LocatedDiagnostic, file: SourceFile): number | undefined {
+  if (!BROKEN_ASSIGNMENT.test(diagnostic.message) || !looksUnfinished(codeTokens(file, diagnostic.line))) return undefined;
+  const next = nextCodeLine(file, diagnostic.line);
+  return next !== undefined && startsStatement(codeTokens(file, next)) ? next : undefined;
+}
+
 // ------------------------------------------------------------ muting
 
 /**
  * The muted follow-on errors, each with the line of its file's first error.
  * After a syntax error: a later error on a line that already has one, a
- * lost-place message the line above does not explain, and the bogus line-1
- * messages. Nothing else, so an independent mistake stays visible.
+ * lost-place message the line above does not explain, the bogus line-1
+ * messages, and the syntax error of the statement an unterminated `assign` ran
+ * into. Nothing else, so an independent mistake stays visible.
  */
 function followOns(located: readonly LocatedDiagnostic[], files: ReadonlyMap<string, SourceFile>): ReadonlyMap<LocatedDiagnostic, number> {
   const muted = new Map<LocatedDiagnostic, number>();
@@ -178,11 +200,13 @@ function followOns(located: readonly LocatedDiagnostic[], files: ReadonlyMap<str
     const errors = located.filter((d) => d.fileId === fileId && isError(d)).sort((a, b) => a.line - b.line);
     const primary = errors.find((d) => !isBogusLineOne(d));
     if (primary === undefined || !isSyntaxError(primary.message)) continue;
+    const ranInto = statementAfterUnterminatedAssign(primary, file);
     errors.forEach((error, i) => {
       if (error === primary) return;
       const lineHasEarlierError = i > 0 && errors[i - 1].line === error.line;
       const lostPlace = matchesAny(LOST_PLACE_PATTERNS, error.message) && !previousLineUnfinished(file, error.line);
-      if (lineHasEarlierError || lostPlace || isBogusLineOne(error)) muted.set(error, primary.line);
+      const afterUnterminatedAssign = error.line === ranInto && isSyntaxError(error.message);
+      if (lineHasEarlierError || lostPlace || afterUnterminatedAssign || isBogusLineOne(error)) muted.set(error, primary.line);
     });
   }
   return muted;
@@ -370,7 +394,7 @@ const regOrWireMisuse: Rule = ({ diagnostic, tokens }) => {
  * Rule D: Icarus noticed the problem at the start of a statement, and the code
  * line before it looks unfinished — a missing `;`, reported one code line late
  * (§ 1, F3). Not when that line already shows an error of its own: that error is
- * the explanation (semicolon-assign's line 41).
+ * the explanation.
  */
 const causeOnPreviousLine: Rule = ({ diagnostic, file, tokens, previousLine }, project) => {
   if (!isSyntaxError(diagnostic.message) || !startsStatement(tokens) || previousLine === undefined) return undefined;
@@ -379,8 +403,19 @@ const causeOnPreviousLine: Rule = ({ diagnostic, file, tokens, previousLine }, p
   return { headline: adviceText.missingAtEnd(';', previousLine), relatedLine: previousLine };
 };
 
+/**
+ * Rule D on the reported line itself: Icarus blames the "left side" of an
+ * `assign` whose only fault is the missing `;` at its end.
+ */
+const unterminatedAssign: Rule = ({ diagnostic, file }) =>
+  statementAfterUnterminatedAssign(diagnostic, file) === undefined
+    ? undefined
+    : { headline: adviceText.missingAtEnd(';', diagnostic.line) };
+
 /** Tried in order; the first advice wins. The certain table (E) before the guesses. */
-const RULES: readonly Rule[] = [joinedKeyword, misspelledKeyword, undeclaredName, implicitWire, regOrWireMisuse, causeOnPreviousLine];
+const RULES: readonly Rule[] = [
+  joinedKeyword, misspelledKeyword, undeclaredName, implicitWire, regOrWireMisuse, unterminatedAssign, causeOnPreviousLine,
+];
 
 // ------------------------------------------------------------ public
 

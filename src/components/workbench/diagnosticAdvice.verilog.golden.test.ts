@@ -127,8 +127,8 @@ const EXPECTED: Readonly<Record<string, Outcome>> = {
   'semicolon-nonblocking': row(34, undefined, missingSemicolon(33), 33, 0, 1),
   'semicolon-decl': row(31, undefined, missingSemicolon(29), 29, 4, 3),
   'semicolon-localparam': row(26, undefined, missingSemicolon(22), 22, 1, 1),
-  // Right as printed: line 41 names the statement itself (the markers plan reveals it)
-  'semicolon-assign': row(41, undefined, undefined, undefined, 0, 2),
+  // Rule D on the reported line: Icarus blames the assignment's "left side"; line 45 is the follow-on
+  'semicolon-assign': row(41, undefined, missingSemicolon(41), undefined, 1, 1),
   // Still vague (§ 3, point 3, and the operator mistakes of § 4)
   'endmodule-missing': row(52, undefined, undefined, undefined, 0, 1),
   'end-missing': row(51, undefined, undefined, undefined, 0, 1),
@@ -177,11 +177,8 @@ const EXPECTED_VISIBLE: Readonly<Record<string, readonly string[]>> = {
   'two-mistakes': [`31 [alwyas] ${keyword('alwyas', 'always')}`, '37 [] Icarus: syntax error', `45 [] ${missingSemicolon(41)}`],
   // The port dump stops at the first elaboration error: LEDRR is never reported (§ 2.1)
   'two-semantic': [`36 [conter] ${undeclared('conter', 'counter')}`],
-  // docs/editor_diagnostics_implementation_plan.md A.7: line 19 already says it, so line 23 gets no Rule D
-  'de1soc-semicolon': [
-    '19 [] Icarus: Syntax error in left side of continuous assignment.',
-    '23 [] Icarus: syntax error',
-  ],
+  // docs/editor_diagnostics_implementation_plan.md A.7: the first lab's `assign LEDR = SW` without its `;` (issue #40)
+  'de1soc-semicolon': [`19 [] ${missingSemicolon(19)}`],
 };
 
 describe('the corpus', () => {
@@ -204,16 +201,16 @@ describe('§ 4: one mistake', () => {
     expect(outcome(caseById(id))).toEqual(expected);
   });
 
-  test('24 of the 31 name the real mistake; 1 is right as printed, 6 stay vague', () => {
+  test('25 of the 31 name the real mistake; 6 stay vague', () => {
     const headlines = Object.keys(EXPECTED).filter((id) => outcome(caseById(id)).headline !== undefined);
-    expect([headlines.length, Object.keys(EXPECTED).length]).toEqual([24, 31]);
+    expect([headlines.length, Object.keys(EXPECTED).length]).toEqual([25, 31]);
   });
 
-  test('27 of 70 messages are muted', () => {
+  test('28 of 70 messages are muted', () => {
     const totals = Object.keys(EXPECTED).map((id) => outcome(caseById(id)));
     const muted = totals.reduce((sum, o) => sum + o.muted, 0);
     const all = totals.reduce((sum, o) => sum + o.muted + o.visible, 0);
-    expect([muted, all]).toEqual([27, 70]);
+    expect([muted, all]).toEqual([28, 70]);
   });
 });
 

@@ -250,11 +250,10 @@ passing undeclared-port):
 
 | Result | Cases | Count |
 |---|---|---|
-| Headline naming the real mistake | module, input, output, wire, reg, localparam, always, assign, posedge, else, begin (line 31 from 32), end (`edn`, line 37 from 38), endmodule-typo (51 from 52), semicolon-nonblocking, -decl, -localparam, undeclared-counter, -led, -clock, undeclared-port (G), assign-to-reg (H), wire-in-always (H), elseif, endif | 24 |
-| Right as printed | semicolon-assign (line 41 already names the statement) | 1 |
+| Headline naming the real mistake | module, input, output, wire, reg, localparam, always, assign, posedge, else, begin (line 31 from 32), end (`edn`, line 37 from 38), endmodule-typo (51 from 52), semicolon-nonblocking, -decl, -localparam, semicolon-assign (line 41 itself, V11), undeclared-counter, -led, -clock, undeclared-port (G), assign-to-reg (H), wire-in-always (H), elseif, endif | 25 |
 | Still vague | endmodule-missing, end-missing, begin-missing, paren-missing, assign-reversed, compare-assign | 6 |
 
-27 of 70 messages are muted. In both two-mistake files the second mistake stays visible:
+28 of 70 messages are muted. In both two-mistake files the second mistake stays visible:
 two-mistakes shows `alwyas` (B), line 37's cascade `syntax error`, and line 45 with *Probably a
 missing `;` at the end of line 41*; two-semantic shows `conter` (Icarus never reports `LEDRR`
 there, § 2.1).
@@ -289,6 +288,7 @@ backend message say "is `module` misspelled?" would be a backend change, outside
 | V8 | `declaredNamesVerilog` | A name counts as declared only where a name can end (`,` `;` `)` `=` `(` `#`, after its `[…]` dimensions) | Measured: in `input wire CLOCK, inptu wire [9:0] SW` the typo sits where a second port name could; without this, input-, output- and wire-typo got no advice |
 | V9 | Rule G: suggest on the implicit-wire warning | Also applied to LOG lines (`adviseLogDiagnostics`), and only there to that one warning | A successful compile's warnings reach the browser as LOG lines, which otherwise get no advice (improvement plan § 4.12) |
 | V10 | — | `Always` → `always` is suggested | Verilog is case-sensitive, so `Always` is a name to Icarus; the shared search compares names case-sensitively for Verilog |
+| V11 | semicolon-assign is "right as printed" | Rule D also on the reported line: `Syntax error in left side of continuous assignment.` on a line that looks unfinished, followed by a code line that starts a statement, gets *Probably a missing `;` at the end of line N*, and that next line's `syntax error` is muted as its follow-on | The line is right but the words are not: Icarus blames the left side whatever is wrong in the assignment, and the first lab's `assign LEDR = SW` without its `;` (de1soc-semicolon, issue #40) is the likeliest first mistake |
 
 ---
 
