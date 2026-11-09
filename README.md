@@ -61,7 +61,7 @@ Ubuntu 22.04 compatibility applies to builds from the updated packaging in this 
 - **Made for:** Ubuntu 22.04/24.04 LTS and Linux Mint 21.x/22.x on 64-bit x86. Other distributions and ARM are not supported yet. [linuxAppImage/README.md](linuxAppImage/README.md#tested-on) lists what has been tested.
 - **Offline:** Once downloaded, it needs no network, and nothing else to install. It includes GHDL 6.0.0 and Icarus Verilog 13.0, and never uses a GHDL or Icarus installed on the system.
 - **Check the download:** Put the `.sha256` file from the release beside the AppImage and run `sha256sum -c HDLBoard-*.AppImage.sha256`. It should print `OK`.
-- **Your files:** Settings, saved projects and the log (`logs/backend.log`) are in `~/.config/HDLBoard`.
+- **Your files:** Settings, saved projects and the logs (`logs/backend.log`, `logs/chromium.log`) are in `~/.config/HDLBoard`.
 - **Updating:** Download the new file and delete the old one. Deleting the AppImage leaves your settings and projects in place.
 - **Sandbox:** On a default Ubuntu 24.04 or Mint 22 desktop the app starts without Chromium's OS sandbox, because Ubuntu blocks what it needs for programs that are not installed as packages. The window still shows only HDLBoard's own page. [linuxAppImage/README.md](linuxAppImage/README.md#the-chromium-sandbox) explains this and has an AppArmor profile for lab administrators.
 - **No menu entry and no automatic updates.** To add HDLBoard to the application menu, use a tool such as Gear Lever or AppImageLauncher.

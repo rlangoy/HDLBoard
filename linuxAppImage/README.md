@@ -57,7 +57,7 @@ To test a build: `linuxAppImage/smoke-test.sh [--mounted] [--in <dir>] linuxAppI
 | `fetch-ghdl.sh` | Downloads and verifies the pinned GHDL source, builds mcode with GNAT on Ubuntu 22.04, checks its libraries, writes `VERSION.txt`. `--force`, `--check`. |
 | `build-iverilog.sh` | Downloads the pinned Icarus source tag, verifies it, builds it, assembles the flat tree, writes `VERSION.txt`. `--force`, `--check`. |
 | `verify-simulators.sh` | The smoke test of both trees (step 2). `--ghdl`, `--iverilog`, `--fixtures` to point it elsewhere. |
-| `AppRun` | The AppImage's entry point: the sandbox check (below), then `exec hdlboard`. |
+| `AppRun` | The AppImage's entry point: the sandbox check (below), then `hdlboard`, with Chromium's own stderr messages sent to `logs/chromium.log` instead of the terminal. |
 | `LICENSES.txt` | Ships as `resources/licenses/README.txt`: where every license text is. |
 | `smoke-test.sh`, `smoke-sessions.mjs` | The packaged smoke test. |
 | `vendor/`, `output/` | Gitignored: downloads, simulator trees, build output. |
@@ -170,7 +170,7 @@ custom `AppRun` and the static runtime are both things electron-builder 25's App
 | What | Where |
 |---|---|
 | Settings, window state, stored projects, GitHub token | `~/.config/HDLBoard/` (`$XDG_CONFIG_HOME/HDLBoard`); `main.js` sets this on Linux. (Windows keeps its existing `hdl-board-desktop` folder.) |
-| Log | `~/.config/HDLBoard/logs/backend.log` |
+| Log | `~/.config/HDLBoard/logs/backend.log`, and `logs/chromium.log` for Chromium's own messages from the last start (such as the harmless GPU errors in a virtual machine without 3D) |
 | Simulation working files | `os.tmpdir()`, as before |
 | Inside the AppImage | read-only; nothing is written there |
 
