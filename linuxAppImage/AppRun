@@ -39,7 +39,44 @@ case "${HDLBOARD_SANDBOX:-auto}" in
 esac
 export HDLBOARD_SANDBOX_REASON
 
-if [ "${sandbox_ok}" = 1 ]; then
+if [ "${sandbox_ok}" = 0 ]; then
+  set -- --no-sandbox "$@"
+fi
+
+# Chromium prints its own diagnostics on stderr, such as "Exiting GPU process
+# due to errors during initialization" in a virtual machine without 3D. They
+# are harmless (Chromium falls back to software drawing) but look like a
+# failure to a student starting the app from a terminal. Every stderr line
+# therefore goes to logs/chromium.log, rewritten on each start, and only the
+# lines that are not Chromium's ERROR/WARNING/INFO/VERBOSE ones still reach
+# the terminal: the app's own messages and Chromium's FATAL lines stay
+# visible. Where the log cannot be written, nothing is filtered.
+LOG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/HDLBoard/logs"
+CHROMIUM_LOG="${LOG_DIR}/chromium.log"
+if ! mkdir -p "${LOG_DIR}" 2> /dev/null || ! : > "${CHROMIUM_LOG}" 2> /dev/null; then
   exec "${HERE}/hdlboard" "$@"
 fi
-exec "${HERE}/hdlboard" --no-sandbox "$@"
+
+# Ctrl+C reaches the app directly; this shell only waits for it to finish
+# shutting down, so the image is not unmounted under it.
+trap : INT
+
+# hdlboard's stderr runs through awk, its stdout goes straight to the
+# terminal (fd 4), and its exit status comes back through fd 3.
+{
+  status=$(
+    {
+      { "${HERE}/hdlboard" "$@" 2>&1 1>&4 4>&- 3>&-; echo $? >&3; } |
+        awk -v out="${CHROMIUM_LOG}" '
+          { print > out; fflush(out) }
+          !/^\[[0-9]+:[0-9]+\/[0-9.]+:(ERROR|WARNING|INFO|VERBOSE[0-9]*):/ { print; fflush() }
+        ' >&2
+    } 3>&1
+  )
+} 4>&1
+
+status="${status:-1}"
+if [ "${status}" != 0 ]; then
+  echo "HDLBoard exited with status ${status}. Chromium's messages are in ${CHROMIUM_LOG}" >&2
+fi
+exit "${status}"
