@@ -12,7 +12,7 @@ made in **Settings** is kept in that browser and wins over the file.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `bouncyButtons` | `true` | Settings › Pushbuttons › **Offer bouncy pushbuttons**. On: the Pushbuttons panel's menu offers *No Bounce* and *Bouncy* contacts. Off: the choice is hidden and every press is one clean edge; a project saved as Bouncy keeps that choice and gets it back when the setting is on again. |
+| `bouncyButtons` | `true` | Settings › Board & I/O › Pushbuttons › **Offer bouncy pushbuttons**. On: the Pushbuttons panel's menu offers *No Bounce* and *Bouncy* contacts. Off: the choice is hidden and every press is one clean edge; a project saved as Bouncy keeps that choice and gets it back when the setting is on again. |
 
 `$comment` and `$schema` are allowed and ignored. Anything else, or a value of the wrong type, is
 skipped with a warning in the browser console; the rest of the file still applies. A missing file

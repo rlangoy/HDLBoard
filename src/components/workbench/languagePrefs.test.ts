@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_LANGUAGES, parsePreferredLanguages, serializePreferredLanguages } from './languagePrefs';
+import { DEFAULT_LANGUAGES, parsePreferredLanguages, serializePreferredLanguages, withLanguageToggled } from './languagePrefs';
 
 describe('parsePreferredLanguages', () => {
   test.each([null, '', 'not json', '"vhdl"', '{}'])('%s falls back to both languages', (json) => {
@@ -31,5 +31,21 @@ describe('serializePreferredLanguages', () => {
     const verilogOnly = new Set(['verilog'] as const);
     expect(parsePreferredLanguages(serializePreferredLanguages(verilogOnly))).toEqual(verilogOnly);
     expect(parsePreferredLanguages(serializePreferredLanguages(new Set())).size).toBe(0);
+  });
+});
+
+describe('withLanguageToggled', () => {
+  test('clears a ticked language', () => {
+    expect(withLanguageToggled(new Set(['vhdl', 'verilog']), 'vhdl')).toEqual(new Set(['verilog']));
+  });
+
+  test('ticks a cleared language', () => {
+    expect(withLanguageToggled(new Set(), 'verilog')).toEqual(new Set(['verilog']));
+  });
+
+  test('leaves the set it was given unchanged', () => {
+    const languages = new Set(['vhdl'] as const);
+    withLanguageToggled(languages, 'vhdl');
+    expect(languages).toEqual(new Set(['vhdl']));
   });
 });

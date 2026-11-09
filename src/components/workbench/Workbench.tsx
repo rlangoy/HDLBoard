@@ -35,7 +35,10 @@ import type { BoardCatalog, BoardDefinition } from '../../boards/types';
 import { Header } from './Header';
 import { GitHubSplitButton } from './GitHubSplitButton';
 import { AboutDialog } from './AboutDialog';
-import { SettingsDialog } from './SettingsDialog';
+import { SettingsPage } from './settings/SettingsPage';
+import { useSettingsPage } from './settings/useSettingsPage';
+import { useKeepProject } from './settings/useKeepProject';
+import { useExplorerFolds, usePageFold } from './explorerFolds';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog, type NewProjectChoice } from './NewFileDialog';
@@ -89,7 +92,7 @@ import { ProjectPage } from './ProjectPage';
 import { BoardSettingsPage } from './BoardSettingsPage';
 import { BoardDraftIo } from './boardEditor/BoardDraftIo';
 import { useBoardSettings } from './boardEditor/useBoardSettings';
-import { useOverlay } from './useOverlay';
+import { useOverlay, type Overlay } from './useOverlay';
 import { OpenProjectDialog } from './OpenProjectDialog';
 import { ProjectFolderDialog } from './ProjectFolderDialog';
 import { canPickWithHandles, pickFilesWithHandles, pickFolderOf, pickProjectFolder, type FileHandles } from './fileSystemAccess';
@@ -154,6 +157,7 @@ import { nameKey, sameFileName } from '../../project/fileName';
 import { filesBesideProject, pathBeside, type Placed, type TaggedFile } from './chosenFolder';
 import { NO_PROJECT_FILE_MESSAGE } from '../../project/selectProjectFile';
 import { PANE_IDS, PANE_SHORTCUT, usePaneLayout } from './usePaneLayout';
+import { BOARD_SETTINGS_MIN_W, EDITOR_MIN_W, SETTINGS_PAGE_MIN_W } from './paneLayout';
 import './Workbench.css';
 
 
@@ -270,6 +274,12 @@ type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
  * `Leds`, `Pushbuttons` and `SevenSegment`.
  */
 
+/** The room each page in the editor's place asks for; any other gets EDITOR_MIN_W. */
+const PAGE_ROOM: Partial<Record<NonNullable<Overlay>, number>> = {
+  boardSettings: BOARD_SETTINGS_MIN_W,
+  settings: SETTINGS_PAGE_MIN_W,
+};
+
 export function Workbench() {
   // The boards available here, and the student's last choice, which a fresh workspace starts on.
   const [preferredBoard] = useState(loadPreferredBoard);
@@ -330,7 +340,7 @@ export function Workbench() {
   // The one open dialog, if any. About can also be opened from outside
   // React — the desktop app's native Help > About menu item fires
   // ABOUT_EVENT on window — so it shows the same dialog as the header.
-  const [dialog, applyDialog] = useState<'about' | 'settings' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
+  const [dialog, applyDialog] = useState<'about' | 'help' | 'newFile' | 'openProject' | 'githubSignIn' | null>(null);
   // New File > Project with files in Files: asked first whether the project keeps them (RemoveFilesDialog).
   const [projectToCreate, setProjectToCreate] = useState<NewProjectChoice | null>(null);
   // A project that kept its files is created on their board; the change to the board chosen follows.
@@ -419,7 +429,22 @@ export function Workbench() {
   // The pane geometry: side pane widths, which panes are shut, the console's
   // height, and the dividers and shortcuts that change them.
   const layout = usePaneLayout();
+  // A page in the editor's place that needs more room than the editor (PAGE_ROOM): the board
+  // pane narrows, its board scaled down, while it is open, and gets its own width back after.
+  const { setEditorRoom } = layout;
+  useEffect(() => {
+    setEditorRoom((overlay && PAGE_ROOM[overlay]) ?? EDITOR_MIN_W);
+  }, [overlay, setEditorRoom]);
   const { collapsed, togglePane, showPane } = layout;
+  // The Explorer folds away while the waveform view, the Settings page or the board settings
+  // are shown, and comes back after if it was open. Declared before the waveform view, whose
+  // fold this shares.
+  const showExplorer = useCallback((open: boolean) => showPane('sidebar', open), [showPane]);
+  const explorerFolds = useExplorerFolds({ collapsed: collapsed.sidebar, show: showExplorer });
+  usePageFold(overlay, explorerFolds);
+  // The Settings page, in the editor's place like the other pages there.
+  const settingsPage = useSettingsPage({ overlay, setOverlay });
+  const keepProject = useKeepProject();
 
   const [boardLayout, setBoardLayout] = useState(loadBoardLayout);
   useEffect(() => subscribeBoardLayout(setBoardLayout), []);
@@ -522,7 +547,7 @@ export function Workbench() {
       show: useCallback(() => setOverlay('waveform'), []),
       hide: useCallback(() => setOverlay((shown) => (shown === 'waveform' ? null : shown)), []),
     },
-    explorer: { collapsed: collapsed.sidebar, show: useCallback((open: boolean) => showPane('sidebar', open), [showPane]) },
+    explorerFolds,
     files: useCallback(() => filesRef.current, []),
     reveal: (target) => revealLocation(target, target.symbolId),
     log: useCallback((text: string, link?: boolean) => appendLog(text, link ? 'success' : undefined, link ? 'open-waveform' : undefined), [appendLog]),
@@ -1536,7 +1561,7 @@ export function Workbench() {
   /** A run's first line names the board, so a screenshot shows which names were expected (§ 3.1). */
   const logRunBoard = () => {
     if (boardInstalled) appendLog(runBoardLog(activeBoard));
-    else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => setDialog('settings') });
+    else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => settingsPage.open('board') });
   };
 
   /** Two architectures of one entity with one name: in the console and the code, as a compiler warning. */
@@ -1690,7 +1715,6 @@ export function Workbench() {
     catalog,
     stopSimulation: stopRunSoon,
     boardConfigFor: catalog.boardConfigFor,
-    reopenSettings: () => setDialog('settings'),
     log: logWithLink,
     busy: boardLocked,
     projectKey: String(projectGeneration),
@@ -1701,14 +1725,9 @@ export function Workbench() {
     setBoardForNewProject(null);
     // Refused only while the project is busy: say so, so the board chosen is not lost without a word.
     if (!boardChange.requestBoardChange(boardForNewProject)) {
-      appendLog(`The new project stays on ${activeBoard.name} for now: choose ${findBoard(catalog, boardForNewProject).board.name} in Settings › Board.`, 'error');
+      appendLog(`The new project stays on ${activeBoard.name} for now: choose ${findBoard(catalog, boardForNewProject).board.name} in Settings › Board & I/O.`, 'error');
     }
   }, [boardForNewProject, boardChange, appendLog, activeBoard, catalog]);
-
-  // Settings closes only for a change that happens: the question takes its place, or the board just changes.
-  const handleBoardChosenInSettings = (id: string) => {
-    if (boardChange.requestBoardChange(id, { fromSettings: true })) setDialog(null);
-  };
 
   // A fresh start on a board from boards/boards.json: that file arrives after the first
   // render, and the untouched starter files are then put in the board's names. A run
@@ -1812,7 +1831,8 @@ export function Workbench() {
       style={{ '--wb-console-h': `${layout.consoleHeight}px` } as CSSProperties}
     >
       <Header
-        onSettings={() => setDialog('settings')}
+        onSettings={settingsPage.toggle}
+        settingsOpen={settingsPage.section !== null}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
         onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
@@ -1836,31 +1856,6 @@ export function Workbench() {
             />
           )
         }
-      />
-      <SettingsDialog
-        open={dialog === 'settings'}
-        onClose={() => setDialog(null)}
-        boards={catalog}
-        boardId={project.board}
-        boardLayout={boardLayout}
-        onBoardLayoutChange={changeBoardLayout}
-        onBoardChange={handleBoardChosenInSettings}
-        onViewBoardSettings={() => {
-          setDialog(null);
-          showPane('sidebar', false);
-          setOverlay('boardSettings');
-        }}
-        boardLocked={boardLocked}
-        preferredLanguages={preferredLanguages}
-        onPreferredLanguagesChange={handlePreferredLanguagesChange}
-        splitPreference={tb.split.prefs.preference}
-        onSplitPreferenceChange={tb.split.setPreference}
-        recordWaves={waveView.waveform.recording}
-        onRecordWavesChange={waveView.waveform.setRecording}
-        bouncyButtons={bouncyOption.enabled}
-        onBouncyButtonsChange={bouncyOption.setEnabled}
-        checkForUpdates={updateCheck.enabled}
-        onCheckForUpdatesChange={updateCheck.setEnabled}
       />
       <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} board={activeBoard} />
       {boardChange.pending && (
@@ -2067,6 +2062,31 @@ export function Workbench() {
               }
             />
             </div>
+            {settingsPage.section !== null && (
+              <SettingsPage
+                section={settingsPage.section}
+                onSectionChange={settingsPage.select}
+                onClose={settingsPage.close}
+                general={{ languages: { value: preferredLanguages, onChange: handlePreferredLanguagesChange }, keepProject }}
+                boardIo={{
+                  board: {
+                    boards: catalog,
+                    boardId: project.board,
+                    locked: boardLocked,
+                    onChange: (id) => boardChange.requestBoardChange(id),
+                    onViewSettings: () => setOverlay('boardSettings'),
+                  },
+                  layout: { value: boardLayout, onChange: changeBoardLayout },
+                  bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
+                }}
+                editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
+                simulation={{ recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                updates={{
+                  checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
+                  check: { status: updateCheck.status, onCheck: updateCheck.checkNow },
+                }}
+              />
+            )}
             {overlay === 'boardSettings' && catalog.ready && (
               <BoardSettingsPage document={catalog.document} boards={catalog.editorBoards} builtInBoardIds={catalog.builtInBoardIds} initialBoardId={activeBoard.id}
                 onSave={boardSettings.onSave} onClose={() => setOverlay(null)} registerLeaveGuard={registerLeaveGuard} onPreview={boardSettings.onPreview} />
@@ -2081,7 +2101,7 @@ export function Workbench() {
                 boards={catalog}
                 onBoardChange={(id) => boardChange.requestBoardChange(id)}
                 boardLocked={boardLocked}
-                onChooseBoard={() => setDialog('settings')}
+                onChooseBoard={() => settingsPage.open('board')}
                 onEntryChange={(name, patch) => setProject((p) => withEntryEdited(p, name, patch))}
                 onOpenFile={handleOpenProjectFile}
                 onRemoveEntry={(name) => setProject((p) => withEntryRemoved(p, name))}

@@ -17,6 +17,7 @@ import { filesOf, newestOrigin, originOf, withOrigin, type RunOrigin, type RunOr
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
 import type { SavedViews } from './useSavedView';
 import type { WaveFocus } from './useWaveView';
+import type { ExplorerFolds } from '../workbench/explorerFolds';
 import type { ViewMemory } from './viewSetup';
 import { buttonState, type ButtonState } from './waveState';
 
@@ -27,15 +28,11 @@ export interface OverlaySlot {
   hide(): void;
 }
 
-export interface ExplorerPane {
-  readonly collapsed: boolean;
-  show(open: boolean): void;
-}
-
 export interface WaveformViewInput {
   readonly waveGet: (run: number) => void;
   readonly overlay: OverlaySlot;
-  readonly explorer: ExplorerPane;
+  /** The Explorer folds away while the view is open (explorerFolds.ts). */
+  readonly explorerFolds: ExplorerFolds;
   /** The project's files, read when a declaration is looked up. */
   readonly files: () => readonly VhdlFile[];
   readonly reveal: (target: DeclarationTarget) => void;
@@ -120,17 +117,13 @@ function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOff
   return { clientHandlers, boardStateSeen, runEnded, reset };
 }
 
+const WAVEFORM_HOLDER = 'waveform';
+
 /** The Explorer folds away while the view is open, and comes back after if it was open. */
-function useExplorerFold(explorer: ExplorerPane, viewOpen: boolean) {
-  const before = useRef<boolean | null>(null);
-  const fold = () => {
-    if (before.current !== null) return;
-    before.current = !explorer.collapsed;
-    explorer.show(false);
-  };
-  const { show } = explorer;
-  // Only a view that was open and has closed brings the Explorer back: an effect left
-  // over from a render before the view opened (a run's WAVE-READY opens it, not a click)
+function useExplorerFold(folds: ExplorerFolds, viewOpen: boolean) {
+  const fold = () => folds.hold(WAVEFORM_HOLDER);
+  // Only a view that was open and has closed lets go of the fold: an effect left over
+  // from a render before the view opened (a run's WAVE-READY opens it, not a click)
   // still sees it closed, and must not undo the fold.
   const wasOpen = useRef(false);
   useEffect(() => {
@@ -140,9 +133,8 @@ function useExplorerFold(explorer: ExplorerPane, viewOpen: boolean) {
     }
     if (!wasOpen.current) return;
     wasOpen.current = false;
-    if (before.current) show(true);
-    before.current = null;
-  }, [viewOpen, show]);
+    folds.release(WAVEFORM_HOLDER);
+  }, [viewOpen, folds]);
   return fold;
 }
 
@@ -195,7 +187,7 @@ function useViewRuns(waveform: Waveform, input: WaveformViewInput) {
   // The run going on, and the origin of every recent run that offered a waveform.
   const running = useRef<RunOrigin | null>(null);
   const [origins, setOrigins] = useState<RunOrigins>([]);
-  const fold = useExplorerFold(input.explorer, waveform.state.open);
+  const fold = useExplorerFold(input.explorerFolds, waveform.state.open);
   const showView = () => {
     fold();
     waveform.open();

@@ -21,7 +21,7 @@ import { projectBoard } from '../../boards/projectBoard';
 /** What the board-change dialog shows (docs/board_io_config_spec.md § 3.3, § 3.5). */
 export type PendingBoardChange =
   /** Change board? — the renames a board change would make, or why they cannot be made. */
-  | { readonly kind: 'change'; readonly plan: BoardChangePlan; readonly fromSettings: boolean }
+  | { readonly kind: 'change'; readonly plan: BoardChangePlan }
   /** Port names do not match the board — the top file uses `other`'s names. */
   | { readonly kind: 'mismatch'; readonly fileName: string; readonly other: BoardDefinition; readonly active: BoardDefinition };
 
@@ -34,8 +34,6 @@ export interface BoardChangeOptions {
   boardConfigFor?: (id: string) => Record<string, unknown> | undefined;
   /** Stops a running simulation: it was built with the old names. */
   stopSimulation: () => void;
-  /** Settings closes for the question; Cancel brings it back, so the student is where they started. */
-  reopenSettings: () => void;
   log: (text: string, link?: ConsoleLink) => void;
   /** Loading or saving the project, or compiling a run: requests are ignored (the selectors are disabled too). */
   busy: boolean;
@@ -46,10 +44,10 @@ export interface BoardChangeOptions {
 export interface BoardChange {
   readonly pending: PendingBoardChange | null;
   /**
-   * Settings › Board, the Project page, and the mismatch dialog's Switch board. False when
-   * nothing happens (busy, the same board, a board not installed), so Settings can stay open.
+   * Settings › Board & I/O, the Project page, and the mismatch dialog's Switch board. False when
+   * nothing happens (busy, the same board, a board not installed).
    */
-  readonly requestBoardChange: (toId: string, origin?: { fromSettings: boolean }) => boolean;
+  readonly requestBoardChange: (toId: string) => boolean;
   /** The mismatch dialog's Rename files: the files go from `source`'s names to the active board's; the board stays. */
   readonly requestRenameToBoard: (source: BoardDefinition) => void;
   /** The mismatch hint's Fix…. */
@@ -186,7 +184,7 @@ type Requests = Pick<BoardChange, 'requestBoardChange' | 'requestRenameToBoard' 
 /** The three ways a board change starts: choose a board, rename the files to the board, or the mismatch hint. */
 function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) => void, setPending: (pending: PendingBoardChange | null) => void): Requests {
   const requestBoardChange = useCallback(
-    (toId: string, origin = { fromSettings: false }) => {
+    (toId: string) => {
       const { busy, project, catalog, files } = latest.current;
       const target = findBoard(catalog, toId);
       if (busy || toId === project.board || !target.installed) return false;
@@ -194,7 +192,7 @@ function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) =>
       const plan = planBoardChange(files, activeBoardOf(latest), target.board);
       const ask = needsQuestion(plan);
       // A mismatch dialog that asked for this is answered either way.
-      setPending(ask ? { kind: 'change', plan, fromSettings: origin.fromSettings } : null);
+      setPending(ask ? { kind: 'change', plan } : null);
       if (!ask) commit(boardOnly(latest, target.board));
       return true;
     },
@@ -206,7 +204,7 @@ function useBoardRequests(latest: Latest, commit: (change: BoardChangeResult) =>
       if (latest.current.busy) return;
       const plan = planBoardChange(latest.current.files, source, activeBoardOf(latest));
       // The student chose to rename: it is done at once, unless a conflict has to be shown first.
-      setPending(canApply(plan) ? null : { kind: 'change', plan, fromSettings: false });
+      setPending(canApply(plan) ? null : { kind: 'change', plan });
       // The board stays as it is, even a project's board that is not installed here.
       if (canApply(plan)) commit({ ...renamedBy(latest, plan), boardId: latest.current.project.board });
     },
@@ -248,11 +246,7 @@ function usePendingAnswers(latest: Latest, { pending, setPending, commit }: Pend
     commit(boardOnly(latest, pending.plan.to));
   }, [latest, pending, setPending, commit]);
 
-  const cancel = useCallback(() => {
-    const reopen = pending?.kind === 'change' && pending.fromSettings;
-    setPending(null);
-    if (reopen) latest.current.reopenSettings();
-  }, [latest, pending, setPending]);
+  const cancel = useCallback(() => setPending(null), [setPending]);
 
   return { confirmUpdate, confirmBoardOnly, cancel };
 }

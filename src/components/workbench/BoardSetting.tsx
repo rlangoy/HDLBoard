@@ -21,9 +21,10 @@ export interface BoardSettingProps {
 }
 
 /**
- * Settings › Board (docs/board_io_config_spec.md § 3.2): a dropdown of the boards, a
- * line about the chosen one, and where the list comes from. A project on a board that
- * is not installed keeps that board as its choice, marked so.
+ * Settings › Board & I/O › Board (docs/board_io_config_spec.md § 3.2): a dropdown of the
+ * boards, a line about the chosen one, and where the list comes from. A project on a board
+ * that is not installed keeps that board as its choice, marked so. The card around it
+ * carries the title.
  */
 export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings }: BoardSettingProps) {
   const { board, installed } = findBoard(boards, boardId);
@@ -32,13 +33,12 @@ export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings
   const nameOf = (id: string): string => findBoard(boards, id).board.name;
   const labelOf = (id: string): string => (id === boardId && !installed ? notInstalledOption(id, DEFAULT_BOARD) : nameOf(id));
   return (
-    <fieldset className="wb-settings__group">
-      <legend className="wb-settings__heading">{BOARD_TEXT.settingTitle}</legend>
+    <div className="wb-board-setting">
       <FlatSelect value={boardId} options={options} label={BOARD_TEXT.settingTitle} labelOf={labelOf} className="wb-board-select" disabled={locked} onChange={onChange} />
       <p className="wb-board-setting__info">
         {installed ? (
           <>
-            <strong>{board.name}</strong> &middot; {boardSummary(board)}
+            <strong>{BOARD_TEXT.settingDetails}</strong> {boardSummary(board)}
           </>
         ) : (
           notInstalledNote(boardId, DEFAULT_BOARD)
@@ -53,7 +53,7 @@ export function BoardSetting({ boards, boardId, locked, onChange, onViewSettings
           ⚠ {warning}
         </span>
       ))}
-    </fieldset>
+    </div>
   );
 }
 
@@ -63,8 +63,7 @@ function BoardFileNote({ canManage }: { canManage: boolean }) {
     <div className="wb-board-setting__note" role="note">
       <InfoIcon className="wb-board-setting__note-icon" aria-hidden="true" />
       <div>
-        <p>{canManage ? BOARD_TEXT.settingFileLead : BOARD_TEXT.settingFileEdit}</p>
-        <p className="wb-board-setting__note-small">{BOARD_TEXT.settingNote}</p>
+        <p>{BOARD_TEXT.settingNote} {canManage ? BOARD_TEXT.settingFileLead : BOARD_TEXT.settingFileEdit}</p>
         <ExternalLink className="wb-board-setting__help" href={BOARDS_DOC_URL}>{BOARD_TEXT.settingHowTo} <OpenInIcon aria-hidden="true" /></ExternalLink>
       </div>
     </div>

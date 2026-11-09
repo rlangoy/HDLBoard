@@ -1,0 +1,748 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The Settings page (issue #42): a sidebar of sections beside the chosen section's cards.
+   It takes the editor's place, as the board settings do; the Explorer and Board I/O stay
+   in view. Its layout follows its own width (container queries), not the window's. */
+
+.wb-settings {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--wb-settings-page-bg);
+  color: var(--wb-text);
+  outline: none;
+  container: settings-page / inline-size;
+}
+
+.wb-settings__frame {
+  --wb-settings-sidebar-w: 220px;
+  --wb-settings-gutter: 24px;
+  --wb-settings-radius: 12px;
+  --wb-settings-gap: 20px;
+
+  display: grid;
+  grid-template-columns: var(--wb-settings-sidebar-w) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.wb-settings a {
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-settings :is(button, input, a):focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ sidebar */
+
+.wb-settings__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 20px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--wb-border);
+  background: var(--wb-settings-sidebar-bg);
+}
+
+.wb-settings__back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--wb-accent-dark-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-settings__back:hover {
+  background: var(--wb-hover);
+}
+
+.wb-settings__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-settings-nav {
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.wb-settings-nav ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-settings-nav .wb-settings-nav__support {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.wb-settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-settings .wb-settings-nav__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.wb-settings-nav__item:hover {
+  background: var(--wb-hover);
+}
+
+.wb-settings-nav__item[aria-current='page'] {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark-ink);
+  font-weight: 600;
+}
+
+.wb-settings-nav__icon {
+  display: inline-flex;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-settings-nav__item[aria-current='page'] .wb-settings-nav__icon {
+  color: var(--wb-accent-ink);
+}
+
+.wb-settings-nav__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------- header + main */
+
+.wb-settings__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.wb-settings__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px var(--wb-settings-gutter);
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-settings__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--wb-settings-card-border);
+  border-radius: var(--wb-settings-radius);
+  background: var(--wb-settings-card-bg);
+  color: var(--wb-accent-ink);
+}
+
+.wb-settings__badge svg {
+  width: 28px;
+  height: 28px;
+}
+
+.wb-settings__heading {
+  min-width: 0;
+}
+
+.wb-settings__heading h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.wb-settings__heading p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--wb-text-muted);
+}
+
+.wb-settings__saved {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 auto;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+  white-space: nowrap;
+}
+
+.wb-settings__saved svg {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  color: var(--wb-success);
+}
+
+/* Just after a change: "Saved", a moment in the accent colour. */
+.wb-settings__saved.is-fresh {
+  color: var(--wb-accent-dark-ink);
+  font-weight: 600;
+}
+
+.wb-settings__scroll {
+  flex: 1;
+}
+
+.wb-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--wb-settings-gap);
+  padding: var(--wb-settings-gap) var(--wb-settings-gutter) 32px;
+}
+
+/* --------------------------------------------------------------- cards */
+
+.wb-settings-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--wb-settings-card-border);
+  border-radius: var(--wb-settings-radius);
+  background: var(--wb-settings-card-bg);
+  box-shadow: 0 1px 3px #0f172a0d; /* theme-exempt: shadow */
+}
+
+.wb-settings-card--wide {
+  grid-column: 1 / -1;
+}
+
+.wb-settings-card__title {
+  margin: 0;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--wb-settings-card-border);
+  background: var(--wb-settings-card-head-bg);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-settings-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+}
+
+/* Space between the parts of a card; an empty live region takes none. */
+.wb-settings-card__body > * {
+  margin-block: 0;
+}
+
+.wb-settings-card__body > * + * {
+  margin-top: 14px;
+}
+
+.wb-settings-card__body > * + :empty {
+  margin-top: 0;
+}
+
+.wb-settings__note {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--wb-text-muted);
+}
+
+.wb-settings__note--error {
+  color: var(--wb-danger-dark-ink);
+}
+
+.wb-settings-lead {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--wb-text-body);
+}
+
+/* -------------------------------------------------------------- switch */
+
+.wb-settings-switch {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  cursor: pointer;
+}
+
+/* The real checkbox lies over the drawn track, so it keeps its keyboard and screen-reader behaviour. */
+.wb-settings-switch__input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.wb-settings-switch__track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--wb-settings-switch-off-bg);
+  transition: background 140ms ease;
+}
+
+.wb-settings-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--wb-settings-switch-knob);
+  box-shadow: 0 1px 2px #0f172a40; /* theme-exempt: shadow */
+  transition: transform 140ms ease;
+}
+
+.wb-settings-switch__input:checked + .wb-settings-switch__track {
+  background: var(--wb-accent);
+}
+
+.wb-settings-switch__input:checked + .wb-settings-switch__track::after {
+  transform: translateX(20px);
+}
+
+.wb-settings-switch__input:focus-visible + .wb-settings-switch__track {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-settings-switch__text {
+  display: grid;
+  gap: 3px;
+}
+
+.wb-settings-switch__text strong {
+  font-size: 15px;
+}
+
+/* ------------------------------------------------- choice cards (radio) */
+
+.wb-settings-choice {
+  position: relative;
+  border: 1.5px solid var(--wb-settings-choice-border);
+  border-radius: 10px;
+  background: var(--wb-settings-card-bg);
+  color: var(--wb-text);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.wb-settings-choice:hover {
+  border-color: var(--wb-accent);
+}
+
+.wb-settings-choice.is-selected {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  box-shadow: 0 0 0 1px var(--wb-accent), 0 4px 12px -4px var(--wb-settings-choice-selected-shadow);
+}
+
+.wb-settings-choice:has(input:focus-visible) {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.wb-settings-choice input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--wb-accent);
+  cursor: pointer;
+}
+
+/* The radio itself shows the focus, through its card's outline. */
+.wb-settings .wb-settings-choice input:focus-visible {
+  outline: none;
+}
+
+/* Appearance: three cards with a preview each. */
+.wb-settings-themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 200px));
+  gap: 12px;
+}
+
+.wb-settings-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 14px;
+  text-align: center;
+}
+
+.wb-settings-theme__head {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  font-size: 15px;
+}
+
+/* Editor: one row per choice. */
+.wb-settings-options {
+  display: grid;
+  gap: 10px;
+}
+
+.wb-settings-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.wb-settings-option input {
+  margin-top: 1px;
+}
+
+.wb-settings-option strong {
+  font-size: 15px;
+}
+
+/* Board simulator layout: a drawing of the columns, the radio hidden behind it. */
+.wb-settings-layouts {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.wb-settings-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 132px;
+  padding: 16px;
+  color: var(--wb-settings-choice-fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.wb-settings-layout.is-selected {
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-settings .wb-settings-layout__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wb-settings-layout__check {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  visibility: hidden;
+  font-size: 18px;
+}
+
+.wb-settings-layout.is-selected .wb-settings-layout__check {
+  visibility: visible;
+}
+
+.wb-settings-layout__icon {
+  display: flex;
+  gap: 5px;
+  height: 52px;
+}
+
+.wb-settings-layout__icon span {
+  width: 26px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+/* Languages: the two boxes on one line. */
+.wb-settings-languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+}
+
+.wb-settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.wb-settings-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--wb-accent);
+  cursor: pointer;
+}
+
+/* Updates: the version running here. */
+.wb-settings-version {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+  font-size: 14px;
+  color: var(--wb-text-muted);
+}
+
+.wb-settings-version strong {
+  color: var(--wb-text);
+}
+
+/* ------------------------------------------------------ help & feedback */
+
+.wb-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wb-settings a.wb-settings-action {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: var(--wb-settings-action-bg);
+  color: var(--wb-text);
+  text-decoration: none;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.wb-settings a.wb-settings-action:hover {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+}
+
+.wb-settings a.wb-settings-action--primary {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent);
+  color: var(--wb-settings-action-primary-fg);
+}
+
+.wb-settings a.wb-settings-action--primary:hover {
+  border-color: var(--wb-accent-dark);
+  background: var(--wb-accent-dark);
+}
+
+.wb-settings-action__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wb-settings-action__text {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--wb-text-muted);
+}
+
+.wb-settings-action--primary .wb-settings-action__text {
+  color: var(--wb-settings-action-text-fg);
+}
+
+/* ------------------------------------------------------ theme previews */
+
+.wb-theme-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 128px;
+  aspect-ratio: 16 / 9;
+}
+
+.wb-theme-preview__window {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 30% 1fr;
+  grid-template-rows: 18% 1fr;
+  overflow: hidden;
+  border: 1px solid var(--tp-frame);
+  border-radius: 6px;
+  background: var(--tp-editor);
+}
+
+.wb-theme-preview__window--light {
+  --tp-frame: var(--wb-theme-preview-light-frame);
+  --tp-bar: var(--wb-theme-preview-light-bar);
+  --tp-side: var(--wb-theme-preview-light-side);
+  --tp-editor: var(--wb-theme-preview-light-editor);
+  --tp-block: var(--wb-theme-preview-light-block);
+  --tp-line: var(--wb-theme-preview-light-line);
+}
+
+.wb-theme-preview__window--dark {
+  --tp-frame: var(--wb-theme-preview-dark-frame);
+  --tp-bar: var(--wb-theme-preview-dark-bar);
+  --tp-side: var(--wb-theme-preview-dark-side);
+  --tp-editor: var(--wb-theme-preview-dark-editor);
+  --tp-block: var(--wb-theme-preview-dark-block);
+  --tp-line: var(--wb-theme-preview-dark-line);
+}
+
+/* System: the dark window over the light one, cut on the diagonal. */
+.wb-theme-preview__window + .wb-theme-preview__window {
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+/* Three window dots at each end of the header bar. */
+.wb-theme-preview__bar {
+  position: relative;
+  grid-column: 1 / -1;
+  background: var(--tp-bar);
+}
+
+.wb-theme-preview__bar::before,
+.wb-theme-preview__bar::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 1.5px);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--wb-theme-preview-dot);
+  box-shadow: 5px 0 var(--wb-theme-preview-dot), 10px 0 var(--wb-theme-preview-dot);
+}
+
+.wb-theme-preview__bar::before {
+  left: 6px;
+}
+
+.wb-theme-preview__bar::after {
+  right: 16px;
+}
+
+/* The file list: three short lines. */
+.wb-theme-preview__side {
+  background:
+    linear-gradient(var(--tp-line), var(--tp-line)) 5px 7px / 55% 2px no-repeat,
+    linear-gradient(var(--tp-line), var(--tp-line)) 5px 13px / 65% 2px no-repeat,
+    linear-gradient(var(--tp-line), var(--tp-line)) 5px 19px / 45% 2px no-repeat,
+    var(--tp-side);
+}
+
+.wb-theme-preview__editor {
+  margin: 6px;
+  border-radius: 3px;
+  background: var(--tp-block);
+}
+
+/* ---------------------------------------------------------- narrow widths */
+
+@container settings-page (max-width: 1100px) {
+  .wb-settings__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The sidebar becomes a strip of tabs above the cards. */
+@container settings-page (max-width: 640px) {
+  .wb-settings__frame {
+    --wb-settings-gutter: 16px;
+    --wb-settings-gap: 16px;
+
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .wb-settings__sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    border-right: 0;
+    border-bottom: 1px solid var(--wb-border);
+  }
+
+  .wb-settings-nav,
+  .wb-settings-nav ul {
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+  }
+
+  .wb-settings-nav .wb-settings-nav__support {
+    margin: 0;
+    padding: 0 0 0 4px;
+    border: 0;
+    border-left: 1px solid var(--wb-border);
+  }
+
+  .wb-settings-nav__item {
+    padding: 8px 12px;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .wb-settings__back {
+    flex: none;
+  }
+
+  .wb-settings__header {
+    flex-wrap: wrap;
+  }
+
+  .wb-settings-actions,
+  .wb-settings-layouts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-settings * {
+    transition: none !important;
+  }
+}
