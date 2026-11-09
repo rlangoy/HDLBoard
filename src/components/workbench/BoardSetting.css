@@ -1,7 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (C) 2026 Rune Langøy */
 
-/* Settings › Board: the dropdown as a full-width field, the board's line, and the info box. */
+/* Settings › Board & I/O › Board: the dropdown as a full-width field, the board's line, and a note. */
+
+.wb-board-setting {
+  display: grid;
+  gap: 10px;
+}
 
 .wb-board-select {
   display: flex;
@@ -105,7 +110,8 @@
 
 .wb-board-setting__action {
   justify-self: start;
-  padding: 9px 14px;
+  margin-top: 4px;
+  padding: 9px 16px;
   border: 1px solid var(--wb-board-setting-action-border);
   border-radius: 6px;
   background: var(--wb-board-setting-action-bg);
@@ -124,25 +130,23 @@
 
 .wb-board-setting__note {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 12px 14px;
-  border: 1px solid var(--wb-board-setting-note-border);
-  border-radius: 8px;
-  background: var(--wb-accent-soft);
-  font-size: 13.5px;
-  color: var(--wb-text);
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wb-border);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wb-text-muted);
 }
 
 .wb-board-setting__note p {
   margin: 0;
 }
 
-.wb-board-setting__help { margin-top: 5px; }
-
 .wb-board-setting__note-icon {
   flex: none;
-  width: 20px;
-  height: 20px;
-  color: var(--wb-accent-ink);
+  width: 18px;
+  height: 18px;
+  color: var(--wb-icon-muted);
 }

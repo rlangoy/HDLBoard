@@ -81,7 +81,6 @@
   --wb-board-setting-action-border: #d4d4d4;
   --wb-board-setting-action-bg: #fafafa;
   --wb-board-setting-action-bg-hover: #f0f0f0;
-  --wb-board-setting-note-border: #c7dafc;
 
   /* --- CodeEditor.css --- */
   --wb-code-bg: #ffffff;
@@ -169,12 +168,34 @@
   --wb-dialog-secondary-bg: #ffffff;
   --wb-dialog-close-fg: #ffffff;
 
-  /* --- SettingsDialog.css --- */
+  /* --- SettingsPage.css --- */
+  --wb-settings-page-bg: #f6f8fb;
+  --wb-settings-sidebar-bg: #fbfcfe;
+  --wb-settings-card-bg: #ffffff;
+  --wb-settings-card-border: #d5e3f5;
+  --wb-settings-card-head-bg: #eaf2fd;
+  --wb-settings-choice-border: #d4d9e0;
+  --wb-settings-choice-fg: #626b78;
+  --wb-settings-choice-selected-shadow: rgba(47, 111, 237, 0.35);
+  --wb-settings-switch-off-bg: #cbd5e1;
+  --wb-settings-switch-knob: #ffffff;
   --wb-settings-action-bg: #ffffff;
   --wb-settings-action-primary-fg: #ffffff;
   --wb-settings-action-text-fg: rgba(255, 255, 255, 0.85);
-  --wb-settings-layout-border: #d4d9e0;
-  --wb-settings-layout-fg: #626b78;
+  /* The Appearance previews show each theme as it is, whichever one is in use. */
+  --wb-theme-preview-light-frame: #c3cedb;
+  --wb-theme-preview-light-bar: #3f6fc4;
+  --wb-theme-preview-light-side: #eef2f7;
+  --wb-theme-preview-light-editor: #ffffff;
+  --wb-theme-preview-light-block: #e2e8f0;
+  --wb-theme-preview-light-line: #b8c4d3;
+  --wb-theme-preview-dark-frame: #3b414a;
+  --wb-theme-preview-dark-bar: #2a2f36;
+  --wb-theme-preview-dark-side: #1c1f23;
+  --wb-theme-preview-dark-editor: #121416;
+  --wb-theme-preview-dark-block: #262a30;
+  --wb-theme-preview-dark-line: #4b5563;
+  --wb-theme-preview-dot: rgba(255, 255, 255, 0.85);
 
   /* --- HelpDialog.css --- */
   --wb-dialog-code-bg: #f1f5f9;

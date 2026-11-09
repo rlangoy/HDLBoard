@@ -50,33 +50,37 @@ fi
 # therefore goes to logs/chromium.log, rewritten on each start, and only the
 # lines that are not Chromium's ERROR/WARNING/INFO/VERBOSE ones still reach
 # the terminal: the app's own messages and Chromium's FATAL lines stay
-# visible. Where the log cannot be written, nothing is filtered.
+# visible. Where the log or the pipe cannot be made, nothing is filtered.
+#
+# hdlboard must replace this shell (exec), not run as its child: a SIGTERM
+# or SIGHUP sent to the launcher then reaches the app itself and goes through
+# its normal teardown, which stops the simulators, and the AppImage runtime
+# waits for the app before it unmounts the image. Forwarding signals from a
+# waiting shell would not do: logout and systemd signal every process, so the
+# app would get a second SIGTERM, and Chromium's second one kills at once.
+# So stderr reaches awk through a named pipe instead of a shell pipeline.
 LOG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/HDLBoard/logs"
 CHROMIUM_LOG="${LOG_DIR}/chromium.log"
-if ! mkdir -p "${LOG_DIR}" 2> /dev/null || ! : > "${CHROMIUM_LOG}" 2> /dev/null; then
+if ! mkdir -p "${LOG_DIR}" 2> /dev/null || ! : > "${CHROMIUM_LOG}" 2> /dev/null ||
+   ! PIPE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hdlboard.XXXXXX" 2> /dev/null)"; then
+  exec "${HERE}/hdlboard" "$@"
+fi
+if ! mkfifo -m 600 "${PIPE_DIR}/stderr" 2> /dev/null; then
+  rmdir "${PIPE_DIR}"
   exec "${HERE}/hdlboard" "$@"
 fi
 
-# Ctrl+C reaches the app directly; this shell only waits for it to finish
-# shutting down, so the image is not unmounted under it.
-trap : INT
-
-# hdlboard's stderr runs through awk, its stdout goes straight to the
-# terminal (fd 4), and its exit status comes back through fd 3.
+# The reader opens the pipe (waiting for the writer), removes it, then runs
+# awk until the app and everything it started have closed their stderr. It
+# ignores Ctrl+C, SIGHUP and SIGTERM so that it still records the app's
+# shutdown messages; it ends on end of input.
 {
-  status=$(
-    {
-      { "${HERE}/hdlboard" "$@" 2>&1 1>&4 4>&- 3>&-; echo $? >&3; } |
-        awk -v out="${CHROMIUM_LOG}" '
-          { print > out; fflush(out) }
-          !/^\[[0-9]+:[0-9]+\/[0-9.]+:(ERROR|WARNING|INFO|VERBOSE[0-9]*):/ { print; fflush() }
-        ' >&2
-    } 3>&1
-  )
-} 4>&1
+  rm -rf "${PIPE_DIR}"
+  trap '' INT HUP TERM
+  exec awk -v out="${CHROMIUM_LOG}" '
+    { print > out; fflush(out) }
+    !/^\[[0-9]+:[0-9]+\/[0-9.]+:(ERROR|WARNING|INFO|VERBOSE[0-9]*):/ { print; fflush() }
+  ' >&2
+} < "${PIPE_DIR}/stderr" &
 
-status="${status:-1}"
-if [ "${status}" != 0 ]; then
-  echo "HDLBoard exited with status ${status}. Chromium's messages are in ${CHROMIUM_LOG}" >&2
-fi
-exit "${status}"
+exec "${HERE}/hdlboard" "$@" 2> "${PIPE_DIR}/stderr"

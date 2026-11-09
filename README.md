@@ -110,7 +110,7 @@ Typical uses:
 
 ### An interactive virtual board
 - Choose the built-in **DE1-SoC**, **DE10-Lite**, **Basys 3**, **Nexys A7** or generic **Default** board in Settings. Each provides its own selection of switches, buttons, LEDs and 7-segment displays.
-- **Design your own board.** Open **Settings › Board › View board settings** to make an editable copy of any board and shape it with the board editor: switches, pushbuttons, LEDs and 7-segment displays (any of them can be left out), their port names and polarities, and the clock frequency. The Board pane previews your changes as you type. Built-in boards stay read-only. Boards can also be added in a JSON file; see [BOARDS.md](docs/BOARDS.md).
+- **Design your own board.** Open **Settings › Board & I/O › Manage boards** to make an editable copy of any board and shape it with the board editor: switches, pushbuttons, LEDs and 7-segment displays (any of them can be left out), their port names and polarities, and the clock frequency. The Board pane previews your changes as you type. Built-in boards stay read-only. Boards can also be added in a JSON file; see [BOARDS.md](docs/BOARDS.md).
 - Inputs go to the simulation while it runs, and the design's outputs drive the board.
 - **Real-time pacing:** simulated time follows the clock on your wall, so an LED meant to blink once a second blinks once a second.
 

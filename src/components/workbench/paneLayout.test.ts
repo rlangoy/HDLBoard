@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   BOARD_MIN_W,
+  BOARD_SETTINGS_MIN_W,
   CHROME_W,
   EDITOR_MIN_W,
   SIDEBAR_MIN_W,
@@ -35,7 +36,7 @@ describe('fitSidePanes', () => {
   });
 
   test('during a drag the other pane gives way first', () => {
-    expect(fitSidePanes(1000, { sidebar: 500, board: 600 }, open, 'board')).toEqual({
+    expect(fitSidePanes(1000, { sidebar: 500, board: 600 }, open, { shrinkFirst: 'board' })).toEqual({
       sidebar: 500,
       board: 1000 - CHROME_W - EDITOR_MIN_W - 500,
     });
@@ -55,6 +56,38 @@ describe('fitSidePanes', () => {
     expect(fitSidePanes(1600, { sidebar: 320, board: 700 }, { sidebar: true, board: true })).toEqual({
       sidebar: 320,
       board: 700,
+    });
+  });
+
+  describe('with room kept for the board settings', () => {
+    const explorerShut = { sidebar: true, board: false };
+    const fitted = (width: number) =>
+      fitSidePanes(width, { sidebar: 300, board: 900 }, explorerShut, { shrinkFirst: 'board', editorRoom: BOARD_SETTINGS_MIN_W });
+
+    test('the board pane narrows to leave the editor its room', () => {
+      expect(fitted(1600).board).toBe(1600 - CHROME_W - BOARD_SETTINGS_MIN_W);
+    });
+
+    test('the board pane keeps its own width when there is room for both', () => {
+      expect(fitted(2400).board).toBe(900);
+    });
+
+    test('the board pane never narrows below its minimum', () => {
+      expect(fitted(1000).board).toBe(BOARD_MIN_W);
+    });
+    test('the Explorer keeps its width when the window is too narrow for the full room', () => {
+      const { sidebar } = fitSidePanes(1400, { sidebar: 278, board: 900 }, open, { shrinkFirst: 'board', editorRoom: BOARD_SETTINGS_MIN_W });
+      expect(sidebar).toBe(278);
+    });
+
+    test('the Explorer keeps its width when the board pane asks to grow while dragged', () => {
+      const { sidebar } = fitSidePanes(1600, { sidebar: 278, board: 900 }, open, { shrinkFirst: 'sidebar', editorRoom: BOARD_SETTINGS_MIN_W });
+      expect(sidebar).toBe(278);
+    });
+
+    test('the board pane then stays at its minimum, still shown', () => {
+      const { board } = fitSidePanes(1400, { sidebar: 278, board: 900 }, open, { shrinkFirst: 'board', editorRoom: BOARD_SETTINGS_MIN_W });
+      expect(board).toBe(BOARD_MIN_W);
     });
   });
 });

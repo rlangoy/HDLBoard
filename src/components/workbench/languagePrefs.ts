@@ -52,3 +52,11 @@ export function savePreferredLanguages(languages: PreferredLanguages): void {
     // Storage blocked or full: the choice just isn't remembered.
   }
 }
+
+/** The languages with `language` ticked if it was not, or cleared if it was. */
+export function withLanguageToggled(languages: PreferredLanguages, language: ExampleLanguage): PreferredLanguages {
+  const next = new Set(languages);
+  if (next.has(language)) next.delete(language);
+  else next.add(language);
+  return next;
+}

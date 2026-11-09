@@ -6,8 +6,9 @@ import { useSyncExternalStore } from 'react';
 import { getThemeState, subscribeTheme, type ThemeState } from './themeStore';
 import type { ResolvedTheme } from './themePreference';
 
+/** The store's state is also what a server render (a test's static markup) sees. */
 export function useThemeState(): ThemeState {
-  return useSyncExternalStore(subscribeTheme, getThemeState);
+  return useSyncExternalStore(subscribeTheme, getThemeState, getThemeState);
 }
 
 export function useResolvedTheme(): ResolvedTheme {

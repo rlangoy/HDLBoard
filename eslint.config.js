@@ -104,7 +104,11 @@ const NEW_CODE = [
   // Theme profiles and switching (docs/HDLBoard_Black_Theme_Spec.md).
   'src/theme/**/*.ts',
   'src/theme/**/*.tsx',
-  'src/components/workbench/ThemeSetting.tsx',
+  // The Settings page with a sidebar (issue #42).
+  'src/components/workbench/settings/**/*.ts',
+  'src/components/workbench/settings/**/*.tsx',
+  'src/components/workbench/explorerFolds.ts',
+  'src/components/workbench/explorerFolds.test.ts',
   // Compiler options in the project file (issue #37).
   'src/project/compilerOptions.ts',
   'src/project/compilerOptions.test.ts',

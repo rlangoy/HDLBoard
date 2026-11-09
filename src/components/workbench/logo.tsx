@@ -3,6 +3,12 @@
 
 import logoSvg from '../../Images/hdlboard_logo.svg?raw';
 
+/** The chip body and its eight pins, wound clockwise (hdlboard_logo.svg). */
+const CHIP_PATH =
+  'M8 4h16a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM8 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM20 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM12 27v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-4zM24 27v4a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-4zM5 12H1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h4zM5 24H1a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4zM27 8h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM27 20h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4z';
+/** The H, wound the other way: drawn after CHIP_PATH in one path, it is a hole. */
+const H_PATH = 'M8 8v16h4v-6h8v6h4V8h-4v6h-8V8z';
+
 /**
  * `?raw` pulls the SVG in as a plain string at build time — not a
  * separate asset file — so it ends up inlined in the JS bundle rather
@@ -27,11 +33,20 @@ export const LOGO_DATA_URI = `data:image/svg+xml;base64,${btoa(logoSvg)}`;
 export function HeaderLogo() {
   return (
     <svg viewBox="0 0 32 32" className="wb-header__logo" aria-hidden="true">
-      <path
-        fill="#ffffff"
-        d="M8 4h16a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM8 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM20 5V1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4zM12 27v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-4zM24 27v4a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-4zM5 12H1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h4zM5 24H1a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h4zM27 8h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4zM27 20h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4z"
-      />
-      <path fill="#000000" d="M8 8v16h4v-6h8v6h4V8h-4v6h-8V8z" />
+      <path fill="#ffffff" d={CHIP_PATH} />
+      <path fill="#000000" d={H_PATH} />
+    </svg>
+  );
+}
+
+/**
+ * The same mark in one colour, `currentColor`, with the H as a hole: an icon that
+ * follows the text it sits in (Settings › Board & I/O).
+ */
+export function LogoMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} fill="currentColor" aria-hidden="true">
+      <path d={`${CHIP_PATH}${H_PATH}`} />
     </svg>
   );
 }

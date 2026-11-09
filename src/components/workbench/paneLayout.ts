@@ -29,6 +29,11 @@ export const SIDEBAR_DEFAULT_W = 278;
 export const EDITOR_MIN_W = 200;
 export const BOARD_MIN_W = 200;
 export const BOARD_DEFAULT_W = 792;
+// The editor's place while the board settings are open: room for their two panels side
+// by side (BoardSettingsPage.css), so the board pane gives way, and scales its board down.
+export const BOARD_SETTINGS_MIN_W = 960;
+// The same for the Settings page: its sidebar beside one column of cards.
+export const SETTINGS_PAGE_MIN_W = 900;
 // The two vertical .wb-resizer handles, which sit between the panes and take
 // width of their own (Workbench.css keeps them at 5px each). They stay put
 // when a pane is collapsed, so a collapsed pane can be dragged back out.
@@ -55,6 +60,16 @@ export type SidePaneFlags = Record<SidePane, boolean>;
  */
 export type ShrinkFirst = SidePane | 'proportional';
 
+export interface FitOptions {
+  shrinkFirst?: ShrinkFirst;
+  /**
+   * The width the editor's place asks for: EDITOR_MIN_W, or more while a page there
+   * needs it (BOARD_SETTINGS_MIN_W). Only the board pane gives way for it, down to its
+   * minimum: the Explorer keeps its width.
+   */
+  editorRoom?: number;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 /**
@@ -66,23 +81,26 @@ export function fitSidePanes(
   containerWidth: number,
   desired: SidePaneWidths,
   collapsed: SidePaneFlags,
-  shrinkFirst: ShrinkFirst = 'proportional',
+  { shrinkFirst = 'proportional', editorRoom = EDITOR_MIN_W }: FitOptions = {},
 ): SidePaneWidths {
   // What is left for the three panes once the drag handles take theirs.
   const room = containerWidth - CHROME_W;
+  const editorMinWidth = editorMinWidthFor(room, desired, collapsed, editorRoom);
   // Each pane may claim anything the other two don't need, so a pane can
-  // always be dragged back out to where the window allows.
-  const sidebarNeeds = collapsed.sidebar ? 0 : SIDEBAR_MIN_W;
+  // always be dragged back out to where the window allows. While a page asks
+  // for room, the Explorer keeps its own width: the board pane is the one to fit.
+  const pageAsksRoom = editorRoom > EDITOR_MIN_W;
+  const sidebarNeeds = pageAsksRoom ? sidebarTakenOf(desired, collapsed) : sidebarLeastOf(collapsed);
   const boardNeeds = collapsed.board ? 0 : BOARD_MIN_W;
-  const sidebarMax = Math.max(SIDEBAR_MIN_W, room - boardNeeds - EDITOR_MIN_W);
-  const boardMax = Math.max(BOARD_MIN_W, room - sidebarNeeds - EDITOR_MIN_W);
+  const sidebarMax = Math.max(SIDEBAR_MIN_W, room - boardNeeds - editorMinWidth);
+  const boardMax = Math.max(BOARD_MIN_W, room - sidebarNeeds - editorMinWidth);
   let sidebar = clamp(desired.sidebar, SIDEBAR_MIN_W, sidebarMax);
   let board = clamp(desired.board, BOARD_MIN_W, boardMax);
 
   // With either pane collapsed the clamps above already fit the open one.
   if (collapsed.sidebar || collapsed.board) return { sidebar, board };
 
-  const overflow = sidebar + board + EDITOR_MIN_W - room;
+  const overflow = sidebar + board + editorMinWidth - room;
   if (overflow > 0) {
     if (shrinkFirst === 'proportional') {
       const sidebarRoom = sidebar - SIDEBAR_MIN_W;
@@ -111,6 +129,22 @@ export function fitSidePanes(
     }
   }
   return { sidebar, board };
+}
+
+/** The editor's minimum: `editorRoom` as far as the board pane can give it, never less than EDITOR_MIN_W. */
+function editorMinWidthFor(room: number, desired: SidePaneWidths, collapsed: SidePaneFlags, editorRoom: number): number {
+  const boardLeast = collapsed.board ? 0 : BOARD_MIN_W;
+  return Math.max(EDITOR_MIN_W, Math.min(editorRoom, room - sidebarTakenOf(desired, collapsed) - boardLeast));
+}
+
+/** The Explorer's own width, or none while it is shut. */
+function sidebarTakenOf(desired: SidePaneWidths, collapsed: SidePaneFlags): number {
+  return collapsed.sidebar ? 0 : Math.max(SIDEBAR_MIN_W, desired.sidebar);
+}
+
+/** The least the Explorer can make do with, or none while it is shut. */
+function sidebarLeastOf(collapsed: SidePaneFlags): number {
+  return collapsed.sidebar ? 0 : SIDEBAR_MIN_W;
 }
 
 /**
