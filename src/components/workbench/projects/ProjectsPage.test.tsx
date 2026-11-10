@@ -124,9 +124,19 @@ describe('a list', () => {
   });
 });
 
-test('shows where a project is stored as an icon, named for screen readers and in its tooltip', () => {
-  const html = render('local');
+test('All projects shows where a project is stored as an icon, named for screen readers and in its tooltip', () => {
+  const html = render('all');
   expect(html).toMatch(/<li title="On this computer"><svg[^]*?<span class="wb-projects__sr">On this computer<\/span><\/li>/);
+});
+
+test('On this computer and On GitHub have no Location column: every project there is in that place', () => {
+  expect(render('all')).toContain('>Location</th>');
+  expect(render('local')).not.toContain('>Location</th>');
+  const knightRider = { name: 'Knight Rider', description: '', url: 'https://gist.github.com/me/g1', gistId: 'g1', createdAt: '', updatedAt: '' };
+  const signedIn = { ...PROPS.lists.connection, session: { user: { login: 'me', avatarUrl: '' } } } as GitHubConnection;
+  const github = render('github', { lists: { ...PROPS.lists, connection: signedIn, gitHubProjects: { ...gitHubProjects, entries: [knightRider] } } });
+  expect(github).toContain('aria-label="Open Knight Rider"');
+  expect(github).not.toContain('>Location</th>');
 });
 
 describe('an empty list on this computer says why', () => {

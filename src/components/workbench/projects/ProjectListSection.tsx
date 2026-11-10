@@ -59,7 +59,7 @@ export function ProjectListSection(props: ProjectListSectionProps) {
       <PlaceHeader {...props} onRetry={list.refresh} />
       <ListToolbar list={list} searchRef={searchRef} />
       <ListOrWhyNot section={section} list={list} local={localProjects} signedIn={connection.session !== null} onNewProject={props.onNewProject} onSignIn={props.onSignIn}>
-        <ProjectTable rows={list.shown} query={list.query} opening={props.opening} onOpen={openRow} onMenu={(row, anchor) => setMenu({ row, anchor })} />
+        <ProjectTable rows={list.shown} query={list.query} opening={props.opening} onOpen={openRow} onMenu={(row, anchor) => setMenu({ row, anchor })} showPlaces={section === 'all'} />
       </ListOrWhyNot>
       {section === 'all' && <SourcesFooter local={localProjects} connection={connection} onSignIn={props.onSignIn} />}
       <p className="wb-projects__aside">

@@ -16,6 +16,8 @@ export interface ProjectTableProps {
   onOpen: (row: ProjectRow) => void;
   /** Opens the row's ⋮ menu below `button`. */
   onMenu: (row: ProjectRow, button: HTMLElement) => void;
+  /** The Location column: only where projects from both places are listed (All projects). */
+  showPlaces: boolean;
 }
 
 const PLACE_LABEL = { local: 'On this computer', github: 'On GitHub' } as const;
@@ -30,7 +32,7 @@ export function ProjectTable({ rows, ...rowProps }: ProjectTableProps) {
         <thead>
           <tr>
             <th scope="col">Project</th>
-            <th scope="col" className="is-places">Location</th>
+            {rowProps.showPlaces && <th scope="col" className="is-places">Location</th>}
             <th scope="col" className="is-saved">Last saved</th>
             <th scope="col">
               <span className="wb-projects__sr">Actions</span>
@@ -50,15 +52,17 @@ export function ProjectTable({ rows, ...rowProps }: ProjectTableProps) {
 type RowProps = Omit<ProjectTableProps, 'rows'> & { row: ProjectRow };
 
 /** One project: Open stays on every row; what is done less often is in its ⋮ menu. */
-function ProjectTableRow({ row, query, opening, onOpen, onMenu }: RowProps) {
+function ProjectTableRow({ row, query, opening, onOpen, onMenu, showPlaces }: RowProps) {
   return (
     <tr className={cx(row.isOpen && 'is-open')}>
       <td>
         <NameAndDescription row={row} query={query} />
       </td>
-      <td className="is-places">
-        <Places places={row.places} />
-      </td>
+      {showPlaces && (
+        <td className="is-places">
+          <Places places={row.places} />
+        </td>
+      )}
       <td className="is-saved">
         <SavedWhen iso={row.updatedAt} />
       </td>
