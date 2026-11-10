@@ -21,7 +21,7 @@ export const LIST_SECTIONS: readonly ProjectsSection<ListSectionId>[] = [
   { id: 'github', label: 'On GitHub', intro: 'Projects saved on your GitHub account, as secret gists.' },
 ];
 
-/** Below the lists, ruled off: the open project's own settings. */
+/** The open project's own settings: reached from its card (Project details), not from the sidebar. */
 export const ACTIVE_SECTION: ProjectsSection<'active'> = {
   id: 'active',
   label: 'Active project',

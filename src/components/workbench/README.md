@@ -226,21 +226,24 @@ card; the folding one starts open). The styles are `page/Page.css`; their colour
 ### `<ProjectsPage>`
 
 The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
-computer* and *On GitHub*, then, ruled off at the foot, *Active project*; the project in
-the Explorer opens the page there (`useProjectsPage`). The Explorer and Board I/O fold away
+computer* and *On GitHub*. *Active project* has no entry there: its card's *Project
+details*, and the project in the Explorer, open it (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
 
 On top of every section, `CurrentProjectCard` shows the open project: its name, *Unsaved
 changes* while the place it saves to does not hold it, *Saves to this computer: …* or
 *Saves to GitHub* (`openProject.ts`: a project with a gist saves there, any other on this
-computer), Save, and *Open in workspace* back to the editor.
+computer), Save, *Open in workspace* back to the editor, and a ⋮ menu with *New project*,
+*Open from a URL or path…* and *Close project*.
 
 A list section has its place's folder or GitHub account above a search and a sort
 (`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row
 (`projectRows.ts`, `ProjectTable`) shows the name with the description beneath it, where
 the project is stored, when it was saved, *Open*, and a ⋮ menu for the rest (`rowMenu.tsx`).
 The open project is one row even when it is stored in both places, each place with its own
-*Saved* or *Unsaved changes*.
+*Saved* or *Unsaved changes*. An empty list from this computer says why: the browser waits
+for permission to read the folder again (*Allow access*), no folder is chosen, or the
+folder holds no projects (*Choose another folder…*).
 
 *Active project* holds four cards, each open: *Project details* (name, board,
 description), *Storage* (this computer and GitHub, each with its state and Save, and
@@ -249,8 +252,8 @@ version, the project file's name, Close project). A save of a project without a 
 own shows its name field instead, asking for one.
 
 Before another project replaces one with unsaved changes, `UnsavedChangesDialog` asks:
-*Save* (where the project saves to; the other opens only if the save worked), *Discard
-changes* or *Cancel*.
+*Save* (where the project saves to; the other opens only if the save worked, and it asks
+again if something was edited while it saved), *Discard changes* or *Cancel*.
 
 ### `<SettingsPage>`
 

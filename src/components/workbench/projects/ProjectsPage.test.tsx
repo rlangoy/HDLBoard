@@ -73,9 +73,10 @@ const render = (section: ProjectsSectionId, props: Partial<ProjectsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('the sidebar', () => {
-  test('lists where projects are stored, and the active project at its foot', () => {
+  test('lists where projects are stored; the active project is reached from its card', () => {
     const labels = [...render('all').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project']);
+    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub']);
+    expect(textOf(render('all'))).toContain('Project details');
   });
 
   test('marks the section shown', () => {
@@ -98,6 +99,12 @@ describe('the active project, on top of every section', () => {
   test('offers the way back to the editor', () => {
     expect(textOf(render('all'))).toContain('Open in workspace');
   });
+
+  test('has a menu for a new project; the header has no button of its own', () => {
+    const html = render('all');
+    expect(html).toContain('aria-label="More: new project, open another"');
+    expect(html).not.toMatch(/wb-page__header.*New project.*<\/header>/);
+  });
 });
 
 describe('a list', () => {
@@ -118,6 +125,27 @@ describe('a list', () => {
   });
 });
 
+describe('an empty list on this computer says why', () => {
+  const emptyLocal = (over: Partial<LocalProjects>) => ({ ...PROPS.lists, localProjects: { ...local, items: [], ...over } as LocalProjects });
+  const noOpenProject = { ...info, onComputer: false };
+
+  test('the browser has not been allowed to read the folder again', () => {
+    const text = textOf(render('local', { info: noOpenProject, lists: emptyLocal({ items: null, folderState: 'needs-permission' }) }));
+    expect(text).toContain('The browser needs your permission to read projects');
+    expect(text).toContain('Allow access');
+  });
+
+  test('no folder is chosen', () => {
+    expect(textOf(render('all', { info: noOpenProject, lists: emptyLocal({ items: null, folderState: 'none' }) }))).toContain('No projects folder is chosen yet');
+  });
+
+  test('the folder has no projects: maybe they are in another', () => {
+    const text = textOf(render('local', { info: noOpenProject, lists: emptyLocal({}) }));
+    expect(text).toContain('No projects in projects. If your projects are in another folder, choose that one.');
+    expect(text).toContain('Choose another folder…');
+  });
+});
+
 describe('the Active project section', () => {
   test('has its details, storage, files and the rest, in that order', () => {
     const titles = [...render('active').matchAll(/class="wb-page-card__toggle"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
@@ -126,6 +154,11 @@ describe('the Active project section', () => {
 
   test('marks where Save writes', () => {
     expect(render('active')).toMatch(/This computer<\/strong><span class="wb-projects-chip is-destination">Save goes here/);
+  });
+
+  test('unfolds Project details when the name field is to get the focus', () => {
+    const html = render('active', { nameAsk: { ...PROPS.nameAsk, focusPending: true } });
+    expect(html).toMatch(/aria-expanded="true"[^>]*>.*?Project details/);
   });
 
   test('asks for a name while the project has none of its own', () => {

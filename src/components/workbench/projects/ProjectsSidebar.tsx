@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { GitHubIcon, LaptopIcon, ProjectIcon, StackIcon } from '../icons';
 import { PageSidebar, type PageNavEntry } from '../page/PageSidebar';
-import { ACTIVE_SECTION, LIST_SECTIONS, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
+import { LIST_SECTIONS, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
 
 export const SECTION_ICONS: Readonly<Record<ProjectsSectionId, ReactNode>> = {
   all: <StackIcon />,
@@ -15,8 +15,11 @@ export const SECTION_ICONS: Readonly<Record<ProjectsSectionId, ReactNode>> = {
 
 const navEntry = (section: ProjectsSection): PageNavEntry<ProjectsSectionId> => ({ id: section.id, label: section.label, icon: SECTION_ICONS[section.id] });
 
-/** The lists, then, ruled off at the bottom, the active project. */
-const NAV_GROUPS = [LIST_SECTIONS.map(navEntry), [navEntry(ACTIVE_SECTION)]];
+/**
+ * The lists only: the active project is reached from its card on top of every section
+ * (Project details) and from the project in the Explorer, so it needs no entry of its own.
+ */
+const NAV_GROUPS = [LIST_SECTIONS.map(navEntry)];
 
 export interface ProjectsSidebarProps {
   current: ProjectsSectionId;

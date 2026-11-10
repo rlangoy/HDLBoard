@@ -142,6 +142,13 @@
   background: var(--wb-hover);
 }
 
+.wb-projects__icon-btn.is-boxed {
+  width: 36px;
+  height: 36px;
+  border-color: var(--wb-border);
+  background: var(--wb-projects-btn-bg);
+}
+
 .wb-projects__icon-btn:disabled {
   opacity: 0.45;
   cursor: default;
@@ -642,8 +649,38 @@
 }
 
 .wb-projects__empty p {
-  max-width: 420px;
+  max-width: 460px;
   margin: 0;
+}
+
+/* Its buttons side by side, wrapping when narrow. */
+.wb-projects__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wb-projects__notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: 10px;
+  background: var(--wb-page-card-head-bg);
+  font-size: 14px;
+}
+
+.wb-projects__notice > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--wb-accent-ink);
+}
+
+.wb-projects__notice .wb-projects__btn {
+  margin-left: auto;
 }
 
 .wb-projects__error {
@@ -733,6 +770,10 @@
   border-radius: 10px;
   background: var(--wb-projects-menu-bg);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16); /* theme-exempt: shadow */
+}
+
+.wb-projects__menu:has(.wb-projects__menu-detail) {
+  width: 270px;
 }
 
 .wb-projects__menu-item {

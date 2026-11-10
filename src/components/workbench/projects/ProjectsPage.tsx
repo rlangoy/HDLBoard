@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { PlusIcon } from '../icons';
+import { CloseIcon, LinkIcon, PlusIcon } from '../icons';
+import type { MenuAction } from '../ProjectMenu';
 import { Page } from '../page/Page';
 import { PageHeader } from '../page/PageHeader';
 import type { OpenProject, ProjectDetails, ProjectEntryRow } from '../projectFile';
@@ -70,7 +71,6 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
   return (
     <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} onSelect={onSectionChange} onBack={onClose} />}>
       <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
-        {section !== 'active' && <NewProjectButton onClick={lists.onNewProject} />}
       </PageHeader>
       {/* Keyed by section, so another section starts at its top. */}
       <ScrollArea key={section} className="wb-page__scroll">
@@ -81,6 +81,7 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
             onSave={info.destination === 'github' ? guarded.toGitHub : guarded.toComputer}
             onShowDetails={section === 'active' ? undefined : () => onSectionChange('active')}
             onOpenInWorkspace={onClose}
+            menu={cardMenu(lists, active)}
           />
           {section === 'active' ? (
             <ActiveProjectSection active={active} info={info} busy={busy} name={name.request} saves={guarded} />
@@ -100,13 +101,13 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
   );
 }
 
-function NewProjectButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" className="wb-projects__btn is-primary" onClick={onClick} title="Start a new project: name it, add files, then save it">
-      <PlusIcon aria-hidden="true" />
-      New project
-    </button>
-  );
+/** The active project's ⋮ menu: starting or opening another project, and closing this one. */
+function cardMenu(lists: ProjectListsProps, active: ActiveProjectProps): MenuAction[] {
+  return [
+    { label: 'New project', icon: <PlusIcon aria-hidden="true" />, onSelect: lists.onNewProject, detail: 'Name it, add files, then save it' },
+    { label: 'Open from a URL or path…', icon: <LinkIcon aria-hidden="true" />, onSelect: lists.onOpenFromUrl },
+    { label: 'Close project', icon: <CloseIcon aria-hidden="true" />, onSelect: active.onCloseProject, detail: 'Files keeps its files' },
+  ];
 }
 
 interface ActiveProjectSectionProps {

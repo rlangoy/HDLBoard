@@ -45,7 +45,7 @@ export interface ProjectDetailsCardProps {
 export function ProjectDetailsCard({ project, onChange, board, name }: ProjectDetailsCardProps) {
   const ids = useId();
   return (
-    <FoldingPageCard title="Project details" icon={<InfoIcon />}>
+    <FoldingPageCard title="Project details" icon={<InfoIcon />} unfold={name.focusPending}>
       <div className="wb-active__form">
         <label htmlFor={`${ids}-name`}>Name</label>
         <NameField id={`${ids}-name`} value={project.name} request={name} onChange={(value) => onChange({ name: value })} />

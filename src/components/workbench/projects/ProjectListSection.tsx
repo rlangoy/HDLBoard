@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Activity } from '../GitHubStatus';
-import { AlertIcon, PlusIcon, ProjectIcon } from '../icons';
+import { cx } from '../../board';
+import { AlertIcon, FolderOpenIcon, PlusIcon, ProjectIcon } from '../icons';
 import type { ProjectListItem } from '../projectCatalog';
 import { ProjectMenu } from '../ProjectMenu';
 import type { LocalProjects } from '../useLocalProjects';
@@ -57,7 +58,7 @@ export function ProjectListSection(props: ProjectListSectionProps) {
     <div className="wb-projects__section" onKeyDown={(event) => focusSearchOnShortcut(event, searchRef.current)}>
       <PlaceHeader {...props} onRetry={list.refresh} />
       <ListToolbar list={list} searchRef={searchRef} />
-      <ListOrWhyNot section={section} list={list} signedIn={connection.session !== null} onNewProject={props.onNewProject} onSignIn={props.onSignIn}>
+      <ListOrWhyNot section={section} list={list} local={localProjects} signedIn={connection.session !== null} onNewProject={props.onNewProject} onSignIn={props.onSignIn}>
         <ProjectTable rows={list.shown} query={list.query} opening={props.opening} onOpen={openRow} onMenu={(row, anchor) => setMenu({ row, anchor })} />
       </ListOrWhyNot>
       {section === 'all' && <SourcesFooter local={localProjects} connection={connection} onSignIn={props.onSignIn} />}
@@ -101,6 +102,7 @@ function PlaceHeader({ section, connection, gitHubProjects, localProjects, onSig
       {section === 'github' && <GitHubAccountCard connection={connection} onSignIn={onSignIn} />}
       {section !== 'local' && <Activity projects={gitHubProjects} />}
       {section !== 'github' && <LocalFolderError local={localProjects} onRetry={onRetry} />}
+      {section === 'all' && <LocalAccessNotice local={localProjects} />}
     </>
   );
 }
@@ -119,9 +121,24 @@ function LocalFolderError({ local, onRetry }: { local: LocalProjects; onRetry: (
   );
 }
 
+/** All projects lists GitHub's, but the browser has not been allowed to read the projects folder again yet. */
+function LocalAccessNotice({ local }: { local: LocalProjects }) {
+  if (local.folderState !== 'needs-permission' || local.items !== null) return null;
+  return (
+    <div className="wb-projects__notice" role="status">
+      <FolderOpenIcon aria-hidden="true" />
+      <span>The projects in {local.folderLabel} are not listed until the browser may read that folder.</span>
+      <button type="button" className="wb-projects__btn" onClick={local.allowAccess}>
+        Allow access
+      </button>
+    </div>
+  );
+}
+
 interface ListOrWhyNotProps {
   section: ListSectionId;
   list: ProjectList;
+  local: LocalProjects;
   signedIn: boolean;
   onNewProject: () => void;
   onSignIn: () => void;
@@ -130,16 +147,14 @@ interface ListOrWhyNotProps {
 }
 
 /** The list; or, while there is nothing to list, why not and what to do about it. */
-function ListOrWhyNot({ section, list, signedIn, onNewProject, onSignIn, children }: ListOrWhyNotProps) {
+function ListOrWhyNot({ section, list, local, signedIn, onNewProject, onSignIn, children }: ListOrWhyNotProps) {
   if (list.loading) return <Skeletons />;
   if (section === 'github' && (!signedIn || list.gitHubUnread)) return <GitHubWhyNot signedIn={signedIn} onSignIn={onSignIn} onRetry={list.refresh} />;
   if (list.inSection.length === 0) {
+    if (section !== 'github') return <LocalWhyNot local={local} onNewProject={onNewProject} />;
     return (
-      <EmptyState text={section === 'github' ? 'No projects on GitHub yet. Save one there from the Active project.' : 'No projects here yet.'}>
-        <button type="button" className="wb-projects__btn is-primary" onClick={onNewProject}>
-          <PlusIcon aria-hidden="true" />
-          New project
-        </button>
+      <EmptyState text="No projects on GitHub yet. Save one there from the active project's Storage.">
+        <NewProjectButton onClick={onNewProject} />
       </EmptyState>
     );
   }
@@ -153,6 +168,56 @@ function ListOrWhyNot({ section, list, signedIn, onNewProject, onSignIn, childre
     );
   }
   return <>{children}</>;
+}
+
+/**
+ * Nothing listed from this computer: the browser may not have been allowed to read the
+ * folder again yet (it asks after every restart), no folder is chosen, or the projects are
+ * in another folder. Each says so, with the button that helps.
+ */
+function LocalWhyNot({ local, onNewProject }: { local: LocalProjects; onNewProject: () => void }) {
+  if (local.folderState === 'needs-permission') {
+    return (
+      <EmptyState text={`The browser needs your permission to read ${local.folderLabel} before its projects can be listed.`}>
+        <button type="button" className="wb-projects__btn is-primary" onClick={local.allowAccess}>
+          Allow access
+        </button>
+        <ChooseFolderButton local={local} label="Choose another folder…" />
+      </EmptyState>
+    );
+  }
+  if (local.folderState === 'none') {
+    return (
+      <EmptyState text="No projects folder is chosen yet. Choose the folder on this computer that holds your projects.">
+        <ChooseFolderButton local={local} label="Choose folder…" primary />
+        <NewProjectButton onClick={onNewProject} />
+      </EmptyState>
+    );
+  }
+  return (
+    <EmptyState text={`No projects in ${local.folderLabel}. If your projects are in another folder, choose that one.`}>
+      <ChooseFolderButton local={local} label="Choose another folder…" primary />
+      <NewProjectButton onClick={onNewProject} />
+    </EmptyState>
+  );
+}
+
+function ChooseFolderButton({ local, label, primary = false }: { local: LocalProjects; label: string; primary?: boolean }) {
+  return (
+    <button type="button" className={cx('wb-projects__btn', primary && 'is-primary')} onClick={local.chooseFolder}>
+      <FolderOpenIcon aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+function NewProjectButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="wb-projects__btn" onClick={onClick}>
+      <PlusIcon aria-hidden="true" />
+      New project
+    </button>
+  );
 }
 
 /** On GitHub lists nothing: signed out, or its list could not be read (there may well be projects there). */
@@ -180,7 +245,7 @@ function EmptyState({ text, children }: { text: string; children: ReactNode }) {
     <div className="wb-projects__empty">
       <ProjectIcon aria-hidden="true" />
       <p>{text}</p>
-      {children}
+      <div className="wb-projects__empty-actions">{children}</div>
     </div>
   );
 }

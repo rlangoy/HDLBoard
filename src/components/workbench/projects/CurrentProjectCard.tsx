@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { CloudUploadIcon, GitHubIcon, InfoIcon, LaptopIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
+import { useCallback, useState } from 'react';
+import { CloudUploadIcon, GitHubIcon, InfoIcon, LaptopIcon, MoreIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
+import { ProjectMenu, type MenuAction } from '../ProjectMenu';
 import type { OpenProjectInfo, SaveDestination } from './openProject';
 import { UnsavedChip } from './StateChip';
 
@@ -15,6 +17,8 @@ export interface CurrentProjectCardProps {
   onShowDetails?: () => void;
   /** Back to the editor. */
   onOpenInWorkspace: () => void;
+  /** What its ⋮ menu offers: New project, and the other ways to another project. */
+  menu: readonly MenuAction[];
 }
 
 const DESTINATION_LABEL: Record<SaveDestination, string> = { local: 'this computer', github: 'GitHub' };
@@ -23,7 +27,7 @@ const DESTINATION_LABEL: Record<SaveDestination, string> = { local: 'this comput
  * The project open in the workspace, on top of every section (issue #44): its name,
  * whether it has unsaved changes, where Save writes it, and the way back to the editor.
  */
-export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpenInWorkspace }: CurrentProjectCardProps) {
+export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpenInWorkspace, menu }: CurrentProjectCardProps) {
   const canSave = !busy && (project.unsaved || !savedAtDestinationYet(project));
   return (
     <section className="wb-projects-current" aria-label="Active project">
@@ -53,8 +57,22 @@ export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpe
           <OpenInIcon aria-hidden="true" />
           Open in workspace
         </button>
+        <CardMenu actions={menu} />
       </div>
     </section>
+  );
+}
+
+function CardMenu({ actions }: { actions: readonly MenuAction[] }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const close = useCallback(() => setAnchor(null), []);
+  return (
+    <>
+      <button type="button" className="wb-projects__icon-btn is-boxed" onClick={(event) => setAnchor(event.currentTarget)} aria-haspopup="menu" aria-label="More: new project, open another">
+        <MoreIcon aria-hidden="true" />
+      </button>
+      {anchor && <ProjectMenu anchor={anchor} actions={actions} onClose={close} />}
+    </>
   );
 }
 

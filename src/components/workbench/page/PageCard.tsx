@@ -33,11 +33,18 @@ export function PageCard({ title, icon, wide, headEnd, children }: PageCardProps
   );
 }
 
+export interface FoldingPageCardProps extends Pick<PageCardProps, 'title' | 'icon' | 'children'> {
+  /** Unfolds the card (and keeps it open), e.g. for a field in it that is to get the focus. */
+  unfold?: boolean;
+}
+
 /** A card whose title folds its body away and back; it starts open. */
-export function FoldingPageCard({ title, icon, children }: Pick<PageCardProps, 'title' | 'icon' | 'children'>) {
+export function FoldingPageCard({ title, icon, unfold = false, children }: FoldingPageCardProps) {
   const titleId = useId();
   const bodyId = useId();
   const [open, setOpen] = useState(true);
+  // Set while rendering, so the body is shown before its children's effects run (a focus, say).
+  if (unfold && !open) setOpen(true);
   return (
     <section className={cx('wb-page-card', !open && 'is-folded')} aria-labelledby={titleId}>
       <div className="wb-page-card__head">
