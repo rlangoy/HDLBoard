@@ -114,15 +114,19 @@ describe('a list', () => {
     expect(html).toContain('aria-label="Open 4-bit Adder"');
   });
 
-  test('lists the open project once, with the saved state of its place', () => {
+  test('lists the open project once, its saved state beside Open now', () => {
     const text = textOf(render('local'));
-    expect(text).toContain('Open now');
-    expect(text).toMatch(/On this computer Unsaved changes/);
+    expect(text).toContain('Open now Unsaved changes');
   });
 
   test('On GitHub asks to sign in while signed out', () => {
     expect(textOf(render('github'))).toContain('Sign in to GitHub to see the projects saved on your account.');
   });
+});
+
+test('shows where a project is stored as an icon, named for screen readers and in its tooltip', () => {
+  const html = render('local');
+  expect(html).toMatch(/<li title="On this computer"><svg[^]*?<span class="wb-projects__sr">On this computer<\/span><\/li>/);
 });
 
 describe('an empty list on this computer says why', () => {

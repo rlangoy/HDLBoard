@@ -89,6 +89,7 @@ function NameAndDescription({ row, query }: { row: ProjectRow; query: string }) 
         <span className="wb-projects-table__name">
           <strong title={row.name}>{rowName(row)}</strong>
           {row.isOpen && <span className="wb-projects-chip is-open">Open now</span>}
+          <PlaceStates places={row.places} />
         </span>
         {row.description !== '' && <span className="wb-projects-table__description">{row.description}</span>}
         {hit && (
@@ -103,15 +104,30 @@ function NameAndDescription({ row, query }: { row: ProjectRow; query: string }) 
   );
 }
 
-/** Each place the project is stored; for the open project, whether that place holds it as it is now. */
+const placeIcon = (place: ProjectPlace) => (place.source === 'github' ? <GitHubIcon aria-hidden="true" /> : <LaptopIcon aria-hidden="true" />);
+
+/**
+ * Beside Open now: whether each place holds the open project as it is now. Stored in both
+ * places, each state carries its place's icon, so the two are told apart.
+ */
+function PlaceStates({ places }: { places: readonly ProjectPlace[] }) {
+  const known = places.filter((place) => place.state !== undefined);
+  return known.map((place) => (
+    <span key={place.source} className="wb-projects-table__state" title={PLACE_LABEL[place.source]}>
+      {known.length > 1 && placeIcon(place)}
+      {place.state && <SavedChip state={place.state} />}
+    </span>
+  ));
+}
+
+/** Where the project is stored, as icons only (the column stays narrow); the name is in the tooltip. */
 function Places({ places }: { places: readonly ProjectPlace[] }) {
   return (
     <ul className="wb-projects-table__places">
       {places.map((place) => (
-        <li key={place.source}>
-          {place.source === 'github' ? <GitHubIcon aria-hidden="true" /> : <LaptopIcon aria-hidden="true" />}
-          <span>{PLACE_LABEL[place.source]}</span>
-          {place.state && <SavedChip state={place.state} />}
+        <li key={place.source} title={PLACE_LABEL[place.source]}>
+          {placeIcon(place)}
+          <span className="wb-projects__sr">{PLACE_LABEL[place.source]}</span>
         </li>
       ))}
     </ul>

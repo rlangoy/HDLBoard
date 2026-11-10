@@ -489,7 +489,7 @@
 }
 
 .wb-projects-table th.is-places {
-  width: 230px;
+  width: 92px;
 }
 
 .wb-projects-table th.is-saved {
@@ -588,29 +588,37 @@
 }
 
 .wb-projects-table__places {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .wb-projects-table__places li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  font-size: 13.5px;
+  display: inline-flex;
 }
 
 .wb-projects-table__places svg {
-  flex: none;
-  width: 17px;
-  height: 17px;
+  width: 19px;
+  height: 19px;
   color: var(--wb-icon-muted);
 }
 
-.wb-projects-table__places .wb-projects-chip {
+/* The open project's saved state, beside Open now. */
+.wb-projects-table__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-projects-table__state > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-projects-table__name .wb-projects-chip {
   height: 20px;
   padding: 0 8px;
   font-size: 11.5px;
