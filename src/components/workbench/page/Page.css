@@ -1,0 +1,377 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* A page in the editor's place, as Settings and Projects are: a sidebar of sections beside
+   the chosen section, under a header. Its layout follows its own width (container queries),
+   not the window's. */
+
+.wb-page {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--wb-page-bg);
+  color: var(--wb-text);
+  outline: none;
+  container: page / inline-size;
+}
+
+.wb-page__frame {
+  --wb-page-sidebar-w: 220px;
+  --wb-page-gutter: 24px;
+  --wb-page-radius: 12px;
+  --wb-page-gap: 20px;
+
+  display: grid;
+  grid-template-columns: var(--wb-page-sidebar-w) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.wb-page a {
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-page :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ sidebar */
+
+.wb-page__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 20px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--wb-border);
+  background: var(--wb-page-sidebar-bg);
+}
+
+.wb-page__back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--wb-accent-dark-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-page__back:hover {
+  background: var(--wb-hover);
+}
+
+.wb-page__back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-page-nav {
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.wb-page-nav ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each further group of entries is ruled off from the one above it. */
+.wb-page-nav ul + ul {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.wb-page-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.wb-page .wb-page-nav__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.wb-page-nav__item:hover {
+  background: var(--wb-hover);
+}
+
+.wb-page-nav__item[aria-current='page'] {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark-ink);
+  font-weight: 600;
+}
+
+.wb-page-nav__icon {
+  display: inline-flex;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-page-nav__item[aria-current='page'] .wb-page-nav__icon {
+  color: var(--wb-accent-ink);
+}
+
+.wb-page-nav__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ------------------------------------------------------- header + main */
+
+.wb-page__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.wb-page__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px var(--wb-page-gutter);
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-page__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-page-card-bg);
+  color: var(--wb-accent-ink);
+}
+
+.wb-page__badge svg {
+  width: 28px;
+  height: 28px;
+}
+
+.wb-page__heading {
+  min-width: 0;
+}
+
+.wb-page__heading h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.wb-page__heading p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--wb-text-muted);
+}
+
+/* What the header holds after its title, pushed to the right. */
+.wb-page__header-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.wb-page__scroll {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------- cards */
+
+.wb-page-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-page-card-bg);
+  box-shadow: 0 1px 3px #0f172a0d; /* theme-exempt: shadow */
+}
+
+.wb-page-card--wide {
+  grid-column: 1 / -1;
+}
+
+.wb-page-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--wb-page-card-border);
+  background: var(--wb-page-card-head-bg);
+}
+
+.wb-page-card__title {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 11px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-page-card__icon {
+  display: inline-flex;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--wb-accent-ink);
+}
+
+.wb-page-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A card that folds: its whole title is the button. */
+.wb-page-card__toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-page-card__chevron {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--wb-icon-muted);
+  transition: transform 140ms ease;
+}
+
+.wb-page-card.is-folded .wb-page-card__chevron {
+  transform: rotate(-90deg);
+}
+
+.wb-page-card.is-folded .wb-page-card__head {
+  border-bottom: 0;
+}
+
+.wb-page-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+}
+
+/* `hidden` would lose to the flex display above. */
+.wb-page-card__body[hidden] {
+  display: none;
+}
+
+/* Space between the parts of a card; an empty live region takes none. */
+.wb-page-card__body > * {
+  margin-block: 0;
+}
+
+.wb-page-card__body > * + * {
+  margin-top: 14px;
+}
+
+.wb-page-card__body > * + :empty {
+  margin-top: 0;
+}
+
+/* ---------------------------------------------------------- narrow widths */
+
+/* The sidebar becomes a strip of tabs above the section. */
+@container page (max-width: 640px) {
+  .wb-page__frame {
+    --wb-page-gutter: 16px;
+    --wb-page-gap: 16px;
+
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .wb-page__sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    border-right: 0;
+    border-bottom: 1px solid var(--wb-border);
+  }
+
+  .wb-page-nav,
+  .wb-page-nav ul {
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+  }
+
+  .wb-page-nav ul + ul {
+    margin: 0;
+    padding: 0 0 0 4px;
+    border: 0;
+    border-left: 1px solid var(--wb-border);
+  }
+
+  .wb-page-nav__item {
+    padding: 8px 12px;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .wb-page__back {
+    flex: none;
+  }
+
+  .wb-page__header {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-page * {
+    transition: none !important;
+  }
+}

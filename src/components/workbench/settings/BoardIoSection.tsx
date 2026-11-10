@@ -6,7 +6,7 @@ import { cx } from '../../board';
 import type { BoardLayout } from '../boardLayoutPreference';
 import { BoardSetting, type BoardSettingProps } from '../BoardSetting';
 import { BOARD_TEXT } from '../boardText';
-import { SettingsCard } from './SettingsCard';
+import { PageCard } from '../page/PageCard';
 import { SettingSwitch } from './SettingSwitch';
 import type { Setting } from './settingsSections';
 
@@ -22,17 +22,17 @@ export interface BoardIoSectionProps {
 export function BoardIoSection({ board, layout, bouncyButtons }: BoardIoSectionProps) {
   return (
     <>
-      <SettingsCard title={BOARD_TEXT.settingTitle}>
+      <PageCard title={BOARD_TEXT.settingTitle}>
         <BoardSetting {...board} />
-      </SettingsCard>
+      </PageCard>
       <BoardLayoutCard layout={layout} />
-      <SettingsCard title="Pushbuttons" wide>
+      <PageCard title="Pushbuttons" wide>
         <SettingSwitch
           label="Offer bouncy pushbuttons"
           description="The Pushbuttons panel's menu lets you pick Bouncy contacts, which give several edges per press like real buttons. Off: the choice is hidden and every press is one clean edge."
           setting={bouncyButtons}
         />
-      </SettingsCard>
+      </PageCard>
     </>
   );
 }
@@ -51,7 +51,7 @@ const LAYOUT_CHOICES: readonly LayoutChoice[] = [
 function BoardLayoutCard({ layout }: { layout: Setting<BoardLayout> }) {
   const groupName = useId();
   return (
-    <SettingsCard title={BOARD_TEXT.layoutTitle}>
+    <PageCard title={BOARD_TEXT.layoutTitle}>
       <div className="wb-settings-layouts">
         {LAYOUT_CHOICES.map(({ value, label, columns }) => {
           const selected = layout.value === value;
@@ -67,6 +67,6 @@ function BoardLayoutCard({ layout }: { layout: Setting<BoardLayout> }) {
           );
         })}
       </div>
-    </SettingsCard>
+    </PageCard>
   );
 }

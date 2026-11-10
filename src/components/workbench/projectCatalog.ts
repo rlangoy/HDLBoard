@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The Projects page's list (docs/project_browse_page.md § 5): local and GitHub projects as one
- * kind of item, searched, filtered and sorted. Pure — no React, no I/O.
+ * The Projects page's lists (docs/project_browse_page.md § 5, issue #44): local and GitHub
+ * projects as one kind of item, searched and sorted. Pure — no React, no I/O.
  */
 
 import type { IndexEntry } from '../../github/projectIndex';
@@ -13,30 +13,42 @@ import { languageOfName } from './fileKinds';
 
 export type ProjectLanguage = 'vhdl' | 'verilog';
 export type ProjectSource = 'local' | 'github';
-export type TypeFilter = 'all' | ProjectLanguage;
-/** 'local' and 'github': that place's projects first, each place newest first. */
-export type SortOrder = 'newest' | 'oldest' | 'name' | 'local' | 'github';
-/** 'details': the table, a row opening to the project's details; 'grid': small icons. */
-export type ProjectsView = 'details' | 'grid';
+export type SortOrder = 'newest' | 'oldest' | 'name';
+
+export const SORT_ORDERS: readonly SortOrder[] = ['newest', 'oldest', 'name'];
 
 export interface CatalogFile {
   name: string;
   description: string;
 }
 
-export interface ProjectListItem {
-  /** Unique in the list: `local:<location>` or `github:<gistId>`. */
-  key: string;
-  source: ProjectSource;
+/** What a search looks through: the project's own words and its files'. */
+export interface Searchable {
   name: string;
   description: string;
+  /** The GitHub login for GitHub projects; '' for local ones. */
+  owner: string;
+  files: readonly CatalogFile[];
+}
+
+/** What a sort orders by. */
+export interface Sortable {
+  /** Unique in the list. */
+  key: string;
+  name: string;
+  /** ISO 8601, or '' when unknown. */
+  updatedAt: string;
+}
+
+export interface ProjectListItem extends Searchable, Sortable {
+  /** `local:<location>` or `github:<gistId>`. */
+  key: string;
+  source: ProjectSource;
   files: CatalogFile[];
   /** From the file names, 'vhdl' before 'verilog'; empty when none is a source file. */
   languages: ProjectLanguage[];
-  /** ISO 8601, or '' when unknown. Local: the project file's modification time. GitHub: updatedAt, else createdAt. */
+  /** Local: the project file's modification time. GitHub: updatedAt, else createdAt. */
   updatedAt: string;
-  /** The GitHub login for GitHub items; '' for local ones. */
-  owner: string;
   /** Local: the project file's full path (Windows app) or `<folder>/<sub>/<file>` (browser). GitHub: the gist's address. */
   location: string;
   /** GitHub items only. */
@@ -107,32 +119,27 @@ function wordsOf(query: string): string[] {
   return normalise(query).split(/\s+/).filter(Boolean);
 }
 
-function searchText(item: ProjectListItem): string {
+function searchText(item: Searchable): string {
   return normalise([item.name, item.description, item.owner, ...item.files.flatMap((file) => [file.name, file.description])].join(' '));
 }
 
-/** The items in `type` whose search text contains every word of `query`. */
-export function filterItems(items: readonly ProjectListItem[], query: string, type: TypeFilter): ProjectListItem[] {
+/** The items whose search text contains every word of `query`. */
+export function filterItems<T extends Searchable>(items: readonly T[], query: string): T[] {
   const words = wordsOf(query);
   return items.filter((item) => {
-    if (type !== 'all' && !item.languages.includes(type)) return false;
     const text = searchText(item);
     return words.every((word) => text.includes(word));
   });
 }
 
 /** A new array in `order`; ties go by name, then key, so the order is stable. */
-export function sortItems(items: readonly ProjectListItem[], order: SortOrder): ProjectListItem[] {
-  const byName = (a: ProjectListItem, b: ProjectListItem) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.key.localeCompare(b.key);
-  const byDate = (direction: 1 | -1) => (a: ProjectListItem, b: ProjectListItem) => {
+export function sortItems<T extends Sortable>(items: readonly T[], order: SortOrder): T[] {
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.key.localeCompare(b.key);
+  const byDate = (direction: 1 | -1) => (a: T, b: T) => {
     if ((a.updatedAt === '') !== (b.updatedAt === '')) return a.updatedAt === '' ? 1 : -1;
     return direction * a.updatedAt.localeCompare(b.updatedAt) || byName(a, b);
   };
-  const newest = byDate(-1);
-  const bySource = (first: ProjectSource) => (a: ProjectListItem, b: ProjectListItem) =>
-    Number(b.source === first) - Number(a.source === first) || newest(a, b);
-  const compare = { name: byName, newest, oldest: byDate(1), local: bySource('local'), github: bySource('github') }[order];
+  const compare = { name: byName, newest: byDate(-1), oldest: byDate(1) }[order];
   return [...items].sort(compare);
 }
 
@@ -152,7 +159,7 @@ export function isSameProject(item: ProjectListItem, open: { name: string; gistI
  * what to show under the project while searching. Undefined when the project itself matches, or
  * no single file does.
  */
-export function fileHit(item: ProjectListItem, query: string): CatalogFile | undefined {
+export function fileHit(item: Searchable, query: string): CatalogFile | undefined {
   const words = wordsOf(query);
   if (words.length === 0) return undefined;
   const own = normalise(`${item.name} ${item.description} ${item.owner}`);
@@ -165,22 +172,15 @@ export function fileHit(item: ProjectListItem, query: string): CatalogFile | und
 }
 
 export interface ProjectsPagePrefs {
-  type: TypeFilter;
   sort: SortOrder;
-  view: ProjectsView;
 }
 
 export const PROJECTS_PAGE_PREFS_KEY = 'hdlboard.projectsPage';
-/** What is written to PROJECTS_PAGE_PREFS_KEY: the type filter lasts for the visit only. */
-export const storedProjectsPagePrefs = ({ sort, view }: ProjectsPagePrefs) => JSON.stringify({ sort, view });
+export const storedProjectsPagePrefs = ({ sort }: ProjectsPagePrefs) => JSON.stringify({ sort });
 
-const DEFAULT_PREFS: ProjectsPagePrefs = { type: 'all', sort: 'newest', view: 'details' };
+const DEFAULT_PREFS: ProjectsPagePrefs = { sort: 'newest' };
 
-/**
- * The remembered choices; bad or missing JSON, or a value that is no choice, gives the default.
- * The type filter is never remembered: a filter left on from an earlier visit hid projects
- * without anyone noticing, so every visit starts at All types (a stored type is ignored).
- */
+/** The remembered sort; bad or missing JSON, or a sort this version has no more, gives the default. */
 export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
   let record: Record<string, unknown> = {};
   try {
@@ -189,13 +189,8 @@ export function parseProjectsPagePrefs(json: string | null): ProjectsPagePrefs {
   } catch {
     // The defaults.
   }
-  const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
-    allowed.includes(value as T) ? (value as T) : fallback;
-  return {
-    type: DEFAULT_PREFS.type,
-    sort: pick(record.sort, ['newest', 'oldest', 'name', 'local', 'github'], DEFAULT_PREFS.sort),
-    view: pick(record.view, ['details', 'grid'], DEFAULT_PREFS.view),
-  };
+  const sort = SORT_ORDERS.find((order) => order === record.sort) ?? DEFAULT_PREFS.sort;
+  return { sort };
 }
 
 const UNIT_SECONDS: readonly (readonly [Intl.RelativeTimeFormatUnit, number])[] = [

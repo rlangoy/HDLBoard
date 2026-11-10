@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useCallback, type SetStateAction } from 'react';
 import { createNavigator } from './overlayNavigator';
 
-export type Overlay = 'examples' | 'project' | 'projects' | 'waveform' | 'boardSettings' | 'settings' | null;
+export type Overlay = 'examples' | 'projects' | 'waveform' | 'boardSettings' | 'settings' | null;
 
 /** What is shown over the editor. Leaving the board settings asks first when they hold unsaved edits. */
 export function useOverlay() {
