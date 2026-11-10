@@ -108,7 +108,7 @@ Workbench                              (CSS grid: header / body / divider / cons
 │  │  there are no files
 │  ├─ .wb-center                       (flex: 1 — takes the remaining width)
 │  │  ├─ CodeEditor
-│  │  ├─ ProjectsPage                  (only while open: local and GitHub projects in one list; useLocalProjects, projectCatalog.ts)
+│  │  ├─ SettingsPage, ProjectsPage    (only while open: a page with a sidebar, page/; Projects folds Explorer and Board I/O)
 │  │  └─ ExamplesPane                  (only while open: covers the editor, which stays mounted)
 │  ├─ .wb-resizer                      (drag handle — resizes or collapses .wb-right)
 │  └─ SidePanel .wb-right              (draggable width, collapsible, "Board I/O")
@@ -214,12 +214,56 @@ Modal dialogs, both `{ open, onClose }` and both built on the shared
   must be kept in step with `DE1_SoC.vhdl` (`files.ts`) and
   `SevenSegment/segments.ts`; the links are data in `helpResources.ts`.
 
+### The page frame (`page/`)
+
+Settings and Projects share one frame: `Page` (the section in the editor's place, Esc
+closes it, it takes the focus as it opens), `PageSidebar` (*Back to workspace*, then the
+sections in groups ruled off from each other), `PageHeader` (badge, title, subtitle, and
+what the page adds before its close button) and `PageCard` / `FoldingPageCard` (a titled
+card; the folding one starts open). The styles are `page/Page.css`; their colours are the
+`--wb-page-*` tokens.
+
+### `<ProjectsPage>`
+
+The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
+computer* and *On GitHub*, then, ruled off below them, *Active project*, with an orange dot
+on its icon while the project has unsaved changes. Its card's *Project details*, and the
+project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
+while it is shown and come back after if they were open (`paneFolds.ts`).
+
+On top of Active project, `CurrentProjectCard` shows the open project: its name, *Unsaved
+changes* while the place it saves to does not hold it, *Saves to this computer: …* or
+*Saves to GitHub* (`openProject.ts`: a project with a gist saves there, any other on this
+computer), Save, *Open in workspace* back to the editor, and a ⋮ menu with *New project*,
+*Open from a URL or path…* and *Close project*. The lists have no such card (the open
+project is their first row); their header has a ⋮ menu with *New project* and *Open from a
+URL or path…*.
+
+A list section has its place's folder or GitHub account above a search and a sort
+(`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row
+(`projectRows.ts`, `ProjectTable`) shows the name with the description beneath it, where
+the project is stored, when it was saved, *Open*, and a ⋮ menu for the rest (`rowMenu.tsx`).
+The open project is one row even when it is stored in both places, each place with its own
+*Saved* or *Unsaved changes*. An empty list from this computer says why: the browser waits
+for permission to read the folder again (*Allow access*), no folder is chosen, or the
+folder holds no projects (*Choose another folder…*).
+
+*Active project* holds four cards, each open: *Project details* (name, board,
+description), *Storage* (this computer and GitHub, each with its state and Save, and
+*Save goes here* on the one Save writes to), *Project files* and *Advanced* (the format
+version, the project file's name, Close project). A save of a project without a name of its
+own shows its name field instead, asking for one.
+
+Before another project replaces one with unsaved changes, `UnsavedChangesDialog` asks:
+*Save* (where the project saves to; the other opens only if the save worked, and it asks
+again if something was edited while it saved), *Discard changes* or *Cancel*.
+
 ### `<SettingsPage>`
 
 Settings as a page in the editor's place (`settings/`, issue #42), like the board
 settings: the Explorer folds to its icon rail while the page is open and comes back
-after if it was open (`explorerFolds.ts`, shared with the board settings and the
-waveform view, so going from one of them to another keeps it folded), and Board I/O stays in view, narrowed (its board scaled down)
+after if it was open (`paneFolds.ts`, shared with the board settings, the Projects page
+and the waveform view, so going from one of them to another keeps it folded), and Board I/O stays in view, narrowed (its board scaled down)
 when the page needs the room (`PAGE_ROOM`, `setEditorRoom`), so a change to the
 board layout shows there at once. A sidebar has *Back to workspace*
 and one entry per section; `useSettingsPage` keeps which one is shown and puts the

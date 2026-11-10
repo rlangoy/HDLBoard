@@ -32,19 +32,19 @@ const render = (section: SettingsSectionId, props: Partial<SettingsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 /** The text of every card title, in order. */
-const cardTitles = (html: string) => [...html.matchAll(/<h3[^>]*class="wb-settings-card__title"[^>]*>([^<]*)</g)].map((match) => match[1]);
+const cardTitles = (html: string) => [...html.matchAll(/<h3[^>]*class="wb-page-card__title"[^>]*>([^<]*)</g)].map((match) => match[1]);
 
 beforeEach(() => vi.stubGlobal('__APP_VERSION__', '1.6.3'));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the sidebar', () => {
   test('lists the settings, then Help & feedback', () => {
-    const labels = [...render('general').matchAll(/class="wb-settings-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
+    const labels = [...render('general').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
     expect(labels).toEqual(['General', 'Board &amp; I/O', 'Editor', 'Simulation', 'Updates', 'Help &amp; feedback']);
   });
 
   test('marks the section shown as the current page', () => {
-    expect(render('editor')).toMatch(/aria-current="page"[^>]*><span class="wb-settings-nav__icon">.*?<\/span>Editor</);
+    expect(render('editor')).toMatch(/aria-current="page"[^>]*><span class="wb-page-nav__icon">.*?<\/span>Editor</);
   });
 
   test('marks only one section', () => {
@@ -52,7 +52,7 @@ describe('the sidebar', () => {
   });
 
   test("shows the HDLBoard mark for Board & I/O", () => {
-    expect(render('general')).toMatch(/<span class="wb-settings-nav__icon"><svg viewBox="0 0 32 32"[^>]*><path d="M8 4h16[^"]*"><\/path><\/svg><\/span>Board &amp; I\/O/);
+    expect(render('general')).toMatch(/<span class="wb-page-nav__icon"><svg viewBox="0 0 32 32"[^>]*><path d="M8 4h16[^"]*"><\/path><\/svg><\/span>Board &amp; I\/O/);
   });
 
   test('offers the way back to the workspace', () => {

@@ -3,7 +3,7 @@
 
 import { UpdateStatusText, type UpdateCheckView } from '../AboutDialog';
 import { APP_NAME } from '../project';
-import { SettingsCard } from './SettingsCard';
+import { PageCard } from '../page/PageCard';
 import { SettingSwitch } from './SettingSwitch';
 import type { Setting } from './settingsSections';
 
@@ -17,11 +17,11 @@ export interface UpdatesSectionProps {
 /** Settings › Updates: the version running here, and whether to look for a newer one. */
 export function UpdatesSection({ checkAtStartUp, check }: UpdatesSectionProps) {
   return (
-    <SettingsCard title="Updates" wide>
+    <PageCard title="Updates" wide>
       <SettingSwitch label="Check for updates" description="Check GitHub for a new release at startup." setting={checkAtStartUp} />
       <p className="wb-settings-version" aria-live="polite">
         <strong>{APP_NAME} {__APP_VERSION__}</strong> &middot; <UpdateStatusText {...check} />
       </p>
-    </SettingsCard>
+    </PageCard>
   );
 }

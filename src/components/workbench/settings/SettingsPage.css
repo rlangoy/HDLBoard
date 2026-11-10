@@ -1,202 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (C) 2026 Rune Langøy */
 
-/* The Settings page (issue #42): a sidebar of sections beside the chosen section's cards.
-   It takes the editor's place, as the board settings do; the Explorer and Board I/O stay
-   in view. Its layout follows its own width (container queries), not the window's. */
-
-.wb-settings {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  background: var(--wb-settings-page-bg);
-  color: var(--wb-text);
-  outline: none;
-  container: settings-page / inline-size;
-}
-
-.wb-settings__frame {
-  --wb-settings-sidebar-w: 220px;
-  --wb-settings-gutter: 24px;
-  --wb-settings-radius: 12px;
-  --wb-settings-gap: 20px;
-
-  display: grid;
-  grid-template-columns: var(--wb-settings-sidebar-w) minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
-}
-
-.wb-settings a {
-  color: var(--wb-accent-dark-ink);
-}
-
-.wb-settings :is(button, input, a):focus-visible {
-  outline: 2px solid var(--wb-accent);
-  outline-offset: 2px;
-}
-
-/* ------------------------------------------------------------ sidebar */
-
-.wb-settings__sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-height: 0;
-  padding: 20px 16px;
-  overflow-y: auto;
-  border-right: 1px solid var(--wb-border);
-  background: var(--wb-settings-sidebar-bg);
-}
-
-.wb-settings__back {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--wb-accent-dark-ink);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.wb-settings__back:hover {
-  background: var(--wb-hover);
-}
-
-.wb-settings__back svg {
-  width: 18px;
-  height: 18px;
-}
-
-.wb-settings-nav {
-  padding-top: 14px;
-  border-top: 1px solid var(--wb-border);
-}
-
-.wb-settings-nav ul {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wb-settings-nav .wb-settings-nav__support {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--wb-border);
-}
-
-.wb-settings-nav__item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 10px 14px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  color: var(--wb-text);
-  font: inherit;
-  font-size: 15px;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 140ms ease;
-}
-
-.wb-settings .wb-settings-nav__item:focus-visible {
-  outline-offset: -2px;
-}
-
-.wb-settings-nav__item:hover {
-  background: var(--wb-hover);
-}
-
-.wb-settings-nav__item[aria-current='page'] {
-  background: var(--wb-accent-soft);
-  color: var(--wb-accent-dark-ink);
-  font-weight: 600;
-}
-
-.wb-settings-nav__icon {
-  display: inline-flex;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  color: var(--wb-icon-muted);
-}
-
-.wb-settings-nav__item[aria-current='page'] .wb-settings-nav__icon {
-  color: var(--wb-accent-ink);
-}
-
-.wb-settings-nav__icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* ------------------------------------------------------- header + main */
-
-.wb-settings__main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.wb-settings__header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px var(--wb-settings-gutter);
-  border-bottom: 1px solid var(--wb-border);
-}
-
-.wb-settings__badge {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--wb-settings-card-border);
-  border-radius: var(--wb-settings-radius);
-  background: var(--wb-settings-card-bg);
-  color: var(--wb-accent-ink);
-}
-
-.wb-settings__badge svg {
-  width: 28px;
-  height: 28px;
-}
-
-.wb-settings__heading {
-  min-width: 0;
-}
-
-.wb-settings__heading h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.wb-settings__heading p {
-  margin: 2px 0 0;
-  font-size: 14px;
-  color: var(--wb-text-muted);
-}
+/* The Settings page (issue #42), on the page frame of page/Page.css: the chosen section's
+   cards in two columns, and the controls they hold. */
 
 .wb-settings__saved {
   display: inline-flex;
   align-items: center;
-  margin: 0 0 0 auto;
+  margin: 0;
   font-size: 13px;
   color: var(--wb-text-muted);
   white-space: nowrap;
@@ -215,62 +26,11 @@
   font-weight: 600;
 }
 
-.wb-settings__scroll {
-  flex: 1;
-}
-
 .wb-settings__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--wb-settings-gap);
-  padding: var(--wb-settings-gap) var(--wb-settings-gutter) 32px;
-}
-
-/* --------------------------------------------------------------- cards */
-
-.wb-settings-card {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--wb-settings-card-border);
-  border-radius: var(--wb-settings-radius);
-  background: var(--wb-settings-card-bg);
-  box-shadow: 0 1px 3px #0f172a0d; /* theme-exempt: shadow */
-}
-
-.wb-settings-card--wide {
-  grid-column: 1 / -1;
-}
-
-.wb-settings-card__title {
-  margin: 0;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--wb-settings-card-border);
-  background: var(--wb-settings-card-head-bg);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--wb-text);
-}
-
-.wb-settings-card__body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  padding: 16px 18px 18px;
-}
-
-/* Space between the parts of a card; an empty live region takes none. */
-.wb-settings-card__body > * {
-  margin-block: 0;
-}
-
-.wb-settings-card__body > * + * {
-  margin-top: 14px;
-}
-
-.wb-settings-card__body > * + :empty {
-  margin-top: 0;
+  gap: var(--wb-page-gap);
+  padding: var(--wb-page-gap) var(--wb-page-gutter) 32px;
 }
 
 .wb-settings__note {
@@ -364,7 +124,7 @@
   position: relative;
   border: 1.5px solid var(--wb-settings-choice-border);
   border-radius: 10px;
-  background: var(--wb-settings-card-bg);
+  background: var(--wb-page-card-bg);
   color: var(--wb-text);
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
@@ -679,70 +439,15 @@
 
 /* ---------------------------------------------------------- narrow widths */
 
-@container settings-page (max-width: 1100px) {
+@container page (max-width: 1100px) {
   .wb-settings__grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* The sidebar becomes a strip of tabs above the cards. */
-@container settings-page (max-width: 640px) {
-  .wb-settings__frame {
-    --wb-settings-gutter: 16px;
-    --wb-settings-gap: 16px;
-
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .wb-settings__sidebar {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    border-right: 0;
-    border-bottom: 1px solid var(--wb-border);
-  }
-
-  .wb-settings-nav,
-  .wb-settings-nav ul {
-    display: flex;
-    gap: 4px;
-    padding: 0;
-    border: 0;
-  }
-
-  .wb-settings-nav .wb-settings-nav__support {
-    margin: 0;
-    padding: 0 0 0 4px;
-    border: 0;
-    border-left: 1px solid var(--wb-border);
-  }
-
-  .wb-settings-nav__item {
-    padding: 8px 12px;
-    gap: 8px;
-    font-size: 14px;
-  }
-
-  .wb-settings__back {
-    flex: none;
-  }
-
-  .wb-settings__header {
-    flex-wrap: wrap;
-  }
-
+@container page (max-width: 640px) {
   .wb-settings-actions,
   .wb-settings-layouts {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wb-settings * {
-    transition: none !important;
   }
 }

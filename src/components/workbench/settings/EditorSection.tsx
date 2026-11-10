@@ -5,7 +5,7 @@ import { useId } from 'react';
 import { cx } from '../../board';
 import type { SplitPreference } from '../editorView';
 import { TEXT } from '../testbenchText';
-import { SettingsCard } from './SettingsCard';
+import { PageCard } from '../page/PageCard';
 import type { Setting } from './settingsSections';
 
 export interface EditorSectionProps {
@@ -29,7 +29,7 @@ const SPLIT_CHOICES: readonly SplitChoice[] = [
 export function EditorSection({ split }: EditorSectionProps) {
   const groupName = useId();
   return (
-    <SettingsCard title={TEXT.settingTitle} wide>
+    <PageCard title={TEXT.settingTitle} wide>
       <div className="wb-settings-options">
         {SPLIT_CHOICES.map((choice) => {
           const selected = split.value === choice.value;
@@ -44,6 +44,6 @@ export function EditorSection({ split }: EditorSectionProps) {
           );
         })}
       </div>
-    </SettingsCard>
+    </PageCard>
   );
 }

@@ -58,23 +58,16 @@ describe('languagesOf', () => {
 describe('filterItems', () => {
   test('finds a project by a word only a file description has', () => {
     const lab = item({ name: 'Lab 3', files: [{ name: 'a.vhd', description: 'debouncer' }] });
-    expect(filterItems([lab, counter], 'debouncer', 'all')).toEqual([lab]);
+    expect(filterItems([lab, counter], 'debouncer')).toEqual([lab]);
   });
 
   test('ignores case and accents and needs every word', () => {
-    expect(filterItems([counter], 'cöunter ENABLE', 'all')).toEqual([counter]);
-    expect(filterItems([counter], 'counter xyz', 'all')).toEqual([]);
+    expect(filterItems([counter], 'cöunter ENABLE')).toEqual([counter]);
+    expect(filterItems([counter], 'counter xyz')).toEqual([]);
   });
 
   test('an empty query matches everything', () => {
-    expect(filterItems([counter], '   ', 'all')).toEqual([counter]);
-  });
-
-  test('a type keeps the projects with that language, mixed ones too', () => {
-    const verilog = item({ name: 'v', languages: ['verilog'] });
-    const mixed = item({ name: 'm', languages: ['vhdl', 'verilog'] });
-    const none = item({ name: 'n' });
-    expect(filterItems([counter, verilog, mixed, none], '', 'verilog')).toEqual([verilog, mixed]);
+    expect(filterItems([counter], '   ')).toEqual([counter]);
   });
 });
 
@@ -98,14 +91,6 @@ describe('sortItems', () => {
     const lab2 = item({ name: 'lab2' });
     const lab10 = item({ name: 'lab10' });
     expect(sortItems([lab10, lab2], 'name')).toEqual([lab2, lab10]);
-  });
-
-  test('by where it is stored: that place first, each place newest first', () => {
-    const gitHubOld = item({ name: 'g-old', source: 'github', updatedAt: old.updatedAt });
-    const gitHubNew = item({ name: 'g-new', source: 'github', updatedAt: recent.updatedAt });
-    const items = [gitHubOld, old, gitHubNew, recent];
-    expect(sortItems(items, 'local')).toEqual([recent, old, gitHubNew, gitHubOld]);
-    expect(sortItems(items, 'github')).toEqual([gitHubNew, gitHubOld, recent, old]);
   });
 
   test('does not change its input', () => {
@@ -189,24 +174,23 @@ describe('isSameProject', () => {
 });
 
 describe('parseProjectsPagePrefs', () => {
-  test('a bad value gives the default for that choice', () => {
-    expect(parseProjectsPagePrefs('{"view":"grid","sort":"bogus"}')).toEqual({ type: 'all', sort: 'newest', view: 'grid' });
-    // Views of earlier versions ('compact', 'list') read as the default.
-    expect(parseProjectsPagePrefs('{"view":"compact"}').view).toBe('details');
-    expect(parseProjectsPagePrefs('{"view":"list"}').view).toBe('details');
-    expect(parseProjectsPagePrefs('{"sort":"github"}').sort).toBe('github');
+  test('reads a stored sort', () => {
+    expect(parseProjectsPagePrefs('{"sort":"name"}')).toEqual({ sort: 'name' });
   });
 
-  test('nothing, or text that is not JSON, gives the defaults', () => {
-    const defaults = { type: 'all', sort: 'newest', view: 'details' };
-    expect(parseProjectsPagePrefs(null)).toEqual(defaults);
-    expect(parseProjectsPagePrefs('{nope')).toEqual(defaults);
-    expect(parseProjectsPagePrefs('5')).toEqual(defaults);
+  test('a sort of earlier versions, or a bad one, gives the default', () => {
+    expect(parseProjectsPagePrefs('{"sort":"github"}')).toEqual({ sort: 'newest' });
+    expect(parseProjectsPagePrefs('{"sort":"bogus","view":"grid"}')).toEqual({ sort: 'newest' });
   });
 
-  test('the type filter is not remembered: a stored one is ignored, and none is written', () => {
-    expect(parseProjectsPagePrefs('{"type":"verilog","sort":"local"}')).toEqual({ type: 'all', sort: 'local', view: 'details' });
-    expect(JSON.parse(storedProjectsPagePrefs({ type: 'vhdl', sort: 'name', view: 'grid' }))).toEqual({ sort: 'name', view: 'grid' });
+  test('nothing, or text that is not JSON, gives the default', () => {
+    expect(parseProjectsPagePrefs(null)).toEqual({ sort: 'newest' });
+    expect(parseProjectsPagePrefs('{nope')).toEqual({ sort: 'newest' });
+    expect(parseProjectsPagePrefs('5')).toEqual({ sort: 'newest' });
+  });
+
+  test('writes only the sort', () => {
+    expect(JSON.parse(storedProjectsPagePrefs({ sort: 'oldest' }))).toEqual({ sort: 'oldest' });
   });
 });
 

@@ -144,9 +144,9 @@ src/github/                     plain TypeScript, no React
 src/components/workbench/
   gistLink.ts, projectGitHub.ts an open project and its gist: snapshot, status, links (pure)
   useGitHub.ts                  the sign-in state
-  useGitHubProjects.ts          the project actions, for the dialog and the project page
-  GitHubSignInDialog.tsx, ProjectGitHubCard.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, GitHub.css
-  ProjectsPage.tsx (+ ProjectItems, ProjectMenu, ProjectsAccount), projectCatalog.ts, useLocalProjects.ts   the Projects page
+  useGitHubProjects.ts          the project actions, for the dialog and the Projects page
+  GitHubSignInDialog.tsx, GitHubConflictDialog.tsx, GitHubStatus.tsx, GitHub.css
+  projects/ (+ ProjectMenu.tsx), projectCatalog.ts, useLocalProjects.ts   the Projects page; Active project › Storage saves to GitHub
   gitHubWindow.ts               the GitHub window (pop-up, or the Windows app's dialog) and the web flow's callback channel
 public/github-callback.html     where GitHub returns after "Authorize" (web flow)
 winInstaller/electron/          main.js + preload.js: the encrypted token file, the GitHub sign-in window and the projects folder

@@ -17,7 +17,7 @@ import { filesOf, newestOrigin, originOf, withOrigin, type RunOrigin, type RunOr
 import { useWaveform, type RunInfo, type Waveform } from './useWaveform';
 import type { SavedViews } from './useSavedView';
 import type { WaveFocus } from './useWaveView';
-import type { ExplorerFolds } from '../workbench/explorerFolds';
+import type { PaneFolds } from '../workbench/paneFolds';
 import type { ViewMemory } from './viewSetup';
 import { buttonState, type ButtonState } from './waveState';
 
@@ -31,8 +31,8 @@ export interface OverlaySlot {
 export interface WaveformViewInput {
   readonly waveGet: (run: number) => void;
   readonly overlay: OverlaySlot;
-  /** The Explorer folds away while the view is open (explorerFolds.ts). */
-  readonly explorerFolds: ExplorerFolds;
+  /** The Explorer folds away while the view is open (paneFolds.ts). */
+  readonly explorerFolds: PaneFolds;
   /** The project's files, read when a declaration is looked up. */
   readonly files: () => readonly VhdlFile[];
   readonly reveal: (target: DeclarationTarget) => void;
@@ -120,7 +120,7 @@ function useRunTracking(waveform: Waveform, log: WaveformViewInput['log'], onOff
 const WAVEFORM_HOLDER = 'waveform';
 
 /** The Explorer folds away while the view is open, and comes back after if it was open. */
-function useExplorerFold(folds: ExplorerFolds, viewOpen: boolean) {
+function useExplorerFold(folds: PaneFolds, viewOpen: boolean) {
   const fold = () => folds.hold(WAVEFORM_HOLDER);
   // Only a view that was open and has closed lets go of the fold: an effect left over
   // from a render before the view opened (a run's WAVE-READY opens it, not a click)

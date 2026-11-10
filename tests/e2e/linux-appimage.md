@@ -11,7 +11,7 @@ end and in `linuxAppImage/README.md` § Tested on. A distribution is listed as s
 
 - A **clean** Ubuntu 24.04 LTS desktop and a clean Linux Mint 22.x desktop, x86-64 (a VM is fine): no Node.js, no
   GHDL, no Icarus Verilog, no `libfuse2` (check: `ldconfig -p | grep libfuse.so.2` prints nothing).
-- `HDLBoard-<version>-linux-x86_64.AppImage` and its `.sha256` from the draft release or the workflow artifact,
+- `HDLBoard-<version>-x86_64.AppImage` and its `.sha256` from the draft release or the workflow artifact,
   copied to `~/Nedlastinger/` (or `~/Downloads/`).
 - To read the log: `~/.config/HDLBoard/logs/backend.log`.
 

@@ -11,7 +11,7 @@ import {
 } from '../../github/projectGists';
 import type { IndexEntry } from '../../github/projectIndex';
 import { confirmDialog } from './desktop';
-import { unsavedChangesQuestion, type OpenProject } from './projectFile';
+import type { OpenProject } from './projectFile';
 import { describeSavePlan, gitHubSyncState, projectSnapshot, withoutGistLink, withSavedGistLink, type SourceFile } from './projectGitHub';
 import type { GitHubConnection } from './useGitHub';
 
@@ -33,13 +33,15 @@ export interface GitHubProjects {
   message: GitHubMessage | null;
   conflict: SaveConflict | null;
   refresh(): void;
+  /** Opens the project from its gist, replacing Files: the caller asks about unsaved changes first. */
   open(entry: IndexEntry): void;
   remove(entry: IndexEntry): void;
   /**
    * Save to GitHub: a new gist the first time, then that gist — or, for a project opened
    * from someone else's gist, a copy in a new gist of the user's own. Asks to sign in first.
+   * Whether it was saved: not while signed out, nor when GitHub's version changed meanwhile.
    */
-  save(): void;
+  save(): Promise<boolean>;
   /** Opens the project again as it is on GitHub, replacing the files here. */
   getGitHubVersion(): void;
   /** The conflict's answers: save over GitHub's version, or open it instead. */
@@ -60,7 +62,7 @@ export interface GitHubProjectsOptions {
   log: (text: string, tone?: 'success' | 'error') => void;
 }
 
-type SignedInAction = (projects: ProjectGists) => Promise<void>;
+type SignedInAction = (projects: ProjectGists) => Promise<boolean>;
 
 /** The GitHub actions on projects (docs/GITHUB.md), for the GitHub dialog and the project settings. */
 export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProjects {
@@ -88,16 +90,19 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
     [log],
   );
 
+  /** Runs an action, showing it as busy; whether it got to its end without failing. */
   const run = useCallback(
-    async (activity: string, action: () => Promise<void>) => {
+    async (activity: string, action: () => Promise<void>): Promise<boolean> => {
       const running = { activity };
       activities.current.push(running);
       setBusy(activity);
       setMessage(null);
       try {
         await action();
+        return true;
       } catch (failure) {
         report('error', failure instanceof Error ? failure.message : String(failure));
+        return false;
       } finally {
         activities.current = activities.current.filter((other) => other !== running);
         setBusy(activities.current[activities.current.length - 1]?.activity ?? null);
@@ -106,10 +111,12 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
     [report],
   );
 
-  const whenSignedIn = (action: SignedInAction) => {
-    if (projects !== null) return void action(projects);
+  /** Runs the action now, or once signed in (then it reports false: it has not run yet). */
+  const whenSignedIn = async (action: SignedInAction): Promise<boolean> => {
+    if (projects !== null) return action(projects);
     afterSignIn.current = action;
     showSignIn();
+    return false;
   };
 
   const refresh = useCallback(() => {
@@ -140,26 +147,30 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
       report('success', `Saved ${current.name} to GitHub as a new secret gist.`);
     });
 
-  const saveOver = (current: ProjectSnapshot, write: (snapshot: ProjectSnapshot) => Promise<SaveResult>) =>
-    run('Saving to GitHub…', async () => {
+  /** Saves over the gist; a gist changed on GitHub meanwhile is not saved over, but asked about (the conflict). */
+  const saveOver = async (current: ProjectSnapshot, write: (snapshot: ProjectSnapshot) => Promise<SaveResult>) => {
+    let saved = false;
+    await run('Saving to GitHub…', async () => {
       try {
         const result = await write(current);
         linkSaved(result, current);
         report('success', `Saved ${current.name} to GitHub: ${describeSavePlan(result.plan)}.`);
+        saved = true;
       } catch (failure) {
         if (!(failure instanceof GistChangedError)) throw failure;
         setConflict({ whenKnown: failure.whenKnown });
       }
     });
+    return saved;
+  };
 
-  const save = () => {
-    if (project === null) return;
+  const save = async () => {
+    if (project === null) return false;
     const current = projectSnapshot(project, files);
     const link = project.gist;
-    whenSignedIn(async (target) => {
-      if (link === undefined || !target.isOwnedByUser(link)) await publish(target, current);
-      else await saveOver(current, (snapshot) => target.save(link, snapshot));
-    });
+    return whenSignedIn((target) =>
+      link === undefined || !target.isOwnedByUser(link) ? publish(target, current) : saveOver(current, (snapshot) => target.save(link, snapshot)),
+    );
   };
 
   const replaceGitHubVersion = () => {
@@ -175,15 +186,12 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
       setConflict(null);
     });
 
-  const open = (entry: IndexEntry) => {
-    if (!confirmReplacingFiles(project, files, `Open ${entry.name} from GitHub?`)) return;
-    whenSignedIn((target) => openGist(target, entry.gistId));
-  };
+  const open = (entry: IndexEntry) => void whenSignedIn((target) => openGist(target, entry.gistId));
 
   const getGitHubVersion = () => {
     const link = project?.gist;
     if (link === undefined || !confirmLosingChanges(project, files)) return;
-    whenSignedIn((target) => openGist(target, link.gistId));
+    void whenSignedIn((target) => openGist(target, link.gistId));
   };
 
   const remove = (entry: IndexEntry) => {
@@ -213,12 +221,6 @@ export function useGitHubProjects(options: GitHubProjectsOptions): GitHubProject
 
 function deleteQuestion(entry: IndexEntry): string {
   return `Delete ${entry.name} from GitHub?\n\nIts gist and all its files are deleted on GitHub. This cannot be undone. The files open in HDLBoard are kept.`;
-}
-
-/** Opening another project replaces Files: ask first when the open project has changes not saved anywhere. */
-function confirmReplacingFiles(project: OpenProject | null, files: readonly SourceFile[], question: string): boolean {
-  if (project === null || gitHubSyncState(project, files) !== 'changed') return true;
-  return confirmDialog(unsavedChangesQuestion(question, project.name, 'GitHub'));
 }
 
 function confirmLosingChanges(project: OpenProject | null, files: readonly SourceFile[]): boolean {

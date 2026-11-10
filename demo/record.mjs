@@ -26,6 +26,7 @@ await page.addInitScript(() => {
 });
 page.setDefaultTimeout(12000);
 const button = (name) => page.getByRole('button', { name, exact: true });
+const settingsSection = (name) => page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name });
 const click = async (locator) => { await locator.scrollIntoViewIfNeeded(); await locator.hover(); await pause(500); await locator.click(); await pause(); };
 const fastDialogClick = async (locator) => { await locator.scrollIntoViewIfNeeded(); await locator.hover(); await pause(250); await locator.click(); await pause(600); };
 // The repeated checkbox clicks take about one tenth of a normal narrated click.
@@ -80,16 +81,16 @@ try {
     await pause(400);
   }
   await click(button('Stop'));
-  await click(button('Settings'));
   const boardDivider = page.getByRole('separator', { name: 'Resize board panel' });
   const originalBoardWidth = Number(await boardDivider.getAttribute('aria-valuenow'));
+  await click(button('Settings'));
+  await click(settingsSection('Board & I/O'));
   const singleColumn = page.locator('label').filter({ hasText: 'Single column' });
   await singleColumn.hover();
   await singleColumn.click();
   await check(await page.getByLabel('Single column').isChecked(), 'Single column was not selected');
   await pause(1000);
-  await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close', exact: true }).click();
-  await pause();
+  await click(button('Close settings'));
   const singleColumnWidth = Number(await boardDivider.getAttribute('aria-valuenow'));
   await drag(boardDivider, singleColumnWidth - originalBoardWidth, 0);
   await check(Math.abs(Number(await boardDivider.getAttribute('aria-valuenow')) - originalBoardWidth) <= 1, 'Board pane width was not restored');
@@ -216,10 +217,28 @@ try {
   await pause(1500);
   await page.screenshot({ path: path.join(output, 'final-frame.png') });
   await click(button('Close the waveform'));
-  const nexysFile = page.getByRole('treeitem', { name: /Nexys_A7\.vhdl/ });
-  await nexysFile.hover();
-  await nexysFile.click();
-  await page.waitForTimeout(1000);
+  // Finish in the dark theme with the board's own top file: two switches, two LEDs.
+  await click(button('Settings'));
+  await click(settingsSection('General'));
+  await click(page.locator('label').filter({ hasText: 'Dark background and panels.' }));
+  await check(await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'Dark theme was not applied');
+  await pause(1000);
+  await click(button('Close settings'));
+  await click(button('Examples'));
+  await click(button('Open Board Top Level (VHDL)'));
+  const nexysTop = button('Set Nexys_A7.vhdl as the top-level file');
+  if (await nexysTop.count()) await click(nexysTop);
+  await check(await button('Nexys_A7.vhdl is the top-level file').isDisabled(), 'Nexys_A7.vhdl was not selected as top');
+  await click(button('Start simulation with Nexys_A7.vhdl as top'));
+  await page.getByText('Simulation running ...', { exact: false }).last().waitFor({ timeout: 60000 });
+  for (const i of [0, 1]) {
+    await click(page.getByRole('switch', { name: `SW${i}`, exact: true }));
+    await page.getByRole('img', { name: `LD${i} on`, exact: true }).waitFor();
+  }
+  await pause(1500);
+  await click(button('Stop simulation of Nexys_A7.vhdl'));
+  await pause(1500);
+  await page.screenshot({ path: path.join(output, 'dark-finish.png') });
 } catch (error) {
   console.error(error);
   await page.screenshot({ path: path.join(output, 'failure.png') });

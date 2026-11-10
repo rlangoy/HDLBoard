@@ -38,7 +38,7 @@ import { AboutDialog } from './AboutDialog';
 import { SettingsPage } from './settings/SettingsPage';
 import { useSettingsPage } from './settings/useSettingsPage';
 import { useKeepProject } from './settings/useKeepProject';
-import { useExplorerFolds, usePageFold } from './explorerFolds';
+import { BOARD_FOLDING_PAGES, EXPLORER_FOLDING_PAGES, usePageFold, usePaneFolds } from './paneFolds';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog, type NewProjectChoice } from './NewFileDialog';
@@ -88,7 +88,6 @@ import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
-import { ProjectPage } from './ProjectPage';
 import { BoardSettingsPage } from './BoardSettingsPage';
 import { BoardDraftIo } from './boardEditor/BoardDraftIo';
 import { useBoardSettings } from './boardEditor/useBoardSettings';
@@ -130,7 +129,6 @@ import {
   withDescriptionForDownload,
   isUntouchedDefault,
   projectNeedsName,
-  unsavedChangesQuestion,
   type OpenedProject,
   type OpenProject,
   type LocalSourceFile,
@@ -142,13 +140,15 @@ import { parseGistRef, resolveProjectUrl } from '../../project/gistUrl';
 import { GITHUB_AUTH_PATH } from '../../github/config';
 import type { GistLink, OpenedGistProject } from '../../github/projectGists';
 import { GitHubSignInDialog } from './GitHubSignInDialog';
-import { ProjectsPage } from './ProjectsPage';
-import { openProjectInfo } from './ProjectsAccount';
+import { ProjectsPage } from './projects/ProjectsPage';
+import { openProjectInfo } from './projects/openProject';
+import { useLeaveOpenProject } from './projects/useLeaveOpenProject';
+import { useProjectsPage } from './projects/useProjectsPage';
+import { useUnsavedChangesQuestion } from './projects/UnsavedChangesDialog';
 import { isSameProject, type ProjectListItem } from './projectCatalog';
 import type { FolderHandle, ScanOutcome } from './localProjectScan';
 import { openRequestFor, useLocalProjects, type LocalOpenRequest } from './useLocalProjects';
 import { GitHubConflictDialog } from './GitHubConflictDialog';
-import { ProjectGitHubCard } from './ProjectGitHubCard';
 import { gistLinkFromUrl, gitHubSyncState, isSomeoneElses, withGistLink } from './projectGitHub';
 import { gitHubShareView } from './gitHubShare';
 import { useGitHub } from './useGitHub';
@@ -258,11 +258,12 @@ interface RunChoice {
 const BOARD_PANE_TITLE = 'Board I/O';
 
 /**
- * When opening a project shows the project settings: always (a URL), only when a file could
+ * When opening a project shows the Active project: always (a URL), only when a file could
  * not be loaded or loading warned (a gist), or only when the project lists no files
  * (opened from this computer: straight to the code).
  */
 type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
+
 
 /**
  * The workbench's main page: a file tree and tabbed editor on the left
@@ -349,7 +350,7 @@ export function Workbench() {
   const [boardForNewProject, setBoardForNewProject] = useState<string | null>(null);
   // Files an upload, a drop or a rename refused, shown in RefusedFilesDialog until closed.
   const [refusal, setRefusal] = useState<{ title: string; refused: readonly RefusedFile[] } | null>(null);
-  // What is shown over the editor (which stays mounted underneath): the Examples pane, the project settings or the Projects page.
+  // What is shown over the editor (which stays mounted underneath): the Examples pane, Settings or the Projects page.
   // 'waveform': the waveform view, in place of the testbench/RTL split (docs/waveform_viewer_spec.md W8).
   const { overlay, setOverlay, registerLeaveGuard, navigate } = useOverlay();
   const setDialog = useCallback((next: typeof dialog) => {
@@ -375,7 +376,7 @@ export function Workbench() {
     setProject(next);
     setProjectGeneration(projectGenerationRef.current);
   }, []);
-  // What the project is busy with, e.g. downloading a file; shown on the project settings.
+  // What the project is busy with, e.g. downloading a file; shown on the Active project.
   const [projectBusy, setProjectBusy] = useState<string | null>(null);
   // Files a project opened in a browser without: stored next to its project file, but not chosen with it.
   const [folderNeeded, setFolderNeeded] = useState<readonly string[] | null>(null);
@@ -387,7 +388,7 @@ export function Workbench() {
   const saveFolderRef = useRef<PickedFolder | null>(null);
   // Save project would overwrite files that are not the project's own: the question, and its answer.
   const [overwriteAsk, setOverwriteAsk] = useState<{ paths: readonly string[]; answer: (overwrite: boolean) => void } | null>(null);
-  // Folders the last save emptied, offered for removal on the project settings (D13), and the disk they are on.
+  // Folders the last save emptied, offered for removal on the Active project (D13), and the disk they are on.
   const [emptiedFolders, setEmptiedFolders] = useState<readonly string[]>([]);
   const savedDiskRef = useRef<SaveDisk | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
@@ -438,14 +439,21 @@ export function Workbench() {
     setEditorRoom((overlay && PAGE_ROOM[overlay]) ?? EDITOR_MIN_W);
   }, [overlay, setEditorRoom]);
   const { collapsed, togglePane, showPane } = layout;
-  // The Explorer folds away while the waveform view, the Settings page or the board settings
-  // are shown, and comes back after if it was open. Declared before the waveform view, whose
-  // fold this shares.
+  // The Explorer folds away while the waveform view, the Settings page, the board settings or
+  // the Projects page are shown, and comes back after if it was open. Declared before the
+  // waveform view, whose fold this shares.
   const showExplorer = useCallback((open: boolean) => showPane('sidebar', open), [showPane]);
-  const explorerFolds = useExplorerFolds({ collapsed: collapsed.sidebar, show: showExplorer });
-  usePageFold(overlay, explorerFolds);
-  // The Settings page, in the editor's place like the other pages there.
+  const explorerFolds = usePaneFolds({ collapsed: collapsed.sidebar, show: showExplorer });
+  usePageFold(overlay, explorerFolds, EXPLORER_FOLDING_PAGES);
+  // Board I/O folds away while the Projects page is shown, and comes back after if it was open.
+  const showBoard = useCallback((open: boolean) => showPane('board', open), [showPane]);
+  const boardFolds = usePaneFolds({ collapsed: collapsed.board, show: showBoard });
+  usePageFold(overlay, boardFolds, BOARD_FOLDING_PAGES);
+  // The Settings and Projects pages, in the editor's place like the other pages there.
   const settingsPage = useSettingsPage({ overlay, setOverlay });
+  const projectsPage = useProjectsPage({ overlay, setOverlay }, projectNeedsName(project));
+  // Save, Discard changes or Cancel, before another project replaces one with unsaved changes.
+  const unsavedQuestion = useUnsavedChangesQuestion();
   const keepProject = useKeepProject();
 
   const [boardLayout, setBoardLayout] = useState(loadBoardLayout);
@@ -882,7 +890,7 @@ export function Workbench() {
     const projectUpload = projectFileInZip(zipMembers) ?? pickProjectUpload(chosen.filter((file) => zipPathOf(file) === undefined));
     if (projectUpload) {
       // The project's files replace Files: never without asking when the open project has changes.
-      if (!confirmLeavingUnsaved(projectUpload.name)) return;
+      if (!(await leaveOpenProject(projectUpload.name))) return;
       projectFileHandleRef.current = handles.get(projectUpload.name) ?? null;
       await openProjectUpload(projectUpload, chosen.filter((file) => file !== projectUpload));
       for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
@@ -949,7 +957,7 @@ export function Workbench() {
 
   /**
    * Opens a project file's text: its files replace what Files holds, the first of them is
-   * shown, and the project settings shows as `page` says (ProjectPageWhen).
+   * shown, and the Active project shows as `page` says (ProjectPageWhen).
    * `gist`: the GitHub gist it is stored in (projectGitHub.ts). Returns why it could not be
    * opened, or null.
    */
@@ -976,7 +984,7 @@ export function Workbench() {
 
   /**
    * A project read from its gist through the GitHub API (the Projects page, Get the GitHub
-   * version). Opened cleanly, it goes straight to the editor; the project settings shows only
+   * version). Opened cleanly, it goes straight to the editor; the Active project shows only
    * when something needs a look.
    */
   const openGistProject = async ({ projectFileText: text, rawProjectUrl, files: gistFiles, link }: OpenedGistProject) => {
@@ -1043,18 +1051,19 @@ export function Workbench() {
     }
     setOpenProjectError(null);
     setDialog(null);
+    // The folder's projects are listed first: asking about unsaved changes may take the student elsewhere.
+    projectsPage.open('local');
     // A project file in the folder itself, not one folder down.
     const own = outcome.items.filter((item) => parentFolder(item.location) === withSlashes(folder));
-    if (own.length === 1 && confirmLeavingUnsaved(own[0].name)) {
-      const item = own[0];
-      const source = outcome.sources.get(item.key);
-      // The Windows app lists full paths and opens them as such; browsers read their source.
-      const error = await (source ? openRequestFor(item, source) : Promise.resolve<LocalOpenRequest>({ kind: 'path', path: item.location }))
-        .then(openLocalProject)
-        .catch((err: unknown) => errorText(err));
-      if (error) appendLog(`Project not opened: ${item.name}: ${error}`, 'error');
-    }
-    setOverlay('projects');
+    if (own.length !== 1 || !(await leaveOpenProject(own[0].name))) return;
+    const item = own[0];
+    const source = outcome.sources.get(item.key);
+    // The Windows app lists full paths and opens them as such; browsers read their source.
+    const error = await (source ? openRequestFor(item, source) : Promise.resolve<LocalOpenRequest>({ kind: 'path', path: item.location }))
+      .then(openLocalProject)
+      .catch((err: unknown) => errorText(err));
+    if (error) appendLog(`Project not opened: ${item.name}: ${error}`, 'error');
+    projectsPage.open('local');
   };
 
   /** Open project folder in the Windows app: its own folder dialog, which also sets the projects folder. */
@@ -1085,20 +1094,16 @@ export function Workbench() {
     }
   };
 
-  const localProjects = useLocalProjects(overlay === 'projects');
+  // Read while a list is shown; Active project lists nothing.
+  const localProjects = useLocalProjects(projectsPage.section !== null && projectsPage.section !== 'active');
 
-  // Signing in from the dialog ends in the Projects page, where the projects are.
+  // Signing in from the dialog ends in the Projects page, among the projects on GitHub.
   const signedIn = gitHub.session !== null;
   useEffect(() => {
     if (!signedIn || dialog !== 'githubSignIn') return;
     setDialog(null);
-    setOverlay('projects');
+    projectsPage.open('github');
   }, [signedIn, dialog]);
-
-  /** Opening a project replaces Files: ask first when the open project has changes that would be lost. */
-  const confirmLeavingUnsaved = (opening: string) =>
-    !projectUnsaved ||
-    confirmDialog(unsavedChangesQuestion(`Open ${opening}?`, project.name));
 
   const openLocalProject = async (request: LocalOpenRequest): Promise<string | null> => {
     if (request.kind === 'path') return openProjectFrom(request.path);
@@ -1116,15 +1121,14 @@ export function Workbench() {
   /** Projects page: open a project from the list, GitHub or local (docs/project_browse_page.md § 8). */
   const handleOpenListedProject = async (item: ProjectListItem) => {
     if (isSameProject(item, { name: project.name, gistId: project.gist?.gistId, location: project.location })) {
-      setOverlay(null);
+      projectsPage.close();
       return;
     }
+    if (!(await leaveOpenProject(item.name))) return;
     if (item.source === 'github' && item.entry) {
-      // Open asks about changes not on GitHub itself; other unsaved changes it does not know of.
-      if (gitHubSync === 'changed' || confirmLeavingUnsaved(item.name)) gitHubProjects.open(item.entry);
+      gitHubProjects.open(item.entry);
       return;
     }
-    if (!confirmLeavingUnsaved(item.name)) return;
     try {
       const error = await openLocalProject(await localProjects.readForOpen(item));
       if (error !== null) throw new Error(error);
@@ -1136,7 +1140,7 @@ export function Workbench() {
 
   const handleOpenProjectFrom = async (input: string) => {
     setOpenProjectError(null);
-    if (!confirmLeavingUnsaved(input)) return;
+    if (!(await leaveOpenProject(input))) return;
     const error = await openProjectFrom(input);
     if (error === null) setDialog(null);
     else setOpenProjectError(error);
@@ -1169,7 +1173,8 @@ export function Workbench() {
     replaceProject(opened);
     const clean = Object.keys(opened.unloaded).length === 0 && opened.warnings.length === 0;
     const showPage = page === 'always' || (page === 'onProblems' ? !clean : opened.entries.length === 0);
-    setOverlay(showPage ? 'project' : null);
+    if (showPage) projectsPage.open('active');
+    else setOverlay(null);
     // A browser read only the files chosen with the project file: ask for its folder at once.
     const notChosen = opened.entries.filter((entry) => opened.unloaded[entry.name.toLowerCase()] === MISSING_LOCAL_FILE);
     setFolderNeeded(notChosen.length > 0 ? notChosen.map((entry) => entry.name) : null);
@@ -1284,13 +1289,13 @@ export function Workbench() {
    * another folder are moved; a file that is not the project's own is overwritten only
    * after asking.
    */
-  const handleSaveProject = async () => {
+  const handleSaveProject = async (): Promise<boolean> => {
     const savingProjectGeneration = projectGenerationRef.current;
     const projectIsCurrent = () => projectGenerationRef.current === savingProjectGeneration;
     const folderError = sourceDirectoryError(project.sourceDirectory);
     if (folderError) {
       appendLog(`Project not saved: ${folderError}`, 'error');
-      return;
+      return false;
     }
     const current = filesRef.current;
     const projectFile = { name: project.fileName, text: projectFileText(project, current.map((f) => f.name)) };
@@ -1314,7 +1319,7 @@ export function Workbench() {
         picked = saveFolderRef.current;
         if (!picked) {
           picked = (await pickSaveFolder()) ?? null;
-          if (!picked) return;
+          if (!picked) return false;
           known = withoutDiskPlaces(project);
         }
         disk = folderHandleDisk(picked);
@@ -1325,7 +1330,7 @@ export function Workbench() {
         const count = downloadOpenProject(project, current);
         setProject((p) => projectIsCurrent() ? withSaved(p, current, project) : p);
         appendLog(`Downloaded ${projectFile.name.replace(/\.hdlboard\.json$/i, '')}.zip: ${projectFile.name} and ${count} file(s) in ${sourceFolderOf(project)}. Unpack it to keep the project.`, 'success');
-        return;
+        return true;
       }
 
       const plan = planDiskSave(known, toSave, projectFile, await readExisting(disk, known));
@@ -1333,7 +1338,7 @@ export function Workbench() {
         const overwrite = await askOverwrite(plan.clashes);
         if (!overwrite) {
           appendLog(`Project not saved: ${plan.clashes.length} file(s) would have been overwritten.`, 'error');
-          return;
+          return false;
         }
       }
       let outcome;
@@ -1349,7 +1354,7 @@ export function Workbench() {
             (err.written.length > 0 ? ' Copies written before the failure stay, and the next save tidies them.' : ''),
           'error',
         );
-        return;
+        return false;
       }
       if (picked) {
         if (projectIsCurrent()) saveFolderRef.current = picked;
@@ -1364,8 +1369,10 @@ export function Workbench() {
         const list = outcome.leftBehind.map(({ path, reason }) => `${path} (${reason})`).join(', ');
         appendLog(`Could not remove the old copies, which you can delete yourself: ${list}.`, 'error');
       }
+      return true;
     } catch (err) {
       appendLog(`Project not saved: ${errorText(err)}`, 'error');
+      return false;
     } finally {
       setProjectBusy(null);
     }
@@ -1443,7 +1450,7 @@ export function Workbench() {
     showNewFile(top.id);
     setTopFileId(top.id);
     setTopUnit(null);
-    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from the project settings (click the project in Files).`, 'success');
+    appendLog(`New project ${created.name} (${created.fileName}), listing ${listed.length} file(s). Save it from Projects › Active project (click the project in Files).`, 'success');
   };
 
   /**
@@ -1475,13 +1482,13 @@ export function Workbench() {
     createProject(choice.name, choice.board, [top.name], top);
   };
 
-  // Create Project (Files panel): a new, empty project; the project settings offers the files now in Files.
+  // Create Project (Files panel): a new, empty project; the Active project offers the files now in Files.
   const handleStartProject = () => navigate(() => {
     // The files it offers are in the open project's names: its board too.
     const started = withBoardConfig(startProject(fileNames, project.board), catalog.boardConfigFor(project.board));
     saveFolderRef.current = null;
     replaceProject(started);
-    setOverlay('project');
+    projectsPage.open('active');
     appendLog('New project: give it a name, and add the files that belong to it.', 'success');
   });
 
@@ -1703,7 +1710,7 @@ export function Workbench() {
     setFiles(next);
   };
 
-  // Changing the board (docs/board_io_config_spec.md § 3.3): from Settings, the project settings, or a mismatch hint.
+  // Changing the board (docs/board_io_config_spec.md § 3.3): from Settings, the Active project, or a mismatch hint.
   // Not while the project loads or saves, or a run compiles: there is no overlapping state to define.
   const boardLocked = projectBusy !== null || status === 'compiling';
   const boardSettings = useBoardSettings(catalog, { setProject, stopSimulation: stopRunSoon });
@@ -1789,21 +1796,22 @@ export function Workbench() {
   });
 
   // Ctrl+Shift+S saves to GitHub (Ctrl+S, above, saves the shown file to disk).
-  // The untouched Default project is named on the project settings before it is saved to GitHub.
+  // The untouched Default project is named on the Active project before it is saved to GitHub.
   const untouchedDefault = isUntouchedDefault(project, projectUnsaved);
-  // Whether the project settings was opened for that first save: decided as it opens, and kept while it
+  // Whether the Active project was opened for that first save: decided as it opens, and kept while it
   // stays open, so editing the project's details does not change the page under the user.
   const [firstSaveAsked, setFirstSaveAsked] = useState(false);
+  const activeProjectShown = projectsPage.section === 'active';
   useEffect(() => {
-    if (overlay !== 'project') setFirstSaveAsked(false);
-  }, [overlay]);
-  const gitHubFirstSave = firstSaveAsked && overlay === 'project' && signedIn && project.gist === undefined;
+    if (!activeProjectShown) setFirstSaveAsked(false);
+  }, [activeProjectShown]);
+  const gitHubFirstSave = firstSaveAsked && activeProjectShown && signedIn && project.gist === undefined;
   const saveToGitHub = untouchedDefault || projectNeedsName(project)
     ? () => {
         setFirstSaveAsked(true);
-        setOverlay('project');
+        projectsPage.open('active');
       }
-    : gitHubProjects.save;
+    : () => void gitHubProjects.save();
   const shareRef = useRef({ view: gitHubShare, save: saveToGitHub });
   shareRef.current = { view: gitHubShare, save: saveToGitHub };
   useEffect(() => {
@@ -1818,7 +1826,22 @@ export function Workbench() {
   }, []);
 
   // The Projects page's view of the open project, new only when it changes (its list is memoised on it).
-  const openProjectSummary = useMemo(() => openProjectInfo(project, gitHubSync, projectUnsaved), [project, gitHubSync, projectUnsaved]);
+  const openProjectSummary = useMemo(
+    () => openProjectInfo(project, { changedSinceLocalSave: projectUnsaved, syncState: gitHubSync, firstSaveToGitHub: gitHubFirstSave }),
+    [project, gitHubSync, projectUnsaved, gitHubFirstSave],
+  );
+  // Opening another project asks first about unsaved changes (Save, Discard changes, Cancel).
+  const leaveOpenProject = useLeaveOpenProject({
+    openNow: {
+      info: openProjectSummary,
+      name: project.name,
+      needsName: projectNeedsName(project),
+      save: openProjectSummary.destination === 'github' ? gitHubProjects.save : handleSaveProject,
+    },
+    ask: unsavedQuestion.ask,
+    askForName: () => projectsPage.nameAsk.ask(true),
+    logError: (text) => appendLog(text, 'error'),
+  });
   const showInFolder = desktopBridge()?.showInFolder;
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
@@ -1837,7 +1860,7 @@ export function Workbench() {
         settingsOpen={settingsPage.section !== null}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
-        onGitHub={() => (signedIn ? setOverlay((shown) => (shown === 'projects' ? null : 'projects')) : setDialog('githubSignIn'))}
+        onGitHub={() => (signedIn ? projectsPage.toggleSection('github') : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
         notifications={
           <UpdateBell
@@ -1854,7 +1877,7 @@ export function Workbench() {
               someoneElses={gitHubSomeoneElses}
               onSave={saveToGitHub}
               onGetGitHubVersion={gitHubProjects.getGitHubVersion}
-              onOpenProjects={() => setOverlay('projects')}
+              onOpenProjects={() => projectsPage.open('github')}
             />
           )
         }
@@ -1968,6 +1991,7 @@ export function Workbench() {
         />
       )}
       {tb.roleConflictDialog}
+      {unsavedQuestion.dialog}
       {runChoice && (
         <RunTestbenchDialog
           designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
@@ -2025,8 +2049,8 @@ export function Workbench() {
               onSelect={handleOpenFile}
               onUpload={showOpenDialog}
               onNewFile={handleNewFile}
-              onOpenProject={() => setOverlay((shown) => (shown === 'projects' ? null : 'projects'))}
-              projectsOpen={overlay === 'projects'}
+              onOpenProject={() => projectsPage.toggleSection('all')}
+              projectsOpen={projectsPage.section !== null}
               onRename={handleRenameFile}
               onDelete={handleDeleteFile}
               onDownload={handleDownloadFile}
@@ -2037,8 +2061,8 @@ export function Workbench() {
               onSetTopFile={handleSetTopFile}
               topLocked={isSimulating}
               project={{ name: project.name, fileName: project.fileName, description: project.description, unsaved: projectUnsaved }}
-              projectOpen={overlay === 'project'}
-              onToggleProject={() => setOverlay((shown) => (shown === 'project' ? null : 'project'))}
+              projectOpen={activeProjectShown}
+              onToggleProject={() => projectsPage.toggleSection('active')}
             />
           </SidePanel>
 
@@ -2048,7 +2072,7 @@ export function Workbench() {
           />
 
           <div className="wb-center">
-            {/* Under the Examples pane or the project settings the editor is inert: no caret, no typing into a hidden file. */}
+            {/* Under the Examples pane or the Active project the editor is inert: no caret, no typing into a hidden file. */}
             <div className="wb-center__editor" {...(overlay !== null ? { inert: '' } : {})}>
             <CodeEditor
               onChange={handleContentChange}
@@ -2093,62 +2117,51 @@ export function Workbench() {
               <BoardSettingsPage document={catalog.document} boards={catalog.editorBoards} builtInBoardIds={catalog.builtInBoardIds} initialBoardId={activeBoard.id}
                 onSave={boardSettings.onSave} onClose={() => setOverlay(null)} registerLeaveGuard={registerLeaveGuard} onPreview={boardSettings.onPreview} />
             )}
-            {overlay === 'project' && (
-              <ProjectPage
-                project={project}
-                rows={projectEntries(project, fileNames)}
-                unsaved={projectUnsaved}
-                busy={projectBusy}
-                onDetailsChange={(details) => setProject((p) => withDetails(p, details))}
-                boards={catalog}
-                onBoardChange={(id) => boardChange.requestBoardChange(id)}
-                boardLocked={boardLocked}
-                onChooseBoard={() => settingsPage.open('board')}
-                onEntryChange={(name, patch) => setProject((p) => withEntryEdited(p, name, patch))}
-                onOpenFile={handleOpenProjectFile}
-                onRemoveEntry={(name) => setProject((p) => withEntryRemoved(p, name))}
-                onReloadFromUrl={(name) => void handleReloadFromUrl(name)}
-                onFolderChosen={(chosen) => void handleProjectFolderChosen(chosen)}
-                onSave={() => void handleSaveProject()}
-                saveHint={saveHint}
-                emptiedFolders={emptiedFolders}
-                onRemoveFolder={(folder) => void handleRemoveEmptyFolder(folder)}
-                available={availableFiles(project, fileNames)}
-                onAddFiles={(names) => setProject((p) => withFilesAdded(p, names))}
-                onLeaveProject={(name) => setProject((p) => withFileLeft(p, name))}
-                onCloseProject={handleCloseProject}
-                onClose={() => setOverlay(null)}
-                gitHubSave={gitHubFirstSave ? gitHubProjects.save : undefined}
-                askName={gitHubFirstSave && projectNeedsName(project)}
-                github={
-                  gitHubFirstSave ? undefined : (
-                  <ProjectGitHubCard
-                    link={project.gist}
-                    syncState={gitHubSync}
-                    userLogin={gitHub.session?.user.login ?? null}
-                    projects={gitHubProjects}
-                    named={!projectNeedsName(project)}
-                  />
-                  )
-                }
-              />
-            )}
-            {overlay === 'projects' && (
+            {projectsPage.section !== null && (
               <ProjectsPage
-                connection={gitHub}
-                gitHubProjects={gitHubProjects}
-                localProjects={localProjects}
-                openProject={openProjectSummary}
-                opening={projectBusy !== null || gitHubProjects.busy !== null}
-                onOpenItem={(item) => void handleOpenListedProject(item)}
-                onNewProject={handleStartProject}
-                onShowProjectPage={() => setOverlay('project')}
-                // A project without a name is named on its settings first.
-                onSaveLocal={() => (projectNeedsName(project) ? setOverlay('project') : void handleSaveProject())}
-                onSignIn={() => setDialog('githubSignIn')}
-                onShowInFolder={showInFolder && ((path) => void showInFolder(path))}
-                onOpenFromUrl={showOpenDialog}
-                onClose={() => setOverlay(null)}
+                section={projectsPage.section}
+                onSectionChange={projectsPage.select}
+                onClose={projectsPage.close}
+                info={openProjectSummary}
+                saves={{ toComputer: () => void handleSaveProject(), toGitHub: () => void gitHubProjects.save() }}
+                lists={{
+                  connection: gitHub,
+                  gitHubProjects,
+                  localProjects,
+                  opening: projectBusy !== null || gitHubProjects.busy !== null,
+                  onOpenItem: (item) => void handleOpenListedProject(item),
+                  onNewProject: handleStartProject,
+                  onSignIn: () => setDialog('githubSignIn'),
+                  onOpenFromUrl: showOpenDialog,
+                  onShowInFolder: showInFolder && ((path) => void showInFolder(path)),
+                }}
+                nameAsk={projectsPage.nameAsk}
+                active={{
+                  project,
+                  rows: projectEntries(project, fileNames),
+                  busy: projectBusy,
+                  needsName: projectNeedsName(project),
+                  onDetailsChange: (details) => setProject((p) => withDetails(p, details)),
+                  board: {
+                    boards: catalog,
+                    onChange: (id) => boardChange.requestBoardChange(id),
+                    locked: boardLocked,
+                    onChooseBoard: () => settingsPage.open('board'),
+                  },
+                  files: {
+                    available: availableFiles(project, fileNames),
+                    onAddFiles: (names) => setProject((p) => withFilesAdded(p, names)),
+                    onLeaveProject: (name) => setProject((p) => withFileLeft(p, name)),
+                    onEntryChange: (name, patch) => setProject((p) => withEntryEdited(p, name, patch)),
+                    onOpenFile: handleOpenProjectFile,
+                    onRemoveEntry: (name) => setProject((p) => withEntryRemoved(p, name)),
+                    onReloadFromUrl: (name) => void handleReloadFromUrl(name),
+                    onFolderChosen: (chosen) => void handleProjectFolderChosen(chosen),
+                  },
+                  local: { saveHint, emptiedFolders, onRemoveFolder: (folder) => void handleRemoveEmptyFolder(folder) },
+                  github: { link: project.gist, someoneElses: gitHubSomeoneElses, projects: gitHubProjects },
+                  onCloseProject: handleCloseProject,
+                }}
               />
             )}
             {overlay === 'waveform' && (

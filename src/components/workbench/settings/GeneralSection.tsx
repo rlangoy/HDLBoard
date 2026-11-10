@@ -9,7 +9,7 @@ import { useThemeState } from '../../../theme/useTheme';
 import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL } from '../examples';
 import { withLanguageToggled, type PreferredLanguages } from '../languagePrefs';
 import { APP_NAME } from '../project';
-import { SettingsCard } from './SettingsCard';
+import { PageCard } from '../page/PageCard';
 import { SettingSwitch } from './SettingSwitch';
 import type { Setting } from './settingsSections';
 import type { KeepProjectSetting } from './useKeepProject';
@@ -52,7 +52,7 @@ function AppearanceCard() {
   const { preference, saveFailed } = useThemeState();
   const groupName = useId();
   return (
-    <SettingsCard title="Appearance" wide>
+    <PageCard title="Appearance" wide>
       <div className="wb-settings-themes">
         {THEME_CHOICES.map((choice) => {
           const selected = preference === choice.value;
@@ -70,14 +70,14 @@ function AppearanceCard() {
       </div>
       {/* Always mounted: a live region that appears already filled is often not announced. */}
       <p className="wb-settings__note wb-settings__note--error" role="status">{saveFailed ? THEME_SAVE_FAILED_TEXT : ''}</p>
-    </SettingsCard>
+    </PageCard>
   );
 }
 
 /** Each box on its own; with neither ticked, the Examples pane opens asking for a language. */
 function LanguagesCard({ languages }: Pick<GeneralSectionProps, 'languages'>) {
   return (
-    <SettingsCard title="Languages" wide>
+    <PageCard title="Languages" wide>
       <div className="wb-settings-languages">
         {EXAMPLE_LANGUAGES.map((language) => (
           <label key={language} className="wb-settings-check">
@@ -91,20 +91,20 @@ function LanguagesCard({ languages }: Pick<GeneralSectionProps, 'languages'>) {
         ))}
       </div>
       <p className="wb-settings__note">Choose which languages are selected by default in Examples. You can change this there.</p>
-    </SettingsCard>
+    </PageCard>
   );
 }
 
 /** The desktop app's project storage (desktop.ts): stored for the next launch, not what this one runs with. */
 function DesktopSessionCard({ keepProject }: { keepProject: KeepProjectSetting }) {
   return (
-    <SettingsCard title="Desktop app" wide>
+    <PageCard title="Desktop app" wide>
       <SettingSwitch
         label="Keep my project between sessions"
         description={`Saves your files and the one you were editing on this computer and restores them when ${APP_NAME} starts. Applies after restart.`}
         setting={keepProject.setting}
       />
       {keepProject.saveFailed && <p className="wb-settings__note wb-settings__note--error" role="alert">The setting could not be saved.</p>}
-    </SettingsCard>
+    </PageCard>
   );
 }
