@@ -79,7 +79,7 @@ describe('the sidebar', () => {
   });
 
   test('puts a dot on the active project while it has unsaved changes', () => {
-    expect(render('all')).toMatch(/<span class="wb-page-nav__dot" title="Unsaved changes"><\/span><\/span>Active project<span class="wb-page-nav__sr">, Unsaved changes/);
+    expect(render('all')).toMatch(/<span class="wb-page-nav__dot" title="Unsaved changes"><\/span><\/span>Active project<span class="wb-page__sr">, Unsaved changes/);
     expect(render('all', { info: { ...info, unsaved: false } })).not.toContain('wb-page-nav__dot');
   });
 
@@ -135,7 +135,7 @@ describe('a list', () => {
 
 test('All projects shows where a project is stored as an icon, named for screen readers and in its tooltip', () => {
   const html = render('all');
-  expect(html).toMatch(/<li title="On this computer"><svg[^]*?<span class="wb-projects__sr">On this computer<\/span><\/li>/);
+  expect(html).toMatch(/<li title="On this computer"><svg[^]*?<span class="wb-page__sr">On this computer<\/span><\/li>/);
 });
 
 test('On this computer and On GitHub have no Location column: every project there is in that place', () => {

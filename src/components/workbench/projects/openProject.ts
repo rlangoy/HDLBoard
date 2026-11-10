@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import type { CatalogFile } from '../projectCatalog';
+import type { CatalogFile, ProjectSource } from '../projectCatalog';
 import type { OpenProject } from '../projectFile';
 import type { GitHubSyncState } from '../projectGitHub';
 
 /** Where Save project writes the open project (issue #44: said plainly, never guessed). */
-export type SaveDestination = 'local' | 'github';
+export type SaveDestination = ProjectSource;
 
 /** The open project, as the Projects page shows it. */
 export interface OpenProjectInfo {

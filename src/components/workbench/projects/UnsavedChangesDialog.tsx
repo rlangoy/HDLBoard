@@ -5,6 +5,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '../Dialog';
 import { AlertIcon } from '../icons';
 import type { SaveDestination } from './openProject';
+import { PLACE } from './places';
 import '../NewFileDialog.css';
 
 /** What the student chose when another project would replace one with unsaved changes. */
@@ -18,7 +19,6 @@ export interface UnsavedQuestion {
   opening: string;
 }
 
-const DESTINATION_TEXT: Record<SaveDestination, string> = { local: 'on this computer', github: 'on GitHub' };
 
 export interface UnsavedChangesDialogProps {
   question: UnsavedQuestion;
@@ -51,7 +51,7 @@ export function UnsavedChangesDialog({ question, onAnswer }: UnsavedChangesDialo
       }
     >
       <p id="wb-unsaved-text" className="wb-newfile__label">
-        {name} has changes that are not saved {DESTINATION_TEXT[question.destination]}. Save saves them there first; Discard changes opens {question.opening}{' '}
+        {name} has changes that are not saved on {PLACE[question.destination].name}. Save saves them there first; Discard changes opens {question.opening}{' '}
         without them.
       </p>
     </Dialog>

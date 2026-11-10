@@ -45,7 +45,7 @@ export function ListToolbar({ list, searchRef }: ListToolbarProps) {
           <RefreshIcon aria-hidden="true" />
         </button>
       </div>
-      <p className="wb-projects__sr" role="status">
+      <p className="wb-page__sr" role="status">
         Showing {list.shown.length} of {list.inSection.length} projects
       </p>
     </>

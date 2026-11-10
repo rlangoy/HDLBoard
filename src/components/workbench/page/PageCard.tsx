@@ -7,33 +7,29 @@ import { ChevronDownIcon } from '../icons';
 
 export interface PageCardProps {
   title: string;
-  /** Drawn before the title, in the accent colour. */
-  icon?: ReactNode;
   /** Spans every column of the section's grid. */
   wide?: boolean;
-  /** What the head holds at its right, e.g. a status. */
-  headEnd?: ReactNode;
   children: ReactNode;
 }
 
 /** One group of related things on a page: a titled card in the style of the board's panels. */
-export function PageCard({ title, icon, wide, headEnd, children }: PageCardProps) {
+export function PageCard({ title, wide, children }: PageCardProps) {
   const titleId = useId();
   return (
     <section className={cx('wb-page-card', wide && 'wb-page-card--wide')} aria-labelledby={titleId}>
       <div className="wb-page-card__head">
         <h3 id={titleId} className="wb-page-card__title">
-          {icon && <span className="wb-page-card__icon" aria-hidden="true">{icon}</span>}
           {title}
         </h3>
-        {headEnd}
       </div>
       <div className="wb-page-card__body">{children}</div>
     </section>
   );
 }
 
-export interface FoldingPageCardProps extends Pick<PageCardProps, 'title' | 'icon' | 'children'> {
+export interface FoldingPageCardProps extends Pick<PageCardProps, 'title' | 'children'> {
+  /** Drawn before the title, in the accent colour. */
+  icon?: ReactNode;
   /** Unfolds the card (and keeps it open), e.g. for a field in it that is to get the focus. */
   unfold?: boolean;
 }

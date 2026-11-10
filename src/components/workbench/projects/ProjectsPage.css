@@ -39,15 +39,6 @@
   overflow-wrap: anywhere;
 }
 
-.wb-projects__sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 .wb-projects__aside {
   margin: 0;
   font-size: 13.5px;

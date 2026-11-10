@@ -159,7 +159,8 @@
   background: var(--wb-page-nav-dot-bg);
 }
 
-.wb-page-nav__sr {
+/* Read by screen readers, not shown. */
+.wb-page__sr {
   position: absolute;
   width: 1px;
   height: 1px;

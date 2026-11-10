@@ -5,7 +5,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { copyText } from '../clipboard';
 import type { ProjectGistLink } from '../gistLink';
 import { Activity } from '../GitHubStatus';
-import { CloudDownloadIcon, CloudUploadIcon, CopyIcon, DeleteIcon, GitHubIcon, InfoIcon, LaptopIcon, SaveIcon } from '../icons';
+import { CloudDownloadIcon, CloudUploadIcon, CopyIcon, DeleteIcon, InfoIcon, SaveIcon } from '../icons';
+import { PLACE, PlaceIcon } from './places';
 import { FoldingPageCard } from '../page/PageCard';
 import type { OpenProject } from '../projectFile';
 import { pendingLayoutChange, sourceFolderOf } from '../projectLayout';
@@ -64,15 +65,15 @@ const GITHUB_STATE: Record<OpenProjectInfo['syncState'], SavedState> = { 'not-on
 function LocalPlace({ info, busy, local, onSaveToComputer }: ProjectStorageCardProps) {
   return (
     <StoragePlace
-      icon={<LaptopIcon />}
-      title="This computer"
+      icon={<PlaceIcon place="local" />}
+      title={PLACE.local.title}
       state={localState(info)}
       destination={info.destination === 'local'}
       where={info.onComputer ? <span className="wb-projects__mono" title={info.location}>{info.location}</span> : 'Not saved on this computer yet.'}
     >
       <button type="button" className="wb-projects__btn" onClick={onSaveToComputer} disabled={busy} title={local.saveHint}>
         <SaveIcon aria-hidden="true" />
-        Save to this computer
+        Save to {PLACE.local.name}
       </button>
     </StoragePlace>
   );
@@ -98,8 +99,8 @@ function GitHubPlace({ info, busy, github, onSaveToGitHub }: ProjectStorageCardP
   const { link } = github;
   return (
     <StoragePlace
-      icon={<GitHubIcon />}
-      title="GitHub"
+      icon={<PlaceIcon place="github" />}
+      title={PLACE.github.title}
       state={GITHUB_STATE[info.syncState]}
       destination={info.destination === 'github'}
       where={link ? <GistAddress link={link} /> : 'Save it on your GitHub account to open it on any computer. It is stored as a secret gist.'}

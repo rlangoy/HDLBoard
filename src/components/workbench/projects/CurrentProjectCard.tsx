@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { CloudUploadIcon, GitHubIcon, LaptopIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
+import { CloudUploadIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
+import { PLACE, PlaceIcon } from './places';
 import type { MenuAction } from '../ProjectMenu';
 import { MoreMenuButton } from './MoreMenuButton';
-import type { OpenProjectInfo, SaveDestination } from './openProject';
+import type { OpenProjectInfo } from './openProject';
 import { UnsavedChip } from './StateChip';
 
 export interface CurrentProjectCardProps {
@@ -19,7 +20,6 @@ export interface CurrentProjectCardProps {
   menu: readonly MenuAction[];
 }
 
-const DESTINATION_LABEL: Record<SaveDestination, string> = { local: 'this computer', github: 'GitHub' };
 
 /**
  * The project open in the workspace, on top of Active project (issue #44): its name,
@@ -43,7 +43,7 @@ export function CurrentProjectCard({ project, busy, onSave, onOpenInWorkspace, m
       <div className="wb-projects-current__actions">
         <button type="button" className="wb-projects__btn" onClick={onSave} disabled={!canSave}>
           {project.destination === 'github' ? <CloudUploadIcon aria-hidden="true" /> : <SaveIcon aria-hidden="true" />}
-          Save to {DESTINATION_LABEL[project.destination]}
+          Save to {PLACE[project.destination].name}
         </button>
         <button type="button" className="wb-projects__btn is-primary" onClick={onOpenInWorkspace} title="Back to the editor (Esc)">
           <OpenInIcon aria-hidden="true" />
@@ -62,12 +62,11 @@ function savedAtDestinationYet(project: OpenProjectInfo): boolean {
 
 /** "Saves to this computer: C:\…\Counter.hdlboard.json", so Save never surprises. */
 function SaveDestinationLine({ project }: { project: OpenProjectInfo }) {
-  const github = project.destination === 'github';
   return (
     <span className="wb-projects-current__destination">
-      {github ? <GitHubIcon aria-hidden="true" /> : <LaptopIcon aria-hidden="true" />}
+      <PlaceIcon place={project.destination} />
       <span>
-        Saves to {DESTINATION_LABEL[project.destination]}
+        Saves to {PLACE[project.destination].name}
         {': '}
         <DestinationPlace project={project} />
       </span>

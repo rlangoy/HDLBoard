@@ -76,7 +76,7 @@ function FilesTable({ rows, busy, actions }: { rows: readonly ProjectEntryRow[];
           <th scope="col">File name</th>
           <th scope="col">Description</th>
           <th scope="col">
-            <span className="wb-projects__sr">Actions</span>
+            <span className="wb-page__sr">Actions</span>
           </th>
         </tr>
       </thead>

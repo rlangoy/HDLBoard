@@ -94,10 +94,14 @@ export function projectRows(items: readonly ProjectListItem[], open: OpenProject
   return [...(row ? [row] : []), ...others.map(itemRow)];
 }
 
+/** The one place each list keeps to; All projects keeps to none. */
+const SECTION_PLACE: Readonly<Record<ListSectionId, ProjectSource | null>> = { all: null, local: 'local', github: 'github' };
+
 /** The rows a section lists: all of them, or those stored in its one place. */
 export function rowsInSection(rows: readonly ProjectRow[], section: ListSectionId): ProjectRow[] {
-  if (section === 'all') return [...rows];
-  return rows.filter((row) => row.places.some((place) => place.source === section));
+  const only = SECTION_PLACE[section];
+  if (only === null) return [...rows];
+  return rows.filter((row) => row.places.some((place) => place.source === only));
 }
 
 /** The open project's row first, wherever the sort put it; the others keep their order. */

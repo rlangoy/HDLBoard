@@ -46,7 +46,7 @@ export function PageSidebar<Id extends string>({ label, groups, current, onSelec
                     {entry.marker && <span className="wb-page-nav__dot" title={entry.marker} />}
                   </span>
                   {entry.label}
-                  {entry.marker && <span className="wb-page-nav__sr">, {entry.marker}</span>}
+                  {entry.marker && <span className="wb-page__sr">, {entry.marker}</span>}
                 </button>
               </li>
             ))}

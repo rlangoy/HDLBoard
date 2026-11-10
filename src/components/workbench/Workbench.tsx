@@ -141,7 +141,8 @@ import { GITHUB_AUTH_PATH } from '../../github/config';
 import type { GistLink, OpenedGistProject } from '../../github/projectGists';
 import { GitHubSignInDialog } from './GitHubSignInDialog';
 import { ProjectsPage } from './projects/ProjectsPage';
-import { openProjectInfo, type OpenProjectInfo } from './projects/openProject';
+import { openProjectInfo } from './projects/openProject';
+import { useLeaveOpenProject } from './projects/useLeaveOpenProject';
 import { useProjectsPage } from './projects/useProjectsPage';
 import { useUnsavedChangesQuestion } from './projects/UnsavedChangesDialog';
 import { isSameProject, type ProjectListItem } from './projectCatalog';
@@ -261,17 +262,6 @@ const BOARD_PANE_TITLE = 'Board I/O';
  */
 type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
 
-/** The open project as the question before leaving it needs it, from the latest render. */
-interface OpenNow {
-  info: OpenProjectInfo;
-  name: string;
-  needsName: boolean;
-  /** Saves where it saves to; whether it saved. */
-  save: () => Promise<boolean>;
-}
-
-/** Resolves once React has rendered what was set before it (a frame later). */
-const nextRender = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 /**
  * The workbench's main page: a file tree and tabbed editor on the left
@@ -462,9 +452,6 @@ export function Workbench() {
   const projectsPage = useProjectsPage({ overlay, setOverlay }, projectNeedsName(project));
   // Save, Discard changes or Cancel, before another project replaces one with unsaved changes.
   const unsavedQuestion = useUnsavedChangesQuestion();
-  // The open project and its saves as of the latest render, for the question above: a save
-  // takes time, and what it is checked against afterwards must be the project as it is then.
-  const openNow = useRef<OpenNow | null>(null);
   const keepProject = useKeepProject();
 
   const [boardLayout, setBoardLayout] = useState(loadBoardLayout);
@@ -1115,27 +1102,6 @@ export function Workbench() {
     setDialog(null);
     projectsPage.open('github');
   }, [signedIn, dialog]);
-
-  /**
-   * Opening a project replaces Files: when the open project has changes where it saves to,
-   * ask first (Save, Discard changes or Cancel). Whether to go on: after a save, only if it
-   * saved, and only once nothing edited while it saved is left unsaved (it asks again then).
-   */
-  const leaveOpenProject = async (opening: string): Promise<boolean> => {
-    const now = openNow.current;
-    if (now === null || !now.info.unsaved) return true;
-    const answer = await unsavedQuestion.ask({ projectName: now.name, destination: now.info.destination, opening });
-    if (answer !== 'save') return answer === 'discard';
-    // A project without a name is named in its details first; the other project waits.
-    if (now.needsName) {
-      appendLog(`${opening} not opened: give this project a name and save it first.`, 'error');
-      projectsPage.nameAsk.ask(true);
-      return false;
-    }
-    if (!(await now.save())) return false;
-    await nextRender();
-    return leaveOpenProject(opening);
-  };
 
   const openLocalProject = async (request: LocalOpenRequest): Promise<string | null> => {
     if (request.kind === 'path') return openProjectFrom(request.path);
@@ -1862,12 +1828,18 @@ export function Workbench() {
     () => openProjectInfo(project, { changedSinceLocalSave: projectUnsaved, syncState: gitHubSync, firstSaveToGitHub: gitHubFirstSave }),
     [project, gitHubSync, projectUnsaved, gitHubFirstSave],
   );
-  openNow.current = {
-    info: openProjectSummary,
-    name: project.name,
-    needsName: projectNeedsName(project),
-    save: openProjectSummary.destination === 'github' ? gitHubProjects.save : handleSaveProject,
-  };
+  // Opening another project asks first about unsaved changes (Save, Discard changes, Cancel).
+  const leaveOpenProject = useLeaveOpenProject({
+    openNow: {
+      info: openProjectSummary,
+      name: project.name,
+      needsName: projectNeedsName(project),
+      save: openProjectSummary.destination === 'github' ? gitHubProjects.save : handleSaveProject,
+    },
+    ask: unsavedQuestion.ask,
+    askForName: () => projectsPage.nameAsk.ask(true),
+    logError: (text) => appendLog(text, 'error'),
+  });
   const showInFolder = desktopBridge()?.showInFolder;
 
   const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;

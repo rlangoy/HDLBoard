@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { cx } from '../../board';
-import { FileIcon, GitHubIcon, LaptopIcon, MoreIcon, OpenInIcon, ProjectIcon } from '../icons';
+import { FileIcon, MoreIcon, OpenInIcon, ProjectIcon } from '../icons';
+import { PLACE, PlaceIcon } from './places';
 import { displayName, fileHit, relativeTime } from '../projectCatalog';
 import type { ProjectPlace, ProjectRow } from './projectRows';
 import { SavedChip } from './StateChip';
@@ -20,7 +21,6 @@ export interface ProjectTableProps {
   showPlaces: boolean;
 }
 
-const PLACE_LABEL = { local: 'On this computer', github: 'On GitHub' } as const;
 
 const rowName = (row: ProjectRow) => displayName(row.name) || 'Untitled project';
 
@@ -35,7 +35,7 @@ export function ProjectTable({ rows, ...rowProps }: ProjectTableProps) {
             {rowProps.showPlaces && <th scope="col" className="is-places">Location</th>}
             <th scope="col" className="is-saved">Last saved</th>
             <th scope="col">
-              <span className="wb-projects__sr">Actions</span>
+              <span className="wb-page__sr">Actions</span>
             </th>
           </tr>
         </thead>
@@ -108,8 +108,6 @@ function NameAndDescription({ row, query }: { row: ProjectRow; query: string }) 
   );
 }
 
-const placeIcon = (place: ProjectPlace) => (place.source === 'github' ? <GitHubIcon aria-hidden="true" /> : <LaptopIcon aria-hidden="true" />);
-
 /**
  * Beside Open now: whether each place holds the open project as it is now. Stored in both
  * places, each state carries its place's icon, so the two are told apart.
@@ -117,8 +115,8 @@ const placeIcon = (place: ProjectPlace) => (place.source === 'github' ? <GitHubI
 function PlaceStates({ places }: { places: readonly ProjectPlace[] }) {
   const known = places.filter((place) => place.state !== undefined);
   return known.map((place) => (
-    <span key={place.source} className="wb-projects-table__state" title={PLACE_LABEL[place.source]}>
-      {known.length > 1 && placeIcon(place)}
+    <span key={place.source} className="wb-projects-table__state" title={PLACE[place.source].on}>
+      {known.length > 1 && <PlaceIcon place={place.source} />}
       {place.state && <SavedChip state={place.state} />}
     </span>
   ));
@@ -129,9 +127,9 @@ function Places({ places }: { places: readonly ProjectPlace[] }) {
   return (
     <ul className="wb-projects-table__places">
       {places.map((place) => (
-        <li key={place.source} title={PLACE_LABEL[place.source]}>
-          {placeIcon(place)}
-          <span className="wb-projects__sr">{PLACE_LABEL[place.source]}</span>
+        <li key={place.source} title={PLACE[place.source].on}>
+          <PlaceIcon place={place.source} />
+          <span className="wb-page__sr">{PLACE[place.source].on}</span>
         </li>
       ))}
     </ul>
