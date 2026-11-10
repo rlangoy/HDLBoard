@@ -226,8 +226,9 @@ card; the folding one starts open). The styles are `page/Page.css`; their colour
 ### `<ProjectsPage>`
 
 The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
-computer* and *On GitHub*. *Active project* has no entry there: its card's *Project
-details*, and the project in the Explorer, open it (`useProjectsPage`). The Explorer and Board I/O fold away
+computer* and *On GitHub*, then, ruled off below them, *Active project*, with an orange dot
+on its icon while the project has unsaved changes. Its card's *Project details*, and the
+project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
 
 On top of every section, `CurrentProjectCard` shows the open project: its name, *Unsaved

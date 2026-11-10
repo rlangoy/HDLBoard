@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { GitHubIcon, LaptopIcon, ProjectIcon, StackIcon } from '../icons';
 import { PageSidebar, type PageNavEntry } from '../page/PageSidebar';
-import { LIST_SECTIONS, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
+import { ACTIVE_SECTION, LIST_SECTIONS, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
 
 export const SECTION_ICONS: Readonly<Record<ProjectsSectionId, ReactNode>> = {
   all: <StackIcon />,
@@ -15,18 +15,22 @@ export const SECTION_ICONS: Readonly<Record<ProjectsSectionId, ReactNode>> = {
 
 const navEntry = (section: ProjectsSection): PageNavEntry<ProjectsSectionId> => ({ id: section.id, label: section.label, icon: SECTION_ICONS[section.id] });
 
-/**
- * The lists only: the active project is reached from its card on top of every section
- * (Project details) and from the project in the Explorer, so it needs no entry of its own.
- */
-const NAV_GROUPS = [LIST_SECTIONS.map(navEntry)];
+const LIST_ENTRIES = LIST_SECTIONS.map(navEntry);
+
+/** The lists, then, ruled off below them, the active project: a dot while it has unsaved changes. */
+function navGroups(unsaved: boolean) {
+  const active = { ...navEntry(ACTIVE_SECTION), marker: unsaved ? 'Unsaved changes' : undefined };
+  return [LIST_ENTRIES, [active]];
+}
 
 export interface ProjectsSidebarProps {
   current: ProjectsSectionId;
+  /** The open project has changes where it saves to. */
+  unsaved: boolean;
   onSelect: (section: ProjectsSectionId) => void;
   onBack: () => void;
 }
 
-export function ProjectsSidebar({ current, onSelect, onBack }: ProjectsSidebarProps) {
-  return <PageSidebar label="Project sections" groups={NAV_GROUPS} current={current} onSelect={onSelect} onBack={onBack} />;
+export function ProjectsSidebar({ current, unsaved, onSelect, onBack }: ProjectsSidebarProps) {
+  return <PageSidebar label="Project sections" groups={navGroups(unsaved)} current={current} onSelect={onSelect} onBack={onBack} />;
 }

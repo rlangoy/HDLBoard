@@ -69,7 +69,7 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
   const busy = active.busy !== null || active.github.projects.busy !== null;
 
   return (
-    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} onSelect={onSectionChange} onBack={onClose} />}>
+    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={onSectionChange} onBack={onClose} />}>
       <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
       </PageHeader>
       {/* Keyed by section, so another section starts at its top. */}

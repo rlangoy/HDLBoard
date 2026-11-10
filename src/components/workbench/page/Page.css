@@ -143,6 +143,31 @@
   height: 100%;
 }
 
+.wb-page-nav__icon {
+  position: relative;
+}
+
+/* On the icon's corner: something to see there, e.g. unsaved changes. */
+.wb-page-nav__dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--wb-page-sidebar-bg);
+  border-radius: 50%;
+  background: var(--wb-page-nav-dot-bg);
+}
+
+.wb-page-nav__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------- header + main */
 
 .wb-page__main {

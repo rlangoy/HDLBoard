@@ -8,6 +8,8 @@ export interface PageNavEntry<Id extends string> {
   readonly id: Id;
   readonly label: string;
   readonly icon: ReactNode;
+  /** A dot on the icon, and this said to screen readers, e.g. "Unsaved changes". */
+  readonly marker?: string;
 }
 
 export interface PageSidebarProps<Id extends string> {
@@ -39,8 +41,12 @@ export function PageSidebar<Id extends string>({ label, groups, current, onSelec
                   aria-current={entry.id === current ? 'page' : undefined}
                   onClick={() => onSelect(entry.id)}
                 >
-                  <span className="wb-page-nav__icon">{entry.icon}</span>
+                  <span className="wb-page-nav__icon">
+                    {entry.icon}
+                    {entry.marker && <span className="wb-page-nav__dot" title={entry.marker} />}
+                  </span>
                   {entry.label}
+                  {entry.marker && <span className="wb-page-nav__sr">, {entry.marker}</span>}
                 </button>
               </li>
             ))}

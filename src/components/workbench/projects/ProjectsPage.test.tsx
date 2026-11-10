@@ -73,10 +73,14 @@ const render = (section: ProjectsSectionId, props: Partial<ProjectsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('the sidebar', () => {
-  test('lists where projects are stored; the active project is reached from its card', () => {
+  test('lists where projects are stored, and the active project below them', () => {
     const labels = [...render('all').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub']);
-    expect(textOf(render('all'))).toContain('Project details');
+    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project']);
+  });
+
+  test('puts a dot on the active project while it has unsaved changes', () => {
+    expect(render('all')).toMatch(/<span class="wb-page-nav__dot" title="Unsaved changes"><\/span><\/span>Active project<span class="wb-page-nav__sr">, Unsaved changes/);
+    expect(render('all', { info: { ...info, unsaved: false } })).not.toContain('wb-page-nav__dot');
   });
 
   test('marks the section shown', () => {
