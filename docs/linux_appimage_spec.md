@@ -31,7 +31,7 @@ The Windows build, the browser version, `scripts/start.sh`, the Docker image, th
 
 ### 3.1 High priority – a working offline application
 
-- **L1. Package:** Produce one file, `HDLBoard-<version>-linux-x86_64.AppImage`, containing the frontend, backend, Electron runtime, GHDL and Icarus Verilog. `<version>` is the version stamped by `tools/bump-version.mjs`.
+- **L1. Package:** Produce one file, `HDLBoard-<version>-x86_64.AppImage`, containing the frontend, backend, Electron runtime, GHDL and Icarus Verilog. `<version>` is the version stamped by `tools/bump-version.mjs`.
 
 - **L2. GHDL tree:** Use the upstream release asset `ghdl-mcode-6.0.0-ubuntu24.04-x86_64.tar.gz` (same GHDL version and backend as Windows). Ship its `bin/`, `lib/` and analyzed standard and IEEE libraries under `resources/ghdl/`, so `ghdlInDir()` finds `resources/ghdl/bin/ghdl`. The upstream asset does not document its runtime dependencies; determine them with `ldd` in a clean `ubuntu:24.04` container. Any library not present on a default Ubuntu 24.04 desktop (expected: the GNAT runtime `libgnat-13`) shall be bundled in the tree and found through an `RPATH` of `$ORIGIN/../lib` set with `patchelf`, not through a global `LD_LIBRARY_PATH`.
 
@@ -69,7 +69,7 @@ The Windows build, the browser version, `scripts/start.sh`, the Docker image, th
   | `AppRun` (or launcher) | The sandbox check from L9 |
   | `vendor/`, `output/` | Gitignored, as on Windows |
 
-  The Electron shell stays in `winInstaller/electron/`. Add a `dist:linux` script (`electron-builder --linux AppImage`) and a `linux` section to `electron-builder.yml` (`target: AppImage`, `category: Development`, `artifactName: ${productName}-${version}-linux-x86_64.${ext}`, PNG icon). Extend `make-assets.cjs` to emit a 512×512 PNG icon. Leave the `win` and `nsis` sections untouched.
+  The Electron shell stays in `winInstaller/electron/`. Add a `dist:linux` script (`electron-builder --linux AppImage`) and a `linux` section to `electron-builder.yml` (`target: AppImage`, `category: Development`, `artifactName: ${productName}-${version}-x86_64.${ext}`, PNG icon). Extend `make-assets.cjs` to emit a 512×512 PNG icon. Leave the `win` and `nsis` sections untouched.
 
 - **B2. Repeatable inputs:** Pin the GHDL asset name and SHA-256, the Icarus source tag and tarball SHA-256, and the build-base image. Refuse to unpack on a checksum mismatch (same behavior as `fetch-ghdl.ps1`). Each simulator tree contains a `VERSION.txt` with the exact version, source URL, checksum and, for Icarus, the configure options.
 
@@ -80,7 +80,7 @@ The Windows build, the browser version, `scripts/start.sh`, the Docker image, th
   - `v*` tag → additionally upload both files to the tag's **draft** release, creating the draft if it does not exist. Never publish; publishing stays the maintainer's manual step for both platforms.
   - Both workflows may run at the same time on one tag. Release creation shall tolerate that (create-if-missing, then retry `gh release upload --clobber` if the create lost the race).
   - The log prints the commit SHA and both simulator `VERSION.txt` files.
-  - The checksum file is `HDLBoard-<version>-linux-x86_64.AppImage.sha256` in `sha256sum` format, so `sha256sum -c` works.
+  - The checksum file is `HDLBoard-<version>-x86_64.AppImage.sha256` in `sha256sum` format, so `sha256sum -c` works.
 
 - **B5. Licenses:** Ship license texts under `resources/` for HDLBoard (GPL-2.0-only), GHDL (GPL-2.0 plus the IEEE library license), Icarus Verilog (GPL-2.0-or-later) and every bundled library (for example the GNAT runtime, GPL with the GCC Runtime Library Exception). Because the AppImage has no installer license page, the maintainer README and the root README state where these files are. For Icarus, which is built from source here, attach the exact source tarball to the release or otherwise make the corresponding source available as GPL requires. *(Not legal advice; the same caveat as `winInstaller/README.md`.)*
 
