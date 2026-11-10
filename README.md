@@ -16,7 +16,7 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 ### Try it in one minute
 
-1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows or Linux app.
+1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows/Linux app.
 2. The starter design already connects the switches to the LEDs:
 
    ```vhdl
