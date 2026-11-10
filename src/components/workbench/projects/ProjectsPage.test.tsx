@@ -88,26 +88,31 @@ describe('the sidebar', () => {
   });
 });
 
-describe('the active project, on top of every section', () => {
+describe('the active project card', () => {
+  test('is shown in Active project only: the lists have the open project as their first row', () => {
+    expect(render('active')).toContain('aria-label="Active project"');
+    for (const section of ['all', 'local', 'github'] as const) expect(render(section)).not.toContain('aria-label="Active project"');
+  });
+
   test('says it has unsaved changes and where Save writes it', () => {
-    const text = textOf(render('local'));
+    const text = textOf(render('active'));
     expect(text).toContain('Custom_Board Unsaved changes');
-    expect(text).toContain('Saves to this computer: C:\\Users\\you\\Projects\\Custom_Board.hdlboard.json');
+    expect(text).toContain(`Saves to this computer: ${info.location}`);
     expect(text).toContain('Save to this computer');
   });
 
   test('a project on GitHub saves there', () => {
-    expect(textOf(render('all', { info: { ...info, destination: 'github' } }))).toContain('Saves to GitHub');
+    expect(textOf(render('active', { info: { ...info, destination: 'github' } }))).toContain('Saves to GitHub');
   });
 
   test('offers the way back to the editor', () => {
-    expect(textOf(render('all'))).toContain('Open in workspace');
+    expect(textOf(render('active'))).toContain('Open in workspace');
   });
+});
 
-  test('has a menu for a new project; the header has no button of its own', () => {
-    const html = render('all');
-    expect(html).toContain('aria-label="More: new project, open another"');
-    expect(html).not.toMatch(/wb-page__header.*New project.*<\/header>/);
+describe('the lists header', () => {
+  test('has a menu for a new project', () => {
+    expect(render('all')).toMatch(/<header class="wb-page__header">.*aria-label="More: new project, open another".*<\/header>/);
   });
 });
 

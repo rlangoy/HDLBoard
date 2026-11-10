@@ -8,6 +8,7 @@ import { PageHeader } from '../page/PageHeader';
 import type { OpenProject, ProjectDetails, ProjectEntryRow } from '../projectFile';
 import { ScrollArea } from '../ScrollArea';
 import { CurrentProjectCard } from './CurrentProjectCard';
+import { MoreMenuButton } from './MoreMenuButton';
 import type { OpenProjectInfo } from './openProject';
 import { ProjectAdvancedCard } from './ProjectAdvancedCard';
 import { ProjectDetailsCard, type BoardChoice, type NameRequest } from './ProjectDetailsCard';
@@ -59,8 +60,8 @@ const TITLE_ID = 'wb-projects-title';
 
 /**
  * The Projects page (issue #44), in the editor's place like Settings: a sidebar of where
- * projects are stored, and the active project at its foot. The project open now is on top
- * of every section, with where Save writes it and the way back to the editor.
+ * projects are stored, and the active project at its foot. The lists have the open project
+ * on top; Active project shows it in full, with where Save writes it.
  */
 export function ProjectsPage({ section, onSectionChange, onClose, info, saves, lists, active, nameAsk }: ProjectsPageProps) {
   const { label, intro } = projectsSection(section);
@@ -71,20 +72,22 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
   return (
     <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={onSectionChange} onBack={onClose} />}>
       <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
+        {section !== 'active' && <MoreMenuButton label="More: new project, open another" actions={listsMenu(lists)} />}
       </PageHeader>
       {/* Keyed by section, so another section starts at its top. */}
       <ScrollArea key={section} className="wb-page__scroll">
         <div className="wb-projects__body">
-          <CurrentProjectCard
-            project={info}
-            busy={busy}
-            onSave={info.destination === 'github' ? guarded.toGitHub : guarded.toComputer}
-            onShowDetails={section === 'active' ? undefined : () => onSectionChange('active')}
-            onOpenInWorkspace={onClose}
-            menu={cardMenu(lists, active)}
-          />
           {section === 'active' ? (
-            <ActiveProjectSection active={active} info={info} busy={busy} name={name.request} saves={guarded} />
+            <>
+              <CurrentProjectCard
+                project={info}
+                busy={busy}
+                onSave={info.destination === 'github' ? guarded.toGitHub : guarded.toComputer}
+                onOpenInWorkspace={onClose}
+                menu={[...listsMenu(lists), closeProjectAction(active)]}
+              />
+              <ActiveProjectSection active={active} info={info} busy={busy} name={name.request} saves={guarded} />
+            </>
           ) : (
             <ProjectListSection
               {...lists}
@@ -101,13 +104,17 @@ export function ProjectsPage({ section, onSectionChange, onClose, info, saves, l
   );
 }
 
-/** The active project's ⋮ menu: starting or opening another project, and closing this one. */
-function cardMenu(lists: ProjectListsProps, active: ActiveProjectProps): MenuAction[] {
+/** The ⋮ menu of the lists' header: starting or opening another project. */
+function listsMenu(lists: ProjectListsProps): MenuAction[] {
   return [
     { label: 'New project', icon: <PlusIcon aria-hidden="true" />, onSelect: lists.onNewProject, detail: 'Name it, add files, then save it' },
     { label: 'Open from a URL or path…', icon: <LinkIcon aria-hidden="true" />, onSelect: lists.onOpenFromUrl },
-    { label: 'Close project', icon: <CloseIcon aria-hidden="true" />, onSelect: active.onCloseProject, detail: 'Files keeps its files' },
   ];
+}
+
+/** On the active project's own menu, after the lists' entries. */
+function closeProjectAction(active: ActiveProjectProps): MenuAction {
+  return { label: 'Close project', icon: <CloseIcon aria-hidden="true" />, onSelect: active.onCloseProject, detail: 'Files keeps its files' };
 }
 
 interface ActiveProjectSectionProps {

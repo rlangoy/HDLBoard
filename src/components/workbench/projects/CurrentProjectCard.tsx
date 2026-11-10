@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useState } from 'react';
-import { CloudUploadIcon, GitHubIcon, InfoIcon, LaptopIcon, MoreIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
-import { ProjectMenu, type MenuAction } from '../ProjectMenu';
+import { CloudUploadIcon, GitHubIcon, LaptopIcon, OpenInIcon, ProjectIcon, SaveIcon } from '../icons';
+import type { MenuAction } from '../ProjectMenu';
+import { MoreMenuButton } from './MoreMenuButton';
 import type { OpenProjectInfo, SaveDestination } from './openProject';
 import { UnsavedChip } from './StateChip';
 
@@ -13,8 +13,6 @@ export interface CurrentProjectCardProps {
   busy: boolean;
   /** Saves where the project saves to (project.destination). */
   onSave: () => void;
-  /** To the Active project section; absent while it is shown. */
-  onShowDetails?: () => void;
   /** Back to the editor. */
   onOpenInWorkspace: () => void;
   /** What its ⋮ menu offers: New project, and the other ways to another project. */
@@ -24,10 +22,10 @@ export interface CurrentProjectCardProps {
 const DESTINATION_LABEL: Record<SaveDestination, string> = { local: 'this computer', github: 'GitHub' };
 
 /**
- * The project open in the workspace, on top of every section (issue #44): its name,
+ * The project open in the workspace, on top of Active project (issue #44): its name,
  * whether it has unsaved changes, where Save writes it, and the way back to the editor.
  */
-export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpenInWorkspace, menu }: CurrentProjectCardProps) {
+export function CurrentProjectCard({ project, busy, onSave, onOpenInWorkspace, menu }: CurrentProjectCardProps) {
   const canSave = !busy && (project.unsaved || !savedAtDestinationYet(project));
   return (
     <section className="wb-projects-current" aria-label="Active project">
@@ -43,12 +41,6 @@ export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpe
         <SaveDestinationLine project={project} />
       </div>
       <div className="wb-projects-current__actions">
-        {onShowDetails && (
-          <button type="button" className="wb-projects__btn" onClick={onShowDetails}>
-            <InfoIcon aria-hidden="true" />
-            Project details
-          </button>
-        )}
         <button type="button" className="wb-projects__btn" onClick={onSave} disabled={!canSave}>
           {project.destination === 'github' ? <CloudUploadIcon aria-hidden="true" /> : <SaveIcon aria-hidden="true" />}
           Save to {DESTINATION_LABEL[project.destination]}
@@ -57,22 +49,9 @@ export function CurrentProjectCard({ project, busy, onSave, onShowDetails, onOpe
           <OpenInIcon aria-hidden="true" />
           Open in workspace
         </button>
-        <CardMenu actions={menu} />
+        <MoreMenuButton label="More: new project, open another, close this one" actions={menu} />
       </div>
     </section>
-  );
-}
-
-function CardMenu({ actions }: { actions: readonly MenuAction[] }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const close = useCallback(() => setAnchor(null), []);
-  return (
-    <>
-      <button type="button" className="wb-projects__icon-btn is-boxed" onClick={(event) => setAnchor(event.currentTarget)} aria-haspopup="menu" aria-label="More: new project, open another">
-        <MoreIcon aria-hidden="true" />
-      </button>
-      {anchor && <ProjectMenu anchor={anchor} actions={actions} onClose={close} />}
-    </>
   );
 }
 

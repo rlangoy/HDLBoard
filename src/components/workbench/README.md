@@ -231,11 +231,13 @@ on its icon while the project has unsaved changes. Its card's *Project details*,
 project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
 
-On top of every section, `CurrentProjectCard` shows the open project: its name, *Unsaved
+On top of Active project, `CurrentProjectCard` shows the open project: its name, *Unsaved
 changes* while the place it saves to does not hold it, *Saves to this computer: …* or
 *Saves to GitHub* (`openProject.ts`: a project with a gist saves there, any other on this
 computer), Save, *Open in workspace* back to the editor, and a ⋮ menu with *New project*,
-*Open from a URL or path…* and *Close project*.
+*Open from a URL or path…* and *Close project*. The lists have no such card (the open
+project is their first row); their header has a ⋮ menu with *New project* and *Open from a
+URL or path…*.
 
 A list section has its place's folder or GitHub account above a search and a sort
 (`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row
