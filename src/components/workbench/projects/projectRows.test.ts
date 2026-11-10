@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import type { ProjectListItem } from '../projectCatalog';
+import { sortItems, type ProjectListItem } from '../projectCatalog';
 import type { OpenProjectInfo } from './openProject';
-import { projectRows, rowsInSection } from './projectRows';
+import { openRowFirst, projectRows, rowsInSection } from './projectRows';
 
 const local = (name: string, updatedAt = ''): ProjectListItem => ({
   key: `local:${name}`,
@@ -96,5 +96,23 @@ describe('rowsInSection', () => {
   test('a place lists the rows stored there, a project in both places in each', () => {
     expect(names('local')).toEqual(['Counter', 'Adder']);
     expect(names('github')).toEqual(['Counter', 'Knight Rider']);
+  });
+});
+
+describe('openRowFirst', () => {
+  const rows = projectRows([local('Adder', '2026-03-01T00:00:00Z'), local('Counter', '2026-01-01T00:00:00Z'), local('Blinky', '2026-02-01T00:00:00Z')], open({}));
+
+  test('puts the open project on top, whatever the sort', () => {
+    expect(openRowFirst(sortItems(rows, 'newest')).map((row) => row.name)).toEqual(['Counter', 'Adder', 'Blinky']);
+    expect(openRowFirst(sortItems(rows, 'name')).map((row) => row.name)).toEqual(['Counter', 'Adder', 'Blinky']);
+  });
+
+  test('keeps the order of the others', () => {
+    expect(openRowFirst(sortItems(rows, 'oldest')).map((row) => row.name)).toEqual(['Counter', 'Blinky', 'Adder']);
+  });
+
+  test('changes nothing when the open project is not listed', () => {
+    const others = rows.filter((row) => !row.isOpen);
+    expect(openRowFirst(others)).toEqual(others);
   });
 });

@@ -16,7 +16,7 @@ import type { GitHubConnection } from '../useGitHub';
 import type { GitHubProjects } from '../useGitHubProjects';
 import type { LocalProjects } from '../useLocalProjects';
 import type { OpenProjectInfo } from './openProject';
-import { projectRows, rowsInSection, type ProjectRow } from './projectRows';
+import { openRowFirst, projectRows, rowsInSection, type ProjectRow } from './projectRows';
 import type { ListSectionId } from './projectsSections';
 
 /** Where a list's projects come from. */
@@ -33,7 +33,7 @@ export interface ProjectList {
   setSort: (sort: SortOrder) => void;
   /** The section's rows, before the search. */
   inSection: readonly ProjectRow[];
-  /** The rows the search leaves, sorted. */
+  /** The rows the search leaves, sorted, with the open project's on top. */
   shown: readonly ProjectRow[];
   /** Nothing is listed yet, and a place is still being read. */
   loading: boolean;
@@ -52,7 +52,7 @@ export function useProjectList(section: ListSectionId, sources: ProjectSources, 
   const [sort, setSort] = usePersistedSort();
   const items = useListedItems(sources);
   const inSection = useMemo(() => rowsInSection(projectRows(items, openProject), section), [items, openProject, section]);
-  const shown = useMemo(() => sortItems(filterItems(inSection, query), sort), [inSection, query, sort]);
+  const shown = useMemo(() => openRowFirst(sortItems(filterItems(inSection, query), sort)), [inSection, query, sort]);
   const readingGitHub = connection.session !== null && gitHubProjects.entries === null && gitHubProjects.busy !== null;
   const refresh = () => {
     if (section !== 'github') localProjects.rescan();

@@ -99,3 +99,8 @@ export function rowsInSection(rows: readonly ProjectRow[], section: ListSectionI
   if (section === 'all') return [...rows];
   return rows.filter((row) => row.places.some((place) => place.source === section));
 }
+
+/** The open project's row first, wherever the sort put it; the others keep their order. */
+export function openRowFirst(rows: readonly ProjectRow[]): ProjectRow[] {
+  return [...rows.filter((row) => row.isOpen), ...rows.filter((row) => !row.isOpen)];
+}
