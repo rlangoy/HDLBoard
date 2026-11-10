@@ -1886,7 +1886,7 @@ export function Workbench() {
         settingsOpen={settingsPage.section !== null}
         onHelp={() => setDialog('help')}
         onAbout={() => setDialog('about')}
-        onGitHub={() => (signedIn ? projectsPage.toggle('github') : setDialog('githubSignIn'))}
+        onGitHub={() => (signedIn ? projectsPage.toggleSection('github') : setDialog('githubSignIn'))}
         gitHubUser={gitHub.session?.user ?? null}
         notifications={
           <UpdateBell
@@ -2075,7 +2075,7 @@ export function Workbench() {
               onSelect={handleOpenFile}
               onUpload={showOpenDialog}
               onNewFile={handleNewFile}
-              onOpenProject={() => projectsPage.toggle('all')}
+              onOpenProject={() => projectsPage.toggleSection('all')}
               projectsOpen={projectsPage.section !== null}
               onRename={handleRenameFile}
               onDelete={handleDeleteFile}
@@ -2088,7 +2088,7 @@ export function Workbench() {
               topLocked={isSimulating}
               project={{ name: project.name, fileName: project.fileName, description: project.description, unsaved: projectUnsaved }}
               projectOpen={activeProjectShown}
-              onToggleProject={() => projectsPage.toggle('active')}
+              onToggleProject={() => projectsPage.toggleSection('active')}
             />
           </SidePanel>
 

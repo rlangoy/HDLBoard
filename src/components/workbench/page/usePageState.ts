@@ -15,11 +15,10 @@ export interface PageState<Id extends string> {
   readonly section: Id | null;
   readonly open: (section?: Id) => void;
   readonly select: (section: Id) => void;
-  /**
-   * Closes the page when it shows `section` (or, without one, whatever it shows);
-   * opens it at `section` otherwise.
-   */
-  readonly toggle: (section?: Id) => void;
+  /** The page's own button: closes the page when it is shown, opens it otherwise. Takes no argument, so it can be a click handler. */
+  readonly toggle: () => void;
+  /** Closes the page when it shows `section`; opens it at `section` otherwise. */
+  readonly toggleSection: (section: Id) => void;
   /** Back to the workspace: the focus returns to where it was before the page opened. */
   readonly close: () => void;
 }
@@ -46,9 +45,10 @@ export function usePageState<Id extends string>(page: NonNullable<Overlay>, firs
     if (returnTo?.isConnected) requestAnimationFrame(() => returnTo.focus());
   }, [setOverlay]);
 
-  const toggle = (target?: Id) => (shown && (target === undefined || target === section) ? close() : open(target));
+  const toggle = () => (shown ? close() : open());
+  const toggleSection = (target: Id) => (shown && target === section ? close() : open(target));
 
-  return { section: shown ? section : null, open, select: setSection, toggle, close };
+  return { section: shown ? section : null, open, select: setSection, toggle, toggleSection, close };
 }
 
 function activeElement(): HTMLElement | null {
