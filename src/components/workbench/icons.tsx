@@ -484,3 +484,8 @@ export function HelpCircleIcon(props: SVGProps<SVGSVGElement>) {
 export function ArrowLeftIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M19 12H5', 'm12 19-7-7 7-7']} {...props} />;
 }
+
+/** Three stacked layers: Projects › All projects. */
+export function StackIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M12 3 3 7.5 12 12l9-4.5L12 3Z', 'm3 12 9 4.5 9-4.5', 'm3 16.5 9 4.5 9-4.5']} {...props} />;
+}

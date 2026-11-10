@@ -107,8 +107,12 @@ const NEW_CODE = [
   // The Settings page with a sidebar (issue #42).
   'src/components/workbench/settings/**/*.ts',
   'src/components/workbench/settings/**/*.tsx',
-  'src/components/workbench/explorerFolds.ts',
-  'src/components/workbench/explorerFolds.test.ts',
+  'src/components/workbench/paneFolds.ts',
+  'src/components/workbench/paneFolds.test.ts',
+  // The page frame Settings and Projects share, and the Projects page (issue #44).
+  'src/components/workbench/page/**/*.tsx',
+  'src/components/workbench/projects/**/*.ts',
+  'src/components/workbench/projects/**/*.tsx',
   // Compiler options in the project file (issue #37).
   'src/project/compilerOptions.ts',
   'src/project/compilerOptions.test.ts',

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (C) 2026 Rune Langøy */
 
-/* GitHub: the dialog (GitHubDialog.tsx), the project settings' card (ProjectGitHubCard.tsx),
-   the conflict dialog and the status chip. The dialog shell is in Dialog.css. */
+/* GitHub: the dialog (GitHubDialog.tsx), the conflict dialog, the status chip and the
+   activity line. The dialog shell is in Dialog.css. */
 
 /* ---- Buttons ---- */
 
@@ -70,16 +70,6 @@
   font-size: 15px;
 }
 
-.wb-github__btn--small {
-  padding: 4px 10px;
-  font-size: 13px;
-}
-
-.wb-github__btn--small svg {
-  width: 15px;
-  height: 15px;
-}
-
 /* ---- Text ---- */
 
 .wb-github__lead {
@@ -110,10 +100,6 @@
 .wb-github__small a,
 .wb-github__signin a,
 .wb-github__device a,
-.wb-github__address a {
-  color: var(--wb-accent-dark-ink);
-}
-
 .wb-github__message {
   margin: 0;
   padding: 10px 12px;
@@ -320,53 +306,6 @@
   color: var(--wb-github-status-changed-fg);
 }
 
-/* ---- Project settings card ---- */
-
-.wb-github__card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.wb-github__card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.wb-github__card-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.wb-github__card-text {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--wb-text-muted);
-}
-
-.wb-github__address {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 13px;
-}
-
-.wb-github__address a {
-  overflow-wrap: anywhere;
-}
-
-.wb-github__card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 /* ---- Conflict dialog ---- */
 
 .wb-github__conflict p {
@@ -392,10 +331,4 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
-}
-
-/* Waiting for a project name: dimmed, but clickable so the project settings can ask for it. */
-.wb-github__btn[aria-disabled='true'] {
-  opacity: 0.55;
-  cursor: not-allowed;
 }

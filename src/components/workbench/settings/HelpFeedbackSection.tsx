@@ -4,7 +4,7 @@
 import { cx } from '../../board';
 import { ExternalLink } from '../ExternalLink';
 import { ISSUES_URL } from '../project';
-import { SettingsCard } from './SettingsCard';
+import { PageCard } from '../page/PageCard';
 
 const NEW_ISSUE = `${ISSUES_URL}/new`;
 
@@ -27,7 +27,7 @@ const ISSUE_ACTIONS: readonly IssueAction[] = [
 export function HelpFeedbackSection() {
   return (
     <>
-      <SettingsCard title="Help us improve it" wide>
+      <PageCard title="Help us improve it" wide>
         <p className="wb-settings-lead">
           Found a bug, or missing something? Please create an issue in the GitHub repository. Suggestions and
           bug reports are very welcome &mdash; they are how this tool gets better for the next group of students.
@@ -43,13 +43,13 @@ export function HelpFeedbackSection() {
         <p className="wb-settings__note">
           <ExternalLink href={ISSUES_URL}>Browse existing issues</ExternalLink> &middot; a free GitHub account is needed to create one.
         </p>
-      </SettingsCard>
-      <SettingsCard title="Reporting a bug?" wide>
+      </PageCard>
+      <PageCard title="Reporting a bug?" wide>
         <p className="wb-settings-lead">
           Tell us what you did, what you expected and what happened instead. Your HDL code, the text in the
           console panel and the version shown in About make it much easier to reproduce.
         </p>
-      </SettingsCard>
+      </PageCard>
     </>
   );
 }

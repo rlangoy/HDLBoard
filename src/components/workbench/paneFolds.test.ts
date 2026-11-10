@@ -2,32 +2,32 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { createExplorerFolds, type ExplorerPane } from './explorerFolds';
+import { createPaneFolds, type FoldablePane } from './paneFolds';
 
 /** An Explorer that is open or shut, as `show` leaves it. */
-function explorerPane(open: boolean) {
+function foldablePane(open: boolean) {
   const pane = {
     collapsed: !open,
     show(next: boolean) {
       pane.collapsed = !next;
     },
   };
-  return pane satisfies ExplorerPane;
+  return pane satisfies FoldablePane;
 }
 
 /** Lets the releases settle, as they do after the update that made them. */
 const settled = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
-describe('createExplorerFolds', () => {
+describe('createPaneFolds', () => {
   test('folds the Explorer for the first holder', () => {
-    const pane = explorerPane(true);
-    createExplorerFolds(() => pane).hold('settings');
+    const pane = foldablePane(true);
+    createPaneFolds(() => pane).hold('settings');
     expect(pane.collapsed).toBe(true);
   });
 
   test('opens it again once the last holder lets go', async () => {
-    const pane = explorerPane(true);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(true);
+    const folds = createPaneFolds(() => pane);
     folds.hold('settings');
     folds.release('settings');
     await settled();
@@ -35,8 +35,8 @@ describe('createExplorerFolds', () => {
   });
 
   test('keeps it shut when it was shut before', async () => {
-    const pane = explorerPane(false);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(false);
+    const folds = createPaneFolds(() => pane);
     folds.hold('settings');
     folds.release('settings');
     await settled();
@@ -44,8 +44,8 @@ describe('createExplorerFolds', () => {
   });
 
   test('keeps it folded from Settings to the waveform', async () => {
-    const pane = explorerPane(true);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(true);
+    const folds = createPaneFolds(() => pane);
     folds.hold('settings');
     folds.hold('waveform');
     folds.release('settings');
@@ -54,8 +54,8 @@ describe('createExplorerFolds', () => {
   });
 
   test('keeps it folded from the waveform to Settings, the release arriving first', async () => {
-    const pane = explorerPane(true);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(true);
+    const folds = createPaneFolds(() => pane);
     folds.hold('waveform');
     folds.release('waveform');
     folds.hold('settings');
@@ -64,8 +64,8 @@ describe('createExplorerFolds', () => {
   });
 
   test('remembers the Explorer as it was before the first view, through a handover', async () => {
-    const pane = explorerPane(true);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(true);
+    const folds = createPaneFolds(() => pane);
     folds.hold('waveform');
     folds.release('waveform');
     folds.hold('settings');
@@ -76,8 +76,8 @@ describe('createExplorerFolds', () => {
   });
 
   test('ignores a release from a view that never held it', async () => {
-    const pane = explorerPane(true);
-    const folds = createExplorerFolds(() => pane);
+    const pane = foldablePane(true);
+    const folds = createPaneFolds(() => pane);
     folds.hold('settings');
     folds.release('waveform');
     await settled();

@@ -3,8 +3,9 @@
 
 import type { ReactNode } from 'react';
 import { WaveformIcon } from '../../waveform/WaveformButton';
-import { ArrowLeftIcon, CodeIcon, GearIcon, HelpCircleIcon, RefreshIcon } from '../icons';
+import { CodeIcon, GearIcon, HelpCircleIcon, RefreshIcon } from '../icons';
 import { LogoMark } from '../logo';
+import { PageSidebar, type PageNavEntry } from '../page/PageSidebar';
 import { PREFERENCE_SECTIONS, SUPPORT_SECTIONS, type SettingsSection, type SettingsSectionId } from './settingsSections';
 
 const SECTION_ICONS: Readonly<Record<SettingsSectionId, ReactNode>> = {
@@ -16,37 +17,17 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, ReactNode>> = {
   help: <HelpCircleIcon />,
 };
 
+const navEntry = (section: SettingsSection): PageNavEntry<SettingsSectionId> => ({ ...section, icon: SECTION_ICONS[section.id] });
+
+/** The settings, then, ruled off, Help & feedback. */
+const NAV_GROUPS = [PREFERENCE_SECTIONS.map(navEntry), SUPPORT_SECTIONS.map(navEntry)];
+
 export interface SettingsSidebarProps {
   current: SettingsSectionId;
   onSelect: (section: SettingsSectionId) => void;
   onBack: () => void;
 }
 
-/** The way back to the workspace, then one entry per section; the current one is marked. */
 export function SettingsSidebar({ current, onSelect, onBack }: SettingsSidebarProps) {
-  const renderEntry = (section: SettingsSection) => (
-    <li key={section.id}>
-      <button
-        type="button"
-        className="wb-settings-nav__item"
-        aria-current={section.id === current ? 'page' : undefined}
-        onClick={() => onSelect(section.id)}
-      >
-        <span className="wb-settings-nav__icon">{SECTION_ICONS[section.id]}</span>
-        {section.label}
-      </button>
-    </li>
-  );
-  return (
-    <aside className="wb-settings__sidebar">
-      <button type="button" className="wb-settings__back" onClick={onBack}>
-        <ArrowLeftIcon aria-hidden="true" />
-        Back to workspace
-      </button>
-      <nav className="wb-settings-nav" aria-label="Settings sections">
-        <ul>{PREFERENCE_SECTIONS.map(renderEntry)}</ul>
-        <ul className="wb-settings-nav__support">{SUPPORT_SECTIONS.map(renderEntry)}</ul>
-      </nav>
-    </aside>
-  );
+  return <PageSidebar label="Settings sections" groups={NAV_GROUPS} current={current} onSelect={onSelect} onBack={onBack} />;
 }

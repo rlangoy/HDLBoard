@@ -167,12 +167,15 @@
   --wb-dialog-secondary-bg: #262a30;
   --wb-dialog-close-fg: #ffffff;
 
+  /* --- page/Page.css: the Settings and Projects pages --- */
+  --wb-page-bg: #121416;
+  --wb-page-sidebar-bg: #1a1d21;
+  --wb-page-card-bg: #1c1f23;
+  --wb-page-card-border: #2c3f57;
+  --wb-page-card-head-bg: #1d2a3a;
+  --wb-page-nav-dot-bg: #f59e0b;
+
   /* --- SettingsPage.css --- */
-  --wb-settings-page-bg: #121416;
-  --wb-settings-sidebar-bg: #1a1d21;
-  --wb-settings-card-bg: #1c1f23;
-  --wb-settings-card-border: #2c3f57;
-  --wb-settings-card-head-bg: #1d2a3a;
   --wb-settings-choice-border: #3b414a;
   --wb-settings-choice-fg: #abb4c0;
   --wb-settings-choice-selected-shadow: rgba(0, 0, 0, 0.5);
@@ -324,101 +327,44 @@
   --wb-examples-open-bg: #262a30;
   --wb-examples-note-border: #2c4a72;
 
-  /* --- ProjectPage.css --- */
-  --wb-project-card-bg: #1c1f23;
-  --wb-project-badge-bg: #4f8bff;
-  --wb-project-badge-fg: #ffffff;
-  --wb-project-unsaved-bg: #382d18;
-  --wb-project-unsaved-fg: #ffd27a;
-  --wb-project-name-input-bg: #262a30;
-  --wb-project-name-input-border-hover: #778391;
-  --wb-project-name-input-bg-focus: #262a30;
-  --wb-project-btn-bg: #262a30;
-  --wb-project-btn-primary-fg: #ffffff;
+  /* --- projects/ProjectsPage.css: the Active project section --- */
   --wb-project-field-bg: #262a30;
   --wb-project-field-placeholder-fg: #abb4c0;
-  --wb-project-busy-border: #2c4a72;
   --wb-project-spinner-border: #4a6a94;
   --wb-project-warnings-border: #6a5426;
   --wb-project-warnings-bg: #382d18;
   --wb-project-warnings-ul-fg: #ffd27a;
   --wb-project-warn-icon-fg: #ffd27a;
-  --wb-project-missing-border: #2c4a72;
   --wb-project-problem-fg: #ffd27a;
-  --wb-project-note-border: #2c4a72;
-  --wb-project-field-wrap-has-suffix-bg: #262a30;
-  --wb-project-name-icon-fg: #abb4c0;
   --wb-project-pencil-fg: #abb4c0;
   --wb-project-board-note-fg: #ffd27a;
 
-  /* --- ProjectsPage.css --- */
+  /* --- projects/ProjectsPage.css --- */
   --wb-projects-btn-bg: #262a30;
   --wb-projects-btn-primary-fg: #ffffff;
-  --wb-projects-btn-primary-shadow: #00000080;
-  --wb-projects-btn-dark-bg: #303640;
-  --wb-projects-btn-dark-border: #778391;
-  --wb-projects-btn-dark-fg: #ffffff;
-  --wb-projects-btn-dark-bg-hover: #39424e;
   --wb-projects-btn-open-border: #2c4a72;
   --wb-projects-btn-open-bg: #262a30;
   --wb-projects-icon-btn-fg: #abb4c0;
-  --wb-projects-icon-btn-boxed-bg: #262a30;
-  --wb-projects-account-bg: #262a30;
   --wb-projects-avatar-bg: #1f3550;
   --wb-projects-gh-tile-bg: #303640;
   --wb-projects-gh-tile-fg: #ffffff;
-  --wb-projects-current-border: #2c4a72;
   --wb-projects-chip-warn-bg: #382d18;
   --wb-projects-chip-warn-fg: #ffd27a;
-  --wb-projects-search-input-border: #778391;
-  --wb-projects-search-input-bg: #262a30;
+  --wb-projects-chip-saved-bg: #17301f;
+  --wb-projects-chip-idle-bg: #303640;
+  --wb-projects-row-open-bg: #1f2733;
+  --wb-projects-field-border: #778391;
+  --wb-projects-field-bg: #262a30;
   --wb-projects-select-svg-fg: #abb4c0;
-  --wb-projects-segmented-border: #778391;
-  --wb-projects-segmented-bg: #262a30;
-  --wb-projects-segmented-button-fg: #abb4c0;
-  --wb-projects-segmented-button-fg-selected: #ffffff;
-  --wb-projects-folder-code-bg: #2a2f36;
   --wb-projects-error-border: #6a2a2e;
   --wb-projects-error-bg: #3a1d20;
   --wb-projects-error-fg: #ff9a9a;
-  --wb-projects-error-text-span-fg: #ff9a9a;
-  --wb-projects-item-bg: #1c1f23;
-  --wb-projects-item-border-hover: #3b414a;
-  --wb-projects-tile-fg: #ffffff;
-  --wb-projects-tile-bottom-edge: rgba(0, 0, 0, 0.12);
-  --wb-projects-tile-vhdl-from-bg: #4f8bff;
-  --wb-projects-tile-vhdl-to-bg: #245a96;
-  --wb-projects-tile-verilog-from-bg: #34d399;
-  --wb-projects-tile-verilog-to-bg: #15803d;
-  --wb-projects-tile-both-from-bg: #a78bfa;
-  --wb-projects-tile-both-to-bg: #6d28d9;
-  --wb-projects-tile-none-from-bg: #94a3b8;
-  --wb-projects-tile-none-to-bg: #475569;
-  --wb-projects-item-desc-fg: #abb4c0;
-  --wb-projects-badge-local-bg: #303640;
-  --wb-projects-badge-github-fg: #eceff4;
-  --wb-projects-badge-github-bg: #262a30;
-  --wb-projects-badge-github-border: #3b414a;
-  --wb-projects-lang-bg: #1c1f23;
-  --wb-projects-table-wrap-bg: #1c1f23;
-  --wb-projects-table-th-bg: #1c1f23;
-  --wb-projects-table-th-fg: #abb4c0;
-  --wb-projects-table-td-bottom-border: #3b414a;
-  --wb-projects-table-tbody-tr-bg-hover: #2a2f36;
-  --wb-projects-table-tbody-tr-open-bg: #262a30;
-  --wb-projects-table-tbody-tr-expanded-bg: #1c1f23;
-  --wb-projects-detail-row-td-bg: #1c1f23;
-  --wb-projects-p-desc-fg: #abb4c0;
-  --wb-projects-table-foot-bg: #1c1f23;
   --wb-projects-menu-bg: #262a30;
   --wb-projects-menu-item-svg-fg: #abb4c0;
   --wb-projects-skeleton-bg: #1c1f23;
   --wb-projects-skeleton-i-stop1-bg: #2a2f36;
   --wb-projects-skeleton-i-stop2-bg: #1c1f23;
   --wb-projects-skeleton-i-stop3-bg: #2a2f36;
-  --wb-projects-empty-bg: #1c1f23;
-  --wb-projects-empty-border: #3b414a;
-  --wb-projects-empty-svg-fg: #abb4c0;
 
   /* --- BoardSettingsPage.css --- */
   --wb-bce-bg: #121416;

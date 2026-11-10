@@ -1,0 +1,1286 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The Projects page (issue #44), on the page frame of page/Page.css: the active project's
+   card on top, then a list of projects or the active project's own cards. */
+
+.wb-projects__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-page-gap);
+  padding: var(--wb-page-gap) var(--wb-page-gutter) 32px;
+}
+
+.wb-projects__section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --------------------------------------------------------------- text */
+
+.wb-projects__eyebrow {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects__muted {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects__mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.wb-projects__aside {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--wb-text-muted);
+}
+
+/* ------------------------------------------------------------ buttons */
+
+.wb-projects__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 9px;
+  background: var(--wb-projects-btn-bg);
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-projects__btn svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+
+.wb-projects__btn:hover:not(:disabled) {
+  border-color: var(--wb-accent);
+  background: var(--wb-hover);
+}
+
+.wb-projects__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wb-projects__btn.is-primary {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent);
+  color: var(--wb-projects-btn-primary-fg);
+}
+
+.wb-projects__btn.is-primary:hover:not(:disabled) {
+  border-color: var(--wb-accent-dark);
+  background: var(--wb-accent-dark);
+}
+
+/* Open, on every row: outlined in the accent, the row's main way on. */
+.wb-projects__btn.is-open {
+  height: 32px;
+  padding: 0 14px;
+  border-color: var(--wb-projects-btn-open-border);
+  background: var(--wb-projects-btn-open-bg);
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-projects__btn.is-small {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.wb-projects__icon-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--wb-projects-icon-btn-fg);
+  cursor: pointer;
+}
+
+.wb-projects__icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-projects__icon-btn:hover:not(:disabled) {
+  border-color: var(--wb-border);
+  background: var(--wb-hover);
+}
+
+.wb-projects__icon-btn.is-boxed {
+  width: 36px;
+  height: 36px;
+  border-color: var(--wb-border);
+  background: var(--wb-projects-btn-bg);
+}
+
+.wb-projects__icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wb-projects__icon-btn.is-danger:hover:not(:disabled) {
+  color: var(--wb-danger-dark-ink);
+}
+
+.wb-projects__icon-btn.is-spinning svg {
+  animation: wb-projects-spin 0.9s linear infinite;
+}
+
+@keyframes wb-projects-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wb-projects__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-accent-dark-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-projects__link:hover {
+  text-decoration: underline;
+}
+
+.wb-projects__link svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* -------------------------------------------------------------- chips */
+
+.wb-projects-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wb-projects-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-projects-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wb-projects-chip.is-saved {
+  background: var(--wb-projects-chip-saved-bg);
+  color: var(--wb-success-dark);
+}
+
+.wb-projects-chip:is(.is-unsaved, .is-changed) {
+  background: var(--wb-projects-chip-warn-bg);
+  color: var(--wb-projects-chip-warn-fg);
+}
+
+.wb-projects-chip.is-not-saved {
+  background: var(--wb-projects-chip-idle-bg);
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-chip:is(.is-open, .is-destination) {
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark-ink);
+}
+
+/* ---------------------------------------------------- the active project */
+
+.wb-projects-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-page-card-bg);
+  box-shadow: 0 1px 3px #0f172a0d; /* theme-exempt: shadow */
+}
+
+.wb-projects-current__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-ink);
+}
+
+.wb-projects-current__tile svg {
+  width: 26px;
+  height: 26px;
+}
+
+.wb-projects-current__text {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wb-projects-current__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 18px;
+}
+
+.wb-projects-current__name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-projects-current__destination {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-current__destination svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.wb-projects-current__destination > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-projects-current__destination .wb-projects__mono {
+  overflow-wrap: normal;
+}
+
+.wb-projects-current__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ----------------------------------------- where the projects are stored */
+
+.wb-projects-source {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-page-card-head-bg);
+}
+
+.wb-projects-source__tile,
+.wb-projects-source__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--wb-page-card-bg);
+  color: var(--wb-accent-ink);
+}
+
+.wb-projects-source__tile svg {
+  width: 22px;
+  height: 22px;
+}
+
+.wb-projects-source__tile.is-github {
+  background: var(--wb-projects-gh-tile-bg);
+  color: var(--wb-projects-gh-tile-fg);
+}
+
+.wb-projects-source__avatar {
+  border-radius: 50%;
+  background: var(--wb-projects-avatar-bg);
+}
+
+.wb-projects-source__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.wb-projects-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wb-border);
+  font-size: 13.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-sources > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.wb-projects-sources svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* ------------------------------------------------- search and sort */
+
+.wb-projects__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-projects__search {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.wb-projects__search svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  translate: 0 -50%;
+  color: var(--wb-text-muted);
+  pointer-events: none;
+}
+
+.wb-projects__search input,
+.wb-projects__select select {
+  height: 38px;
+  border: 1px solid var(--wb-projects-field-border);
+  border-radius: 9px;
+  background: var(--wb-projects-field-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.wb-projects__search input {
+  width: 100%;
+  padding: 0 12px 0 38px;
+}
+
+.wb-projects__select {
+  position: relative;
+  flex: none;
+}
+
+.wb-projects__select select {
+  appearance: none;
+  padding: 0 36px 0 12px;
+  cursor: pointer;
+}
+
+.wb-projects__select svg {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  translate: 0 -50%;
+  color: var(--wb-projects-select-svg-fg);
+  pointer-events: none;
+}
+
+.wb-projects .wb-projects__search input:focus-visible,
+.wb-projects .wb-projects__select select:focus-visible {
+  outline: none;
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 3px var(--wb-accent-soft);
+}
+
+/* -------------------------------------------------------------- the list */
+
+.wb-projects-table {
+  overflow: hidden;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-page-card-bg);
+}
+
+.wb-projects-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.wb-projects-table th {
+  padding: 10px 16px;
+  background: var(--wb-page-card-head-bg);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-table th.is-places {
+  width: 76px;
+}
+
+/* Location is one or two icons: a narrow column, centred, next to Last saved. */
+.wb-projects-table :is(th, td).is-places {
+  padding-inline: 4px;
+  text-align: center;
+}
+
+.wb-projects-table th.is-saved {
+  width: 140px;
+}
+
+.wb-projects-table th:last-child {
+  width: 128px;
+}
+
+.wb-projects-table td {
+  padding: 12px 16px;
+  border-top: 1px solid var(--wb-border);
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.wb-projects-table tbody tr {
+  transition: background 140ms ease;
+}
+
+.wb-projects-table tbody tr:hover {
+  background: var(--wb-hover);
+}
+
+.wb-projects-table tbody tr.is-open {
+  background: var(--wb-projects-row-open-bg);
+}
+
+.wb-projects-table__project {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-projects-table__tile {
+  display: inline-flex;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  color: var(--wb-accent-ink);
+}
+
+.wb-projects-table__tile svg {
+  width: 100%;
+  height: 100%;
+}
+
+.wb-projects-table__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wb-projects-table__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 15px;
+}
+
+.wb-projects-table__name strong {
+  overflow: hidden;
+  color: var(--wb-accent-dark-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Two lines of the description at most; the whole of it is in the Active project. */
+.wb-projects-table__description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--wb-text-body);
+}
+
+.wb-projects-table__hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-table__hit svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.wb-projects-table__places {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-projects-table__places li {
+  display: inline-flex;
+}
+
+.wb-projects-table__places svg {
+  width: 19px;
+  height: 19px;
+  color: var(--wb-icon-muted);
+}
+
+/* The open project's saved state, beside Open now. */
+.wb-projects-table__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-projects-table__state > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-projects-table__name .wb-projects-chip {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.wb-projects-table td.is-saved {
+  font-size: 13.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects-table__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ------------------------------------------------- why there is no list */
+
+.wb-projects__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 20px;
+  border: 1px dashed var(--wb-page-card-border);
+  border-radius: var(--wb-page-radius);
+  text-align: center;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects__empty > svg {
+  width: 34px;
+  height: 34px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-projects__empty p {
+  max-width: 460px;
+  margin: 0;
+}
+
+/* Its buttons side by side, wrapping when narrow. */
+.wb-projects__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wb-projects__notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: 10px;
+  background: var(--wb-page-card-head-bg);
+  font-size: 14px;
+}
+
+.wb-projects__notice > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--wb-accent-ink);
+}
+
+.wb-projects__notice .wb-projects__btn {
+  margin-left: auto;
+}
+
+.wb-projects__error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--wb-projects-error-border);
+  border-radius: 10px;
+  background: var(--wb-projects-error-bg);
+  color: var(--wb-projects-error-fg);
+  font-size: 14px;
+}
+
+.wb-projects__error > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.wb-projects__error .wb-projects__btn {
+  margin-left: auto;
+}
+
+.wb-projects__skeletons {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-projects__skeleton {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-page-radius);
+  background: var(--wb-projects-skeleton-bg);
+}
+
+.wb-projects__skeleton i {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--wb-projects-skeleton-i-stop1-bg) 25%, var(--wb-projects-skeleton-i-stop2-bg) 50%, var(--wb-projects-skeleton-i-stop3-bg) 75%);
+  background-size: 200% 100%;
+  animation: wb-projects-shimmer 1.2s infinite;
+}
+
+.wb-projects__skeleton span {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wb-projects__skeleton .is-tile {
+  height: 40px;
+  border-radius: 10px;
+}
+
+.wb-projects__skeleton .is-title {
+  width: 40%;
+  height: 14px;
+}
+
+.wb-projects__skeleton .is-text {
+  width: 70%;
+  height: 12px;
+}
+
+@keyframes wb-projects-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ------------------------------------------------------- the ⋮ menu */
+
+.wb-projects__menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  background: var(--wb-projects-menu-bg);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16); /* theme-exempt: shadow */
+}
+
+.wb-projects__menu:has(.wb-projects__menu-detail) {
+  width: 270px;
+}
+
+.wb-projects__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-projects__menu-item svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--wb-projects-menu-item-svg-fg);
+}
+
+.wb-projects__menu-item:hover,
+.wb-projects__menu-item:focus-visible {
+  background: var(--wb-hover);
+  outline: none;
+}
+
+.wb-projects__menu-item.is-danger,
+.wb-projects__menu-item.is-danger svg {
+  color: var(--wb-danger-dark-ink);
+}
+
+.wb-projects__menu-head {
+  overflow: hidden;
+  margin-bottom: 4px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--wb-border);
+  font-size: 12px;
+  color: var(--wb-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-projects__menu-detail {
+  display: block;
+  font-size: 11.5px;
+  color: var(--wb-text-muted);
+}
+
+.wb-projects__menu-rule {
+  margin: 4px 2px;
+  border: 0;
+  border-top: 1px solid var(--wb-border);
+}
+
+/* ===================================================== Active project */
+
+/* Project details: labels on the left, fields on the right. */
+.wb-active__form {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px 18px;
+}
+
+.wb-active__form > label {
+  padding-top: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wb-active__field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--wb-projects-field-border);
+  border-radius: 9px;
+  background: var(--wb-project-field-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.wb-active__field::placeholder {
+  color: var(--wb-project-field-placeholder-fg);
+}
+
+.wb-projects .wb-active__field:focus-visible {
+  outline: none;
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 3px var(--wb-accent-soft);
+}
+
+/* A name still missing stays red while it has the focus. */
+.wb-projects .wb-active__field.is-error:focus-visible {
+  border-color: var(--wb-danger-dark-ink);
+  box-shadow: none;
+}
+
+.wb-active__field:disabled {
+  opacity: 0.6;
+}
+
+.wb-active__field.is-asking {
+  border-style: dashed;
+  border-color: var(--wb-accent);
+}
+
+.wb-active__field.is-error {
+  border-style: solid;
+  border-color: var(--wb-danger-dark-ink);
+  animation: wb-active-shake 0.3s ease;
+}
+
+@keyframes wb-active-shake {
+  25% {
+    translate: -4px 0;
+  }
+
+  75% {
+    translate: 4px 0;
+  }
+}
+
+.wb-active__select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.wb-active__textarea {
+  display: block;
+  line-height: 1.45;
+  resize: none;
+  overflow: hidden;
+}
+
+.wb-active__pencil-wrap {
+  position: relative;
+  display: block;
+}
+
+.wb-active__textarea.has-pencil {
+  padding-right: 34px;
+}
+
+.wb-active__pencil {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--wb-project-pencil-fg);
+  pointer-events: none;
+}
+
+.wb-active__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+.wb-active__hint.is-error {
+  color: var(--wb-danger-dark-ink);
+  font-weight: 600;
+}
+
+.wb-active__hint.is-warn {
+  color: var(--wb-project-board-note-fg);
+}
+
+/* Storage: one row per place. */
+.wb-active__place {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+}
+
+.wb-active__place-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-ink);
+}
+
+.wb-active__place-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.wb-active__place-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wb-active__place-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 15px;
+}
+
+.wb-active__place-where {
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+.wb-active__place-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2 / -1;
+  gap: 8px;
+}
+
+.wb-active__gist {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.wb-active__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13.5px;
+  color: var(--wb-text-body);
+}
+
+.wb-active__notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--wb-accent-ink);
+}
+
+.wb-active__busy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-active__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--wb-project-spinner-border);
+  border-top-color: var(--wb-accent);
+  border-radius: 50%;
+  animation: wb-projects-spin 0.8s linear infinite;
+}
+
+/* Project files: what is missing, what could join, and warnings. */
+.wb-active__callout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: 10px;
+  background: var(--wb-page-card-head-bg);
+}
+
+.wb-active__callout.is-warn {
+  border-color: var(--wb-project-warnings-border);
+  background: var(--wb-project-warnings-bg);
+  color: var(--wb-project-warnings-ul-fg);
+}
+
+.wb-active__callout strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-active__callout strong svg {
+  width: 17px;
+  height: 17px;
+}
+
+.wb-active__callout.is-warn strong svg {
+  color: var(--wb-project-warn-icon-fg);
+}
+
+.wb-active__callout ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+}
+
+.wb-active__callout-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wb-active__available {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-active__available li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.wb-active__available li > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--wb-icon-muted);
+}
+
+.wb-active__available li > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-active__files {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.wb-active__files th {
+  padding: 8px 10px;
+  border-radius: 0;
+  background: var(--wb-page-card-head-bg);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  color: var(--wb-text-muted);
+}
+
+.wb-active__files th:first-child {
+  width: 34%;
+  border-radius: 8px 0 0 8px;
+}
+
+.wb-active__files th:last-child {
+  width: 118px;
+  border-radius: 0 8px 8px 0;
+}
+
+.wb-active__files td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--wb-border);
+  vertical-align: top;
+}
+
+.wb-active__files tr:last-child td {
+  border-bottom: 0;
+}
+
+.wb-active__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-accent-dark-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-active__file > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-active__file svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+button.wb-active__file:hover > span {
+  text-decoration: underline;
+}
+
+.wb-active__file.is-unloaded {
+  color: var(--wb-text-muted);
+  cursor: default;
+}
+
+.wb-active__file.is-unloaded svg {
+  color: var(--wb-project-warn-icon-fg);
+}
+
+.wb-active__problem {
+  display: block;
+  font-size: 12.5px;
+  color: var(--wb-project-problem-fg);
+}
+
+.wb-active__file-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Advanced: read-only facts, then Close project. */
+.wb-active__facts {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px 18px;
+  font-size: 14px;
+}
+
+.wb-active__facts dt {
+  font-weight: 600;
+}
+
+.wb-active__facts dd {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--wb-page-card-head-bg);
+}
+
+.wb-active__close {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wb-border);
+}
+
+/* ---------------------------------------------------------- narrow widths */
+
+@container page (max-width: 860px) {
+  .wb-projects-table th.is-saved,
+  .wb-projects-table td.is-saved {
+    display: none;
+  }
+}
+
+@container page (max-width: 640px) {
+  .wb-projects-table th.is-places,
+  .wb-projects-table td.is-places {
+    display: none;
+  }
+
+  .wb-projects-current__actions {
+    margin-left: 0;
+  }
+
+  .wb-active__form,
+  .wb-active__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wb-active__form > label {
+    padding-top: 0;
+  }
+
+  .wb-active__place {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .wb-active__place > .wb-projects-chip {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-projects *,
+  .wb-projects *::before {
+    animation: none !important;
+  }
+}
