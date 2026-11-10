@@ -480,7 +480,13 @@
 }
 
 .wb-projects-table th.is-places {
-  width: 92px;
+  width: 76px;
+}
+
+/* Location is one or two icons: a narrow column, centred, next to Last saved. */
+.wb-projects-table :is(th, td).is-places {
+  padding-inline: 4px;
+  text-align: center;
 }
 
 .wb-projects-table th.is-saved {
@@ -580,6 +586,7 @@
 
 .wb-projects-table__places {
   display: flex;
+  justify-content: center;
   gap: 10px;
   margin: 0;
   padding: 0;
