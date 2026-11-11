@@ -20,8 +20,12 @@ services:
       # Memory cap per simulation run, in MB (docker/simlimit.sh).
       - key: HDLBOARD_SIM_MEMORY_MB
         value: "96"
-      # When all sessions are in use, one open this many minutes is closed to
-      # make room for a new student, who would otherwise be refused; its
-      # student is told why. 0: never, the new one is refused.
+      # When all sessions are in use, the one idle longest is closed to make
+      # room for a new student, but not one idle less than this many seconds,
+      # unless its address has another session too.
+      - key: HDL_IDLE_GRACE_SECONDS
+        value: "60"
+      # Failing that, one open this many minutes is closed, so the new student
+      # is not refused; its student is told why. 0: never close a session.
       - key: HDL_REPLACE_AFTER_MINUTES
         value: "9"
