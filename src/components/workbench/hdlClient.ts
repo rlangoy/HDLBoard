@@ -21,6 +21,7 @@ import type { BoardPorts } from '../../boards/types';
 import type { CompilerOptions } from '../../project/types';
 import { BOARD_TEXT } from './boardText';
 import type { TimedStim } from './bouncyButtons';
+import { WaveRunNumbers } from './waveRunNumbers';
 
 /** `<bits>`, or `<bits>/<holdNs>` for a step that holds a set time. */
 function stimStepText({ bits, holdNs }: TimedStim): string {
@@ -43,6 +44,8 @@ const SHAPED_BOARD_PROTOCOL = 3;
 const OPTIONS_PROTOCOL = 6;
 /** The first protocol that takes timed STIM steps; an older backend gets the final state alone. */
 const TIMED_STIM_PROTOCOL = 4;
+/** The `ERROR` stages that end a run (server/src/protocol.ts): the client then closes its socket. */
+const RUN_ENDING_STAGES: readonly string[] = ['analyze', 'elaborate', 'runtime', 'internal'];
 /** A backend that answers WELCOME without a number is the oldest one. */
 const OLDEST_PROTOCOL = 1;
 /** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
@@ -183,6 +186,11 @@ export class HdlClient {
   private backendVersion: number | undefined;
   // What waits for WELCOME: a run's frames depend on the backend's version (§ 6.3).
   private afterWelcome: Array<() => void> = [];
+  // Whether the last run offered a waveform (WAVE-READY). It lives in this socket's session on
+  // the server, so the socket stays open after the run for the viewer and Download to fetch it.
+  private waveOffered = false;
+  // The waveform run numbers the handlers see: unique in the page, though sessions repeat theirs.
+  private readonly waveRuns = new WaveRunNumbers();
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -197,6 +205,8 @@ export class HdlClient {
     this.backendKnowsBoard = true;
     this.backendVersion = undefined;
     this.afterWelcome = [];
+    this.waveTransfer = false;
+    this.waveRuns.newSession();
     const ws = new WebSocket(this.url);
     // Waveform content arrives as binary frames; an ArrayBuffer goes straight to the worker.
     ws.binaryType = 'arraybuffer';
@@ -243,12 +253,11 @@ export class HdlClient {
         this.handlers.onLog(body);
         break;
       case 'ERROR':
-        if (this.isOldBackendAnswer(inline, body)) this.noteOldBackend();
-        else this.handlers.onError(inline, body);
-        if (inline === BUSY_STAGE) this.letGoOfSocket();
+        this.handleError(inline, body);
         break;
       case 'DONE':
         this.handlers.onDone(inline);
+        this.runEnded();
         break;
       case 'WAVE-READY':
       case 'WAVE-BEGIN':
@@ -265,18 +274,50 @@ export class HdlClient {
   }
 
   /**
+   * `ERROR`: the old backend's answer to BOARD is noted. A `protocol` one leaves the run
+   * going on the server (a bad STIM, a verb an older backend does not know), so only the
+   * stages that end a run end it here.
+   */
+  private handleError(stage: string, text: string): void {
+    if (this.isOldBackendAnswer(stage, text)) {
+      this.noteOldBackend();
+      return;
+    }
+    this.handlers.onError(stage, text);
+    if (stage === BUSY_STAGE) this.letGoOfSocket();
+    else if (RUN_ENDING_STAGES.includes(stage)) this.runEnded();
+  }
+
+  /**
+   * The run ended (`DONE`, or an `ERROR`), and the Workbench shows it stopped. The socket
+   * is closed, so its place on the server is free for another student while this one
+   * reads the console or edits; the next Start opens a fresh one. A run that offered a
+   * waveform keeps it open, as the waveform goes with its session on the server.
+   */
+  private runEnded(): void {
+    if (!this.waveOffered) this.detachSocket()?.close();
+  }
+
+  /**
    * The server is full and closes this socket (`ERROR busy`). Let go of it now rather
    * than wait for the close: a proxy can hold that back (Render's did), and until then
    * every Start would go to the dead socket. The next Start opens a fresh one.
    */
   private letGoOfSocket(): void {
-    const ws = this.ws;
+    const ws = this.detachSocket();
     if (ws === null) return;
+    ws.close();
+    this.handlers.onClosed();
+  }
+
+  /** Forgets the socket: nothing it still sends, nor its close, reaches the handlers. */
+  private detachSocket(): WebSocket | null {
+    const ws = this.ws;
+    if (ws === null) return null;
     ws.onclose = null;
     ws.onmessage = null;
-    ws.close();
     this.ws = null;
-    this.handlers.onClosed();
+    return ws;
   }
 
   private welcome(version: string): void {
@@ -324,13 +365,18 @@ export class HdlClient {
     const wave = this.handlers.wave;
     if (verb === 'WAVE-READY') {
       const ready = parseWaveReady(inline);
-      if (ready === undefined) console.warn(`HdlClient: dropped a malformed WAVE-READY: ${JSON.stringify(inline)}`);
-      else wave?.onReady(ready);
+      if (ready === undefined) {
+        console.warn(`HdlClient: dropped a malformed WAVE-READY: ${JSON.stringify(inline)}`);
+        return;
+      }
+      this.waveOffered = true;
+      wave?.onReady({ ...ready, run: this.waveRuns.offered(ready.run) });
       return;
     }
     const [runText = '', bytesText = '0'] = inline.split(' ');
-    if (!RUN_NUMBER.test(runText)) return;
-    const run = Number(runText);
+    // Only ever an answer to WAVE-GET, which asks for a run this session offered.
+    const run = RUN_NUMBER.test(runText) ? this.waveRuns.pageRun(Number(runText)) : undefined;
+    if (run === undefined) return;
     this.waveTransfer = verb === 'WAVE-BEGIN';
     if (verb === 'WAVE-BEGIN') wave?.onBegin(run, Number(bytesText));
     else if (verb === 'WAVE-END') wave?.onEnd(run);
@@ -355,6 +401,8 @@ export class HdlClient {
    */
   run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, settings: RunSettings): void {
     const { recordWave, board, compilerOptions } = settings;
+    // The last run's waveform goes when this run starts (W10), on the server too.
+    this.waveOffered = false;
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
@@ -363,6 +411,7 @@ export class HdlClient {
       const boardFrame = this.boardFrameFor(board);
       if (boardFrame === undefined) {
         this.handlers.onError('protocol', BOARD_TEXT.oldBackendShape);
+        this.runEnded();
         return;
       }
       // WAVE goes right before the RUN it is for (docs/waveform_viewer_spec.md § 7.1).
@@ -400,9 +449,16 @@ export class HdlClient {
     this.ws.send(`STIM ${steps.map(stimStepText).join(' ')}`);
   }
 
-  /** Asks for the waveform of `run` (`WAVE-GET`); it arrives through `handlers.wave`. */
+  /**
+   * Asks for the waveform of `run` (`WAVE-GET`); it arrives through `handlers.wave`.
+   * A run whose session is gone — the socket closed, or another one opened since — has
+   * gone with it (`onNone`).
+   */
   waveGet(run: number): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(`WAVE-GET ${run}`);
+    const serverRun = this.waveRuns.serverRun(run);
+    const open = this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    if (open && serverRun !== undefined) this.ws?.send(`WAVE-GET ${serverRun}`);
+    else this.handlers.wave?.onNone(run);
   }
 
   reset(): void {
@@ -414,10 +470,6 @@ export class HdlClient {
   }
 
   close(): void {
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
-    }
+    this.detachSocket()?.close();
   }
 }
