@@ -27,6 +27,9 @@ const NEW_CODE = [
   // A full server closes an old session for a new one.
   'src/sessionLimit.ts',
   'src/sessionLimit.test.ts',
+  // A student's address, so one student's many tabs give way first.
+  'src/clientAddress.ts',
+  'src/clientAddress.test.ts',
   'src/testSupport/**/*.ts',
   'src/githubAuth.ts',
   'src/githubAuth.test.ts',

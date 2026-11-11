@@ -120,10 +120,13 @@ describe('the WebSocket endpoint path', () => {
     assert.equal(await opens('/hdlsim', `http://${LOOPBACK}:5173`), true));
 });
 
-describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
-  const MINUTE = 60_000;
+describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_AFTER_MINUTES)', () => {
+  const SECOND = 1000;
+  const MINUTE = 60 * SECOND;
   /** RFC 6455's "Try Again Later", what a busy close carries. */
   const TRY_AGAIN_LATER = 1013;
+  const REFUSED = /all|only simulation session is in use/;
+  const CLOSED_IDLE = /closed because it was not simulating.*HDLBoard\/releases/s;
 
   interface Peer {
     readonly ws: WebSocket;
@@ -131,10 +134,10 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
     readonly closed: Promise<number>;
   }
 
-  /** An open socket on `/hdlsim`, keeping every text frame it receives. */
-  const connect = (port: number) =>
+  /** An open socket on `/hdlsim` from `address`, as a proxy names it, keeping every text frame it receives. */
+  const connect = (port: number, address: string) =>
     new Promise<Peer>((resolve, reject) => {
-      const ws = new WebSocket(`ws://${LOOPBACK}:${port}/hdlsim`);
+      const ws = new WebSocket(`ws://${LOOPBACK}:${port}/hdlsim`, { headers: { 'x-forwarded-for': address } });
       const texts: string[] = [];
       ws.on('message', (data) => texts.push(String(data)));
       const closed = new Promise<number>((done) => ws.once('close', (code) => done(code)));
@@ -152,61 +155,94 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_REPLACE_AFTER_MINUTES)', () => {
     throw new Error(`no ${prefix} frame; got ${JSON.stringify(peer.texts)}`);
   };
 
-  /** A one-session backend on a clock the test moves. */
-  const fullBackend = async (replaceAfterMinutes: number) => {
-    const clock = { now: 1_000_000 };
-    const backend = startBackend({ port: await freePort(), maxSessions: 1, replaceAfterMinutes, now: () => clock.now });
-    await backend.ready;
-    return { backend, clock };
+  /** Whether `peer` answers HELLO, the way a session that kept its place does. */
+  const welcomed = async (peer: Peer) => {
+    peer.ws.send('HELLO 5');
+    return (await frame(peer, 'WELCOME')) === 'WELCOME 6';
   };
 
-  test('refuses a new session while the one there is younger than the limit', async () => {
-    const { backend, clock } = await fullBackend(9);
-    try {
-      const first = await connect(backend.port);
-      clock.now += 8 * MINUTE;
-      const second = await connect(backend.port);
-      assert.match(await frame(second, 'ERROR busy\n'), /all|only simulation session is in use/);
-      assert.equal(await second.closed, TRY_AGAIN_LATER);
-      // The first keeps its place.
-      first.ws.send('HELLO 5');
-      assert.equal(await frame(first, 'WELCOME'), 'WELCOME 6');
-      assert.equal(first.texts.filter((t) => t.startsWith('ERROR')).length, 0);
-      first.ws.close();
-    } finally {
-      await stopped(backend);
-    }
-  });
+  interface Scenario {
+    /** Where the second connection comes from; the first is from `lab-1`. */
+    readonly secondFrom: string;
+    /** How long after the first the second connects. */
+    readonly afterMs: number;
+    readonly replaceAfterMinutes?: number;
+  }
 
-  test('closes a session open past the limit and takes the new one', async () => {
-    const { backend, clock } = await fullBackend(9);
+  /**
+   * On a one-session backend with a 60 s grace period, an idle first connection, then a
+   * second: `check` gets both while the backend is up.
+   */
+  const whenSecondConnects = async (scenario: Scenario, check: (first: Peer, second: Peer) => Promise<void>) => {
+    const clock = { now: 1_000_000 };
+    const { replaceAfterMinutes = 9 } = scenario;
+    const backend = startBackend({
+      port: await freePort(),
+      maxSessions: 1,
+      replaceAfterMinutes,
+      idleGraceSeconds: 60,
+      now: () => clock.now,
+    });
+    await backend.ready;
     try {
-      const first = await connect(backend.port);
-      clock.now += 9 * MINUTE;
-      const second = await connect(backend.port);
-      assert.match(await frame(first, 'ERROR busy\n'), /closed because the server is under heavy load.*HDLBoard\/releases/s);
-      assert.equal(await first.closed, TRY_AGAIN_LATER);
-      second.ws.send('HELLO 5');
-      assert.equal(await frame(second, 'WELCOME'), 'WELCOME 6');
-      assert.equal(second.texts.filter((t) => t.startsWith('ERROR')).length, 0);
+      const first = await connect(backend.port, 'lab-1');
+      clock.now += scenario.afterMs;
+      const second = await connect(backend.port, scenario.secondFrom);
+      await check(first, second);
+      first.ws.close();
       second.ws.close();
     } finally {
       await stopped(backend);
     }
-  });
+  };
 
-  test('never closes one with a limit of 0', async () => {
-    const { backend, clock } = await fullBackend(0);
-    try {
-      const first = await connect(backend.port);
-      clock.now += 600 * MINUTE;
-      const second = await connect(backend.port);
-      await frame(second, 'ERROR busy\n');
+  const WITHIN_GRACE: Scenario = { secondFrom: 'lab-2', afterMs: 30 * SECOND };
+  const PAST_GRACE: Scenario = { secondFrom: 'lab-2', afterMs: 60 * SECOND };
+  const SAME_ADDRESS: Scenario = { secondFrom: 'lab-1', afterMs: SECOND };
+  const NEVER_REPLACE: Scenario = { secondFrom: 'lab-2', afterMs: 600 * MINUTE, replaceAfterMinutes: 0 };
+
+  test('refuses a newcomer while the idle session there is within the grace period', () =>
+    whenSecondConnects(WITHIN_GRACE, async (_first, second) => {
+      assert.match(await frame(second, 'ERROR busy\n'), REFUSED);
+    }));
+
+  test('closes the refused socket as Try Again Later', () =>
+    whenSecondConnects(WITHIN_GRACE, async (_first, second) => {
       assert.equal(await second.closed, TRY_AGAIN_LATER);
+    }));
+
+  test('the session spared by the grace period keeps its place', () =>
+    whenSecondConnects(WITHIN_GRACE, async (first) => {
+      assert.equal(await welcomed(first), true);
+    }));
+
+  test('closes an idle session past the grace period, telling its student why', () =>
+    whenSecondConnects(PAST_GRACE, async (first) => {
+      assert.match(await frame(first, 'ERROR busy\n'), CLOSED_IDLE);
+    }));
+
+  test('the newcomer takes the place of the session closed for it', () =>
+    whenSecondConnects(PAST_GRACE, async (_first, second) => {
+      assert.equal(await welcomed(second), true);
+    }));
+
+  test('closes an idle session within the grace period when the newcomer shares its address', () =>
+    whenSecondConnects(SAME_ADDRESS, async (first) => {
+      assert.match(await frame(first, 'ERROR busy\n'), CLOSED_IDLE);
+    }));
+
+  test('never closes one with a limit of 0', () =>
+    whenSecondConnects(NEVER_REPLACE, async (first, second) => {
+      await frame(second, 'ERROR busy\n');
       assert.equal(first.ws.readyState, WebSocket.OPEN);
-      first.ws.close();
-    } finally {
-      await stopped(backend);
-    }
+    }));
+
+  test('logs each ERROR busy it sends', async (t) => {
+    const log = t.mock.method(console, 'log', () => {});
+    await whenSecondConnects(PAST_GRACE, async (first) => {
+      await frame(first, 'ERROR busy\n');
+    });
+    const lines = log.mock.calls.map((call) => String(call.arguments[0]));
+    assert.ok(lines.includes('hdl-board: ERROR busy: closed a session open 1 min (idle 1 min) to make room for a new one'));
   });
 });

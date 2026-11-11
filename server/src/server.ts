@@ -35,8 +35,21 @@ import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './veril
 import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
-import { MAX_SESSIONS, REPLACE_AFTER_MINUTES, WS_PORT, readIntSetting } from './settings.js';
-import { MS_PER_MINUTE, fullText, replacedText, sessionToReplace } from './sessionLimit.js';
+import { IDLE_GRACE_SECONDS, MAX_SESSIONS, REPLACE_AFTER_MINUTES, WS_PORT, readIntSetting } from './settings.js';
+import {
+  MS_PER_MINUTE,
+  MS_PER_SECOND,
+  ReplacementPolicy,
+  closedIdleText,
+  closedLogLine,
+  closedSimulatingText,
+  fullText,
+  refusedLogLine,
+  sessionsFrom,
+  type Newcomer,
+  type OpenSession,
+} from './sessionLimit.js';
+import { clientAddress } from './clientAddress.js';
 import {
   GitHubAuthForwarder,
   credentialsFromEnv,
@@ -104,10 +117,16 @@ export interface BackendOptions {
    */
   maxSessions?: number;
   /**
-   * On a full server, a session open at least this many minutes is closed for a new one
-   * (sessionLimit.ts); 0 refuses the new one instead. Defaults to `HDL_REPLACE_AFTER_MINUTES`, then 9.
+   * On a full server, when no idle session can be closed, a session open at least this many
+   * minutes is closed for a new one (sessionLimit.ts); 0 closes nothing and refuses the new
+   * one instead. Defaults to `HDL_REPLACE_AFTER_MINUTES`, then 9.
    */
   replaceAfterMinutes?: number;
+  /**
+   * On a full server, a session idle less than this is spared unless its address has another
+   * (sessionLimit.ts). Defaults to `HDL_IDLE_GRACE_SECONDS`, then 60.
+   */
+  idleGraceSeconds?: number;
   /** The clock sessions' ages are measured on, in ms. Defaults to `Date.now`; tests move it. */
   now?: () => number;
   /**
@@ -215,15 +234,20 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
 }
 
 /** One open WebSocket and its session, as the choice of which to close for a new one sees it. */
-class Connection {
+class Connection implements OpenSession {
   constructor(
     readonly ws: WebSocket,
     readonly session: Session,
     readonly openedAt: number,
+    readonly clientAddress: string,
   ) {}
 
   get simulating(): boolean {
     return this.session.simulating;
+  }
+
+  get idleSince(): number {
+    return this.session.idleSince;
   }
 }
 
@@ -236,6 +260,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const port = opts.port ?? readIntSetting(WS_PORT);
   const maxSessions = opts.maxSessions ?? readIntSetting(MAX_SESSIONS);
   const replaceAfterMs = (opts.replaceAfterMinutes ?? readIntSetting(REPLACE_AFTER_MINUTES)) * MS_PER_MINUTE;
+  const idleGraceMs = (opts.idleGraceSeconds ?? readIntSetting(IDLE_GRACE_SECONDS)) * MS_PER_SECOND;
+  const replacementPolicy = new ReplacementPolicy(replaceAfterMs, idleGraceMs);
   const now = opts.now ?? Date.now;
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
@@ -318,29 +344,33 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     session.destroy();
   };
 
-  /** Tells the student why (`ERROR busy`), then closes — and cuts, if the close is held up. */
-  const closeBusy = (ws: WebSocket, text: string) => {
+  /** Logs it, tells the student why (`ERROR busy`), then closes — and cuts, if the close is held up. */
+  const closeBusy = (ws: WebSocket, text: string, logLine: string) => {
+    console.log(logLine);
     if (ws.readyState === WebSocket.OPEN) ws.send(encodeServerFrame({ verb: 'ERROR', stage: 'busy', text }));
     ws.close(CLOSE_TRY_AGAIN_LATER, 'server busy');
     setTimeout(() => ws.terminate(), BUSY_CLOSE_GRACE_MS).unref();
   };
 
-  wss.on('connection', (ws: WebSocket) => {
-    if (sessions.size >= maxSessions) {
-      const t = now();
-      const replaced = sessionToReplace(sessions.values(), t, replaceAfterMs);
-      if (replaced === undefined) {
-        console.log(`hdl-board: refused a session, all ${maxSessions} in use`);
-        closeBusy(ws, fullText(maxSessions));
-        return;
-      }
-      const minutes = Math.floor((t - replaced.openedAt) / MS_PER_MINUTE);
-      console.log(
-        `hdl-board: closed a session open ${minutes} min${replaced.simulating ? ' (simulating)' : ''} to make room for a new one`,
-      );
-      closeBusy(replaced.ws, replacedText());
-      // Now, not on its close: the place is the new connection's at once.
-      endSession(replaced.session);
+  /** Closes the session the policy picks for `newcomer`; false when it picks none. */
+  const makeRoomFor = (newcomer: Newcomer): boolean => {
+    const open = [...sessions.values()];
+    const closed = replacementPolicy.sessionToClose(open, newcomer);
+    if (closed === undefined) return false;
+    const sameAddress = sessionsFrom(closed.clientAddress, open, newcomer);
+    const text = closed.simulating ? closedSimulatingText() : closedIdleText();
+    closeBusy(closed.ws, text, closedLogLine(closed, sameAddress, newcomer.at));
+    // Now, not on its close: the place is the new connection's at once.
+    endSession(closed.session);
+    return true;
+  };
+
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    const newcomer: Newcomer = { clientAddress: clientAddress(req), at: now() };
+    const hasPlace = sessions.size < maxSessions || makeRoomFor(newcomer);
+    if (!hasPlace) {
+      closeBusy(ws, fullText(maxSessions), refusedLogLine([...sessions.values()]));
+      return;
     }
 
     let helloed = false;
@@ -350,8 +380,8 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     const sendBinary = (chunk: Buffer) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk, { binary: true });
     };
-    const session = new Session(send, undefined, { sendBinary });
-    sessions.set(session, new Connection(ws, session, now()));
+    const session = new Session(send, undefined, { sendBinary, now });
+    sessions.set(session, new Connection(ws, session, newcomer.at, newcomer.clientAddress));
 
     ws.on('message', (data, isBinary) => {
       // Closed to make room for another, it is only waiting for its socket to close.

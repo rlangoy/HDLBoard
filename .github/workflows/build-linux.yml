@@ -114,6 +114,10 @@ jobs:
           npm ci
           npm ci --prefix server
 
+      # The Clean Code rules for new frontend code (eslint.config.js decides which files).
+      - name: Lint
+        run: npm run lint
+
       - name: Cache Electron downloads
         uses: actions/cache@v6
         with:

@@ -67,7 +67,8 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 |---|---|---|
 | `HDLBOARD_PAGE_PORT` | `80` | Host port for the page **and** the WebSocket. The page connects back to whatever origin it was loaded from, so no rebuild is needed |
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused (the older name `GHDL_MAX_SESSIONS` is still read) |
-| `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server, a session open this long is closed to make room for a new one, and its student told why; `0` refuses the new one instead |
+| `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
+| `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, a session open this long is closed to make room for a new one, and its student told why; `0` closes no session and refuses the new one instead |
 | `GHDL_REF` | `master` | GHDL branch or tag to build, for example `v6.0.0` for a pinned release |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 | `HDLBOARD_BOUNCY_BUTTONS` | `false` | Start-up default of Settings › Pushbuttons › *Offer bouncy pushbuttons*, written to the page's `settings.json` ([SETTINGS.md](../docs/SETTINGS.md)). `true` offers Bouncy contacts. A student's own choice in Settings still wins. Needs a rebuild (`--build`) |
