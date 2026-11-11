@@ -193,6 +193,7 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
   });
 
   const waveHandlers = () => ({ onReady: vi.fn(), onBegin: vi.fn(), onChunk: vi.fn(), onEnd: vi.fn(), onNone: vi.fn() });
+  const WAVE_READY_1 = 'WAVE-READY 1 ghw 2420 complete';
 
   test('WAVE on/off and the board go right before every RUN', () => {
     const client = new HdlClient('ws://test', recordingHandlers());
@@ -211,24 +212,48 @@ describe('HdlClient and waveforms (docs/waveform_viewer_spec.md § 7.4)', () => 
     client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
     const socket = FakeSocket.last;
     if (socket === undefined) throw new Error('no socket was opened');
+    // The server's run 3 is the page's first: the handlers see page-wide numbers.
     socket.receive('WAVE-READY 3 ghw 2420 complete');
-    expect(wave.onReady).toHaveBeenCalledWith({ run: 3, format: 'ghw', bytes: 2420, status: 'complete' });
+    expect(wave.onReady).toHaveBeenCalledWith({ run: 1, format: 'ghw', bytes: 2420, status: 'complete' });
     socket.onmessage?.({ data: new ArrayBuffer(4) });
     expect(wave.onChunk).not.toHaveBeenCalled();
     socket.receive('WAVE-BEGIN 3 2420');
     socket.onmessage?.({ data: new ArrayBuffer(4) });
     socket.receive('WAVE-END 3');
     socket.onmessage?.({ data: new ArrayBuffer(4) });
-    expect(wave.onBegin).toHaveBeenCalledWith(3, 2420);
+    expect(wave.onBegin).toHaveBeenCalledWith(1, 2420);
     expect(wave.onChunk).toHaveBeenCalledOnce();
-    expect(wave.onEnd).toHaveBeenCalledWith(3);
-    socket.receive('WAVE-NONE 2');
-    expect(wave.onNone).toHaveBeenCalledWith(2);
+    expect(wave.onEnd).toHaveBeenCalledWith(1);
+    socket.receive('WAVE-NONE 3');
+    expect(wave.onNone).toHaveBeenCalledWith(1);
     socket.receive('WAVE-READY 3 fst 1 complete');
     expect(wave.onReady).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledTimes(3);
-    client.waveGet(3);
+    client.waveGet(1);
     expect(socket.sent[socket.sent.length - 1]).toBe('WAVE-GET 3');
+  });
+
+  test('a run of a closed session is gone: nothing is asked of the next session', () => {
+    const onNone = vi.fn();
+    const client = new HdlClient('ws://test', { ...recordingHandlers(), wave: { ...waveHandlers(), onNone } });
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
+    FakeSocket.last?.receive(WAVE_READY_1);
+    client.close();
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
+    FakeSocket.last?.receive(WELCOME_CURRENT);
+    client.waveGet(1);
+    expect(onNone).toHaveBeenCalledWith(1);
+  });
+
+  test('the same server run in a new session is a new page run, so the view fetches it', () => {
+    const wave = waveHandlers();
+    const client = new HdlClient('ws://test', { ...recordingHandlers(), wave });
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
+    FakeSocket.last?.receive(WAVE_READY_1);
+    client.close();
+    client.run(PROJECT, 'top.vhd', null, { recordWave: true, board: DEFAULT_BOARD.ports });
+    FakeSocket.last?.receive(WAVE_READY_1);
+    expect(wave.onReady.mock.calls.map(([ready]) => ready.run)).toEqual([1, 2]);
   });
 });
 
@@ -323,6 +348,105 @@ describe('HdlClient.stimSteps (a bouncing pushbutton)', () => {
   test('a backend older than protocol 4 gets the final state alone', () => {
     clientWelcomedBy('WELCOME 3').stimSteps(STEPS);
     expect(lastFrame()).toBe('STIM 1110');
+  });
+});
+
+describe('after a run, its place on the server is freed', () => {
+  const BOARD_RUN = { recordWave: false, board: DEFAULT_BOARD.ports };
+  const COMPILE_ERROR = 'ERROR analyze\ntop.vhd:3:1: syntax error';
+  const WAVE_READY = 'WAVE-READY 1 ghw 2420 complete';
+
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** A client whose run is under way on `FakeSocket.last`. */
+  function running(handlers = recordingHandlers()): HdlClient {
+    const client = new HdlClient('ws://test', { ...handlers, wave: { onReady: vi.fn(), onBegin: vi.fn(), onChunk: vi.fn(), onEnd: vi.fn(), onNone: vi.fn() } });
+    client.run(PROJECT, 'top.vhd', null, BOARD_RUN);
+    FakeSocket.last?.receive(WELCOME_CURRENT);
+    return client;
+  }
+
+  test('a stopped run closes the socket', () => {
+    running();
+    FakeSocket.last?.receive('DONE stopped');
+    expect(FakeSocket.last?.closed).toBe(true);
+  });
+
+  test('a run that fails to compile closes the socket', () => {
+    running();
+    FakeSocket.last?.receive(COMPILE_ERROR);
+    expect(FakeSocket.last?.closed).toBe(true);
+  });
+
+  test('the close that follows the run’s end is not reported: its handler is gone', () => {
+    running();
+    FakeSocket.last?.receive('DONE stopped');
+    expect(FakeSocket.last?.onclose).toBeNull();
+  });
+
+  test('a protocol error leaves the run going, and the socket open', () => {
+    running();
+    FakeSocket.last?.receive('ERROR protocol\nSTIM has 3 bits; this board takes 14.');
+    expect(FakeSocket.last?.closed).toBe(false);
+  });
+
+  test('a run that dies at runtime closes the socket', () => {
+    running();
+    FakeSocket.last?.receive('ERROR runtime\nbound check failure');
+    expect(FakeSocket.last?.closed).toBe(true);
+  });
+
+  test('the next Start opens a fresh socket', () => {
+    const client = running();
+    const ended = FakeSocket.last;
+    ended?.receive('DONE stopped');
+    client.run(PROJECT, 'top.vhd', null, BOARD_RUN);
+    expect(FakeSocket.last).not.toBe(ended);
+  });
+
+  test('a run that offered a waveform keeps the socket, so it can be fetched', () => {
+    running();
+    FakeSocket.last?.receive(WAVE_READY);
+    FakeSocket.last?.receive('DONE completed');
+    expect(FakeSocket.last?.closed).toBe(false);
+  });
+
+  test('a failing testbench that offered a waveform keeps the socket too', () => {
+    running();
+    FakeSocket.last?.receive(WAVE_READY);
+    FakeSocket.last?.receive('ERROR runtime\nassertion failed');
+    expect(FakeSocket.last?.closed).toBe(false);
+  });
+
+  test('the run after a waveform run closes the socket again', () => {
+    const client = running();
+    const socket = FakeSocket.last;
+    socket?.receive(WAVE_READY);
+    socket?.receive('DONE completed');
+    client.run(PROJECT, 'top.vhd', null, BOARD_RUN);
+    socket?.receive('DONE stopped');
+    expect(socket?.closed).toBe(true);
+  });
+
+  test('an older backend’s answer to BOARD keeps the socket: its run goes on', () => {
+    running();
+    FakeSocket.last?.receive('ERROR protocol\nUnknown verb: "BOARD"');
+    expect(FakeSocket.last?.closed).toBe(false);
+  });
+
+  test('a waveform asked for once the socket is closed is gone (WAVE-NONE)', () => {
+    const onNone = vi.fn();
+    const client = new HdlClient('ws://test', { ...recordingHandlers(), wave: { onReady: vi.fn(), onBegin: vi.fn(), onChunk: vi.fn(), onEnd: vi.fn(), onNone } });
+    client.waveGet(4);
+    expect(onNone).toHaveBeenCalledWith(4);
   });
 });
 

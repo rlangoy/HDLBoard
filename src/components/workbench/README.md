@@ -855,6 +855,17 @@ first Start rather than on mount — mounting the component never opens a
 socket nobody asked for. Full wire protocol and backend design:
 [`ghdl_implementation_plan.md`](../../../docs/ghdl_implementation_plan.md) § 6.
 
+The socket lives for one run. When the run ends (`DONE`, or an `ERROR` of stage
+`analyze`, `elaborate`, `runtime` or `internal`; a `protocol` one leaves the run
+going) the client closes it, so a student who is reading the console or editing
+holds no place on a shared server (`HDL_MAX_SESSIONS`, docs/HOSTING.md); the
+next Start opens a fresh one, and every run sends its settings, so nothing is
+lost. A run that offered a waveform (`WAVE-READY`) keeps it, because the
+waveform is fetched from that session; the next run's end closes it. The server
+numbers a session's waveforms from 1, so the client gives each its own number
+(`waveRunNumbers.ts`) and the view never takes a new run's waveform for one it
+shows; a `waveGet` for a run whose session is gone answers `onNone`.
+
 `handleStart` (the card's Start button) shows the file with the blue dot
 (Files panel highlight and pane header), then runs it; `handleRunPane` (Play in
 a pane header) first makes that pane's file top, then does the same. Both go

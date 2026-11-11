@@ -1016,7 +1016,8 @@ board — `blinkTest.vhdl` blinks at 2 Hz in both.
 
 - **No file system on disk.** Uploaded files and edits are held in memory on
   both ends; nothing is written beyond a per-session temp directory on the
-  backend, deleted when the tab closes.
+  backend, deleted when the session closes: when its run ends (one that
+  recorded a waveform stays for it to be viewed) or the tab closes.
 - **Verilog is the second language.** The course is taught in VHDL, and the
   editor's highlighting, the Help dialog's learning links and most of the
   design notes are VHDL-oriented. Verilog support is described in

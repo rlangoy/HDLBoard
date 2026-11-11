@@ -116,6 +116,9 @@ const NEW_CODE = [
   // Compiler options in the project file (issue #37).
   'src/project/compilerOptions.ts',
   'src/project/compilerOptions.test.ts',
+  // A session per run: page-wide waveform run numbers.
+  'src/components/workbench/waveRunNumbers.ts',
+  'src/components/workbench/waveRunNumbers.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

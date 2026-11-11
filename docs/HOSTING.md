@@ -57,15 +57,18 @@ build time (default `9010`). So:
 | **[Icarus Verilog](https://steveicarus.github.io/iverilog/)** (optional) | 12.0 or newer; `iverilog` and `vvp` on the service's `PATH` | Verified against 12.0 and 13.0. Without it VHDL still runs and a Verilog run says the simulator is missing. Install it if students will use Verilog |
 | **Ports** | 2 open to clients | Default `5173` (page) and `9010` (backend). The Alpine installer uses `80` and `9010`. Docker, or any setup with the reverse proxy of [§ 8](#8-one-port-with-a-reverse-proxy), needs only `80` |
 | **CPU / RAM** | ~1 core and ~150 MB per *active* simulation | Every running session forks its own `ghdl` or `vvp` process |
-| **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the browser tab closes |
+| **Disk** | the checkout (~300 MB with `node_modules`) | Sessions also write to the system temp directory, one directory each, removed when the session closes (the run ends, or the tab closes) |
 
 Nothing else, and no external services or accounts: everything stays on your
 machine and your network.
 
 **Sizing.** The backend accepts 32 concurrent sessions by default
-(`HDL_MAX_SESSIONS`). A session is one open browser tab that has clicked
-Start, running or not. When the server is full, the next student still gets
-in if a session can be closed for them, in this order:
+(`HDL_MAX_SESSIONS`). A session is one browser tab that has clicked Start. The
+page closes it when the run ends, so a student who is reading the console or
+editing holds no place; only a testbench run that recorded a waveform keeps its
+session open after the run, as the waveform is fetched from it. When the server
+is full, the next student still gets in if a session can be closed for them, in
+this order:
 
 1. The session that has been idle longest (not compiling or running). One idle
    less than 60 seconds (`HDL_IDLE_GRACE_SECONDS`) is spared, so a student who

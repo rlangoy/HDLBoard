@@ -41,10 +41,12 @@ Two rules hold for every host:
    after the base load** (about 400 MB on a 512 MB machine), so that no mix of
    student designs can push the machine into swap or the OOM killer.
 
-`HDL_MAX_SESSIONS` counts *open browser tabs* (WebSocket sessions), not only
-running simulations. An idle tab costs no CPU, so real load is usually lower
-than the worst case in the table. A tab left open does not hold its place
-forever: on a full server, the session idle longest is closed for a new
+`HDL_MAX_SESSIONS` counts WebSocket sessions. The page closes its session when
+a run ends, so mostly these are running simulations; a testbench run that
+recorded a waveform keeps its session after the run, for the waveform to be
+fetched. An idle session costs no CPU, so real load is usually lower than the
+worst case in the table. One left open (an older page, a waveform run) does not
+hold its place forever: on a full server, the session idle longest is closed for a new
 student (one idle under `HDL_IDLE_GRACE_SECONDS`, 60, is spared unless its
 address has another session), and failing that the oldest open
 `HDL_REPLACE_AFTER_MINUTES` (9) or more.
