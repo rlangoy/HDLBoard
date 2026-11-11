@@ -168,6 +168,8 @@ export interface SessionOptions {
   readonly maxWaveBytes?: number;
   readonly waveCheckMs?: number;
   readonly vhdlWaveFormat?: WaveFormat;
+  /** The clock `idleSince` is read on, in ms. Defaults to `Date.now`; tests move it. */
+  readonly now?: () => number;
 }
 
 /** The waveform of the newest batch run (docs/waveform_viewer_spec.md § 7.4). */
@@ -249,6 +251,8 @@ export class Session {
   private readonly maxWaveBytes: number;
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
+  private readonly now: () => number;
+  private idleSinceMs: number;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
   constructor(
@@ -263,6 +267,15 @@ export class Session {
     this.maxWaveBytes = options.maxWaveBytes ?? readIntSetting(MAX_WAVE_BYTES);
     this.waveCheckMs = options.waveCheckMs ?? readIntSetting(WAVE_CHECK_MS);
     this.vhdlWaveFormat = options.vhdlWaveFormat ?? readVhdlWaveFormat();
+    this.now = options.now ?? Date.now;
+    this.idleSinceMs = this.now();
+  }
+
+  /** Every state change goes through here, so `idleSince` cannot miss the end of a run. */
+  private setState(next: SessionState): void {
+    const wasSimulating = this.simulating;
+    this.state = next;
+    if (wasSimulating && !this.simulating) this.idleSinceMs = this.now();
   }
 
   private inputPath(): string {
@@ -415,7 +428,7 @@ export class Session {
     // Cleared first: the run being replaced is not offered, its waveform is obsolete (W10).
     this.clearWave();
     this.stopActive('stopped');
-    this.state = 'compiling';
+    this.setState('compiling');
     const request = ++this.runRequest;
 
     const board = this.boardForRun();
@@ -501,7 +514,7 @@ export class Session {
 
   private failRun(stage: ErrorStage, text: string): void {
     this.send({ verb: 'ERROR', stage, text });
-    this.state = 'stopped';
+    this.setState('stopped');
   }
 
   private startRun(engine: SimEngine, plan: RunPlan): void {
@@ -546,7 +559,7 @@ export class Session {
       if (this.destroyed || this.run !== handle) return;
       this.run = null;
       const wasRunning = this.state === 'running';
-      this.state = 'stopped';
+      this.setState('stopped');
       this.stopOutputPolling();
       this.stopPacing();
       this.endOutput();
@@ -563,7 +576,7 @@ export class Session {
     // `assert`, never internal plumbing).
     this.beginOutput();
     handle.onOutput((line) => this.forwardOutputLine(line));
-    this.state = 'running';
+    this.setState('running');
     this.send({ verb: 'READY' });
     this.startOutputPolling();
   }
@@ -735,7 +748,7 @@ export class Session {
     const onOutput = (line: string) => this.forwardOutputLine(line);
     const handle = engine.startBatchRun(plan, { onOutput, timeoutMs: BATCH_TIMEOUT_MS, waveFile: wave?.fileName });
     this.batchRun = handle;
-    this.state = 'running';
+    this.setState('running');
     this.send({ verb: 'READY' });
     if (wave !== null) this.startWaveWatchdog(wave, handle);
 
@@ -743,7 +756,7 @@ export class Session {
       if (this.destroyed || this.batchRun !== handle) return; // superseded by Stop/Reset/a new RUN
       this.batchRun = null;
       const wasRunning = this.state === 'running';
-      this.state = 'stopped';
+      this.setState('stopped');
       this.endOutput();
       if (wasRunning) this.reportBatchEnd(result); // otherwise already reported via handleStop's own DONE
     });
@@ -864,7 +877,7 @@ export class Session {
    */
   private abandonCompile(): void {
     this.runRequest++;
-    this.state = 'stopped';
+    this.setState('stopped');
     this.send({ verb: 'DONE', reason: 'stopped' });
   }
 
@@ -882,7 +895,7 @@ export class Session {
       this.batchRun = null;
     }
     if (reason && this.state === 'running') {
-      this.state = 'stopped';
+      this.setState('stopped');
       // What the stopped run recorded is kept and offered (§ 7.4: status `stopped`).
       this.announceWave('stopped');
       this.send({ verb: 'DONE', reason });
@@ -892,6 +905,11 @@ export class Session {
   /** Compiling or running: what closing it to make room would interrupt (sessionLimit.ts). */
   get simulating(): boolean {
     return this.state === 'compiling' || this.state === 'running';
+  }
+
+  /** When it last stopped simulating, or when it was made if it never simulated (sessionLimit.ts). */
+  get idleSince(): number {
+    return this.idleSinceMs;
   }
 
   destroy(): void {

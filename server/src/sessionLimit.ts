@@ -2,14 +2,21 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * What a full server does with one more connection (`HDL_MAX_SESSIONS`): it closes a
- * session that has been open a long time (`HDL_REPLACE_AFTER_MINUTES`) and takes the new
- * one, or, when every session is younger than that, refuses the new one. Both students
- * are told why in an `ERROR busy` frame, with where to get HDLBoard to run on their own
- * computer.
+ * What a full server (`HDL_MAX_SESSIONS`) does with one more connection. In order:
+ *
+ *  1. It closes the session that has been idle longest — not compiling or running. One idle
+ *     less than `HDL_IDLE_GRACE_SECONDS` is spared, unless its address has another session
+ *     too: one student's extra tabs give way before anyone else's only one.
+ *  2. Failing that, it closes the oldest session open at least `HDL_REPLACE_AFTER_MINUTES`,
+ *     an idle one before a simulating one.
+ *  3. Failing that, it refuses the new connection.
+ *
+ * A `HDL_REPLACE_AFTER_MINUTES` of 0 turns replacing off: every new connection is refused.
+ * Each student turned away is told why in an `ERROR busy` frame, and the server logs it.
  */
 
 export const MS_PER_MINUTE = 60_000;
+export const MS_PER_SECOND = 1000;
 
 /** Where the offline version (the Windows and Linux apps) is downloaded. */
 export const RELEASES_URL = 'https://github.com/rlangoy/HDLBoard/releases';
@@ -22,30 +29,79 @@ export interface OpenSession {
   readonly openedAt: number;
   /** Whether it is compiling or running a simulation right now. */
   readonly simulating: boolean;
+  /** When it last stopped simulating, or when it opened if it never simulated. */
+  readonly idleSince: number;
+  /** Where the student connects from (clientAddress.ts). */
+  readonly clientAddress: string;
 }
 
-/**
- * The session to close for a new one: of those open at least `replaceAfterMs`, one that is
- * not simulating if there is one — its student loses nothing running — and the oldest
- * among those. Undefined when none is old enough, or when `replaceAfterMs` is 0 (never).
- */
-export function sessionToReplace<T extends OpenSession>(open: Iterable<T>, now: number, replaceAfterMs: number): T | undefined {
-  if (replaceAfterMs <= 0) return undefined;
-  let best: T | undefined;
-  for (const candidate of open) {
-    if (now - candidate.openedAt < replaceAfterMs) continue;
-    if (best === undefined || better(candidate, best)) best = candidate;
+/** The connection that wants a place. */
+export interface Newcomer {
+  readonly clientAddress: string;
+  /** When it connected, in ms. */
+  readonly at: number;
+}
+
+/** How many of `open`, with the newcomer, come from `address`. */
+export function sessionsFrom(address: string, open: readonly OpenSession[], newcomer: Newcomer): number {
+  const newcomerShares = newcomer.clientAddress === address ? 1 : 0;
+  return open.filter((session) => session.clientAddress === address).length + newcomerShares;
+}
+
+export class ReplacementPolicy {
+  constructor(
+    private readonly replaceAfterMs: number,
+    private readonly idleGraceMs: number,
+  ) {}
+
+  /** The session to close for `newcomer`, or undefined: the newcomer is refused. */
+  sessionToClose<T extends OpenSession>(open: readonly T[], newcomer: Newcomer): T | undefined {
+    const replacingIsOff = this.replaceAfterMs <= 0;
+    if (replacingIsOff) return undefined;
+    return this.longestIdle(open, newcomer) ?? this.oldest(open, newcomer.at);
   }
-  return best;
+
+  private longestIdle<T extends OpenSession>(open: readonly T[], newcomer: Newcomer): T | undefined {
+    const closable = open.filter((session) => isIdle(session) && this.mayCloseIdle(session, open, newcomer));
+    return first(closable, (a, b) => a.idleSince - b.idleSince);
+  }
+
+  private mayCloseIdle(session: OpenSession, open: readonly OpenSession[], newcomer: Newcomer): boolean {
+    const pastGrace = newcomer.at - session.idleSince >= this.idleGraceMs;
+    const sharesAddress = sessionsFrom(session.clientAddress, open, newcomer) > 1;
+    return pastGrace || sharesAddress;
+  }
+
+  private oldest<T extends OpenSession>(open: readonly T[], now: number): T | undefined {
+    const oldEnough = open.filter((session) => now - session.openedAt >= this.replaceAfterMs);
+    return first(oldEnough, idleFirstThenOldest);
+  }
 }
 
-function better(a: OpenSession, b: OpenSession): boolean {
-  if (a.simulating !== b.simulating) return !a.simulating;
-  return a.openedAt < b.openedAt;
+function isIdle(session: OpenSession): boolean {
+  return !session.simulating;
 }
 
-/** To the student whose session was closed to make room. */
-export function replacedText(): string {
+/** An idle session before a simulating one — its student loses nothing running — then the older. */
+function idleFirstThenOldest(a: OpenSession, b: OpenSession): number {
+  if (a.simulating !== b.simulating) return a.simulating ? 1 : -1;
+  return a.openedAt - b.openedAt;
+}
+
+function first<T>(items: readonly T[], order: (a: T, b: T) => number): T | undefined {
+  return [...items].sort(order)[0];
+}
+
+/** To the student whose idle session was closed to make room. */
+export function closedIdleText(): string {
+  return (
+    'Your simulation session was closed because it was not simulating and another student needed the place. ' +
+    `Click Start to try again, or ${OFFLINE_HINT}`
+  );
+}
+
+/** To the student whose simulation was closed to make room. */
+export function closedSimulatingText(): string {
   return (
     'Your simulation session was closed because the server is under heavy load and another student needed the place. ' +
     `Click Start to try again, or ${OFFLINE_HINT}`
@@ -56,4 +112,29 @@ export function replacedText(): string {
 export function fullText(maxSessions: number): string {
   const all = maxSessions === 1 ? 'its only simulation session is' : `all ${maxSessions} simulation sessions are`;
   return `The server is busy: ${all} in use. Try again in a few minutes, or ${OFFLINE_HINT}`;
+}
+
+const LOG_PREFIX = 'hdl-board: ERROR busy:';
+
+/** The server log's line for a session closed to make room; `sameAddress` counts the newcomer too. */
+export function closedLogLine(closed: OpenSession, sameAddress: number, now: number): string {
+  const openMinutes = wholeMinutes(now - closed.openedAt);
+  return `${LOG_PREFIX} closed a session open ${openMinutes} min (${stateNote(closed, sameAddress, now)}) to make room for a new one`;
+}
+
+function stateNote(closed: OpenSession, sameAddress: number, now: number): string {
+  if (closed.simulating) return 'simulating';
+  const idle = `idle ${wholeMinutes(now - closed.idleSince)} min`;
+  return sameAddress > 1 ? `${idle}, ${sameAddress} sessions from its address` : idle;
+}
+
+/** The server log's line for a newcomer refused because no session could be closed. */
+export function refusedLogLine(open: readonly OpenSession[]): string {
+  const simulating = open.filter((session) => session.simulating).length;
+  const idle = open.length - simulating;
+  return `${LOG_PREFIX} refused a new session, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
+}
+
+function wholeMinutes(ms: number): number {
+  return Math.floor(ms / MS_PER_MINUTE);
 }
