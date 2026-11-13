@@ -9,15 +9,13 @@
  */
 
 import { createReadStream, promises as fs } from 'node:fs';
-import { createGzip } from 'node:zlib';
+import { constants as zlib, createGzip } from 'node:zlib';
+import { MAX_BINARY_FRAME_BYTES } from '../frameLimits.js';
 import type { ServerFrame } from '../protocol.js';
-
-/** 1 MiB. */
-export const MAX_BINARY_FRAME_BYTES = 1_048_576;
 
 export interface WaveSink {
   send(frame: ServerFrame): void;
-  sendBinary(chunk: Buffer): void;
+  sendBinary: ((chunk: Buffer) => void) | ((chunk: Buffer) => Promise<void>);
 }
 
 export interface WaveTransfer {
@@ -29,65 +27,35 @@ export interface WaveTransfer {
   readonly maxFrameBytes?: number;
 }
 
-/** Collects gzip output into binary frames of exactly `maxBytes`, the last one shorter. */
-class FrameBuffer {
-  private pending: Buffer[] = [];
-  private pendingBytes = 0;
-
-  constructor(
-    private readonly maxBytes: number,
-    private readonly sendFrame: (frame: Buffer) => void,
-  ) {}
-
-  /** Adds `chunk`; returns false as soon as the transfer should stop. */
-  add(chunk: Buffer, isCurrent: () => boolean): boolean {
-    for (let offset = 0; offset < chunk.length; ) {
-      if (!isCurrent()) return false;
-      const take = Math.min(chunk.length - offset, this.maxBytes - this.pendingBytes);
-      this.pending.push(chunk.subarray(offset, offset + take));
-      this.pendingBytes += take;
-      offset += take;
-      if (this.pendingBytes === this.maxBytes) this.flush();
-    }
-    return true;
+/** Sends `chunk` in frames of at most `maxFrameBytes`, each awaited; false once the run is no longer current. */
+async function sendChunk(transfer: WaveTransfer, chunk: Buffer, maxFrameBytes: number): Promise<boolean> {
+  for (let offset = 0; offset < chunk.length; offset += maxFrameBytes) {
+    if (!transfer.isCurrent()) return false;
+    await transfer.sink.sendBinary(chunk.subarray(offset, offset + maxFrameBytes));
   }
-
-  flush(): void {
-    if (this.pendingBytes === 0) return;
-    this.sendFrame(Buffer.concat(this.pending, this.pendingBytes));
-    this.pending = [];
-    this.pendingBytes = 0;
-  }
+  return true;
 }
 
 /** Streams the gzip-compressed file into the sink; resolves with the frame that ends the transfer, or null. */
-function streamCompressed(transfer: WaveTransfer, maxFrameBytes: number): Promise<ServerFrame | null> {
-  const { path, run, sink, isCurrent } = transfer;
-  return new Promise((resolve) => {
-    const source = createReadStream(path);
-    const gzip = createGzip();
-    const frames = new FrameBuffer(maxFrameBytes, (frame) => sink.sendBinary(frame));
-    let finished = false;
-    const finish = (end: ServerFrame | null) => {
-      if (finished) return;
-      finished = true;
-      source.destroy();
-      gzip.destroy();
-      resolve(end);
-    };
-    gzip.on('data', (chunk: Buffer) => {
-      if (!frames.add(chunk, isCurrent)) finish(null);
-    });
-    gzip.on('end', () => {
-      if (!isCurrent()) return finish(null);
-      frames.flush();
-      finish({ verb: 'WAVE-END', run });
-    });
-    const fail = () => finish({ verb: 'WAVE-NONE', run });
-    source.on('error', fail);
-    gzip.on('error', fail);
+async function streamCompressed(transfer: WaveTransfer, maxFrameBytes: number): Promise<ServerFrame | null> {
+  const { path, run, isCurrent } = transfer;
+  // Neither throws: a missing file is an `error` event, and the chunk size is at least
+  // zlib's minimum (createGzip throws below it). Output chunks then fill whole frames.
+  const source = createReadStream(path);
+  const gzip = createGzip({ chunkSize: Math.max(maxFrameBytes, zlib.Z_MIN_CHUNK) });
+  source.on('error', (error) => gzip.destroy(error));
+  try {
     source.pipe(gzip);
-  });
+    for await (const chunk of gzip) {
+      if (!(await sendChunk(transfer, chunk as Buffer, maxFrameBytes))) return null;
+    }
+    return isCurrent() ? { verb: 'WAVE-END', run } : null;
+  } catch {
+    return { verb: 'WAVE-NONE', run };
+  } finally {
+    source.destroy();
+    gzip.destroy();
+  }
 }
 
 async function fileSize(path: string): Promise<number | undefined> {

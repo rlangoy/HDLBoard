@@ -9,6 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { childEnv } from '../childEnv.js';
 import type { BoardFiles, BoardTiming } from '../engines/types.js';
 import { createBatchHandle, createRunHandle, type BatchHandle, type RunHandle } from '../runtime.js';
 import { SIMULATION_FILE_NAME } from './fileNames.js';
@@ -65,11 +66,11 @@ export function batchRunArguments(tools: ToolPaths, plusargs: readonly string[] 
  */
 export function startVerilogBoardRun(tools: ToolPaths, request: BoardRunRequest): RunHandle {
   const args = boardRunArguments(tools, request.files, request.timing);
-  return createRunHandle(spawn(tools.vvp, args, { cwd: request.dir }));
+  return createRunHandle(spawn(tools.vvp, args, { cwd: request.dir, env: childEnv() }));
 }
 
 /** Starts a standalone testbench, forwarding each line it prints to `onOutput`. */
 export function startVerilogBatchRun(tools: ToolPaths, request: BatchRunRequest, onOutput: (line: string) => void): BatchHandle {
-  const child = spawn(tools.vvp, batchRunArguments(tools, request.plusargs), { cwd: request.dir });
+  const child = spawn(tools.vvp, batchRunArguments(tools, request.plusargs), { cwd: request.dir, env: childEnv() });
   return createBatchHandle(child, onOutput, request.timeoutMs);
 }

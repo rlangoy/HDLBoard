@@ -101,6 +101,22 @@ describe('runCommand', () => {
     assert.equal(result.out.trim().toLowerCase(), cwdDir.path.toLowerCase());
   });
 
+  test('an abort kills a running command at once, not at its timeout', async () => {
+    const abort = new AbortController();
+    const started = Date.now();
+    const pending = runCommand({ cmd: node, args: ['-e', 'setInterval(() => {}, 1000)'], cwd: cwdDir.path, signal: abort.signal });
+    setTimeout(() => abort.abort(), 200);
+    await pending;
+    assert.ok(Date.now() - started < GONE_WAIT_MS);
+  });
+
+  test('an aborted signal starts no command', async () => {
+    const abort = new AbortController();
+    abort.abort();
+    const result = await runCommand({ cmd: node, args: ['-e', 'console.log("ran")'], cwd: cwdDir.path, signal: abort.signal });
+    assert.equal(result.out, '');
+  });
+
   test('kills a command that outlives its timeout, and says so', async () => {
     const script = 'setInterval(() => {}, 1000)';
     const result = await runCommand({ cmd: node, args: ['-e', script], cwd: cwdDir.path, timeoutMs: SHORT_TIMEOUT_MS });

@@ -40,14 +40,15 @@ const PACING: RunPlan['pacing'] = process.platform === 'win32' ? 'stdin' : 'fifo
 interface Workspace {
   readonly dir: string;
   readonly flags: readonly string[];
+  readonly signal?: AbortSignal;
 }
 
 /**
  * `ghdl -a <file>` or `ghdl -e <unit>`, with the run's flags. Expected to finish in
  * seconds, so they run under the shared build timeout (§ 7.4).
  */
-const ghdl = (command: '-a' | '-e', fileOrUnit: string, { dir, flags }: Workspace): Promise<CmdResult> =>
-  runCommand({ cmd: getGhdlExe(), args: [command, ...flags, fileOrUnit], cwd: dir });
+const ghdl = (command: '-a' | '-e', fileOrUnit: string, { dir, flags, signal }: Workspace): Promise<CmdResult> =>
+  runCommand({ cmd: getGhdlExe(), args: [command, ...flags, fileOrUnit], cwd: dir, signal });
 
 const failure = (stage: ErrorStage, text: string): PrepareResult => ({ ok: false, stage, text });
 
@@ -234,9 +235,9 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
 }
 
 /** The run's folder with the GHDL flags its files and options call for, and the warnings that explain them. */
-function planWorkspace({ dir, files, compilerOptions = DEFAULT_COMPILER_OPTIONS }: PrepareRequest) {
+function planWorkspace({ dir, files, compilerOptions = DEFAULT_COMPILER_OPTIONS, signal }: PrepareRequest) {
   const { flags, warnings } = planGhdlFlags(compilerOptions.ghdl, files);
-  const workspace: Workspace = { dir, flags };
+  const workspace: Workspace = { dir, flags, signal };
   return { workspace, warnings };
 }
 

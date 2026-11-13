@@ -39,7 +39,7 @@ import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
-import { sendWaveFile } from './wave/waveTransfer.js';
+import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
 
 /** What a `RUN` after an invalid `BOARD` frame is told (docs/board_io_config_spec.md § 8.2). */
 export const RUN_REFUSED_FOR_BOARD = 'RUN refused: the last BOARD frame was not valid.';
@@ -176,7 +176,7 @@ type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 /** What a session needs besides its text frames; every field has a production default. */
 export interface SessionOptions {
   /** Binary frames: a waveform's gzip content between WAVE-BEGIN and WAVE-END. */
-  readonly sendBinary?: (chunk: Buffer) => void;
+  readonly sendBinary?: WaveSink['sendBinary'];
   readonly maxWaveBytes?: number;
   readonly waveCheckMs?: number;
   readonly vhdlWaveFormat?: WaveFormat;
@@ -250,6 +250,12 @@ export class Session {
   private decodedOptions: DecodedCompilerOptions = { ok: true, options: DEFAULT_COMPILER_OPTIONS };
   /** The compile in progress, if any: the next one waits for it (`prepareInTurn`). */
   private compiling: Promise<void> = Promise.resolve();
+  /**
+   * Aborted by `destroy`: a closed connection's compile is killed, not left to run out
+   * its timeout. Otherwise a client that sends RUN and reconnects, again and again,
+   * would pile up compilers past the session limit.
+   */
+  private readonly compileAbort = new AbortController();
   /** The board of the run in progress: what its `STIM` and `STATE` lengths are (§ 6.2). */
   private runBoard: BoardIo = DEFAULT_BOARD_IO;
   /** The newest batch run's waveform, until the next run, Reset or teardown deletes it. */
@@ -259,7 +265,8 @@ export class Session {
   private waveWatchdog: NodeJS.Timeout | null = null;
   /** The size guard stopped the current run (§ 7.5). */
   private waveLimitHit = false;
-  private readonly sendBinary: (chunk: Buffer) => void;
+  private readonly sendBinary: WaveSink['sendBinary'];
+  private waveTransfer: { wave: RunWave; done: Promise<void> } | null = null;
   private readonly maxWaveBytes: number;
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
@@ -346,16 +353,21 @@ export class Session {
    */
   handleWaveGet(run: number): Promise<void> {
     const wave = this.wave;
+    if (wave !== null && this.waveTransfer?.wave === wave && wave.run === run) return this.waveTransfer.done;
     if (wave === null || wave.run !== run || wave.status === undefined) {
       this.send({ verb: 'WAVE-NONE', run });
       return Promise.resolve();
     }
-    return sendWaveFile({
+    const done = sendWaveFile({
       path: join(this.dir, wave.fileName),
       run,
       sink: { send: this.send, sendBinary: this.sendBinary },
       isCurrent: () => !this.destroyed && this.wave === wave,
+    }).finally(() => {
+      if (this.waveTransfer?.done === done) this.waveTransfer = null;
     });
+    this.waveTransfer = { wave, done };
+    return done;
   }
 
   private waveRequest(): WaveRequest | undefined {
@@ -455,7 +467,16 @@ export class Session {
       return;
     }
 
-    const prepared = await this.prepareInTurn(engine, request, { dir: this.dir, files, topFile, runTarget, wave: this.waveRequest(), board, compilerOptions });
+    const prepared = await this.prepareInTurn(engine, request, {
+      dir: this.dir,
+      files,
+      topFile,
+      runTarget,
+      wave: this.waveRequest(),
+      board,
+      compilerOptions,
+      signal: this.compileAbort.signal,
+    });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (prepared === undefined || this.destroyed || request !== this.runRequest) return;
@@ -926,6 +947,7 @@ export class Session {
 
   destroy(): void {
     this.destroyed = true;
+    this.compileAbort.abort();
     this.stopWaveWatchdog();
     this.stopOutputPolling();
     this.stopPacing();

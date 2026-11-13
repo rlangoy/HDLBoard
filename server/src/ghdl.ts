@@ -11,6 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { childEnv } from './childEnv.js';
 import { createBatchHandle, createRunHandle, type BatchHandle, type RunHandle } from './runtime.js';
 import { resolveGhdlExe } from './ghdlPath.js';
 
@@ -78,7 +79,7 @@ export function startPersistentRun({ cwd, entityName, flags }: GhdlRunTarget, ge
       // the "no FIFO" state.
       ...(generics.pacingFile ? [`-gpacing_file=${generics.pacingFile}`] : []),
     ],
-    { cwd },
+    { cwd, env: childEnv() },
   );
 
   return createRunHandle(child);
@@ -106,6 +107,6 @@ export function runBatch(
   runOptions: readonly string[] = [],
 ): BatchHandle {
   // Run options such as `--wave=` follow the entity name: they belong to the simulation, not to GHDL.
-  const child = spawn(ghdlExe, ['-r', ...flags, entityName, ...runOptions], { cwd });
+  const child = spawn(ghdlExe, ['-r', ...flags, entityName, ...runOptions], { cwd, env: childEnv() });
   return createBatchHandle(child, onOutput, timeoutMs);
 }

@@ -15,8 +15,7 @@
  * Each student turned away is told why in an `ERROR busy` frame, and the server logs it.
  */
 
-export const MS_PER_MINUTE = 60_000;
-export const MS_PER_SECOND = 1000;
+import { MS_PER_MINUTE } from './timeUnits.js';
 
 /** Where the offline version (the Windows and Linux apps) is downloaded. */
 export const RELEASES_URL = 'https://github.com/rlangoy/HDLBoard/releases';
@@ -114,12 +113,13 @@ export function fullText(maxSessions: number): string {
   return `The server is busy: ${all} in use. Try again in a few minutes, or ${OFFLINE_HINT}`;
 }
 
-const LOG_PREFIX = 'hdl-board: ERROR busy:';
+/** What every `ERROR busy` line in the server log starts with. */
+export const BUSY_LOG_PREFIX = 'hdl-board: ERROR busy:';
 
 /** The server log's line for a session closed to make room; `sameAddress` counts the newcomer too. */
 export function closedLogLine(closed: OpenSession, sameAddress: number, now: number): string {
   const openMinutes = wholeMinutes(now - closed.openedAt);
-  return `${LOG_PREFIX} closed a session open ${openMinutes} min (${stateNote(closed, sameAddress, now)}) to make room for a new one`;
+  return `${BUSY_LOG_PREFIX} closed a session open ${openMinutes} min (${stateNote(closed, sameAddress, now)}) to make room for a new one`;
 }
 
 function stateNote(closed: OpenSession, sameAddress: number, now: number): string {
@@ -132,7 +132,7 @@ function stateNote(closed: OpenSession, sameAddress: number, now: number): strin
 export function refusedLogLine(open: readonly OpenSession[]): string {
   const simulating = open.filter((session) => session.simulating).length;
   const idle = open.length - simulating;
-  return `${LOG_PREFIX} refused a new session, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
+  return `${BUSY_LOG_PREFIX} refused a new session, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
 }
 
 function wholeMinutes(ms: number): number {

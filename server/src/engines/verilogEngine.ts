@@ -49,6 +49,7 @@ interface Build {
   readonly board: BoardIo;
   /** The project's Icarus options as flags, for every compile step (optionFlags.ts). */
   readonly optionFlags: readonly string[];
+  readonly signal?: AbortSignal;
 }
 
 type Checked =
@@ -119,6 +120,7 @@ const compileRequest = (build: Build, target: string, extras: Extras = {}): Comp
   files: [...(extras.files ?? []), ...build.sources],
   extraRoots: extras.roots ?? [],
   optionFlags: build.optionFlags,
+  signal: build.signal,
 });
 
 function batchPlan(build: Build, messages: readonly string[], wave: PlannedWave | undefined): RunPlan {
@@ -202,7 +204,7 @@ async function versionNotes(tools: ToolPaths, dir: string): Promise<string[]> {
 }
 
 async function prepare(request: PrepareRequest): Promise<PrepareResult> {
-  const { dir, files, topFile, runTarget, wave, board, compilerOptions = DEFAULT_COMPILER_OPTIONS } = request;
+  const { dir, files, topFile, runTarget, wave, board, compilerOptions = DEFAULT_COMPILER_OPTIONS, signal } = request;
   const checked = checkProject(files, topFile, runTarget);
   if (!checked.ok) return failure(checked.stage, checked.text);
   writeProject(dir, files);
@@ -211,7 +213,8 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   const sameNamed = sameNamedElsewhere(files, checked);
   const sources = checked.sources.filter((name) => !sameNamed.otherFiles.includes(name));
   const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
-  const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags: iverilogFlags(compilerOptions.iverilog) };
+  const optionFlags = iverilogFlags(compilerOptions.iverilog);
+  const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);

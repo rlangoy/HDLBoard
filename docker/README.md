@@ -76,6 +76,11 @@ Put these in a `.env` file next to `docker-compose.yml`. All of them are optiona
 The internal backend port (9010) never has to change, because it isn't
 published.
 
+WebSocket connection attempts, incoming messages, expensive commands, and outgoing
+queues have default limits. The `HDL_WS_*` variables can also be set in this `.env`
+file; see [HOSTING.md § 3.1](../docs/HOSTING.md#31-websocket-rate-and-output-limits)
+for the defaults, burst allowances, and close behavior.
+
 ## Notes
 
 - **Security.** Anyone who can load the page can compile and run code in the

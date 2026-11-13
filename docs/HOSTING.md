@@ -96,6 +96,13 @@ session gets its own temp directory and simulations are killed after a
 timeout, but that is scheduling hygiene, not a sandbox. There is no
 authentication and no TLS.
 
+The simulators start with a minimal environment (`PATH`, temp, locale; see
+`server/src/childEnv.ts`), so the backend's settings and secrets are not in their
+own environment. On Linux that is not a wall: a design can still read the
+backend's startup environment from `/proc/<parent pid>/environ`, since both run
+as the same user. Treat anything you give the backend, such as
+`GITHUB_CLIENT_SECRET`, as readable by whoever can run a simulation.
+
 Host it accordingly:
 
 - **Good:** a classroom LAN, a lab VLAN, a VPN, a machine you'd hand students
@@ -108,6 +115,52 @@ If it must sit somewhere less trusted, run it as a dedicated unprivileged user
 or an authenticating proxy in front.
 
 ---
+
+### 3.1 WebSocket rate and output limits
+
+The backend applies these limits by default. Set environment variables before starting
+Node, or put them in the compose `.env` file when using Docker. Each must be a whole
+number at least its minimum; any other value falls back to the default with a warning.
+
+| Variable | Default | Minimum | Scope and behavior |
+|---|---|---|---|
+| `HDL_WS_UPGRADES_PER_MINUTE` | `600` | `1` | Per client address: all of them at once, then 10 a second. Counted after the path and Origin checks, so another site open in a student's browser spends none of it. |
+| `HDL_WS_MESSAGES_PER_SECOND` | `200` | `1` | Per connection, with two seconds' worth at once. Counts text, binary, ping and pong frames, malformed ones too. |
+| `HDL_WS_BYTES_PER_SECOND` | `8388608` | `8388608` | Per connection, 8 MiB a second with two seconds' worth at once. The minimum is one RUN of the largest size (8 MiB), so a big project is never refused. |
+| `HDL_WS_WORK_PER_MINUTE` | `30` | `1` | Per connection, shared by `RUN` and `RESET`, each of which starts a compiler or a simulator: five at once (or the limit, if smaller), then one every two seconds. Waveform downloads (`WAVE-GET`) have a budget of their own at the same rate. |
+| `HDL_WS_OUTGOING_BYTES` | `4194304` | `1048590` | Output a connection may have queued, 4 MiB. The minimum is one waveform frame (1 MiB) and its header. |
+| `HDL_WS_SEND_TIMEOUT_MS` | `10000` | `1000` | A connection whose queued output makes no progress for this long is cut. |
+
+What happens over a limit:
+
+- **Upgrades:** HTTP 429 with `Retry-After: 60`.
+- **Frames or bytes:** a short protocol error, then the connection is closed with
+  code 1008 and its simulation stopped.
+- **Work:** a `RUN` is refused with `ERROR busy` ("Too many runs in a short time"),
+  which ends the run the way a full server does; the student clicks Start again.
+  A `RESET` is refused with a protocol error and the run goes on. A `WAVE-GET`
+  is refused with a protocol error and `WAVE-NONE`, so the page does not wait.
+- **Output:** a queue over the cap, a failed write, or a stalled one cuts the socket
+  and frees its session.
+
+Waveform downloads wait for each binary frame to be written before reading more, so
+a slow reader does not queue the whole file, and two requests for the same waveform
+share one transfer. A connection that closes takes its compile with it: the compiler is
+killed, so reconnecting cannot pile up compiles beyond `HDL_MAX_SESSIONS`. The output cap covers the WebSocket queue only, not simulator,
+compression, kernel or proxy memory: keep the container's CPU and memory limits too.
+
+Addresses follow `HDL_TRUSTED_PROXIES` (§ 9). Behind a proxy, set it, or every
+student shares the proxy's address and its upgrade budget. Students behind one NAT,
+as in most schools, share one address anyway: since the page opens a new socket for
+every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class meets 429s. For the
+same reason there is no limit on sessions per address; on a full server the
+replacement policy closes one address's extra sessions first. The address table holds
+10,000 addresses; past that, the one seen longest ago is forgotten and starts again
+with a full budget.
+
+These limits belong to one backend process. Several backend replicas need a shared
+limiter at the proxy for a deployment-wide budget. They do not authenticate anyone
+or isolate submitted HDL (§ 3).
 
 ## Pick a route
 
@@ -180,6 +233,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All are optional.
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
 | `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
 | `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, a session open this long is closed to make room for a new one; `0` closes no session and refuses the new one instead |
+| `HDL_TRUSTED_PROXIES` | `1` | Set by the compose file: the page container's nginx is the one proxy in front of the backend |
 | `GHDL_REF` | `master` | GHDL branch or tag to build. Set a release tag such as `v6.0.0` for a reproducible build |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 
@@ -875,8 +929,14 @@ server {
 Now only port 80 has to be open, and 9010 can be bound to loopback by a
 firewall rule. `proxy_read_timeout` matters: the default 60 s closes a socket
 that's merely waiting for the student to flip a switch. `X-Forwarded-For` tells
-the backend each student's address; without it every session seems to come from
-the proxy, and a full server never spares a just-stopped session (§ 2, Sizing).
+the backend each student's address; start the backend with
+`HDL_TRUSTED_PROXIES=1` so it reads it. Without that, every session seems to
+come from the proxy, and a full server never spares a just-stopped session
+(§ 2, Sizing). The backend reads the entry the proxy appended, counted from the
+right, so whatever a client puts in the header itself is skipped; with a second
+proxy in front of nginx, set `HDL_TRUSTED_PROXIES=2`. Keep 9010 closed to
+everything but the proxy, or a client could send the header straight to the
+backend.
 
 **HTTPS** needs nothing extra: the page opens `wss://` when it was loaded over
 `https://`, and with an empty `VITE_HDL_WS_PORT` it uses the page's own host
@@ -894,6 +954,7 @@ Backend, read at startup:
 | `HDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
 | `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
 | `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, the oldest session open at least this long (one not simulating first) is closed to make room for a new one, and its student told why. `0`: never close a session, idle or not; the new one is refused |
+| `HDL_TRUSTED_PROXIES` | `0` | How many proxies in front of the backend append to `X-Forwarded-For`; the student's address is the entry the outermost one added. `0` ignores the header and uses the connection's own address. Set it only when clients cannot reach the backend except through those proxies |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
 | `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |

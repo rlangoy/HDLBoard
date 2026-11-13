@@ -12,6 +12,7 @@
  */
 
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { childEnv } from './childEnv.js';
 
 export interface CmdResult {
   code: number;
@@ -26,7 +27,11 @@ export interface CommandOptions {
   readonly cwd: string;
   /** Defaults to `DEFAULT_COMMAND_TIMEOUT_MS`. */
   readonly timeoutMs?: number;
+  /** Aborted, the command is killed with every process it started, or never started. */
+  readonly signal?: AbortSignal;
 }
+
+const ABORTED: CmdResult = { code: -1, out: '', err: 'Stopped: the session ended.', timedOut: false };
 
 /** A bounded command is expected to finish in seconds: a compile, not a simulation. */
 export const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
@@ -55,10 +60,11 @@ function killTree(child: ChildProcess): void {
   }
 }
 
-export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS }: CommandOptions): Promise<CmdResult> {
+export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS, signal }: CommandOptions): Promise<CmdResult> {
+  if (signal?.aborted) return Promise.resolve(ABORTED);
   return new Promise((resolve) => {
     // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
-    const child = spawn(cmd, args, { cwd, detached: process.platform !== 'win32' });
+    const child = spawn(cmd, args, { cwd, env: childEnv(), detached: process.platform !== 'win32' });
     let out = '';
     let err = '';
     let timedOut = false;
@@ -67,6 +73,9 @@ export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT
       timedOut = true;
       killTree(child);
     }, timeoutMs);
+    const abort = () => killTree(child);
+    signal?.addEventListener('abort', abort, { once: true });
+    child.on('close', () => signal?.removeEventListener('abort', abort));
 
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
