@@ -35,6 +35,8 @@ export interface CompileRequest {
   readonly extraRoots?: readonly string[];
   /** The project's options as flags (optionFlags.ts); absent, none. Both steps get the same ones. */
   readonly optionFlags?: readonly string[];
+  /** Aborted when the session ends: the compiler is killed. */
+  readonly signal?: AbortSignal;
 }
 
 export type PortsOutcome =
@@ -79,8 +81,8 @@ export function compileArguments(tools: ToolPaths, request: CompileRequest): str
   ];
 }
 
-function runIverilog(tools: ToolPaths, args: string[], dir: string): Promise<CmdResult> {
-  return runCommand({ cmd: tools.iverilog, args, cwd: dir, timeoutMs: BUILD_TIMEOUT_MS });
+function runIverilog(tools: ToolPaths, args: string[], { dir, signal }: Pick<CompileRequest, 'dir' | 'signal'>): Promise<CmdResult> {
+  return runCommand({ cmd: tools.iverilog, args, cwd: dir, timeoutMs: BUILD_TIMEOUT_MS, signal });
 }
 
 function failedToFinish(result: CmdResult): boolean {
@@ -103,7 +105,7 @@ function nonEmptyLines(text: string): string[] {
 
 /** The first line of `iverilog -V`, or an empty string if it could not be run. */
 export async function readBanner(tools: ToolPaths, dir: string): Promise<string> {
-  const result = await runIverilog(tools, [...compilerFlags(tools), '-V'], dir);
+  const result = await runIverilog(tools, [...compilerFlags(tools), '-V'], { dir });
   return failedToFinish(result) ? '' : extractBanner(result.out);
 }
 
@@ -113,7 +115,7 @@ export async function readBanner(tools: ToolPaths, dir: string): Promise<string>
  * from their own top, before any wrapper exists.
  */
 export async function readTopPorts(tools: ToolPaths, request: CompileRequest): Promise<PortsOutcome> {
-  const result = await runIverilog(tools, stubArguments(tools, request), request.dir);
+  const result = await runIverilog(tools, stubArguments(tools, request), request);
   if (failedToFinish(result)) return { ok: false, failure: failureOf(result) };
   const stub = await readFile(join(request.dir, STUB_FILE_NAME), 'utf8');
   const parsed = parseStubPorts(stub, request.target);
@@ -123,7 +125,7 @@ export async function readTopPorts(tools: ToolPaths, request: CompileRequest): P
 
 /** Builds `sim.vvp`. On success the compiler's warnings come back as `messages` rather than being lost. */
 export async function compileVerilog(tools: ToolPaths, request: CompileRequest): Promise<CompileOutcome> {
-  const result = await runIverilog(tools, compileArguments(tools, request), request.dir);
+  const result = await runIverilog(tools, compileArguments(tools, request), request);
   if (failedToFinish(result)) return { ok: false, failure: failureOf(result) };
   return { ok: true, messages: nonEmptyLines(result.err) };
 }

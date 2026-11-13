@@ -16,6 +16,7 @@ import { SocketOutput } from './socketOutput.js';
 import { MS_PER_SECOND } from './timeUnits.js';
 import {
   MessageBudget,
+  TOO_MANY_DOWNLOADS_TEXT,
   TOO_MANY_MESSAGES_TEXT,
   TOO_MANY_RESETS_TEXT,
   TOO_MANY_RUNS_LOG_LINE,
@@ -118,7 +119,7 @@ export class ClientConnection implements OpenSession, Peer {
     BOARD: (frame) => this.session.handleBoard(frame.board),
     // Invalid options too: the RUN that follows says why.
     OPTIONS: (frame) => this.session.handleOptions(frame.options),
-    'WAVE-GET': (frame) => void this.session.handleWaveGet(frame.run),
+    'WAVE-GET': (frame) => this.waveGet(frame.run),
     RESET: () => this.reset(),
     STOP: () => this.session.handleStop(),
     PING: () => this.send({ verb: 'PONG' }),
@@ -213,6 +214,13 @@ export class ClientConnection implements OpenSession, Peer {
     this.session.handleRun(frame.files, frame.topFile, frame.runTarget).catch((e) => {
       this.send({ verb: 'ERROR', stage: 'internal', text: `Internal server error:\n${String(e)}` });
     });
+  }
+
+  /** Over the download budget, the page is still answered (`WAVE-NONE`), so it never waits for frames. */
+  private waveGet(run: number): void {
+    if (this.budget.takeDownload()) return void this.session.handleWaveGet(run);
+    this.send({ verb: 'ERROR', stage: 'protocol', text: TOO_MANY_DOWNLOADS_TEXT });
+    this.send({ verb: 'WAVE-NONE', run });
   }
 
   private reset(): void {

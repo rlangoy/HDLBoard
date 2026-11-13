@@ -74,12 +74,21 @@ const WHOLE_NUMBER = /^\d+$/;
 export function readIntSetting(setting: IntSetting, env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[setting.name] ?? (setting.legacyName === undefined ? undefined : env[setting.legacyName]);
   if (raw === undefined) return setting.fallback;
-  // An empty or mistyped value must not quietly mean "no limit" (a NaN compares false with everything).
-  if (!WHOLE_NUMBER.test(raw.trim())) return fallBack(setting, `${JSON.stringify(raw)} is not a whole number`);
+  const problem = problemWith(raw, setting.minimum ?? 0);
+  return problem === undefined ? Number(raw) : fallBack(setting, problem);
+}
+
+/**
+ * Why `raw` is no usable value, or undefined when it is one. Each case must fall back, not
+ * pass: a NaN compares false with everything, and Infinity is never counted down, so either
+ * would quietly mean "no limit".
+ */
+function problemWith(raw: string, minimum: number): string | undefined {
+  if (!WHOLE_NUMBER.test(raw.trim())) return `${JSON.stringify(raw)} is not a whole number`;
   const value = Number(raw);
-  const minimum = setting.minimum ?? 0;
-  if (value < minimum) return fallBack(setting, `${value} is below its minimum of ${minimum}`);
-  return value;
+  if (!Number.isSafeInteger(value)) return `${JSON.stringify(raw)} is too large`;
+  if (value < minimum) return `${value} is below its minimum of ${minimum}`;
+  return undefined;
 }
 
 function fallBack(setting: IntSetting, problem: string): number {

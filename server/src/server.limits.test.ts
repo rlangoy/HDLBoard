@@ -147,10 +147,31 @@ describe('work limits', () => {
       assert.equal(await answers(ws), true);
     }));
 
-  test('WAVE-GET costs no work: the page asks for each waveform it shows', TIMEOUT, () =>
+  test('WAVE-GET spends no RUN budget', TIMEOUT, () =>
     withBackend({ wsLimits: { workPerMinute: 1 } }, async (open) => {
       const ws = await open();
-      for (let i = 0; i < 3; i++) ws.send('WAVE-GET 1');
+      ws.send('HELLO 6');
+      ws.send('WAVE-GET 1');
+      const answer = frameStarting(ws, 'ERROR');
+      ws.send('RUN top.vhd\n@@FILE top.vhd@@\n');
+      assert.doesNotMatch(await answer, /Too many runs/);
+    }));
+
+  test('a WAVE-GET over the download budget is answered WAVE-NONE, so the page does not wait', TIMEOUT, () =>
+    withBackend({ wsLimits: { workPerMinute: 1 } }, async (open) => {
+      const ws = await open();
+      ws.send('WAVE-GET 1');
+      await frameStarting(ws, 'WAVE-NONE');
+      const refused = frameStarting(ws, 'ERROR protocol');
+      ws.send('WAVE-GET 1');
+      assert.match(await refused, /too many waveform downloads/);
+    }));
+
+  test('a WAVE-GET over the download budget leaves the connection open', TIMEOUT, () =>
+    withBackend({ wsLimits: { workPerMinute: 1 } }, async (open) => {
+      const ws = await open();
+      ws.send('WAVE-GET 1');
+      ws.send('WAVE-GET 1');
       assert.equal(await answers(ws), true);
     }));
 });

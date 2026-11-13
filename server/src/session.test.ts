@@ -55,6 +55,19 @@ function controlledEngine() {
 
 const FILES = [{ name: 'top.vhdl', content: '' }];
 
+describe('Session teardown', () => {
+  test('aborts the compile in progress, so a closed connection leaves no compiler running', async () => {
+    const { engine } = controlledEngine();
+    let signal: AbortSignal | undefined;
+    const prepare = engine.prepare;
+    const session = new Session(() => {}, () => ({ ...engine, prepare: (request) => ((signal = request.signal), prepare(request)) }));
+    void session.handleRun(FILES, 'top.vhdl');
+    await settle();
+    session.destroy();
+    assert.equal(signal?.aborted, true);
+  });
+});
+
 describe('Session file names', () => {
   test('refuses a name that would be written outside the session directory', async () => {
     const escaped = join(tmpdir(), 'hdl-board-session-test-escape.vhdl');

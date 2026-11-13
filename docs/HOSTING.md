@@ -127,7 +127,7 @@ number at least its minimum; any other value falls back to the default with a wa
 | `HDL_WS_UPGRADES_PER_MINUTE` | `600` | `1` | Per client address: all of them at once, then 10 a second. Counted after the path and Origin checks, so another site open in a student's browser spends none of it. |
 | `HDL_WS_MESSAGES_PER_SECOND` | `200` | `1` | Per connection, with two seconds' worth at once. Counts text, binary, ping and pong frames, malformed ones too. |
 | `HDL_WS_BYTES_PER_SECOND` | `8388608` | `8388608` | Per connection, 8 MiB a second with two seconds' worth at once. The minimum is one RUN of the largest size (8 MiB), so a big project is never refused. |
-| `HDL_WS_WORK_PER_MINUTE` | `30` | `1` | Per connection, shared by `RUN` and `RESET`, each of which starts a compiler or a simulator: five at once (or the limit, if smaller), then one every two seconds. |
+| `HDL_WS_WORK_PER_MINUTE` | `30` | `1` | Per connection, shared by `RUN` and `RESET`, each of which starts a compiler or a simulator: five at once (or the limit, if smaller), then one every two seconds. Waveform downloads (`WAVE-GET`) have a budget of their own at the same rate. |
 | `HDL_WS_OUTGOING_BYTES` | `4194304` | `1048590` | Output a connection may have queued, 4 MiB. The minimum is one waveform frame (1 MiB) and its header. |
 | `HDL_WS_SEND_TIMEOUT_MS` | `10000` | `1000` | A connection whose queued output makes no progress for this long is cut. |
 
@@ -138,13 +138,15 @@ What happens over a limit:
   code 1008 and its simulation stopped.
 - **Work:** a `RUN` is refused with `ERROR busy` ("Too many runs in a short time"),
   which ends the run the way a full server does; the student clicks Start again.
-  A `RESET` is refused with a protocol error and the run goes on.
+  A `RESET` is refused with a protocol error and the run goes on. A `WAVE-GET`
+  is refused with a protocol error and `WAVE-NONE`, so the page does not wait.
 - **Output:** a queue over the cap, a failed write, or a stalled one cuts the socket
   and frees its session.
 
 Waveform downloads wait for each binary frame to be written before reading more, so
 a slow reader does not queue the whole file, and two requests for the same waveform
-share one transfer. The output cap covers the WebSocket queue only, not simulator,
+share one transfer. A connection that closes takes its compile with it: the compiler is
+killed, so reconnecting cannot pile up compiles beyond `HDL_MAX_SESSIONS`. The output cap covers the WebSocket queue only, not simulator,
 compression, kernel or proxy memory: keep the container's CPU and memory limits too.
 
 Addresses follow `HDL_TRUSTED_PROXIES` (§ 9). Behind a proxy, set it, or every

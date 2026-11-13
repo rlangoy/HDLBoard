@@ -55,20 +55,27 @@ export function readWsLimits(overrides: Partial<WsLimits> = {}, env: NodeJS.Proc
 
 /** Frames and bytes may come in bursts this many seconds long. */
 const BURST_SECONDS = 2;
-/** RUN and RESET requests that may come at once: a student clicking Reset a few times. */
+/**
+ * RUN and RESET requests that may come at once (a student clicking Reset a few times), and
+ * likewise waveform downloads (the page fetches one to show and one to save, per run).
+ */
 const WORK_BURST = 5;
 
-/** What one connection may send: frames and bytes, and RUN and RESET requests. */
+/** What one connection may send: frames and bytes, RUN and RESET requests, waveform downloads. */
 export class MessageBudget {
   private readonly messages: TokenBucket;
   private readonly bytes: TokenBucket;
   private readonly work: TokenBucket;
+  private readonly downloads: TokenBucket;
 
   constructor(limits: WsLimits, now: () => number) {
     const { messagesPerSecond, bytesPerSecond, workPerMinute } = limits;
     this.messages = TokenBucket.perSecond(messagesPerSecond, messagesPerSecond * BURST_SECONDS, now);
     this.bytes = TokenBucket.perSecond(bytesPerSecond, bytesPerSecond * BURST_SECONDS, now);
     this.work = TokenBucket.perMinute(workPerMinute, Math.min(WORK_BURST, workPerMinute), now);
+    // Its own bucket at the same rate: a download is not a run, but each compresses and
+    // sends a waveform of up to 16 MiB, so repeating one must cost the client too.
+    this.downloads = TokenBucket.perMinute(workPerMinute, Math.min(WORK_BURST, workPerMinute), now);
   }
 
   /** Spends one frame of `bytes`, any frame: text, binary, ping or pong. */
@@ -79,6 +86,11 @@ export class MessageBudget {
   /** Spends one RUN or RESET, each of which starts a compiler or a simulator. */
   takeWork(): boolean {
     return this.work.take();
+  }
+
+  /** Spends one `WAVE-GET`. */
+  takeDownload(): boolean {
+    return this.downloads.take();
   }
 }
 
@@ -91,6 +103,10 @@ export const TOO_MANY_RUNS_TEXT = 'Too many runs in a short time. Wait a few sec
 /** To the student whose RESET came over the work budget, in an `ERROR protocol`: the run goes on. */
 export const TOO_MANY_RESETS_TEXT =
   'Reset ignored: too many runs and resets in a short time. Wait a few seconds, then reset again.';
+
+/** To the student whose `WAVE-GET` came over the download budget, before its `WAVE-NONE`. */
+export const TOO_MANY_DOWNLOADS_TEXT =
+  'Waveform not sent: too many waveform downloads in a short time. Wait a few seconds, then try again.';
 
 /** The server log's line for a RUN refused over the work budget. */
 export const TOO_MANY_RUNS_LOG_LINE = `${BUSY_LOG_PREFIX} refused a RUN, too many runs and resets from one connection in a short time`;

@@ -42,6 +42,16 @@ describe('readIntSetting', () => {
     assert.equal(warn.mock.calls[0].arguments[0], 'hdl-board: HDL_TEST_LIMIT=0 is below its minimum of 1; using 30.');
   });
 
+  test('uses the default for a number too large to count with: never "no limit"', (t) => {
+    t.mock.method(console, 'warn', () => {});
+    assert.equal(readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '9'.repeat(400) }), 30);
+  });
+
+  test('uses the default for a number past the largest safe integer', (t) => {
+    t.mock.method(console, 'warn', () => {});
+    assert.equal(readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '9007199254740992' }), 30);
+  });
+
   test('takes a value at its minimum', () => {
     assert.equal(readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '1' }), 1);
   });

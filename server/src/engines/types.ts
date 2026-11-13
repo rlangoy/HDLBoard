@@ -101,6 +101,8 @@ export interface PrepareRequest {
   readonly board: BoardIo;
   /** The project's compiler options (`OPTIONS`); omitted, every option at its default. */
   readonly compilerOptions?: CompilerOptions;
+  /** Aborted when the session ends: every compiler step still running is killed. */
+  readonly signal?: AbortSignal;
 }
 
 /** A failure is a value: a design that does not compile is an expected outcome, not a bug. */

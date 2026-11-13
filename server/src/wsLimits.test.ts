@@ -70,6 +70,24 @@ describe('MessageBudget', () => {
     assert.equal(budget.takeWork(), false);
   });
 
+  test('takes five waveform downloads at once', () => {
+    const budget = new MessageBudget(DEFAULTS, () => 0);
+    for (let i = 0; i < 4; i++) budget.takeDownload();
+    assert.equal(budget.takeDownload(), true);
+  });
+
+  test('refuses a sixth download', () => {
+    const budget = new MessageBudget(DEFAULTS, () => 0);
+    for (let i = 0; i < 5; i++) budget.takeDownload();
+    assert.equal(budget.takeDownload(), false);
+  });
+
+  test('downloads do not spend the RUN and RESET budget', () => {
+    const budget = new MessageBudget(DEFAULTS, () => 0);
+    for (let i = 0; i < 5; i++) budget.takeDownload();
+    assert.equal(budget.takeWork(), true);
+  });
+
   test('takes no more at once than the work limit, when that is below five', () => {
     const budget = new MessageBudget({ ...DEFAULTS, workPerMinute: 2 }, () => 0);
     budget.takeWork();
