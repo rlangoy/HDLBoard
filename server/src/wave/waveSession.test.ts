@@ -107,6 +107,41 @@ describe('recording a waveform', () => {
     assert.equal(gunzipSync(Buffer.concat(chunks)).toString(), 'wave data');
   });
 
+  /** A session whose run 1 has finished and offers its waveform. */
+  async function withRecordedWave(check: (recorded: ReturnType<typeof session>) => Promise<void>) {
+    const recorded = session();
+    try {
+      recorded.s.handleWave(true);
+      await recorded.s.handleRun(FILES, 'tb.vhdl');
+      recorded.runs[0].finish({});
+      await settle();
+      await check(recorded);
+    } finally {
+      recorded.s.destroy();
+    }
+  }
+  const transfersStarted = (frames: ServerFrame[]) => frames.filter((f) => f.verb === 'WAVE-BEGIN').length;
+
+  test('a second request for a waveform being sent shares its transfer', () =>
+    withRecordedWave(async ({ s }) => {
+      const first = s.handleWaveGet(1);
+      assert.equal(s.handleWaveGet(1), first);
+      await first;
+    }));
+
+  test('a shared transfer sends the waveform once', () =>
+    withRecordedWave(async ({ s, frames }) => {
+      await Promise.all([s.handleWaveGet(1), s.handleWaveGet(1)]);
+      assert.equal(transfersStarted(frames), 1);
+    }));
+
+  test('a request after the transfer ended sends it again', () =>
+    withRecordedWave(async ({ s, frames }) => {
+      await s.handleWaveGet(1);
+      await s.handleWaveGet(1);
+      assert.equal(transfersStarted(frames), 2);
+    }));
+
   test('a failing testbench still offers its waveform as complete', async () => {
     const { s, frames, runs } = session();
     s.handleWave(true);

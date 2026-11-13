@@ -134,6 +134,26 @@ describe('sendWaveFile', () => {
     assert.deepEqual(frames, [{ verb: 'WAVE-NONE', run: 2 }]);
   });
 
+  test('sends no further frame while the sink is still writing one', async () => {
+    const chunks: Buffer[] = [];
+    let release!: () => void;
+    let firstWritten!: () => void;
+    const writing = new Promise<void>((resolve) => (release = resolve));
+    const firstChunk = new Promise<void>((resolve) => (firstWritten = resolve));
+    const sendBinary = async (chunk: Buffer) => {
+      chunks.push(chunk);
+      firstWritten();
+      await writing;
+    };
+    const pending = sendWaveFile({ path, run: 1, maxFrameBytes: 4096, isCurrent: () => true, sink: { send: () => {}, sendBinary } });
+    await firstChunk;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const sentWhileWriting = chunks.length;
+    release();
+    await pending;
+    assert.equal(sentWhileWriting, 1);
+  });
+
   test('a run that stops being current stops sending', async () => {
     const frames: ServerFrame[] = [];
     let current = true;

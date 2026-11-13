@@ -39,7 +39,7 @@ import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
-import { sendWaveFile } from './wave/waveTransfer.js';
+import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
 
 /** What a `RUN` after an invalid `BOARD` frame is told (docs/board_io_config_spec.md § 8.2). */
 export const RUN_REFUSED_FOR_BOARD = 'RUN refused: the last BOARD frame was not valid.';
@@ -164,7 +164,7 @@ type SessionState = 'new' | 'compiling' | 'running' | 'stopped';
 /** What a session needs besides its text frames; every field has a production default. */
 export interface SessionOptions {
   /** Binary frames: a waveform's gzip content between WAVE-BEGIN and WAVE-END. */
-  readonly sendBinary?: (chunk: Buffer) => void;
+  readonly sendBinary?: WaveSink['sendBinary'];
   readonly maxWaveBytes?: number;
   readonly waveCheckMs?: number;
   readonly vhdlWaveFormat?: WaveFormat;
@@ -247,7 +247,8 @@ export class Session {
   private waveWatchdog: NodeJS.Timeout | null = null;
   /** The size guard stopped the current run (§ 7.5). */
   private waveLimitHit = false;
-  private readonly sendBinary: (chunk: Buffer) => void;
+  private readonly sendBinary: WaveSink['sendBinary'];
+  private waveTransfer: { wave: RunWave; done: Promise<void> } | null = null;
   private readonly maxWaveBytes: number;
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
@@ -334,16 +335,21 @@ export class Session {
    */
   handleWaveGet(run: number): Promise<void> {
     const wave = this.wave;
+    if (wave !== null && this.waveTransfer?.wave === wave && wave.run === run) return this.waveTransfer.done;
     if (wave === null || wave.run !== run || wave.status === undefined) {
       this.send({ verb: 'WAVE-NONE', run });
       return Promise.resolve();
     }
-    return sendWaveFile({
+    const done = sendWaveFile({
       path: join(this.dir, wave.fileName),
       run,
       sink: { send: this.send, sendBinary: this.sendBinary },
       isCurrent: () => !this.destroyed && this.wave === wave,
+    }).finally(() => {
+      if (this.waveTransfer?.done === done) this.waveTransfer = null;
     });
+    this.waveTransfer = { wave, done };
+    return done;
   }
 
   private waveRequest(): WaveRequest | undefined {

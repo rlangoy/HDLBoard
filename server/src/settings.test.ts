@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MAX_SESSIONS, MAX_WAVE_BYTES, WAVE_CHECK_MS, WS_PORT, readIntSetting, readVhdlWaveFormat } from './settings.js';
+import { MAX_SESSIONS, MAX_WAVE_BYTES, WAVE_CHECK_MS, WS_PORT, readIntSetting, readVhdlWaveFormat, type IntSetting } from './settings.js';
 
 describe('readIntSetting', () => {
   test('reads the HDL_* name', () => {
@@ -27,6 +27,23 @@ describe('readIntSetting', () => {
     const warn = t.mock.method(console, 'warn', () => {});
     for (const raw of ['', 'many', '3.5', '-1']) assert.equal(readIntSetting(MAX_SESSIONS, { HDL_MAX_SESSIONS: raw }), 32, raw);
     assert.equal(warn.mock.callCount(), 4);
+  });
+
+  const AT_LEAST_ONE: IntSetting = { name: 'HDL_TEST_LIMIT', fallback: 30, minimum: 1 };
+
+  test('uses the default for a value below its minimum', (t) => {
+    t.mock.method(console, 'warn', () => {});
+    assert.equal(readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '0' }), 30);
+  });
+
+  test('says why it used the default for a value below its minimum', (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '0' });
+    assert.equal(warn.mock.calls[0].arguments[0], 'hdl-board: HDL_TEST_LIMIT=0 is below its minimum of 1; using 30.');
+  });
+
+  test('takes a value at its minimum', () => {
+    assert.equal(readIntSetting(AT_LEAST_ONE, { HDL_TEST_LIMIT: '1' }), 1);
   });
 });
 

@@ -116,6 +116,50 @@ or an authenticating proxy in front.
 
 ---
 
+### 3.1 WebSocket rate and output limits
+
+The backend applies these limits by default. Set environment variables before starting
+Node, or put them in the compose `.env` file when using Docker. Each must be a whole
+number at least its minimum; any other value falls back to the default with a warning.
+
+| Variable | Default | Minimum | Scope and behavior |
+|---|---|---|---|
+| `HDL_WS_UPGRADES_PER_MINUTE` | `600` | `1` | Per client address: all of them at once, then 10 a second. Counted after the path and Origin checks, so another site open in a student's browser spends none of it. |
+| `HDL_WS_MESSAGES_PER_SECOND` | `200` | `1` | Per connection, with two seconds' worth at once. Counts text, binary, ping and pong frames, malformed ones too. |
+| `HDL_WS_BYTES_PER_SECOND` | `8388608` | `8388608` | Per connection, 8 MiB a second with two seconds' worth at once. The minimum is one RUN of the largest size (8 MiB), so a big project is never refused. |
+| `HDL_WS_WORK_PER_MINUTE` | `30` | `1` | Per connection, shared by `RUN` and `RESET`, each of which starts a compiler or a simulator: five at once (or the limit, if smaller), then one every two seconds. |
+| `HDL_WS_OUTGOING_BYTES` | `4194304` | `1048590` | Output a connection may have queued, 4 MiB. The minimum is one waveform frame (1 MiB) and its header. |
+| `HDL_WS_SEND_TIMEOUT_MS` | `10000` | `1000` | A connection whose queued output makes no progress for this long is cut. |
+
+What happens over a limit:
+
+- **Upgrades:** HTTP 429 with `Retry-After: 60`.
+- **Frames or bytes:** a short protocol error, then the connection is closed with
+  code 1008 and its simulation stopped.
+- **Work:** a `RUN` is refused with `ERROR busy` ("Too many runs in a short time"),
+  which ends the run the way a full server does; the student clicks Start again.
+  A `RESET` is refused with a protocol error and the run goes on.
+- **Output:** a queue over the cap, a failed write, or a stalled one cuts the socket
+  and frees its session.
+
+Waveform downloads wait for each binary frame to be written before reading more, so
+a slow reader does not queue the whole file, and two requests for the same waveform
+share one transfer. The output cap covers the WebSocket queue only, not simulator,
+compression, kernel or proxy memory: keep the container's CPU and memory limits too.
+
+Addresses follow `HDL_TRUSTED_PROXIES` (§ 9). Behind a proxy, set it, or every
+student shares the proxy's address and its upgrade budget. Students behind one NAT,
+as in most schools, share one address anyway: since the page opens a new socket for
+every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class meets 429s. For the
+same reason there is no limit on sessions per address; on a full server the
+replacement policy closes one address's extra sessions first. The address table holds
+10,000 addresses; past that, the one seen longest ago is forgotten and starts again
+with a full budget.
+
+These limits belong to one backend process. Several backend replicas need a shared
+limiter at the proxy for a deployment-wide budget. They do not authenticate anyone
+or isolate submitted HDL (§ 3).
+
 ## Pick a route
 
 | Route | Best for | Ports open to clients | Section |
