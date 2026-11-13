@@ -29,3 +29,11 @@ services:
       # is not refused; its student is told why. 0: never close a session.
       - key: HDL_REPLACE_AFTER_MINUTES
         value: "9"
+      # The proxies that append to X-Forwarded-For before the backend reads it:
+      # Cloudflare (adds the student), Render's edge (adds Cloudflare), and this
+      # container's nginx (adds Render's internal address). The student is the
+      # third entry from the right; whatever a client sends itself sits further
+      # left and is skipped. Without it every student is Render's address, and
+      # shares one upgrade budget and one grace period (HOSTING.md § 3.1).
+      - key: HDL_TRUSTED_PROXIES
+        value: "3"
