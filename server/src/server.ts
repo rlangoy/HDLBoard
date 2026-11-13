@@ -187,6 +187,19 @@ function decodedPath(req: IncomingMessage): string | undefined {
 }
 
 /**
+ * An upgrade request's path, or `undefined` when it is no URL. `new URL` throws on some
+ * request targets Node's parser lets through (`GET //`), and a throw inside the `upgrade`
+ * handler ends the process: one request would take every session down.
+ */
+function upgradePathname(req: IncomingMessage): string | undefined {
+  try {
+    return new URL(req.url ?? '/', 'http://localhost').pathname;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Serves one file out of `rootDir`. The `normalize`-then-prefix-check is
  * the path traversal guard: a request for `/../../etc/passwd` normalizes
  * to something outside `rootDir`, and anything that does is refused
@@ -313,7 +326,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
-    const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+    const pathname = upgradePathname(req);
     if (pathname !== WSPATH && pathname !== LEGACY_WSPATH) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();

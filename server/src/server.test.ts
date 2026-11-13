@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type Server } from 'node:net';
+import { connect, createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -118,6 +118,24 @@ describe('the WebSocket endpoint path', () => {
   test('refuses a page from another site', async () => assert.equal(await opens('/hdlsim', 'https://evil.example'), false));
   test("accepts the page's own host on another port (Vite, Docker)", async () =>
     assert.equal(await opens('/hdlsim', `http://${LOOPBACK}:5173`), true));
+
+  // `GET //` is no URL to `new URL`, and its throw in the upgrade handler used to end the process.
+  test('answers an upgrade whose target is no URL with 404, and keeps serving', async () => {
+    const reply = await new Promise<string>((resolve, reject) => {
+      const socket = connect(backend.port, LOOPBACK, () =>
+        socket.write(
+          'GET // HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n',
+        ),
+      );
+      let text = '';
+      socket.on('data', (chunk) => (text += String(chunk)));
+      socket.on('close', () => resolve(text));
+      socket.on('error', reject);
+    });
+    assert.match(reply, /^HTTP\/1\.1 404/);
+    assert.equal(await opens('/hdlsim'), true);
+  });
 });
 
 describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_AFTER_MINUTES)', () => {
