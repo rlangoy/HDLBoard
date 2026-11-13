@@ -12,6 +12,7 @@
  */
 
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { childEnv } from './childEnv.js';
 
 export interface CmdResult {
   code: number;
@@ -58,7 +59,7 @@ function killTree(child: ChildProcess): void {
 export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS }: CommandOptions): Promise<CmdResult> {
   return new Promise((resolve) => {
     // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
-    const child = spawn(cmd, args, { cwd, detached: process.platform !== 'win32' });
+    const child = spawn(cmd, args, { cwd, env: childEnv(), detached: process.platform !== 'win32' });
     let out = '';
     let err = '';
     let timedOut = false;

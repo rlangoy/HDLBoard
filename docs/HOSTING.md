@@ -96,6 +96,13 @@ session gets its own temp directory and simulations are killed after a
 timeout, but that is scheduling hygiene, not a sandbox. There is no
 authentication and no TLS.
 
+The simulators start with a minimal environment (`PATH`, temp, locale; see
+`server/src/childEnv.ts`), so the backend's settings and secrets are not in their
+own environment. On Linux that is not a wall: a design can still read the
+backend's startup environment from `/proc/<parent pid>/environ`, since both run
+as the same user. Treat anything you give the backend, such as
+`GITHUB_CLIENT_SECRET`, as readable by whoever can run a simulation.
+
 Host it accordingly:
 
 - **Good:** a classroom LAN, a lab VLAN, a VPN, a machine you'd hand students
