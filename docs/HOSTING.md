@@ -872,7 +872,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 1d;          # simulations idle between frames
     }
 }
@@ -884,9 +884,11 @@ that's merely waiting for the student to flip a switch. `X-Forwarded-For` tells
 the backend each student's address; start the backend with
 `HDL_TRUSTED_PROXIES=1` so it reads it. Without that, every session seems to
 come from the proxy, and a full server never spares a just-stopped session
-(§ 2, Sizing). Use `$remote_addr`, not `$proxy_add_x_forwarded_for`: the latter
-keeps whatever the client sent in front, and with port 9010 open a client could
-send the header itself, so keep 9010 closed to everything but the proxy.
+(§ 2, Sizing). The backend reads the entry the proxy appended, counted from the
+right, so whatever a client puts in the header itself is skipped; with a second
+proxy in front of nginx, set `HDL_TRUSTED_PROXIES=2`. Keep 9010 closed to
+everything but the proxy, or a client could send the header straight to the
+backend.
 
 **HTTPS does not work as shipped.** The page always builds a `ws://` URL, and
 browsers block a plain WebSocket from an `https://` page, so a TLS front end
