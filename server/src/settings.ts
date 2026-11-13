@@ -28,6 +28,11 @@ export const REPLACE_AFTER_MINUTES: IntSetting = { name: 'HDL_REPLACE_AFTER_MINU
  * unless its address has another session too (sessionLimit.ts).
  */
 export const IDLE_GRACE_SECONDS: IntSetting = { name: 'HDL_IDLE_GRACE_SECONDS', fallback: 60 };
+/**
+ * How many proxies in front of the backend append to `X-Forwarded-For` (clientAddress.ts).
+ * 0: the header is ignored, and each connection's address is its socket's peer.
+ */
+export const TRUSTED_PROXIES: IntSetting = { name: 'HDL_TRUSTED_PROXIES', fallback: 0 };
 
 /** The largest waveform file a run may write, 16 MiB (docs/waveform_viewer_spec.md § 7.5, W6). */
 export const MAX_WAVE_BYTES: IntSetting = { name: 'HDL_MAX_WAVE_BYTES', fallback: 16_777_216 };

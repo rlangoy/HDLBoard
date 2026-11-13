@@ -180,6 +180,7 @@ Put these in a `.env` file next to `docker-compose.yml`. All are optional.
 | `HDL_MAX_SESSIONS` | `32` | Concurrent simulations before new ones are refused |
 | `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
 | `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, a session open this long is closed to make room for a new one; `0` closes no session and refuses the new one instead |
+| `HDL_TRUSTED_PROXIES` | `1` | Set by the compose file: the page container's nginx is the one proxy in front of the backend |
 | `GHDL_REF` | `master` | GHDL branch or tag to build. Set a release tag such as `v6.0.0` for a reproducible build |
 | `ALPINE_VERSION` | `3.24` | Base image for the build and backend stages |
 
@@ -864,7 +865,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_read_timeout 1d;          # simulations idle between frames
     }
 }
@@ -873,8 +874,12 @@ server {
 Now only port 80 has to be open, and 9010 can be bound to loopback by a
 firewall rule. `proxy_read_timeout` matters: the default 60 s closes a socket
 that's merely waiting for the student to flip a switch. `X-Forwarded-For` tells
-the backend each student's address; without it every session seems to come from
-the proxy, and a full server never spares a just-stopped session (§ 2, Sizing).
+the backend each student's address; start the backend with
+`HDL_TRUSTED_PROXIES=1` so it reads it. Without that, every session seems to
+come from the proxy, and a full server never spares a just-stopped session
+(§ 2, Sizing). Use `$remote_addr`, not `$proxy_add_x_forwarded_for`: the latter
+keeps whatever the client sent in front, and with port 9010 open a client could
+send the header itself, so keep 9010 closed to everything but the proxy.
 
 **HTTPS does not work as shipped.** The page always builds a `ws://` URL, and
 browsers block a plain WebSocket from an `https://` page, so a TLS front end
@@ -901,6 +906,7 @@ Backend, read at startup:
 | `HDL_MAX_SESSIONS` | `32` | Concurrent sessions before new ones are refused |
 | `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
 | `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, the oldest session open at least this long (one not simulating first) is closed to make room for a new one, and its student told why. `0`: never close a session, idle or not; the new one is refused |
+| `HDL_TRUSTED_PROXIES` | `0` | How many proxies in front of the backend append to `X-Forwarded-For`; the student's address is the entry the outermost one added. `0` ignores the header and uses the connection's own address. Set it only when clients cannot reach the backend except through those proxies |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
 | `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |

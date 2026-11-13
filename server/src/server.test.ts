@@ -152,7 +152,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
     readonly closed: Promise<number>;
   }
 
-  /** An open socket on `/hdlsim` from `address`, as a proxy names it, keeping every text frame it receives. */
+  /** An open socket on `/hdlsim` whose `X-Forwarded-For` is `address` (one trusted proxy), keeping every text frame it receives. */
   const connect = (port: number, address: string) =>
     new Promise<Peer>((resolve, reject) => {
       const ws = new WebSocket(`ws://${LOOPBACK}:${port}/hdlsim`, { headers: { 'x-forwarded-for': address } });
@@ -180,7 +180,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
   };
 
   interface Scenario {
-    /** Where the second connection comes from; the first is from `lab-1`. */
+    /** The second connection's `X-Forwarded-For`; the first's is `10.0.0.1`. */
     readonly secondFrom: string;
     /** How long after the first the second connects. */
     readonly afterMs: number;
@@ -199,11 +199,12 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
       maxSessions: 1,
       replaceAfterMinutes,
       idleGraceSeconds: 60,
+      trustedProxies: 1,
       now: () => clock.now,
     });
     await backend.ready;
     try {
-      const first = await connect(backend.port, 'lab-1');
+      const first = await connect(backend.port, '10.0.0.1');
       clock.now += scenario.afterMs;
       const second = await connect(backend.port, scenario.secondFrom);
       await check(first, second);
@@ -214,10 +215,12 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
     }
   };
 
-  const WITHIN_GRACE: Scenario = { secondFrom: 'lab-2', afterMs: 30 * SECOND };
-  const PAST_GRACE: Scenario = { secondFrom: 'lab-2', afterMs: 60 * SECOND };
-  const SAME_ADDRESS: Scenario = { secondFrom: 'lab-1', afterMs: SECOND };
-  const NEVER_REPLACE: Scenario = { secondFrom: 'lab-2', afterMs: 600 * MINUTE, replaceAfterMinutes: 0 };
+  const WITHIN_GRACE: Scenario = { secondFrom: '10.0.0.2', afterMs: 30 * SECOND };
+  const PAST_GRACE: Scenario = { secondFrom: '10.0.0.2', afterMs: 60 * SECOND };
+  const SAME_ADDRESS: Scenario = { secondFrom: '10.0.0.1', afterMs: SECOND };
+  // A newcomer from 10.0.0.2 claiming 10.0.0.1, with the address its proxy appended after it.
+  const FORGED_ADDRESS: Scenario = { secondFrom: '10.0.0.1, 10.0.0.2', afterMs: SECOND };
+  const NEVER_REPLACE: Scenario = { secondFrom: '10.0.0.2', afterMs: 600 * MINUTE, replaceAfterMinutes: 0 };
 
   test('refuses a newcomer while the idle session there is within the grace period', () =>
     whenSecondConnects(WITHIN_GRACE, async (_first, second) => {
@@ -247,6 +250,12 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
   test('closes an idle session within the grace period when the newcomer shares its address', () =>
     whenSecondConnects(SAME_ADDRESS, async (first) => {
       assert.match(await frame(first, 'ERROR busy\n'), CLOSED_IDLE);
+    }));
+
+  test("an address forged ahead of the trusted proxy takes no one's grace period", () =>
+    whenSecondConnects(FORGED_ADDRESS, async (first, second) => {
+      assert.match(await frame(second, 'ERROR busy\n'), REFUSED);
+      assert.equal(await welcomed(first), true);
     }));
 
   test('never closes one with a limit of 0', () =>

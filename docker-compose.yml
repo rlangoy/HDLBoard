@@ -27,6 +27,8 @@ services:
       HDL_IDLE_GRACE_SECONDS: ${HDL_IDLE_GRACE_SECONDS:-60}
       # Failing that, a session open this many minutes makes room (0: never close any session).
       HDL_REPLACE_AFTER_MINUTES: ${HDL_REPLACE_AFTER_MINUTES:-9}
+      # The page container's nginx is the one proxy in front, and it sets X-Forwarded-For.
+      HDL_TRUSTED_PROXIES: 1
       # GitHub sign-in (docs/GITHUB.md). Empty: HDLBoard's own OAuth App, code sign-in only.
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}

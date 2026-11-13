@@ -35,7 +35,7 @@ import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './veril
 import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
 import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
-import { IDLE_GRACE_SECONDS, MAX_SESSIONS, REPLACE_AFTER_MINUTES, WS_PORT, readIntSetting } from './settings.js';
+import { IDLE_GRACE_SECONDS, MAX_SESSIONS, REPLACE_AFTER_MINUTES, TRUSTED_PROXIES, WS_PORT, readIntSetting } from './settings.js';
 import {
   MS_PER_MINUTE,
   MS_PER_SECOND,
@@ -127,6 +127,11 @@ export interface BackendOptions {
    * (sessionLimit.ts). Defaults to `HDL_IDLE_GRACE_SECONDS`, then 60.
    */
   idleGraceSeconds?: number;
+  /**
+   * How many proxies in front of the backend append to `X-Forwarded-For`; 0 ignores the
+   * header (clientAddress.ts). Defaults to `HDL_TRUSTED_PROXIES`, then 0.
+   */
+  trustedProxies?: number;
   /** The clock sessions' ages are measured on, in ms. Defaults to `Date.now`; tests move it. */
   now?: () => number;
   /**
@@ -274,6 +279,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const maxSessions = opts.maxSessions ?? readIntSetting(MAX_SESSIONS);
   const replaceAfterMs = (opts.replaceAfterMinutes ?? readIntSetting(REPLACE_AFTER_MINUTES)) * MS_PER_MINUTE;
   const idleGraceMs = (opts.idleGraceSeconds ?? readIntSetting(IDLE_GRACE_SECONDS)) * MS_PER_SECOND;
+  const trustedProxies = opts.trustedProxies ?? readIntSetting(TRUSTED_PROXIES);
   const replacementPolicy = new ReplacementPolicy(replaceAfterMs, idleGraceMs);
   const now = opts.now ?? Date.now;
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
@@ -379,7 +385,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   };
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const newcomer: Newcomer = { clientAddress: clientAddress(req), at: now() };
+    const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), at: now() };
     const hasPlace = sessions.size < maxSessions || makeRoomFor(newcomer);
     if (!hasPlace) {
       closeBusy(ws, fullText(maxSessions), refusedLogLine([...sessions.values()]));
