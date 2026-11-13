@@ -12,6 +12,10 @@ describe('childEnv', () => {
     assert.deepEqual(childEnv(env, 'linux'), { PATH: '/usr/bin', LANG: 'C.UTF-8' });
   });
 
+  test("keeps the Docker image's memory cap, which the tool wrapper reads", () => {
+    assert.equal(childEnv({ HDLBOARD_SIM_MEMORY_MB: '128' }, 'linux').HDLBOARD_SIM_MEMORY_MB, '128');
+  });
+
   test('keeps no secret', () => {
     assert.equal(childEnv(env, 'linux').GITHUB_CLIENT_SECRET, undefined);
   });

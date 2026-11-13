@@ -10,8 +10,22 @@
  * arguments (`-B`, `-M`, the GHDL executable's path), not the environment. Pure.
  */
 
-/** What any program needs: where programs and libraries are, temp, locale, time zone. */
-const POSIX_NAMES: readonly string[] = ['PATH', 'LD_LIBRARY_PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'GHDL_PREFIX'];
+/**
+ * What any program needs: where programs and libraries are, temp, locale, time zone. And
+ * the memory cap the Docker image's docker/simlimit.sh puts on every tool it wraps: the
+ * wrapper is the child, so without it every run would get the script's default instead.
+ */
+const POSIX_NAMES: readonly string[] = [
+  'PATH',
+  'LD_LIBRARY_PATH',
+  'TMPDIR',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TZ',
+  'GHDL_PREFIX',
+  'HDLBOARD_SIM_MEMORY_MB',
+];
 
 /** The same on Windows, where a program cannot start without SystemRoot. */
 const WINDOWS_NAMES: readonly string[] = [
