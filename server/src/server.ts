@@ -26,19 +26,15 @@ import { createReadStream, promises as fs } from 'node:fs';
 import { extname, normalize, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Duplex } from 'node:stream';
-import { WebSocketServer, WebSocket, type RawData } from 'ws';
-import { Session } from './session.js';
+import { WebSocketServer, type WebSocket } from 'ws';
 import { setGhdlExe } from './ghdl.js';
 import { resolveGhdlExe } from './ghdlPath.js';
 import { setToolPaths } from './verilog/tools.js';
 import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
 import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
-import { decodeClientFrame, encodeServerFrame, type ServerFrame } from './protocol.js';
 import { IDLE_GRACE_SECONDS, MAX_SESSIONS, REPLACE_AFTER_MINUTES, TRUSTED_PROXIES, WS_PORT, readIntSetting } from './settings.js';
 import {
-  MS_PER_MINUTE,
-  MS_PER_SECOND,
   ReplacementPolicy,
   closedIdleText,
   closedLogLine,
@@ -47,8 +43,8 @@ import {
   refusedLogLine,
   sessionsFrom,
   type Newcomer,
-  type OpenSession,
 } from './sessionLimit.js';
+import { MS_PER_MINUTE, MS_PER_SECOND } from './timeUnits.js';
 import { clientAddress } from './clientAddress.js';
 import {
   GitHubAuthForwarder,
@@ -59,40 +55,14 @@ import {
 } from './githubAuth.js';
 import { socketRequestAllowed } from './requestOrigin.js';
 import { UpgradeLimiter } from './rateLimit.js';
-import {
-  MessageBudget,
-  TOO_MANY_MESSAGES_TEXT,
-  TOO_MANY_RESETS_TEXT,
-  TOO_MANY_RUNS_LOG_LINE,
-  TOO_MANY_RUNS_TEXT,
-  readWsLimits,
-  type WsLimits,
-} from './wsLimits.js';
-import { SocketOutput } from './socketOutput.js';
+import { readWsLimits, type WsLimits } from './wsLimits.js';
 import { MAX_CLIENT_FRAME_BYTES } from './frameLimits.js';
+import { CLOSE_GRACE_MS, ClientConnection, refuseBusy, type ConnectionContext } from './clientConnection.js';
 
 const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
 // older page or proxy config keeps working. New clients use WSPATH.
 const LEGACY_WSPATH = '/ghdlsim';
-// 2: the BOARD frame (docs/board_io_config_spec.md § 8). HELLO's version stays
-// informational: any version a client names is accepted, and answered with this one.
-// 3: board shapes — a JSON BOARD body, STIM and STATE lengths per board
-// (docs/board_io_v2_spec.md § 6). A version-2 client's line body is still accepted.
-// 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
-// 5: `ERROR busy` — the server is full; this connection was refused, or closed for a new one.
-// 6: `OPTIONS` — the project's compiler options (compilerOptions.ts), sent before RUN.
-const PROTOCOL_VERSION = '6';
-/**
- * How long a socket told `ERROR busy` gets to close before it is cut. A proxy may hold the
- * close frame back (Render's did: the tab kept a dead socket open), and cutting the
- * connection ends it there too.
- */
-const BUSY_CLOSE_GRACE_MS = 1000;
-/** RFC 6455's "Try Again Later". */
-const CLOSE_TRY_AGAIN_LATER = 1013;
-/** RFC 6455's "Policy Violation": a client over its message budget. */
-const CLOSE_POLICY_VIOLATION = 1008;
 const TOO_MANY_REQUESTS_RESPONSE =
   'HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\nContent-Length: 0\r\n\r\n';
 
@@ -262,36 +232,6 @@ async function serveStatic(rootDir: string, req: IncomingMessage, res: ServerRes
   }
 }
 
-/** An open WebSocket and what it sends through. */
-interface Peer {
-  readonly ws: WebSocket;
-  readonly output: SocketOutput;
-}
-
-/** A message's size, whichever of its forms `ws` hands it over in. */
-function byteLength(data: RawData): number {
-  return Array.isArray(data) ? data.reduce((sum, chunk) => sum + chunk.length, 0) : data.byteLength;
-}
-
-/** One open WebSocket and its session, as the choice of which to close for a new one sees it. */
-class Connection implements OpenSession, Peer {
-  constructor(
-    readonly ws: WebSocket,
-    readonly session: Session,
-    readonly openedAt: number,
-    readonly clientAddress: string,
-    readonly output: SocketOutput,
-  ) {}
-
-  get simulating(): boolean {
-    return this.session.simulating;
-  }
-
-  get idleSince(): number {
-    return this.session.idleSince;
-  }
-}
-
 /**
  * Starts the backend. Returns a handle rather than running to process
  * exit, so Electron can own the lifecycle — it calls `stop()` from
@@ -356,6 +296,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
    * `/ghdlsim`) is a socket
    * while everything else stays a normal request.
    */
+  // `autoPong` off: a ping is answered through the connection's output, under its cap and budget.
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_FRAME_BYTES, autoPong: false });
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
@@ -376,178 +317,44 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     // spend the budget of everyone behind that student's address (a school's NAT).
     if (!upgrades.take(clientAddress(req, trustedProxies))) {
       socket.end(TOO_MANY_REQUESTS_RESPONSE);
-      setTimeout(() => socket.destroy(), BUSY_CLOSE_GRACE_MS).unref();
+      setTimeout(() => socket.destroy(), CLOSE_GRACE_MS).unref();
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
   /**
-   * Every live session, so shutdown can reach them. Without this, killing
+   * Every live connection, so shutdown can reach them. Without this, killing
    * the backend (`stop.sh`, Ctrl-C, a restart) left each session's `ghdl -r`
    * child orphaned and spinning at 100 % CPU forever — the wrapper loops on
    * purpose (§ 5), so nothing ever ends it on its own, and § 7.2's teardown
    * only ever fired on a WebSocket close. Real incident, § 5.10.
    */
-  const sessions = new Map<Session, Connection>();
-
-  // `error` is normally followed by `close`, so this runs twice for one socket: the
-  // second call finds no connection and has nothing left to tear down.
-  const endSession = (session: Session) => {
-    const connection = sessions.get(session);
-    if (!connection) return;
-    sessions.delete(session);
-    connection.output.dispose();
-    session.destroy();
+  const connections = new Set<ClientConnection>();
+  const context: ConnectionContext = {
+    limits: wsLimits,
+    now,
+    monotonicNow,
+    onEnded: (connection) => connections.delete(connection),
   };
 
-  /** Logs it, tells the student why (`ERROR busy`), then closes — and cuts, if the close is held up. */
-  const closeBusy = (peer: Peer, text: string, logLine: string) => {
-    console.log(logLine);
-    peer.output.send(encodeServerFrame({ verb: 'ERROR', stage: 'busy', text }));
-    peer.output.dispose();
-    peer.ws.close(CLOSE_TRY_AGAIN_LATER, 'server busy');
-    setTimeout(() => peer.ws.terminate(), BUSY_CLOSE_GRACE_MS).unref();
-  };
-
-  /** Closes the session the policy picks for `newcomer`; false when it picks none. */
+  /** Closes the connection the policy picks for `newcomer`; false when it picks none. */
   const makeRoomFor = (newcomer: Newcomer): boolean => {
-    const open = [...sessions.values()];
+    const open = [...connections];
     const closed = replacementPolicy.sessionToClose(open, newcomer);
     if (closed === undefined) return false;
     const sameAddress = sessionsFrom(closed.clientAddress, open, newcomer);
     const text = closed.simulating ? closedSimulatingText() : closedIdleText();
-    closeBusy(closed, text, closedLogLine(closed, sameAddress, newcomer.at));
-    // Now, not on its close: the place is the new connection's at once.
-    endSession(closed.session);
+    // Ended now, not on its close: the place is the new connection's at once.
+    closed.closeBusy(text, closedLogLine(closed, sameAddress, newcomer.at));
     return true;
   };
 
-  /**
-   * The connection's output. A failure only cuts the socket: its `close` then ends the
-   * session, after whatever session method was sending has returned. Ending it inside
-   * that method would let the method go on to start timers on a destroyed session.
-   */
-  const outputFor = (ws: WebSocket) =>
-    new SocketOutput({
-      socket: ws,
-      limits: wsLimits,
-      onFailure: (reason) => {
-        console.warn(`hdl-board: closed WebSocket: ${reason}`);
-        ws.terminate();
-      },
-    });
-
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    // Refused connections also need an error listener while their close is in progress.
-    ws.on('error', () => {});
-    const output = outputFor(ws);
     const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), at: now() };
-    const hasPlace = sessions.size < maxSessions || makeRoomFor(newcomer);
-    if (!hasPlace) {
-      closeBusy({ ws, output }, fullText(maxSessions), refusedLogLine([...sessions.values()]));
-      return;
-    }
-
-    let helloed = false;
-    const send = (frame: ServerFrame) => output.send(encodeServerFrame(frame));
-    const session = new Session(send, undefined, { sendBinary: (chunk) => output.sendBinary(chunk), now });
-    const connection = new Connection(ws, session, newcomer.at, newcomer.clientAddress, output);
-    sessions.set(session, connection);
-    const budget = new MessageBudget(wsLimits, monotonicNow);
-
-    /** A client over its frame or byte budget: told why, its session ended, its socket closed. */
-    const closeForFlooding = () => {
-      console.warn('hdl-board: closed WebSocket: message rate limit');
-      send({ verb: 'ERROR', stage: 'protocol', text: TOO_MANY_MESSAGES_TEXT });
-      endSession(session);
-      ws.close(CLOSE_POLICY_VIOLATION, 'rate limit exceeded');
-      setTimeout(() => ws.terminate(), BUSY_CLOSE_GRACE_MS).unref();
-    };
-
-    /** A RUN over the work budget ends like one on a full server, so the page lets go of the run. */
-    const refuseRun = () => {
-      closeBusy(connection, TOO_MANY_RUNS_TEXT, TOO_MANY_RUNS_LOG_LINE);
-      endSession(session);
-    };
-
-    ws.on('ping', (data) => {
-      if (!sessions.has(session)) return;
-      if (budget.takeMessage(data.length)) output.pong(data);
-      else closeForFlooding();
-    });
-    ws.on('pong', (data) => {
-      if (sessions.has(session) && !budget.takeMessage(data.length)) closeForFlooding();
-    });
-
-    ws.on('message', (data, isBinary) => {
-      // Closed to make room for another, it is only waiting for its socket to close.
-      if (!sessions.has(session)) return;
-      if (!budget.takeMessage(byteLength(data))) return closeForFlooding();
-      if (isBinary) {
-        // Binary frames only ever go to the client, with a waveform (docs/waveform_viewer_spec.md § 7.4).
-        send({ verb: 'ERROR', stage: 'protocol', text: 'A client sends no binary frames.' });
-        ws.close();
-        return;
-      }
-      const frame = decodeClientFrame(data.toString('utf8'));
-      if ('message' in frame) {
-        send({ verb: 'ERROR', stage: 'protocol', text: frame.message });
-        return;
-      }
-
-      switch (frame.verb) {
-        case 'HELLO':
-          helloed = true;
-          send({ verb: 'WELCOME', version: PROTOCOL_VERSION });
-          break;
-        case 'RUN':
-          if (!helloed) {
-            send({ verb: 'ERROR', stage: 'protocol', text: 'RUN sent before HELLO.' });
-            break;
-          }
-          if (!budget.takeWork()) {
-            refuseRun();
-            break;
-          }
-          session.handleRun(frame.files, frame.topFile, frame.runTarget).catch((e) => {
-            send({ verb: 'ERROR', stage: 'internal', text: `Internal server error:\n${String(e)}` });
-          });
-          break;
-        case 'STIM':
-          session.handleStim(frame.steps);
-          break;
-        case 'WAVE':
-          session.handleWave(frame.on);
-          break;
-        case 'BOARD':
-          // An invalid board is reported once, by the RUN that follows it (session.ts).
-          session.handleBoard(frame.board);
-          break;
-        case 'OPTIONS':
-          // Invalid options too: the RUN that follows says why.
-          session.handleOptions(frame.options);
-          break;
-        case 'WAVE-GET':
-          void session.handleWaveGet(frame.run);
-          break;
-        case 'RESET':
-          // The page does not wait for an answer to RESET, so one over the budget is only refused.
-          if (budget.takeWork()) session.handleReset();
-          else send({ verb: 'ERROR', stage: 'protocol', text: TOO_MANY_RESETS_TEXT });
-          break;
-        case 'STOP':
-          session.handleStop();
-          break;
-        case 'PING':
-          send({ verb: 'PONG' });
-          break;
-      }
-    });
-
-    const teardown = () => endSession(session);
-    ws.on('close', teardown);
-    ws.on('error', teardown);
+    const hasPlace = connections.size < maxSessions || makeRoomFor(newcomer);
+    if (hasPlace) connections.add(new ClientConnection(ws, newcomer, context));
+    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections]) });
   });
 
   // Only a listen error belongs to `ready`; once listening, the listener is removed so
@@ -577,9 +384,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
         return;
       }
       stopped = true;
-      for (const session of sessions.keys()) session.destroy();
-      for (const connection of sessions.values()) connection.output.dispose();
-      sessions.clear();
+      for (const connection of [...connections]) connection.end();
       // An open WebSocket is a live connection as far as the HTTP server
       // is concerned, so `httpServer.close()` would wait forever on it —
       // its callback only fires once every connection has ended.

@@ -30,6 +30,8 @@ const NEW_CODE = [
   'src/wsLimits.test.ts',
   'src/server.limits.test.ts',
   'src/frameLimits.ts',
+  'src/clientConnection.ts',
+  'src/timeUnits.ts',
   'src/childEnv.ts',
   'src/childEnv.test.ts',
   'src/settings.ts',

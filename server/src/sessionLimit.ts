@@ -15,8 +15,7 @@
  * Each student turned away is told why in an `ERROR busy` frame, and the server logs it.
  */
 
-export const MS_PER_MINUTE = 60_000;
-export const MS_PER_SECOND = 1000;
+import { MS_PER_MINUTE } from './timeUnits.js';
 
 /** Where the offline version (the Windows and Linux apps) is downloaded. */
 export const RELEASES_URL = 'https://github.com/rlangoy/HDLBoard/releases';

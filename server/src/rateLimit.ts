@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { MS_PER_MINUTE, MS_PER_SECOND } from './sessionLimit.js';
+import { MS_PER_MINUTE, MS_PER_SECOND } from './timeUnits.js';
 
 /** A refillable budget of tokens. A clock that goes back mints none. */
 export class TokenBucket {
