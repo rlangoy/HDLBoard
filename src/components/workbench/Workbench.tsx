@@ -527,7 +527,7 @@ export function Workbench() {
     setActiveFileId(target.fileId);
     setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight });
   }), [navigate, setOverlay]);
-  // A console link marks just its own message, as a run marks errors, and jumps to it.
+  // Console links retain recorded advice and the file's other markers.
   const openConsoleDiagnostic = useCallback(
     (diagnostic: LocatedDiagnostic) => {
       showDiagnostic(diagnostic);

@@ -7,7 +7,12 @@
  * DOM. A line is recognized by its shape alone, never by which tool ran.
  */
 
+import { languageOfName } from './fileKinds';
+
 export type DiagnosticSeverity = 'error' | 'warning';
+
+/** Bounds repeated continuation lines from simulator output. */
+export const MAX_DIAGNOSTIC_DETAILS = 20;
 
 /** One problem as the simulator reported it, before it is matched to a project file. */
 export interface Diagnostic {
@@ -21,6 +26,8 @@ export interface Diagnostic {
   readonly message: string;
   /** Related notes printed right after it: Icarus "declared here", GHDL "(found: 'end')". */
   readonly details: readonly string[];
+  /** A design's runtime assertion/report, whose wording must not become compiler advice. */
+  readonly fromReport?: boolean;
   /**
    * A warning about something that may well be intended — HDLBoard's own "not a board
    * port" — shown only as the gutter's `!` and its tooltip: no inline text, no tint,
@@ -33,7 +40,7 @@ export type LineResult =
   | { readonly kind: 'diagnostic'; readonly diagnostic: Diagnostic }
   /** GHDL compile message that starts with "(" — § 4.3 rule 2. Only recognizer 1 returns this. */
   | { readonly kind: 'continuation'; readonly diagnostic: Diagnostic }
-  | { readonly kind: 'note'; readonly message: string }
+  | { readonly kind: 'note'; readonly message: string; readonly fileName?: string; readonly line?: number }
   /** A GHDL run error that names no place ("overflow detected"); its place is the next `callSite`. */
   | { readonly kind: 'unplaced'; readonly message: string }
   /** A frame of the backtrace GHDL prints under an unplaced error: "  from: process … at slice.vhd:14". */
@@ -81,6 +88,7 @@ const GHDL_REPORT_LEVEL: Readonly<Record<string, DiagnosticSeverity | undefined>
 
 const ICARUS_LEVEL: Readonly<Record<string, DiagnosticSeverity | undefined>> = {
   error: 'error',
+  Error: 'error',
   sorry: 'error',
   warning: 'warning',
 };
@@ -107,7 +115,7 @@ export function normalizeFileName(printed: string): string {
 function build(
   groups: Groups,
   severity: DiagnosticSeverity,
-  options: { readonly lineOffset?: number; readonly details?: readonly string[] } = {},
+  options: { readonly lineOffset?: number; readonly details?: readonly string[]; readonly fromReport?: boolean } = {},
 ): Diagnostic | undefined {
   const line = Number(groups.line) + (options.lineOffset ?? 0);
   if (!(line >= 1)) return undefined;
@@ -119,6 +127,7 @@ function build(
     severity,
     message: groups.message.trimEnd(),
     details: options.details ?? [],
+    ...(options.fromReport && { fromReport: true }),
   };
 }
 
@@ -174,17 +183,20 @@ const RECOGNIZERS: readonly Recognizer[] = [
   {
     // vvp run: "ERROR: tb.v:6: values differ"
     pattern: /^(?<level>ERROR|WARNING|FATAL): (?<file>.+?):(?<line>\d+): (?<message>.*)$/,
-    interpret: (groups) => byLevel(VVP_LEVEL, groups),
+    interpret: (groups) => byLevel(VVP_LEVEL, groups, { fromReport: true }),
   },
   {
     // Icarus note under an error: "regassign.v:3:      : LEDR is declared here as wire."
     // Must run before the Icarus recognizers below.
     pattern: /^(?<file>.+?):(?<line>\d+):\s+: (?<message>.*)$/,
-    interpret: (groups) => ({ kind: 'note', message: groups.message.trimEnd() }),
+    interpret: (groups) => ({
+      kind: 'note', message: groups.message.trimEnd(),
+      fileName: normalizeFileName(groups.file), line: Number(groups.line),
+    }),
   },
   {
     // Icarus compile: "undeclared.v:5: error: Unable to bind wire/reg/memory `SWX' in `undeclared'"
-    pattern: /^(?<file>.+?):(?<line>\d+): (?<level>error|warning|sorry): (?<message>.*)$/,
+    pattern: /^(?<file>.+?):(?<line>\d+): (?<level>error|Error|warning|sorry): (?<message>.*)$/,
     interpret: (groups) => byLevel(ICARUS_LEVEL, groups),
   },
   {
@@ -258,14 +270,35 @@ export function parseDiagnostics(text: string): Diagnostic[] {
   return new DiagnosticParser().parse(text);
 }
 
+type Note = Extract<LineResult, { kind: 'note' }>;
+
+/** An Icarus compiler message; a design's own `$error`/`$warning` report gets no notes. */
+function mayGetNotes(diagnostic: Diagnostic): boolean {
+  return languageOfName(diagnostic.fileName) === 'verilog' && !diagnostic.fromReport;
+}
+
+function isNoteOf(note: Note, diagnostic: Diagnostic): boolean {
+  return note.fileName === diagnostic.fileName && note.line === diagnostic.line;
+}
+
+/** Adds a note up to the limit; returns the diagnostic as it now stands. */
+function withNote(builder: Builder, note: string): Diagnostic {
+  const { details } = builder;
+  if (details.length < MAX_DIAGNOSTIC_DETAILS) details.push(note);
+  return { ...builder.diagnostic, details: [...details] };
+}
+
 /**
  * Parses simulator output that comes in pieces. A run's output reaches the
  * browser one LOG line at a time, and GHDL prints the place of an unplaced run
  * error ("overflow detected") on a later line, in its backtrace: the parser
  * keeps that error from one `parse` to the next until a frame places it.
+ * An adjacent Icarus note re-emits its diagnostic with added details; the store
+ * merges that update into the existing marker without adding another warning.
  */
 export class DiagnosticParser {
   private unplaced: string | undefined;
+  private pendingNote: Diagnostic | undefined;
 
   parse(text: string): Diagnostic[] {
     const finished: Builder[] = [];
@@ -278,19 +311,26 @@ export class DiagnosticParser {
 
     for (const line of text.split('\n')) {
       const result = recognizeLine(line);
+      const pending = this.pendingNote;
+      if (line.trim() !== '') this.pendingNote = undefined;
       if (result.kind === 'unplaced') {
         this.unplaced = result.message;
       } else if (result.kind === 'callSite') {
         if (this.unplaced !== undefined) start(placedRunError(this.unplaced, result));
         this.unplaced = undefined;
       } else if (result.kind === 'note') {
-        previous?.details.push(result.message);
+        // Successful Icarus builds send warning details in separate LOG frames:
+        // an adjacent note at the same place re-emits the earlier frame's warning.
+        if (!previous && pending && isNoteOf(result, pending)) start(pending);
+        if (previous && mayGetNotes(previous.diagnostic)) this.pendingNote = withNote(previous, result.message);
+        else if (previous) withNote(previous, result.message);
       } else if (result.kind === 'continuation') {
         const sameFile = previous?.diagnostic.fileName === result.diagnostic.fileName;
         if (previous && sameFile) previous.details.push(result.diagnostic.message);
         else start(result.diagnostic);
       } else if (result.kind === 'diagnostic') {
         start(result.diagnostic);
+        if (mayGetNotes(result.diagnostic)) this.pendingNote = result.diagnostic;
       }
     }
     return finished.map(({ diagnostic, details }) => ({ ...diagnostic, details }));

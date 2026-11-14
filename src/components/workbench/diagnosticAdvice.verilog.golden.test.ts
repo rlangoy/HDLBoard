@@ -129,13 +129,13 @@ const EXPECTED: Readonly<Record<string, Outcome>> = {
   'semicolon-localparam': row(26, undefined, missingSemicolon(22), 22, 1, 1),
   // Rule D on the reported line: Icarus blames the assignment's "left side"; line 45 is the follow-on
   'semicolon-assign': row(41, undefined, missingSemicolon(41), undefined, 1, 1),
-  // Still vague (§ 3, point 3, and the operator mistakes of § 4)
-  'endmodule-missing': row(52, undefined, undefined, undefined, 0, 1),
-  'end-missing': row(51, undefined, undefined, undefined, 0, 1),
+  // Construct and operator advice added after the novice diagnostics research.
+  'endmodule-missing': row(52, undefined, 'Probably a missing `endmodule` for `module` on line 6.', 6, 0, 1),
+  'end-missing': row(51, undefined, 'Probably a missing `end` for `begin` on line 31.', 31, 0, 1),
   'begin-missing': row(38, undefined, undefined, undefined, 1, 1),
   'paren-missing': row(31, undefined, undefined, undefined, 5, 2),
-  'assign-reversed': row(33, undefined, undefined, undefined, 1, 1),
-  'compare-assign': row(32, undefined, undefined, undefined, 1, 1),
+  'assign-reversed': row(33, '=<', '`=<` is not a Verilog operator — check whether you meant `<=`.', undefined, 1, 1),
+  'compare-assign': row(32, '=', 'This `if` condition uses `=` — did you mean `==` to compare values?', undefined, 1, 1),
   // Rule C: undeclared names (F5)
   'undeclared-counter': row(36, 'conter', undeclared('conter', 'counter'), undefined, 0, 1),
   'undeclared-led': row(34, 'led_stat', undeclared('led_stat', 'led_state'), undefined, 0, 1),
@@ -144,7 +144,7 @@ const EXPECTED: Readonly<Record<string, Outcome>> = {
   'undeclared-port': row(
     41,
     'LEDRR',
-    '`LEDRR` is not declared — did you mean `LEDR`? Verilog made a new, unconnected wire.',
+    '`LEDRR` is not declared — did you mean `LEDR`? Verilog made a new wire automatically.',
     undefined,
     0,
     1,
@@ -161,7 +161,7 @@ const EXPECTED: Readonly<Record<string, Outcome>> = {
   'wire-in-always': row(
     34,
     'led_state',
-    '`led_state` is a `wire`: only a `reg` can be assigned inside an `always` block — declare it as `reg`.',
+    '`led_state` is a `wire`: procedural assignments (`always` or `initial`) need a variable, such as `reg`.',
     undefined,
     0,
     1,
@@ -201,9 +201,9 @@ describe('§ 4: one mistake', () => {
     expect(outcome(caseById(id))).toEqual(expected);
   });
 
-  test('25 of the 31 name the real mistake; 6 stay vague', () => {
+  test('29 of the 31 name the real mistake; 2 stay vague', () => {
     const headlines = Object.keys(EXPECTED).filter((id) => outcome(caseById(id)).headline !== undefined);
-    expect([headlines.length, Object.keys(EXPECTED).length]).toEqual([25, 31]);
+    expect([headlines.length, Object.keys(EXPECTED).length]).toEqual([29, 31]);
   });
 
   test('28 of 70 messages are muted', () => {

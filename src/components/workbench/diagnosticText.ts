@@ -65,14 +65,16 @@ export const adviceText = {
       ? `${code(word)} (line ${line}) must be two words in ${language}: ${code(wanted)}.`
       : `${code(word)} (line ${line}) is written ${code(wanted)} in ${language}.`,
   /** Rule G (Icarus): a misspelled name on the left of `assign` is not an error, only a new wire. */
-  implicitWire: (word: string, suggestion: string): string =>
-    `${code(word)} is not declared — did you mean ${code(suggestion)}? Verilog made a new, unconnected wire.`,
+  implicitWire: (word: string, suggestion?: string): string =>
+    suggestion
+      ? `${code(word)} is not declared — did you mean ${code(suggestion)}? Verilog made a new wire automatically.`
+      : `Verilog created a wire for ${code(word)} automatically — check its spelling or declare it explicitly.`,
   /** Rule H (Icarus): `assign` to a `reg`, where Icarus's own note points at SystemVerilog. */
   regDrivenByAssign: (name: string): string =>
     `${code(name)} is a ${code('reg')}: drive it inside an ${code('always')} block, or declare it as ${code('wire')}.`,
   /** Rule H (Icarus): a `wire` assigned inside an `always` block. */
   wireAssignedInAlways: (name: string): string =>
-    `${code(name)} is a ${code('wire')}: only a ${code('reg')} can be assigned inside an ${code('always')} block — declare it as ${code('reg')}.`,
+    `${code(name)} is a ${code('wire')}: procedural assignments (${code('always')} or ${code('initial')}) need a variable, such as ${code('reg')}.`,
   /**
    * A declaration written after `begin`: it belongs between `opener` (`is`,
    * `process`) and `begin`, and above the `begin` on `beginLine` when known.
@@ -115,6 +117,46 @@ export const adviceText = {
   followOn: (line: number): string => `Probably caused by the error on line ${line} — fix that one first and run again.`,
   /** Rule F, on the line of the first error itself. */
   followOnSameLine: (): string => 'Probably caused by the first error on this line — fix that one first and run again.',
+};
+
+/** Icarus-specific wording uses the same inline and tooltip presentation as VHDL. */
+export const verilogAdviceText = {
+  unknownSystemTask: (name: string, suggestion?: string): string => suggestion
+    ? `${code(name)} is not a known system task or function — did you mean ${code(suggestion)}?`
+    : `${code(name)} is not defined — check its spelling and any required simulator extension.`,
+  portWidth: (port: string, module: string, expected: string, actual: string): string =>
+    `Port ${code(port)} of ${code(module)} expects ${expected} bits; the connection has ${actual} — check both widths.`,
+  /** Appended to `portWidth`, hence the leading space. */
+  highBitsDiscarded: (bits: string, target: string): string => ` Icarus discards ${bits} high bits of the ${target}.`,
+  highBitsAdded: (bits: string, target: string): string => ` Icarus adds ${bits} high bits to the ${target}.`,
+  bitSelect: (name: string, range: string, index: string): string =>
+    `${code(name)} has range ${code(range)}; index ${code(index)} is outside it, so this select produces ${code('x')}.`,
+  partSelect: (name: string, range: string, select: string): string =>
+    `${code(select)} extends outside ${code(`${name}${range}`)} — out-of-range bits become ${code('x')}.`,
+  reversedSelect: (name: string, select: string): string =>
+    `${code(`${name}${select}`)} selects bits in the opposite direction to the declaration — check the order of its bounds.`,
+  unknownModule: (name: string, suggestion?: string): string => suggestion
+    ? `Module ${code(name)} was not found — did you mean ${code(suggestion)}?`
+    : `Module ${code(name)} was not found — check its spelling and include its source file in the project.`,
+  unknownMember: (kind: string, name: string, instance: string, suggestion?: string): string => suggestion
+    ? `${code(instance)} has no ${kind} ${code(name)} — did you mean ${code(suggestion)}?`
+    : `${code(instance)} has no ${kind} ${code(name)} — compare the name with its module declaration.`,
+  portCount: (expected: string, actual: string): string =>
+    `This instance has ${actual} connections, but its module accepts at most ${expected} — check their order or use named ports.`,
+  undefinedMacro: (name: string): string =>
+    `Macro ${code(name)} is not defined here — check spelling, earlier define/include directives and active conditional branches.`,
+  duplicate: (name: string): string =>
+    `${code(name)} is already declared in this scope — remove or rename one declaration.`,
+  truncatedLiteral: (bits: string): string =>
+    `This number does not fit its written width of ${bits} bits — high bits are discarded; increase the width or use a smaller value.`,
+  invalidOperator: (): string => `${code('=<')} is not a Verilog operator — check whether you meant ${code('<=')}.`,
+  comparison: (): string => `This ${code('if')} condition uses ${code('=')} — did you mean ${code('==')} to compare values?`,
+  invalidDigit: (literal: string, base: string, digits: string): string =>
+    `${code(literal)} contains an invalid base-${base} digit — use ${digits}, ${code('x')} or ${code('z')} (${code('?')} also means ${code('z')}).`,
+  unclosed: (opener: string, closer: string, line: number): string =>
+    `Probably a missing ${code(closer)} for ${code(opener)} on line ${line}.`,
+  caseColon: (): string => `Probably a missing ${code(':')} between this case value and its statement.`,
+  blockNeeded: (): string => `Only one statement follows an unbraced ${code('if')} — use ${code('begin ... end')} if both statements belong to it.`,
 };
 
 /** `an \`integer\``, `a \`std_logic_vector\``: a type named in a sentence. */

@@ -10,12 +10,12 @@ function diagnostic(
   line: number,
   severity: Diagnostic['severity'],
   message: string,
-  extra: { column?: number; details?: string[] } = {},
+  extra: { column?: number; details?: string[]; fromReport?: boolean } = {},
 ): LineResult {
   const { column, details = [] } = extra;
   return {
     kind: 'diagnostic',
-    diagnostic: { fileName, line, ...(column === undefined ? {} : { column }), severity, message, details },
+    diagnostic: { fileName, line, ...(column === undefined ? {} : { column }), severity, message, details, ...(extra.fromReport && { fromReport: true }) },
   };
 }
 
@@ -94,12 +94,12 @@ describe('recognizeLine', () => {
       'x.v:3: sorry: constant selects in always_* processes are not currently supported (all bits will be included).',
       diagnostic('x.v', 3, 'error', 'constant selects in always_* processes are not currently supported (all bits will be included).'),
     ],
-    ['P-16', 'regassign.v:3:      : LEDR is declared here as wire.', { kind: 'note', message: 'LEDR is declared here as wire.' }],
+    ['P-16', 'regassign.v:3:      : LEDR is declared here as wire.', { kind: 'note', message: 'LEDR is declared here as wire.', fileName: 'regassign.v', line: 3 }],
     ['P-17', './defs.vh:2: syntax error', diagnostic('defs.vh', 2, 'error', 'syntax error', { details: [ICARUS_SYNTAX_HINT] })],
     ['P-18', 'miss.v:2: Include file nope.vh not found', diagnostic('miss.v', 1, 'error', 'Include file nope.vh not found')],
-    ['P-19', 'ERROR: tb.v:6: values differ', diagnostic('tb.v', 6, 'error', 'values differ')],
-    ['P-20', 'WARNING: tb.v:5: careful: 3', diagnostic('tb.v', 5, 'warning', 'careful: 3')],
-    ['P-21', 'FATAL: tb.v:9: fatal stop', diagnostic('tb.v', 9, 'error', 'fatal stop')],
+    ['P-19', 'ERROR: tb.v:6: values differ', diagnostic('tb.v', 6, 'error', 'values differ', { fromReport: true })],
+    ['P-20', 'WARNING: tb.v:5: careful: 3', diagnostic('tb.v', 5, 'warning', 'careful: 3', { fromReport: true })],
+    ['P-21', 'FATAL: tb.v:9: fatal stop', diagnostic('tb.v', 9, 'error', 'fatal stop', { fromReport: true })],
     ['P-22', 'tb2.v:4: $finish called at 0 (1ps)', NONE],
     ['P-23', 'I give up.', NONE],
     ['P-24', '5 error(s) during elaboration.', NONE],
@@ -122,7 +122,7 @@ describe('recognizeLine', () => {
       'tb.vhdl:6:9:@0ms:(assertion error): (debug) x',
       diagnostic('tb.vhdl', 6, 'error', '(debug) x', { column: 9 }),
     ],
-    ['P-37', 'ERROR: tb.v:6: values differ   ', diagnostic('tb.v', 6, 'error', 'values differ')],
+    ['P-37', 'ERROR: tb.v:6: values differ   ', diagnostic('tb.v', 6, 'error', 'values differ', { fromReport: true })],
   ])('%s: %s', (_id, input, expected) => {
     expect(recognizeLine(input)).toEqual(expected);
   });

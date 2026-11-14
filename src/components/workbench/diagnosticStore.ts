@@ -9,7 +9,9 @@
  */
 
 import type { Advice, AdvisedDiagnostic, QuickFix, Span } from './diagnosticAdvice';
+import type { LocatedDiagnostic } from './diagnosticLocation';
 import type { DiagnosticSeverity } from './diagnostics';
+import { MAX_DIAGNOSTIC_DETAILS } from './diagnostics';
 
 /** A runtime assertion with a changing text ($error("count=%0d", i)) would otherwise grow without bound. */
 export const MAX_MESSAGES_PER_LINE = 5;
@@ -39,6 +41,13 @@ export interface LineDiagnostic {
 export type DiagnosticsByFile = Readonly<Record<string, readonly LineDiagnostic[]>>;
 
 export const NO_DIAGNOSTICS: DiagnosticsByFile = {};
+
+/** Recover advice and streamed details when a console link names a recorded message. */
+export function withStoredMessage(byFile: DiagnosticsByFile, diagnostic: LocatedDiagnostic): AdvisedDiagnostic {
+  const line = byFile[diagnostic.fileId]?.find((entry) => entry.line === diagnostic.line);
+  const message = line?.messages.find((entry) => isSameMessage(entry, diagnostic));
+  return message ? { ...diagnostic, ...message } : diagnostic;
+}
 
 /** A muted follow-on error (Rule F): shown only in the gutter and the tooltip. */
 export function isFollowOn(message: { readonly advice?: Advice }): boolean {
@@ -111,10 +120,6 @@ export function hintLines(lines: readonly LineDiagnostic[]): ReadonlyMap<number,
   return hints;
 }
 
-function isDuplicate(messages: readonly LineMessage[], candidate: LineMessage): boolean {
-  return messages.some((m) => m.severity === candidate.severity && m.message === candidate.message);
-}
-
 function withinMessageLimit(messages: readonly LineMessage[]): boolean {
   return messages.length < MAX_MESSAGES_PER_LINE;
 }
@@ -131,6 +136,38 @@ function lineWith(line: number, messages: readonly LineMessage[]): LineDiagnosti
   return { line, severity: worstSeverity(messages), messages };
 }
 
+type MessageKey = Pick<LineMessage, 'severity' | 'message'>;
+
+function isSameMessage(a: MessageKey, b: MessageKey): boolean {
+  return a.severity === b.severity && a.message === b.message;
+}
+
+/** True when `longer` starts with every detail of `shorter`, in order, and adds more. */
+function extendsDetails(shorter: readonly string[], longer: readonly string[]): boolean {
+  return longer.length > shorter.length && shorter.every((detail, i) => longer[i] === detail);
+}
+
+/**
+ * The parser re-emits a message with the notes that arrived in later frames
+ * (Icarus); such a repeat replaces the stored details. Any other repeat
+ * changes nothing and returns `stored` itself.
+ */
+function withDetailsOf(stored: LineMessage, repeat: LineMessage): LineMessage {
+  if (!extendsDetails(stored.details, repeat.details)) return stored;
+  const details = repeat.details.slice(0, MAX_DIAGNOSTIC_DETAILS);
+  return { ...stored, details, advice: repeat.advice ?? stored.advice };
+}
+
+/** Adds or merges one message on a line; returns `messages` itself when nothing changed. */
+function addToMessages(messages: readonly LineMessage[], message: LineMessage): readonly LineMessage[] {
+  const stored = messages.find((m) => isSameMessage(m, message));
+  if (stored) {
+    const merged = withDetailsOf(stored, message);
+    return merged === stored ? messages : messages.map((m) => (m === stored ? merged : m));
+  }
+  return withinMessageLimit(messages) ? [...messages, message] : messages;
+}
+
 /** Adds one message to a file's lines; returns the input array itself when nothing was added. */
 function addToLines(lines: readonly LineDiagnostic[], diagnostic: AdvisedDiagnostic): readonly LineDiagnostic[] {
   const message: LineMessage = {
@@ -142,8 +179,9 @@ function addToLines(lines: readonly LineDiagnostic[], diagnostic: AdvisedDiagnos
   };
   const existing = lines.find((l) => l.line === diagnostic.line);
   if (existing) {
-    if (isDuplicate(existing.messages, message) || !withinMessageLimit(existing.messages)) return lines;
-    const updated = lineWith(existing.line, [...existing.messages, message]);
+    const messages = addToMessages(existing.messages, message);
+    if (messages === existing.messages) return lines;
+    const updated = lineWith(existing.line, messages);
     return lines.map((l) => (l === existing ? updated : l));
   }
   if (!withinLineLimit(lines)) return lines;
