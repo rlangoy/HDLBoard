@@ -30,6 +30,7 @@ import {
   namesIn,
   returnValueOn,
   widthOf,
+  splitTopLevel,
   withoutOuterParentheses,
   type Assignment,
   type NamedPart,
@@ -328,16 +329,29 @@ const unknownValueLength: CheckRule = (check) => {
 
 // ------------------------------------------------------------ numbers
 
+type Step = 'up' | 'down';
+
 /**
- * `count + 1` steps `count` up and `count - STEP` down, when the number added or
- * subtracted is known and positive. `count + delta` says nothing: `delta` may be
- * negative, and then the value left the range at the other end.
+ * Which way the value moved `target`: the sign of `value - target`, when algebra
+ * proves it constant (staticInteger.ts reads the whole expression, left to right):
+ * `count + 1` and `count - 1 + 2` step up, `count + STEP - 3` down. `count + delta`
+ * says nothing: `delta` may be negative, and then the value left at the other end.
  */
-function stepOf(value: string, target: string, check: FailedCheck): 'up' | 'down' | undefined {
-  const step = new RegExp(`^${target}\\s*(?<operator>[+-])(?<amount>.+)$`, 'is').exec(withoutOuterParentheses(value))?.groups;
-  const amount = step && check.declarations.valueOf(step.amount, check.line);
-  if (step === undefined || amount === undefined || amount <= 0) return undefined;
-  return step.operator === '+' ? 'up' : 'down';
+function stepOf(value: string, target: string, check: FailedCheck): Step | undefined {
+  const moved = check.declarations.constantDifference(value, target, check.line);
+  if (moved === undefined || moved === 0) return undefined;
+  return moved > 0 ? 'up' : 'down';
+}
+
+/**
+ * The step of an overflow. GHDL checks every intermediate result, so
+ * `i - 1 + 2` may fail at `i - 1` though it adds 1: only a value that is one
+ * addition to or subtraction from `target` has a known direction.
+ */
+function overflowStepOf(value: string, target: string, check: FailedCheck): Step | undefined {
+  const terms = splitTopLevel(withoutOuterParentheses(value), /[+-]/);
+  const isOneStep = terms.length === 2 && terms[0].toLowerCase() === target.toLowerCase();
+  return isOneStep ? stepOf(value, target, check) : undefined;
 }
 
 function numberHeadline(value: string, target: string, type: { readonly range: DeclaredRange; readonly name: string }, check: FailedCheck): string {
@@ -372,7 +386,7 @@ const integerOverflow: CheckRule = (check) => {
     up: rangeText.integerAbove,
     down: rangeText.integerBelow,
     unknown: rangeText.integerOutside,
-  }[stepOf(value, assignment.targetName, check) ?? 'unknown'](value);
+  }[overflowStepOf(value, assignment.targetName, check) ?? 'unknown'](value);
   return { headline, span: spanOf(assignment.value) };
 };
 

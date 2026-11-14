@@ -46,6 +46,24 @@ describe('the direction of a range error', () => {
   test('subtracting a positive constant passes the bottom', () => {
     expect(headline([COUNTER], 7)).toMatch(/^`count - STEP` went below 0/);
   });
+
+  const chained = (statement: string) => headline([COUNTER.replace('  count <= count + 1;', `  ${statement}`)], 6);
+
+  test('a chain is read left to right: count - 1 + 2 steps up', () => {
+    expect(chained('count <= count - 1 + 2;')).toMatch(/^`count - 1 \+ 2` went above 9/);
+  });
+
+  test('a chain with a constant can step down: count + STEP - 3', () => {
+    expect(chained('count <= count + STEP - 3;')).toMatch(/^`count \+ STEP - 3` went below 0/);
+  });
+
+  test('the number may come first: 1 + count steps up', () => {
+    expect(chained('count <= 1 + count;')).toMatch(/^`1 \+ count` went above 9/);
+  });
+
+  test('a chain that adds nothing names neither end', () => {
+    expect(chained('count <= count + 1 - 1;')).toMatch(/^`count \+ 1 - 1` gave `count` a value outside its range/);
+  });
 });
 
 describe('an integer overflow', () => {
@@ -58,6 +76,10 @@ describe('an integer overflow', () => {
 
   test('subtracting a positive number goes below the smallest integer', () => {
     expect(overflow('i := i - 1;')).toMatch(/^`i - 1` went below -2147483648/);
+  });
+
+  test('a chain names neither end: i - 1 + 2 may underflow at i - 1 though it adds 1', () => {
+    expect(overflow('i := i - 1 + 2;')).toMatch(/^`i - 1 \+ 2` is outside what an `integer` can hold/);
   });
 
   test('a product of unknown sign names neither end', () => {

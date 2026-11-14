@@ -291,7 +291,7 @@ export class VhdlDeclarations {
   }
 
   /** `left - right` when algebra proves it the same whatever the changing names hold (staticInteger.ts). */
-  private constantDifference(left: string, right: string, line: number): number | undefined {
+  constantDifference(left: string, right: string, line: number): number | undefined {
     const names = { ...this.staticNames(line), changes: (name: string) => this.changes(name, line) };
     return this.nested(() => constantDifference(left, right, names));
   }

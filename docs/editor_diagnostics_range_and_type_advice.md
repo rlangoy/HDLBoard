@@ -89,8 +89,11 @@ Three pure modules read what advice needs from the source, by pattern, and give 
   a vector whose value's width is unknown, a number's range, an overflow, and last a
   general direction. A number "went above" or "below" its range only when the amount
   added or subtracted is known and positive: `count + delta` may go either way. The
-  same holds for an `integer` overflow: `i + 1` went above 2147483647, `i - 1` below
-  -2147483648, and `i * 2` is only said to be outside what an `integer` can hold.
+  direction is the sign of `value - target`, proved by the same algebra, so a chain is
+  read as VHDL reads it: `count - 1 + 2` steps up. For an `integer` overflow GHDL
+  checks every intermediate result, so an end is named only for one addition or
+  subtraction: `i + 1` went above 2147483647, `i - 1` below -2147483648, and
+  `i * 2` or `i - 1 + 2` are only said to be outside what an `integer` can hold.
   GHDL evaluates a slice before it compares widths, so a width mismatch is given
   alone only when every slice on the line is certainly inside its vector; a slice
   that certainly failed is given instead, and one that may have left its vector is
