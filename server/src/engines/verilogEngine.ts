@@ -16,6 +16,7 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { standaloneHint, versionWarning } from '../verilog/diagnostics.js';
 import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE, validateSourceName } from '../verilog/fileNames.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, type Port } from '../verilog/ports.js';
+import { explainMissingInclude } from '../verilog/includeCycles.js';
 import { iverilogFlags } from '../verilog/optionFlags.js';
 import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '../verilog/process.js';
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
@@ -216,7 +217,7 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   const optionFlags = iverilogFlags(compilerOptions.iverilog);
   const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
-  if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
+  if (!ports.ok) return failure(ports.failure.stage, explainMissingInclude(ports.failure.text, files));
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);
   return prepareBatch(build, ports.ports, wave === undefined ? undefined : planWave(compiledFiles(files, checked.sources, sources)));
 }

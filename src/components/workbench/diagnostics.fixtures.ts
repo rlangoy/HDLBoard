@@ -154,6 +154,21 @@ export const ICARUS_MISSING_INCLUDE = join([
   '1 error(s) during elaboration.',
 ]);
 
+/**
+ * Icarus Verilog 13.0 on an unguarded loop between two headers whose names hold spaces, with
+ * the backend's explanation below it, copied from a real run (server/src/verilog/includeCycles.ts).
+ */
+export const INCLUDE_LOOP_NOTE =
+  'cycle b.vh exists, but its includes form a loop: cycle b.vh → cycle a.vh → cycle b.vh. ' +
+  'Icarus opens the headers again on every pass until it runs out of files, then reports one as not found. ' +
+  'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.';
+export const ICARUS_INCLUDE_LOOP = join([
+  './cycle a.vh:3: Include file cycle b.vh not found',
+  'Preprocessor failed with 1 errors.',
+  '',
+  INCLUDE_LOOP_NOTE,
+]);
+
 /** Icarus Verilog 12.0, `iverilog -Wall … warn.v` (A.5): a compile that succeeds. */
 export const ICARUS_WARNING = "warn.v:6: warning: implicit definition of wire 'nothere'.";
 

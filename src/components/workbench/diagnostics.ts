@@ -198,6 +198,12 @@ const RECOGNIZERS: readonly Recognizer[] = [
     interpret: (groups) => diagnosticOrNone(build(groups, 'error', { lineOffset: INCLUDE_LINE_OFFSET })),
   },
   {
+    // HDLBoard's backend, why an existing header was "not found" (server/src/verilog/includeCycles.ts):
+    // "b.vh exists, but its includes form a loop: b.vh → a.vh → b.vh. …"
+    pattern: /^(?<message>.+? exists, but its includes form a loop: .*)$/,
+    interpret: ({ message }) => ({ kind: 'note', message }),
+  },
+  {
     // HDLBoard's backend, a port the board does not connect (server/src/engines/extraPorts.ts):
     // "Warning: `Dummy` (DE1_SoC.vhdl, line 21) is not a board input, so the board holds it at 0."
     pattern: /^Warning: (?<message>`[^`]+` \((?<file>[^,()]+), line (?<line>\d+)\) .*)$/,

@@ -158,6 +158,10 @@ describe('parseDiagnostics', () => {
     expect(parseDiagnostics(fixture.ICARUS_REGASSIGN).map((d) => d.details)).toEqual([['LEDR is declared here as wire.']]);
   });
 
+  test('T-5b: the backend\'s include-loop explanation becomes a detail of the "not found" error', () => {
+    expect(parseDiagnostics(fixture.ICARUS_INCLUDE_LOOP).map((d) => d.details)).toEqual([[fixture.INCLUDE_LOOP_NOTE]]);
+  });
+
   test('T-6: undeclared.v gives five diagnostics', () => {
     expect(parseDiagnostics(fixture.ICARUS_UNDECLARED)).toHaveLength(5);
   });

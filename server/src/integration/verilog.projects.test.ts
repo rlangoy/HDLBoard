@@ -19,7 +19,8 @@ import type { WsTestClient } from '../testSupport/WsTestClient.js';
 
 const icarus = icarusForTests();
 
-const PROMPT_ERROR_MS = 1_000;
+/** Far below the compiler's 30 s timeout, yet loose enough for a loaded machine. */
+const PROMPT_ERROR_MS = 5_000;
 const CHAIN_DEPTH = 6;
 const LARGE_PROJECT_MODULES = 100;
 const LARGE_PROJECT_READY_MS = 3_000;
@@ -45,10 +46,36 @@ function nestedIncludes(depth: number): VhdlFileInput[] {
   return [{ name: 'top.v', content: `\`include "inc1.vh"\n${top}` }, ...headers];
 }
 
-const CIRCULAR_INCLUDES: VhdlFileInput[] = [
-  { name: 'top.v', content: '`include "a.vh"\nmodule top(output [9:0] LEDR);\n  assign LEDR = 10\'d0;\nendmodule\n' },
-  { name: 'a.vh', content: '`include "b.vh"\n' },
-  { name: 'b.vh', content: '`include "a.vh"\n' },
+/** A top that includes `first`, and drives the LEDs from `LED_VALUE` when a header defines it. */
+function topIncluding(first: string): VhdlFileInput {
+  const body = 'module top(output [9:0] LEDR);\n`ifdef LED_VALUE\n  assign LEDR = `LED_VALUE;\n`else\n  assign LEDR = 10\'d0;\n`endif\nendmodule\n';
+  return { name: 'top.v', content: `\`include "${first}"\n${body}` };
+}
+
+const includes = (name: string, included: string): VhdlFileInput => ({ name, content: `\`include "${included}"\n` });
+
+/** A header whose text is wrapped in an include guard. */
+function guarded(name: string, text: string): VhdlFileInput {
+  const guard = `${name.replace('.', '_').toUpperCase()}_INCLUDED`;
+  return { name, content: `\`ifndef ${guard}\n\`define ${guard}\n${text}\`endif\n` };
+}
+
+const LED_PATTERN = '1111000011';
+const DEFINES_LED_VALUE = `\`define LED_VALUE 10'b${LED_PATTERN}\n`;
+
+const CIRCULAR_INCLUDES: VhdlFileInput[] = [topIncluding('a.vh'), includes('a.vh', 'b.vh'), includes('b.vh', 'a.vh')];
+const LONG_CYCLE: VhdlFileInput[] = [topIncluding('a.vh'), includes('a.vh', 'b.vh'), includes('b.vh', 'c.vh'), includes('c.vh', 'a.vh')];
+const SPACED_CYCLE: VhdlFileInput[] = [topIncluding('cycle a.vh'), includes('cycle a.vh', 'cycle b.vh'), includes('cycle b.vh', './cycle a.vh')];
+const SELF_INCLUDE: VhdlFileInput[] =[topIncluding('self.vh'), includes('self.vh', 'self.vh')];
+const GUARDED_CYCLE: VhdlFileInput[] = [
+  topIncluding('a.vh'),
+  guarded('a.vh', `\`include "b.vh"\n${DEFINES_LED_VALUE}`),
+  guarded('b.vh', '`include "a.vh"\n'),
+];
+const CYCLE_IN_INACTIVE_BRANCH: VhdlFileInput[] = [
+  topIncluding('a.vh'),
+  { name: 'a.vh', content: `\`ifdef NEVER_DEFINED\n\`include "b.vh"\n\`endif\n${DEFINES_LED_VALUE}` },
+  includes('b.vh', 'a.vh'),
 ];
 
 /** `m0` is the top, each `mN` instantiates `m(N+1)`, and the last drives the LEDs. */
@@ -122,11 +149,44 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       assert.match(frame.text, /nowhere\.vh/);
     }));
 
-  test('I-V19: circular includes are reported promptly and do not hang', () =>
+  describe('I-V19: an unguarded include loop is reported promptly, by its chain', () => {
+    const loops = [
+      ['two headers', CIRCULAR_INCLUDES, /form a loop: (a\.vh → b\.vh → a\.vh|b\.vh → a\.vh → b\.vh)\./],
+      ['three headers', LONG_CYCLE, /form a loop: (\w\.vh → ){3}\w\.vh\./],
+      ['a header that includes itself', SELF_INCLUDE, /form a loop: self\.vh → self\.vh\./],
+      ['headers spelled with spaces and ./', SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
+    ] as const;
+    for (const [label, files, chain] of loops) {
+      test(label, () =>
+        withSession(async (client) => {
+          const frame = await errorOf(client, [...files], 'top.v', PROMPT_ERROR_MS);
+          assert.match(frame.text, chain);
+        }));
+    }
+
+    test('as an analyze error that keeps the compiler\'s own message', () =>
+      withSession(async (client) => {
+        const frame = await errorOf(client, CIRCULAR_INCLUDES, 'top.v', PROMPT_ERROR_MS);
+        assert.match(`${frame.stage}: ${frame.text}`, /^analyze: [^]*Include file [ab]\.vh not found/);
+      }));
+  });
+
+  test('I-V19: a genuinely missing include is not called a loop', () =>
     withSession(async (client) => {
-      const frame = await errorOf(client, CIRCULAR_INCLUDES, 'top.v', PROMPT_ERROR_MS);
-      assert.equal(frame.stage, 'analyze');
+      const frame = await errorOf(client, [{ name: 'top.v', content: MISSING_INCLUDE }], 'top.v', PROMPT_ERROR_MS);
+      assert.doesNotMatch(frame.text, /loop/);
     }));
+
+  describe('I-V19: an include loop that is never expanded runs', () => {
+    const harmless = [['behind include guards', GUARDED_CYCLE], ['in an inactive `ifdef branch', CYCLE_IN_INACTIVE_BRANCH]] as const;
+    for (const [label, files] of harmless) {
+      test(label, () =>
+        withSession(async (client) => {
+          await startRun(client, [...files], 'top.v');
+          await client.untilState((state) => state.ledr === LED_PATTERN);
+        }));
+    }
+  });
 
   test('I-V20: a project of 101 files is ready within a few seconds', () =>
     withSession(async (client) => {
