@@ -13,8 +13,9 @@
  * project's `-D` macros first), and only the includes in active `ifdef branches. `ifdef
  * asks only whether a name is defined, so the trace is exact — include guards, inactive
  * loops and headers no source includes never stop a run. Where it cannot be exact (an
- * `include of a macro or in angle brackets, `undefineall, a conditional on an expression,
- * or a project too large or too deeply nested) it gives up, and Icarus runs as usual.
+ * `include of a macro, in angle brackets or of a file the project lacks, `undefineall, a
+ * macro whose body holds a directive, a conditional on an expression, or a project too
+ * large or too deeply nested) it gives up, and Icarus runs as usual.
  * If Icarus then reports a header of the project as missing, a hint says why it likely
  * did, without naming a loop the trace could not establish.
  *
@@ -43,15 +44,16 @@ export interface IncludeLoop {
 const MISSING_INCLUDE = /^.+?:\d+: Include file (.+) not found\r?$/gm;
 
 /**
- * Comments and strings are skipped. A `define's body runs to the end of its line,
- * continuations included, so an `include inside a macro body is not taken for one.
+ * Comments and strings are skipped. A `define's body, captured too, runs to the end of
+ * its line, continuations included: a directive inside it belongs to the macro, and makes
+ * the macro untraceable (defineOf).
  * Captured last: an untraceable `include of anything but a quoted name, `undefineall or
  * `undef of no plain name; then a conditional whose argument is not a plain name
  * (`ifdef (A && B)), which cannot be skipped even when inactive — its `endif would close
  * the wrong block.
  */
 const DIRECTIVE =
-  /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:[^"\\\n]|\\.)*"|`define\s+([\w$]+)(?:\\\r?\n|\\.|[^\\\n])*|`(ifdef|ifndef|elsif|undef)\s+([\w$]+)|`(else|endif)\b|`include\s+"([^"\n]+)"|(`(?:include|undefineall|undef)\b)|(`(?:ifdef|ifndef|elsif)\b)/g;
+  /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:[^"\\\n]|\\.)*"|`define\s+([\w$]+)((?:\\\r?\n|\\.|[^\\\n])*)|`(ifdef|ifndef|elsif|undef)\s+([\w$]+)|`(else|endif)\b|`include\s+"([^"\n]+)"|(`(?:include|undefineall|undef)\b)|(`(?:ifdef|ifndef|elsif)\b)/g;
 
 /** Project files have plain names, so `./name` and `name` are the same file. */
 const SESSION_DIRECTORY_PREFIX = /^(?:\.\/)+/;
@@ -98,10 +100,19 @@ class LineCounter {
   }
 }
 
+/**
+ * A macro whose body holds a directive is untraceable: invoking it would change what Icarus
+ * expands, and the trace does not expand invocations. Comments and strings in the body do not count.
+ */
+function defineOf(name: string, body: string): Directive {
+  const holdsDirective = directivesOf(body).length > 0;
+  return holdsDirective ? { kind: 'untraceable' } : { kind: 'define', name };
+}
+
 /** The directive one DIRECTIVE match is, or undefined for a comment or a string. */
 function directiveOf(match: RegExpExecArray, lines: LineCounter): Directive | undefined {
-  const [, defined, conditional, name, bare, included, untraceable, unreadable] = match;
-  if (defined !== undefined) return { kind: 'define', name: defined };
+  const [, defined, body = '', conditional, name, bare, included, untraceable, unreadable] = match;
+  if (defined !== undefined) return defineOf(defined, body);
   if (name !== undefined) return { kind: conditional as NamedDirective, name };
   if (bare !== undefined) return { kind: bare as BareDirective };
   if (included !== undefined) return { kind: 'include', file: projectFileName(included), line: lines.lineAt(match.index) };
@@ -184,8 +195,9 @@ interface Opened {
  * with the same macros defined as when it was opened further out: what a file expands to
  * depends on nothing else, so from there the expansion repeats forever.
  *
- * A file outside the project is passed by: the session directory holds only the
- * project's files, so Icarus cannot open it either, and it defines nothing.
+ * A file outside the project ends the trace. Icarus usually stops there with its own
+ * "not found", so a loop after it would not be the student's first problem; and where it
+ * can open the file after all (another letter case on Windows), only Icarus knows what follows.
  */
 class IncludeExpansion {
   private readonly sources = new Map<string, string>();
@@ -214,8 +226,7 @@ class IncludeExpansion {
 
   private firstLoopIn(sources: readonly string[]): IncludeLoop | undefined {
     for (const source of sources) {
-      const directives = this.directivesIn(source);
-      const loop = directives === undefined ? undefined : this.expand(this.opening(source), directives);
+      const loop = this.expand(this.opening(source), this.directivesIn(source));
       if (loop !== undefined) return loop;
     }
     return undefined;
@@ -223,7 +234,6 @@ class IncludeExpansion {
 
   private include(includer: string, { file, line }: IncludeDirective): IncludeLoop | undefined {
     const directives = this.directivesIn(file);
-    if (directives === undefined) return undefined;
     const opened = this.opening(file);
     const reopened = this.expanding.findIndex((outer) => outer.file === file && outer.macros === opened.macros);
     if (reopened < 0) return this.expand(opened, directives);
@@ -249,9 +259,9 @@ class IncludeExpansion {
     if (this.expansionsLeft < 0 || this.expanding.length >= MAX_INCLUDE_DEPTH) throw new TraceAbandoned();
   }
 
-  private directivesIn(file: string): readonly Directive[] | undefined {
+  private directivesIn(file: string): readonly Directive[] {
     const source = this.sources.get(file);
-    if (source === undefined) return undefined;
+    if (source === undefined) throw new TraceAbandoned();
     const known = this.directives.get(file) ?? directivesOf(source);
     this.directives.set(file, known);
     return known;

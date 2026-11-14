@@ -36,8 +36,20 @@ describe('directivesOf', () => {
     assert.deepEqual(directivesOf('initial $display("`include \\"a.vh\\"");\n'), []);
   });
 
-  test('takes an include inside a macro body for part of the macro', () => {
-    assert.deepEqual(directivesOf('`define LOAD \\\n  `include "a.vh"\n'), [{ kind: 'define', name: 'LOAD' }]);
+  test('takes an include inside a macro body for part of the macro, which it cannot trace', () => {
+    assert.deepEqual(directivesOf('`define LOAD \\\n  `include "a.vh"\n'), [{ kind: 'untraceable' }]);
+  });
+
+  test('reads a directive word in a macro body\'s comment as no directive', () => {
+    assert.deepEqual(directivesOf('`define W 8 // see `include below\n'), [{ kind: 'define', name: 'W' }]);
+  });
+
+  test('reads a directive word in a macro body\'s string as no directive', () => {
+    assert.deepEqual(directivesOf('`define MSG $display("`ifdef X");\n'), [{ kind: 'define', name: 'MSG' }]);
+  });
+
+  test('reads a macro whose body holds no directive as a plain definition', () => {
+    assert.deepEqual(directivesOf('`define WIDTH `SIZE + 1\n'), [{ kind: 'define', name: 'WIDTH' }]);
   });
 });
 
@@ -138,6 +150,16 @@ describe('findIncludeLoop — abandoning a trace it cannot follow exactly', () =
 
   test('gives up at an active include in angle brackets', () => {
     assert.equal(loopIn([file('top.v', '`include <defs.vh>\n`include "a.vh"\n'), header('a.vh', 'a.vh')]), undefined);
+  });
+
+  test('gives up at a macro that expands to a `define, which may guard what follows', () => {
+    const top = file('top.v', '`define SET `define GUARD\n`include "g.vh"\n');
+    const guardedBySet = file('g.vh', '`ifndef GUARD\n`SET\n`include "g.vh"\n`endif\n');
+    assert.equal(loopIn([top, guardedBySet]), undefined);
+  });
+
+  test('gives up at an include of a file the project lacks, where Icarus stops first', () => {
+    assert.equal(loopIn([top('missing.vh', 'a.vh'), header('a.vh', 'a.vh')]), undefined);
   });
 
   test('gives up at an active `undefineall', () => {

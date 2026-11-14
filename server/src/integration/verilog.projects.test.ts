@@ -89,6 +89,19 @@ const LOOP_IN_BLOCK_OPENED_BY_A_HEADER: VhdlFileInput[] = [
   { name: 'opens.vh', content: '`ifdef NEVER_DEFINED\n' },
   includes('self.vh', 'self.vh'),
 ];
+/** `SET expands to the `define GUARD that stops g.vh including itself again. */
+const LOOP_GUARDED_THROUGH_A_MACRO: VhdlFileInput[] = [
+  {
+    name: 'top.v',
+    content: `\`define SET \`define GUARD\n\`include "g.vh"\nmodule top(output [9:0] LEDR);\n  assign LEDR = 10'b${LED_PATTERN};\nendmodule\n`,
+  },
+  { name: 'g.vh', content: '`ifndef GUARD\n`SET\n`include "g.vh"\n`endif\n' },
+];
+/** Icarus stops at the missing header, before the self-including one after it. */
+const MISSING_BEFORE_LOOP: VhdlFileInput[] = [
+  { name: 'top.v', content: `\`include "missing.vh"\n${topIncluding('self.vh').content}` },
+  includes('self.vh', 'self.vh'),
+];
 /** x.vh and y.vh loop, but no source includes either, so Icarus never reads them. */
 const CYCLE_IN_UNUSED_HEADERS: VhdlFileInput[] = [
   topIncluding('led.vh'),
@@ -212,6 +225,12 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       assert.match(frame.text, /Include file a\.vh not found[^]*\n\na\.vh exists, but Icarus could not open it\./);
     }));
 
+  test('I-V19: a missing include before a loop is reported, as Icarus stops there', () =>
+    withSession(async (client) => {
+      const frame = await errorOf(client, MISSING_BEFORE_LOOP, 'top.v', PROMPT_ERROR_MS);
+      assert.match(frame.text, /Include file missing\.vh not found/);
+    }));
+
   test('I-V19: a genuinely missing include is not called a loop', () =>
     withSession(async (client) => {
       const frame = await errorOf(client, [{ name: 'top.v', content: MISSING_INCLUDE }], 'top.v', PROMPT_ERROR_MS);
@@ -224,6 +243,7 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       ['in an inactive `ifdef branch', CYCLE_IN_INACTIVE_BRANCH],
       ['between headers no source includes', CYCLE_IN_UNUSED_HEADERS],
       ['inside an `ifdef a header opens and its includer closes', LOOP_IN_BLOCK_OPENED_BY_A_HEADER],
+      ['guarded by a macro that expands to a `define', LOOP_GUARDED_THROUGH_A_MACRO],
     ] as const;
     for (const [label, files] of harmless) {
       test(label, () =>
