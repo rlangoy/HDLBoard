@@ -63,6 +63,21 @@ describe('recognizeLine', () => {
       { kind: 'callSite', fileName: 'slice_bounds.vhd', line: 14 },
     ],
     ['P-39', '  from: [unknown caller]', NONE],
+    [
+      'P-40',
+      '  from: process work.slice_bounds(test).P0 at my design.vhd:14',
+      { kind: 'callSite', fileName: 'my design.vhd', line: 14 },
+    ],
+    [
+      'P-41',
+      '  from: process work.t(a).P0 at look at me.vhd:3',
+      { kind: 'callSite', fileName: 'look at me.vhd', line: 3 },
+    ],
+    [
+      'P-42',
+      'ghdl:error: bound check failure at look at me.vhd:11',
+      diagnostic('look at me.vhd', 11, 'error', 'bound check failure'),
+    ],
     ['P-12', 'syntax.v:6: syntax error', diagnostic('syntax.v', 6, 'error', 'syntax error', { details: [ICARUS_SYNTAX_HINT] })],
     [
       'P-13',

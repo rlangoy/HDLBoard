@@ -154,8 +154,10 @@ const RECOGNIZERS: readonly Recognizer[] = [
     interpret: (groups) => byLevel(GHDL_REPORT_LEVEL, groups),
   },
   {
-    // GHDL run, failed check: "ghdl:error: index (5) out of bounds (0 to 3) at bound.vhdl:9"
-    pattern: /^(?:.*[\\/])?ghdl[^\\/:]*:error: (?<message>.+) at (?<file>[^:]+):(?<line>\d+)$/,
+    // GHDL run, failed check: "ghdl:error: index (5) out of bounds (0 to 3) at bound.vhdl:9".
+    // The file is everything from the first " at " to the last ":line": a name may hold
+    // spaces, even " at " ("look at me.vhd"), but never ":" (server/src/engines/sourceNames.ts).
+    pattern: /^(?:.*[\\/])?ghdl[^\\/:]*:error: (?<message>.+?) at (?<file>[^:]+):(?<line>\d+)$/,
     interpret: (groups) => diagnosticOrNone(build(groups, 'error')),
   },
   {
@@ -165,7 +167,8 @@ const RECOGNIZERS: readonly Recognizer[] = [
   },
   {
     // The innermost frame comes first: "  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:14"
-    pattern: /^\s+from: .* at (?<file>[^\s:]+):(?<line>\d+)$/,
+    // The file is delimited as in the failed check above: "… at my design.vhd:14".
+    pattern: /^\s+from: .*? at (?<file>[^:]+):(?<line>\d+)$/,
     interpret: ({ file, line }) => ({ kind: 'callSite', fileName: normalizeFileName(file), line: Number(line) }),
   },
   {
