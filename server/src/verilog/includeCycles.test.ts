@@ -95,9 +95,61 @@ describe('findActiveIncludeLoop', () => {
     assert.equal(findActiveIncludeLoop({ files, sources: ['first.v', 'second.v'], predefined: [] }), undefined);
   });
 
+  test('follows the branch a macro Icarus defines itself selects', () => {
+    const a = file('a.vh', '`ifdef __ICARUS__\n`include "b.vh"\n`else\n`include "a.vh"\n`endif\n');
+    assert.deepEqual(loopIn([top('a.vh'), a, header('b.vh', 'a.vh')], ['__ICARUS__']), ['a.vh', 'b.vh', 'a.vh']);
+  });
+
   test('follows a loop again once `undef removes its guard', () => {
     const a = file('a.vh', '`undef GUARD\n`ifndef GUARD\n`define GUARD\n`include "a.vh"\n`endif\n');
     assert.deepEqual(loopIn([top('a.vh'), a], ['GUARD']), ['a.vh', 'a.vh']);
+  });
+});
+
+describe('findActiveIncludeLoop — abandoning a trace it cannot follow exactly', () => {
+  /** `top.v` → h0.vh → h1.vh → … → the last, which includes itself. */
+  const chainEndingInLoop = (length: number) => {
+    const headers = Array.from({ length }, (_, index) => header(`h${index}.vh`, `h${Math.min(index + 1, length - 1)}.vh`));
+    return [top('h0.vh'), ...headers];
+  };
+
+  test('names a loop at the end of a moderately deep chain', () => {
+    assert.deepEqual(loopIn(chainEndingInLoop(100))?.slice(-2), ['h99.vh', 'h99.vh']);
+  });
+
+  test('gives up, rather than overflowing the stack, on a chain thousands of headers deep', () => {
+    assert.equal(loopIn(chainEndingInLoop(4_000)), undefined);
+  });
+
+  test('gives up once it has expanded more files than any project needs', () => {
+    const manyIncludes = `${'`include "empty.vh"\n'.repeat(10_001)}\`include "self.vh"\n`;
+    assert.equal(loopIn([file('top.v', manyIncludes), header('empty.vh'), header('self.vh', 'self.vh')]), undefined);
+  });
+
+  test('gives up at an active include of a macro, whose file it cannot know', () => {
+    assert.equal(loopIn([file('top.v', '`include `HEADER\n`include "a.vh"\n'), header('a.vh', 'a.vh')]), undefined);
+  });
+
+  test('gives up at an active include in angle brackets', () => {
+    assert.equal(loopIn([file('top.v', '`include <defs.vh>\n`include "a.vh"\n'), header('a.vh', 'a.vh')]), undefined);
+  });
+
+  test('gives up at an active `undefineall', () => {
+    assert.equal(loopIn([file('top.v', '`undefineall\n`include "a.vh"\n'), header('a.vh', 'a.vh')]), undefined);
+  });
+
+  test('gives up at an `ifdef of an expression, whose `endif it could not pair', () => {
+    const top = file('top.v', '`ifdef OUTER\n`ifdef (A && B)\n`endif\n`include "a.vh"\n`endif\n');
+    assert.equal(loopIn([top, header('a.vh', 'a.vh')]), undefined);
+  });
+
+  test('reads a macro name that holds a $', () => {
+    assert.deepEqual(directivesOf('`ifdef A$B\n'), [{ kind: 'ifdef', name: 'A$B' }]);
+  });
+
+  test('passes an untraceable include in an inactive branch', () => {
+    const a = file('top.v', '`ifdef NEVER\n`include `HEADER\n`endif\n`include "a.vh"\n');
+    assert.deepEqual(loopIn([a, header('a.vh', 'a.vh')]), ['a.vh', 'a.vh']);
   });
 });
 

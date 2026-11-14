@@ -8,11 +8,12 @@
  * loop is traced and added to the compiler's message, which is kept as it was.
  *
  * The loop is the one Icarus expands, not merely one in the text: the sources are read in
- * compile order, macros are defined and undefined as they go (the project's own `-D`
- * macros first), and only the includes in active `ifdef branches are followed. `ifdef
- * asks only whether a name is defined, so this is exact — include guards and inactive
- * loops are never named. Where it cannot be exact (an `include of a macro, or a project
- * too large to trace) nothing is added, and the compiler's message stands alone.
+ * compile order, macros are defined and undefined as they go (the project's `-D` macros
+ * and Icarus's own first), and only the includes in active `ifdef branches are followed.
+ * `ifdef asks only whether a name is defined, so this is exact — include guards and
+ * inactive loops are never named. Where it cannot be exact (an `include of a macro or in
+ * angle brackets, `undefineall, or a project too large or too deeply nested to trace) the
+ * trace is abandoned: nothing is added, and the compiler's message stands alone.
  * Pure: it reads text and touches nothing.
  *
  * The frontend recognises the note by its wording (src/components/workbench/diagnostics.ts).
@@ -20,7 +21,7 @@
 
 import type { VhdlFileInput } from '../protocol.js';
 
-/** What Icarus preprocessed: every project file, the sources in compile order, and the `-D` macros. */
+/** What Icarus preprocessed: every project file, the sources in compile order, and the macros defined before them. */
 export interface IncludeContext {
   readonly files: readonly VhdlFileInput[];
   readonly sources: readonly string[];
@@ -33,15 +34,25 @@ const MISSING_INCLUDE = /^.+?:\d+: Include file (.+) not found\r?$/gm;
 /**
  * Comments and strings are skipped. A `define's body runs to the end of its line,
  * continuations included, so an `include inside a macro body is not taken for one.
+ * Captured last: an untraceable `include of anything but a quoted name, `undefineall or
+ * `undef of no plain name; then a conditional whose argument is not a plain name
+ * (`ifdef (A && B)), which cannot be skipped even when inactive — its `endif would close
+ * the wrong block.
  */
 const DIRECTIVE =
-  /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:[^"\\\n]|\\.)*"|`define\s+(\w+)(?:\\\r?\n|\\.|[^\\\n])*|`(ifdef|ifndef|elsif|undef)\s+(\w+)|`(else|endif)\b|`include\s+"([^"\n]+)"/g;
+  /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:[^"\\\n]|\\.)*"|`define\s+([\w$]+)(?:\\\r?\n|\\.|[^\\\n])*|`(ifdef|ifndef|elsif|undef)\s+([\w$]+)|`(else|endif)\b|`include\s+"([^"\n]+)"|(`(?:include|undefineall|undef)\b)|(`(?:ifdef|ifndef|elsif)\b)/g;
 
 /** Project files have plain names, so `./name` and `name` are the same file. */
 const SESSION_DIRECTORY_PREFIX = /^(?:\.\/)+/;
 
 /** How many file expansions are traced before giving up: far above any real project, low enough to stay instant. */
 const MAX_EXPANSIONS = 10_000;
+
+/**
+ * How deeply nested includes are traced before giving up. Icarus runs out of open files
+ * near 500 levels; tracing much deeper would only risk the call stack, three frames a level.
+ */
+const MAX_INCLUDE_DEPTH = 1_000;
 
 /** The DIRECTIVE groups these come from can only hold these words. */
 type NamedDirective = 'undef' | 'ifdef' | 'ifndef' | 'elsif';
@@ -50,21 +61,29 @@ type BareDirective = 'else' | 'endif';
 type Directive =
   | { readonly kind: 'define' | NamedDirective; readonly name: string }
   | { readonly kind: BareDirective }
-  | { readonly kind: 'include'; readonly file: string };
+  | { readonly kind: 'include'; readonly file: string }
+  | { readonly kind: 'untraceable' | 'unreadableConditional' };
 
 const projectFileName = (included: string): string => included.replace(SESSION_DIRECTORY_PREFIX, '');
 
+/** The directive one DIRECTIVE match is, or undefined for a comment or a string. */
+function directiveOf([, defined, conditional, name, bare, included, untraceable, unreadable]: RegExpExecArray): Directive | undefined {
+  if (defined !== undefined) return { kind: 'define', name: defined };
+  if (name !== undefined) return { kind: conditional as NamedDirective, name };
+  if (bare !== undefined) return { kind: bare as BareDirective };
+  if (included !== undefined) return { kind: 'include', file: projectFileName(included) };
+  if (untraceable !== undefined) return { kind: 'untraceable' };
+  if (unreadable !== undefined) return { kind: 'unreadableConditional' };
+  return undefined;
+}
+
 /** The preprocessor directives HDLBoard follows, in source order, outside comments and strings. */
 export function directivesOf(source: string): Directive[] {
-  const found: Directive[] = [];
-  for (const [, defined, conditional, name, bare, included] of source.matchAll(DIRECTIVE)) {
-    if (defined !== undefined) found.push({ kind: 'define', name: defined });
-    else if (conditional !== undefined && name !== undefined) found.push({ kind: conditional as NamedDirective, name });
-    else if (bare !== undefined) found.push({ kind: bare as BareDirective });
-    else if (included !== undefined) found.push({ kind: 'include', file: projectFileName(included) });
-  }
-  return found;
+  return [...source.matchAll(DIRECTIVE)].map(directiveOf).filter((directive) => directive !== undefined);
 }
+
+/** Raised inside a trace that can no longer follow Icarus exactly; the trace then names no loop. */
+class TraceAbandoned extends Error {}
 
 interface Branch {
   readonly enclosingActive: boolean;
@@ -98,6 +117,8 @@ class Conditionals {
       case 'endif':
         this.open.pop();
         return true;
+      case 'unreadableConditional':
+        throw new TraceAbandoned();
       default:
         return false;
     }
@@ -142,8 +163,20 @@ class IncludeExpansion {
     this.defined = new Set(predefined);
   }
 
-  /** The loop as a chain that starts and ends with the same file, or undefined when there is none. */
+  /**
+   * The loop as a chain that starts and ends with the same file; undefined when there is
+   * none, or when the trace was abandoned before it could tell.
+   */
   loopIn(sources: readonly string[]): string[] | undefined {
+    try {
+      return this.firstLoopIn(sources);
+    } catch (error) {
+      if (error instanceof TraceAbandoned) return undefined;
+      throw error;
+    }
+  }
+
+  private firstLoopIn(sources: readonly string[]): string[] | undefined {
     for (const source of sources) {
       const loop = this.expand(source);
       if (loop !== undefined) return loop;
@@ -151,16 +184,27 @@ class IncludeExpansion {
     return undefined;
   }
 
+  /**
+   * A file outside the project is passed by: the session directory holds only the
+   * project's files, so Icarus cannot open it either, and it defines nothing.
+   */
   private expand(file: string): string[] | undefined {
+    const directives = this.directivesIn(file);
+    if (directives === undefined) return undefined;
     const opened: Opened = { file, macros: [...this.defined].sort().join(' ') };
     const repeated = this.expanding.findIndex(({ file: outer, macros }) => outer === file && macros === opened.macros);
     if (repeated >= 0) return [...this.expanding.slice(repeated).map((outer) => outer.file), file];
-    const directives = this.directivesIn(file);
-    if (directives === undefined || this.expansionsLeft-- <= 0) return undefined;
+    this.spendExpansion();
     this.expanding.push(opened);
     const loop = this.follow(directives);
     this.expanding.pop();
     return loop;
+  }
+
+  /** Abandons the trace once it has expanded too many files, or nested them too deeply. */
+  private spendExpansion(): void {
+    this.expansionsLeft -= 1;
+    if (this.expansionsLeft < 0 || this.expanding.length >= MAX_INCLUDE_DEPTH) throw new TraceAbandoned();
   }
 
   private directivesIn(file: string): readonly Directive[] | undefined {
@@ -183,9 +227,20 @@ class IncludeExpansion {
   }
 
   private apply(directive: Directive): string[] | undefined {
-    if (directive.kind === 'define') this.defined.add(directive.name);
-    if (directive.kind === 'undef') this.defined.delete(directive.name);
-    return directive.kind === 'include' ? this.expand(directive.file) : undefined;
+    switch (directive.kind) {
+      case 'define':
+        this.defined.add(directive.name);
+        return undefined;
+      case 'undef':
+        this.defined.delete(directive.name);
+        return undefined;
+      case 'include':
+        return this.expand(directive.file);
+      case 'untraceable':
+        throw new TraceAbandoned();
+      default:
+        return undefined;
+    }
   }
 }
 

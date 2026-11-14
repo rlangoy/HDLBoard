@@ -72,6 +72,12 @@ const withInactiveSelfInclude = (name: string, other: string): VhdlFileInput => 
   content: `\`ifdef NEVER_DEFINED\n\`include "${name}"\n\`endif\n\`include "${other}"\n`,
 });
 const CYCLE_BESIDE_INACTIVE_ONES: VhdlFileInput[] = [topIncluding('a.vh'), withInactiveSelfInclude('a.vh', 'b.vh'), withInactiveSelfInclude('b.vh', 'a.vh')];
+/** Icarus defines `__ICARUS__` itself, so a.vh takes the loop through b.vh, not its own `else. */
+const CYCLE_CHOSEN_BY_ICARUS: VhdlFileInput[] = [
+  topIncluding('a.vh'),
+  { name: 'a.vh', content: '`ifdef __ICARUS__\n`include "b.vh"\n`else\n`include "a.vh"\n`endif\n' },
+  includes('b.vh', 'a.vh'),
+];
 const SELF_INCLUDE: VhdlFileInput[] = [topIncluding('self.vh'), includes('self.vh', 'self.vh')];
 const GUARDED_CYCLE: VhdlFileInput[] = [
   topIncluding('a.vh'),
@@ -161,7 +167,8 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       ['three headers', LONG_CYCLE, /form a loop: (\w\.vh → ){3}\w\.vh\./],
       ['a header that includes itself', SELF_INCLUDE, /form a loop: self\.vh → self\.vh\./],
       ['two headers, not the inactive self-includes beside them', CYCLE_BESIDE_INACTIVE_ONES, /form a loop: ([ab])\.vh → [ab]\.vh → \1\.vh\./],
-      ['headers spelled with spaces and ./',SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
+      ['two headers, through the branch `ifdef __ICARUS__ takes', CYCLE_CHOSEN_BY_ICARUS, /form a loop: ([ab])\.vh → [ab]\.vh → \1\.vh\./],
+      ['headers spelled with spaces and ./', SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
     ] as const;
     for (const [label, files, chain] of loops) {
       test(label, () =>

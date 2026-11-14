@@ -17,7 +17,7 @@ import { standaloneHint, versionWarning } from '../verilog/diagnostics.js';
 import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE, validateSourceName } from '../verilog/fileNames.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, type Port } from '../verilog/ports.js';
 import { explainMissingInclude } from '../verilog/includeCycles.js';
-import { iverilogFlags } from '../verilog/optionFlags.js';
+import { iverilogFlags, predefinedMacros } from '../verilog/optionFlags.js';
 import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '../verilog/process.js';
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
@@ -218,7 +218,7 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
   if (!ports.ok) {
-    const includes = { files, sources, predefined: Object.keys(compilerOptions.iverilog.defines) };
+    const includes = { files, sources, predefined: predefinedMacros(compilerOptions.iverilog) };
     return failure(ports.failure.stage, explainMissingInclude(ports.failure.text, includes));
   }
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);
