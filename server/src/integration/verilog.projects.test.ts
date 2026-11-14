@@ -66,7 +66,13 @@ const DEFINES_LED_VALUE = `\`define LED_VALUE 10'b${LED_PATTERN}\n`;
 const CIRCULAR_INCLUDES: VhdlFileInput[] = [topIncluding('a.vh'), includes('a.vh', 'b.vh'), includes('b.vh', 'a.vh')];
 const LONG_CYCLE: VhdlFileInput[] = [topIncluding('a.vh'), includes('a.vh', 'b.vh'), includes('b.vh', 'c.vh'), includes('c.vh', 'a.vh')];
 const SPACED_CYCLE: VhdlFileInput[] = [topIncluding('cycle a.vh'), includes('cycle a.vh', 'cycle b.vh'), includes('cycle b.vh', './cycle a.vh')];
-const SELF_INCLUDE: VhdlFileInput[] =[topIncluding('self.vh'), includes('self.vh', 'self.vh')];
+/** Each header also includes itself, but only inside an `ifdef that is never taken. */
+const withInactiveSelfInclude = (name: string, other: string): VhdlFileInput => ({
+  name,
+  content: `\`ifdef NEVER_DEFINED\n\`include "${name}"\n\`endif\n\`include "${other}"\n`,
+});
+const CYCLE_BESIDE_INACTIVE_ONES: VhdlFileInput[] = [topIncluding('a.vh'), withInactiveSelfInclude('a.vh', 'b.vh'), withInactiveSelfInclude('b.vh', 'a.vh')];
+const SELF_INCLUDE: VhdlFileInput[] = [topIncluding('self.vh'), includes('self.vh', 'self.vh')];
 const GUARDED_CYCLE: VhdlFileInput[] = [
   topIncluding('a.vh'),
   guarded('a.vh', `\`include "b.vh"\n${DEFINES_LED_VALUE}`),
@@ -154,7 +160,8 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       ['two headers', CIRCULAR_INCLUDES, /form a loop: (a\.vh → b\.vh → a\.vh|b\.vh → a\.vh → b\.vh)\./],
       ['three headers', LONG_CYCLE, /form a loop: (\w\.vh → ){3}\w\.vh\./],
       ['a header that includes itself', SELF_INCLUDE, /form a loop: self\.vh → self\.vh\./],
-      ['headers spelled with spaces and ./', SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
+      ['two headers, not the inactive self-includes beside them', CYCLE_BESIDE_INACTIVE_ONES, /form a loop: ([ab])\.vh → [ab]\.vh → \1\.vh\./],
+      ['headers spelled with spaces and ./',SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
     ] as const;
     for (const [label, files, chain] of loops) {
       test(label, () =>

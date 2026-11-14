@@ -5,14 +5,14 @@
  * Explaining a circular `include. Icarus expands an unguarded loop of headers until it
  * runs out of open files, then reports the header it was opening as "not found" —
  * although the student's project holds it. When Icarus names a header that exists, the
- * loop it sits on is traced through the project's `include lines and added to the
- * compiler's message, which is kept as it was.
+ * loop is traced and added to the compiler's message, which is kept as it was.
  *
- * Only a failed compile is explained, so a project whose loops include guards or an
- * inactive `ifdef branch make harmless is never told about them. The scan does not
- * evaluate directives, though: when a header is on several loops, the shortest is named,
- * which may be a harmless one. A quoted `include of a plain name is followed; an
- * `include <name> or one named by a macro is not, and leaves the message unchanged.
+ * The loop is the one Icarus expands, not merely one in the text: the sources are read in
+ * compile order, macros are defined and undefined as they go (the project's own `-D`
+ * macros first), and only the includes in active `ifdef branches are followed. `ifdef
+ * asks only whether a name is defined, so this is exact — include guards and inactive
+ * loops are never named. Where it cannot be exact (an `include of a macro, or a project
+ * too large to trace) nothing is added, and the compiler's message stands alone.
  * Pure: it reads text and touches nothing.
  *
  * The frontend recognises the note by its wording (src/components/workbench/diagnostics.ts).
@@ -20,81 +20,212 @@
 
 import type { VhdlFileInput } from '../protocol.js';
 
+/** What Icarus preprocessed: every project file, the sources in compile order, and the `-D` macros. */
+export interface IncludeContext {
+  readonly files: readonly VhdlFileInput[];
+  readonly sources: readonly string[];
+  readonly predefined: readonly string[];
+}
+
 /** `./cycle_a.vh:3: Include file cycle_b.vh not found` — the header is the captured group. */
 const MISSING_INCLUDE = /^.+?:\d+: Include file (.+) not found\r?$/gm;
 
-/** Comments and string literals are skipped; only the `include directives are captured. */
-const COMMENT_STRING_OR_INCLUDE = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|`include\s+"([^"\n]+)"|"(?:[^"\\\n]|\\.)*"/g;
+/**
+ * Comments and strings are skipped. A `define's body runs to the end of its line,
+ * continuations included, so an `include inside a macro body is not taken for one.
+ */
+const DIRECTIVE =
+  /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:[^"\\\n]|\\.)*"|`define\s+(\w+)(?:\\\r?\n|\\.|[^\\\n])*|`(ifdef|ifndef|elsif|undef)\s+(\w+)|`(else|endif)\b|`include\s+"([^"\n]+)"/g;
 
 /** Project files have plain names, so `./name` and `name` are the same file. */
 const SESSION_DIRECTORY_PREFIX = /^(?:\.\/)+/;
 
-/** Which headers each project file includes, by name. */
-type IncludeGraph = ReadonlyMap<string, readonly string[]>;
+/** How many file expansions are traced before giving up: far above any real project, low enough to stay instant. */
+const MAX_EXPANSIONS = 10_000;
+
+/** The DIRECTIVE groups these come from can only hold these words. */
+type NamedDirective = 'undef' | 'ifdef' | 'ifndef' | 'elsif';
+type BareDirective = 'else' | 'endif';
+
+type Directive =
+  | { readonly kind: 'define' | NamedDirective; readonly name: string }
+  | { readonly kind: BareDirective }
+  | { readonly kind: 'include'; readonly file: string };
 
 const projectFileName = (included: string): string => included.replace(SESSION_DIRECTORY_PREFIX, '');
 
-/** The project files a source includes, in source order, outside comments and strings. */
-export function includedNames(source: string): string[] {
-  return [...source.matchAll(COMMENT_STRING_OR_INCLUDE)]
-    .map(([, included]) => included)
-    .filter((included): included is string => included !== undefined)
-    .map(projectFileName);
+/** The preprocessor directives HDLBoard follows, in source order, outside comments and strings. */
+export function directivesOf(source: string): Directive[] {
+  const found: Directive[] = [];
+  for (const [, defined, conditional, name, bare, included] of source.matchAll(DIRECTIVE)) {
+    if (defined !== undefined) found.push({ kind: 'define', name: defined });
+    else if (conditional !== undefined && name !== undefined) found.push({ kind: conditional as NamedDirective, name });
+    else if (bare !== undefined) found.push({ kind: bare as BareDirective });
+    else if (included !== undefined) found.push({ kind: 'include', file: projectFileName(included) });
+  }
+  return found;
 }
 
-function includeGraph(files: readonly VhdlFileInput[]): IncludeGraph {
-  return new Map(files.map((file) => [file.name, includedNames(file.content)]));
+interface Branch {
+  readonly enclosingActive: boolean;
+  active: boolean;
+  taken: boolean;
 }
 
-/** The chain from the search's start to `end`, following each file back to the one that included it. */
-function chainEndingAt(end: string, includedBy: ReadonlyMap<string, string>): string[] {
-  const chain = [end];
-  for (let file = includedBy.get(end); file !== undefined; file = includedBy.get(file)) chain.unshift(file);
-  return chain;
+/** The `ifdef … `elsif … `else … `endif blocks open in one file, and whether its text is active. */
+class Conditionals {
+  private readonly open: Branch[] = [];
+
+  get active(): boolean {
+    return this.open.at(-1)?.active ?? true;
+  }
+
+  /** Applies a conditional directive and returns true; any other directive is left to the caller. */
+  track(directive: Directive, isDefined: (name: string) => boolean): boolean {
+    switch (directive.kind) {
+      case 'ifdef':
+        this.begin(isDefined(directive.name));
+        return true;
+      case 'ifndef':
+        this.begin(!isDefined(directive.name));
+        return true;
+      case 'elsif':
+        this.alternative(isDefined(directive.name));
+        return true;
+      case 'else':
+        this.alternative(true);
+        return true;
+      case 'endif':
+        this.open.pop();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private begin(condition: boolean): void {
+    const enclosingActive = this.active;
+    this.open.push({ enclosingActive, active: enclosingActive && condition, taken: condition });
+  }
+
+  /** `elsif` with its condition, `else` with `true`: active only if no earlier branch was. */
+  private alternative(condition: boolean): void {
+    const branch = this.open.at(-1);
+    if (branch === undefined) return;
+    branch.active = branch.enclosingActive && !branch.taken && condition;
+    branch.taken ||= condition;
+  }
+}
+
+/** A file being expanded, and the macros that were defined when it was opened. */
+interface Opened {
+  readonly file: string;
+  readonly macros: string;
 }
 
 /**
- * The shortest chain of includes that leads from `start` back to it, beginning and
- * ending with `start`; undefined when no chain does. Breadth first, so a header that
- * includes itself is found as `[start, start]`.
+ * Expands the sources as Icarus does, as far as includes go. Opening a file again is not
+ * yet a loop — its include guard may make it empty. It is one when the file is opened
+ * with the same macros defined as when it was opened further out: what a file expands to
+ * depends on nothing else, so from there the expansion repeats forever.
  */
-export function findIncludeCycle(graph: IncludeGraph, start: string): string[] | undefined {
-  const includedBy = new Map<string, string>();
-  const queue = [start];
-  for (const file of queue) {
-    for (const included of graph.get(file) ?? []) {
-      if (included === start) return [...chainEndingAt(file, includedBy), start];
-      if (includedBy.has(included) || !graph.has(included)) continue;
-      includedBy.set(included, file);
-      queue.push(included);
-    }
+class IncludeExpansion {
+  private readonly sources = new Map<string, string>();
+  private readonly directives = new Map<string, readonly Directive[]>();
+  private readonly defined: Set<string>;
+  /** Outermost first. */
+  private readonly expanding: Opened[] = [];
+  private expansionsLeft = MAX_EXPANSIONS;
+
+  constructor({ files, predefined }: IncludeContext) {
+    for (const file of files) this.sources.set(file.name, file.content);
+    this.defined = new Set(predefined);
   }
-  return undefined;
+
+  /** The loop as a chain that starts and ends with the same file, or undefined when there is none. */
+  loopIn(sources: readonly string[]): string[] | undefined {
+    for (const source of sources) {
+      const loop = this.expand(source);
+      if (loop !== undefined) return loop;
+    }
+    return undefined;
+  }
+
+  private expand(file: string): string[] | undefined {
+    const opened: Opened = { file, macros: [...this.defined].sort().join(' ') };
+    const repeated = this.expanding.findIndex(({ file: outer, macros }) => outer === file && macros === opened.macros);
+    if (repeated >= 0) return [...this.expanding.slice(repeated).map((outer) => outer.file), file];
+    const directives = this.directivesIn(file);
+    if (directives === undefined || this.expansionsLeft-- <= 0) return undefined;
+    this.expanding.push(opened);
+    const loop = this.follow(directives);
+    this.expanding.pop();
+    return loop;
+  }
+
+  private directivesIn(file: string): readonly Directive[] | undefined {
+    const source = this.sources.get(file);
+    if (source === undefined) return undefined;
+    const known = this.directives.get(file) ?? directivesOf(source);
+    this.directives.set(file, known);
+    return known;
+  }
+
+  private follow(directives: readonly Directive[]): string[] | undefined {
+    const conditionals = new Conditionals();
+    const isDefined = (name: string): boolean => this.defined.has(name);
+    for (const directive of directives) {
+      if (conditionals.track(directive, isDefined) || !conditionals.active) continue;
+      const loop = this.apply(directive);
+      if (loop !== undefined) return loop;
+    }
+    return undefined;
+  }
+
+  private apply(directive: Directive): string[] | undefined {
+    if (directive.kind === 'define') this.defined.add(directive.name);
+    if (directive.kind === 'undef') this.defined.delete(directive.name);
+    return directive.kind === 'include' ? this.expand(directive.file) : undefined;
+  }
 }
 
-function cycleNote(header: string, cycle: readonly string[]): string {
+/** The include loop Icarus expands for these sources, or undefined when it expands none. */
+export function findActiveIncludeLoop(context: IncludeContext): string[] | undefined {
+  return new IncludeExpansion(context).loopIn(context.sources);
+}
+
+/** The same loop told from `header`, when it is on it: `[b, a, b]` told from `a` is `[a, b, a]`. */
+function startingAt(header: string, loop: readonly string[]): readonly string[] {
+  const files = loop.slice(0, -1);
+  const at = files.indexOf(header);
+  if (at < 0) return loop;
+  const rotated = [...files.slice(at), ...files.slice(0, at)];
+  return [...rotated, header];
+}
+
+function cycleNote(header: string, loop: readonly string[]): string {
   return (
-    `${header} exists, but its includes form a loop: ${cycle.join(' → ')}. ` +
+    `${header} exists, but its includes form a loop: ${startingAt(header, loop).join(' → ')}. ` +
     'Icarus opens the headers again on every pass until it runs out of files, then reports one as not found. ' +
     'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.'
   );
 }
 
-/** The first header Icarus reported as not found that is on a loop, with that loop. */
-function firstLoopReported(compilerText: string, graph: IncludeGraph): { header: string; cycle: string[] } | undefined {
-  for (const [, reported = ''] of compilerText.matchAll(MISSING_INCLUDE)) {
-    const header = projectFileName(reported);
-    const cycle = findIncludeCycle(graph, header);
-    if (cycle !== undefined) return { header, cycle };
-  }
-  return undefined;
+/** The first header Icarus reported as not found that the project holds. */
+function existingHeaderReported(compilerText: string, files: readonly VhdlFileInput[]): string | undefined {
+  const names = new Set(files.map((file) => file.name));
+  return [...compilerText.matchAll(MISSING_INCLUDE)]
+    .map(([, reported = '']) => projectFileName(reported))
+    .find((header) => names.has(header));
 }
 
 /**
  * The compiler's text, followed by the include loop when Icarus reports a header of the
- * project as missing and that header is on one; otherwise the text unchanged.
+ * project as missing and the sources it compiled loop; otherwise the text unchanged.
  */
-export function explainMissingInclude(compilerText: string, files: readonly VhdlFileInput[]): string {
-  const loop = firstLoopReported(compilerText, includeGraph(files));
-  return loop === undefined ? compilerText : `${compilerText}\n\n${cycleNote(loop.header, loop.cycle)}`;
+export function explainMissingInclude(compilerText: string, context: IncludeContext): string {
+  const header = existingHeaderReported(compilerText, context.files);
+  if (header === undefined) return compilerText;
+  const loop = findActiveIncludeLoop(context);
+  return loop === undefined ? compilerText : `${compilerText}\n\n${cycleNote(header, loop)}`;
 }

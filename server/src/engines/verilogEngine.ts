@@ -217,7 +217,10 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   const optionFlags = iverilogFlags(compilerOptions.iverilog);
   const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
-  if (!ports.ok) return failure(ports.failure.stage, explainMissingInclude(ports.failure.text, files));
+  if (!ports.ok) {
+    const includes = { files, sources, predefined: Object.keys(compilerOptions.iverilog.defines) };
+    return failure(ports.failure.stage, explainMissingInclude(ports.failure.text, includes));
+  }
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);
   return prepareBatch(build, ports.ports, wave === undefined ? undefined : planWave(compiledFiles(files, checked.sources, sources)));
 }
