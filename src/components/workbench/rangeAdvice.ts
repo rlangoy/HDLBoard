@@ -367,7 +367,13 @@ const ARITHMETIC = /[-+*/]|\*\*/;
 const integerOverflow: CheckRule = (check) => {
   const assignment = check.message === OVERFLOW ? assignmentOn(check.text) : undefined;
   if (assignment === undefined || !ARITHMETIC.test(codeShape(assignment.value.text))) return undefined;
-  return { headline: rangeText.integerOverflow(assignment.value.text), span: spanOf(assignment.value) };
+  const value = assignment.value.text;
+  const headline = {
+    up: rangeText.integerAbove,
+    down: rangeText.integerBelow,
+    unknown: rangeText.integerOutside,
+  }[stepOf(value, assignment.targetName, check) ?? 'unknown'](value);
+  return { headline, span: spanOf(assignment.value) };
 };
 
 const anyBound: CheckRule = () => ({ headline: rangeText.anyBound() });

@@ -76,8 +76,10 @@ Three pure modules read what advice needs from the source, by pattern, and give 
   file's constants (`staticInteger.ts`). A generic's default counts as its value only
   when no `generic map` in the project could set it (the board testbench sets none).
   A slice that moves keeps its length when its ends differ by a constant
-  (`i downto i - 3` has 4 bits): each changing name gets its own value and is then
-  moved alone, so `i downto j` and `2 * i downto i` get no length. The nearest declaration above a line wins.
+  (`i downto i - 3` has 4 bits). That is proved by algebra, not by trying values:
+  the same parser reads the ends as linear forms in the changing names (sums,
+  differences, multiples by constants), and the length counts only when every name
+  cancels. `i downto j`, `2 * i downto i` and `i / 1024 + 3 downto 0` get none. The nearest declaration above a line wins.
 - **`vhdlExpression.ts`**: the assignment on a line (a label or a case choice in front
   is skipped), its `name(…)` parts, and how many bits a value has (`a & b`, `u + 1`,
   `x"AB"`, `to_unsigned(5, 8)`, `a(5 downto 2)`), only when certain.
@@ -86,7 +88,9 @@ Three pure modules read what advice needs from the source, by pattern, and give 
   that are both known and differ, a slice,
   a vector whose value's width is unknown, a number's range, an overflow, and last a
   general direction. A number "went above" or "below" its range only when the amount
-  added or subtracted is known and positive: `count + delta` may go either way.
+  added or subtracted is known and positive: `count + delta` may go either way. The
+  same holds for an `integer` overflow: `i + 1` went above 2147483647, `i - 1` below
+  -2147483648, and `i * 2` is only said to be outside what an `integer` can hold.
   GHDL evaluates a slice before it compares widths, so a width mismatch is given
   alone only when every slice on the line is certainly inside its vector; a slice
   that certainly failed is given instead, and one that may have left its vector is

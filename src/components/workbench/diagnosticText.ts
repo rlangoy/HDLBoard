@@ -180,8 +180,13 @@ export const rangeText = {
     `${code(value)} went below 0, but ${code(target)} is ${typeWithArticle(type)} and cannot be negative — check it before you subtract.`,
   numberOutside: (value: string, target: string, range: string): string =>
     `${code(value)} gave ${code(target)} a value outside its range ${range} — keep the value within the range, or make the range wider.`,
-  integerOverflow: (value: string): string =>
-    `${code(value)} is too large for an ${code('integer')}, which goes up to 2147483647 — keep the number smaller, or use ${code('unsigned')} for wide values.`,
+  integerAbove: (value: string): string =>
+    `${code(value)} went above 2147483647, the largest ${code('integer')} — keep the number smaller, or use ${code('unsigned')} for wider values.`,
+  integerBelow: (value: string): string =>
+    `${code(value)} went below -2147483648, the smallest ${code('integer')} — keep the number larger, or use ${code('signed')} for wider values.`,
+  /** The direction is not known: `i * 2` overflows at either end when `i` may be negative. */
+  integerOutside: (value: string): string =>
+    `${code(value)} is outside what an ${code('integer')} can hold (-2147483648 to 2147483647) — keep the numbers smaller, or use ${code('signed')} or ${code('unsigned')} for wider values.`,
   initialOutside: (value: string, name: string, range: string): string =>
     `The start value ${code(value)} is outside the range of ${code(name)} (${range}).`,
   initialLength: (value: string, valueBits: number, name: string, bits: number, range: string): string =>

@@ -134,7 +134,7 @@ const EXPECTED: Readonly<Record<string, Outcome | undefined>> = {
   },
   integer_32_bits: {
     line: 15,
-    headline: "`i * 2` is too large for an `integer`, which goes up to 2147483647 — keep the number smaller, or use `unsigned` for wide values.",
+    headline: "`i * 2` is outside what an `integer` can hold (-2147483648 to 2147483647) — keep the numbers smaller, or use `signed` or `unsigned` for wider values.",
     underlined: "i * 2",
   },
   concatenation_length: {

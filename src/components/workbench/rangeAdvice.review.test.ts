@@ -48,6 +48,23 @@ describe('the direction of a range error', () => {
   });
 });
 
+describe('an integer overflow', () => {
+  const overflow = (statement: string) =>
+    headline([`  variable i : integer;\nbegin\n  ${statement}`], 3, 'overflow detected');
+
+  test('adding a positive number goes above the largest integer', () => {
+    expect(overflow('i := i + 1;')).toMatch(/^`i \+ 1` went above 2147483647/);
+  });
+
+  test('subtracting a positive number goes below the smallest integer', () => {
+    expect(overflow('i := i - 1;')).toMatch(/^`i - 1` went below -2147483648/);
+  });
+
+  test('a product of unknown sign names neither end', () => {
+    expect(overflow('i := i * 2;')).toMatch(/^`i \* 2` is outside what an `integer` can hold \(-2147483648 to 2147483647\)/);
+  });
+});
+
 const SLICE_IN_CONCATENATION = [
   '  signal a : std_logic_vector(7 downto 0);',
   "  signal b : std_logic;",
@@ -89,6 +106,11 @@ const TWO_INDEXES = [
 describe('a slice whose ends move', () => {
   test('two independent ends give no width: i downto j may have any length', () => {
     expect(headline([TWO_INDEXES], 5)).toMatch(/^The slice `a\(i downto j\)` must stay inside `a` \(7 downto 0\) and have 4 bits, like `y`/);
+  });
+
+  test('a division of a changing name gives no width: i / 1024 + 3 downto 0 grows with i', () => {
+    const divided = TWO_INDEXES.replace('  y <= a(7 downto 3);', '  y <= a(i / 1024 + 3 downto 0);');
+    expect(headline([divided], 7)).toMatch(/^The slice `a\(i \/ 1024 \+ 3 downto 0\)` must stay inside/);
   });
 
   test('ends that move together but not by the same amount give no width', () => {
