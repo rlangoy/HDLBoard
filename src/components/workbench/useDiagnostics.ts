@@ -3,7 +3,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { adviseDiagnostics, adviseLogDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
-import { parseDiagnostics } from './diagnostics';
+import { DiagnosticParser, parseDiagnostics, type Diagnostic } from './diagnostics';
 import { locateDiagnostics, locateLink, type LocatedDiagnostic, type RunSnapshot } from './diagnosticLocation';
 import { addToFiles, NO_DIAGNOSTICS, withoutFile, type DiagnosticsByFile } from './diagnosticStore';
 
@@ -13,13 +13,14 @@ export interface DiagnosticsApi {
   startRun(snapshot: RunSnapshot): void;
   /**
    * Parses simulator text (a LOG line), keeps what locates, and returns it. Only
-   * Icarus's implicit-wire warning gets advice here: the other LOG lines are the
-   * simulation's own output.
+   * Icarus's implicit-wire warning and GHDL's failed range checks get advice here:
+   * the other LOG lines are the simulation's own output. A GHDL error whose place
+   * comes on a later line is carried over to it.
    */
   record(text: string, currentFiles: RunSnapshot['files']): readonly AdvisedDiagnostic[];
   /**
    * The same for the body of an ERROR frame — compiler output — plus the advice of
-   * docs/editor_diagnostics_improvement_plan.md. Runtime LOG lines get none (§ 4.12).
+   * docs/editor_diagnostics_improvement_plan.md, and of rangeAdvice.ts for a run that dies.
    */
   recordError(text: string, currentFiles: RunSnapshot['files']): readonly AdvisedDiagnostic[];
   dismissFile(fileId: string): void;
@@ -52,9 +53,11 @@ function guarded<T>(work: () => readonly T[]): readonly T[] {
 export function useDiagnostics(): DiagnosticsApi {
   const [byFile, setByFile] = useState<DiagnosticsByFile>(NO_DIAGNOSTICS);
   const snapshotRef = useRef<RunSnapshot>(NO_RUN);
+  const logParserRef = useRef(new DiagnosticParser());
 
   const startRun = useCallback((snapshot: RunSnapshot) => {
     snapshotRef.current = snapshot;
+    logParserRef.current = new DiagnosticParser();
     setByFile(NO_DIAGNOSTICS);
   }, []);
 
@@ -64,20 +67,20 @@ export function useDiagnostics(): DiagnosticsApi {
   }, []);
 
   const locate = useCallback(
-    (text: string, currentFiles: RunSnapshot['files']) =>
-      locateDiagnostics(parseDiagnostics(text), snapshotRef.current, currentFiles),
+    (parsed: readonly Diagnostic[], currentFiles: RunSnapshot['files']) =>
+      locateDiagnostics(parsed, snapshotRef.current, currentFiles),
     [],
   );
 
   const record = useCallback(
     (text: string, currentFiles: RunSnapshot['files']) =>
-      guarded(() => keep(adviseLogDiagnostics(locate(text, currentFiles), snapshotRef.current))),
+      guarded(() => keep(adviseLogDiagnostics(locate(logParserRef.current.parse(text), currentFiles), snapshotRef.current))),
     [keep, locate],
   );
 
   const recordError = useCallback(
     (text: string, currentFiles: RunSnapshot['files']) =>
-      guarded(() => keep(adviseDiagnostics(locate(text, currentFiles), snapshotRef.current))),
+      guarded(() => keep(adviseDiagnostics(locate(parseDiagnostics(text), currentFiles), snapshotRef.current))),
     [keep, locate],
   );
 

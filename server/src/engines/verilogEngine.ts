@@ -16,7 +16,8 @@ import type { ErrorStage, VhdlFileInput } from '../protocol.js';
 import { standaloneHint, versionWarning } from '../verilog/diagnostics.js';
 import { SIMULATION_FILE_NAME, TESTBENCH_FILE_NAME, TIMESCALE_FILE_NAME, TIMESCALE_SOURCE, validateSourceName } from '../verilog/fileNames.js';
 import { boardPortSpellings, chooseTopModule, isBoardDesign, moduleNames, type Port } from '../verilog/ports.js';
-import { iverilogFlags } from '../verilog/optionFlags.js';
+import { describeIncludeLoop, explainMissingInclude, findIncludeLoop } from '../verilog/includeCycles.js';
+import { iverilogFlags, predefinedMacros } from '../verilog/optionFlags.js';
 import { compileVerilog, readBanner, readTopPorts, type CompileRequest } from '../verilog/process.js';
 import { startVerilogBatchRun, startVerilogBoardRun } from '../verilog/run.js';
 import { buildBoardTestbench, TESTBENCH_MODULE_NAME } from '../verilog/testbench.js';
@@ -212,11 +213,14 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   const tools = getToolPaths();
   const sameNamed = sameNamedElsewhere(files, checked);
   const sources = checked.sources.filter((name) => !sameNamed.otherFiles.includes(name));
-  const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
+  // A certain loop is reported before Icarus runs: Icarus only stops when it runs out of files.
+  const includeLoop = findIncludeLoop({ files, sources, predefined: predefinedMacros(compilerOptions.iverilog) });
+  if (includeLoop !== undefined) return failure('analyze', describeIncludeLoop(includeLoop));
+  const notes =[...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
   const optionFlags = iverilogFlags(compilerOptions.iverilog);
   const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
-  if (!ports.ok) return failure(ports.failure.stage, ports.failure.text);
+  if (!ports.ok) return failure(ports.failure.stage, explainMissingInclude(ports.failure.text, files));
   if (isBoardDesign(ports.ports, board)) return prepareBoard(build, ports.ports);
   return prepareBatch(build, ports.ports, wave === undefined ? undefined : planWave(compiledFiles(files, checked.sources, sources)));
 }

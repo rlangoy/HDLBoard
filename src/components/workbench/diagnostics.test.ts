@@ -51,8 +51,33 @@ describe('recognizeLine', () => {
       'C:\\Program Files\\HDLBoard\\resources\\ghdl\\bin\\ghdl.exe:error: index (5) out of bounds (0 to 3) at bound.vhdl:9',
       diagnostic('bound.vhdl', 9, 'error', 'index (5) out of bounds (0 to 3)'),
     ],
-    ['P-10', 'ghdl:error: simulation failed', NONE],
-    ['P-11', '/usr/bin/ghdl-mcode:error: cannot find entity or configuration nosuch', NONE],
+    ['P-10', 'ghdl:error: simulation failed', DECLINED],
+    [
+      'P-11',
+      '/usr/bin/ghdl-mcode:error: cannot find entity or configuration nosuch',
+      { kind: 'unplaced', message: 'cannot find entity or configuration nosuch' },
+    ],
+    [
+      'P-38',
+      '  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:14',
+      { kind: 'callSite', fileName: 'slice_bounds.vhd', line: 14 },
+    ],
+    ['P-39', '  from: [unknown caller]', NONE],
+    [
+      'P-40',
+      '  from: process work.slice_bounds(test).P0 at my design.vhd:14',
+      { kind: 'callSite', fileName: 'my design.vhd', line: 14 },
+    ],
+    [
+      'P-41',
+      '  from: process work.t(a).P0 at look at me.vhd:3',
+      { kind: 'callSite', fileName: 'look at me.vhd', line: 3 },
+    ],
+    [
+      'P-42',
+      'ghdl:error: bound check failure at look at me.vhd:11',
+      diagnostic('look at me.vhd', 11, 'error', 'bound check failure'),
+    ],
     ['P-12', 'syntax.v:6: syntax error', diagnostic('syntax.v', 6, 'error', 'syntax error', { details: [ICARUS_SYNTAX_HINT] })],
     [
       'P-13',
@@ -133,6 +158,10 @@ describe('parseDiagnostics', () => {
     expect(parseDiagnostics(fixture.ICARUS_REGASSIGN).map((d) => d.details)).toEqual([['LEDR is declared here as wire.']]);
   });
 
+  test('T-5b: the backend\'s include-loop explanation becomes a detail of the "not found" error', () => {
+    expect(parseDiagnostics(fixture.ICARUS_INCLUDE_LOOP).map((d) => d.details)).toEqual([[fixture.INCLUDE_LOOP_NOTE]]);
+  });
+
   test('T-6: undeclared.v gives five diagnostics', () => {
     expect(parseDiagnostics(fixture.ICARUS_UNDECLARED)).toHaveLength(5);
   });
@@ -179,5 +208,19 @@ describe('parseDiagnostics', () => {
 
   test('T-16: a continuation after a declined note is kept on its own', () => {
     expect(parseDiagnostics('a.vhdl:2:1:note: n\na.vhdl:2:1:error: (x)').map((d) => d.message)).toEqual(['(x)']);
+  });
+
+  test('T-17: a run error without a place takes the first frame of its backtrace', () => {
+    expect(parseDiagnostics(fixture.GHDL_RUNTIME_OVERFLOW)).toEqual([
+      { fileName: 'slice_bounds.vhd', line: 14, severity: 'error', message: 'overflow detected', details: [] },
+    ]);
+  });
+
+  test('T-18: a run error with no backtrace stays unplaced', () => {
+    expect(parseDiagnostics(fixture.GHDL_RUNTIME_DIVISION)).toEqual([]);
+  });
+
+  test('T-19: a backtrace frame without an unplaced error before it adds nothing', () => {
+    expect(parseDiagnostics('  from: process work.t(a).P0 at t.vhd:3')).toEqual([]);
   });
 });

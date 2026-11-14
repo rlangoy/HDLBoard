@@ -77,6 +77,22 @@ export const GHDL_RUNTIME_BOUND = join([
   'ghdl:error: simulation failed',
 ]);
 
+/**
+ * GHDL 6.0.0, `ghdl -r --std=08 slice_bounds`: a slice past the top of its vector.
+ * The error names no place; the first frame of the backtrace is the failing line.
+ */
+export const GHDL_RUNTIME_OVERFLOW = join([
+  'ghdl:error: overflow detected',
+  '  instance: /slice_bounds/P0',
+  '  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:14',
+  '  from: [unknown caller]',
+  '  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:12',
+  'ghdl:error: simulation failed',
+]);
+
+/** GHDL 6.0.0, `ghdl -r --std=08` of a division by zero: no place at all. */
+export const GHDL_RUNTIME_DIVISION = join(['ghdl:error: division by 0', 'ghdl:error: simulation failed']);
+
 // ------------------------------------------------------------------- A.4 wrapper
 
 /** GHDL 4.1.0, the generated `hdl_board_tb.vhdl` failing to fit the entity (A.4). */
@@ -136,6 +152,21 @@ export const ICARUS_MISSING_INCLUDE = join([
   'error: Unable to find the root module "miss" in the Verilog source.',
   "     : Perhaps ``-s miss'' is incorrect?",
   '1 error(s) during elaboration.',
+]);
+
+/**
+ * Icarus Verilog 13.0 on a loop between two headers whose names hold spaces, through an
+ * include HDLBoard cannot trace, with the backend's hint below it (server/src/verilog/includeCycles.ts).
+ */
+export const INCLUDE_LOOP_NOTE =
+  'cycle b.vh exists, but Icarus could not open it. That most likely means the includes form a loop ' +
+  'and Icarus ran out of files. ' +
+  'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.';
+export const ICARUS_INCLUDE_LOOP = join([
+  './cycle a.vh:3: Include file cycle b.vh not found',
+  'Preprocessor failed with 1 errors.',
+  '',
+  INCLUDE_LOOP_NOTE,
 ]);
 
 /** Icarus Verilog 12.0, `iverilog -Wall … warn.v` (A.5): a compile that succeeds. */
