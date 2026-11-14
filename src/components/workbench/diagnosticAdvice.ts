@@ -36,7 +36,7 @@ import { adviseRangeCheck, isRangeCheck } from './rangeAdvice';
 import { adviseTypeError, type PortLookup } from './typeAdvice';
 import { splitLines } from './textLines';
 import { addUseClause, clashingPackageInUse } from './useClauseFix';
-import { lengthOf, VhdlDeclarations } from './vhdlDeclarations';
+import { GenericsSetByInstances, lengthOf, VhdlDeclarations } from './vhdlDeclarations';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import { packageDeclaring, type VhdlPackage } from './vhdlPackages';
 import {
@@ -287,6 +287,11 @@ interface Place {
   readonly anchor: number;
 }
 
+/** The generics an instance anywhere in the run sets: their defaults are not their values. */
+function genericsSetIn(snapshot: RunSnapshot): GenericsSetByInstances {
+  return new GenericsSetByInstances(snapshot.files.map((file) => file.content));
+}
+
 function projectOf(
   located: readonly LocatedDiagnostic[],
   snapshot: RunSnapshot,
@@ -295,12 +300,13 @@ function projectOf(
   own: OwnMistakes,
 ): Project {
   const files = new Map<string, SourceFile>();
+  const genericsSet = genericsSetIn(snapshot);
   for (const file of snapshot.files) {
     const errorLines = located.filter((d) => d.fileId === file.id && isAdvisable(d) && !muted.has(d));
     const lines = splitLines(file.content);
     files.set(file.id, {
       lines,
-      declarations: new VhdlDeclarations(lines),
+      declarations: new VhdlDeclarations(lines, genericsSet),
       declared: declaredNames(file.content),
       errorLines: new Set(errorLines.map((d) => d.line)),
     });
@@ -874,12 +880,13 @@ type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) =>
  * a frame), and only those get advice — never the design's own reports.
  */
 const adviseGhdlRunChecks: Advisor = (located, snapshot) => {
+  const genericsSet = genericsSetIn(snapshot);
   const contents = new Map(snapshot.files.map((file) => [file.id, file.content]));
   return located.map((diagnostic) => {
     const content = contents.get(diagnostic.fileId);
     if (content === undefined || !isFailedRunCheck(diagnostic)) return diagnostic;
     const lines = splitLines(content);
-    return withAdvice(diagnostic, adviseRangeCheck(diagnostic.message, diagnostic.line, { lines, declarations: new VhdlDeclarations(lines) }));
+    return withAdvice(diagnostic, adviseRangeCheck(diagnostic.message, diagnostic.line, { lines, declarations: new VhdlDeclarations(lines, genericsSet) }));
   });
 };
 

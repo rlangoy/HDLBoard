@@ -200,10 +200,14 @@ function changingNames(text: string, check: FailedCheck): string[] {
   return namesIn(text).filter(changes);
 }
 
-/** How many bits the assignment's target needs, when the slice is on the other side of it. */
+/**
+ * How many bits the assignment's target needs, when the slice is its whole value:
+ * a slice that is only part of the value (`a(i downto i - 3) & b`) need not have them.
+ */
 function bitsWanted(part: NamedPart, check: FailedCheck): { readonly bits?: number; readonly target?: string } {
   const assignment = assignmentOn(check.text);
-  if (assignment === undefined || assignment.target.start === part.whole.start) return {};
+  const isWholeValue = assignment?.value.start === part.whole.start && assignment.value.end === part.whole.end;
+  if (assignment === undefined || !isWholeValue) return {};
   return { bits: widthOf(assignment.target.text, check.line, check.declarations), target: assignment.target.text };
 }
 
@@ -260,32 +264,61 @@ function vectorTargetRange(assignment: Assignment, check: FailedCheck): string |
   return vectorRange(check, assignment.targetName)?.text;
 }
 
-const vectorLength: CheckRule = (check) => {
+/** An assignment to a vector, with the bits its target has and its value has (when known). */
+interface VectorAssignment {
+  readonly assignment: Assignment;
+  readonly range: string;
+  readonly targetBits: number;
+  readonly valueBits?: number;
+}
+
+function vectorAssignmentOn(check: FailedCheck): VectorAssignment | undefined {
   const assignment = assignmentOn(check.text);
   const range = assignment && vectorTargetRange(assignment, check);
   const targetBits = assignment && widthOf(assignment.target.text, check.line, check.declarations);
   if (assignment === undefined || range === undefined || targetBits === undefined) return undefined;
-  const valueBits = widthOf(assignment.value.text, check.line, check.declarations);
-  if (valueBits === targetBits) return undefined;
+  return { assignment, range, targetBits, valueBits: widthOf(assignment.value.text, check.line, check.declarations) };
+}
+
+function lengthAdvice({ assignment }: VectorAssignment, check: FailedCheck, headline: string): Advice {
   const hint = declarationHint(check.declarations.objectAt(assignment.targetName, check.line), check);
-  const span = spanOf(assignment.value);
-  if (valueBits === undefined) return { headline: rangeText.lengthUnknown(assignment.target.text, targetBits, range), span, ...hint };
+  return { headline, span: spanOf(assignment.value), ...hint };
+}
+
+/** Both widths are known and differ: certain, so it is tried before any slice is suspected. */
+const knownLengthMismatch: CheckRule = (check) => {
+  const vector = vectorAssignmentOn(check);
+  if (vector?.valueBits === undefined || vector.valueBits === vector.targetBits) return undefined;
+  const { assignment, targetBits, valueBits } = vector;
   const fitting = fittingStatement(assignment, targetBits, valueBits, check);
-  return { headline: rangeText.lengthMismatch(assignment.target.text, targetBits, assignment.value.text, valueBits, fitting), span, ...hint };
+  return lengthAdvice(vector, check, rangeText.lengthMismatch(assignment.target.text, targetBits, assignment.value.text, valueBits, fitting));
+};
+
+/** The value's width is not known: the target's is, and the student can count. */
+const unknownValueLength: CheckRule = (check) => {
+  const vector = vectorAssignmentOn(check);
+  if (vector === undefined || vector.valueBits !== undefined) return undefined;
+  return lengthAdvice(vector, check, rangeText.lengthUnknown(vector.assignment.target.text, vector.targetBits, vector.range));
 };
 
 // ------------------------------------------------------------ numbers
 
-/** `count + 1` steps `count` up, `count - 1` down. */
-function stepOf(value: string, target: string): 'up' | 'down' | undefined {
-  const operator = new RegExp(`^${target}\\s*(?<operator>[+-])`, 'i').exec(withoutOuterParentheses(value))?.groups?.operator;
-  if (operator === undefined) return undefined;
-  return operator === '+' ? 'up' : 'down';
+/**
+ * `count + 1` steps `count` up and `count - STEP` down, when the number added or
+ * subtracted is known and positive. `count + delta` says nothing: `delta` may be
+ * negative, and then the value left the range at the other end.
+ */
+function stepOf(value: string, target: string, check: FailedCheck): 'up' | 'down' | undefined {
+  const step = new RegExp(`^${target}\\s*(?<operator>[+-])(?<amount>.+)$`, 'is').exec(withoutOuterParentheses(value))?.groups;
+  const amount = step && check.declarations.valueOf(step.amount, check.line);
+  if (step === undefined || amount === undefined || amount <= 0) return undefined;
+  return step.operator === '+' ? 'up' : 'down';
 }
 
-function numberHeadline(value: string, target: string, range: DeclaredRange, typeName: string): string {
+function numberHeadline(value: string, target: string, type: { readonly range: DeclaredRange; readonly name: string }, check: FailedCheck): string {
+  const { range, name: typeName } = type;
   const bounds = boundsOf(range);
-  const step = stepOf(value, target);
+  const step = stepOf(value, target, check);
   if (bounds === undefined) return rangeText.numberOutside(value, target, range.text);
   const { low, high } = bounds;
   if (step === 'up' && high !== INTEGER_HIGH) return rangeText.numberAbove(value, target, low, high);
@@ -299,7 +332,7 @@ const numberOutOfRange: CheckRule = (check) => {
   if (assignment === undefined || assignment.target.text !== assignment.targetName) return undefined;
   const type = check.declarations.typeAt(assignment.targetName, check.line);
   if (type?.kind !== 'number' || type.range === undefined) return undefined;
-  const headline = numberHeadline(assignment.value.text, assignment.targetName, type.range, type.name);
+  const headline = numberHeadline(assignment.value.text, assignment.targetName, { range: type.range, name: type.name }, check);
   const hint = declarationHint(check.declarations.objectAt(assignment.targetName, check.line), check);
   return { headline, span: spanOf(assignment.value), ...hint };
 };
@@ -348,9 +381,12 @@ const initialLength: CheckRule = (check) => {
 /** Each kind of message and its rules, tried in order; the first advice wins. */
 const RULES_BY_MESSAGE: readonly (readonly [RegExp, readonly CheckRule[]])[] = [
   [INDEX_OUT_OF_BOUNDS, [indexOutOfBounds]],
-  [BOUND_CHECK, [returnOutOfRange, enumerationStep, sliceOutOfRange, vectorLength, numberOutOfRange, integerOverflow, anyBound]],
+  [
+    BOUND_CHECK,
+    [returnOutOfRange, enumerationStep, knownLengthMismatch, sliceOutOfRange, unknownValueLength, numberOutOfRange, integerOverflow, anyBound],
+  ],
   [INITIAL_OUT_OF_RANGE, [initialOutOfRange, numberOutOfRange]],
-  [STRING_LENGTH, [initialLength, vectorLength]],
+  [STRING_LENGTH, [initialLength, knownLengthMismatch, unknownValueLength]],
   [SLICE_DIRECTION, [sliceOutOfRange]],
 ];
 

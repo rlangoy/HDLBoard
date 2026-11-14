@@ -14,12 +14,16 @@ import { tokenizeVhdlLine } from './vhdlHighlight';
 
 export type Direction = 'to' | 'downto';
 
-/** A range as written (`3 downto 0`), with its ends when they are static numbers. */
+/**
+ * A range as written (`3 downto 0`), with its ends when they are static numbers,
+ * else its length when that does not change with them (`i downto i - 3` has 4).
+ */
 export interface DeclaredRange {
   readonly text: string;
   readonly direction: Direction;
   readonly left?: number;
   readonly right?: number;
+  readonly length?: number;
 }
 
 /** What advice needs to know of a type; `name` is as the student wrote it. */
@@ -50,12 +54,58 @@ export function boundsOf(range: DeclaredRange | undefined): { readonly low: numb
   return { low: Math.min(range.left, range.right), high: Math.max(range.left, range.right) };
 }
 
-/** How many elements a range has: `3 downto 0` has 4; a null range has 0. */
-export function lengthOf(range: DeclaredRange | undefined): number | undefined {
-  if (range?.left === undefined || range.right === undefined) return undefined;
-  const length = range.direction === 'downto' ? range.left - range.right + 1 : range.right - range.left + 1;
-  return Math.max(length, 0);
+/** How many elements `left` to `right` has in `direction`; a null range has 0. */
+function elementCount(direction: Direction, left: number, right: number): number {
+  return Math.max(direction === 'downto' ? left - right + 1 : right - left + 1, 0);
 }
+
+/** How many elements a range has: `3 downto 0` has 4, and so does `i downto i - 3`. */
+export function lengthOf(range: DeclaredRange | undefined): number | undefined {
+  if (range?.left === undefined || range.right === undefined) return range?.length;
+  return elementCount(range.direction, range.left, range.right);
+}
+
+/** Stands for every generic when a `generic map` sets generics by position. */
+const BY_POSITION = '';
+const GENERIC_MAP = /\bgeneric\s+map\s*\(/gi;
+const NAMED_ASSOCIATION = /^\s*(?<formal>\w+)\s*=>/;
+
+/**
+ * The generics some instance in the project sets (`generic map (WIDTH => 6)`):
+ * their defaults are not their values. A map by position may set any of them.
+ */
+export class GenericsSetByInstances {
+  private readonly names = new Set<string>();
+
+  constructor(contents: readonly string[]) {
+    for (const content of contents) {
+      const code = codeOf(content.split('\n'));
+      for (const match of code.matchAll(GENERIC_MAP)) this.read(code, match.index + match[0].length);
+    }
+  }
+
+  sets(generic: string): boolean {
+    return this.names.has(BY_POSITION) || this.names.has(generic.toLowerCase());
+  }
+
+  /** The associations of the map whose list starts at `open`, split at its top-level commas. */
+  private read(code: string, open: number): void {
+    let depth = 0;
+    let start = open;
+    for (let i = open; i < code.length && depth >= 0; i++) {
+      const char = code[i];
+      const ends = (char === ',' && depth === 0) || (char === ')' && depth === 0);
+      if (ends) {
+        this.names.add(NAMED_ASSOCIATION.exec(code.slice(start, i))?.groups?.formal.toLowerCase() ?? BY_POSITION);
+        start = i + 1;
+      }
+      if (char === '(') depth++;
+      else if (char === ')') depth--;
+    }
+  }
+}
+
+const NO_GENERICS_SET = new GenericsSetByInstances([]);
 
 const VECTOR_TYPES: ReadonlySet<string> = new Set([
   'std_logic_vector', 'std_ulogic_vector', 'bit_vector', 'unsigned', 'signed', 'string', 'boolean_vector', 'integer_vector',
@@ -95,6 +145,8 @@ type TypeDeclaration =
 const MAX_TYPE_DEPTH = 8;
 /** Constants defined by other constants are followed this deep, for the same reason. */
 const MAX_NESTING = 16;
+/** Two values to try for the names that change, far apart, for `constantDifference`. */
+const DIFFERENCE_PROBES: readonly [number, number] = [0, 1000];
 
 function collapse(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
@@ -153,8 +205,7 @@ function subtypeAndDefault(text: string): { readonly typeText: string; readonly 
   return assignment < 0 ? { typeText } : { typeText, initial: collapse(text.slice(assignment + 2)) };
 }
 
-/** Where each line starts in the text the lines make, joined with `
-`. */
+/** Where each line starts in the text the lines make, joined by newlines. */
 function lineStartsOf(lines: readonly string[]): number[] {
   const starts: number[] = [];
   let offset = 0;
@@ -174,7 +225,11 @@ export class VhdlDeclarations {
   /** How deep `valueOf` is in constants naming constants: `constant A : integer := A + 1` must end. */
   private nesting = 0;
 
-  constructor(lines: readonly string[]) {
+  /** `genericsSet`: generics whose default is not their value, because an instance sets them. */
+  constructor(
+    lines: readonly string[],
+    private readonly genericsSet: GenericsSetByInstances = NO_GENERICS_SET,
+  ) {
     this.code = codeOf(lines);
     this.lineStarts = lineStartsOf(lines);
     this.readObjects();
@@ -210,16 +265,41 @@ export class VhdlDeclarations {
 
   /** A static integer expression's value (`N - 1`), with the file's constants and generics. */
   valueOf(expression: string, line: number): number | undefined {
+    return this.evaluate(expression, line);
+  }
+
+  /**
+   * `expression`'s value with every name that changes (a signal, variable, port,
+   * parameter or loop variable) given `changing`; with none, only a static value.
+   */
+  private evaluate(expression: string, line: number, changing?: number): number | undefined {
     if (this.nesting > MAX_NESTING) return undefined;
     this.nesting++;
     try {
       return evaluateStatic(expression, {
-        constant: (name) => this.constantValue(name, line),
+        constant: (name) => this.constantValue(name, line) ?? (this.changes(name, line) ? changing : undefined),
         attribute: (name, attribute) => this.attributeValue(name, attribute, line),
       });
     } finally {
       this.nesting--;
     }
+  }
+
+  private changes(name: string, line: number): boolean {
+    const objectClass = this.objectAt(name, line)?.objectClass;
+    return objectClass !== undefined && objectClass !== 'constant' && objectClass !== 'generic';
+  }
+
+  /**
+   * `left - right` when it is the same whatever the changing names hold:
+   * `i - (i - 3)` is 3. Two guesses far apart agreeing is taken as proof: it is
+   * for sums and differences, which is how a slice that moves is written
+   * (`i downto i - 3`); `i*i downto 0` gives two different answers, so none.
+   */
+  private constantDifference(left: string, right: string, line: number): number | undefined {
+    const difference = `(${left}) - (${right})`;
+    const [first, second] = DIFFERENCE_PROBES.map((probe) => this.evaluate(difference, line, probe));
+    return first !== undefined && first === second ? first : undefined;
   }
 
   /** `3 downto 0`, `x'range`, `natural range 0 to 7`; undefined for `natural range <>`. */
@@ -230,7 +310,12 @@ export class VhdlDeclarations {
     const parts = RANGE_TEXT.exec(written)?.groups;
     if (parts === undefined) return undefined;
     const direction = parts.direction.toLowerCase() as Direction;
-    return { text: written, direction, left: this.valueOf(parts.left, line), right: this.valueOf(parts.right, line) };
+    const left = this.valueOf(parts.left, line);
+    const right = this.valueOf(parts.right, line);
+    if (left !== undefined && right !== undefined) return { text: written, direction, left, right };
+    const difference = this.constantDifference(parts.left, parts.right, line);
+    const length = difference === undefined ? undefined : elementCount(direction, difference, 0);
+    return { text: written, direction, left, right, length };
   }
 
   /** What a subtype indication (`std_logic_vector(7 downto 0)`, `digit_t`) stands for. */
@@ -288,10 +373,12 @@ export class VhdlDeclarations {
     return { text: `${name}'reverse_range`, direction, left: range.right, right: range.left };
   }
 
+  /** A constant's value, or a generic's default when no instance sets that generic. */
   private constantValue(name: string, line: number): number | undefined {
     const object = this.objectAt(name, line);
-    const isConstant = object?.objectClass === 'constant' || object?.objectClass === 'generic';
-    return isConstant && object.initial !== undefined ? this.valueOf(object.initial, object.line) : undefined;
+    const isGenericWithKnownValue = object?.objectClass === 'generic' && !this.genericsSet.sets(object.name);
+    const isConstant = object?.objectClass === 'constant' || isGenericWithKnownValue;
+    return isConstant && object?.initial !== undefined ? this.valueOf(object.initial, object.line) : undefined;
   }
 
   private attributeValue(name: string, attribute: string, line: number): number | undefined {

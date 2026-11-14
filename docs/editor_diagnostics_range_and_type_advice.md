@@ -73,13 +73,19 @@ Three pure modules read what advice needs from the source, by pattern, and give 
   parameter and loop variable with its type: a vector with its range, a number with
   its range, an enumeration with its literals, or a scalar. Subtypes, array types and
   `x'range` are followed; widths like `WIDTH - 1 downto 0` are evaluated with the
-  file's constants (`staticInteger.ts`). The nearest declaration above a line wins.
+  file's constants (`staticInteger.ts`). A generic's default counts as its value only
+  when no `generic map` in the project could set it (the board testbench sets none).
+  A slice that moves keeps its length when its ends differ by a constant
+  (`i downto i - 3` has 4 bits). The nearest declaration above a line wins.
 - **`vhdlExpression.ts`**: the assignment on a line (a label or a case choice in front
   is skipped), its `name(…)` parts, and how many bits a value has (`a & b`, `u + 1`,
   `x"AB"`, `to_unsigned(5, 8)`, `a(5 downto 2)`), only when certain.
 - **`rangeAdvice.ts`**: one list of rules per GHDL message, tried in order. For
-  `bound check failure`: a function's return value, `'succ`/`'pred`, a slice, two vector
-  lengths, a number's range, an overflow, and last a general direction. It points at the
+  `bound check failure`: a function's return value, `'succ`/`'pred`, two vector lengths
+  that are both known and differ (certain, so before any slice is suspected), a slice,
+  a vector whose value's width is unknown, a number's range, an overflow, and last a
+  general direction. A number "went above" or "below" its range only when the amount
+  added or subtracted is known and positive: `count + delta` may go either way. It points at the
   declaration that sets the limit (`relatedLine`, with the note *"value is declared here:
   integer range 0 to 3"*), or at the loop that runs too far.
 - **`typeAdvice.ts`**: the student's own type names and the conversion to write, from
