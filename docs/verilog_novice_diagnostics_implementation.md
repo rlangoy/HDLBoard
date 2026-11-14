@@ -34,11 +34,13 @@ Review corrections included limiting missing-closer advice to EOF/conflicting cl
 
 A second review against `temp/clean_code.md` removed the duplicated preprocessing check, converted the reported line to the tokens' 0-based numbering in one place, replaced a flag argument (`portAdjustment`) and a hidden dependency on the `module` capture group, split the module and member rules, and extracted the parser's note handling and the store's duplicate merge into small named functions. It also fixed an unclosed `if (` being read to the end of the line as its condition, which could suggest `==` for an ordinary assignment.
 
+A further correctness review narrowed the unbraced-`if` advice to an `if` that forms a whole `initial`/`always` body (inside a `begin` block the same lines are legal), stopped `wait fork;`/`disable fork;` from counting as a `fork` block, kept a design's own reports from being re-emitted by a note in a later frame, kept repeated notes as Icarus printed them, found instances placed after the end of a block, and skipped tokenizing the project for simulation output lines that locate nothing. The module lookup is now built only when a message needs it.
+
 ## Validation
 
 The checked-in `src/components/workbench/fixtures/verilog-novice.json` contains the 44 original sources and captured backend frames. Tests replay the actual parser, file locator, advisors, store and shared text formatter. Controls verify legal operators, comments/strings, runtime assertions, preprocessing, same-name instances in different modules, ambiguous declarations and streamed-note boundaries.
 
-- Final full frontend suite: **169 files, 3,258 tests passed**, including the runtime-report, console-link and prototype-name regressions.
+- Final full frontend suite: **169 files, 3,266 tests passed**, including the runtime-report, console-link and prototype-name regressions.
 - `npm run build`: passed. Vite reports the existing large-bundle advisory.
 - `npm run lint`: passed, including the new files under the clean-code rules.
 - **All 44 original examples ran through the actual HDLBoard UI in Chrome**, using the browser connection and the real local backend with bundled Icarus 13.0. No WebSocket responses were mocked. Editing cleared the previous markers in all 44 cases. The eight accepted-code controls remained unmarked.

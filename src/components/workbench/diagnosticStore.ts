@@ -142,13 +142,19 @@ function isSameMessage(a: MessageKey, b: MessageKey): boolean {
   return a.severity === b.severity && a.message === b.message;
 }
 
+/** True when `longer` starts with every detail of `shorter`, in order, and adds more. */
+function extendsDetails(shorter: readonly string[], longer: readonly string[]): boolean {
+  return longer.length > shorter.length && shorter.every((detail, i) => longer[i] === detail);
+}
+
 /**
- * A repeat of a stored message adds only its new details (an Icarus note that
- * arrived in a later frame); returns `stored` itself when nothing changed.
+ * The parser re-emits a message with the notes that arrived in later frames
+ * (Icarus); such a repeat replaces the stored details. Any other repeat
+ * changes nothing and returns `stored` itself.
  */
 function withDetailsOf(stored: LineMessage, repeat: LineMessage): LineMessage {
-  const details = [...new Set([...stored.details, ...repeat.details])].slice(0, MAX_DIAGNOSTIC_DETAILS);
-  if (details.length === stored.details.length) return stored;
+  if (!extendsDetails(stored.details, repeat.details)) return stored;
+  const details = repeat.details.slice(0, MAX_DIAGNOSTIC_DETAILS);
   return { ...stored, details, advice: repeat.advice ?? stored.advice };
 }
 

@@ -17,7 +17,6 @@ import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { adviceText, verilogAdviceText } from './diagnosticText';
 import { icarusMessageAdvice } from './icarusMessageAdvice';
 import { icarusSyntaxAdvice } from './icarusSyntaxAdvice';
-import { languageOfName } from './fileKinds';
 import { sourceTokens, type SourceToken } from './symbols/sourceTokens';
 import { VerilogModuleLookup } from './verilogModuleLookup';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
@@ -95,7 +94,8 @@ interface SourceFile {
 }
 
 interface Project {
-  readonly modules: VerilogModuleLookup;
+  /** Built on first use: only an unknown module, port or parameter needs it. */
+  readonly modules: () => VerilogModuleLookup;
   /** Every name declared anywhere in the project, lower case (Rule B's exclusions). */
   readonly declared: ReadonlySet<string>;
   /** Per file, the lines with an error that is not muted. */
@@ -224,7 +224,6 @@ function projectOf(
   located: readonly LocatedDiagnostic[],
   files: ReadonlyMap<string, SourceFile>,
   muted: ReadonlyMap<LocatedDiagnostic, number>,
-  snapshot: RunSnapshot,
 ): Project {
   const errorLines = new Map<string, ReadonlySet<number>>();
   for (const fileId of files.keys()) {
@@ -232,13 +231,17 @@ function projectOf(
     errorLines.set(fileId, new Set(shown.map((d) => d.line)));
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { declared: new Set(declared), errorLines, modules: moduleLookupOf(files, snapshot) };
+  return { declared: new Set(declared), errorLines, modules: lazy(() => moduleLookupOf(files)) };
 }
 
-/** Modules come from the project's Verilog files only; a VHDL file in a mixed project has none. */
-function moduleLookupOf(files: ReadonlyMap<string, SourceFile>, snapshot: RunSnapshot): VerilogModuleLookup {
-  const verilog = snapshot.files.filter((file) => languageOfName(file.name) === 'verilog');
-  return new VerilogModuleLookup(new Map(verilog.map((file) => [file.id, files.get(file.id)?.significant ?? []])));
+function lazy<T>(build: () => T): () => T {
+  let value: T | undefined;
+  return () => (value ??= build());
+}
+
+/** `files` holds only Verilog files: `byLanguage` hands this advisor a Verilog-only snapshot. */
+function moduleLookupOf(files: ReadonlyMap<string, SourceFile>): VerilogModuleLookup {
+  return new VerilogModuleLookup(new Map([...files].map(([id, file]) => [id, file.significant])));
 }
 
 // ------------------------------------------------------------ the rules
@@ -396,7 +399,7 @@ const UNKNOWN_PARAMETER = /^parameter `(?<name>[^`]+)` not found in `(?<instance
 const unknownModule: Rule = ({ diagnostic, tokens }, { modules }) => {
   const name = UNKNOWN_MODULE.exec(diagnostic.message)?.groups?.name;
   if (!name) return undefined;
-  return { headline: verilogAdviceText.unknownModule(name, modules.suggestModule(name)), span: spanOf(tokenNamed(tokens, name)) };
+  return { headline: verilogAdviceText.unknownModule(name, modules().suggestModule(name)), span: spanOf(tokenNamed(tokens, name)) };
 };
 
 const unknownMember: Rule = ({ diagnostic, tokens }, { modules }) => {
@@ -404,7 +407,7 @@ const unknownMember: Rule = ({ diagnostic, tokens }, { modules }) => {
   const member = port ?? UNKNOWN_PARAMETER.exec(diagnostic.message)?.groups;
   if (!member) return undefined;
   const kind = port ? 'port' : 'parameter';
-  const suggestion = modules.suggestMember({ fileId: diagnostic.fileId, line: diagnostic.line, instance: member.instance, kind, name: member.name });
+  const suggestion = modules().suggestMember({ fileId: diagnostic.fileId, line: diagnostic.line, instance: member.instance, kind, name: member.name });
   return {
     headline: verilogAdviceText.unknownMember(kind, member.name, member.instance, suggestion),
     span: spanOf(tokenNamed(tokens, member.name)),
@@ -495,9 +498,10 @@ function filesOf(snapshot: RunSnapshot): Map<string, SourceFile> {
  * unchanged.
  */
 export function adviseIcarusDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
+  if (located.length === 0) return [];
   const files = filesOf(snapshot);
   const muted = followOns(located, files);
-  const project = projectOf(located, files, muted, snapshot);
+  const project = projectOf(located, files, muted);
   return located.map((diagnostic) => {
     if (diagnostic.fromReport) return diagnostic;
     const file = files.get(diagnostic.fileId);
@@ -517,6 +521,8 @@ export function adviseIcarusDiagnostics(located: readonly LocatedDiagnostic[], s
  * get advice here; runtime assertions keep the student's own wording.
  */
 export function adviseIcarusLog(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
+  // Every simulation output line arrives here; most locate nothing and need no tokenizing.
+  if (located.length === 0) return [];
   const files = filesOf(snapshot);
   return located.map((diagnostic) => {
     if (diagnostic.fromReport) return diagnostic;

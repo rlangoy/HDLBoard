@@ -31,6 +31,8 @@ const CLOSERS: ReadonlyMap<string, string> = new Map([
   ['fork', 'join'], ['primitive', 'endprimitive'], ['table', 'endtable'], ['specify', 'endspecify'],
 ]);
 const CLOSING_WORDS: ReadonlySet<string> = new Set(CLOSERS.values());
+/** `wait fork;` and `disable fork;` are statements, not a `fork` block. */
+const NOT_A_BLOCK_AFTER: ReadonlySet<string> = new Set(['wait', 'disable']);
 const CASE_WORDS: ReadonlySet<string> = new Set(['case', 'casex', 'casez', 'endcase']);
 const NOT_ASSIGNMENT_BEFORE_EQUALS: ReadonlySet<string> = new Set(['=', '!', '<', '>']);
 
@@ -138,13 +140,20 @@ function isSimpleAssignment(line: readonly SourceToken[]): boolean {
   return line[0]?.type === 'identifier' && line[1]?.text === '=' && line.at(-1)?.text === ';';
 }
 
-/** `if (c)` then two assignments on their own lines, the second on or above the reported line. */
+/** Procedures whose body is a single statement; a second statement then lands at module level. */
+const PROCEDURES: ReadonlySet<string> = new Set(['initial', 'always']);
+
+/**
+ * `initial if (c)` then two assignments on their own lines, the second on the
+ * reported line: the `if` is the whole procedure, so Icarus meets the second
+ * assignment at module level. Inside a `begin` block the same lines are legal.
+ */
 function missingBlock({ tokens, row }: Context): Advice | undefined {
   const linesSoFar = [...new Set(tokens.filter((token) => token.line <= row).map((token) => token.line))];
   const lines = linesSoFar.slice(-UNBRACED_IF_LINES);
   if (lines.length !== UNBRACED_IF_LINES) return undefined;
   const [header, first, second] = lines.map((line) => tokens.filter((token) => token.line === line));
-  const isIfHeader = header.some((token) => token.text === 'if') && header.at(-1)?.text === ')';
+  const isIfHeader = PROCEDURES.has(header[0].text) && header.some((token) => token.text === 'if') && header.at(-1)?.text === ')';
   if (!isIfHeader || !isSimpleAssignment(first) || !isSimpleAssignment(second)) return undefined;
   return { headline: text.blockNeeded(), relatedLine: header[0].line + 1 };
 }
@@ -160,10 +169,14 @@ function closingWord(word: string): string {
   return word === 'join_any' || word === 'join_none' ? 'join' : word;
 }
 
+function opensBlock(tokens: readonly SourceToken[], index: number): boolean {
+  return CLOSERS.has(tokens[index].text) && !NOT_A_BLOCK_AFTER.has(tokens[index - 1]?.text);
+}
+
 function unmatchedConstruct(tokens: readonly SourceToken[]): UnclosedConstruct | undefined {
   const open: SourceToken[] = [];
-  for (const token of tokens) {
-    if (CLOSERS.has(token.text)) {
+  for (const [i, token] of tokens.entries()) {
+    if (opensBlock(tokens, i)) {
       open.push(token);
       continue;
     }

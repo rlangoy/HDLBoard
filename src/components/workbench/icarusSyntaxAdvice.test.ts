@@ -56,6 +56,18 @@ describe('syntax advice only when the source supports it', () => {
     expect(advice('initial begin\n  if (a) b = 1;\n  c = 1;\nend', 3)).toBeUndefined();
   });
 
+  test('two assignments under an if inside a begin block are legal; the error is elsewhere', () => {
+    expect(advice('module m;\ninitial begin\nif (en)\na = 1;\nb = 2 +;\nend\nendmodule', 5)).toBeUndefined();
+  });
+
+  test('explains the unbraced if that makes up a whole initial block', () => {
+    expect(advice('module m;\ninitial if (en)\na = 1;\nb = 2;\nendmodule', 4)?.relatedLine).toBe(2);
+  });
+
+  test.each(['wait fork;', 'disable fork;'])('%s does not open a block', (statement) => {
+    expect(advice(`module m;\ninitial begin\n${statement}\nend\nendmodule\n`, 6)).toBeUndefined();
+  });
+
   test('does not infer a case colon outside a case', () => {
     expect(advice('0 q = 1;')).toBeUndefined();
   });

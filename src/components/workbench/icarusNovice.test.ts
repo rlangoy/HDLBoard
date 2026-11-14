@@ -120,6 +120,19 @@ describe('streamed warning details', () => {
     expect(parser.parse(note)).toEqual([]);
   });
 
+  test('a design report is never re-emitted by a note in a later frame', () => {
+    const parser = new DiagnosticParser();
+    parser.parse('ERROR: top.v:3: values differ\ntop.v:3:        : looks like a note');
+    expect(parser.parse('top.v:3:        : another')).toEqual([]);
+  });
+
+  test('a note repeated under one message is kept, as Icarus printed it', () => {
+    const repeated = 'top.v:3:        : x is declared here as wire.';
+    expect(new DiagnosticParser().parse([warning, repeated, repeated].join('\n'))[0].details).toEqual([
+      'x is declared here as wire.', 'x is declared here as wire.',
+    ]);
+  });
+
   test('a new run parser does not inherit the previous run', () => {
     new DiagnosticParser().parse(warning);
     expect(new DiagnosticParser().parse(note)).toEqual([]);
@@ -130,6 +143,12 @@ describe('streamed warning details', () => {
     const initial = addToFiles(NO_DIAGNOSTICS, [diagnostic]);
     const updated = addToFiles(initial, [{ ...diagnostic, details: ['pruning'] }]);
     expect(updated.f[0].messages).toEqual([{ severity: 'warning', message: 'width', details: ['pruning'], advice: undefined }]);
+  });
+
+  test('a re-emitted message keeps notes that repeat earlier text', () => {
+    const diagnostic = { fileId: 'f', line: 3, severity: 'warning' as const, message: 'width', details: ['same'] };
+    const initial = addToFiles(NO_DIAGNOSTICS, [diagnostic]);
+    expect(addToFiles(initial, [{ ...diagnostic, details: ['same', 'same'] }]).f[0].messages[0].details).toEqual(['same', 'same']);
   });
 
   test('repeated continuations keep the store reference stable', () => {

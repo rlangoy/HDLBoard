@@ -19,6 +19,11 @@ describe('module member suggestions', () => {
     expect(lookup(TOP, CHILD).suggestMember({ fileId: '0', line: 2, instance: 'u1', kind: 'port', name: 'dtaa' })).toBe('data');
   });
 
+  test('finds an instance that follows the end of a block', () => {
+    const top = 'module top;\ninitial begin x = 0; end\nchild u1(.dtaa(0));\nendmodule';
+    expect(lookup(top, CHILD).suggestMember({ fileId: '0', line: 3, instance: 'u1', kind: 'port', name: 'dtaa' })).toBe('data');
+  });
+
   test('handles non-ANSI port declarations', () => {
     expect(lookup(TOP, 'module child(data); input data; endmodule').suggestMember({ fileId: '0', line: 2, instance: 'u1', kind: 'port', name: 'dtaa' })).toBe('data');
   });

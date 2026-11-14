@@ -281,10 +281,10 @@ function isNoteOf(note: Note, diagnostic: Diagnostic): boolean {
   return note.fileName === diagnostic.fileName && note.line === diagnostic.line;
 }
 
-/** Adds a note once and up to the limit; returns the diagnostic as it now stands. */
+/** Adds a note up to the limit; returns the diagnostic as it now stands. */
 function withNote(builder: Builder, note: string): Diagnostic {
   const { details } = builder;
-  if (details.length < MAX_DIAGNOSTIC_DETAILS && !details.includes(note)) details.push(note);
+  if (details.length < MAX_DIAGNOSTIC_DETAILS) details.push(note);
   return { ...builder.diagnostic, details: [...details] };
 }
 
@@ -322,7 +322,8 @@ export class DiagnosticParser {
         // Successful Icarus builds send warning details in separate LOG frames:
         // an adjacent note at the same place re-emits the earlier frame's warning.
         if (!previous && pending && isNoteOf(result, pending)) start(pending);
-        if (previous) this.pendingNote = withNote(previous, result.message);
+        if (previous && mayGetNotes(previous.diagnostic)) this.pendingNote = withNote(previous, result.message);
+        else if (previous) withNote(previous, result.message);
       } else if (result.kind === 'continuation') {
         const sameFile = previous?.diagnostic.fileName === result.diagnostic.fileName;
         if (previous && sameFile) previous.details.push(result.diagnostic.message);

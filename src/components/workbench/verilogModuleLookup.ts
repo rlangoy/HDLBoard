@@ -73,8 +73,11 @@ function afterParameters(tokens: readonly SourceToken[], start: number): number 
   return matchingClose(tokens, start + 1) + 1;
 }
 
+/** What may come right before a module item: a statement's `;` or the end of a block. */
+const BEFORE_MODULE_ITEM: ReadonlySet<string> = new Set([';', 'end', 'endcase', 'endfunction', 'endtask', 'endgenerate']);
+
 function isInstanceStart(tokens: readonly SourceToken[], index: number): boolean {
-  return tokens[index].type === 'identifier' && tokens[index - 1]?.text === ';';
+  return tokens[index].type === 'identifier' && BEFORE_MODULE_ITEM.has(tokens[index - 1]?.text);
 }
 
 function isNamedInstance(tokens: readonly SourceToken[], index: number, name: string): boolean {
