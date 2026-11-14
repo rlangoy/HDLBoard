@@ -270,6 +270,6 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
       await frame(first, 'ERROR busy\n');
     });
     const lines = log.mock.calls.map((call) => String(call.arguments[0]));
-    assert.ok(lines.includes('hdl-board: ERROR busy: closed a session open 1 min (idle 1 min) to make room for a new one'));
+    assert.ok(lines.includes('hdl-board: ERROR busy: closed 10.0.0.1 open 1 min (idle 1 min) to make room for 10.0.0.2'));
   });
 });

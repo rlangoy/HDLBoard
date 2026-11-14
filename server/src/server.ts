@@ -346,7 +346,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     const sameAddress = sessionsFrom(closed.clientAddress, open, newcomer);
     const text = closed.simulating ? closedSimulatingText() : closedIdleText();
     // Ended now, not on its close: the place is the new connection's at once.
-    closed.closeBusy(text, closedLogLine(closed, sameAddress, newcomer.at));
+    closed.closeBusy(text, closedLogLine(closed, sameAddress, newcomer));
     return true;
   };
 
@@ -354,7 +354,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), at: now() };
     const hasPlace = connections.size < maxSessions || makeRoomFor(newcomer);
     if (hasPlace) connections.add(new ClientConnection(ws, newcomer, context));
-    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections]) });
+    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections], newcomer), clientAddress: newcomer.clientAddress });
   });
 
   // Only a listen error belongs to `ready`; once listening, the listener is removed so

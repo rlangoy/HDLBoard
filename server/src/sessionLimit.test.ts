@@ -149,30 +149,33 @@ describe('the busy texts', () => {
   });
 });
 
-describe('the log lines', () => {
+describe('the log lines name the addresses involved', () => {
+  const CLOSED_FROM = '203.0.113.5';
+  const NEWCOMER = newcomerFrom('198.51.100.7');
+
   test('a closed idle session, with how long it was open and idle', () => {
     assert.equal(
-      closedLogLine(session('a', { open: 26, idle: 240 }), 1, NOW),
-      'hdl-board: ERROR busy: closed a session open 26 min (idle 4 min) to make room for a new one',
+      closedLogLine(session('a', { open: 26, idle: 240, from: CLOSED_FROM }), 1, NEWCOMER),
+      'hdl-board: ERROR busy: closed 203.0.113.5 open 26 min (idle 4 min) to make room for 198.51.100.7',
     );
   });
 
   test('a closed idle session that shares its address', () => {
     assert.equal(
-      closedLogLine(session('a', { open: 3, idle: 5 }), 2, NOW),
-      'hdl-board: ERROR busy: closed a session open 3 min (idle 0 min, 2 sessions from its address) to make room for a new one',
+      closedLogLine(session('a', { open: 3, idle: 5, from: CLOSED_FROM }), 2, newcomerFrom(CLOSED_FROM)),
+      'hdl-board: ERROR busy: closed 203.0.113.5 open 3 min (idle 0 min, 2 sessions from that address) to make room for 203.0.113.5',
     );
   });
 
   test('a closed simulating session', () => {
     assert.equal(
-      closedLogLine(session('a', { open: 12 }), 1, NOW),
-      'hdl-board: ERROR busy: closed a session open 12 min (simulating) to make room for a new one',
+      closedLogLine(session('a', { open: 12, from: CLOSED_FROM }), 1, NEWCOMER),
+      'hdl-board: ERROR busy: closed 203.0.113.5 open 12 min (simulating) to make room for 198.51.100.7',
     );
   });
 
   test('a refused newcomer, with what the open sessions were doing', () => {
     const open = [session('a', { open: 1 }), session('b', { open: 2 }), session('c', { open: 3, idle: 10 })];
-    assert.equal(refusedLogLine(open), 'hdl-board: ERROR busy: refused a new session, all 3 in use (2 simulating, 1 idle)');
+    assert.equal(refusedLogLine(open, NEWCOMER), 'hdl-board: ERROR busy: refused 198.51.100.7, all 3 in use (2 simulating, 1 idle)');
   });
 });
