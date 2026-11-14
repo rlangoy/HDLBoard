@@ -117,6 +117,135 @@ export const adviceText = {
   followOnSameLine: (): string => 'Probably caused by the first error on this line — fix that one first and run again.',
 };
 
+/** `an \`integer\``, `a \`std_logic_vector\``: a type named in a sentence. */
+export function typeWithArticle(typeName: string): string {
+  return `${/^[aeiou]/i.test(typeName) ? 'an' : 'a'} ${code(typeName)}`;
+}
+
+function capitalized(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+function bitCount(n: number): string {
+  return `${n} bit${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * The advice on GHDL's run-time checks (rangeAdvice.ts), which name a line but
+ * never the object, its limit or the value. Each says what went outside what, then
+ * what to do.
+ */
+export const rangeText = {
+  indexOutside: (index: number, array: string, range: string, low: number, high: number): string =>
+    `Index ${index} is outside ${code(array)}, which has indexes ${range} — an index of ${code(array)} must be from ${low} to ${high}.`,
+  indexOutsideLoop: (index: number, array: string, range: string, loopVariable: string, loopLine: number): string =>
+    `Index ${index} is outside ${code(array)}, which has indexes ${range} — the loop on line ${loopLine} lets ${code(loopVariable)} reach ${index}.`,
+  /** The index is `to_integer` of a vector that can hold more values than the array has. */
+  indexOutsideWideIndex: (index: number, array: string, range: string, indexText: string, vector: string, bits: number): string =>
+    `Index ${index} is outside ${code(array)}, which has indexes ${range} — ${code(vector)} has ${bitCount(bits)}, so ${code(indexText)} can be up to ${2 ** bits - 1}.`,
+  indexOutsideUnknownArray: (index: number, range: string): string =>
+    `Index ${index} is outside the indexes ${range} of the array on this line.`,
+  returnOutside: (fn: string, type: string, range: string): string =>
+    `${code(fn)} returns a value outside ${code(type)} (${range}) — the value after ${code('return')} must stay within ${range}.`,
+  stepPastLast: (type: string, attribute: string, last: string): string =>
+    `${code(last)} is the last value of ${code(type)}, so ${code(`${type}'${attribute}`)} has nothing after it — test for ${code(`${type}'high`)} first and go back to the first value yourself.`,
+  stepBeforeFirst: (type: string, attribute: string, first: string): string =>
+    `${code(first)} is the first value of ${code(type)}, so ${code(`${type}'${attribute}`)} has nothing before it — test for ${code(`${type}'low`)} first.`,
+  sliceDirection: (vector: string, range: string, direction: string, suggestion: string): string =>
+    `${code(vector)} is declared ${code(range)}, so a slice of it must use ${code(direction)} too: ${code(suggestion)}.`,
+  sliceOutside: (slice: string, vector: string, range: string): string =>
+    `${code(slice)} reaches outside ${code(vector)}, which only has indexes ${range}.`,
+  sliceMayLeave: (slice: string, vector: string, range: string, names: readonly string[], bits?: number, target?: string): string => {
+    const fit = bits === undefined || target === undefined ? '' : ` and have ${bitCount(bits)}, like ${code(target)}`;
+    const check = names.length === 0 ? '' : ` — check the value of ${names.map(code).join(' and ')} here`;
+    return `The slice ${code(slice)} must stay inside ${code(vector)} (${range})${fit}${check}.`;
+  },
+  /** `fitting`: a statement that would fit, shown as the example. */
+  lengthMismatch: (target: string, targetBits: number, value: string, valueBits: number, fitting?: string): string => {
+    const mismatch = `${code(target)} has ${bitCount(targetBits)} but ${code(value)} has ${bitCount(valueBits)} — both sides of an assignment need the same number of bits.`;
+    return fitting === undefined ? mismatch : `${mismatch} For example: ${code(fitting)}`;
+  },
+  lengthUnknown: (target: string, bits: number, range: string): string =>
+    `${code(target)} has ${bitCount(bits)} (${range}), so the value assigned to it must have exactly ${bitCount(bits)} too.`,
+  numberAbove: (value: string, target: string, low: number, high: number): string =>
+    `${code(value)} went above ${high}, the top of the range of ${code(target)} (${low} to ${high}) — a range does not wrap around: set ${code(target)} back to ${low} yourself before it passes ${high}.`,
+  numberBelow: (value: string, target: string, low: number, high: number): string =>
+    `${code(value)} went below ${low}, the bottom of the range of ${code(target)} (${low} to ${high}) — check ${code(target)} before you subtract.`,
+  naturalBelowZero: (value: string, target: string, type: string): string =>
+    `${code(value)} went below 0, but ${code(target)} is ${typeWithArticle(type)} and cannot be negative — check it before you subtract.`,
+  numberOutside: (value: string, target: string, range: string): string =>
+    `${code(value)} gave ${code(target)} a value outside its range ${range} — keep the value within the range, or make the range wider.`,
+  integerOverflow: (value: string): string =>
+    `${code(value)} is too large for an ${code('integer')}, which goes up to 2147483647 — keep the number smaller, or use ${code('unsigned')} for wide values.`,
+  initialOutside: (value: string, name: string, range: string): string =>
+    `The start value ${code(value)} is outside the range of ${code(name)} (${range}).`,
+  initialLength: (value: string, valueBits: number, name: string, bits: number, range: string): string =>
+    `The start value ${code(value)} has ${bitCount(valueBits)}, but ${code(name)} has ${bitCount(bits)} (${range}) — write exactly ${bitCount(bits)}.`,
+  anyBound: (): string =>
+    'A value on this line is outside what its type allows — check each number against its range, and that both sides of each assignment have the same number of bits.',
+  /** On the declaration the advice points at: plain words, drawn without code font. */
+  declaredHere: (name: string, typeText: string): string => `${name} is declared here: ${typeText}`,
+  loopHere: (variable: string, range: string): string => `This loop runs ${variable} through ${range}`,
+};
+
+/** Who needs the value: the target's name (`leds`), or `undefined` when it is not an assignment. */
+function needs(target: string | undefined, type: string): string {
+  return target === undefined ? `${typeWithArticle(type)} is needed here` : `${code(target)} is ${typeWithArticle(type)}`;
+}
+
+/**
+ * The advice on GHDL's type errors (typeAdvice.ts): GHDL names its own types
+ * (`STD_ULOGIC_VECTOR`, `UNRESOLVED_UNSIGNED`), never the conversion to write.
+ */
+export const typeText = {
+  convert: (value: string, valueType: string, target: string | undefined, targetType: string, conversion: string): string =>
+    `${code(value)} is ${typeWithArticle(valueType)}, but ${needs(target, targetType)} — convert it: ${code(conversion)}.`,
+  noConversion: (value: string, valueType: string, target: string | undefined, targetType: string): string =>
+    `${code(value)} is ${typeWithArticle(valueType)}, but ${needs(target, targetType)} — VHDL never converts between types by itself.`,
+  bitToVector: (value: string, target: string, oneBit: string, everyBit: string): string =>
+    `${code(value)} is a single bit, but ${code(target)} is a vector — assign it to one bit, ${code(oneBit)}, or to every bit, ${code(everyBit)}.`,
+  vectorToBit: (value: string, target: string | undefined, oneBit: string): string =>
+    `${code(value)} is a vector, but ${target === undefined ? 'a single bit is needed here' : `${code(target)} is a single bit`} — pick one bit of it, for example ${code(oneBit)}.`,
+  bitInQuotes: (literal: string): string => `A single bit is written in single quotes: ${code(`'${literal}'`)}, not ${code(literal)}.`,
+  notABit: (literal: string, target: string | undefined): string =>
+    `${target === undefined ? 'A single bit' : code(target)} can only be ${code("'0'")} or ${code("'1'")} — ${code(literal)} is a number.`,
+  numberToVector: (type: string, bits: string | undefined, conversion: string): string => {
+    const written = bits === undefined ? '' : `write its bits, ${code(`"${bits}"`)}, or `;
+    return `${capitalized(typeWithArticle(type))} is not a number — ${written}convert: ${code(conversion)}.`;
+  },
+  characterToVector: (literal: string, target: string, bits: number | undefined, written: string | undefined): string => {
+    const all = bits === undefined || written === undefined ? 'write all of its bits' : `write all ${bits} bits, ${code(`"${written}"`)}`;
+    return `${code(literal)} is a single bit, but ${code(target)} is a vector — ${all}, or set every bit to it with ${code(`(others => ${literal})`)}.`;
+  },
+  stringToBit: (literal: string, bit: string | undefined): string =>
+    bit === undefined
+      ? `${code(literal)} is a vector (double quotes), but a single bit is needed here.`
+      : `${code(literal)} in double quotes is a vector — a single bit is written in single quotes: ${code(`'${bit}'`)}.`,
+  vectorArithmetic: (name: string, type: string, operator: string, rewritten: string): string =>
+    `${code(name)} is ${typeWithArticle(type)}, which has no ${code(operator)} — calculate with ${code('unsigned')}: ${code(rewritten)}.`,
+  conditionAsBit: (condition: string, type: string, statement: string): string =>
+    `${code(condition)} is a condition (true or false), not ${typeWithArticle(type)} — write it as ${code(statement)}.`,
+  compareVectorWithNumber: (name: string, type: string, asNumber: string, asBits: string | undefined): string => {
+    const bits = asBits === undefined ? '' : `, or with bits, ${code(asBits)}`;
+    return `${code(name)} is ${typeWithArticle(type)}, not a number — compare it as a number, ${code(asNumber)}${bits}.`;
+  },
+  needsNumericType: (fn: string, argument: string, type: string, rewritten: string): string =>
+    `${code(fn)} takes an ${code('unsigned')} or a ${code('signed')}, not ${typeWithArticle(type)} — say which ${code(argument)} is: ${code(rewritten)}.`,
+  castNotAllowed: (valueType: string, castType: string, conversion: string): string =>
+    `${capitalized(typeWithArticle(valueType))} cannot be cast to ${code(castType)} — convert it: ${code(conversion)}.`,
+  notACondition: (name: string, type: string, comparison: string, oneBit: string | undefined): string => {
+    const bit = oneBit === undefined ? '' : `, or test one bit: ${code(oneBit)}`;
+    return `${code(name)} is ${typeWithArticle(type)}, not a condition — compare it, for example ${code(comparison)}${bit}.`;
+  },
+  variableWithArrow: (name: string): string => `${code(name)} is a variable: assign it with ${code(':=')}, not ${code('<=')}.`,
+  signalWithColon: (name: string): string =>
+    `${code(name)} is a signal: assign it with ${code('<=')} — ${code(':=')} is only for variables.`,
+  portWidth: (actual: string, actualBits: number, port: string, entity: string, portBits: number, slice: string | undefined): string => {
+    const fix = slice === undefined ? `connect ${bitCount(portBits)}` : `connect ${bitCount(portBits)}, for example ${code(slice)}`;
+    return `${code(actual)} has ${bitCount(actualBits)}, but port ${code(port)} of ${code(entity)} has ${bitCount(portBits)} — ${fix}.`;
+  },
+};
+
 /** Where an earlier declaration is: a line of the same file, or of `fileName`. */
 export interface EarlierPlace {
   readonly line: number;

@@ -10,7 +10,9 @@
  * files get Icarus's line-level rules instead (icarusAdvice.ts,
  * docs/editor_diagnostics_verilog_research.md). `useDiagnostics` runs this on
  * ERROR frames; runtime LOG lines get no advice (§ 4.12), except Icarus's
- * implicit-wire warning (`adviseLogDiagnostics`).
+ * implicit-wire warning and GHDL's failed range checks (`adviseLogDiagnostics`).
+ * A failed range check names a line but no column; its advice comes from
+ * rangeAdvice.ts, and type errors get typeAdvice.ts's.
  */
 
 import { declaredNames } from './declaredNames';
@@ -30,8 +32,11 @@ import {
   statementRegionHome,
 } from './vhdlStructure';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
+import { adviseRangeCheck, isRangeCheck } from './rangeAdvice';
+import { adviseTypeError, type PortLookup } from './typeAdvice';
 import { splitLines } from './textLines';
 import { addUseClause, clashingPackageInUse } from './useClauseFix';
+import { lengthOf, VhdlDeclarations } from './vhdlDeclarations';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 import { packageDeclaring, type VhdlPackage } from './vhdlPackages';
 import {
@@ -252,6 +257,8 @@ interface SourceFile {
   readonly lines: readonly string[];
   /** Names declared in this file, as written (Rule C's suggestions). */
   readonly declared: readonly string[];
+  /** Its objects and types, for the advice on ranges and types. */
+  readonly declarations: VhdlDeclarations;
   /** Lines with an error that is not muted. */
   readonly errorLines: ReadonlySet<number>;
 }
@@ -264,6 +271,8 @@ interface Project {
   readonly entities: readonly DeclaredEntity[];
   /** Mistakes found from the source before any error was muted (`ownMistakesOf`). */
   readonly own: OwnMistakes;
+  /** A port of any entity in the project, for the widths in a port map. */
+  readonly ports: PortLookup;
 }
 
 /** One error, with its line's tokens and the token GHDL's column points at. */
@@ -288,14 +297,28 @@ function projectOf(
   const files = new Map<string, SourceFile>();
   for (const file of snapshot.files) {
     const errorLines = located.filter((d) => d.fileId === file.id && isAdvisable(d) && !muted.has(d));
+    const lines = splitLines(file.content);
     files.set(file.id, {
-      lines: splitLines(file.content),
+      lines,
+      declarations: new VhdlDeclarations(lines),
       declared: declaredNames(file.content),
       errorLines: new Set(errorLines.map((d) => d.line)),
     });
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { files, declared: new Set(declared), entities, own };
+  return { files, declared: new Set(declared), entities, own, ports: portLookup(files, entities) };
+}
+
+/** Finds `port` in the declaration of `entity`, in whichever file declares it. */
+function portLookup(files: ReadonlyMap<string, SourceFile>, entities: readonly DeclaredEntity[]): PortLookup {
+  return (entity, port) => {
+    const declaring = entities.find((e) => sameName(e.name, entity));
+    const declarations = declaring && files.get(declaring.fileId)?.declarations;
+    const object = declaring && declarations?.portAfter(declaring.line, port);
+    if (object === undefined || declarations === undefined) return undefined;
+    const type = declarations.typeOf(object.typeText, object.line);
+    return { bits: type?.kind === 'vector' ? lengthOf(type.range) : undefined };
+  };
 }
 
 function positionedTokens(line: string): PositionedToken[] {
@@ -751,12 +774,23 @@ function ownMistakesOf(
   return { extraEnds, missingBegins, all };
 }
 
+/** An index, initial value or string length outside its declared range, found by analysis. */
+const rangeError: Rule = ({ diagnostic, file }) => adviseRangeCheck(diagnostic.message, diagnostic.line, file);
+
+/** A value of one type where another is needed. */
+const typeError: Rule = ({ diagnostic, file, index }, project) => {
+  const text = file.lines[diagnostic.line - 1] ?? '';
+  return adviseTypeError({ ...file, message: diagnostic.message, line: diagnostic.line, text, caret: index, ports: project.ports });
+};
+
 /**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
  * The rules read from GHDL's own words and the shape of the code go before all.
  */
 const RULES: readonly Rule[] = [
+  rangeError,
+  typeError,
   extraEnd,
   entityNotFound,
   designUnitInsideArchitecture,
@@ -793,15 +827,25 @@ function adviseGhdlDiagnostics(located: readonly LocatedDiagnostic[], snapshot: 
   const project = projectOf(located, snapshot, muted, entities, own);
   return withQuietRedefinitions(located).map((diagnostic) => {
     const file = project.files.get(diagnostic.fileId);
-    if (!isAdvisable(diagnostic) || file === undefined) return diagnostic;
+    if (file === undefined) return diagnostic;
+    if (isFailedRunCheck(diagnostic)) return withAdvice(diagnostic, adviseRangeCheck(diagnostic.message, diagnostic.line, file));
+    if (!isAdvisable(diagnostic)) return diagnostic;
     const causeLine = muted.get(diagnostic);
     if (causeLine !== undefined) {
       const headline = causeLine === diagnostic.line ? adviceText.followOnSameLine() : adviceText.followOn(causeLine);
       return { ...diagnostic, advice: { headline, followOnOf: causeLine } };
     }
-    const advice = adviceFor(placeOf(diagnostic, file), project);
-    return advice ? { ...diagnostic, advice } : diagnostic;
+    return withAdvice(diagnostic, adviceFor(placeOf(diagnostic, file), project));
   });
+}
+
+/** A check that failed while the design ran: GHDL names its line, never its column. */
+function isFailedRunCheck(diagnostic: LocatedDiagnostic): boolean {
+  return diagnostic.severity === 'error' && diagnostic.column === undefined && isRangeCheck(diagnostic.message);
+}
+
+function withAdvice(diagnostic: LocatedDiagnostic, advice: Advice | undefined): AdvisedDiagnostic {
+  return advice ? { ...diagnostic, advice } : diagnostic;
 }
 
 /** GHDL's pair of warnings for a second architecture of one name in one file. */
@@ -825,7 +869,19 @@ function withQuietRedefinitions(located: readonly LocatedDiagnostic[]): LocatedD
 
 type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) => AdvisedDiagnostic[];
 
-const noAdvice: Advisor = (located) => [...located];
+/**
+ * A VHDL run's LOG lines: GHDL prints its failed checks there (to stdout, one line
+ * a frame), and only those get advice — never the design's own reports.
+ */
+const adviseGhdlRunChecks: Advisor = (located, snapshot) => {
+  const contents = new Map(snapshot.files.map((file) => [file.id, file.content]));
+  return located.map((diagnostic) => {
+    const content = contents.get(diagnostic.fileId);
+    if (content === undefined || !isFailedRunCheck(diagnostic)) return diagnostic;
+    const lines = splitLines(content);
+    return withAdvice(diagnostic, adviseRangeCheck(diagnostic.message, diagnostic.line, { lines, declarations: new VhdlDeclarations(lines) }));
+  });
+};
 
 /**
  * Each file's messages go to its language's advisor, picked by the file's name
@@ -857,11 +913,12 @@ export function adviseDiagnostics(located: readonly LocatedDiagnostic[], snapsho
 }
 
 /**
- * Advice for LOG lines: none, except Icarus's warning about an implicit wire,
- * which a successful Verilog compile prints there (research § 3, Rule G).
+ * Advice for LOG lines: Icarus's warning about an implicit wire, which a
+ * successful Verilog compile prints there (research § 3, Rule G), and GHDL's
+ * failed range checks; the simulation's own output gets none.
  */
 export function adviseLogDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
-  return byLanguage(located, snapshot, { verilog: adviseIcarusLog, other: noAdvice });
+  return byLanguage(located, snapshot, { verilog: adviseIcarusLog, other: adviseGhdlRunChecks });
 }
 
 /**

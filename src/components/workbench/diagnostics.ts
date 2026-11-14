@@ -34,6 +34,10 @@ export type LineResult =
   /** GHDL compile message that starts with "(" — § 4.3 rule 2. Only recognizer 1 returns this. */
   | { readonly kind: 'continuation'; readonly diagnostic: Diagnostic }
   | { readonly kind: 'note'; readonly message: string }
+  /** A GHDL run error that names no place ("overflow detected"); its place is the next `callSite`. */
+  | { readonly kind: 'unplaced'; readonly message: string }
+  /** A frame of the backtrace GHDL prints under an unplaced error: "  from: process … at slice.vhd:14". */
+  | { readonly kind: 'callSite'; readonly fileName: string; readonly line: number }
   | { readonly kind: 'declined' }
   | { readonly kind: 'none' };
 
@@ -86,6 +90,9 @@ const VVP_LEVEL: Readonly<Record<string, DiagnosticSeverity | undefined>> = {
   FATAL: 'error',
   WARNING: 'warning',
 };
+
+/** GHDL's last line after any run error: it adds nothing to the error above it. */
+const GHDL_RUN_FAILED = 'simulation failed';
 
 /** GHDL compile messages that continue the previous one: "(found: 'end')". */
 function isGhdlContinuation(message: string): boolean {
@@ -152,6 +159,16 @@ const RECOGNIZERS: readonly Recognizer[] = [
     interpret: (groups) => diagnosticOrNone(build(groups, 'error')),
   },
   {
+    // GHDL run, failed check with its place only in the backtrace below: "ghdl:error: overflow detected"
+    pattern: /^(?:.*[\\/])?ghdl[^\\/:]*:error: (?<message>.+)$/,
+    interpret: ({ message }) => (message === GHDL_RUN_FAILED ? { kind: 'declined' } : { kind: 'unplaced', message }),
+  },
+  {
+    // The innermost frame comes first: "  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:14"
+    pattern: /^\s+from: .* at (?<file>[^\s:]+):(?<line>\d+)$/,
+    interpret: ({ file, line }) => ({ kind: 'callSite', fileName: normalizeFileName(file), line: Number(line) }),
+  },
+  {
     // vvp run: "ERROR: tb.v:6: values differ"
     pattern: /^(?<level>ERROR|WARNING|FATAL): (?<file>.+?):(?<line>\d+): (?<message>.*)$/,
     interpret: (groups) => byLevel(VVP_LEVEL, groups),
@@ -202,6 +219,10 @@ export function recognizeLine(text: string): LineResult {
   return { kind: 'none' };
 }
 
+function placedRunError(message: string, { fileName, line }: { readonly fileName: string; readonly line: number }): Diagnostic {
+  return { fileName, line, severity: 'error', message, details: [] };
+}
+
 interface Builder {
   diagnostic: Diagnostic;
   details: string[];
@@ -220,27 +241,49 @@ interface Builder {
  *   syntax.vhdl:13:15:error: (found: 'end')
  *
  * Resetting `previous` on unmatched lines would lose the "(found: 'end')" detail.
+ *
+ * An unplaced run error waits for the first frame of its backtrace, which is
+ * where the check failed; the outer frames are ignored.
  */
 export function parseDiagnostics(text: string): Diagnostic[] {
-  const finished: Builder[] = [];
-  let previous: Builder | undefined;
+  return new DiagnosticParser().parse(text);
+}
 
-  const start = (diagnostic: Diagnostic): void => {
-    previous = { diagnostic, details: [...diagnostic.details] };
-    finished.push(previous);
-  };
+/**
+ * Parses simulator output that comes in pieces. A run's output reaches the
+ * browser one LOG line at a time, and GHDL prints the place of an unplaced run
+ * error ("overflow detected") on a later line, in its backtrace: the parser
+ * keeps that error from one `parse` to the next until a frame places it.
+ */
+export class DiagnosticParser {
+  private unplaced: string | undefined;
 
-  for (const line of text.split('\n')) {
-    const result = recognizeLine(line);
-    if (result.kind === 'note') {
-      previous?.details.push(result.message);
-    } else if (result.kind === 'continuation') {
-      const sameFile = previous?.diagnostic.fileName === result.diagnostic.fileName;
-      if (previous && sameFile) previous.details.push(result.diagnostic.message);
-      else start(result.diagnostic);
-    } else if (result.kind === 'diagnostic') {
-      start(result.diagnostic);
+  parse(text: string): Diagnostic[] {
+    const finished: Builder[] = [];
+    let previous: Builder | undefined;
+
+    const start = (diagnostic: Diagnostic): void => {
+      previous = { diagnostic, details: [...diagnostic.details] };
+      finished.push(previous);
+    };
+
+    for (const line of text.split('\n')) {
+      const result = recognizeLine(line);
+      if (result.kind === 'unplaced') {
+        this.unplaced = result.message;
+      } else if (result.kind === 'callSite') {
+        if (this.unplaced !== undefined) start(placedRunError(this.unplaced, result));
+        this.unplaced = undefined;
+      } else if (result.kind === 'note') {
+        previous?.details.push(result.message);
+      } else if (result.kind === 'continuation') {
+        const sameFile = previous?.diagnostic.fileName === result.diagnostic.fileName;
+        if (previous && sameFile) previous.details.push(result.diagnostic.message);
+        else start(result.diagnostic);
+      } else if (result.kind === 'diagnostic') {
+        start(result.diagnostic);
+      }
     }
+    return finished.map(({ diagnostic, details }) => ({ ...diagnostic, details }));
   }
-  return finished.map(({ diagnostic, details }) => ({ ...diagnostic, details }));
 }

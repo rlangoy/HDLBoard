@@ -77,6 +77,22 @@ export const GHDL_RUNTIME_BOUND = join([
   'ghdl:error: simulation failed',
 ]);
 
+/**
+ * GHDL 6.0.0, `ghdl -r --std=08 slice_bounds`: a slice past the top of its vector.
+ * The error names no place; the first frame of the backtrace is the failing line.
+ */
+export const GHDL_RUNTIME_OVERFLOW = join([
+  'ghdl:error: overflow detected',
+  '  instance: /slice_bounds/P0',
+  '  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:14',
+  '  from: [unknown caller]',
+  '  from: process work.slice_bounds(test).P0 at slice_bounds.vhd:12',
+  'ghdl:error: simulation failed',
+]);
+
+/** GHDL 6.0.0, `ghdl -r --std=08` of a division by zero: no place at all. */
+export const GHDL_RUNTIME_DIVISION = join(['ghdl:error: division by 0', 'ghdl:error: simulation failed']);
+
 // ------------------------------------------------------------------- A.4 wrapper
 
 /** GHDL 4.1.0, the generated `hdl_board_tb.vhdl` failing to fit the entity (A.4). */
