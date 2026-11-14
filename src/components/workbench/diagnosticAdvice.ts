@@ -9,8 +9,8 @@
  * GHDL's rules need its column, so they only take GHDL compile errors. Verilog
  * files get Icarus's line-level rules instead (icarusAdvice.ts,
  * docs/editor_diagnostics_verilog_research.md). `useDiagnostics` runs this on
- * ERROR frames; runtime LOG lines get no advice (§ 4.12), except Icarus's
- * implicit-wire warning and GHDL's failed range checks (`adviseLogDiagnostics`).
+ * ERROR frames; LOG lines get advice for known Icarus compiler messages and
+ * GHDL's failed range checks (`adviseLogDiagnostics`).
  * A failed range check names a line but no column; its advice comes from
  * rangeAdvice.ts, and type errors get typeAdvice.ts's.
  */
@@ -920,9 +920,8 @@ export function adviseDiagnostics(located: readonly LocatedDiagnostic[], snapsho
 }
 
 /**
- * Advice for LOG lines: Icarus's warning about an implicit wire, which a
- * successful Verilog compile prints there (research § 3, Rule G), and GHDL's
- * failed range checks; the simulation's own output gets none.
+ * Advice for LOG lines: measured Icarus compiler warnings and GHDL's failed
+ * range checks. Ordinary simulation output and assertion text stay unchanged.
  */
 export function adviseLogDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
   return byLanguage(located, snapshot, { verilog: adviseIcarusLog, other: adviseGhdlRunChecks });

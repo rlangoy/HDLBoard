@@ -119,6 +119,14 @@ const NEW_CODE = [
   // A session per run: page-wide waveform run numbers.
   'src/components/workbench/waveRunNumbers.ts',
   'src/components/workbench/waveRunNumbers.test.ts',
+  // Beginner Verilog advice uses the same presentation as the VHDL diagnostics.
+  'src/components/workbench/icarusMessageAdvice.ts',
+  'src/components/workbench/icarusSyntaxAdvice.ts',
+  'src/components/workbench/icarusSyntaxAdvice.test.ts',
+  'src/components/workbench/icarusNovice.test.ts',
+  'src/components/workbench/verilogModuleLookup.ts',
+  'src/components/workbench/verilogModuleLookup.test.ts',
+  'src/components/workbench/verilogDirectives.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

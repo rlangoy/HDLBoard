@@ -96,7 +96,9 @@ describe('Rule B false-positive guards (research § 3, point 1)', () => {
   });
 
   test('a semantic error gets no keyword suggestion', () => {
-    expect(headlineFor(snapshotOf('    alwyas u0 (q);'), errorOn(1, 'Unknown module type: alwyas'))).toBeUndefined();
+    expect(headlineFor(snapshotOf('    alwyas u0 (q);'), errorOn(1, 'Unknown module type: alwyas'))).toBe(
+      'Module `alwyas` was not found — check its spelling and include its source file in the project.',
+    );
   });
 
   test('a name in a comment or a string is not a candidate', () => {
@@ -238,15 +240,17 @@ describe('Rule G: an implicit wire', () => {
   test('arrives as a LOG line after a successful compile, and gets advice there', () => {
     const snapshot = snapshotOf('output wire [9:0] LEDR;\n    assign LEDRR = 0;');
     expect(adviseLogDiagnostics([warning('LEDRR')], snapshot)[0].advice).toMatchObject({
-      headline: '`LEDRR` is not declared — did you mean `LEDR`? Verilog made a new, unconnected wire.',
+      headline: '`LEDRR` is not declared — did you mean `LEDR`? Verilog made a new wire automatically.',
       span: { start: 11, end: 16 },
       compiler: 'Icarus',
     });
   });
 
-  test('an intended implicit wire, near no declared name, gets none', () => {
+  test('an implicit wire near no declared name gets an explanation without a spelling guess', () => {
     const snapshot = snapshotOf('output wire [9:0] LEDR;\n    assign carry = 0;');
-    expect(adviseLogDiagnostics([warning('carry')], snapshot)[0].advice).toBeUndefined();
+    expect(adviseLogDiagnostics([warning('carry')], snapshot)[0].advice?.headline).toBe(
+      'Verilog created a wire for `carry` automatically — check its spelling or declare it explicitly.',
+    );
   });
 });
 
@@ -263,7 +267,7 @@ describe('Rule H: Icarus 12.0 words it differently (research § 2.3, A.3)', () =
     const snapshot = snapshotOf('wire led_state;\n    led_state <= 1;');
     const error = errorOn(2, 'led_state is not a valid l-value in blinkTest.', ['led_state is declared here as wire.']);
     expect(headlineFor(snapshot, error)).toBe(
-      '`led_state` is a `wire`: only a `reg` can be assigned inside an `always` block — declare it as `reg`.',
+      '`led_state` is a `wire`: procedural assignments (`always` or `initial`) need a variable, such as `reg`.',
     );
   });
 

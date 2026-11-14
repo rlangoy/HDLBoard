@@ -1,0 +1,582 @@
+[
+  {
+    "name": "missing_semicolon",
+    "source": "module top;\n  reg a\n  initial a = 0;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_semicolon.v:3: syntax error\r\nmissing_semicolon.v:1: error: Syntax error in variable list."
+      }
+    ]
+  },
+  {
+    "name": "wrong_assign_operator",
+    "source": "module top;\n  reg a;\n  initial a =< 1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "wrong_assign_operator.v:3: syntax error\r\nwrong_assign_operator.v:3: error: Malformed statement"
+      }
+    ]
+  },
+  {
+    "name": "comparison_equals",
+    "source": "module top;\n  reg a;\n  initial if (a = 1) $display(\"yes\");\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "comparison_equals.v:3: syntax error\r\ncomparison_equals.v:3: error: Malformed conditional expression."
+      }
+    ]
+  },
+  {
+    "name": "keyword_always",
+    "source": "module top;\n  reg q;\n  alwyas @(*) q = 0;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "keyword_always.v:3: syntax error\r\nkeyword_always.v:3: error: Invalid module instantiation"
+      }
+    ]
+  },
+  {
+    "name": "missing_endmodule",
+    "source": "module top;\n  reg q;\n  initial q = 0;\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_endmodule.v:4: syntax error\r\nI give up."
+      }
+    ]
+  },
+  {
+    "name": "missing_begin",
+    "source": "module top;\n  reg a, b;\n  initial if (a)\n    a = 0;\n    b = 1;\n  else\n    b = 0;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_begin.v:5: syntax error\r\nmissing_begin.v:5: error: Invalid module instantiation\r\nmissing_begin.v:7: syntax error\r\nmissing_begin.v:7: error: Invalid module instantiation\r\nmissing_begin.v:6: error: generate else is missing matching if."
+      }
+    ]
+  },
+  {
+    "name": "bad_sensitivity",
+    "source": "module top;\n  reg clk, q;\n  always @(posedge clk q <= 1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "bad_sensitivity.v:3: syntax error\r\nI give up."
+      }
+    ]
+  },
+  {
+    "name": "wire_procedural",
+    "source": "module top;\n  wire q;\n  initial q = 1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "wire_procedural.v:3: error: 'q' is not a valid l-value for a procedural assignment.\r\nwire_procedural.v:2:      : 'q' is declared here as a wire.\r\nElaboration failed"
+      }
+    ]
+  },
+  {
+    "name": "reg_continuous",
+    "source": "module top;\n  reg q;\n  assign q = 1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "reg_continuous.v:3: error: Variable 'q' cannot be driven by a continuous assignment/module.\r\nreg_continuous.v:3:      : This is allowed when SystemVerilog is enabled.\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "undeclared_rhs",
+    "source": "module top;\n  reg counter;\n  initial $display(\"%b\", countr);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "undeclared_rhs.v:3: error: Unable to bind wire/reg/memory `countr' in `top'\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "unknown_identifier",
+    "source": "module top;\n  initial $display(\"%b\", missing_signal);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "unknown_identifier.v:2: error: Unable to bind wire/reg/memory `missing_signal' in `top'\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "implicit_typo",
+    "source": "module top;\n  wire led_out;\n  assign led_ou = 1'b1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "implicit_typo.v:3: warning: implicit definition of wire 'led_ou'."
+      }
+    ]
+  },
+  {
+    "name": "implicit_no_candidate",
+    "source": "module top;\n  assign answer = 1'b1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "implicit_no_candidate.v:2: warning: implicit definition of wire 'answer'."
+      }
+    ]
+  },
+  {
+    "name": "unknown_module",
+    "source": "module top;\n  adder u1();\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "unknown_module.v:2: error: Unknown module type: adder\r\n2 error(s) during elaboration.\r\n*** These modules were missing:\r\n        adder referenced 1 times.\r\n***"
+      }
+    ]
+  },
+  {
+    "name": "unknown_port",
+    "source": "module child(input a, output y); assign y = a; endmodule\nmodule top;\n  child u1(.input_a(1'b0), .y());\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "unknown_port.v:3: error: port ``input_a'' is not a port of u1.\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "unknown_named_parameter",
+    "source": "module child #(parameter WIDTH=4) (); endmodule\nmodule top;\n  child #(.WIDHT(8)) u1();\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "unknown_named_parameter.v:3: error: parameter `WIDHT` not found in `top.u1`.\r\n2 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "wrong_number_ports",
+    "source": "module child(input a, input b, output y); assign y = a & b; endmodule\nmodule top;\n  wire out;\n  child u1(1'b0, 1'b1, out, 1'b0);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "wrong_number_ports.v:4: error: Wrong number of ports. Expecting at most 3, got 4.\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "port_width",
+    "source": "module child(input [3:0] data); endmodule\nmodule top;\n  wire [7:0] data = 8'haa;\n  child u1(.data(data));\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "port_width.v:4: warning: Port 1 (data) of module child expects 4 bit(s), given 8."
+      },
+      {
+        "verb": "LOG",
+        "text": "port_width.v:4:        : Pruning 4 high bits of the expression."
+      }
+    ]
+  },
+  {
+    "name": "output_width",
+    "source": "module child(output [7:0] data); assign data = 8'haa; endmodule\nmodule top;\n  wire [3:0] data;\n  child u1(.data(data));\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "output_width.v:4: warning: Port 1 (data) of module child expects 8 bit(s), given 4."
+      },
+      {
+        "verb": "LOG",
+        "text": "output_width.v:4:        : Padding 4 high bits of the port."
+      }
+    ]
+  },
+  {
+    "name": "index_outside",
+    "source": "module top;\n  reg [3:0] data;\n  initial $display(\"%b\", data[5]);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "index_outside.v:3: warning: Constant bit select [5] is after vector data[3:0]."
+      },
+      {
+        "verb": "LOG",
+        "text": "index_outside.v:3:        : Replacing select with a constant 1'bx."
+      },
+      {
+        "verb": "LOG",
+        "text": "x"
+      }
+    ]
+  },
+  {
+    "name": "slice_reversed",
+    "source": "module top;\n  reg [7:0] data;\n  initial $display(\"%b\", data[0:3]);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "slice_reversed.v:3: error: part select data[0:3] is out of order.\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "invalid_range",
+    "source": "module top;\n  reg [0:-1] data;\n  initial $display(\"%b\", data);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "xx"
+      }
+    ]
+  },
+  {
+    "name": "duplicate_signal",
+    "source": "module top;\n  wire x;\n  reg x;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "duplicate_signal.v:3: error: 'x' has already been declared in this scope.\r\nduplicate_signal.v:2:      : It was declared here as a net."
+      }
+    ]
+  },
+  {
+    "name": "multiple_driver",
+    "source": "module top;\n  reg x;\n  initial x=0;\n  initial x=1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      }
+    ]
+  },
+  {
+    "name": "assign_width",
+    "source": "module top;\n  wire [3:0] narrowed;\n  assign narrowed = 8'hff;\n  initial #1 $display(\"narrowed=%h\", narrowed);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "narrowed=f"
+      }
+    ]
+  },
+  {
+    "name": "literal_truncated",
+    "source": "module top;\n  reg [3:0] data;\n  initial begin data = 4'd31; $display(\"data=%d\", data); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "literal_truncated.v:3: warning: Numeric constant truncated to 4 bits."
+      },
+      {
+        "verb": "LOG",
+        "text": "data=15"
+      }
+    ]
+  },
+  {
+    "name": "incomplete_combination",
+    "source": "module top;\n  reg en, data, q;\n  always @(*) if (en) q = data;\n  initial begin en=0; data=1; #1 $display(\"q=%b\",q); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "q=x"
+      }
+    ]
+  },
+  {
+    "name": "blocking_sequential",
+    "source": "module top;\n  reg clk=0, a=0, b=0;\n  always @(posedge clk) begin a = 1; b = a; end\n  initial begin #1 clk=1; #1 $display(\"a=%b b=%b\",a,b); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "a=1 b=1"
+      }
+    ]
+  },
+  {
+    "name": "division_zero",
+    "source": "module top;\n  integer a, b;\n  initial begin a=7; b=0; $display(\"quotient=%d\", a / b); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "quotient=          x"
+      }
+    ]
+  },
+  {
+    "name": "bad_binary_digit",
+    "source": "module top;\n  reg [3:0] a;\n  initial a = 4'b1020;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "bad_binary_digit.v:3: syntax error\r\nbad_binary_digit.v:3: error: Malformed statement"
+      }
+    ]
+  },
+  {
+    "name": "case_missing_endcase",
+    "source": "module top;\n  reg [1:0] a; reg b;\n  initial begin\n    case(a)\n      0: b=0;\n      1: b=1;\n  end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "case_missing_endcase.v:7: syntax error\r\nI give up."
+      }
+    ]
+  },
+  {
+    "name": "missing_include",
+    "source": "`include \"defs_missing.vh\"\nmodule top; endmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_include.v:2: Include file defs_missing.vh not found\r\nPreprocessor failed with 1 errors."
+      }
+    ]
+  },
+  {
+    "name": "syntax_lost_eof",
+    "source": "module top;\n  initial begin\n    $display(\"hello\");\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "syntax_lost_eof.v:4: syntax error\r\nI give up."
+      }
+    ]
+  },
+  {
+    "name": "unknown_system_task",
+    "source": "module top;\n  initial $disply(\"hi\");\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "sim.vvp: Program not runnable, 1 errors."
+      },
+      {
+        "verb": "ERROR",
+        "stage": "runtime",
+        "text": "unknown_system_task.v:2: Error: System task/function $disply() is not defined by any module.\r\n"
+      }
+    ]
+  },
+  {
+    "name": "unknown_port_typo",
+    "source": "module child(input data, output result); assign result = data; endmodule\nmodule top;\n  wire y;\n  child u1(.dtaa(1'b0), .result(y));\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "unknown_port_typo.v:4: error: port ``dtaa'' is not a port of u1.\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "part_select_width",
+    "source": "module top;\n  reg [3:0] x;\n  initial $display(\"%b\",x[7:2]);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "part_select_width.v:3: warning: Part select [7:2] is selecting after the vector x[3:0]."
+      },
+      {
+        "verb": "LOG",
+        "text": "part_select_width.v:3:        : Replacing the out of bound bits with 'bx."
+      },
+      {
+        "verb": "LOG",
+        "text": "xxxxxx"
+      }
+    ]
+  },
+  {
+    "name": "undefined_macro",
+    "source": "module top;\n  initial $display(\"%d\", `MAX_COUNT);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "undefined_macro.v:2: warning: macro MAX_COUNT undefined (and assumed null) at this point."
+      },
+      {
+        "verb": "LOG",
+        "text": " 32"
+      }
+    ]
+  },
+  {
+    "name": "missing_else_colon",
+    "source": "module top;\n  reg a,b;\n  initial begin\n    case(a)\n      0 b = 0;\n      default: b = 1;\n    endcase\n  end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_else_colon.v:5: syntax error\r\nmissing_else_colon.v:6: error: Incomprehensible case expression."
+      }
+    ]
+  },
+  {
+    "name": "missing_begin2",
+    "source": "module top;\n  reg a=1,b=0,c=0;\n  initial if (a)\n    b = 1;\n    c = 1;\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_begin2.v:5: syntax error\r\nmissing_begin2.v:5: error: Invalid module instantiation"
+      }
+    ]
+  },
+  {
+    "name": "bad_module_name",
+    "source": "module top;\n  reg [3:0] count;\n  initial $display(\"%d\", countr);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "elaborate",
+        "text": "bad_module_name.v:3: error: Unable to bind wire/reg/memory `countr' in `top'\r\n1 error(s) during elaboration."
+      }
+    ]
+  },
+  {
+    "name": "missing_semicolon_last",
+    "source": "module top;\n reg a;\n initial begin\n  a = 1\n end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "missing_semicolon_last.v:5: syntax error\r\nI give up."
+      }
+    ]
+  },
+  {
+    "name": "conflicting_driver",
+    "source": "module top;\n  wire x;\n  assign x=1'b0;\n  assign x=1'b1;\n  initial #1 $display(\"x=%b\",x);\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "x=x"
+      }
+    ]
+  },
+  {
+    "name": "wrong_operator_le",
+    "source": "module top;\n reg a=0;\n initial begin if (a <= 1) $display(\"yes\"); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "yes"
+      }
+    ]
+  },
+  {
+    "name": "runtime_fatal",
+    "source": "module top;\n initial begin #1 $fatal(1, \"failure example\"); end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "LOG",
+        "text": "Icarus Verilog version 13.0 (stable) (v13_0)"
+      },
+      {
+        "verb": "LOG",
+        "text": "FATAL: runtime_fatal.v:2: failure example"
+      },
+      {
+        "verb": "LOG",
+        "text": "       Time: 1000  Scope: top"
+      },
+      {
+        "verb": "ERROR",
+        "stage": "runtime",
+        "text": "Simulation exited unexpectedly."
+      }
+    ]
+  }
+]

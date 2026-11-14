@@ -14,7 +14,12 @@
 
 import type { Advice, AdvisedDiagnostic } from './diagnosticAdvice';
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
-import { adviceText } from './diagnosticText';
+import { adviceText, verilogAdviceText } from './diagnosticText';
+import { icarusMessageAdvice } from './icarusMessageAdvice';
+import { icarusSyntaxAdvice } from './icarusSyntaxAdvice';
+import { languageOfName } from './fileKinds';
+import { sourceTokens, type SourceToken } from './symbols/sourceTokens';
+import { VerilogModuleLookup } from './verilogModuleLookup';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
 import { verilogDeclaredNames } from './verilogDeclaredNames';
 import { tokenizeVerilog } from './verilogHighlight';
@@ -82,6 +87,7 @@ interface PositionedToken {
 }
 
 interface SourceFile {
+  readonly significant: readonly SourceToken[];
   /** One entry per line, without whitespace; comments kept, so a code line can be told apart. */
   readonly tokens: readonly (readonly PositionedToken[])[];
   /** Names declared in this file, as written (the suggestions of Rules C and G). */
@@ -89,6 +95,7 @@ interface SourceFile {
 }
 
 interface Project {
+  readonly modules: VerilogModuleLookup;
   /** Every name declared anywhere in the project, lower case (Rule B's exclusions). */
   readonly declared: ReadonlySet<string>;
   /** Per file, the lines with an error that is not muted. */
@@ -107,7 +114,8 @@ function positioned(line: readonly Token[]): PositionedToken[] {
 
 function sourceFileOf(content: string): SourceFile {
   const lines = content.split('\n').map((line) => line.replace(/\r$/, ''));
-  return { tokens: tokenizeVerilog(lines).map(positioned), declared: verilogDeclaredNames(content) };
+  const tokenLines = tokenizeVerilog(lines);
+  return { tokens: tokenLines.map(positioned), significant: sourceTokens(tokenLines), declared: verilogDeclaredNames(content) };
 }
 
 function codeTokens(file: SourceFile, line: number): PositionedToken[] {
@@ -216,6 +224,7 @@ function projectOf(
   located: readonly LocatedDiagnostic[],
   files: ReadonlyMap<string, SourceFile>,
   muted: ReadonlyMap<LocatedDiagnostic, number>,
+  snapshot: RunSnapshot,
 ): Project {
   const errorLines = new Map<string, ReadonlySet<number>>();
   for (const fileId of files.keys()) {
@@ -223,7 +232,13 @@ function projectOf(
     errorLines.set(fileId, new Set(shown.map((d) => d.line)));
   }
   const declared = [...files.values()].flatMap((file) => file.declared.map((name) => name.toLowerCase()));
-  return { declared: new Set(declared), errorLines };
+  return { declared: new Set(declared), errorLines, modules: moduleLookupOf(files, snapshot) };
+}
+
+/** Modules come from the project's Verilog files only; a VHDL file in a mixed project has none. */
+function moduleLookupOf(files: ReadonlyMap<string, SourceFile>, snapshot: RunSnapshot): VerilogModuleLookup {
+  const verilog = snapshot.files.filter((file) => languageOfName(file.name) === 'verilog');
+  return new VerilogModuleLookup(new Map(verilog.map((file) => [file.id, files.get(file.id)?.significant ?? []])));
 }
 
 // ------------------------------------------------------------ the rules
@@ -355,14 +370,45 @@ const IMPLICIT_WIRE = [/^implicit definition of wire '(?<name>[^']+)'\.$/];
 
 /**
  * Rule G: a misspelled name on the left of `assign` compiles — Icarus makes a new
- * wire, warns only with -Wall, and the LEDs stay dark (§ 1, F4). Advice only when
- * the name is close to one the file declares; an intended implicit wire has none.
+ * wire and warns with -Wall (§ 1, F4). Explain the implicit declaration without
+ * assuming it is unintended; suggest a spelling only when a close name exists.
  */
 const implicitWire = ({ diagnostic, file, tokens }: Place): Advice | undefined => {
   const name = nameIn(IMPLICIT_WIRE, diagnostic.message);
   const suggestion = name && suggestedName(name, file, []);
-  if (!name || !suggestion) return undefined;
+  if (!name) return undefined;
   return { headline: adviceText.implicitWire(name, suggestion), span: spanOf(tokenNamed(tokens, name)) };
+};
+
+const compilerMessage = ({ diagnostic, tokens }: Place): Advice | undefined => {
+  const advice = icarusMessageAdvice(diagnostic);
+  if (!advice) return undefined;
+  return { headline: advice.headline, span: advice.name ? spanOf(tokenNamed(tokens, advice.name)) : undefined };
+};
+
+const sourceSyntax: Rule = ({ diagnostic, file }) =>
+  isSyntaxError(diagnostic.message) ? icarusSyntaxAdvice(diagnostic, file.significant) : undefined;
+
+const UNKNOWN_MODULE = /^Unknown module type: (?<name>\S+)$/;
+const UNKNOWN_PORT = /^port ``(?<name>[^']+)'' is not a port of (?<instance>.+)\.$/;
+const UNKNOWN_PARAMETER = /^parameter `(?<name>[^`]+)` not found in `(?<instance>[^`]+)`\.$/;
+
+const unknownModule: Rule = ({ diagnostic, tokens }, { modules }) => {
+  const name = UNKNOWN_MODULE.exec(diagnostic.message)?.groups?.name;
+  if (!name) return undefined;
+  return { headline: verilogAdviceText.unknownModule(name, modules.suggestModule(name)), span: spanOf(tokenNamed(tokens, name)) };
+};
+
+const unknownMember: Rule = ({ diagnostic, tokens }, { modules }) => {
+  const port = UNKNOWN_PORT.exec(diagnostic.message)?.groups;
+  const member = port ?? UNKNOWN_PARAMETER.exec(diagnostic.message)?.groups;
+  if (!member) return undefined;
+  const kind = port ? 'port' : 'parameter';
+  const suggestion = modules.suggestMember({ fileId: diagnostic.fileId, line: diagnostic.line, instance: member.instance, kind, name: member.name });
+  return {
+    headline: verilogAdviceText.unknownMember(kind, member.name, member.instance, suggestion),
+    span: spanOf(tokenNamed(tokens, member.name)),
+  };
 };
 
 /** 13.0: `Variable 'x' cannot be driven by a continuous assignment/module.`; 12.0: `reg x; cannot be driven by …` (§ 2.3). */
@@ -414,7 +460,8 @@ const unterminatedAssign: Rule = ({ diagnostic, file }) =>
 
 /** Tried in order; the first advice wins. The certain table (E) before the guesses. */
 const RULES: readonly Rule[] = [
-  joinedKeyword, misspelledKeyword, undeclaredName, implicitWire, regOrWireMisuse, unterminatedAssign, causeOnPreviousLine,
+  compilerMessage, unknownModule, unknownMember, joinedKeyword, misspelledKeyword, sourceSyntax, undeclaredName, implicitWire,
+  regOrWireMisuse, unterminatedAssign, causeOnPreviousLine,
 ];
 
 // ------------------------------------------------------------ public
@@ -450,8 +497,9 @@ function filesOf(snapshot: RunSnapshot): Map<string, SourceFile> {
 export function adviseIcarusDiagnostics(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
   const files = filesOf(snapshot);
   const muted = followOns(located, files);
-  const project = projectOf(located, files, muted);
+  const project = projectOf(located, files, muted, snapshot);
   return located.map((diagnostic) => {
+    if (diagnostic.fromReport) return diagnostic;
     const file = files.get(diagnostic.fileId);
     if (file === undefined) return diagnostic;
     const primaryLine = muted.get(diagnostic);
@@ -465,15 +513,16 @@ export function adviseIcarusDiagnostics(located: readonly LocatedDiagnostic[], s
 }
 
 /**
- * Advice for LOG lines: only Rule G. A successful compile's warnings arrive as
- * LOG lines, and that is where an implicit wire is reported; every other LOG line
- * is the simulation's own output, which gets no advice (improvement plan § 4.12).
+ * Successful compiles send warnings as LOG lines. Only known compiler messages
+ * get advice here; runtime assertions keep the student's own wording.
  */
 export function adviseIcarusLog(located: readonly LocatedDiagnostic[], snapshot: RunSnapshot): AdvisedDiagnostic[] {
   const files = filesOf(snapshot);
   return located.map((diagnostic) => {
+    if (diagnostic.fromReport) return diagnostic;
     const file = files.get(diagnostic.fileId);
-    const advice = file && implicitWire(placeOf(diagnostic, file));
+    const place = file && placeOf(diagnostic, file);
+    const advice = place && (implicitWire(place) ?? compilerMessage(place));
     return advice ? { ...diagnostic, advice: { ...advice, compiler: COMPILER } } : diagnostic;
   });
 }
