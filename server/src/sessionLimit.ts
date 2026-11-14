@@ -116,23 +116,28 @@ export function fullText(maxSessions: number): string {
 /** What every `ERROR busy` line in the server log starts with. */
 export const BUSY_LOG_PREFIX = 'hdl-board: ERROR busy:';
 
-/** The server log's line for a session closed to make room; `sameAddress` counts the newcomer too. */
-export function closedLogLine(closed: OpenSession, sameAddress: number, now: number): string {
-  const openMinutes = wholeMinutes(now - closed.openedAt);
-  return `${BUSY_LOG_PREFIX} closed a session open ${openMinutes} min (${stateNote(closed, sameAddress, now)}) to make room for a new one`;
+/**
+ * The server log's line for a session closed to make room, naming both addresses: an
+ * operator can then tell one student's extra tabs from a class outgrowing the server.
+ * `sameAddress` counts the newcomer too.
+ */
+export function closedLogLine(closed: OpenSession, sameAddress: number, newcomer: Newcomer): string {
+  const openMinutes = wholeMinutes(newcomer.at - closed.openedAt);
+  const state = stateNote(closed, sameAddress, newcomer.at);
+  return `${BUSY_LOG_PREFIX} closed ${closed.clientAddress} open ${openMinutes} min (${state}) to make room for ${newcomer.clientAddress}`;
 }
 
 function stateNote(closed: OpenSession, sameAddress: number, now: number): string {
   if (closed.simulating) return 'simulating';
   const idle = `idle ${wholeMinutes(now - closed.idleSince)} min`;
-  return sameAddress > 1 ? `${idle}, ${sameAddress} sessions from its address` : idle;
+  return sameAddress > 1 ? `${idle}, ${sameAddress} sessions from that address` : idle;
 }
 
 /** The server log's line for a newcomer refused because no session could be closed. */
-export function refusedLogLine(open: readonly OpenSession[]): string {
+export function refusedLogLine(open: readonly OpenSession[], newcomer: Newcomer): string {
   const simulating = open.filter((session) => session.simulating).length;
   const idle = open.length - simulating;
-  return `${BUSY_LOG_PREFIX} refused a new session, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
+  return `${BUSY_LOG_PREFIX} refused ${newcomer.clientAddress}, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
 }
 
 function wholeMinutes(ms: number): number {

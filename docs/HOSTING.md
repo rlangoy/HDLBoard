@@ -79,7 +79,8 @@ this order:
 
 The closed session's student is told why, with a link to download the offline
 version. When no session can be closed, the new one is refused with that link
-instead, rather than the server melting. Every such `ERROR busy` is logged. A session only costs CPU while its simulation is actually running,
+instead, rather than the server melting. Every such `ERROR busy` is logged with the client addresses involved
+(`ERROR busy: closed 203.0.113.5 open 26 min (idle 4 min) to make room for 198.51.100.7`). A session only costs CPU while its simulation is actually running,
 so a 4-core machine comfortably serves a class of 20–30 students editing and
 running in bursts. Raise or lower the cap to match the hardware.
 
@@ -1082,7 +1083,7 @@ same set through nginx, so it tests the WebSocket proxy too.
 | `Icarus Verilog (iverilog) was not found, so Verilog designs cannot run` | Icarus isn't installed, or isn't on the service user's `PATH` — install it (`apt install iverilog`, `apk add iverilog`, `brew install icarus-verilog`) or set `IVERILOG_EXE`; VHDL is unaffected |
 | Verilog console starts with a warning about an untested Icarus version | The installed Icarus is neither 12.x nor 13.x. It usually still works; install 13.0 if compiling or running misbehaves |
 | `EADDRINUSE` | Something already holds the port: `ss -ltnp \| grep 9010` (`netstat -ltn` on Alpine), or an earlier run — `./scripts/stop.sh` |
-| `The server is busy: all … simulation sessions are in use` | The `HDL_MAX_SESSIONS` cap, with no session to close: each simulating and younger than `HDL_REPLACE_AFTER_MINUTES`, or idle less than `HDL_IDLE_GRACE_SECONDS`. Raise the cap if the hardware can take it (older backends said `Too many concurrent sessions`). The log line `ERROR busy: refused a new session` says how many were simulating |
+| `The server is busy: all … simulation sessions are in use` | The `HDL_MAX_SESSIONS` cap, with no session to close: each simulating and younger than `HDL_REPLACE_AFTER_MINUTES`, or idle less than `HDL_IDLE_GRACE_SECONDS`. Raise the cap if the hardware can take it (older backends said `Too many concurrent sessions`). The log line `ERROR busy: refused <address>, all … in use` names the refused client and says how many were simulating |
 | `Your simulation session was closed because it was not simulating` | The server was full and this session was the one idle longest, so it made room for a new student. Click Start to try again |
 | `Your simulation session was closed because the server is under heavy load` | The server was full, every session was simulating, and this one had been open `HDL_REPLACE_AFTER_MINUTES` or more, so it made room for a new student. Click Start to try again |
 | Simulation stops after 60 s | A batch run (a testbench with no ports) hit its timeout — usually a process with no `wait` (VHDL) or no `$finish`/delay (Verilog), not a hosting problem |
