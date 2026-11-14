@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { VhdlFileInput } from '../protocol.js';
-import { directivesOf, explainMissingInclude, findActiveIncludeLoop, type IncludeContext } from './includeCycles.js';
+import { describeIncludeLoop, directivesOf, explainMissingInclude, findIncludeLoop, type IncludeContext } from './includeCycles.js';
 
 /** What the bundled Icarus 13.0 prints for an unguarded a.vh → b.vh → a.vh. */
 const CYCLE_FAILURE = './a.vh:3: Include file b.vh not found\nPreprocessor failed with 1 errors.';
@@ -16,7 +16,7 @@ const top = (...includes: string[]) => header('top.v', ...includes);
 /** The files compiled with `top.v` as the only source, and the macros given on the command line. */
 const compiling = (files: VhdlFileInput[], predefined: string[] = []): IncludeContext => ({ files, sources: ['top.v'], predefined });
 
-const loopIn = (files: VhdlFileInput[], predefined?: string[]) => findActiveIncludeLoop(compiling(files, predefined));
+const loopIn = (files: VhdlFileInput[], predefined?: string[]) => findIncludeLoop(compiling(files, predefined))?.chain;
 
 describe('directivesOf', () => {
   test('lists the directives in source order', () => {
@@ -25,7 +25,7 @@ describe('directivesOf', () => {
   });
 
   test('names a header written as ./name by its project file name', () => {
-    assert.deepEqual(directivesOf('`include "./a.vh"\n'), [{ kind: 'include', file: 'a.vh' }]);
+    assert.deepEqual(directivesOf('`include "./a.vh"\n'), [{ kind: 'include', file: 'a.vh', line: 1 }]);
   });
 
   test('skips directives inside comments', () => {
@@ -41,7 +41,7 @@ describe('directivesOf', () => {
   });
 });
 
-describe('findActiveIncludeLoop', () => {
+describe('findIncludeLoop', () => {
   test('finds a header that includes itself', () => {
     assert.deepEqual(loopIn([top('self.vh'), header('self.vh', 'self.vh')]), ['self.vh', 'self.vh']);
   });
@@ -92,12 +92,18 @@ describe('findActiveIncludeLoop', () => {
 
   test('carries a macro defined in one source into the next', () => {
     const files = [file('first.v', '`define GUARDED\n'), file('second.v', '`include "a.vh"\n'), file('a.vh', '`ifndef GUARDED\n`include "a.vh"\n`endif\n')];
-    assert.equal(findActiveIncludeLoop({ files, sources: ['first.v', 'second.v'], predefined: [] }), undefined);
+    assert.equal(findIncludeLoop({ files, sources: ['first.v', 'second.v'], predefined: [] }), undefined);
   });
 
   test('follows the branch a macro Icarus defines itself selects', () => {
     const a = file('a.vh', '`ifdef __ICARUS__\n`include "b.vh"\n`else\n`include "a.vh"\n`endif\n');
     assert.deepEqual(loopIn([top('a.vh'), a, header('b.vh', 'a.vh')], ['__ICARUS__']), ['a.vh', 'b.vh', 'a.vh']);
+  });
+
+  test('lets a header open a block that the file including it closes, as Icarus does', () => {
+    const opensBlock = file('opens.vh', '`ifdef NEVER\n');
+    const closesIt = file('top.v', '`include "opens.vh"\n`include "self.vh"\n`endif\n');
+    assert.equal(loopIn([closesIt, opensBlock, header('self.vh', 'self.vh')]), undefined);
   });
 
   test('follows a loop again once `undef removes its guard', () => {
@@ -106,7 +112,7 @@ describe('findActiveIncludeLoop', () => {
   });
 });
 
-describe('findActiveIncludeLoop — abandoning a trace it cannot follow exactly', () => {
+describe('findIncludeLoop — abandoning a trace it cannot follow exactly', () => {
   /** `top.v` → h0.vh → h1.vh → … → the last, which includes itself. */
   const chainEndingInLoop = (length: number) => {
     const headers = Array.from({ length }, (_, index) => header(`h${index}.vh`, `h${Math.min(index + 1, length - 1)}.vh`));
@@ -153,46 +159,71 @@ describe('findActiveIncludeLoop — abandoning a trace it cannot follow exactly'
   });
 });
 
-describe('explainMissingInclude', () => {
-  const cycle = compiling([top('a.vh'), header('a.vh', 'b.vh'), header('b.vh', 'a.vh')]);
+describe('findIncludeLoop — where the loop closes', () => {
+  const twoHeaders = compiling([top('a.vh'), file('a.vh', '// a\n`include "b.vh"\n'), file('b.vh', '// b\n\n`include "a.vh"\n')]);
 
-  test('keeps the compiler text first', () => {
-    assert.ok(explainMissingInclude(CYCLE_FAILURE, cycle).startsWith(CYCLE_FAILURE));
+  test('names the file whose include reopens the loop', () => {
+    assert.equal(findIncludeLoop(twoHeaders)?.closingFile, 'b.vh');
   });
 
-  test('tells the loop from the header Icarus reported', () => {
-    assert.match(explainMissingInclude(CYCLE_FAILURE, cycle), /b\.vh exists, but its includes form a loop: b\.vh → a\.vh → b\.vh\./);
+  test('names the line of that include', () => {
+    assert.equal(findIncludeLoop(twoHeaders)?.closingLine, 3);
+  });
+
+  test('counts lines inside a block comment before the include', () => {
+    const commented = compiling([top('a.vh'), file('a.vh', '/* one\ntwo */\n`include "a.vh"\n')]);
+    assert.equal(findIncludeLoop(commented)?.closingLine, 3);
+  });
+});
+
+describe('describeIncludeLoop', () => {
+  const loop = { reopened: 'a.vh', chain: ['a.vh', 'b.vh', 'a.vh'], closingFile: 'b.vh', closingLine: 3 };
+
+  test('reads as an Icarus error at the closing include, so the editor marks that line', () => {
+    assert.match(describeIncludeLoop(loop), /^b\.vh:3: error: /);
+  });
+
+  test('names the reopened header and the whole chain', () => {
+    assert.match(describeIncludeLoop(loop), /Including a\.vh here closes a loop: a\.vh → b\.vh → a\.vh\./);
+  });
+});
+
+describe('explainMissingInclude', () => {
+  const headers = [top('a.vh'), header('a.vh', 'b.vh'), header('b.vh', 'a.vh')];
+
+  test('keeps the compiler text first', () => {
+    assert.ok(explainMissingInclude(CYCLE_FAILURE, headers).startsWith(CYCLE_FAILURE));
+  });
+
+  test('says an existing header could not be opened, and why that most likely is', () => {
+    assert.match(explainMissingInclude(CYCLE_FAILURE, headers), /^b\.vh exists, but Icarus could not open it\. That most likely means/m);
   });
 
   test('recognises the message when the compiler ends its lines with CRLF', () => {
-    assert.match(explainMissingInclude(CYCLE_FAILURE.replace('\n', '\r\n'), cycle), /form a loop/);
+    assert.match(explainMissingInclude(CYCLE_FAILURE.replace('\n', '\r\n'), headers), /^b\.vh exists/m);
   });
 
   test('recognises the header when Icarus reports it as ./name', () => {
-    assert.match(explainMissingInclude('./a.vh:3: Include file ./b.vh not found', cycle), /^b\.vh exists/m);
+    assert.match(explainMissingInclude('./a.vh:3: Include file ./b.vh not found', headers), /^b\.vh exists/m);
   });
 
   test('looks past a genuinely missing header to an existing one reported after it', () => {
     const both = `top.v:1: Include file nowhere.vh not found\n${CYCLE_FAILURE}`;
-    assert.match(explainMissingInclude(both, cycle), /^b\.vh exists/m);
+    assert.match(explainMissingInclude(both, headers), /^b\.vh exists/m);
   });
 
   test('names a header whose name holds a space', () => {
-    const spaced = compiling([top('my defs.vh'), header('my defs.vh', 'my defs.vh')]);
+    const spaced = [header('my defs.vh', 'my defs.vh')];
     assert.match(explainMissingInclude('./my defs.vh:2: Include file my defs.vh not found', spaced), /^my defs\.vh exists/m);
   });
 
   test('leaves a genuinely missing header as the compiler said it', () => {
     const missing = 'top.v:1: Include file nowhere.vh not found\nPreprocessor failed with 1 errors.';
-    assert.equal(explainMissingInclude(missing, compiling([top('nowhere.vh')])), missing);
-  });
-
-  test('leaves an existing header as the compiler said it when nothing loops', () => {
-    assert.equal(explainMissingInclude(CYCLE_FAILURE, compiling([top('a.vh'), header('a.vh', 'b.vh'), header('b.vh')])), CYCLE_FAILURE);
+    assert.equal(explainMissingInclude(missing, [top('nowhere.vh')]), missing);
   });
 
   test('leaves any other failure as the compiler said it', () => {
     const syntax = 'top.v:2: syntax error';
-    assert.equal(explainMissingInclude(syntax, cycle), syntax);
+    assert.equal(explainMissingInclude(syntax, headers), syntax);
   });
 });

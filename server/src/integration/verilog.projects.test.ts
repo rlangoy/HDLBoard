@@ -78,6 +78,24 @@ const CYCLE_CHOSEN_BY_ICARUS: VhdlFileInput[] = [
   { name: 'a.vh', content: '`ifdef __ICARUS__\n`include "b.vh"\n`else\n`include "a.vh"\n`endif\n' },
   includes('b.vh', 'a.vh'),
 ];
+/** a.vh includes itself through a macro, which HDLBoard does not trace; Icarus still loops. */
+const LOOP_THROUGH_MACRO_INCLUDE: VhdlFileInput[] = [topIncluding('a.vh'), { name: 'a.vh', content: '`define NEXT "a.vh"\n`include `NEXT\n' }];
+/** opens.vh opens an `ifdef that top.v closes, so Icarus never reads the self-including header between. */
+const LOOP_IN_BLOCK_OPENED_BY_A_HEADER: VhdlFileInput[] = [
+  {
+    name: 'top.v',
+    content: `\`include "opens.vh"\n\`include "self.vh"\n\`endif\nmodule top(output [9:0] LEDR);\n  assign LEDR = 10'b${LED_PATTERN};\nendmodule\n`,
+  },
+  { name: 'opens.vh', content: '`ifdef NEVER_DEFINED\n' },
+  includes('self.vh', 'self.vh'),
+];
+/** x.vh and y.vh loop, but no source includes either, so Icarus never reads them. */
+const CYCLE_IN_UNUSED_HEADERS: VhdlFileInput[] = [
+  topIncluding('led.vh'),
+  { name: 'led.vh', content: DEFINES_LED_VALUE },
+  includes('x.vh', 'y.vh'),
+  includes('y.vh', 'x.vh'),
+];
 const SELF_INCLUDE: VhdlFileInput[] = [topIncluding('self.vh'), includes('self.vh', 'self.vh')];
 const GUARDED_CYCLE: VhdlFileInput[] = [
   topIncluding('a.vh'),
@@ -161,14 +179,14 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
       assert.match(frame.text, /nowhere\.vh/);
     }));
 
-  describe('I-V19: an unguarded include loop is reported promptly, by its chain', () => {
+  describe('I-V19: an unguarded include loop is reported before Icarus runs, at the include that closes it', () => {
     const loops = [
-      ['two headers', CIRCULAR_INCLUDES, /form a loop: (a\.vh → b\.vh → a\.vh|b\.vh → a\.vh → b\.vh)\./],
-      ['three headers', LONG_CYCLE, /form a loop: (\w\.vh → ){3}\w\.vh\./],
-      ['a header that includes itself', SELF_INCLUDE, /form a loop: self\.vh → self\.vh\./],
-      ['two headers, not the inactive self-includes beside them', CYCLE_BESIDE_INACTIVE_ONES, /form a loop: ([ab])\.vh → [ab]\.vh → \1\.vh\./],
-      ['two headers, through the branch `ifdef __ICARUS__ takes', CYCLE_CHOSEN_BY_ICARUS, /form a loop: ([ab])\.vh → [ab]\.vh → \1\.vh\./],
-      ['headers spelled with spaces and ./', SPACED_CYCLE, /form a loop: cycle ([ab])\.vh → cycle [ab]\.vh → cycle \1\.vh\./],
+      ['two headers', CIRCULAR_INCLUDES, /^b\.vh:1: error: Including a\.vh here closes a loop: a\.vh → b\.vh → a\.vh\./],
+      ['three headers', LONG_CYCLE, /^c\.vh:1: error: Including a\.vh here closes a loop: a\.vh → b\.vh → c\.vh → a\.vh\./],
+      ['a header that includes itself', SELF_INCLUDE, /^self\.vh:1: error: Including self\.vh here closes a loop: self\.vh → self\.vh\./],
+      ['two headers, not the inactive self-includes beside them', CYCLE_BESIDE_INACTIVE_ONES, /^b\.vh:4: error: .* a\.vh → b\.vh → a\.vh\./],
+      ['two headers, through the branch `ifdef __ICARUS__ takes', CYCLE_CHOSEN_BY_ICARUS, /^b\.vh:1: error: .* a\.vh → b\.vh → a\.vh\./],
+      ['headers spelled with spaces and ./', SPACED_CYCLE, /^cycle b\.vh:1: error: .* cycle a\.vh → cycle b\.vh → cycle a\.vh\./],
     ] as const;
     for (const [label, files, chain] of loops) {
       test(label, () =>
@@ -178,12 +196,21 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
         }));
     }
 
-    test('as an analyze error that keeps the compiler\'s own message', () =>
+    test('as an analyze error', () =>
       withSession(async (client) => {
-        const frame = await errorOf(client, CIRCULAR_INCLUDES, 'top.v', PROMPT_ERROR_MS);
-        assert.match(`${frame.stage}: ${frame.text}`, /^analyze: [^]*Include file [ab]\.vh not found/);
+        assert.equal((await errorOf(client, CIRCULAR_INCLUDES, 'top.v', PROMPT_ERROR_MS)).stage, 'analyze');
       }));
   });
+
+  // Icarus stops at an untraced loop only when it runs out of open files: promptly at
+  // Windows' 512, but under Linux's often raised limit (1048576 in Docker) not before the
+  // compile timeout, which then reports it instead.
+  const promptOnlyOnWindows = { skip: process.platform !== 'win32' && 'Icarus runs until the open-file limit' };
+  test('I-V19: a loop HDLBoard cannot trace keeps Icarus\'s message, with a hint below it', promptOnlyOnWindows, () =>
+    withSession(async (client) => {
+      const frame = await errorOf(client, LOOP_THROUGH_MACRO_INCLUDE, 'top.v', PROMPT_ERROR_MS);
+      assert.match(frame.text, /Include file a\.vh not found[^]*\n\na\.vh exists, but Icarus could not open it\./);
+    }));
 
   test('I-V19: a genuinely missing include is not called a loop', () =>
     withSession(async (client) => {
@@ -192,7 +219,12 @@ describe('Verilog path — projects', { skip: icarus.skip }, () => {
     }));
 
   describe('I-V19: an include loop that is never expanded runs', () => {
-    const harmless = [['behind include guards', GUARDED_CYCLE], ['in an inactive `ifdef branch', CYCLE_IN_INACTIVE_BRANCH]] as const;
+    const harmless = [
+      ['behind include guards', GUARDED_CYCLE],
+      ['in an inactive `ifdef branch', CYCLE_IN_INACTIVE_BRANCH],
+      ['between headers no source includes', CYCLE_IN_UNUSED_HEADERS],
+      ['inside an `ifdef a header opens and its includer closes', LOOP_IN_BLOCK_OPENED_BY_A_HEADER],
+    ] as const;
     for (const [label, files] of harmless) {
       test(label, () =>
         withSession(async (client) => {

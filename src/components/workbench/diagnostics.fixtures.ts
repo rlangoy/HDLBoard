@@ -155,12 +155,12 @@ export const ICARUS_MISSING_INCLUDE = join([
 ]);
 
 /**
- * Icarus Verilog 13.0 on an unguarded loop between two headers whose names hold spaces, with
- * the backend's explanation below it, copied from a real run (server/src/verilog/includeCycles.ts).
+ * Icarus Verilog 13.0 on a loop between two headers whose names hold spaces, through an
+ * include HDLBoard cannot trace, with the backend's hint below it (server/src/verilog/includeCycles.ts).
  */
 export const INCLUDE_LOOP_NOTE =
-  'cycle b.vh exists, but its includes form a loop: cycle b.vh → cycle a.vh → cycle b.vh. ' +
-  'Icarus opens the headers again on every pass until it runs out of files, then reports one as not found. ' +
+  'cycle b.vh exists, but Icarus could not open it. That most likely means the includes form a loop ' +
+  'and Icarus ran out of files. ' +
   'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.';
 export const ICARUS_INCLUDE_LOOP = join([
   './cycle a.vh:3: Include file cycle b.vh not found',

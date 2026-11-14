@@ -2,30 +2,41 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Explaining a circular `include. Icarus expands an unguarded loop of headers until it
- * runs out of open files, then reports the header it was opening as "not found" —
- * although the student's project holds it. When Icarus names a header that exists, the
- * loop is traced and added to the compiler's message, which is kept as it was.
+ * Circular `includes. Icarus expands an unguarded loop of headers until it runs out of
+ * open files, then reports the header it was opening as "not found" — although the
+ * project holds it. How long that takes depends on the open-file limit: a fraction of a
+ * second at Windows' 512, but where the limit is raised, as in many containers, the run
+ * can last until the compile timeout.
  *
- * The loop is the one Icarus expands, not merely one in the text: the sources are read in
- * compile order, macros are defined and undefined as they go (the project's `-D` macros
- * and Icarus's own first), and only the includes in active `ifdef branches are followed.
- * `ifdef asks only whether a name is defined, so this is exact — include guards and
- * inactive loops are never named. Where it cannot be exact (an `include of a macro or in
- * angle brackets, `undefineall, or a project too large or too deeply nested to trace) the
- * trace is abandoned: nothing is added, and the compiler's message stands alone.
- * Pure: it reads text and touches nothing.
+ * So the loop is found before Icarus runs, by tracing what Icarus would expand: the
+ * sources in compile order, macros defined and undefined as they go (Icarus's own and the
+ * project's `-D` macros first), and only the includes in active `ifdef branches. `ifdef
+ * asks only whether a name is defined, so the trace is exact — include guards, inactive
+ * loops and headers no source includes never stop a run. Where it cannot be exact (an
+ * `include of a macro or in angle brackets, `undefineall, a conditional on an expression,
+ * or a project too large or too deeply nested) it gives up, and Icarus runs as usual.
+ * If Icarus then reports a header of the project as missing, a hint says why it likely
+ * did, without naming a loop the trace could not establish.
  *
- * The frontend recognises the note by its wording (src/components/workbench/diagnostics.ts).
+ * Pure: it reads text and touches nothing. The frontend recognises the hint by its
+ * wording (src/components/workbench/diagnostics.ts).
  */
 
 import type { VhdlFileInput } from '../protocol.js';
 
-/** What Icarus preprocessed: every project file, the sources in compile order, and the macros defined before them. */
+/** What Icarus preprocesses: every project file, the sources in compile order, and the macros defined before them. */
 export interface IncludeContext {
   readonly files: readonly VhdlFileInput[];
   readonly sources: readonly string[];
   readonly predefined: readonly string[];
+}
+
+/** A loop Icarus would expand: the file reopened, the chain from it back to it, and the include that reopens it. */
+export interface IncludeLoop {
+  readonly reopened: string;
+  readonly chain: readonly string[];
+  readonly closingFile: string;
+  readonly closingLine: number;
 }
 
 /** `./cycle_a.vh:3: Include file cycle_b.vh not found` — the header is the captured group. */
@@ -49,8 +60,8 @@ const SESSION_DIRECTORY_PREFIX = /^(?:\.\/)+/;
 const MAX_EXPANSIONS = 10_000;
 
 /**
- * How deeply nested includes are traced before giving up. Icarus runs out of open files
- * near 500 levels; tracing much deeper would only risk the call stack, three frames a level.
+ * How deeply nested includes are traced before giving up. A real loop is found within a
+ * few levels of its length; tracing much deeper would only risk the call stack.
  */
 const MAX_INCLUDE_DEPTH = 1_000;
 
@@ -58,20 +69,42 @@ const MAX_INCLUDE_DEPTH = 1_000;
 type NamedDirective = 'undef' | 'ifdef' | 'ifndef' | 'elsif';
 type BareDirective = 'else' | 'endif';
 
+interface IncludeDirective {
+  readonly kind: 'include';
+  readonly file: string;
+  readonly line: number;
+}
+
 type Directive =
   | { readonly kind: 'define' | NamedDirective; readonly name: string }
   | { readonly kind: BareDirective }
-  | { readonly kind: 'include'; readonly file: string }
+  | IncludeDirective
   | { readonly kind: 'untraceable' | 'unreadableConditional' };
 
 const projectFileName = (included: string): string => included.replace(SESSION_DIRECTORY_PREFIX, '');
 
+/** The 1-based line of each offset, asked for in increasing order, counted in one pass. */
+class LineCounter {
+  private line = 1;
+  private counted = 0;
+
+  constructor(private readonly text: string) {}
+
+  lineAt(offset: number): number {
+    for (; this.counted < offset; this.counted += 1) {
+      if (this.text[this.counted] === '\n') this.line += 1;
+    }
+    return this.line;
+  }
+}
+
 /** The directive one DIRECTIVE match is, or undefined for a comment or a string. */
-function directiveOf([, defined, conditional, name, bare, included, untraceable, unreadable]: RegExpExecArray): Directive | undefined {
+function directiveOf(match: RegExpExecArray, lines: LineCounter): Directive | undefined {
+  const [, defined, conditional, name, bare, included, untraceable, unreadable] = match;
   if (defined !== undefined) return { kind: 'define', name: defined };
   if (name !== undefined) return { kind: conditional as NamedDirective, name };
   if (bare !== undefined) return { kind: bare as BareDirective };
-  if (included !== undefined) return { kind: 'include', file: projectFileName(included) };
+  if (included !== undefined) return { kind: 'include', file: projectFileName(included), line: lines.lineAt(match.index) };
   if (untraceable !== undefined) return { kind: 'untraceable' };
   if (unreadable !== undefined) return { kind: 'unreadableConditional' };
   return undefined;
@@ -79,7 +112,8 @@ function directiveOf([, defined, conditional, name, bare, included, untraceable,
 
 /** The preprocessor directives HDLBoard follows, in source order, outside comments and strings. */
 export function directivesOf(source: string): Directive[] {
-  return [...source.matchAll(DIRECTIVE)].map(directiveOf).filter((directive) => directive !== undefined);
+  const lines = new LineCounter(source);
+  return [...source.matchAll(DIRECTIVE)].map((match) => directiveOf(match, lines)).filter((directive) => directive !== undefined);
 }
 
 /** Raised inside a trace that can no longer follow Icarus exactly; the trace then names no loop. */
@@ -91,7 +125,7 @@ interface Branch {
   taken: boolean;
 }
 
-/** The `ifdef … `elsif … `else … `endif blocks open in one file, and whether its text is active. */
+/** The `ifdef … `elsif … `else … `endif blocks open so far, and whether the text is active. */
 class Conditionals {
   private readonly open: Branch[] = [];
 
@@ -149,6 +183,9 @@ interface Opened {
  * yet a loop — its include guard may make it empty. It is one when the file is opened
  * with the same macros defined as when it was opened further out: what a file expands to
  * depends on nothing else, so from there the expansion repeats forever.
+ *
+ * A file outside the project is passed by: the session directory holds only the
+ * project's files, so Icarus cannot open it either, and it defines nothing.
  */
 class IncludeExpansion {
   private readonly sources = new Map<string, string>();
@@ -157,17 +194,16 @@ class IncludeExpansion {
   /** Outermost first. */
   private readonly expanding: Opened[] = [];
   private expansionsLeft = MAX_EXPANSIONS;
+  /** One for the whole trace: Icarus lets a header open a block its includer closes. */
+  private readonly conditionals = new Conditionals();
 
   constructor({ files, predefined }: IncludeContext) {
     for (const file of files) this.sources.set(file.name, file.content);
     this.defined = new Set(predefined);
   }
 
-  /**
-   * The loop as a chain that starts and ends with the same file; undefined when there is
-   * none, or when the trace was abandoned before it could tell.
-   */
-  loopIn(sources: readonly string[]): string[] | undefined {
+  /** The first loop the sources expand; undefined when there is none, or when the trace gave up before it could tell. */
+  loopIn(sources: readonly string[]): IncludeLoop | undefined {
     try {
       return this.firstLoopIn(sources);
     } catch (error) {
@@ -176,32 +212,38 @@ class IncludeExpansion {
     }
   }
 
-  private firstLoopIn(sources: readonly string[]): string[] | undefined {
+  private firstLoopIn(sources: readonly string[]): IncludeLoop | undefined {
     for (const source of sources) {
-      const loop = this.expand(source);
+      const directives = this.directivesIn(source);
+      const loop = directives === undefined ? undefined : this.expand(this.opening(source), directives);
       if (loop !== undefined) return loop;
     }
     return undefined;
   }
 
-  /**
-   * A file outside the project is passed by: the session directory holds only the
-   * project's files, so Icarus cannot open it either, and it defines nothing.
-   */
-  private expand(file: string): string[] | undefined {
+  private include(includer: string, { file, line }: IncludeDirective): IncludeLoop | undefined {
     const directives = this.directivesIn(file);
     if (directives === undefined) return undefined;
-    const opened: Opened = { file, macros: [...this.defined].sort().join(' ') };
-    const repeated = this.expanding.findIndex(({ file: outer, macros }) => outer === file && macros === opened.macros);
-    if (repeated >= 0) return [...this.expanding.slice(repeated).map((outer) => outer.file), file];
+    const opened = this.opening(file);
+    const reopened = this.expanding.findIndex((outer) => outer.file === file && outer.macros === opened.macros);
+    if (reopened < 0) return this.expand(opened, directives);
+    const chain = [...this.expanding.slice(reopened).map((outer) => outer.file), file];
+    return { reopened: file, chain, closingFile: includer, closingLine: line };
+  }
+
+  private opening(file: string): Opened {
+    return { file, macros: [...this.defined].sort().join(' ') };
+  }
+
+  private expand(opened: Opened, directives: readonly Directive[]): IncludeLoop | undefined {
     this.spendExpansion();
     this.expanding.push(opened);
-    const loop = this.follow(directives);
+    const loop = this.follow(opened.file, directives);
     this.expanding.pop();
     return loop;
   }
 
-  /** Abandons the trace once it has expanded too many files, or nested them too deeply. */
+  /** Gives up once the trace has expanded too many files, or nested them too deeply. */
   private spendExpansion(): void {
     this.expansionsLeft -= 1;
     if (this.expansionsLeft < 0 || this.expanding.length >= MAX_INCLUDE_DEPTH) throw new TraceAbandoned();
@@ -215,18 +257,17 @@ class IncludeExpansion {
     return known;
   }
 
-  private follow(directives: readonly Directive[]): string[] | undefined {
-    const conditionals = new Conditionals();
+  private follow(file: string, directives: readonly Directive[]): IncludeLoop | undefined {
     const isDefined = (name: string): boolean => this.defined.has(name);
     for (const directive of directives) {
-      if (conditionals.track(directive, isDefined) || !conditionals.active) continue;
-      const loop = this.apply(directive);
+      if (this.conditionals.track(directive, isDefined) || !this.conditionals.active) continue;
+      const loop = this.apply(file, directive);
       if (loop !== undefined) return loop;
     }
     return undefined;
   }
 
-  private apply(directive: Directive): string[] | undefined {
+  private apply(file: string, directive: Directive): IncludeLoop | undefined {
     switch (directive.kind) {
       case 'define':
         this.defined.add(directive.name);
@@ -235,7 +276,7 @@ class IncludeExpansion {
         this.defined.delete(directive.name);
         return undefined;
       case 'include':
-        return this.expand(directive.file);
+        return this.include(file, directive);
       case 'untraceable':
         throw new TraceAbandoned();
       default:
@@ -244,25 +285,18 @@ class IncludeExpansion {
   }
 }
 
-/** The include loop Icarus expands for these sources, or undefined when it expands none. */
-export function findActiveIncludeLoop(context: IncludeContext): string[] | undefined {
+/** The include loop Icarus would expand for these sources, or undefined when it expands none or the trace gave up. */
+export function findIncludeLoop(context: IncludeContext): IncludeLoop | undefined {
   return new IncludeExpansion(context).loopIn(context.sources);
 }
 
-/** The same loop told from `header`, when it is on it: `[b, a, b]` told from `a` is `[a, b, a]`. */
-function startingAt(header: string, loop: readonly string[]): readonly string[] {
-  const files = loop.slice(0, -1);
-  const at = files.indexOf(header);
-  if (at < 0) return loop;
-  const rotated = [...files.slice(at), ...files.slice(0, at)];
-  return [...rotated, header];
-}
+const GUARD_ADVICE = 'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.';
 
-function cycleNote(header: string, loop: readonly string[]): string {
+/** The loop as an error at the include that closes it, in Icarus's own `file:line: error:` form. */
+export function describeIncludeLoop({ reopened, chain, closingFile, closingLine }: IncludeLoop): string {
   return (
-    `${header} exists, but its includes form a loop: ${startingAt(header, loop).join(' → ')}. ` +
-    'Icarus opens the headers again on every pass until it runs out of files, then reports one as not found. ' +
-    'Guard each header with `ifndef NAME / `define NAME … `endif, or remove one of the includes.'
+    `${closingFile}:${closingLine}: error: Including ${reopened} here closes a loop: ${chain.join(' → ')}. ` +
+    `Icarus would open the headers again and again until it ran out of files. ${GUARD_ADVICE}`
   );
 }
 
@@ -274,13 +308,18 @@ function existingHeaderReported(compilerText: string, files: readonly VhdlFileIn
     .find((header) => names.has(header));
 }
 
+function missingHeaderHint(header: string): string {
+  return (
+    `${header} exists, but Icarus could not open it. That most likely means the includes form a loop ` +
+    `and Icarus ran out of files. ${GUARD_ADVICE}`
+  );
+}
+
 /**
- * The compiler's text, followed by the include loop when Icarus reports a header of the
- * project as missing and the sources it compiled loop; otherwise the text unchanged.
+ * The compiler's text, followed by a hint when Icarus reports a header of the project as
+ * missing; otherwise the text unchanged.
  */
-export function explainMissingInclude(compilerText: string, context: IncludeContext): string {
-  const header = existingHeaderReported(compilerText, context.files);
-  if (header === undefined) return compilerText;
-  const loop = findActiveIncludeLoop(context);
-  return loop === undefined ? compilerText : `${compilerText}\n\n${cycleNote(header, loop)}`;
+export function explainMissingInclude(compilerText: string, files: readonly VhdlFileInput[]): string {
+  const header = existingHeaderReported(compilerText, files);
+  return header === undefined ? compilerText : `${compilerText}\n\n${missingHeaderHint(header)}`;
 }

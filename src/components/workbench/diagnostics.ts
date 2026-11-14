@@ -199,8 +199,8 @@ const RECOGNIZERS: readonly Recognizer[] = [
   },
   {
     // HDLBoard's backend, why an existing header was "not found" (server/src/verilog/includeCycles.ts):
-    // "b.vh exists, but its includes form a loop: b.vh → a.vh → b.vh. …"
-    pattern: /^(?<message>.+? exists, but its includes form a loop: .*)$/,
+    // "b.vh exists, but Icarus could not open it. …"
+    pattern: /^(?<message>.+? exists, but Icarus could not open it\. .*)$/,
     interpret: ({ message }) => ({ kind: 'note', message }),
   },
   {
