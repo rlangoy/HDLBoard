@@ -160,6 +160,11 @@ export const rangeText = {
     const check = names.length === 0 ? '' : ` — check the value of ${names.map(code).join(' and ')} here`;
     return `The slice ${code(slice)} must stay inside ${code(vector)} (${range})${fit}${check}.`;
   },
+  /** After a width mismatch, when a slice in the value may have failed first. */
+  sliceMustAlsoStayInside: (slice: string, vector: string, range: string, names: readonly string[]): string => {
+    const check = names.length === 0 ? '' : ` — check the value of ${names.map(code).join(' and ')} here`;
+    return `The slice ${code(slice)} must also stay inside ${code(vector)} (${range})${check}.`;
+  },
   /** `fitting`: a statement that would fit, shown as the example. */
   lengthMismatch: (target: string, targetBits: number, value: string, valueBits: number, fitting?: string): string => {
     const mismatch = `${code(target)} has ${bitCount(targetBits)} but ${code(value)} has ${bitCount(valueBits)} — both sides of an assignment need the same number of bits.`;

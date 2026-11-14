@@ -145,8 +145,14 @@ type TypeDeclaration =
 const MAX_TYPE_DEPTH = 8;
 /** Constants defined by other constants are followed this deep, for the same reason. */
 const MAX_NESTING = 16;
-/** Two values to try for the names that change, far apart, for `constantDifference`. */
-const DIFFERENCE_PROBES: readonly [number, number] = [0, 1000];
+/**
+ * The values `constantDifference` tries for the names that change: each its own,
+ * distinct and not 0 or 1 so that a product shows, then each moved alone.
+ */
+const PROBE_START = 7;
+const PROBE_SPACING = 13;
+const PROBE_MOVE = 1000;
+const NOTHING_CHANGES: ReadonlyMap<string, number> = new Map();
 
 function collapse(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
@@ -269,15 +275,16 @@ export class VhdlDeclarations {
   }
 
   /**
-   * `expression`'s value with every name that changes (a signal, variable, port,
-   * parameter or loop variable) given `changing`; with none, only a static value.
+   * `expression`'s value with each name that changes (a signal, variable, port,
+   * parameter or loop variable) given its value in `changing`; with none, only a
+   * static value.
    */
-  private evaluate(expression: string, line: number, changing?: number): number | undefined {
+  private evaluate(expression: string, line: number, changing: ReadonlyMap<string, number> = NOTHING_CHANGES): number | undefined {
     if (this.nesting > MAX_NESTING) return undefined;
     this.nesting++;
     try {
       return evaluateStatic(expression, {
-        constant: (name) => this.constantValue(name, line) ?? (this.changes(name, line) ? changing : undefined),
+        constant: (name) => this.constantValue(name, line) ?? changing.get(name.toLowerCase()),
         attribute: (name, attribute) => this.attributeValue(name, attribute, line),
       });
     } finally {
@@ -292,14 +299,18 @@ export class VhdlDeclarations {
 
   /**
    * `left - right` when it is the same whatever the changing names hold:
-   * `i - (i - 3)` is 3. Two guesses far apart agreeing is taken as proof: it is
-   * for sums and differences, which is how a slice that moves is written
-   * (`i downto i - 3`); `i*i downto 0` gives two different answers, so none.
+   * `i - (i - 3)` is 3, `i - j` is not. Each name gets its own value, then each in
+   * turn is moved on its own; the difference counts as constant when no move
+   * changes it. That proves it for the sums and differences a moving slice is
+   * written with (`i downto i - 3`), and catches products (`2 * i downto i`).
    */
   private constantDifference(left: string, right: string, line: number): number | undefined {
     const difference = `(${left}) - (${right})`;
-    const [first, second] = DIFFERENCE_PROBES.map((probe) => this.evaluate(difference, line, probe));
-    return first !== undefined && first === second ? first : undefined;
+    const names = [...new Set(difference.match(/[A-Za-z]\w*/g) ?? [])].map((name) => name.toLowerCase()).filter((name) => this.changes(name, line));
+    const start = new Map(names.map((name, i) => [name, PROBE_START + i * PROBE_SPACING]));
+    const atStart = this.evaluate(difference, line, start);
+    const moved = names.map((name) => this.evaluate(difference, line, new Map(start).set(name, (start.get(name) ?? 0) + PROBE_MOVE)));
+    return atStart !== undefined && moved.every((value) => value === atStart) ? atStart : undefined;
   }
 
   /** `3 downto 0`, `x'range`, `natural range 0 to 7`; undefined for `natural range <>`. */

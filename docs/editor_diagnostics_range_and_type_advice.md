@@ -76,16 +76,21 @@ Three pure modules read what advice needs from the source, by pattern, and give 
   file's constants (`staticInteger.ts`). A generic's default counts as its value only
   when no `generic map` in the project could set it (the board testbench sets none).
   A slice that moves keeps its length when its ends differ by a constant
-  (`i downto i - 3` has 4 bits). The nearest declaration above a line wins.
+  (`i downto i - 3` has 4 bits): each changing name gets its own value and is then
+  moved alone, so `i downto j` and `2 * i downto i` get no length. The nearest declaration above a line wins.
 - **`vhdlExpression.ts`**: the assignment on a line (a label or a case choice in front
   is skipped), its `name(…)` parts, and how many bits a value has (`a & b`, `u + 1`,
   `x"AB"`, `to_unsigned(5, 8)`, `a(5 downto 2)`), only when certain.
 - **`rangeAdvice.ts`**: one list of rules per GHDL message, tried in order. For
   `bound check failure`: a function's return value, `'succ`/`'pred`, two vector lengths
-  that are both known and differ (certain, so before any slice is suspected), a slice,
+  that are both known and differ, a slice,
   a vector whose value's width is unknown, a number's range, an overflow, and last a
   general direction. A number "went above" or "below" its range only when the amount
-  added or subtracted is known and positive: `count + delta` may go either way. It points at the
+  added or subtracted is known and positive: `count + delta` may go either way.
+  GHDL evaluates a slice before it compares widths, so a width mismatch is given
+  alone only when every slice on the line is certainly inside its vector; a slice
+  that certainly failed is given instead, and one that may have left its vector is
+  named next to the mismatch. It points at the
   declaration that sets the limit (`relatedLine`, with the note *"value is declared here:
   integer range 0 to 3"*), or at the loop that runs too far.
 - **`typeAdvice.ts`**: the student's own type names and the conversion to write, from

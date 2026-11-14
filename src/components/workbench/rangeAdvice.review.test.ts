@@ -75,6 +75,45 @@ describe('a slice and a width', () => {
   });
 });
 
+const TWO_INDEXES = [
+  '  signal a : std_logic_vector(7 downto 0);',
+  '  signal y : std_logic_vector(3 downto 0);',
+  '  signal i, j : integer;',
+  'begin',
+  '  y <= a(i downto j);',
+  '  y <= a(i downto i - 4);',
+  '  y <= a(7 downto 3);',
+  '  y <= a(2 * i downto i);',
+].join('\n');
+
+describe('a slice whose ends move', () => {
+  test('two independent ends give no width: i downto j may have any length', () => {
+    expect(headline([TWO_INDEXES], 5)).toMatch(/^The slice `a\(i downto j\)` must stay inside `a` \(7 downto 0\) and have 4 bits, like `y`/);
+  });
+
+  test('ends that move together but not by the same amount give no width', () => {
+    expect(headline([TWO_INDEXES], 8)).toMatch(/^The slice `a\(2 \* i downto i\)` must stay inside/);
+  });
+
+  test('a width mismatch with a slice that may also leave its vector names both', () => {
+    expect(headline([TWO_INDEXES], 6)).toBe(
+      '`y` has 4 bits but `a(i downto i - 4)` has 5 bits — both sides of an assignment need the same number of bits.' +
+        ' The slice `a(i downto i - 4)` must also stay inside `a` (7 downto 0) — check the value of `i` here.',
+    );
+  });
+
+  test('a slice certainly outside its vector failed first, before any width was compared', () => {
+    const outside = TWO_INDEXES.replace('  y <= a(7 downto 3);', '  y <= a(9 downto 5);');
+    expect(headline([outside], 7)).toBe('`a(9 downto 5)` reaches outside `a`, which only has indexes 7 downto 0.');
+  });
+
+  test('a width mismatch with a slice that is certainly inside its vector is the cause alone', () => {
+    expect(headline([TWO_INDEXES], 7)).toBe(
+      '`y` has 4 bits but `a(7 downto 3)` has 5 bits — both sides of an assignment need the same number of bits.',
+    );
+  });
+});
+
 const SUB = [
   'entity sub is',
   '  generic (WIDTH : integer := 8);',

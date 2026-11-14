@@ -211,7 +211,16 @@ function bitsWanted(part: NamedPart, check: FailedCheck): { readonly bits?: numb
   return { bits: widthOf(assignment.target.text, check.line, check.declarations), target: assignment.target.text };
 }
 
-function sliceAdvice(part: NamedPart, check: FailedCheck): Advice | undefined {
+/**
+ * What a slice on the failing line may have done: certainly failed (the wrong
+ * direction, or static ends outside its vector), or may have left its vector
+ * (ends that change). A slice certainly inside its vector has no verdict.
+ */
+type SliceVerdict =
+  | { readonly kind: 'failed'; readonly advice: Advice }
+  | { readonly kind: 'mayLeave'; readonly advice: Advice; readonly part: NamedPart; readonly range: string; readonly names: readonly string[] };
+
+function sliceVerdict(part: NamedPart, check: FailedCheck): SliceVerdict | undefined {
   const vector = part.name.text;
   const declared = vectorRange(check, vector);
   const slice = check.declarations.rangeOf(part.inside.text, check.line);
@@ -222,21 +231,26 @@ function sliceAdvice(part: NamedPart, check: FailedCheck): Advice | undefined {
     ...declarationHint(check.declarations.objectAt(vector, check.line), check),
   });
   if (slice.direction !== declared.direction) {
-    return advice(rangeText.sliceDirection(vector, declared.text, declared.direction, turnedAround(part, declared.direction)));
+    const turned = turnedAround(part, declared.direction);
+    return { kind: 'failed', advice: advice(rangeText.sliceDirection(vector, declared.text, declared.direction, turned)) };
   }
   const outside = isOutside(slice, declared);
-  if (outside !== undefined) return outside ? advice(rangeText.sliceOutside(part.whole.text, vector, declared.text)) : undefined;
+  if (outside !== undefined) {
+    return outside ? { kind: 'failed', advice: advice(rangeText.sliceOutside(part.whole.text, vector, declared.text)) } : undefined;
+  }
+  const names = changingNames(part.inside.text, check);
   const { bits, target } = bitsWanted(part, check);
-  return advice(rangeText.sliceMayLeave(part.whole.text, vector, declared.text, changingNames(part.inside.text, check), bits, target));
+  const headline = rangeText.sliceMayLeave(part.whole.text, vector, declared.text, names, bits, target);
+  return { kind: 'mayLeave', advice: advice(headline), part, range: declared.text, names };
 }
 
-const sliceOutOfRange: CheckRule = (check) => {
-  for (const part of namedParts(check.text).filter((p) => isRangeText(p.inside.text))) {
-    const advice = sliceAdvice(part, check);
-    if (advice !== undefined) return advice;
-  }
-  return undefined;
-};
+/** The verdicts of the slices on the failing line, in order. */
+function sliceVerdicts(check: FailedCheck): SliceVerdict[] {
+  const slices = namedParts(check.text).filter((p) => isRangeText(p.inside.text));
+  return slices.flatMap((part) => sliceVerdict(part, check) ?? []);
+}
+
+const sliceOutOfRange: CheckRule = (check) => sliceVerdicts(check)[0]?.advice;
 
 // ------------------------------------------------------------ lengths
 
@@ -285,13 +299,24 @@ function lengthAdvice({ assignment }: VectorAssignment, check: FailedCheck, head
   return { headline, span: spanOf(assignment.value), ...hint };
 }
 
-/** Both widths are known and differ: certain, so it is tried before any slice is suspected. */
+/**
+ * Both widths are known and differ. GHDL evaluates a slice before it compares
+ * widths, so the mismatch is the failed check only when every slice on the line
+ * is certainly inside its vector. A slice that certainly failed is left to the
+ * slice rule; one that may have left its vector is named next to the mismatch.
+ */
 const knownLengthMismatch: CheckRule = (check) => {
   const vector = vectorAssignmentOn(check);
   if (vector?.valueBits === undefined || vector.valueBits === vector.targetBits) return undefined;
+  const slices = sliceVerdicts(check);
+  if (slices.some((slice) => slice.kind === 'failed')) return undefined;
   const { assignment, targetBits, valueBits } = vector;
-  const fitting = fittingStatement(assignment, targetBits, valueBits, check);
-  return lengthAdvice(vector, check, rangeText.lengthMismatch(assignment.target.text, targetBits, assignment.value.text, valueBits, fitting));
+  const mayLeave = slices.find((slice) => slice.kind === 'mayLeave');
+  const mismatch = (fitting?: string) => rangeText.lengthMismatch(assignment.target.text, targetBits, assignment.value.text, valueBits, fitting);
+  if (mayLeave?.kind !== 'mayLeave') return lengthAdvice(vector, check, mismatch(fittingStatement(assignment, targetBits, valueBits, check)));
+  const { part, range, names } = mayLeave;
+  const alsoSlice = rangeText.sliceMustAlsoStayInside(part.whole.text, part.name.text, range, names);
+  return lengthAdvice(vector, check, `${mismatch()} ${alsoSlice}`);
 };
 
 /** The value's width is not known: the target's is, and the student can count. */
