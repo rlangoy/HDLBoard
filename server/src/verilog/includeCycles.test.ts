@@ -48,6 +48,10 @@ describe('directivesOf', () => {
     assert.deepEqual(directivesOf('`define MSG $display("`ifdef X");\n'), [{ kind: 'define', name: 'MSG' }]);
   });
 
+  test('reads thousands of `defines nested on one line without overflowing the stack', () => {
+    assert.deepEqual(directivesOf(`${'`define X '.repeat(6_000)}\n`), [{ kind: 'untraceable' }]);
+  });
+
   test('reads a macro whose body holds no directive as a plain definition', () => {
     assert.deepEqual(directivesOf('`define WIDTH `SIZE + 1\n'), [{ kind: 'define', name: 'WIDTH' }]);
   });

@@ -105,8 +105,17 @@ class LineCounter {
  * expands, and the trace does not expand invocations. Comments and strings in the body do not count.
  */
 function defineOf(name: string, body: string): Directive {
-  const holdsDirective = directivesOf(body).length > 0;
+  const holdsDirective = [...body.matchAll(DIRECTIVE)].some(isDirective);
   return holdsDirective ? { kind: 'untraceable' } : { kind: 'define', name };
+}
+
+/**
+ * Comments and strings match DIRECTIVE without capturing; every directive captures. So a
+ * body is checked in one flat pass — a `define nested in it is not read in turn, which
+ * would recurse once per level.
+ */
+function isDirective(match: RegExpExecArray): boolean {
+  return match.slice(1).some((group) => group !== undefined);
 }
 
 /** The directive one DIRECTIVE match is, or undefined for a comment or a string. */
