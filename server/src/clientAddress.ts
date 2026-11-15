@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import type { IncomingMessage } from 'node:http';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 
 /** What a connection with no address at all is filed under. */
 export const UNKNOWN_ADDRESS = 'unknown';
@@ -39,8 +39,20 @@ export function loggedAddress(req: IncomingMessage, trustedProxies = 0): string 
   return forwarded === undefined || forwarded === address ? address : `${address} (forwarded for ${forwarded})`;
 }
 
+/** This machine in any spelling: `::1`, `0:0:0:0:0:0:0:1`, `127.x.x.x`, `::ffff:7f00:1`. */
+const LOOPBACK = new BlockList();
+const LOOPBACK_PREFIX = 8;
+/** The bits of `::ffff:` in front of an IPv4 address mapped into IPv6. */
+const MAPPED_IPV4_BITS = 96;
+const MAPPED_LOOPBACK_PREFIX = MAPPED_IPV4_BITS + LOOPBACK_PREFIX;
+const IPV6 = 6;
+LOOPBACK.addSubnet('127.0.0.0', LOOPBACK_PREFIX, 'ipv4');
+LOOPBACK.addAddress('::1', 'ipv6');
+LOOPBACK.addSubnet('::ffff:127.0.0.0', MAPPED_LOOPBACK_PREFIX, 'ipv6');
+
+/** `address` must already be an IP address (`isIP`). */
 function isLoopback(address: string): boolean {
-  return address === '::1' || address.startsWith('127.') || address.startsWith('::ffff:127.');
+  return LOOPBACK.check(address, isIP(address) === IPV6 ? 'ipv6' : 'ipv4');
 }
 
 function entriesOf(header: string | string[] | undefined): string[] {
