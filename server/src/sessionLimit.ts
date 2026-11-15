@@ -32,11 +32,15 @@ export interface OpenSession {
   readonly idleSince: number;
   /** Where the student connects from (clientAddress.ts). */
   readonly clientAddress: string;
+  /** How the log names it (`loggedAddress`, clientAddress.ts); `clientAddress` when absent. */
+  readonly logAddress?: string;
 }
 
 /** The connection that wants a place. */
 export interface Newcomer {
   readonly clientAddress: string;
+  /** How the log names it (`loggedAddress`, clientAddress.ts); `clientAddress` when absent. */
+  readonly logAddress?: string;
   /** When it connected, in ms. */
   readonly at: number;
 }
@@ -124,7 +128,11 @@ export const BUSY_LOG_PREFIX = 'hdl-board: ERROR busy:';
 export function closedLogLine(closed: OpenSession, sameAddress: number, newcomer: Newcomer): string {
   const openMinutes = wholeMinutes(newcomer.at - closed.openedAt);
   const state = stateNote(closed, sameAddress, newcomer.at);
-  return `${BUSY_LOG_PREFIX} closed ${closed.clientAddress} open ${openMinutes} min (${state}) to make room for ${newcomer.clientAddress}`;
+  return `${BUSY_LOG_PREFIX} closed ${logged(closed)} open ${openMinutes} min (${state}) to make room for ${logged(newcomer)}`;
+}
+
+function logged(client: OpenSession | Newcomer): string {
+  return client.logAddress ?? client.clientAddress;
 }
 
 function stateNote(closed: OpenSession, sameAddress: number, now: number): string {
@@ -137,7 +145,7 @@ function stateNote(closed: OpenSession, sameAddress: number, now: number): strin
 export function refusedLogLine(open: readonly OpenSession[], newcomer: Newcomer): string {
   const simulating = open.filter((session) => session.simulating).length;
   const idle = open.length - simulating;
-  return `${BUSY_LOG_PREFIX} refused ${newcomer.clientAddress}, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
+  return `${BUSY_LOG_PREFIX} refused ${logged(newcomer)}, all ${open.length} in use (${simulating} simulating, ${idle} idle)`;
 }
 
 function wholeMinutes(ms: number): number {

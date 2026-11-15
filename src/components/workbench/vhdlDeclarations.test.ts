@@ -41,6 +41,8 @@ end architecture;
 
 const declarations = new VhdlDeclarations(SOURCE.split('\n'));
 const AFTER_BEGIN = 25;
+/** The `null;` inside `for i in SW'range loop`. */
+const IN_LOOP = 29;
 const typeOf = (name: string) => declarations.typeAt(name, AFTER_BEGIN);
 
 describe('VhdlDeclarations', () => {
@@ -77,7 +79,7 @@ describe('VhdlDeclarations', () => {
   });
 
   test("a loop over x'range has x's range", () => {
-    expect(typeOf('i')).toMatchObject({ kind: 'number', range: { left: 9, right: 0, direction: 'downto' } });
+    expect(declarations.typeAt('i', IN_LOOP)).toMatchObject({ kind: 'number', range: { left: 9, right: 0, direction: 'downto' } });
   });
 
   test('a declaration written in a comment is not one', () => {
@@ -99,5 +101,46 @@ describe('VhdlDeclarations', () => {
   test('the nearest declaration above a line wins', () => {
     const shadowed = new VhdlDeclarations(['signal x : bit;', 'process', '  variable x : integer;', 'begin'].map(String));
     expect(shadowed.objectAt('x', 4)?.objectClass).toBe('variable');
+  });
+
+  const SCOPES = new VhdlDeclarations([
+    'architecture rtl of e is',                        // 1
+    '  signal count : integer range 0 to 9;',          // 2
+    '  function twice(n : integer) return integer is', // 3
+    '    variable count : integer range 0 to 1;',      // 4
+    '  begin',                                         // 5
+    '    if n > 0 then return 2 * n; end if;',         // 6
+    '    return 0;',                                   // 7
+    '  end function;',                                 // 8
+    'begin',                                           // 9
+    '  a: process(clk)',                               // 10
+    '    variable count : integer range 0 to 3;',      // 11
+    '  begin',                                         // 12
+    '    for i in 0 to 3 loop',                        // 13
+    '      count := i;',                               // 14
+    '    end loop;',                                   // 15
+    '  end process;',                                  // 16
+    '  b: process(clk)',                               // 17
+    '  begin',                                         // 18
+    '    count <= count + 1;',                         // 19
+    '    x <= i;',                                     // 20
+    '  end process;',                                  // 21
+    'end architecture;',                               // 22
+  ]);
+
+  test('a process variable is seen only inside its process', () => {
+    expect(SCOPES.objectAt('count', 14)?.typeText).toBe('integer range 0 to 3');
+    expect(SCOPES.objectAt('count', 19)?.typeText).toBe('integer range 0 to 9');
+  });
+
+  test("a subprogram's declarations are seen only inside it, past its end ifs", () => {
+    expect(SCOPES.objectAt('count', 7)?.typeText).toBe('integer range 0 to 1');
+    expect(SCOPES.objectAt('n', 7)?.objectClass).toBe('parameter');
+    expect(SCOPES.objectAt('n', 19)).toBeUndefined();
+  });
+
+  test('a loop variable is seen only inside its loop', () => {
+    expect(SCOPES.objectAt('i', 14)?.objectClass).toBe('loop');
+    expect(SCOPES.objectAt('i', 20)).toBeUndefined();
   });
 });

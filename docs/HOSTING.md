@@ -151,7 +151,11 @@ killed, so reconnecting cannot pile up compiles beyond `HDL_MAX_SESSIONS`. The o
 compression, kernel or proxy memory: keep the container's CPU and memory limits too.
 
 Addresses follow `HDL_TRUSTED_PROXIES` (§ 9). Behind a proxy, set it, or every
-student shares the proxy's address and its upgrade budget. Students behind one NAT,
+student shares the proxy's address and its upgrade budget. Until it is set, the
+log lines that name a client (`ERROR busy`, `closed WebSocket from`) add the address
+the nearest proxy put in `X-Forwarded-For`, as in `refused 127.0.0.1 (forwarded for
+198.51.100.7)`. That entry is not checked, so it is only shown and never used to decide
+which session is closed. Students behind one NAT,
 as in most schools, share one address anyway: since the page opens a new socket for
 every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class meets 429s. For the
 same reason there is no limit on sessions per address; on a full server the

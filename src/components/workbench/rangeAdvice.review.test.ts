@@ -187,3 +187,23 @@ describe('a generic', () => {
     expect(headline([SUB, top], 8)).toMatch(/^`y` has 4 bits \(3 downto 0\), so/);
   });
 });
+
+describe('a name declared in another process', () => {
+  const TWO_PROCESSES = [
+    '  signal count : integer range 0 to 9;',
+    'begin',
+    '  a: process(clk)',
+    '    variable count : integer range 0 to 3;',
+    '  begin',
+    '    count := 0;',
+    '  end process;',
+    '  b: process(clk)',
+    '  begin',
+    '    count <= count + 1;',
+    '  end process;',
+  ].join('\n');
+
+  test('is not the one an overflow in this process is about', () => {
+    expect(headline([TWO_PROCESSES], 10)).toMatch(/^`count \+ 1` went above 9/);
+  });
+});

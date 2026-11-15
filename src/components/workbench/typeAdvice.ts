@@ -293,9 +293,11 @@ function vectorArithmetic(operator: string, place: TypeErrorPlace): Advice | und
   const operands = operandsAt(place);
   if (operands === undefined) return undefined;
   const { left, right } = operands;
-  const vector = [left, right].find((token) => LOGIC_VECTOR_FAMILIES.has(typeOfName(token.text, place)?.family ?? 'other'));
+  const isLogicVector = (token: PlacedToken) => LOGIC_VECTOR_FAMILIES.has(typeOfName(token.text, place)?.family ?? 'other');
+  const vector = [left, right].find(isLogicVector);
   if (vector === undefined) return undefined;
-  const asUnsigned = (token: PlacedToken) => (token === vector ? `unsigned(${token.text})` : token.text);
+  // Every vector operand: `unsigned(a) + b` with `b` a vector still has no `+`.
+  const asUnsigned = (token: PlacedToken) => (isLogicVector(token) ? `unsigned(${token.text})` : token.text);
   const expression = `${asUnsigned(left)} ${operator} ${asUnsigned(right)}`;
   const targetFamily = typeOfName(assignmentAround(place)?.targetName ?? '', place)?.family;
   const rewritten = targetFamily === 'unsigned' ? expression : `std_logic_vector(${expression})`;
@@ -321,9 +323,12 @@ function vectorWithNumber(operator: string, place: TypeErrorPlace): Advice | und
   const [vector, number] = operands.left.type === 'number' ? [operands.right, operands.left] : [operands.left, operands.right];
   const type = typeOfName(vector.text, place);
   if (number.type !== 'number' || type === undefined || !VECTOR_FAMILIES.has(type.family)) return undefined;
-  const asNumber = `${type.family === 'logicVector' ? `unsigned(${vector.text})` : vector.text} ${operator} ${number.text}`;
+  // The operands stay where the student wrote them: `5 < sw` is not `sw < 5`.
+  const inOrder = (vectorText: string, numberText: string) =>
+    vector === operands.left ? `${vectorText} ${operator} ${numberText}` : `${numberText} ${operator} ${vectorText}`;
+  const asNumber = inOrder(type.family === 'logicVector' ? `unsigned(${vector.text})` : vector.text, number.text);
   const bits = bitsOf(Number(number.text), lengthOf(type.range));
-  const asBits = bits === undefined ? undefined : `${vector.text} ${operator} "${bits}"`;
+  const asBits = bits === undefined ? undefined : inOrder(vector.text, `"${bits}"`);
   const span = { start: Math.min(vector.start, number.start), end: Math.max(vector.end, number.end) };
   return { headline: typeText.compareVectorWithNumber(vector.text, type.name, asNumber, asBits), span };
 }

@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { IncomingMessage } from 'node:http';
-import { UNKNOWN_ADDRESS, clientAddress } from './clientAddress.js';
+import { UNKNOWN_ADDRESS, clientAddress, loggedAddress } from './clientAddress.js';
 
 const request = (forwardedFor: string | undefined, remoteAddress: string | undefined) =>
   ({ headers: { 'x-forwarded-for': forwardedFor }, socket: { remoteAddress } }) as unknown as IncomingMessage;
@@ -41,5 +41,23 @@ describe('clientAddress', () => {
 
   test('unknown with neither', () => {
     assert.equal(clientAddress(request(undefined, undefined), 1), UNKNOWN_ADDRESS);
+  });
+});
+
+describe('loggedAddress', () => {
+  test('behind a proxy on the same machine, names the address the proxy was reached from', () => {
+    assert.equal(loggedAddress(request('10.0.0.7, 203.0.113.9', '127.0.0.1')), '127.0.0.1 (forwarded for 203.0.113.9)');
+  });
+
+  test('the address alone without the header', () => {
+    assert.equal(loggedAddress(request(undefined, '192.168.1.20')), '192.168.1.20');
+  });
+
+  test('a forwarded entry that is no address is left out, so the log cannot be written into', () => {
+    assert.equal(loggedAddress(request('203.0.113.9\nhdl-board: fake','127.0.0.1')), '127.0.0.1');
+  });
+
+  test('with trusted proxies, the trusted address alone: it already is the forwarded one', () => {
+    assert.equal(loggedAddress(request('10.0.0.7, 203.0.113.9', '172.18.0.3'), 1), '203.0.113.9');
   });
 });

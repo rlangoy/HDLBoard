@@ -45,7 +45,7 @@ import {
   type Newcomer,
 } from './sessionLimit.js';
 import { MS_PER_MINUTE, MS_PER_SECOND } from './timeUnits.js';
-import { clientAddress } from './clientAddress.js';
+import { clientAddress, loggedAddress } from './clientAddress.js';
 import {
   GitHubAuthForwarder,
   credentialsFromEnv,
@@ -351,10 +351,10 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   };
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), at: now() };
+    const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), logAddress: loggedAddress(req, trustedProxies), at: now() };
     const hasPlace = connections.size < maxSessions || makeRoomFor(newcomer);
     if (hasPlace) connections.add(new ClientConnection(ws, newcomer, context));
-    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections], newcomer), clientAddress: newcomer.clientAddress });
+    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections], newcomer), logAddress: loggedAddress(req, trustedProxies) });
   });
 
   // Only a listen error belongs to `ready`; once listening, the listener is removed so

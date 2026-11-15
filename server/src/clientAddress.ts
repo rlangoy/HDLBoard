@@ -24,6 +24,20 @@ export function clientAddress(req: IncomingMessage, trustedProxies = 0): string 
   return addedByOutermostProxy(req.headers['x-forwarded-for'], trustedProxies) ?? peer;
 }
 
+/**
+ * How the server log names a client: `clientAddress`, and, when that ignores the
+ * `X-Forwarded-For` header (`HDL_TRUSTED_PROXIES` is 0), the address the nearest proxy
+ * says it was reached from — behind a proxy on the same machine every peer is 127.0.0.1,
+ * which tells an operator nothing. Only for logs: the header is not checked, so it is
+ * labelled as what it is and never steers the full-server policy.
+ */
+export function loggedAddress(req: IncomingMessage, trustedProxies = 0): string {
+  const address = clientAddress(req, trustedProxies);
+  if (trustedProxies > 0) return address;
+  const forwarded = addedByOutermostProxy(req.headers['x-forwarded-for'], 1);
+  return forwarded === undefined || forwarded === address ? address : `${address} (forwarded for ${forwarded})`;
+}
+
 function addedByOutermostProxy(header: string | string[] | undefined, trustedProxies: number): string | undefined {
   const joined = Array.isArray(header) ? header.join(',') : header;
   const entries = (joined ?? '')

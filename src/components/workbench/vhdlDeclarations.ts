@@ -128,11 +128,31 @@ const SUBTYPE_INDICATION = /^(?<base>\w+)\s*(?:\((?<constraint>.*)\))?\s*(?:rang
 const OBJECT_DECLARATION = /\b(?<objectClass>signal|variable|constant)\s+(?<names>\w+(?:\s*,\s*\w+)*)\s*:(?!=)/gi;
 const INTERFACE_LIST = /\b(?:(?<list>port|generic)\s*\(|(?:function|procedure)\s+\w+\s*\()/gi;
 const INTERFACE_ITEM = /^\s*(?:signal|variable|constant|file)?\s*(?<names>\w+(?:\s*,\s*\w+)*)\s*:(?!=)(?<rest>[\s\S]*)$/i;
-const LOOP_PARAMETER = /\bfor\s+(?<name>\w+)\s+in\s+(?<range>[^;]+?)\s+(?:loop|generate)\b/gi;
+const LOOP_PARAMETER = /\bfor\s+(?<name>\w+)\s+in\s+(?<range>[^;]+?)\s+(?<statement>loop|generate)\b/gi;
 const ARRAY_TYPE = /\btype\s+(?<name>\w+)\s+is\s+array\s*\((?<range>[^;]*?)\)\s*of\s+(?<element>[^;]+);/gi;
 const ENUMERATION_TYPE = /\btype\s+(?<name>\w+)\s+is\s+\((?<literals>[^;]*?)\)\s*;/gi;
 const RANGE_TYPE = /\btype\s+(?<name>\w+)\s+is\s+range\s+(?<range>[^;]+);/gi;
 const SUBTYPE = /\bsubtype\s+(?<name>\w+)\s+is\s+(?<indication>[^;]+);/gi;
+/** Statements that end with their own kind: `end process`, `end loop`, `end generate`. */
+const BLOCK_KEYWORD = /\b(?<end>end\s+)?(?<kind>process|loop|generate)\b/gi;
+const SUBPROGRAM = /\b(?:function|procedure)\s+\w+/gi;
+/** Inside a subprogram body: the `end` of the body, unless it names a statement or a type. */
+const SUBPROGRAM_END = /\bend\b(?<keyword>\s+(?:function|procedure))?(?:\s+(?<name>\w+))?\s*;/gi;
+const NOT_A_SUBPROGRAM_END: ReadonlySet<string> = new Set(['if', 'case', 'loop', 'record', 'units', 'protected', 'block']);
+
+/** The lines, 1-based and inclusive, from which a declaration can be seen. */
+interface Scope {
+  readonly first: number;
+  readonly last: number;
+}
+
+/** Where a block starts and ends in the code; a block left open reaches the end of the file. */
+interface Region {
+  readonly kind: 'process' | 'loop' | 'generate' | 'subprogram';
+  /** Where its first word is: `process`, `loop`, `generate`, `function` or `procedure`. */
+  readonly start: number;
+  readonly end: number;
+}
 
 /** A declared type or subtype, before it is resolved. */
 type TypeDeclaration =
@@ -214,12 +234,76 @@ function lineStartsOf(lines: readonly string[]): number[] {
   return starts;
 }
 
+/** Each process, loop and generate, matched with the `end` of its kind; loops and generates nest. */
+function blockRegions(code: string): Region[] {
+  const regions: Region[] = [];
+  const open = new Map<Region['kind'], number[]>();
+  for (const match of code.matchAll(BLOCK_KEYWORD)) {
+    const kind = (match.groups?.kind ?? '').toLowerCase() as Region['kind'];
+    const stack = open.get(kind) ?? [];
+    open.set(kind, stack);
+    if (match.groups?.end === undefined) stack.push(match.index);
+    else {
+      const start = stack.pop();
+      if (start !== undefined) regions.push({ kind, start, end: match.index + match[0].length });
+    }
+  }
+  for (const [kind, stack] of open) for (const start of stack) regions.push({ kind, start, end: code.length });
+  return regions;
+}
+
+/** Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration that has none. */
+function afterHeader(code: string, from: number): { readonly body: boolean; readonly at: number } {
+  let depth = 0;
+  for (let i = from; i < code.length; i++) {
+    const char = code[i];
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    else if (depth === 0 && char === ';') return { body: false, at: i + 1 };
+    else if (depth === 0 && /^is\b/i.test(code.slice(i, i + 3)) && !/\w/.test(code[i - 1] ?? '')) return { body: true, at: i + 2 };
+  }
+  return { body: false, at: code.length };
+}
+
+/**
+ * Each function and procedure: a declaration alone to its `;`, a body to its own
+ * `end`, past the `end if`s and `end loop`s in it and the bodies nested in it.
+ */
+function subprogramRegions(code: string): Region[] {
+  const regions: Region[] = [];
+  const events: { readonly at: number; readonly start?: number; readonly end?: number }[] = [];
+  for (const match of code.matchAll(SUBPROGRAM)) {
+    if (/\bend\s+$/i.test(code.slice(Math.max(match.index - 8, 0), match.index))) continue;
+    const header = afterHeader(code, match.index + match[0].length);
+    if (header.body) events.push({ at: header.at, start: match.index });
+    else regions.push({ kind: 'subprogram', start: match.index, end: header.at });
+  }
+  for (const match of code.matchAll(SUBPROGRAM_END)) {
+    const name = match.groups?.name?.toLowerCase();
+    const endsBody = match.groups?.keyword !== undefined || name === undefined || !NOT_A_SUBPROGRAM_END.has(name);
+    if (endsBody) events.push({ at: match.index, end: match.index + match[0].length });
+  }
+  const bodies: number[] = [];
+  for (const event of events.sort((a, b) => a.at - b.at)) {
+    if (event.start !== undefined) bodies.push(event.start);
+    else {
+      const start = bodies.pop();
+      if (start !== undefined) regions.push({ kind: 'subprogram', start, end: event.end ?? code.length });
+    }
+  }
+  for (const start of bodies) regions.push({ kind: 'subprogram', start, end: code.length });
+  return regions;
+}
+
 /** Every declaration of one file, read once; answers questions about names in it. */
 export class VhdlDeclarations {
   private readonly code: string;
   private readonly lineStarts: readonly number[];
   private readonly objects: DeclaredObject[] = [];
   private readonly types = new Map<string, TypeDeclaration>();
+  /** Where a declaration inside a process, subprogram, loop or generate can be seen; the rest are seen everywhere. */
+  private readonly scopes = new Map<DeclaredObject, Scope>();
+  private readonly regions: readonly Region[];
   /** How deep `valueOf` is in constants naming constants: `constant A : integer := A + 1` must end. */
   private nesting = 0;
 
@@ -230,15 +314,24 @@ export class VhdlDeclarations {
   ) {
     this.code = codeOf(lines);
     this.lineStarts = lineStartsOf(lines);
+    this.regions = [...blockRegions(this.code), ...subprogramRegions(this.code)];
     this.readObjects();
     this.readInterfaceLists();
     this.readLoopParameters();
     this.readTypes();
   }
 
-  /** The declaration of `name` that `line` sees: the nearest one above it, else the first in the file. */
+  /**
+   * The declaration of `name` that `line` sees: the nearest one above it, else the
+   * first in the file. One inside a process, subprogram, loop or generate that
+   * `line` is not in is not seen.
+   */
   objectAt(name: string, line: number): DeclaredObject | undefined {
-    const same = this.objects.filter((object) => object.name.toLowerCase() === name.toLowerCase());
+    const seen = (object: DeclaredObject) => {
+      const scope = this.scopes.get(object);
+      return scope === undefined || (scope.first <= line && line <= scope.last);
+    };
+    const same = this.objects.filter((object) => object.name.toLowerCase() === name.toLowerCase() && seen(object));
     const above = same.filter((object) => object.line <= line).sort((a, b) => b.line - a.line);
     return above[0] ?? same.sort((a, b) => a.line - b.line)[0];
   }
@@ -391,14 +484,36 @@ export class VhdlDeclarations {
   }
 
   private lineAt(offset: number): number {
-    let line = 0;
-    while (line + 1 < this.lineStarts.length && this.lineStarts[line + 1] <= offset) line++;
-    return line + 1;
+    let low = 0;
+    let high = this.lineStarts.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (this.lineStarts[middle] <= offset) low = middle;
+      else high = middle - 1;
+    }
+    return low + 1;
+  }
+
+  private scopeOf(region: Region): Scope {
+    return { first: this.lineAt(region.start), last: this.lineAt(region.end) };
+  }
+
+  /** The innermost process, subprogram or generate around `offset`: where a declaration there is seen. */
+  private scopeAround(offset: number): Scope | undefined {
+    const around = this.regions.filter((r) => r.kind !== 'loop' && r.start <= offset && offset < r.end);
+    const innermost = around.sort((a, b) => b.start - a.start)[0];
+    return innermost && this.scopeOf(innermost);
+  }
+
+  private push(object: DeclaredObject, scope: Scope | undefined): void {
+    this.objects.push(object);
+    if (scope !== undefined) this.scopes.set(object, scope);
   }
 
   private add(names: string, objectClass: ObjectClass, offset: number, text: string): void {
     const { typeText, initial } = subtypeAndDefault(text);
-    for (const name of namesIn(names)) this.objects.push({ name, objectClass, line: this.lineAt(offset), typeText, initial });
+    const scope = this.scopeAround(offset);
+    for (const name of namesIn(names)) this.push({ name, objectClass, line: this.lineAt(offset), typeText, initial }, scope);
   }
 
   private readObjects(): void {
@@ -425,8 +540,11 @@ export class VhdlDeclarations {
 
   private readLoopParameters(): void {
     for (const match of this.code.matchAll(LOOP_PARAMETER)) {
-      const { name, range } = match.groups ?? {};
-      this.objects.push({ name, objectClass: 'loop', line: this.lineAt(match.index), typeText: collapse(range) });
+      const { name, range, statement } = match.groups ?? {};
+      // The loop or generate that `for i in 0 to 3 loop` opens: `i` is seen only in it.
+      const opener = match.index + match[0].length - statement.length;
+      const region = this.regions.find((r) => r.start === opener);
+      this.push({ name, objectClass: 'loop', line: this.lineAt(match.index), typeText: collapse(range) }, region && this.scopeOf(region));
     }
   }
 
