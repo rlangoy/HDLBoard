@@ -59,6 +59,8 @@ const EXPLAINED: readonly [string, number, string][] = [
   ['missing_begin2', 5, 'use `begin ... end`'],
   ['bad_module_name', 3, 'did you mean `count`'],
   ['missing_semicolon_last', 5, 'missing `;`'],
+  ['case_item_semicolon', 6, 'missing `;` at the end of line 5'],
+  ['case_label_semicolon', 6, 'missing `;` at the end of line 5'],
 ];
 
 describe('novice corpus through the shared diagnostic presentation', () => {

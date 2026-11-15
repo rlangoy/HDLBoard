@@ -169,13 +169,26 @@ const ASSIGNMENT_START: ReadonlySet<string> = new Set(['=', '<', '[']);
 
 /**
  * The line starts a statement (§ 3, Rule D): a keyword (`assign`, `always`,
- * `end`, `reg`, …), a system task, or a name being assigned or instantiated.
+ * `end`, `reg`, …), a system task, a name being assigned or instantiated, or
+ * a case item.
  */
 function startsStatement(tokens: readonly PositionedToken[]): boolean {
   const [first, second] = tokens;
   if (first === undefined) return false;
   if (first.type === 'keyword' || first.type === 'type' || first.type === 'system') return true;
+  if (startsCaseItem(tokens)) return true;
   return first.type === 'identifier' && second !== undefined && (ASSIGNMENT_START.has(second.text) || second.type === 'identifier');
+}
+
+/**
+ * `4'd5: seg = …;` or `IDLE: led = …;`: a case value and its `:`. After a case
+ * item without its `;`, Icarus blames the next item's line ("Syntax in assignment
+ * statement l-value.") — measured with Icarus 13.0, case_item_semicolon.
+ */
+function startsCaseItem(tokens: readonly PositionedToken[]): boolean {
+  const [value, colon] = tokens;
+  const isCaseValue = value?.type === 'number' || value?.type === 'identifier';
+  return isCaseValue && colon?.text === ':';
 }
 
 /** Icarus's words for any continuous assignment it could not parse, whatever was wrong in it. */
