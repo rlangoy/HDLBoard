@@ -206,10 +206,15 @@ VVP_EXE=/usr/local/lib/hdlboard/vvp
 The links' directory must **not** be on `PATH`: the script finds the real
 `ghdl`, `iverilog` and `vvp` by name on `PATH`.
 
-When a design exceeds the cap, GHDL stops without a message of its own; the
-`onrender` backend then tells the student the simulation may have run out of
-memory and what the per-simulation limit is (on `main` the message is only
-"Simulation exited unexpectedly.").
+When a design exceeds the cap, GHDL stops without a message of its own. The
+backend then tells the student the simulation may have run out of memory and
+what the per-simulation limit is, on every host that sets
+`HDLBOARD_SIM_MEMORY_MB` (without it, only "Simulation exited unexpectedly.").
+A run whose simulator said why it stopped gets "The simulation stopped as
+reported above." instead. That covers GHDL's `ghdl:error: bound check failure …`
+(under any program name, such as `ghdl.exe:error:`), a design's own
+`std.env.stop(1)` and Icarus's `FATAL: top.v:7: …` from `$fatal`. When the
+per-second output limit dropped that line, the message quotes it whole.
 
 ---
 

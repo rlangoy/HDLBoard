@@ -37,6 +37,17 @@ import { DEFAULT_COMPILER_OPTIONS, type CompilerOptions, type DecodedCompilerOpt
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import {
+  crashOf,
+  explainingReport,
+  failedRunText,
+  readMemoryCapMb,
+  reportOf,
+  silentExitOf,
+  simulatorName,
+  type SimulatorExit,
+  type SimulatorReport,
+} from './runFailure.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
@@ -132,21 +143,6 @@ const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
-/**
- * A simulator that died without a word on stderr still owes the student a reason.
- * Where every run is memory-capped (`HDLBOARD_SIM_MEMORY_MB`, the Docker render
- * stage's `simlimit.sh`), running out is the likely one: GHDL then dies on a
- * segfault without printing anything.
- */
-function unexplainedExitText(): string {
-  const capMb = process.env.HDLBOARD_SIM_MEMORY_MB;
-  if (!capMb) return 'Simulation exited unexpectedly.';
-  return (
-    `Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets ${capMb} MB. ` +
-    'GHDL needs about 350 bytes per std_logic bit of a signal, so a large RAM signal can use it up.'
-  );
-}
-
 /** True once `from` has replaced `to`; false when the destination is held open by another process. */
 function renamed(from: string, to: string): boolean {
   try {
@@ -182,6 +178,21 @@ export interface SessionOptions {
   readonly vhdlWaveFormat?: WaveFormat;
   /** The clock `idleSince` is read on, in ms. Defaults to `Date.now`; tests move it. */
   readonly now?: () => number;
+  /**
+   * A simulator crashed or died without a word (runFailure.ts): told how, for the server
+   * log, which knows the client. Defaults to doing nothing.
+   */
+  readonly onCrash?: (description: string) => void;
+  /**
+   * The host's memory cap on one run, in MB, named when a run dies without a word;
+   * undefined for none. Defaults to `HDLBOARD_SIM_MEMORY_MB` (`readMemoryCapMb`).
+   */
+  readonly memoryCapMb?: number;
+}
+
+/** The cap the options give, even an explicit undefined (no cap), else the host's. */
+function memoryCapOf(options: SessionOptions): number | undefined {
+  return 'memoryCapMb' in options ? options.memoryCapMb : readMemoryCapMb();
 }
 
 /** The waveform of the newest batch run (docs/waveform_viewer_spec.md § 7.4). */
@@ -230,6 +241,8 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
+  /** The report that explains the running simulator's stop so far (`explainingReport`, runFailure.ts). */
+  private simulatorReport: SimulatorReport | null = null;
   private destroyed = false;
   /**
    * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
@@ -271,6 +284,8 @@ export class Session {
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
   private readonly now: () => number;
+  private readonly onCrash: SessionOptions['onCrash'];
+  private readonly memoryCapMb: number | undefined;
   private idleSinceMs: number;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
@@ -287,6 +302,8 @@ export class Session {
     this.waveCheckMs = options.waveCheckMs ?? readIntSetting(WAVE_CHECK_MS);
     this.vhdlWaveFormat = options.vhdlWaveFormat ?? readVhdlWaveFormat();
     this.now = options.now ?? Date.now;
+    this.onCrash = options.onCrash;
+    this.memoryCapMb = memoryCapOf(options);
     this.idleSinceMs = this.now();
   }
 
@@ -588,7 +605,7 @@ export class Session {
     // the time it arrives, `this.state` reads 'running' again (the new
     // run's), so a plain state check would misattribute this stale exit
     // to it. `this.run !== handle` is what actually tells them apart.
-    handle.onExit((code, stderr) => {
+    handle.onExit((code, stderr, signal) => {
       if (this.destroyed || this.run !== handle) return;
       this.run = null;
       const wasRunning = this.state === 'running';
@@ -600,7 +617,7 @@ export class Session {
       // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
       // is a completed run, not a crash: the student asked for it.
       if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
-      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || unexplainedExitText() });
+      else this.reportFailedRun(engine.language, { code, stderr, signal });
     });
     // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
@@ -621,12 +638,30 @@ export class Session {
    */
   private beginOutput(): void {
     this.endOutput();
+    this.simulatorReport = null;
     this.limiter = createOutputLimiter(Date.now);
     this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
   }
 
   private forwardOutputLine(line: string): void {
-    if (/\S/.test(line) && !this.isHiddenWaveNotice(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+    const sent = /\S/.test(line) && !this.isHiddenWaveNotice(line) ? (this.limiter?.accept(line) ?? []) : [];
+    this.sendLogLines(sent);
+    // Whether the line budget let the report through: a dropped one is quoted at the end.
+    const report = reportOf(line, sent.includes(line));
+    if (report !== undefined) this.simulatorReport = explainingReport(this.simulatorReport, report);
+  }
+
+  /**
+   * Tells the student why a run failed (runFailure.ts). The server log hears of a crash,
+   * even after a report, since a design can print its error and then crash; and of a
+   * run that died with no word at all, since its student gets only a guess.
+   */
+  private reportFailedRun(language: SimEngine['language'], exit: SimulatorExit): void {
+    const crash = crashOf(exit);
+    const report = crash === undefined ? this.simulatorReport : null;
+    const logged = crash ?? (report === null ? silentExitOf(exit) : undefined);
+    if (logged !== undefined) this.onCrash?.(`${simulatorName(language)} ${logged}`);
+    this.send({ verb: 'ERROR', stage: 'runtime', text: failedRunText(exit.stderr, report, this.memoryCapMb) });
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
@@ -791,12 +826,12 @@ export class Session {
       const wasRunning = this.state === 'running';
       this.setState('stopped');
       this.endOutput();
-      if (wasRunning) this.reportBatchEnd(result); // otherwise already reported via handleStop's own DONE
+      if (wasRunning) this.reportBatchEnd(engine.language, result); // otherwise already reported via handleStop's own DONE
     });
   }
 
   /** How a batch run that ended on its own – or was ended by the size guard – is reported. */
-  private reportBatchEnd({ code, timedOut, stderr }: BatchResult): void {
+  private reportBatchEnd(language: SimEngine['language'], { code, timedOut, stderr, signal }: BatchResult): void {
     // A run that ended by itself – passing or failing – closed its waveform normally.
     this.announceWave(this.waveLimitHit ? 'size-limit' : timedOut ? 'timeout' : 'complete');
     if (this.waveLimitHit) {
@@ -809,7 +844,7 @@ export class Session {
         text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
       });
     } else if (code !== 0) {
-      this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || unexplainedExitText() });
+      this.reportFailedRun(language, { code, stderr, signal: signal ?? null });
     } else {
       this.send({ verb: 'DONE', reason: 'completed' });
     }

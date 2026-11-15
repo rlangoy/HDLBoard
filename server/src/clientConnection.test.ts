@@ -3,7 +3,16 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { closedSocketLogLine } from './clientConnection.js';
+import { closedSocketLogLine, crashLogLine } from './clientConnection.js';
+
+describe('the crash log line', () => {
+  test('is an ERROR naming the simulator, how it crashed and whose run it was', () => {
+    assert.equal(
+      crashLogLine('198.51.100.7', 'GHDL crashed on SIGSEGV: Segmentation fault'),
+      'hdl-board: ERROR crash: GHDL crashed on SIGSEGV: Segmentation fault, run by 198.51.100.7',
+    );
+  });
+});
 
 describe('the closed-WebSocket log line', () => {
   test('names the client address and why it was closed', () => {

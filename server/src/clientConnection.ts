@@ -74,6 +74,11 @@ export function closedSocketLogLine(clientAddress: string, reason: string): stri
   return `hdl-board: closed WebSocket from ${clientAddress}: ${reason}`;
 }
 
+/** The server log's line for a simulator that crashed (session.ts `crashOf`), naming whose run it was. */
+export function crashLogLine(clientAddress: string, description: string): string {
+  return `hdl-board: ERROR crash: ${description}, run by ${clientAddress}`;
+}
+
 /**
  * A failure only cuts the socket: its `close` then ends the connection, after whatever
  * session method was sending has returned. Ending it inside that method would let the
@@ -141,7 +146,8 @@ export class ClientConnection implements OpenSession, Peer {
     this.logAddress = newcomer.logAddress ?? newcomer.clientAddress;
     this.output = boundedOutput(ws, context.limits, this.logAddress);
     const sendBinary = (chunk: Buffer) => this.output.sendBinary(chunk);
-    this.session = new Session((frame) => this.send(frame), undefined, { sendBinary, now: context.now });
+    const onCrash = (description: string) => console.error(crashLogLine(this.logAddress, description));
+    this.session = new Session((frame) => this.send(frame), undefined, { sendBinary, now: context.now, onCrash });
     this.budget = new MessageBudget(context.limits, context.monotonicNow);
     ws.on('message', (data, isBinary) => this.onMessage(data, isBinary));
     ws.on('ping', (data) => this.onPing(data));

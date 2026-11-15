@@ -180,3 +180,97 @@ describe('Session runs that outlive their request', () => {
     assert.deepEqual(verbs(frames), ['READY']);
   });
 });
+
+describe('Session: why a failed run stopped', () => {
+  interface FailedRun {
+    /** The ERROR frame's text, the student's reason. */
+    readonly text: string | undefined;
+    /** What the server log heard (`onCrash`). */
+    readonly logged: readonly string[];
+  }
+
+  /** Runs a batch design that prints `output`, then exits; no memory cap unless given. */
+  async function failedRun(
+    output: readonly string[],
+    exit: { code: number | null; stderr: string; signal?: NodeJS.Signals | null },
+    memoryCapMb?: number,
+  ): Promise<FailedRun> {
+    const frames: ServerFrame[] = [];
+    const logged: string[] = [];
+    const engine: SimEngine = {
+      language: 'vhdl',
+      prepare: async () => ({ ok: true, plan: batchPlan(tmpdir()) }),
+      startBoardRun: () => assert.fail('a batch run'),
+      startBatchRun: (_plan, run) => {
+        for (const line of output) run.onOutput(line);
+        return { kill: () => {}, done: Promise.resolve({ ...exit, timedOut: false }) };
+      },
+    };
+    const onCrash = (description: string) => logged.push(description);
+    const session = new Session((frame) => frames.push(frame), () => engine, { onCrash, memoryCapMb });
+    await session.handleRun(FILES, 'top.vhdl');
+    await settle();
+    session.destroy();
+    const error = frames.find((frame) => frame.verb === 'ERROR');
+    return { text: error?.verb === 'ERROR' ? error.text : undefined, logged };
+  }
+
+  const BOUND_CHECK = 'ghdl:error: bound check failure at top.vhdl:19';
+
+  test("the simulator's own report is the reason", async () => {
+    const { text } = await failedRun([BOUND_CHECK, 'ghdl:error: simulation failed'], { code: 1, stderr: '' });
+    assert.equal(text, 'The simulation stopped as reported above.');
+  });
+
+  test("the simulator's own report is no crash", async () => {
+    const { logged } = await failedRun([BOUND_CHECK], { code: 1, stderr: '' });
+    assert.deepEqual(logged, []);
+  });
+
+  test('a report the output limit dropped is quoted whole, so the student still gets it', async () => {
+    const flood = Array.from({ length: 300 }, (_, i) => `tick ${i}`);
+    const { text } = await failedRun([...flood, BOUND_CHECK], { code: 1, stderr: '' });
+    assert.equal(text, `The simulation stopped:\n${BOUND_CHECK}`);
+  });
+
+  test('stderr, when there is any, is the reason', async () => {
+    const { text } = await failedRun([], { code: 1, stderr: 'vvp: Unable to open input file.' });
+    assert.equal(text, 'vvp: Unable to open input file.');
+  });
+
+  test('stderr that is only whitespace is no reason', async () => {
+    const { text } = await failedRun([BOUND_CHECK], { code: 1, stderr: '\n' });
+    assert.equal(text, 'The simulation stopped as reported above.');
+  });
+
+  test('a crash after a report is still logged', async () => {
+    const { logged } = await failedRun([BOUND_CHECK], { code: 1, stderr: 'Segmentation fault' });
+    assert.deepEqual(logged, ['GHDL crashed with exit code 1: Segmentation fault']);
+  });
+
+  test('a crash after a report does not point the student at the report', async () => {
+    const { text } = await failedRun(['ERROR: top.v:4: mismatch'], { code: null, stderr: '', signal: 'SIGSEGV' });
+    assert.equal(text, 'Simulation exited unexpectedly.');
+  });
+
+  test('a run that dies without a word is logged', async () => {
+    const { logged } = await failedRun([], { code: 1, stderr: '' });
+    assert.deepEqual(logged, ['GHDL exited with exit code 1 and no message']);
+  });
+
+  test('a run that dies without a word on a memory-capped host names the cap', async () => {
+    const { text } = await failedRun([], { code: 139, stderr: '' }, 96);
+    assert.match(text ?? '', /^Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets 96 MB\./);
+  });
+
+  test('a $fatal the output limit dropped is quoted, not the $error shown before it', async () => {
+    const flood = Array.from({ length: 300 }, (_, i) => `tick ${i}`);
+    const { text } = await failedRun(['ERROR: top.v:3: mismatch', ...flood, 'FATAL: top.v:9: boom'], { code: 1, stderr: '' });
+    assert.equal(text, 'The simulation stopped:\nFATAL: top.v:9: boom');
+  });
+
+  test('a $fatal in a file whose name holds spaces is no crash', async () => {
+    const { logged } = await failedRun(['FATAL: my test.v:5: fatal reason'], { code: 1, stderr: '' });
+    assert.deepEqual(logged, []);
+  });
+});

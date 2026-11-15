@@ -11,6 +11,7 @@
 
 import { constantDifference, evaluateStatic, type StaticNames } from './staticInteger';
 import { tokenizeVhdlLine } from './vhdlHighlight';
+import { holdsDeclarations, regionsIn, type Region } from './vhdlScopes';
 
 export type Direction = 'to' | 'downto';
 
@@ -133,25 +134,10 @@ const ARRAY_TYPE = /\btype\s+(?<name>\w+)\s+is\s+array\s*\((?<range>[^;]*?)\)\s*
 const ENUMERATION_TYPE = /\btype\s+(?<name>\w+)\s+is\s+\((?<literals>[^;]*?)\)\s*;/gi;
 const RANGE_TYPE = /\btype\s+(?<name>\w+)\s+is\s+range\s+(?<range>[^;]+);/gi;
 const SUBTYPE = /\bsubtype\s+(?<name>\w+)\s+is\s+(?<indication>[^;]+);/gi;
-/** Statements that end with their own kind: `end process`, `end loop`, `end generate`. */
-const BLOCK_KEYWORD = /\b(?<end>end\s+)?(?<kind>process|loop|generate)\b/gi;
-const SUBPROGRAM = /\b(?:function|procedure)\s+\w+/gi;
-/** Inside a subprogram body: the `end` of the body, unless it names a statement or a type. */
-const SUBPROGRAM_END = /\bend\b(?<keyword>\s+(?:function|procedure))?(?:\s+(?<name>\w+))?\s*;/gi;
-const NOT_A_SUBPROGRAM_END: ReadonlySet<string> = new Set(['if', 'case', 'loop', 'record', 'units', 'protected', 'block']);
-
 /** The lines, 1-based and inclusive, from which a declaration can be seen. */
 interface Scope {
   readonly first: number;
   readonly last: number;
-}
-
-/** Where a block starts and ends in the code; a block left open reaches the end of the file. */
-interface Region {
-  readonly kind: 'process' | 'loop' | 'generate' | 'subprogram';
-  /** Where its first word is: `process`, `loop`, `generate`, `function` or `procedure`. */
-  readonly start: number;
-  readonly end: number;
 }
 
 /** A declared type or subtype, before it is resolved. */
@@ -175,14 +161,10 @@ function namesIn(list: string): string[] {
 }
 
 /** The file as one text, each comment blanked so that every offset stays where it was. */
-function codeOf(lines: readonly string[], { blankStrings = false } = {}): string {
-  const blanked = ({ text, type }: { text: string; type: string }) => {
-    if (type === 'comment') return ' '.repeat(text.length);
-    // Inside quotes only: `report "end;"` must not end a subprogram.
-    if (blankStrings && type === 'string' && text.length >= 2) return `${text[0]}${' '.repeat(text.length - 2)}${text[text.length - 1]}`;
-    return text;
-  };
-  return lines.map((line) => tokenizeVhdlLine(line).map(blanked).join('')).join('\n');
+function codeOf(lines: readonly string[]): string {
+  const withoutComment = (line: string) =>
+    tokenizeVhdlLine(line).map(({ text, type }) => (type === 'comment' ? ' '.repeat(text.length) : text)).join('');
+  return lines.map(withoutComment).join('\n');
 }
 
 /**
@@ -238,67 +220,6 @@ function lineStartsOf(lines: readonly string[]): number[] {
   return starts;
 }
 
-/** Each process, loop and generate, matched with the `end` of its kind; loops and generates nest. */
-function blockRegions(code: string): Region[] {
-  const regions: Region[] = [];
-  const open = new Map<Region['kind'], number[]>();
-  for (const match of code.matchAll(BLOCK_KEYWORD)) {
-    const kind = (match.groups?.kind ?? '').toLowerCase() as Region['kind'];
-    const stack = open.get(kind) ?? [];
-    open.set(kind, stack);
-    if (match.groups?.end === undefined) stack.push(match.index);
-    else {
-      const start = stack.pop();
-      if (start !== undefined) regions.push({ kind, start, end: match.index + match[0].length });
-    }
-  }
-  for (const [kind, stack] of open) for (const start of stack) regions.push({ kind, start, end: code.length });
-  return regions;
-}
-
-/** Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration that has none. */
-function afterHeader(code: string, from: number): { readonly body: boolean; readonly at: number } {
-  let depth = 0;
-  for (let i = from; i < code.length; i++) {
-    const char = code[i];
-    if (char === '(') depth++;
-    else if (char === ')') depth--;
-    else if (depth === 0 && char === ';') return { body: false, at: i + 1 };
-    else if (depth === 0 && /^is\b/i.test(code.slice(i, i + 3)) && !/\w/.test(code[i - 1] ?? '')) return { body: true, at: i + 2 };
-  }
-  return { body: false, at: code.length };
-}
-
-/**
- * Each function and procedure: a declaration alone to its `;`, a body to its own
- * `end`, past the `end if`s and `end loop`s in it and the bodies nested in it.
- */
-function subprogramRegions(code: string): Region[] {
-  const regions: Region[] = [];
-  const events: { readonly at: number; readonly start?: number; readonly end?: number }[] = [];
-  for (const match of code.matchAll(SUBPROGRAM)) {
-    if (/\bend\s+$/i.test(code.slice(Math.max(match.index - 8, 0), match.index))) continue;
-    const header = afterHeader(code, match.index + match[0].length);
-    if (header.body) events.push({ at: header.at, start: match.index });
-    else regions.push({ kind: 'subprogram', start: match.index, end: header.at });
-  }
-  for (const match of code.matchAll(SUBPROGRAM_END)) {
-    const name = match.groups?.name?.toLowerCase();
-    const endsBody = match.groups?.keyword !== undefined || name === undefined || !NOT_A_SUBPROGRAM_END.has(name);
-    if (endsBody) events.push({ at: match.index, end: match.index + match[0].length });
-  }
-  const bodies: number[] = [];
-  for (const event of events.sort((a, b) => a.at - b.at)) {
-    if (event.start !== undefined) bodies.push(event.start);
-    else {
-      const start = bodies.pop();
-      if (start !== undefined) regions.push({ kind: 'subprogram', start, end: event.end ?? code.length });
-    }
-  }
-  for (const start of bodies) regions.push({ kind: 'subprogram', start, end: code.length });
-  return regions;
-}
-
 /** Every declaration of one file, read once; answers questions about names in it. */
 export class VhdlDeclarations {
   private readonly code: string;
@@ -318,9 +239,7 @@ export class VhdlDeclarations {
   ) {
     this.code = codeOf(lines);
     this.lineStarts = lineStartsOf(lines);
-    // Where blocks end is read with strings blanked too; offsets match this.code.
-    const structure = codeOf(lines, { blankStrings: true });
-    this.regions = [...blockRegions(structure), ...subprogramRegions(structure)];
+    this.regions = regionsIn(lines);
     this.readObjects();
     this.readInterfaceLists();
     this.readLoopParameters();
@@ -506,7 +425,7 @@ export class VhdlDeclarations {
 
   /** The innermost process, subprogram or generate around `offset`: where a declaration there is seen. */
   private scopeAround(offset: number): Scope | undefined {
-    const around = this.regions.filter((r) => r.kind !== 'loop' && r.start <= offset && offset < r.end);
+    const around = this.regions.filter((r) => holdsDeclarations(r) && r.start <= offset && offset < r.end);
     const innermost = around.sort((a, b) => b.start - a.start)[0];
     return innermost && this.scopeOf(innermost);
   }
