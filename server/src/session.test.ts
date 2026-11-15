@@ -187,7 +187,7 @@ describe('Session: why a failed run stopped', () => {
   test('a silent failure is logged too: the student is told only a guess', async () => {
     const crashes: string[] = [];
     await failedRun([], { code: 1, stderr: '' }, crashes);
-    assert.deepEqual(crashes, ['GHDL exited with code 1 and no message']);
+    assert.deepEqual(crashes, ['GHDL exited with exit code 1 and no message']);
   });
 
   test("a design's own error is no crash: the simulator said why", async () => {
@@ -198,17 +198,80 @@ describe('Session: why a failed run stopped', () => {
 
   test("GHDL's own error on stdout is the reason, not an unexplained exit", async () => {
     const error = await failedRun(['ghdl:error: bound check failure at top.vhdl:19', 'ghdl:error: simulation failed'], { code: 1, stderr: '' });
-    assert.deepEqual(error, { verb: 'ERROR', stage: 'runtime', text: 'The simulation stopped on the error reported above.' });
+    assert.deepEqual(error, { verb: 'ERROR', stage: 'runtime', text: 'The simulation stopped as reported above.' });
   });
 
   test("Icarus's $fatal on stdout is the reason too", async () => {
     const error = await failedRun(['FATAL: top.v:1: boom 3', '       Time: 5  Scope: t'], { code: 1, stderr: '' });
-    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped on the error reported above.');
+    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped as reported above.');
   });
 
-  test('stderr, when there is any, still says it', async () => {
-    const error = await failedRun(['ghdl:error: simulation failed'], { code: 1, stderr: 'Segmentation fault' });
+  test('stderr, when there is any, still says it — and a crash after a report is still a crash', async () => {
+    const crashes: string[] = [];
+    const error = await failedRun(['ghdl:error: simulation failed'], { code: 1, stderr: 'Segmentation fault' }, crashes);
     assert.equal(error?.verb === 'ERROR' && error.text, 'Segmentation fault');
+    assert.deepEqual(crashes, ['GHDL crashed with exit code 1: Segmentation fault']);
+  });
+
+  test('a signal after an Icarus $error is a crash, and the student is not pointed at the $error', async () => {
+    const saved = process.env.HDLBOARD_SIM_MEMORY_MB;
+    delete process.env.HDLBOARD_SIM_MEMORY_MB;
+    try {
+      const crashes: string[] = [];
+      const error = await failedRun(['ERROR: top.v:4: mismatch', '       Time: 5  Scope: t'], { code: null, stderr: '', signal: 'SIGSEGV' }, crashes);
+      assert.deepEqual(crashes, ['GHDL crashed on SIGSEGV']);
+      assert.equal(error?.verb === 'ERROR' && error.text, 'Simulation exited unexpectedly.');
+    } finally {
+      if (saved !== undefined) process.env.HDLBOARD_SIM_MEMORY_MB = saved;
+    }
+  });
+
+  test("an installed GHDL names itself by its path: C:\\…\\ghdl.exe:error: and /usr/bin/ghdl-mcode:error:", async () => {
+    for (const line of [
+      'C:\\Program Files\\HDLBoard\\resources\\ghdl\\bin\\ghdl.exe:error: index (5) out of bounds (0 to 3) at bound.vhdl:9',
+      '/usr/bin/ghdl-mcode:error: bound check failure at top.vhdl:19',
+    ]) {
+      const crashes: string[] = [];
+      const error = await failedRun([line], { code: 1, stderr: '' }, crashes);
+      assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped as reported above.', line);
+      assert.deepEqual(crashes, [], line);
+    }
+  });
+
+  test("a design's own std.env.stop(1) is no crash", async () => {
+    const crashes: string[] = [];
+    const error = await failedRun(['simulation stopped @5ns with status 1'], { code: 1, stderr: '' }, crashes);
+    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped as reported above.');
+    assert.deepEqual(crashes, []);
+  });
+
+  test("a student's own $display(\"ERROR: ...\") is no simulator report: a silent exit after it is still logged", async () => {
+    const crashes: string[] = [];
+    await failedRun(['ERROR: mismatch at 40'], { code: 1, stderr: '' }, crashes);
+    assert.deepEqual(crashes, ['GHDL exited with exit code 1 and no message']);
+  });
+
+  test('a report the line budget dropped is quoted whole, so the student still gets it', async () => {
+    const flood = Array.from({ length: 300 }, (_, i) => `tick ${i}`);
+    const error = await failedRun([...flood, 'ghdl:error: bound check failure at top.vhdl:19'], { code: 1, stderr: '' });
+    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped:\nghdl:error: bound check failure at top.vhdl:19');
+  });
+
+  test('stderr that is only whitespace is no message', async () => {
+    const error = await failedRun(['ghdl:error: bound check failure at top.vhdl:19'], { code: 1, stderr: '\n' });
+    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped as reported above.');
+  });
+
+  test('a memory cap that is no whole number is not named', async () => {
+    const saved = process.env.HDLBOARD_SIM_MEMORY_MB;
+    process.env.HDLBOARD_SIM_MEMORY_MB = '96M';
+    try {
+      const error = await failedRun([], { code: 1, stderr: '' });
+      assert.equal(error?.verb === 'ERROR' && error.text, 'Simulation exited unexpectedly.');
+    } finally {
+      if (saved === undefined) delete process.env.HDLBOARD_SIM_MEMORY_MB;
+      else process.env.HDLBOARD_SIM_MEMORY_MB = saved;
+    }
   });
 
   test("the design's own report text is no simulator error", async () => {
@@ -262,5 +325,15 @@ describe('crashOf', () => {
 describe('crashOf on Windows', () => {
   test('a Windows status reads as hex: an access violation is 0xC0000005', () => {
     assert.equal(crashOf({ code: 3221225477, stderr: '', signal: null }), 'crashed with exit code 0xC0000005');
+  });
+});
+
+describe('crashOf: wording', () => {
+  test('a Windows stderr keeps no carriage return in the log', () => {
+    assert.equal(crashOf({ code: 3221225477, stderr: 'Segmentation fault\r\n(core dumped)', signal: null }), 'crashed with exit code 0xC0000005: Segmentation fault');
+  });
+
+  test('no exit code and no signal reads as a sentence', () => {
+    assert.equal(crashOf({ code: null, stderr: '', signal: null }), 'exited with no exit code and no message');
   });
 });

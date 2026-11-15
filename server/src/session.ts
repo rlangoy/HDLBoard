@@ -133,11 +133,15 @@ const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
  */
 const BATCH_TIMEOUT_MS = 60_000;
 /**
- * A simulator's own report of the error it stops on, written to stdout with the
- * design's output: GHDL's `ghdl:error: bound check failure at …`, Icarus's `FATAL: …`
- * from `$fatal` or its `ERROR: …`.
+ * A simulator's own report of why it stops, written to stdout with the design's output.
+ * GHDL names itself by its program, as the front end reads it too (diagnostics.ts):
+ * `ghdl:error: …`, `C:\…\ghdl.exe:error: …`, `/usr/bin/ghdl-mcode:error: …`, and
+ * `simulation stopped @5ns with status 1` for a design's own `std.env.stop(1)`. Icarus
+ * gives its `FATAL:` (`$fatal`) and `ERROR:` a place, `FATAL: top.v:7: …`, which a
+ * student's own `$display("ERROR: mismatch")` does not have.
  */
-const SIMULATOR_ERROR_LINE = /^\s*(?:ghdl:error:|FATAL:|ERROR:)/;
+const SIMULATOR_REPORT_LINE =
+  /^\s*(?:(?:.*[\\/])?ghdl[^\\/:\s]*:error:|(?:FATAL|ERROR): [^:\s]+:\d+:|simulation (?:stopped|finished) @\S+ with status \d+)/;
 /** How a failed simulator process ended. */
 interface SimulatorExit {
   readonly code: number | null;
@@ -157,24 +161,26 @@ const FIRST_SIGNAL_EXIT_CODE = 128;
 const FIRST_WINDOWS_STATUS = 0x80000000;
 const HEX = 16;
 
-function exitCodeText(code: number | null): string {
-  if (code === null) return 'unknown';
-  return code >= FIRST_WINDOWS_STATUS ? `0x${code.toString(HEX).toUpperCase()}` : String(code);
+/** `with exit code 1`, `with exit code 0xC0000005`, or `with no exit code`. */
+function withExitCode(code: number | null): string {
+  if (code === null) return 'with no exit code';
+  return `with exit code ${code >= FIRST_WINDOWS_STATUS ? `0x${code.toString(HEX).toUpperCase()}` : String(code)}`;
 }
 /** The longest piece of stderr a crash line quotes: the server log is no place for a dump. */
 const CRASH_QUOTE_CHARS = 200;
 
 /**
- * How a simulator crashed, or undefined when it only failed: killed by a signal, an exit
- * code a shell gives a signal's death, stderr naming a crash, or an exit with no word at
- * all. Only for runs whose simulator printed no error of its own.
+ * How a simulator crashed, or undefined when it only failed. Killed by a signal, an exit
+ * code a shell gives a signal's death, or stderr naming a crash is a crash whatever the
+ * run printed before. An exit with no word at all is one only when the simulator did
+ * not `report` why on stdout (`SIMULATOR_REPORT_LINE`).
  */
-export function crashOf({ code, stderr, signal }: SimulatorExit): string | undefined {
+export function crashOf({ code, stderr, signal }: SimulatorExit, reported = false): string | undefined {
   if (signal !== null) return `crashed on ${signal}${quotedLine(stderr)}`;
-  const exitCode = exitCodeText(code);
+  const exitCode = withExitCode(code);
   const diedOnSignal = code !== null && code >= FIRST_SIGNAL_EXIT_CODE;
-  if (diedOnSignal || CRASH_TEXT.test(stderr)) return `crashed with exit code ${exitCode}${quotedLine(stderr)}`;
-  return stderr.trim() === '' ? `exited with code ${exitCode} and no message` : undefined;
+  if (diedOnSignal || CRASH_TEXT.test(stderr)) return `crashed ${exitCode}${quotedLine(stderr)}`;
+  return stderr.trim() === '' && !reported ? `exited ${exitCode} and no message` : undefined;
 }
 
 /**
@@ -182,12 +188,24 @@ export function crashOf({ code, stderr, signal }: SimulatorExit): string | undef
  * message must not write lines of its own into the log.
  */
 function quotedLine(stderr: string): string {
-  const firstLine = (stderr.trim().split('\n')[0] ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, CRASH_QUOTE_CHARS);
+  const firstLine = (stderr.trim().split(/\r?\n/)[0] ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, CRASH_QUOTE_CHARS);
   return firstLine === '' ? '' : `: ${firstLine}`;
 }
 
-/** A failed run whose simulator already said why, in the console above. */
-const STOPPED_ON_REPORTED_ERROR_TEXT = 'The simulation stopped on the error reported above.';
+/** A failed run whose simulator already said why, in the console above: an error, or a design's `std.env.stop(1)`. */
+const STOPPED_AS_REPORTED_TEXT = 'The simulation stopped as reported above.';
+
+/**
+ * What a failed run's ERROR says: stderr, else the simulator's report (pointed at when
+ * the student saw it, quoted whole when the line budget dropped it, so the editor can
+ * still mark its line), else a guess. `report` is null for a crash, which a report
+ * before it does not explain.
+ */
+function failedRunText(stderr: string, report: { readonly line: string; readonly shown: boolean } | null): string {
+  if (stderr.trim() !== '') return stderr;
+  if (report === null) return unexplainedExitText();
+  return report.shown ? STOPPED_AS_REPORTED_TEXT : `The simulation stopped:\n${report.line}`;
+}
 
 /**
  * A simulator that died without a word, on stderr or stdout, still owes the student a
@@ -196,8 +214,9 @@ const STOPPED_ON_REPORTED_ERROR_TEXT = 'The simulation stopped on the error repo
  * segfault without printing anything.
  */
 function unexplainedExitText(): string {
-  const capMb = process.env.HDLBOARD_SIM_MEMORY_MB;
-  if (!capMb) return 'Simulation exited unexpectedly.';
+  // Named only as the whole number simlimit.sh itself needs; anything else is no cap.
+  const capMb = process.env.HDLBOARD_SIM_MEMORY_MB?.trim() ?? '';
+  if (!/^\d+$/.test(capMb)) return 'Simulation exited unexpectedly.';
   return (
     `Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets ${capMb} MB. ` +
     'GHDL needs about 350 bytes per std_logic bit of a signal, so a large RAM signal can use it up.'
@@ -292,8 +311,8 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
-  /** The running simulator printed its own error (`SIMULATOR_ERROR_LINE`). */
-  private outputReportedError = false;
+  /** The first line where the running simulator reported why it stops (`SIMULATOR_REPORT_LINE`). */
+  private simulatorReport: { readonly line: string; readonly shown: boolean } | null = null;
   private destroyed = false;
   /**
    * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
@@ -687,26 +706,31 @@ export class Session {
    */
   private beginOutput(): void {
     this.endOutput();
-    this.outputReportedError = false;
+    this.simulatorReport = null;
     this.limiter = createOutputLimiter(Date.now);
     this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
   }
 
   private forwardOutputLine(line: string): void {
-    // Noted before the line budget, which may drop the line itself.
-    if (SIMULATOR_ERROR_LINE.test(line)) this.outputReportedError = true;
-    if (/\S/.test(line) && !this.isHiddenWaveNotice(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+    const sent = /\S/.test(line) && !this.isHiddenWaveNotice(line) ? (this.limiter?.accept(line) ?? []) : [];
+    this.sendLogLines(sent);
+    // Whether the line budget let the report through: a dropped one is quoted at the end.
+    if (this.simulatorReport === null && SIMULATOR_REPORT_LINE.test(line)) {
+      this.simulatorReport = { line: line.trim(), shown: sent.includes(line) };
+    }
   }
 
   /**
-   * Tells the student why a run failed: the simulator's stderr, else the error it
-   * printed, else a guess. A crash also goes to the server log (`onCrash`).
+   * Tells the student why a run failed: the simulator's stderr, else what it reported on
+   * stdout (quoted, when the line budget dropped it), else a guess. A crash also goes to
+   * the server log (`onCrash`), even after a report: a design can print its error and
+   * then crash.
    */
   private reportFailedRun(language: SimEngine['language'], exit: SimulatorExit): void {
-    const crash = this.outputReportedError ? undefined : crashOf(exit);
+    const report = this.simulatorReport;
+    const crash = crashOf(exit, report !== null);
     if (crash !== undefined) this.onCrash?.(`${SIMULATOR_NAMES[language]} ${crash}`);
-    const text = exit.stderr || (this.outputReportedError ? STOPPED_ON_REPORTED_ERROR_TEXT : unexplainedExitText());
-    this.send({ verb: 'ERROR', stage: 'runtime', text });
+    this.send({ verb: 'ERROR', stage: 'runtime', text: failedRunText(exit.stderr, crash === undefined ? report : null) });
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
