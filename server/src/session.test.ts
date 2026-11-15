@@ -153,3 +153,62 @@ describe('Session runs that outlive their request', () => {
     assert.deepEqual(verbs(frames), ['READY']);
   });
 });
+
+describe('Session: why a failed run stopped', () => {
+  /** Runs a batch design that prints `output`, then exits with `code` and `stderr`. */
+  async function failedRun(output: readonly string[], result: { code: number; stderr: string }): Promise<ServerFrame | undefined> {
+    const frames: ServerFrame[] = [];
+    const engine: SimEngine = {
+      language: 'vhdl',
+      prepare: async () => ({ ok: true, plan: batchPlan(tmpdir()) }),
+      startBoardRun: () => assert.fail('a batch run'),
+      startBatchRun: (_plan, run) => {
+        for (const line of output) run.onOutput(line);
+        return { kill: () => {}, done: Promise.resolve({ ...result, timedOut: false }) };
+      },
+    };
+    const session = new Session((frame) => frames.push(frame), () => engine);
+    await session.handleRun(FILES, 'top.vhdl');
+    await settle();
+    session.destroy();
+    return frames.find((frame) => frame.verb === 'ERROR');
+  }
+
+  test("GHDL's own error on stdout is the reason, not an unexplained exit", async () => {
+    const error = await failedRun(['ghdl:error: bound check failure at top.vhdl:19', 'ghdl:error: simulation failed'], { code: 1, stderr: '' });
+    assert.deepEqual(error, { verb: 'ERROR', stage: 'runtime', text: 'The simulation stopped on the error reported above.' });
+  });
+
+  test("Icarus's $fatal on stdout is the reason too", async () => {
+    const error = await failedRun(['FATAL: top.v:1: boom 3', '       Time: 5  Scope: t'], { code: 1, stderr: '' });
+    assert.equal(error?.verb === 'ERROR' && error.text, 'The simulation stopped on the error reported above.');
+  });
+
+  test('stderr, when there is any, still says it', async () => {
+    const error = await failedRun(['ghdl:error: simulation failed'], { code: 1, stderr: 'Segmentation fault' });
+    assert.equal(error?.verb === 'ERROR' && error.text, 'Segmentation fault');
+  });
+
+  test("the design's own report text is no simulator error", async () => {
+    const saved = process.env.HDLBOARD_SIM_MEMORY_MB;
+    delete process.env.HDLBOARD_SIM_MEMORY_MB;
+    try {
+      const error = await failedRun(['top.vhdl:5:5:@0ms:(report note): an error occurred'], { code: 1, stderr: '' });
+      assert.equal(error?.verb === 'ERROR' && error.text, 'Simulation exited unexpectedly.');
+    } finally {
+      if (saved !== undefined) process.env.HDLBOARD_SIM_MEMORY_MB = saved;
+    }
+  });
+
+  test('a silent exit on a memory-capped host names the cap', async () => {
+    const saved = process.env.HDLBOARD_SIM_MEMORY_MB;
+    process.env.HDLBOARD_SIM_MEMORY_MB = '96';
+    try {
+      const error = await failedRun([], { code: 139, stderr: '' });
+      assert.match(error?.verb === 'ERROR' ? error.text : '', /^Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets 96 MB\./);
+    } finally {
+      if (saved === undefined) delete process.env.HDLBOARD_SIM_MEMORY_MB;
+      else process.env.HDLBOARD_SIM_MEMORY_MB = saved;
+    }
+  });
+});

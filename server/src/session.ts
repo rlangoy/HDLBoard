@@ -132,8 +132,29 @@ const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
-/** A simulator that died without a word on stderr still owes the student a reason. */
-const UNEXPLAINED_EXIT_TEXT = 'Simulation exited unexpectedly.';
+/**
+ * A simulator's own report of the error it stops on, written to stdout with the
+ * design's output: GHDL's `ghdl:error: bound check failure at …`, Icarus's `FATAL: …`
+ * from `$fatal` or its `ERROR: …`.
+ */
+const SIMULATOR_ERROR_LINE = /^\s*(?:ghdl:error:|FATAL:|ERROR:)/;
+/** A failed run whose simulator already said why, in the console above. */
+const STOPPED_ON_REPORTED_ERROR_TEXT = 'The simulation stopped on the error reported above.';
+
+/**
+ * A simulator that died without a word, on stderr or stdout, still owes the student a
+ * reason. Where every run is memory-capped (`HDLBOARD_SIM_MEMORY_MB`, the Docker render
+ * stage's `simlimit.sh`), running out is the likely one: GHDL then dies on a
+ * segfault without printing anything.
+ */
+function unexplainedExitText(): string {
+  const capMb = process.env.HDLBOARD_SIM_MEMORY_MB;
+  if (!capMb) return 'Simulation exited unexpectedly.';
+  return (
+    `Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets ${capMb} MB. ` +
+    'GHDL needs about 350 bytes per std_logic bit of a signal, so a large RAM signal can use it up.'
+  );
+}
 
 /** True once `from` has replaced `to`; false when the destination is held open by another process. */
 function renamed(from: string, to: string): boolean {
@@ -218,6 +239,8 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
+  /** The running simulator printed its own error (`SIMULATOR_ERROR_LINE`). */
+  private outputReportedError = false;
   private destroyed = false;
   /**
    * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
@@ -588,7 +611,7 @@ export class Session {
       // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
       // is a completed run, not a crash: the student asked for it.
       if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
-      else this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
+      else this.send({ verb: 'ERROR', stage: 'runtime', text: this.failedRunText(stderr) });
     });
     // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
@@ -609,12 +632,21 @@ export class Session {
    */
   private beginOutput(): void {
     this.endOutput();
+    this.outputReportedError = false;
     this.limiter = createOutputLimiter(Date.now);
     this.limiterTimer = setInterval(() => this.sendLogLines(this.limiter?.flush() ?? []), LIMITER_FLUSH_MS);
   }
 
   private forwardOutputLine(line: string): void {
+    // Noted before the line budget, which may drop the line itself.
+    if (SIMULATOR_ERROR_LINE.test(line)) this.outputReportedError = true;
     if (/\S/.test(line) && !this.isHiddenWaveNotice(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
+  }
+
+  /** Why a run failed: the simulator's stderr, else the error it printed, else a guess. */
+  private failedRunText(stderr: string): string {
+    if (stderr) return stderr;
+    return this.outputReportedError ? STOPPED_ON_REPORTED_ERROR_TEXT : unexplainedExitText();
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
@@ -797,7 +829,7 @@ export class Session {
         text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
       });
     } else if (code !== 0) {
-      this.send({ verb: 'ERROR', stage: 'runtime', text: stderr || UNEXPLAINED_EXIT_TEXT });
+      this.send({ verb: 'ERROR', stage: 'runtime', text: this.failedRunText(stderr) });
     } else {
       this.send({ verb: 'DONE', reason: 'completed' });
     }
