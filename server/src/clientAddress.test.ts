@@ -57,6 +57,16 @@ describe('loggedAddress', () => {
     assert.equal(loggedAddress(request('203.0.113.99,51.174.146.223, ::1', '127.0.0.1')), '127.0.0.1 (forwarded for 51.174.146.223)');
   });
 
+  test('skips loopback in any spelling', () => {
+    for (const hop of ['0:0:0:0:0:0:0:1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:0001', '127.0.0.2']) {
+      assert.equal(loggedAddress(request(`198.51.100.7, ${hop}`, '127.0.0.1')), '127.0.0.1 (forwarded for 198.51.100.7)', hop);
+    }
+  });
+
+  test('a mapped client address is not loopback', () => {
+    assert.equal(loggedAddress(request('::ffff:198.51.100.7, ::1', '127.0.0.1')), '127.0.0.1 (forwarded for ::ffff:198.51.100.7)');
+  });
+
   test('the address alone when every entry is this machine', () => {
     assert.equal(loggedAddress(request('::1, 127.0.0.1', '127.0.0.1')), '127.0.0.1');
   });

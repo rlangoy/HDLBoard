@@ -139,6 +139,35 @@ describe('VhdlDeclarations', () => {
     expect(SCOPES.objectAt('n', 19)).toBeUndefined();
   });
 
+  test('words inside a string end no scope: report "end;" or "end process;"', () => {
+    const reported = new VhdlDeclarations([
+      'architecture rtl of e is',                         // 1
+      '  signal count : integer range 0 to 9;',           // 2
+      '  procedure step is',                              // 3
+      '    variable count : integer range 0 to 3;',       // 4
+      '  begin',                                          // 5
+      '    report "end;";',                               // 6
+      '    count := count + 1;',                          // 7
+      '  end procedure;',                                 // 8
+      'begin',                                            // 9
+      '  p: process',                                     // 10
+      '    variable v : integer range 0 to 1;',           // 11
+      '  begin',                                          // 12
+      '    report "end process; loop";',                  // 13
+      '    v := v + 1;',                                  // 14
+      '  end process;',                                   // 15
+      'end architecture;',                                // 16
+    ]);
+    expect(reported.objectAt('count', 7)?.typeText).toBe('integer range 0 to 3');
+    expect(reported.objectAt('v', 14)?.typeText).toBe('integer range 0 to 1');
+    expect(reported.objectAt('v', 16)).toBeUndefined();
+  });
+
+  test('a string keeps its text for what is declared with it', () => {
+    const named = new VhdlDeclarations(['constant MSG : string := "end process";']);
+    expect(named.objectAt('MSG', 1)?.initial).toBe('"end process"');
+  });
+
   test('a loop variable is seen only inside its loop', () => {
     expect(SCOPES.objectAt('i', 14)?.objectClass).toBe('loop');
     expect(SCOPES.objectAt('i', 20)).toBeUndefined();

@@ -175,10 +175,14 @@ function namesIn(list: string): string[] {
 }
 
 /** The file as one text, each comment blanked so that every offset stays where it was. */
-function codeOf(lines: readonly string[]): string {
-  const withoutComment = (line: string) =>
-    tokenizeVhdlLine(line).map(({ text, type }) => (type === 'comment' ? ' '.repeat(text.length) : text)).join('');
-  return lines.map(withoutComment).join('\n');
+function codeOf(lines: readonly string[], { blankStrings = false } = {}): string {
+  const blanked = ({ text, type }: { text: string; type: string }) => {
+    if (type === 'comment') return ' '.repeat(text.length);
+    // Inside quotes only: `report "end;"` must not end a subprogram.
+    if (blankStrings && type === 'string' && text.length >= 2) return `${text[0]}${' '.repeat(text.length - 2)}${text[text.length - 1]}`;
+    return text;
+  };
+  return lines.map((line) => tokenizeVhdlLine(line).map(blanked).join('')).join('\n');
 }
 
 /**
@@ -314,7 +318,9 @@ export class VhdlDeclarations {
   ) {
     this.code = codeOf(lines);
     this.lineStarts = lineStartsOf(lines);
-    this.regions = [...blockRegions(this.code), ...subprogramRegions(this.code)];
+    // Where blocks end is read with strings blanked too; offsets match this.code.
+    const structure = codeOf(lines, { blankStrings: true });
+    this.regions = [...blockRegions(structure), ...subprogramRegions(structure)];
     this.readObjects();
     this.readInterfaceLists();
     this.readLoopParameters();
