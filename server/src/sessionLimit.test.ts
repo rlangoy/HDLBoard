@@ -179,15 +179,19 @@ describe('the log lines name the addresses involved', () => {
     assert.equal(refusedLogLine(open, NEWCOMER), 'hdl-board: ERROR busy: refused 198.51.100.7, all 3 in use (2 simulating, 1 idle)');
   });
 
-  test('behind a local proxy, the lines name the forwarded addresses', () => {
-    const proxied = (address: string) => ({ ...newcomerFrom('127.0.0.1'), logAddress: `127.0.0.1 (forwarded for ${address})` });
-    const closed = { ...session('a', { open: 12, from: '127.0.0.1' }), logAddress: '127.0.0.1 (forwarded for 203.0.113.5)' };
+  const proxied = (address: string) => ({ ...newcomerFrom('127.0.0.1'), logAddress: `127.0.0.1 (forwarded for ${address})` });
+  const closedBehindProxy = () => ({ ...session('a', { open: 12, from: '127.0.0.1' }), logAddress: '127.0.0.1 (forwarded for 203.0.113.5)' });
+
+  test('behind a local proxy, a closed session names both forwarded addresses', () => {
     assert.equal(
-      closedLogLine(closed, 2, proxied('198.51.100.7')),
+      closedLogLine(closedBehindProxy(), 2, proxied('198.51.100.7')),
       'hdl-board: ERROR busy: closed 127.0.0.1 (forwarded for 203.0.113.5) open 12 min (simulating) to make room for 127.0.0.1 (forwarded for 198.51.100.7)',
     );
+  });
+
+  test('behind a local proxy, a refusal names the forwarded address', () => {
     assert.equal(
-      refusedLogLine([closed], proxied('198.51.100.7')),
+      refusedLogLine([closedBehindProxy()], proxied('198.51.100.7')),
       'hdl-board: ERROR busy: refused 127.0.0.1 (forwarded for 198.51.100.7), all 1 in use (1 simulating, 0 idle)',
     );
   });

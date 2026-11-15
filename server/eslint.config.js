@@ -20,6 +20,9 @@ const NEW_CODE = [
   'src/runtime.ts',
   'src/session.ts',
   'src/session.test.ts',
+  // Why a run failed: the student's reason and the crash log (session.ts feeds it).
+  'src/runFailure.ts',
+  'src/runFailure.test.ts',
   'src/server.test.ts',
   'src/outputLimiter.ts',
   'src/rateLimit.ts',

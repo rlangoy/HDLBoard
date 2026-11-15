@@ -39,16 +39,21 @@ export function loggedAddress(req: IncomingMessage, trustedProxies = 0): string 
   return forwarded === undefined || forwarded === address ? address : `${address} (forwarded for ${forwarded})`;
 }
 
-/** This machine in any spelling: `::1`, `0:0:0:0:0:0:0:1`, `127.x.x.x`, `::ffff:7f00:1`. */
-const LOOPBACK = new BlockList();
 const LOOPBACK_PREFIX = 8;
 /** The bits of `::ffff:` in front of an IPv4 address mapped into IPv6. */
 const MAPPED_IPV4_BITS = 96;
-const MAPPED_LOOPBACK_PREFIX = MAPPED_IPV4_BITS + LOOPBACK_PREFIX;
 const IPV6 = 6;
-LOOPBACK.addSubnet('127.0.0.0', LOOPBACK_PREFIX, 'ipv4');
-LOOPBACK.addAddress('::1', 'ipv6');
-LOOPBACK.addSubnet('::ffff:127.0.0.0', MAPPED_LOOPBACK_PREFIX, 'ipv6');
+
+/** This machine in any spelling: `::1`, `0:0:0:0:0:0:0:1`, `127.x.x.x`, `::ffff:7f00:1`. */
+const LOOPBACK = loopbackAddresses();
+
+function loopbackAddresses(): BlockList {
+  const addresses = new BlockList();
+  addresses.addSubnet('127.0.0.0', LOOPBACK_PREFIX, 'ipv4');
+  addresses.addAddress('::1', 'ipv6');
+  addresses.addSubnet('::ffff:127.0.0.0', MAPPED_IPV4_BITS + LOOPBACK_PREFIX, 'ipv6');
+  return addresses;
+}
 
 /** `address` must already be an IP address (`isIP`). */
 function isLoopback(address: string): boolean {

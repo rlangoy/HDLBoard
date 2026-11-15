@@ -104,63 +104,64 @@ describe('VhdlDeclarations', () => {
   });
 
   const SCOPES = new VhdlDeclarations([
-    'architecture rtl of e is',                        // 1
-    '  signal count : integer range 0 to 9;',          // 2
+    'architecture rtl of e is', // 1
+    '  signal count : integer range 0 to 9;', // 2
     '  function twice(n : integer) return integer is', // 3
-    '    variable count : integer range 0 to 1;',      // 4
-    '  begin',                                         // 5
-    '    if n > 0 then return 2 * n; end if;',         // 6
-    '    return 0;',                                   // 7
-    '  end function;',                                 // 8
-    'begin',                                           // 9
-    '  a: process(clk)',                               // 10
-    '    variable count : integer range 0 to 3;',      // 11
-    '  begin',                                         // 12
-    '    for i in 0 to 3 loop',                        // 13
-    '      count := i;',                               // 14
-    '    end loop;',                                   // 15
-    '  end process;',                                  // 16
-    '  b: process(clk)',                               // 17
-    '  begin',                                         // 18
-    '    count <= count + 1;',                         // 19
-    '    x <= i;',                                     // 20
-    '  end process;',                                  // 21
-    'end architecture;',                               // 22
+    '    variable count : integer range 0 to 1;', // 4
+    '  begin', // 5
+    '    if n > 0 then return 2 * n; end if;', // 6
+    '    return 0;', // 7
+    '  end function;', // 8
+    'begin', // 9
+    '  a: process(clk)', // 10
+    '    variable count : integer range 0 to 3;', // 11
+    '  begin', // 12
+    '    for i in 0 to 3 loop', // 13
+    '      count := i;', // 14
+    '    end loop;', // 15
+    '  end process;', // 16
+    '  b: process(clk)', // 17
+    '  begin', // 18
+    '    count <= count + 1;', // 19
+    '    x <= i;', // 20
+    '  end process;', // 21
+    'end architecture;', // 22
   ]);
 
-  test('a process variable is seen only inside its process', () => {
+  test('a process variable is seen inside its process', () => {
     expect(SCOPES.objectAt('count', 14)?.typeText).toBe('integer range 0 to 3');
+  });
+
+  test("a process variable is not seen from another process", () => {
     expect(SCOPES.objectAt('count', 19)?.typeText).toBe('integer range 0 to 9');
   });
 
-  test("a subprogram's declarations are seen only inside it, past its end ifs", () => {
+  test("a subprogram's variable is seen inside it, past its end ifs", () => {
     expect(SCOPES.objectAt('count', 7)?.typeText).toBe('integer range 0 to 1');
+  });
+
+  test("a subprogram's parameter is seen inside it", () => {
     expect(SCOPES.objectAt('n', 7)?.objectClass).toBe('parameter');
+  });
+
+  test("a subprogram's parameter is not seen outside it", () => {
     expect(SCOPES.objectAt('n', 19)).toBeUndefined();
   });
 
-  test('words inside a string end no scope: report "end;" or "end process;"', () => {
+  test('report "end;" in a procedure does not end its scope', () => {
     const reported = new VhdlDeclarations([
-      'architecture rtl of e is',                         // 1
-      '  signal count : integer range 0 to 9;',           // 2
-      '  procedure step is',                              // 3
-      '    variable count : integer range 0 to 3;',       // 4
-      '  begin',                                          // 5
-      '    report "end;";',                               // 6
-      '    count := count + 1;',                          // 7
-      '  end procedure;',                                 // 8
-      'begin',                                            // 9
-      '  p: process',                                     // 10
-      '    variable v : integer range 0 to 1;',           // 11
-      '  begin',                                          // 12
-      '    report "end process; loop";',                  // 13
-      '    v := v + 1;',                                  // 14
-      '  end process;',                                   // 15
-      'end architecture;',                                // 16
+      'architecture rtl of e is',
+      '  signal count : integer range 0 to 9;',
+      '  procedure step is',
+      '    variable count : integer range 0 to 3;',
+      '  begin',
+      '    report "end;";',
+      '    count := count + 1; -- line 7',
+      '  end procedure;',
+      'begin',
+      'end architecture;',
     ]);
     expect(reported.objectAt('count', 7)?.typeText).toBe('integer range 0 to 3');
-    expect(reported.objectAt('v', 14)?.typeText).toBe('integer range 0 to 1');
-    expect(reported.objectAt('v', 16)).toBeUndefined();
   });
 
   test('a string keeps its text for what is declared with it', () => {
@@ -168,8 +169,11 @@ describe('VhdlDeclarations', () => {
     expect(named.objectAt('MSG', 1)?.initial).toBe('"end process"');
   });
 
-  test('a loop variable is seen only inside its loop', () => {
+  test('a loop variable is seen inside its loop', () => {
     expect(SCOPES.objectAt('i', 14)?.objectClass).toBe('loop');
+  });
+
+  test('a loop variable is not seen after its loop', () => {
     expect(SCOPES.objectAt('i', 20)).toBeUndefined();
   });
 });

@@ -37,6 +37,16 @@ import { DEFAULT_COMPILER_OPTIONS, type CompilerOptions, type DecodedCompilerOpt
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import {
+  crashOf,
+  failedRunText,
+  isSimulatorReport,
+  readMemoryCapMb,
+  silentExitOf,
+  simulatorName,
+  type SimulatorExit,
+  type SimulatorReport,
+} from './runFailure.js';
 import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
@@ -132,97 +142,6 @@ const CONTENDED_RENAME_CODES: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
  * no `wait`) from hanging the server instead.
  */
 const BATCH_TIMEOUT_MS = 60_000;
-/**
- * A simulator's own report of why it stops, written to stdout with the design's output.
- * GHDL names itself by its program, as the front end reads it too (diagnostics.ts):
- * `ghdl:error: …`, `C:\…\ghdl.exe:error: …`, `/usr/bin/ghdl-mcode:error: …`, and
- * `simulation stopped @5ns with status 1` for a design's own `std.env.stop(1)`. Icarus
- * gives its `FATAL:` (`$fatal`) and `ERROR:` a place, `FATAL: top.v:7: …`, which a
- * student's own `$display("ERROR: mismatch")` does not have.
- */
-const SIMULATOR_REPORT_LINE =
-  /^\s*(?:(?:.*[\\/])?ghdl[^\\/:\s]*:error:|(?:FATAL|ERROR): [^:\s]+:\d+:|simulation (?:stopped|finished) @\S+ with status \d+)/;
-/** How a failed simulator process ended. */
-interface SimulatorExit {
-  readonly code: number | null;
-  readonly stderr: string;
-  readonly signal: NodeJS.Signals | null;
-}
-
-const SIMULATOR_NAMES: Readonly<Record<SimEngine['language'], string>> = { vhdl: 'GHDL', verilog: 'Icarus Verilog' };
-/** What a process that crashed, rather than failed, says on stderr. */
-const CRASH_TEXT = /segmentation fault|sigsegv|sigbus|sigabrt|core dumped|out of memory|bad_alloc|cannot allocate|stack overflow/i;
-/**
- * Exit codes from 128 up are a death by signal as a POSIX shell reports it (128 + its
- * number), or a Windows status such as 0xC0000005, an access violation.
- */
-const FIRST_SIGNAL_EXIT_CODE = 128;
-/** Windows statuses (top bit set) read as hex: 0xC0000005, not 3221225477. */
-const FIRST_WINDOWS_STATUS = 0x80000000;
-const HEX = 16;
-
-/** `with exit code 1`, `with exit code 0xC0000005`, or `with no exit code`. */
-function withExitCode(code: number | null): string {
-  if (code === null) return 'with no exit code';
-  return `with exit code ${code >= FIRST_WINDOWS_STATUS ? `0x${code.toString(HEX).toUpperCase()}` : String(code)}`;
-}
-/** The longest piece of stderr a crash line quotes: the server log is no place for a dump. */
-const CRASH_QUOTE_CHARS = 200;
-
-/**
- * How a simulator crashed, or undefined when it only failed. Killed by a signal, an exit
- * code a shell gives a signal's death, or stderr naming a crash is a crash whatever the
- * run printed before. An exit with no word at all is one only when the simulator did
- * not `report` why on stdout (`SIMULATOR_REPORT_LINE`).
- */
-export function crashOf({ code, stderr, signal }: SimulatorExit, reported = false): string | undefined {
-  if (signal !== null) return `crashed on ${signal}${quotedLine(stderr)}`;
-  const exitCode = withExitCode(code);
-  const diedOnSignal = code !== null && code >= FIRST_SIGNAL_EXIT_CODE;
-  if (diedOnSignal || CRASH_TEXT.test(stderr)) return `crashed ${exitCode}${quotedLine(stderr)}`;
-  return stderr.trim() === '' && !reported ? `exited ${exitCode} and no message` : undefined;
-}
-
-/**
- * `: ` and the first line of `stderr`, printable and cut short, or nothing: a crash
- * message must not write lines of its own into the log.
- */
-function quotedLine(stderr: string): string {
-  const firstLine = (stderr.trim().split(/\r?\n/)[0] ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, CRASH_QUOTE_CHARS);
-  return firstLine === '' ? '' : `: ${firstLine}`;
-}
-
-/** A failed run whose simulator already said why, in the console above: an error, or a design's `std.env.stop(1)`. */
-const STOPPED_AS_REPORTED_TEXT = 'The simulation stopped as reported above.';
-
-/**
- * What a failed run's ERROR says: stderr, else the simulator's report (pointed at when
- * the student saw it, quoted whole when the line budget dropped it, so the editor can
- * still mark its line), else a guess. `report` is null for a crash, which a report
- * before it does not explain.
- */
-function failedRunText(stderr: string, report: { readonly line: string; readonly shown: boolean } | null): string {
-  if (stderr.trim() !== '') return stderr;
-  if (report === null) return unexplainedExitText();
-  return report.shown ? STOPPED_AS_REPORTED_TEXT : `The simulation stopped:\n${report.line}`;
-}
-
-/**
- * A simulator that died without a word, on stderr or stdout, still owes the student a
- * reason. Where every run is memory-capped (`HDLBOARD_SIM_MEMORY_MB`, the Docker render
- * stage's `simlimit.sh`), running out is the likely one: GHDL then dies on a
- * segfault without printing anything.
- */
-function unexplainedExitText(): string {
-  // Named only as the whole number simlimit.sh itself needs; anything else is no cap.
-  const capMb = process.env.HDLBOARD_SIM_MEMORY_MB?.trim() ?? '';
-  if (!/^\d+$/.test(capMb)) return 'Simulation exited unexpectedly.';
-  return (
-    `Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets ${capMb} MB. ` +
-    'GHDL needs about 350 bytes per std_logic bit of a signal, so a large RAM signal can use it up.'
-  );
-}
-
 /** True once `from` has replaced `to`; false when the destination is held open by another process. */
 function renamed(from: string, to: string): boolean {
   try {
@@ -259,10 +178,20 @@ export interface SessionOptions {
   /** The clock `idleSince` is read on, in ms. Defaults to `Date.now`; tests move it. */
   readonly now?: () => number;
   /**
-   * A simulator crashed (`crashOf`): told how, for the server log, which knows the
-   * client. Defaults to doing nothing.
+   * A simulator crashed or died without a word (runFailure.ts): told how, for the server
+   * log, which knows the client. Defaults to doing nothing.
    */
   readonly onCrash?: (description: string) => void;
+  /**
+   * The host's memory cap on one run, in MB, named when a run dies without a word;
+   * undefined for none. Defaults to `HDLBOARD_SIM_MEMORY_MB` (`readMemoryCapMb`).
+   */
+  readonly memoryCapMb?: number;
+}
+
+/** The cap the options give, even an explicit undefined (no cap), else the host's. */
+function memoryCapOf(options: SessionOptions): number | undefined {
+  return 'memoryCapMb' in options ? options.memoryCapMb : readMemoryCapMb();
 }
 
 /** The waveform of the newest batch run (docs/waveform_viewer_spec.md § 7.4). */
@@ -311,8 +240,8 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
-  /** The first line where the running simulator reported why it stops (`SIMULATOR_REPORT_LINE`). */
-  private simulatorReport: { readonly line: string; readonly shown: boolean } | null = null;
+  /** The first line where the running simulator reported why it stops (runFailure.ts). */
+  private simulatorReport: SimulatorReport | null = null;
   private destroyed = false;
   /**
    * Bumped per `RUN`. A compile is awaited, so a newer `RUN` — or the socket
@@ -355,6 +284,7 @@ export class Session {
   private readonly vhdlWaveFormat: WaveFormat;
   private readonly now: () => number;
   private readonly onCrash: SessionOptions['onCrash'];
+  private readonly memoryCapMb: number | undefined;
   private idleSinceMs: number;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
@@ -372,6 +302,7 @@ export class Session {
     this.vhdlWaveFormat = options.vhdlWaveFormat ?? readVhdlWaveFormat();
     this.now = options.now ?? Date.now;
     this.onCrash = options.onCrash;
+    this.memoryCapMb = memoryCapOf(options);
     this.idleSinceMs = this.now();
   }
 
@@ -715,22 +646,22 @@ export class Session {
     const sent = /\S/.test(line) && !this.isHiddenWaveNotice(line) ? (this.limiter?.accept(line) ?? []) : [];
     this.sendLogLines(sent);
     // Whether the line budget let the report through: a dropped one is quoted at the end.
-    if (this.simulatorReport === null && SIMULATOR_REPORT_LINE.test(line)) {
+    if (this.simulatorReport === null && isSimulatorReport(line)) {
       this.simulatorReport = { line: line.trim(), shown: sent.includes(line) };
     }
   }
 
   /**
-   * Tells the student why a run failed: the simulator's stderr, else what it reported on
-   * stdout (quoted, when the line budget dropped it), else a guess. A crash also goes to
-   * the server log (`onCrash`), even after a report: a design can print its error and
-   * then crash.
+   * Tells the student why a run failed (runFailure.ts). The server log hears of a crash,
+   * even after a report, since a design can print its error and then crash; and of a
+   * run that died with no word at all, since its student gets only a guess.
    */
   private reportFailedRun(language: SimEngine['language'], exit: SimulatorExit): void {
-    const report = this.simulatorReport;
-    const crash = crashOf(exit, report !== null);
-    if (crash !== undefined) this.onCrash?.(`${SIMULATOR_NAMES[language]} ${crash}`);
-    this.send({ verb: 'ERROR', stage: 'runtime', text: failedRunText(exit.stderr, crash === undefined ? report : null) });
+    const crash = crashOf(exit);
+    const report = crash === undefined ? this.simulatorReport : null;
+    const logged = crash ?? (report === null ? silentExitOf(exit) : undefined);
+    if (logged !== undefined) this.onCrash?.(`${simulatorName(language)} ${logged}`);
+    this.send({ verb: 'ERROR', stage: 'runtime', text: failedRunText(exit.stderr, report, this.memoryCapMb) });
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
