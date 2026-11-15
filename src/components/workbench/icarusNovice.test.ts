@@ -59,6 +59,8 @@ const EXPLAINED: readonly [string, number, string][] = [
   ['missing_begin2', 5, 'use `begin ... end`'],
   ['bad_module_name', 3, 'did you mean `count`'],
   ['missing_semicolon_last', 5, 'missing `;`'],
+  ['case_item_semicolon', 6, 'missing `;` at the end of line 5'],
+  ['case_label_semicolon', 6, 'missing `;` at the end of line 5'],
 ];
 
 describe('novice corpus through the shared diagnostic presentation', () => {
@@ -77,6 +79,11 @@ describe('novice corpus through the shared diagnostic presentation', () => {
     'blocking_sequential', 'division_zero', 'conflicting_driver', 'wrong_operator_le',
   ])('%s is accepted without invented diagnostics', (name) => {
     expect(replay(name)).toEqual([]);
+  });
+
+  test('a nested case header after its case label is no unfinished statement', () => {
+    const messages = replay('nested_case_header').find((entry) => entry.line === 5)?.messages.filter((m) => !isMuted(m));
+    expect(messages?.[0].advice?.headline ?? '').not.toContain('missing `;`');
   });
 
   test('runtime assertions retain the student message', () => {

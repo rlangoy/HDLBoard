@@ -578,5 +578,38 @@
         "text": "Simulation exited unexpectedly."
       }
     ]
+  },
+  {
+    "name": "case_item_semicolon",
+    "source": "module top (input [3:0] digit, output reg [6:0] seg);\n  always @* begin\n    case (digit)\n      4'd3: seg = 7'b0110000;\n      4'd4: seg = 7'b0011001\n      4'd5: seg = 7'b0010010;\n      default: seg = 7'b1111111;\n    endcase\n  end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "case_item_semicolon.v:6: syntax error\r\ncase_item_semicolon.v:6: Syntax in assignment statement l-value."
+      }
+    ]
+  },
+  {
+    "name": "case_label_semicolon",
+    "source": "module top (input [1:0] state, output reg led);\n  localparam IDLE = 2'd0, RUN = 2'd1;\n  always @* begin\n    case (state)\n      IDLE: led = 1'b0\n      RUN: led = 1'b1;\n      default: led = 1'b0;\n    endcase\n  end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "case_label_semicolon.v:6: syntax error\r\ncase_label_semicolon.v:6: Syntax in assignment statement l-value."
+      }
+    ]
+  },
+  {
+    "name": "nested_case_header",
+    "source": "module top (input [1:0] sel, input [1:0] inner_sel, output reg q);\n  always @* begin\n    case (sel)\n      0: case (inner_sel)\n        1: q = ;\n        default: q = 0;\n      endcase\n      default: q = 1;\n    endcase\n  end\nendmodule\n",
+    "frames": [
+      {
+        "verb": "ERROR",
+        "stage": "analyze",
+        "text": "nested_case_header.v:5: syntax error\r\nnested_case_header.v:5: error: Malformed statement"
+      }
+    ]
   }
 ]
