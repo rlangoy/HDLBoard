@@ -235,4 +235,15 @@ describe('Session: why a failed run stopped', () => {
     const { text } = await failedRun([], { code: 139, stderr: '' }, 96);
     assert.match(text ?? '', /^Simulation exited unexpectedly, possibly out of memory: each simulation on this server gets 96 MB\./);
   });
+
+  test('a $fatal the output limit dropped is quoted, not the $error shown before it', async () => {
+    const flood = Array.from({ length: 300 }, (_, i) => `tick ${i}`);
+    const { text } = await failedRun(['ERROR: top.v:3: mismatch', ...flood, 'FATAL: top.v:9: boom'], { code: 1, stderr: '' });
+    assert.equal(text, 'The simulation stopped:\nFATAL: top.v:9: boom');
+  });
+
+  test('a $fatal in a file whose name holds spaces is no crash', async () => {
+    const { logged } = await failedRun(['FATAL: my test.v:5: fatal reason'], { code: 1, stderr: '' });
+    assert.deepEqual(logged, []);
+  });
 });

@@ -39,9 +39,10 @@ import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import {
   crashOf,
+  explainingReport,
   failedRunText,
-  isSimulatorReport,
   readMemoryCapMb,
+  reportOf,
   silentExitOf,
   simulatorName,
   type SimulatorExit,
@@ -240,7 +241,7 @@ export class Session {
   private lastSentState: string | null = null;
   private limiter: OutputLimiter | null = null;
   private limiterTimer: NodeJS.Timeout | null = null;
-  /** The first line where the running simulator reported why it stops (runFailure.ts). */
+  /** The report that explains the running simulator's stop so far (`explainingReport`, runFailure.ts). */
   private simulatorReport: SimulatorReport | null = null;
   private destroyed = false;
   /**
@@ -646,9 +647,8 @@ export class Session {
     const sent = /\S/.test(line) && !this.isHiddenWaveNotice(line) ? (this.limiter?.accept(line) ?? []) : [];
     this.sendLogLines(sent);
     // Whether the line budget let the report through: a dropped one is quoted at the end.
-    if (this.simulatorReport === null && isSimulatorReport(line)) {
-      this.simulatorReport = { line: line.trim(), shown: sent.includes(line) };
-    }
+    const report = reportOf(line, sent.includes(line));
+    if (report !== undefined) this.simulatorReport = explainingReport(this.simulatorReport, report);
   }
 
   /**

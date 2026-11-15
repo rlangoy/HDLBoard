@@ -16,28 +16,46 @@ export interface SimulatorExit {
   readonly signal: NodeJS.Signals | null;
 }
 
-/** The first line where the simulator said why it stops, and whether the student got it. */
+/** A line where the simulator reported an error on stdout, and whether the student got it. */
 export interface SimulatorReport {
   readonly line: string;
   /** False when the per-second output limit (outputLimiter.ts) dropped the line. */
   readonly shown: boolean;
+  /** It ends the run (`$fatal`, a GHDL error), rather than letting it go on (`$error`). */
+  readonly stops: boolean;
 }
 
 /**
- * A simulator's own report of why it stops, written to stdout with the design's output.
- * GHDL names itself by its program, as the front end reads it too (diagnostics.ts):
- * `ghdl:error: …`, `C:\…\ghdl.exe:error: …`, `/usr/bin/ghdl-mcode:error: …`, and
- * `simulation stopped @5ns with status 1` for a design's own `std.env.stop(1)`. Icarus
- * gives its `FATAL:` (`$fatal`) and `ERROR:` a place, `FATAL: top.v:7: …`, which a
- * student's own `$display("ERROR: mismatch")` does not have.
+ * A simulator's own report, written to stdout with the design's output. GHDL names
+ * itself by its program, as the front end reads it too (diagnostics.ts): `ghdl:error: …`,
+ * `C:\…\ghdl.exe:error: …`, `/usr/bin/ghdl-mcode:error: …`, and `simulation stopped @5ns
+ * with status 1` for a design's own `std.env.stop(1)`. Icarus gives its `FATAL:`
+ * (`$fatal`) and `ERROR:` (`$error`) a place, `FATAL: my test.v:7: …` — a file name may
+ * hold spaces — which a student's own `$display("ERROR: mismatch")` does not have.
  */
 const GHDL_ERROR = String.raw`(?:.*[\\/])?ghdl[^\\/:\s]*:error:`;
-const ICARUS_ERROR = String.raw`(?:FATAL|ERROR): [^:\s]+:\d+:`;
 const GHDL_STOP = String.raw`simulation (?:stopped|finished) @\S+ with status \d+`;
-const SIMULATOR_REPORT_LINE = new RegExp(String.raw`^\s*(?:${GHDL_ERROR}|${ICARUS_ERROR}|${GHDL_STOP})`);
+const ICARUS_PLACE = String.raw`[^:]+:\d+:`;
+const STOPPING_REPORT = new RegExp(String.raw`^\s*(?:${GHDL_ERROR}|${GHDL_STOP}|FATAL: ${ICARUS_PLACE})`);
+/** Icarus's `$error`: reported, but the run goes on. */
+const CONTINUING_REPORT = new RegExp(String.raw`^\s*ERROR: ${ICARUS_PLACE}`);
 
-export function isSimulatorReport(line: string): boolean {
-  return SIMULATOR_REPORT_LINE.test(line);
+/** `line` as a simulator report, or undefined when it is the design's own output. */
+export function reportOf(line: string, shown: boolean): SimulatorReport | undefined {
+  if (STOPPING_REPORT.test(line)) return { line: line.trim(), shown, stops: true };
+  if (CONTINUING_REPORT.test(line)) return { line: line.trim(), shown, stops: false };
+  return undefined;
+}
+
+/**
+ * The report that explains the run: the first that stopped it, else the first it
+ * reported. A `$fatal` after an `$error` is the reason, even when the error was shown and
+ * the fatal dropped; GHDL's `simulation failed` after its own error adds nothing.
+ */
+export function explainingReport(current: SimulatorReport | null, next: SimulatorReport): SimulatorReport {
+  if (current === null) return next;
+  if (current.stops) return current;
+  return next.stops ? next : current;
 }
 
 const SIMULATOR_NAMES: Readonly<Record<SimEngine['language'], string>> = { vhdl: 'GHDL', verilog: 'Icarus Verilog' };
