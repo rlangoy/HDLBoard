@@ -880,6 +880,8 @@ type Advisor = (located: readonly LocatedDiagnostic[], snapshot: RunSnapshot) =>
  * a frame), and only those get advice — never the design's own reports.
  */
 const adviseGhdlRunChecks: Advisor = (located, snapshot) => {
+  // Most LOG lines are the design's own output: read the project only for a failed check.
+  if (!located.some(isFailedRunCheck)) return [...located];
   const genericsSet = genericsSetIn(snapshot);
   const contents = new Map(snapshot.files.map((file) => [file.id, file.content]));
   return located.map((diagnostic) => {
