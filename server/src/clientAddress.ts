@@ -26,24 +26,33 @@ export function clientAddress(req: IncomingMessage, trustedProxies = 0): string 
 
 /**
  * How the server log names a client: `clientAddress`, and, when that ignores the
- * `X-Forwarded-For` header (`HDL_TRUSTED_PROXIES` is 0), the address the nearest proxy
- * says it was reached from — behind a proxy on the same machine every peer is 127.0.0.1,
- * which tells an operator nothing. Only for logs: the header is not checked, so it is
+ * `X-Forwarded-For` header (`HDL_TRUSTED_PROXIES` is 0), the nearest address in it that
+ * is not this machine: behind a proxy on the same machine every peer is 127.0.0.1, and
+ * the entry that proxy adds may be ::1 (Render's container: `<student>, ::1`), neither of
+ * which tells an operator anything. Only for logs: the header is not checked, so it is
  * labelled as what it is and never steers the full-server policy.
  */
 export function loggedAddress(req: IncomingMessage, trustedProxies = 0): string {
   const address = clientAddress(req, trustedProxies);
   if (trustedProxies > 0) return address;
-  const forwarded = addedByOutermostProxy(req.headers['x-forwarded-for'], 1);
+  const forwarded = entriesOf(req.headers['x-forwarded-for']).reverse().find((entry) => isIP(entry) && !isLoopback(entry));
   return forwarded === undefined || forwarded === address ? address : `${address} (forwarded for ${forwarded})`;
 }
 
-function addedByOutermostProxy(header: string | string[] | undefined, trustedProxies: number): string | undefined {
+function isLoopback(address: string): boolean {
+  return address === '::1' || address.startsWith('127.') || address.startsWith('::ffff:127.');
+}
+
+function entriesOf(header: string | string[] | undefined): string[] {
   const joined = Array.isArray(header) ? header.join(',') : header;
-  const entries = (joined ?? '')
+  return (joined ?? '')
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry !== '');
+}
+
+function addedByOutermostProxy(header: string | string[] | undefined, trustedProxies: number): string | undefined {
+  const entries = entriesOf(header);
   if (entries.length === 0) return undefined;
   // Fewer entries than proxies: every one was added by a trusted proxy, so the first is the client.
   const entry = entries[Math.max(0, entries.length - trustedProxies)];
