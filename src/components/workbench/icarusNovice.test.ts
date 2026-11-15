@@ -81,6 +81,11 @@ describe('novice corpus through the shared diagnostic presentation', () => {
     expect(replay(name)).toEqual([]);
   });
 
+  test('a nested case header after its case label is no unfinished statement', () => {
+    const messages = replay('nested_case_header').find((entry) => entry.line === 5)?.messages.filter((m) => !isMuted(m));
+    expect(messages?.[0].advice?.headline ?? '').not.toContain('missing `;`');
+  });
+
   test('runtime assertions retain the student message', () => {
     expect(replay('runtime_fatal')[0].messages[0].advice).toBeUndefined();
   });

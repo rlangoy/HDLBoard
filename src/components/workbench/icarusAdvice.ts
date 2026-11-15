@@ -143,7 +143,8 @@ const CLOSING = new Set([')', ']', '}']);
  * A line that should have ended with `;` (§ 3, Rule D): it ends in a name, a
  * number or a closing bracket. It is not unfinished when it ends in `;`, a
  * keyword (`begin`, `end`, `else`), an operator or `,` (the statement goes on),
- * or the `)` of an `if` or `always` header; a compiler-directive line never is.
+ * or the `)` of an `if` or `always` header — also after a case label, as in
+ * `0: case (inner_sel)`; a compiler-directive line never is.
  */
 function looksUnfinished(tokens: readonly PositionedToken[]): boolean {
   const [first] = tokens;
@@ -151,7 +152,8 @@ function looksUnfinished(tokens: readonly PositionedToken[]): boolean {
   if (last === undefined || first.type === 'directive') return false;
   if (VALUE_TYPES.has(last.type)) return true;
   if (!CLOSING.has(last.text)) return false;
-  return !(last.text === ')' && HEADER_WORDS.has(first.text));
+  const statementStart = statementAfterLabel(tokens)[0];
+  return !(last.text === ')' && HEADER_WORDS.has(statementStart?.text));
 }
 
 /** The nearest line below `line` that holds code. */
@@ -186,9 +188,17 @@ function startsStatement(tokens: readonly PositionedToken[]): boolean {
  * statement l-value.") — measured with Icarus 13.0, case_item_semicolon.
  */
 function startsCaseItem(tokens: readonly PositionedToken[]): boolean {
+  return statementAfterLabel(tokens) !== tokens;
+}
+
+/** A case item's value and `:` — `4'd5:`, `IDLE:`, `default:` — are a label, not its statement. */
+const CASE_LABEL_LENGTH = 2;
+
+/** The statement on a line, after its case label when it has one: `case (inner_sel)` in `0: case (inner_sel)`. */
+function statementAfterLabel(tokens: readonly PositionedToken[]): readonly PositionedToken[] {
   const [value, colon] = tokens;
-  const isCaseValue = value?.type === 'number' || value?.type === 'identifier';
-  return isCaseValue && colon?.text === ':';
+  const isCaseValue = value?.type === 'number' || value?.type === 'identifier' || value?.text === 'default';
+  return isCaseValue && colon?.text === ':' ? tokens.slice(CASE_LABEL_LENGTH) : tokens;
 }
 
 /** Icarus's words for any continuous assignment it could not parse, whatever was wrong in it. */
