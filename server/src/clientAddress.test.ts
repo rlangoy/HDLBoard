@@ -49,6 +49,22 @@ describe('loggedAddress', () => {
     assert.equal(loggedAddress(request('10.0.0.7, 203.0.113.9', '127.0.0.1')), '127.0.0.1 (forwarded for 203.0.113.9)');
   });
 
+  test("skips the loopback hop a proxy in the same container adds: Render's `<student>, ::1`", () => {
+    assert.equal(loggedAddress(request('51.174.146.223, ::1', '127.0.0.1')), '127.0.0.1 (forwarded for 51.174.146.223)');
+  });
+
+  test('a made-up entry the client sent sits left of the real one and is not shown', () => {
+    assert.equal(loggedAddress(request('203.0.113.99,51.174.146.223, ::1', '127.0.0.1')), '127.0.0.1 (forwarded for 51.174.146.223)');
+  });
+
+  test('the address alone when every entry is this machine', () => {
+    assert.equal(loggedAddress(request('::1, 127.0.0.1', '127.0.0.1')), '127.0.0.1');
+  });
+
+  test("with Render's two proxies trusted, the student, not an entry the client made up", () => {
+    assert.equal(clientAddress(request('203.0.113.99,51.174.146.223, ::1', '127.0.0.1'), 2), '51.174.146.223');
+  });
+
   test('the address alone without the header', () => {
     assert.equal(loggedAddress(request(undefined, '192.168.1.20')), '192.168.1.20');
   });
