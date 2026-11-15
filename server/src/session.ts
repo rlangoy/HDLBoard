@@ -138,6 +138,54 @@ const BATCH_TIMEOUT_MS = 60_000;
  * from `$fatal` or its `ERROR: …`.
  */
 const SIMULATOR_ERROR_LINE = /^\s*(?:ghdl:error:|FATAL:|ERROR:)/;
+/** How a failed simulator process ended. */
+interface SimulatorExit {
+  readonly code: number | null;
+  readonly stderr: string;
+  readonly signal: NodeJS.Signals | null;
+}
+
+const SIMULATOR_NAMES: Readonly<Record<SimEngine['language'], string>> = { vhdl: 'GHDL', verilog: 'Icarus Verilog' };
+/** What a process that crashed, rather than failed, says on stderr. */
+const CRASH_TEXT = /segmentation fault|sigsegv|sigbus|sigabrt|core dumped|out of memory|bad_alloc|cannot allocate|stack overflow/i;
+/**
+ * Exit codes from 128 up are a death by signal as a POSIX shell reports it (128 + its
+ * number), or a Windows status such as 0xC0000005, an access violation.
+ */
+const FIRST_SIGNAL_EXIT_CODE = 128;
+/** Windows statuses (top bit set) read as hex: 0xC0000005, not 3221225477. */
+const FIRST_WINDOWS_STATUS = 0x80000000;
+const HEX = 16;
+
+function exitCodeText(code: number | null): string {
+  if (code === null) return 'unknown';
+  return code >= FIRST_WINDOWS_STATUS ? `0x${code.toString(HEX).toUpperCase()}` : String(code);
+}
+/** The longest piece of stderr a crash line quotes: the server log is no place for a dump. */
+const CRASH_QUOTE_CHARS = 200;
+
+/**
+ * How a simulator crashed, or undefined when it only failed: killed by a signal, an exit
+ * code a shell gives a signal's death, stderr naming a crash, or an exit with no word at
+ * all. Only for runs whose simulator printed no error of its own.
+ */
+export function crashOf({ code, stderr, signal }: SimulatorExit): string | undefined {
+  if (signal !== null) return `crashed on ${signal}${quotedLine(stderr)}`;
+  const exitCode = exitCodeText(code);
+  const diedOnSignal = code !== null && code >= FIRST_SIGNAL_EXIT_CODE;
+  if (diedOnSignal || CRASH_TEXT.test(stderr)) return `crashed with exit code ${exitCode}${quotedLine(stderr)}`;
+  return stderr.trim() === '' ? `exited with code ${exitCode} and no message` : undefined;
+}
+
+/**
+ * `: ` and the first line of `stderr`, printable and cut short, or nothing: a crash
+ * message must not write lines of its own into the log.
+ */
+function quotedLine(stderr: string): string {
+  const firstLine = (stderr.trim().split('\n')[0] ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, CRASH_QUOTE_CHARS);
+  return firstLine === '' ? '' : `: ${firstLine}`;
+}
+
 /** A failed run whose simulator already said why, in the console above. */
 const STOPPED_ON_REPORTED_ERROR_TEXT = 'The simulation stopped on the error reported above.';
 
@@ -191,6 +239,11 @@ export interface SessionOptions {
   readonly vhdlWaveFormat?: WaveFormat;
   /** The clock `idleSince` is read on, in ms. Defaults to `Date.now`; tests move it. */
   readonly now?: () => number;
+  /**
+   * A simulator crashed (`crashOf`): told how, for the server log, which knows the
+   * client. Defaults to doing nothing.
+   */
+  readonly onCrash?: (description: string) => void;
 }
 
 /** The waveform of the newest batch run (docs/waveform_viewer_spec.md § 7.4). */
@@ -282,6 +335,7 @@ export class Session {
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
   private readonly now: () => number;
+  private readonly onCrash: SessionOptions['onCrash'];
   private idleSinceMs: number;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
@@ -298,6 +352,7 @@ export class Session {
     this.waveCheckMs = options.waveCheckMs ?? readIntSetting(WAVE_CHECK_MS);
     this.vhdlWaveFormat = options.vhdlWaveFormat ?? readVhdlWaveFormat();
     this.now = options.now ?? Date.now;
+    this.onCrash = options.onCrash;
     this.idleSinceMs = this.now();
   }
 
@@ -599,7 +654,7 @@ export class Session {
     // the time it arrives, `this.state` reads 'running' again (the new
     // run's), so a plain state check would misattribute this stale exit
     // to it. `this.run !== handle` is what actually tells them apart.
-    handle.onExit((code, stderr) => {
+    handle.onExit((code, stderr, signal) => {
       if (this.destroyed || this.run !== handle) return;
       this.run = null;
       const wasRunning = this.state === 'running';
@@ -611,7 +666,7 @@ export class Session {
       // A board design that ends the simulation itself (`$finish`, `std.env.finish`)
       // is a completed run, not a crash: the student asked for it.
       if (code === 0) this.send({ verb: 'DONE', reason: 'completed' });
-      else this.send({ verb: 'ERROR', stage: 'runtime', text: this.failedRunText(stderr) });
+      else this.reportFailedRun(engine.language, { code, stderr, signal });
     });
     // The design's own report/assert/$display output — the simulator writes this to
     // stdout, not the result file, so it needs its own forwarding path
@@ -643,10 +698,15 @@ export class Session {
     if (/\S/.test(line) && !this.isHiddenWaveNotice(line)) this.sendLogLines(this.limiter?.accept(line) ?? []);
   }
 
-  /** Why a run failed: the simulator's stderr, else the error it printed, else a guess. */
-  private failedRunText(stderr: string): string {
-    if (stderr) return stderr;
-    return this.outputReportedError ? STOPPED_ON_REPORTED_ERROR_TEXT : unexplainedExitText();
+  /**
+   * Tells the student why a run failed: the simulator's stderr, else the error it
+   * printed, else a guess. A crash also goes to the server log (`onCrash`).
+   */
+  private reportFailedRun(language: SimEngine['language'], exit: SimulatorExit): void {
+    const crash = this.outputReportedError ? undefined : crashOf(exit);
+    if (crash !== undefined) this.onCrash?.(`${SIMULATOR_NAMES[language]} ${crash}`);
+    const text = exit.stderr || (this.outputReportedError ? STOPPED_ON_REPORTED_ERROR_TEXT : unexplainedExitText());
+    this.send({ verb: 'ERROR', stage: 'runtime', text });
   }
 
   /** Reports what the budget dropped in the last window, then stops budgeting. */
@@ -811,12 +871,12 @@ export class Session {
       const wasRunning = this.state === 'running';
       this.setState('stopped');
       this.endOutput();
-      if (wasRunning) this.reportBatchEnd(result); // otherwise already reported via handleStop's own DONE
+      if (wasRunning) this.reportBatchEnd(engine.language, result); // otherwise already reported via handleStop's own DONE
     });
   }
 
   /** How a batch run that ended on its own – or was ended by the size guard – is reported. */
-  private reportBatchEnd({ code, timedOut, stderr }: BatchResult): void {
+  private reportBatchEnd(language: SimEngine['language'], { code, timedOut, stderr, signal }: BatchResult): void {
     // A run that ended by itself – passing or failing – closed its waveform normally.
     this.announceWave(this.waveLimitHit ? 'size-limit' : timedOut ? 'timeout' : 'complete');
     if (this.waveLimitHit) {
@@ -829,7 +889,7 @@ export class Session {
         text: `Simulation exceeded ${BATCH_TIMEOUT_MS / MS_PER_SECOND}s and was stopped. Check for a process with no wait statement, or a wait condition that never becomes true.`,
       });
     } else if (code !== 0) {
-      this.send({ verb: 'ERROR', stage: 'runtime', text: this.failedRunText(stderr) });
+      this.reportFailedRun(language, { code, stderr, signal: signal ?? null });
     } else {
       this.send({ verb: 'DONE', reason: 'completed' });
     }

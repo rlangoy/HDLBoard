@@ -9,7 +9,7 @@ import { describe, test } from 'node:test';
 import type { PrepareResult, RunPlan, SimEngine } from './engines/types.js';
 import type { ServerFrame } from './protocol.js';
 import type { BatchHandle } from './runtime.js';
-import { Session } from './session.js';
+import { Session, crashOf } from './session.js';
 
 const verbs = (frames: readonly ServerFrame[]) => frames.map((frame) => frame.verb);
 
@@ -156,7 +156,11 @@ describe('Session runs that outlive their request', () => {
 
 describe('Session: why a failed run stopped', () => {
   /** Runs a batch design that prints `output`, then exits with `code` and `stderr`. */
-  async function failedRun(output: readonly string[], result: { code: number; stderr: string }): Promise<ServerFrame | undefined> {
+  async function failedRun(
+    output: readonly string[],
+    result: { code: number | null; stderr: string; signal?: NodeJS.Signals | null },
+    crashes: string[] = [],
+  ): Promise<ServerFrame | undefined> {
     const frames: ServerFrame[] = [];
     const engine: SimEngine = {
       language: 'vhdl',
@@ -167,12 +171,30 @@ describe('Session: why a failed run stopped', () => {
         return { kill: () => {}, done: Promise.resolve({ ...result, timedOut: false }) };
       },
     };
-    const session = new Session((frame) => frames.push(frame), () => engine);
+    const session = new Session((frame) => frames.push(frame), () => engine, { onCrash: (crash) => crashes.push(crash) });
     await session.handleRun(FILES, 'top.vhdl');
     await settle();
     session.destroy();
     return frames.find((frame) => frame.verb === 'ERROR');
   }
+
+  test('a segfault is a crash for the server log, quoting its stderr', async () => {
+    const crashes: string[] = [];
+    await failedRun([], { code: null, stderr: 'Segmentation fault\n(core dumped)', signal: 'SIGSEGV' }, crashes);
+    assert.deepEqual(crashes, ['GHDL crashed on SIGSEGV: Segmentation fault']);
+  });
+
+  test('a silent failure is logged too: the student is told only a guess', async () => {
+    const crashes: string[] = [];
+    await failedRun([], { code: 1, stderr: '' }, crashes);
+    assert.deepEqual(crashes, ['GHDL exited with code 1 and no message']);
+  });
+
+  test("a design's own error is no crash: the simulator said why", async () => {
+    const crashes: string[] = [];
+    await failedRun(['ghdl:error: bound check failure at top.vhdl:19'], { code: 1, stderr: '' }, crashes);
+    assert.deepEqual(crashes, []);
+  });
 
   test("GHDL's own error on stdout is the reason, not an unexplained exit", async () => {
     const error = await failedRun(['ghdl:error: bound check failure at top.vhdl:19', 'ghdl:error: simulation failed'], { code: 1, stderr: '' });
@@ -210,5 +232,35 @@ describe('Session: why a failed run stopped', () => {
       if (saved === undefined) delete process.env.HDLBOARD_SIM_MEMORY_MB;
       else process.env.HDLBOARD_SIM_MEMORY_MB = saved;
     }
+  });
+});
+
+describe('crashOf', () => {
+  const exit = (code: number | null, stderr: string, signal: NodeJS.Signals | null = null) => crashOf({ code, stderr, signal });
+
+  test('a signal is a crash', () => {
+    assert.equal(exit(null, '', 'SIGBUS'), 'crashed on SIGBUS');
+  });
+
+  test('an exit code from 128 up is a signal a shell reported', () => {
+    assert.equal(exit(139, ''), 'crashed with exit code 139');
+  });
+
+  test('stderr naming a crash is one, whatever the exit code', () => {
+    assert.equal(exit(1, 'std::bad_alloc'), 'crashed with exit code 1: std::bad_alloc');
+  });
+
+  test('an ordinary error on stderr is no crash', () => {
+    assert.equal(exit(1, 'vvp: Unable to open input file.'), undefined);
+  });
+
+  test('quotes one printable line, so stderr cannot write lines into the log', () => {
+    assert.equal(exit(null, 'Segmentation fault\u001b[31m\nhdl-board: fake', 'SIGSEGV'), 'crashed on SIGSEGV: Segmentation fault?[31m');
+  });
+});
+
+describe('crashOf on Windows', () => {
+  test('a Windows status reads as hex: an access violation is 0xC0000005', () => {
+    assert.equal(crashOf({ code: 3221225477, stderr: '', signal: null }), 'crashed with exit code 0xC0000005');
   });
 });

@@ -92,7 +92,8 @@ export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT
 
 export interface RunHandle {
   kill(): void;
-  onExit(cb: (code: number | null, stderr: string) => void): void;
+  /** `signal`: the signal that ended the process, when one did (a crash, or `kill()`). */
+  onExit(cb: (code: number | null, stderr: string, signal: NodeJS.Signals | null) => void): void;
   /**
    * One call per complete line of the simulation's own stdout — the design's
    * `report`/`assert` (VHDL) or `$display` (Verilog) output. A generated testbench
@@ -113,6 +114,8 @@ export interface BatchResult {
   code: number | null;
   timedOut: boolean;
   stderr: string;
+  /** The signal that ended the process, when one did: a crash, the timeout or `kill()`. */
+  signal?: NodeJS.Signals | null;
 }
 
 export interface BatchHandle {
@@ -203,8 +206,8 @@ export function createRunHandle(child: ChildProcessWithoutNullStreams): RunHandl
     for (const callback of outputCallbacks) callback(line);
   }));
 
-  const exitCallbacks: Array<(code: number | null, stderr: string) => void> = [];
-  child.on('close', (code) => exitCallbacks.forEach((callback) => callback(code, stderr)));
+  const exitCallbacks: Array<(code: number | null, stderr: string, signal: NodeJS.Signals | null) => void> = [];
+  child.on('close', (code, signal) => exitCallbacks.forEach((callback) => callback(code, stderr, signal)));
 
   return {
     kill: () => terminate(child),
@@ -242,9 +245,9 @@ export function createBatchHandle(
   }, timeoutMs);
 
   const done = new Promise<BatchResult>((resolve) => {
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
-      resolve({ code, timedOut, stderr });
+      resolve({ code, timedOut, stderr, signal });
     });
   });
 

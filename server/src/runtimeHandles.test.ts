@@ -80,7 +80,7 @@ describe('createBatchHandle', () => {
   test('resolves when the process ends on its own, having shown its output', async () => {
     const lines: string[] = [];
     const handle = createBatchHandle(spawnNode('console.log("done");'), (line) => lines.push(line), WAIT_MS);
-    assert.deepEqual(await handle.done, { code: 0, timedOut: false, stderr: '' });
+    assert.deepEqual(await handle.done, { code: 0, timedOut: false, stderr: '', signal: null });
     assert.deepEqual(lines, ['done']);
   });
 
