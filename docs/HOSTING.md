@@ -151,11 +151,14 @@ killed, so reconnecting cannot pile up compiles beyond `HDL_MAX_SESSIONS`. The o
 compression, kernel or proxy memory: keep the container's CPU and memory limits too.
 
 Addresses follow `HDL_TRUSTED_PROXIES` (§ 9). Behind a proxy, set it, or every
-student shares the proxy's address and its upgrade budget. Until it is set, the
-log lines that name a client (`ERROR busy`, `closed WebSocket from`) add the address
-the nearest proxy put in `X-Forwarded-For`, as in `refused 127.0.0.1 (forwarded for
-198.51.100.7)`. That entry is not checked, so it is only shown and never used to decide
-which session is closed. Students behind one NAT,
+student shares the proxy's address and its upgrade budget. Set, the log lines that
+name a client (`ERROR busy`, `closed WebSocket from`) show the student's address
+(`refused 198.51.100.7, all 4 in use`). Until it is set, they add the nearest
+`X-Forwarded-For` entry that is not the server itself, skipping the `127.0.0.1` or
+`::1` a proxy on the same machine adds: `refused 127.0.0.1 (forwarded for
+198.51.100.7)`. That entry is not checked, so it is only shown and never used to
+decide which session is closed. Seeing `(forwarded for …)` in the log means the
+setting is missing. Students behind one NAT,
 as in most schools, share one address anyway: since the page opens a new socket for
 every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class meets 429s. For the
 same reason there is no limit on sessions per address; on a full server the
@@ -939,7 +942,10 @@ the backend each student's address; start the backend with
 come from the proxy, and a full server never spares a just-stopped session
 (§ 2, Sizing). The backend reads the entry the proxy appended, counted from the
 right, so whatever a client puts in the header itself is skipped; with a second
-proxy in front of nginx, set `HDL_TRUSTED_PROXIES=2`. Keep 9010 closed to
+proxy in front of nginx, set `HDL_TRUSTED_PROXIES=2`. To count the proxies, send
+one WebSocket with a made-up `X-Forwarded-For` and look at what nginx logs. The real
+address must be the entry the outermost trusted proxy added, never the made-up one.
+Keep 9010 closed to
 everything but the proxy, or a client could send the header straight to the
 backend.
 
