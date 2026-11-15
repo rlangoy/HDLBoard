@@ -100,16 +100,17 @@ function closeBusy(peer: Peer, text: string, logLine: string): void {
 }
 
 /** Refuses a socket that got no place, before any session is made for it. */
-export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string; clientAddress: string }): void {
+export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string; logAddress: string }): void {
   // An error while the close is in progress must not go unheard: that would end the process.
   ws.on('error', () => {});
-  closeBusy({ ws, output: boundedOutput(ws, limits, reason.clientAddress) }, reason.text, reason.logLine);
+  closeBusy({ ws, output: boundedOutput(ws, limits, reason.logAddress) }, reason.text, reason.logLine);
 }
 
 export class ClientConnection implements OpenSession, Peer {
   readonly output: SocketOutput;
   readonly openedAt: number;
   readonly clientAddress: string;
+  readonly logAddress: string;
   private readonly session: Session;
   private readonly budget: MessageBudget;
   private helloed = false;
@@ -137,7 +138,8 @@ export class ClientConnection implements OpenSession, Peer {
   ) {
     this.openedAt = newcomer.at;
     this.clientAddress = newcomer.clientAddress;
-    this.output = boundedOutput(ws, context.limits, this.clientAddress);
+    this.logAddress = newcomer.logAddress ?? newcomer.clientAddress;
+    this.output = boundedOutput(ws, context.limits, this.logAddress);
     const sendBinary = (chunk: Buffer) => this.output.sendBinary(chunk);
     this.session = new Session((frame) => this.send(frame), undefined, { sendBinary, now: context.now });
     this.budget = new MessageBudget(context.limits, context.monotonicNow);
@@ -236,7 +238,7 @@ export class ClientConnection implements OpenSession, Peer {
 
   /** Over its frame or byte budget: told why, ended, closed. */
   private closeForFlooding(): void {
-    console.warn(closedSocketLogLine(this.clientAddress, 'message rate limit'));
+    console.warn(closedSocketLogLine(this.logAddress, 'message rate limit'));
     this.send({ verb: 'ERROR', stage: 'protocol', text: TOO_MANY_MESSAGES_TEXT });
     this.end();
     this.ws.close(CLOSE_POLICY_VIOLATION, 'rate limit exceeded');
