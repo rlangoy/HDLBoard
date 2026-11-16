@@ -37,6 +37,15 @@ export const IDLE_GRACE_SECONDS: IntSetting = { name: 'HDL_IDLE_GRACE_SECONDS', 
  * 0: the header is ignored, and each connection's address is its socket's peer.
  */
 export const TRUSTED_PROXIES: IntSetting = { name: 'HDL_TRUSTED_PROXIES', fallback: 0 };
+/**
+ * The same count for plain HTTP requests (the GitHub sign-in routes), when they reach the
+ * backend through more proxies than a WebSocket does: on Render a request passes Cloudflare
+ * and Render's balancer, an upgrade only Render's edge. Unset: `HDL_TRUSTED_PROXIES`.
+ */
+export const TRUSTED_HTTP_PROXIES: IntSetting = { name: 'HDL_TRUSTED_HTTP_PROXIES', fallback: 0 };
+
+/** GitHub sign-ins started per client address and minute (githubAuth.ts), all at once at most. */
+export const GITHUB_SIGNINS_PER_MINUTE: IntSetting = { name: 'HDL_GITHUB_SIGNINS_PER_MINUTE', fallback: 20, minimum: 1 };
 
 /*
  * WebSocket abuse limits (wsLimits.ts, docs/HOSTING.md § 3.1). Each has a minimum: a
@@ -83,6 +92,11 @@ export function readIntSetting(setting: IntSetting, env: NodeJS.ProcessEnv = pro
  * pass: a NaN compares false with everything, and Infinity is never counted down, so either
  * would quietly mean "no limit".
  */
+/** `setting`, or `otherwise` when the environment does not name it at all. */
+export function readIntSettingOr(setting: IntSetting, otherwise: number, env: NodeJS.ProcessEnv = process.env): number {
+  return env[setting.name] === undefined ? otherwise : readIntSetting(setting, env);
+}
+
 function problemWith(raw: string, minimum: number): string | undefined {
   if (!WHOLE_NUMBER.test(raw.trim())) return `${JSON.stringify(raw)} is not a whole number`;
   const value = Number(raw);

@@ -33,6 +33,8 @@ export function toSignInError(answer: Record<string, unknown>): SignInError {
     case 'client_not_allowed':
     case 'web_flow_not_configured':
       return new SignInError('app-settings', `GitHub did not accept HDLBoard's sign-in settings (${String(answer.error)})${description}.`);
+    case 'too_many_requests':
+      return new SignInError('unavailable', 'Too many GitHub sign-ins from your network in the last minute. Wait a minute and try again.');
     case 'bad_gateway':
       return new SignInError('unavailable', 'The HDLBoard server could not reach github.com. Try again later.');
     default:

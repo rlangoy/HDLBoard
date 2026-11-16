@@ -153,3 +153,54 @@ describe('the /github-auth routes over HTTP', () => {
     assert.equal(response.status, 400);
   });
 });
+
+describe('the sign-in admission', () => {
+  let server: Server;
+  let base: string;
+  let admitted = 0;
+  let open = true;
+
+  before(async () => {
+    const forwarder = new GitHubAuthForwarder(WITHOUT_SECRET, fakeGitHub({ user_code: 'ABCD-1234' }).fetchFn);
+    const admit = () => {
+      admitted++;
+      return open;
+    };
+    server = createServer((req, res) => void handleGitHubAuthRequest(forwarder, req, res, admit));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  const post = (route: string, origin?: string) =>
+    fetch(`${base}/github-auth/${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) },
+      body: JSON.stringify({ client_id: CLIENT_ID, device_code: 'd', grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }),
+    });
+
+  test('a refused sign-in gets 429, Retry-After and the CORS headers the page needs to read it', async () => {
+    open = false;
+    try {
+      const response = await post('device/code', 'http://127.0.0.1:5173');
+      assert.equal(response.status, 429);
+      assert.equal(response.headers.get('retry-after'), '60');
+      assert.equal(response.headers.get('access-control-allow-origin'), 'http://127.0.0.1:5173');
+      assert.equal(((await response.json()) as { error: string }).error, 'too_many_requests');
+    } finally {
+      open = true;
+    }
+  });
+
+  test('only the routes that start a sign-in are counted, not polling, config or a preflight', async () => {
+    admitted = 0;
+    await post('device/token');
+    await fetch(`${base}/github-auth/config`);
+    await fetch(`${base}/github-auth/device/code`, { method: 'OPTIONS', headers: { Origin: 'http://127.0.0.1:5173' } });
+    assert.equal(admitted, 0);
+    await post('device/code');
+    await post('web/token');
+    assert.equal(admitted, 2);
+  });
+});

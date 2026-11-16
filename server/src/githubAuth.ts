@@ -11,8 +11,13 @@
  *   POST /github-auth/device/token  -> https://github.com/login/oauth/access_token (device code grant)
  *   POST /github-auth/web/token     -> https://github.com/login/oauth/access_token (code + PKCE verifier + secret)
  *
- * Stores nothing and logs nothing: the bodies hold codes and tokens. Only the
+ * Stores nothing and never logs a body: the bodies hold codes and tokens. Only the
  * configured client ID is forwarded, and only the parameters each route needs.
+ *
+ * The two routes that start a sign-in (`device/code`, `web/token`) are counted per
+ * client address by the caller's `admitSignIn` (server.ts), so one address cannot spend
+ * the OAuth App's GitHub rate limits that every visitor shares. `device/token` is not:
+ * a sign-in polls it every 5 s or more, and GitHub throttles each device code itself.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -51,6 +56,14 @@ const ACCESS_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const MAX_BODY_BYTES = 4096;
 const HTTP_NO_CONTENT = 204;
+const HTTP_TOO_MANY_REQUESTS = 429;
+/** The routes that start a sign-in, the ones `admitSignIn` counts. */
+const SIGN_IN_ROUTES: ReadonlySet<string> = new Set(['device/code', 'web/token']);
+/** What a refused sign-in is told to wait; an address's budget refills within a minute. */
+export const SIGN_IN_RETRY_AFTER_SECONDS = 60;
+
+/** Whether `request` may start a sign-in now; spends one from its address's budget if so. */
+export type SignInAdmission = (request: IncomingMessage) => boolean;
 
 const ROUTES: Readonly<Record<string, Route>> = {
   'device/code': { url: DEVICE_CODE_URL, allowedParams: ['client_id', 'scope'], needsSecret: false },
@@ -127,6 +140,7 @@ export async function handleGitHubAuthRequest(
   forwarder: GitHubAuthForwarder,
   request: IncomingMessage,
   response: ServerResponse,
+  admitSignIn: SignInAdmission = () => true,
 ): Promise<void> {
   const corsHeaders = corsHeadersFor(request);
   if (corsHeaders === null) return sendJson(response, { status: 403, body: { error: 'origin_not_allowed' } }, {});
@@ -137,6 +151,10 @@ export async function handleGitHubAuthRequest(
     return sendJson(response, { status: 200, body: forwarder.config }, corsHeaders);
   }
   if (request.method !== 'POST') return sendJson(response, { status: 405, body: { error: 'method_not_allowed' } }, corsHeaders);
+  // Before the body is read or checked: a refused request costs no more than a few bytes.
+  if (SIGN_IN_ROUTES.has(routeName) && !admitSignIn(request)) {
+    return sendJson(response, TOO_MANY_SIGN_INS, { ...corsHeaders, 'Retry-After': String(SIGN_IN_RETRY_AFTER_SECONDS) });
+  }
 
   let params: Record<string, unknown>;
   try {
@@ -146,6 +164,14 @@ export async function handleGitHubAuthRequest(
   }
   sendJson(response, await forwarder.forward(routeName, params), corsHeaders);
 }
+
+const TOO_MANY_SIGN_INS: ForwardResult = {
+  status: HTTP_TOO_MANY_REQUESTS,
+  body: {
+    error: 'too_many_requests',
+    error_description: 'Too many GitHub sign-ins from your network in the last minute. Wait a minute and try again.',
+  },
+};
 
 /** CORS headers for the request's Origin; {} for a same-origin request; null for a foreign site. */
 function corsHeadersFor(request: IncomingMessage): Record<string, string> | null {

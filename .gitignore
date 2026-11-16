@@ -15,3 +15,7 @@ Examples/
 
 # Logs from running the dev server and backend by hand (server.log, server.err.log, vite.log)
 *.log
+
+# Claude Code skills installed locally, and their lock file
+/.claude/
+/skills-lock.json
