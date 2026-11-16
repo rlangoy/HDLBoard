@@ -52,7 +52,7 @@ export interface UpgradeLimits {
 }
 
 /**
- * WebSocket upgrades per client address. Its memory is bounded: past `maxAddresses`, the
+ * A budget per client address: WebSocket upgrades, GitHub sign-ins, refusal log lines. Its memory is bounded: past `maxAddresses`, the
  * address seen longest ago is forgotten and starts again with a full budget when it comes
  * back. Forgetting one takes `maxAddresses` other addresses, so it buys an attacker less
  * than it costs, and no address is ever refused for want of room.

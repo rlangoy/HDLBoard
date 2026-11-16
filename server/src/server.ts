@@ -33,7 +33,17 @@ import { setToolPaths } from './verilog/tools.js';
 import { hasShellSpecial, resolveToolPaths, withUsableBundledDir } from './verilog/toolPaths.js';
 import { hasSpace, posixLinkPath, windowsShortPath } from './verilog/shortPath.js';
 import { TOOL_ARGS_USAGE, parseToolArgs } from './cliArgs.js';
-import { IDLE_GRACE_SECONDS, MAX_SESSIONS, REPLACE_AFTER_MINUTES, TRUSTED_PROXIES, WS_PORT, readIntSetting } from './settings.js';
+import {
+  GITHUB_SIGNINS_PER_MINUTE,
+  IDLE_GRACE_SECONDS,
+  MAX_SESSIONS,
+  REPLACE_AFTER_MINUTES,
+  TRUSTED_HTTP_PROXIES,
+  TRUSTED_PROXIES,
+  WS_PORT,
+  readIntSetting,
+  readIntSettingOr,
+} from './settings.js';
 import {
   ReplacementPolicy,
   closedIdleText,
@@ -111,6 +121,13 @@ export interface BackendOptions {
    * header (clientAddress.ts). Defaults to `HDL_TRUSTED_PROXIES`, then 0.
    */
   trustedProxies?: number;
+  /**
+   * The same for plain HTTP requests (the GitHub sign-in routes). Defaults to
+   * `HDL_TRUSTED_HTTP_PROXIES`, then `trustedProxies`.
+   */
+  trustedHttpProxies?: number;
+  /** GitHub sign-ins started per client address and minute. Defaults to `HDL_GITHUB_SIGNINS_PER_MINUTE`, then 20. */
+  githubSignInsPerMinute?: number;
   /** WebSocket abuse limits; defaults read from HDL_WS_* settings (docs/HOSTING.md). */
   wsLimits?: Partial<WsLimits>;
   /** The clock sessions' ages are measured on, in ms. Defaults to `Date.now`; tests move it. */
@@ -243,6 +260,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const replaceAfterMs = (opts.replaceAfterMinutes ?? readIntSetting(REPLACE_AFTER_MINUTES)) * MS_PER_MINUTE;
   const idleGraceMs = (opts.idleGraceSeconds ?? readIntSetting(IDLE_GRACE_SECONDS)) * MS_PER_SECOND;
   const trustedProxies = opts.trustedProxies ?? readIntSetting(TRUSTED_PROXIES);
+  const trustedHttpProxies = opts.trustedHttpProxies ?? readIntSettingOr(TRUSTED_HTTP_PROXIES, trustedProxies);
   const replacementPolicy = new ReplacementPolicy(replaceAfterMs, idleGraceMs);
   const now = opts.now ?? Date.now;
   // Budgets refill on a clock that never jumps; tests move `now` instead.
@@ -276,12 +294,23 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const host = serveDir ? '127.0.0.1' : '0.0.0.0';
 
   const githubAuth = new GitHubAuthForwarder(opts.githubOAuthApp ?? credentialsFromEnv(process.env));
+  const githubSignInsPerMinute = opts.githubSignInsPerMinute ?? readIntSetting(GITHUB_SIGNINS_PER_MINUTE);
+  const githubSignIns = new UpgradeLimiter({ perMinute: githubSignInsPerMinute, now: monotonicNow });
+  const githubRefusalLogLines = new UpgradeLimiter({ perMinute: REFUSAL_LOG_LINES_PER_MINUTE, now: monotonicNow });
+  const admitGitHubSignIn = (req: IncomingMessage): boolean => {
+    const address = clientAddress(req, trustedHttpProxies);
+    if (githubSignIns.take(address)) return true;
+    if (githubRefusalLogLines.take(address)) {
+      console.log(`hdl-board: GitHub sign-in refused ${loggedAddress(req, trustedHttpProxies)}, over its ${githubSignInsPerMinute} a minute`);
+    }
+    return false;
+  };
 
   const httpServer: Server = createServer((req, res) => {
     // GitHub sign-in for the page, in both modes: the page reaches it where it reaches the socket.
     if (isGitHubAuthPath(decodedPath(req) ?? '')) {
       // Unhandled, a rejection here (a client gone mid-answer) would end the process.
-      handleGitHubAuthRequest(githubAuth, req, res).catch(() => res.destroy());
+      handleGitHubAuthRequest(githubAuth, req, res, admitGitHubSignIn).catch(() => res.destroy());
     } else if (serveDir) {
       void serveStatic(serveDir, req, res);
     } else {

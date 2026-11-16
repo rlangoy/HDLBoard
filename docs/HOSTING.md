@@ -981,6 +981,8 @@ Backend, read at startup:
 | `HDL_IDLE_GRACE_SECONDS` | `60` | On a full server, the session idle longest is closed to make room for a new one, but not one idle less than this, unless its address has another session too |
 | `HDL_REPLACE_AFTER_MINUTES` | `9` | On a full server with no idle session to close, the oldest session open at least this long (one not simulating first) is closed to make room for a new one, and its student told why. `0`: never close a session, idle or not; the new one is refused |
 | `HDL_TRUSTED_PROXIES` | `0` | How many proxies in front of the backend append to `X-Forwarded-For`; the student's address is the entry the outermost one added. `0` ignores the header and uses the connection's own address. Set it only when clients cannot reach the backend except through those proxies |
+| `HDL_TRUSTED_HTTP_PROXIES` | `HDL_TRUSTED_PROXIES` | The same count for plain HTTP requests (the GitHub sign-in routes), where they pass more proxies than a WebSocket does. On Render a request passes Cloudflare and Render's balancer as well, an upgrade only Render's edge. Count them the same way, with a `POST /github-auth/device/code` instead of a WebSocket |
+| `HDL_GITHUB_SIGNINS_PER_MINUTE` | `20` | GitHub sign-ins started per client address and minute, all at once at most ([GITHUB.md](GITHUB.md)). Over it the page gets a 429 and the student is asked to wait a minute |
 | `GHDL_EXE` | `ghdl` | Path to the GHDL binary, if it isn't on `PATH` |
 | `GHDL_DIR` | unset | A GHDL installation (the Windows app ships one); the backend runs `<dir>/bin/ghdl`. Takes precedence over `GHDL_EXE` |
 | `IVERILOG_EXE` | `iverilog` | Path to the Icarus Verilog compiler, if it isn't on `PATH` |

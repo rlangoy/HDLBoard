@@ -23,6 +23,11 @@ describe('clientAddress', () => {
     assert.equal(clientAddress(request(header, '10.28.0.1'), 3), '5.32.57.18');
   });
 
+  test("a request on Render: the student before Cloudflare's edge, Render's balancer and nginx", () => {
+    const header = '192.0.2.50, 128.39.205.73, 162.158.223.18, 10.30.143.103, ::1';
+    assert.equal(clientAddress(request(header, '127.0.0.1'), 4), '128.39.205.73');
+  });
+
   test('the first entry when there are fewer than the trusted proxies', () => {
     assert.equal(clientAddress(request('5.32.57.18', '10.28.0.1'), 3), '5.32.57.18');
   });

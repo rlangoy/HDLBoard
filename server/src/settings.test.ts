@@ -3,7 +3,17 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MAX_SESSIONS, MAX_WAVE_BYTES, WAVE_CHECK_MS, WS_PORT, readIntSetting, readVhdlWaveFormat, type IntSetting } from './settings.js';
+import {
+  MAX_SESSIONS,
+  MAX_WAVE_BYTES,
+  TRUSTED_HTTP_PROXIES,
+  WAVE_CHECK_MS,
+  WS_PORT,
+  readIntSetting,
+  readIntSettingOr,
+  readVhdlWaveFormat,
+  type IntSetting,
+} from './settings.js';
 
 describe('readIntSetting', () => {
   test('reads the HDL_* name', () => {
@@ -68,5 +78,16 @@ describe('waveform settings', () => {
     assert.equal(readIntSetting(MAX_WAVE_BYTES, { HDL_MAX_WAVE_BYTES: '1000' }), 1000);
     assert.equal(readVhdlWaveFormat({ HDL_WAVE_VHDL_FORMAT: 'VCD' }), 'vcd');
     assert.equal(readVhdlWaveFormat({ HDL_WAVE_VHDL_FORMAT: 'fst' }), 'ghw');
+  });
+});
+
+describe('readIntSettingOr', () => {
+  test('the other value when the setting is not named at all', () => {
+    assert.equal(readIntSettingOr(TRUSTED_HTTP_PROXIES, 2, {}), 2);
+  });
+
+  test('the setting when it is named, 0 included', () => {
+    assert.equal(readIntSettingOr(TRUSTED_HTTP_PROXIES, 2, { HDL_TRUSTED_HTTP_PROXIES: '4' }), 4);
+    assert.equal(readIntSettingOr(TRUSTED_HTTP_PROXIES, 2, { HDL_TRUSTED_HTTP_PROXIES: '0' }), 0);
   });
 });

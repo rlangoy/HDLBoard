@@ -75,14 +75,16 @@ github.com sends no CORS headers on its sign-in endpoints, so the page signs in 
 | `POST /github-auth/device/token` | `https://github.com/login/oauth/access_token` | Only the device-code grant |
 | `POST /github-auth/web/token` | `https://github.com/login/oauth/access_token` | Adds the client secret; 501 without one |
 
-Only the configured client ID is forwarded, unknown parameters are dropped, and nothing is stored or logged. The page reaches the routes where it reaches the simulator, `<page host>:<backend port>`. A page on another port of the same host name may call them, as Vite does in development, while a page on another site is refused. Gist API calls go straight from the browser to `api.github.com`, which allows CORS, and the token is sent nowhere else.
+Only the configured client ID is forwarded, unknown parameters are dropped, and no request body is stored or logged.
+
+Every visitor's sign-in goes out from the server's one address under one OAuth App, so one visitor must not spend GitHub's limits for everyone. `device/code` and `web/token`, the two routes that start a sign-in, are counted per client address: `HDL_GITHUB_SIGNINS_PER_MINUTE` (default 20) at once, then that many a minute. Over it the page is answered 429 with `Retry-After: 60`, and the student sees "Too many GitHub sign-ins from your network in the last minute". The log gets at most one line a minute for each address: `GitHub sign-in refused 198.51.100.7, over its 20 a minute`. A class behind one NAT shares one budget, so raise the limit if a large class signs in at the same moment. Polling for the token (`device/token`) is not counted: a sign-in polls every 5 seconds until the student approves, and GitHub throttles each code itself with `slow_down`. The address is read as for the WebSocket (`HDL_TRUSTED_PROXIES`, [HOSTING.md](HOSTING.md) § 9), or by `HDL_TRUSTED_HTTP_PROXIES` when plain requests pass more proxies than a WebSocket does, as on Render. The page reaches the routes where it reaches the simulator, `<page host>:<backend port>`. A page on another port of the same host name may call them, as Vite does in development, while a page on another site is refused. Gist API calls go straight from the browser to `api.github.com`, which allows CORS, and the token is sent nowhere else.
 
 | Setup | What to do |
 |---|---|
 | Development (`npm run dev` + `server`) | Nothing |
 | Windows app | Nothing: the backend serves the page and the routes on one port |
 | Docker | Nothing: `docker/nginx.conf` proxies `/github-auth/` to the backend |
-| A reverse proxy of your own | Proxy `/github-auth/` to the backend like `/hdlsim` |
+| A reverse proxy of your own | Proxy `/github-auth/` to the backend like `/hdlsim`, appending to `X-Forwarded-For` the same way |
 | A static host without the backend (GitHub Pages) | Code sign-in is unavailable; the personal access token still works |
 
 ### Backend environment
@@ -91,6 +93,7 @@ Only the configured client ID is forwarded, unknown parameters are dropped, and 
 |---|---|---|
 | `GITHUB_CLIENT_ID` | `Ov23liDFfwtpvKX3SMvz` (HDLBoard's OAuth App) | The OAuth App the routes forward for. A fork sets its own |
 | `GITHUB_CLIENT_SECRET` | empty | Turns on the **one-click sign-in** (web flow + PKCE) in browsers. Never sent to the page |
+| `HDL_GITHUB_SIGNINS_PER_MINUTE` | `20` | Sign-ins started per client address and minute, all at once at most. Minimum 1 |
 
 Without a secret, students use the code sign-in (device flow), which needs only the client ID and works everywhere. With a secret, a browser opens one GitHub window where the student clicks **Authorize**. The window closes by itself, and after the first time it shows nothing at all. It returns to `github-callback.html` next to the page, so the OAuth App's **Authorization callback URL** must be the page's address, e.g. `https://hdlboard.example.org/`. An OAuth App has one callback URL, so use one app per published address. The Windows app ships without a secret, because an installer cannot keep one, so it uses the code sign-in. Its GitHub dialog (`winInstaller/electron/main.js`) is a modal child `BrowserWindow`: a top-level window to Chromium, so github.com shows in it although it refuses frames. A Windows app started with `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` of an OAuth App whose callback URL is `http://127.0.0.1:9010/` gets the one-click sign-in in that dialog (a second copy of the app, on port 9011, too: GitHub lets a `127.0.0.1` callback come back on any port) (with the browser option unticked): GitHub's redirect back to `github-callback.html` is caught with `will-redirect` and never loaded.
 
