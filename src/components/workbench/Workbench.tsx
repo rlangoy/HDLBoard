@@ -89,6 +89,7 @@ import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagn
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { outputReadWarnings } from './outputReads';
+import { inputAssignWarnings } from './verilogPortAdvice';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { BoardSettingsPage } from './BoardSettingsPage';
@@ -1584,11 +1585,13 @@ export function Workbench() {
 
   /**
    * HDLBoard's own checks at Start, in the console and the code as compiler warnings: two
-   * architectures of one entity with one name, and an output port read (VHDL-93 forbids it).
+   * architectures of one entity with one name, an output port read (VHDL-93 forbids it),
+   * and a Verilog `assign` to an input port (Icarus accepts it without a word).
    */
   const warnProjectChecks = (runFiles: RunSnapshot['files']) => {
     const snapshot = { files: runFiles };
-    for (const warning of [...duplicateArchitectureWarnings(snapshot), ...outputReadWarnings(snapshot)]) {
+    const warnings = [...duplicateArchitectureWarnings(snapshot), ...outputReadWarnings(snapshot), ...inputAssignWarnings(snapshot)];
+    for (const warning of warnings) {
       appendLog(warning);
       recordDiagnostics(warning, runFiles);
     }

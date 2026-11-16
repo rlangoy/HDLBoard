@@ -22,6 +22,8 @@ import { VerilogModuleLookup } from './verilogModuleLookup';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
 import { verilogDeclaredNames } from './verilogDeclaredNames';
 import { tokenizeVerilog } from './verilogHighlight';
+import { adviseInputAssignedInAlways } from './verilogPortAdvice';
+import { modulePorts, type ModulePorts } from './verilogPorts';
 import type { Token } from './vhdlHighlight';
 import { SUGGESTED_VERILOG_KEYWORDS, SYSTEMVERILOG_WORDS, VERILOG_JOINED_KEYWORDS } from './verilogWords';
 
@@ -86,6 +88,10 @@ interface PositionedToken {
 }
 
 interface SourceFile {
+  /** The file as Icarus saw it, one entry per line, without a trailing `\r`. */
+  readonly lines: readonly string[];
+  /** Its modules' ports, for an input port assigned. */
+  readonly ports: readonly ModulePorts[];
   readonly significant: readonly SourceToken[];
   /** One entry per line, without whitespace; comments kept, so a code line can be told apart. */
   readonly tokens: readonly (readonly PositionedToken[])[];
@@ -115,7 +121,8 @@ function positioned(line: readonly Token[]): PositionedToken[] {
 function sourceFileOf(content: string): SourceFile {
   const lines = content.split('\n').map((line) => line.replace(/\r$/, ''));
   const tokenLines = tokenizeVerilog(lines);
-  return { tokens: tokenLines.map(positioned), significant: sourceTokens(tokenLines), declared: verilogDeclaredNames(content) };
+  const significant = sourceTokens(tokenLines);
+  return { lines, ports: modulePorts(significant), tokens: tokenLines.map(positioned), significant, declared: verilogDeclaredNames(content) };
 }
 
 function codeTokens(file: SourceFile, line: number): PositionedToken[] {
@@ -484,8 +491,16 @@ const unterminatedAssign: Rule = ({ diagnostic, file }) =>
     ? undefined
     : { headline: adviceText.missingAtEnd(';', diagnostic.line) };
 
+/**
+ * An input port assigned in `always`. Before Rule H, whose "a procedural assignment
+ * needs a `reg`" is wrong for an input, though Icarus's note calls `input wire SW` a wire.
+ */
+const inputAssignedInAlways: Rule = ({ diagnostic, file }) =>
+  adviseInputAssignedInAlways(diagnostic.message, file.lines[diagnostic.line - 1] ?? '', diagnostic.line, file.ports);
+
 /** Tried in order; the first advice wins. The certain table (E) before the guesses. */
 const RULES: readonly Rule[] = [
+  inputAssignedInAlways,
   compilerMessage, unknownModule, unknownMember, joinedKeyword, misspelledKeyword, sourceSyntax, undeclaredName, implicitWire,
   regOrWireMisuse, unterminatedAssign, causeOnPreviousLine,
 ];
