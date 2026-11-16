@@ -44,7 +44,7 @@ export function useLeaveOpenProject(input: LeaveOpenProjectInput): (opening: str
     const answer = await ask({ projectName: openNow.name, destination: openNow.info.destination, opening });
     if (answer !== 'save') return answer === 'discard';
     if (openNow.needsName) {
-      logError(`${opening} not opened: give this project a name and save it first.`);
+      logError(`Not yet opening ${opening}: give this project a name and save it first.`);
       askForName();
       return false;
     }
