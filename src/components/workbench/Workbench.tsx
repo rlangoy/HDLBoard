@@ -66,7 +66,7 @@ import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } fro
 import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { BUSY_STAGE, HdlClient, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { BUSY_STAGE, HdlClient, REFUSED_REASON, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
 import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
 import { useWaveformView } from '../waveform/useWaveformView';
 import { useProjectWaveViews } from './useProjectWaveViews';
@@ -614,6 +614,8 @@ export function Workbench() {
           blankBoard();
           endRunWaveform();
         },
+        // A RESET or a download over the server's limits, a bad STIM: said, while the run goes on.
+        onRefused: (text) => appendLog(withBoardName(text, activeBoardName.current), 'error'),
         onDone: (reason) => {
           stopElapsedTimer();
           setStatus('stopped');
@@ -623,8 +625,10 @@ export function Workbench() {
           // tone matches 'Simulation running ...' above, since this is
           // the design finishing correctly, not being interrupted.
           // A run ended for an opened example adds nothing: the console is the example's now.
+          // A refused RUN never started, and its refusal is in the console already.
           const completed = reason === 'completed';
-          if (!takeFlag(quietEnd)) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
+          const quiet = takeFlag(quietEnd) || reason === REFUSED_REASON;
+          if (!quiet) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
           blankBoard();
           endRunWaveform();
         },

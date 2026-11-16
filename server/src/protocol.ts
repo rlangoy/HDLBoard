@@ -43,7 +43,10 @@ export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'int
 // 'completed': a batch-mode (portless-entity) run reached its own natural
 // end on its own — distinct from 'stopped' (the user clicked Stop) so the
 // frontend can tell "your design finished" from "you ended the session".
-export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed';
+// 'refused': the RUN never started (an invalid BOARD or OPTIONS frame); its `ERROR protocol`
+// said why. An `ERROR protocol` alone never ends a run (protocol 7).
+export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed' | 'refused';
+const DONE_REASONS: readonly DoneReason[] = ['stopped', 'completed', 'max-cycles', 'closed', 'refused'];
 
 /** The waveform formats (docs/waveform_viewer_spec.md W2): GHW for VHDL, VCD for Verilog. */
 export type WaveFormat = 'ghw' | 'vcd';
@@ -324,7 +327,7 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
     }
     case 'DONE': {
       const reason = inline as DoneReason;
-      if (!['stopped', 'completed', 'max-cycles', 'closed'].includes(reason)) {
+      if (!DONE_REASONS.includes(reason)) {
         return { message: `DONE has an unknown reason: ${JSON.stringify(inline)}` };
       }
       return { verb: 'DONE', reason };

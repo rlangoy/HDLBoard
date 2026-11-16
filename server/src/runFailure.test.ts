@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { crashOf, explainingReport, failedRunText, readMemoryCapMb, reportOf, silentExitOf, type SimulatorReport } from './runFailure.js';
+import { crashBeyondReport, crashOf, explainingReport, failedRunText, readMemoryCapMb, reportOf, silentExitOf, type SimulatorReport } from './runFailure.js';
 
 describe('reportOf', () => {
   /** Whether `line` is a report that stops the run, one that lets it go on, or no report. */
@@ -106,6 +106,22 @@ describe('crashOf', () => {
 
   test('a Windows stderr keeps no carriage return in the log', () => {
     assert.equal(exit(3221225477, 'Segmentation fault\r\n(core dumped)'), 'crashed with exit code 0xC0000005: Segmentation fault');
+  });
+});
+
+describe('crashBeyondReport', () => {
+  const stop = (stops: boolean): SimulatorReport => ({ line: 'simulation stopped @5ns with status 200', shown: true, stops });
+
+  test('a stopping report explains an exit code from 128 up', () => {
+    assert.equal(crashBeyondReport({ code: 200, stderr: '', signal: null }, stop(true)), undefined);
+  });
+
+  test('a report that let the run go on explains nothing', () => {
+    assert.equal(crashBeyondReport({ code: 200, stderr: '', signal: null }, stop(false)), 'crashed with exit code 200');
+  });
+
+  test('stderr naming a crash is one, whatever was reported', () => {
+    assert.equal(crashBeyondReport({ code: 200, stderr: 'Segmentation fault', signal: null }, stop(true)), 'crashed with exit code 200: Segmentation fault');
   });
 });
 

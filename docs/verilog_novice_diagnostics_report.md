@@ -5,7 +5,7 @@ Scope: diagnostic research and temporary test cases; no application code changes
 
 ## Executive summary
 
-HDLBoard already provides useful Verilog help for misspelled keywords and identifiers, a likely missing semicolon, implicit-wire typos, and common `wire`/`reg` mistakes. The largest remaining opportunities are **port and parameter connection errors**, **width and range warnings**, and **runtime errors the editor cannot locate**. These are common situations in board exercises where a student needs the object, its actual and expected widths, and a concrete next step?not only Icarus's terminology.
+HDLBoard already provides useful Verilog help for misspelled keywords and identifiers, a likely missing semicolon, implicit-wire typos, and common `wire`/`reg` mistakes. The largest remaining opportunities are **port and parameter connection errors**, **width and range warnings**, and **runtime errors the editor cannot locate**. These are common situations in board exercises where a student needs the object, its actual and expected widths, and a concrete next step — not only Icarus's terminology.
 
 In 44 deliberately small examples, the real HDLBoard backend returned 28 error outcomes and completed 16 runs. The editor's parsing/advice functions produced at least one located diagnostic in 35 cases; 8 cases produced a non-follow-on advice headline. These counts describe this **chosen, non-representative corpus**, not the prevalence of student mistakes or a quality score. Some completed examples intentionally demonstrate behavior that the simulator accepts, and some parseable messages are already understandable. Two cases exercise a known typo pattern, so counts are not independent categories.
 
@@ -13,34 +13,34 @@ In 44 deliberately small examples, the real HDLBoard backend returned 28 error o
 
 ## Method and boundaries
 
-- Source context: [existing Verilog diagnostic research](docs/editor_diagnostics_verilog_research.md), [Icarus advice rules](src/components/workbench/icarusAdvice.ts), and [VHDL range/type advice](docs/editor_diagnostics_range_and_type_advice.md). This research extends rather than replaces the earlier 33-case study.
+- Source context: [existing Verilog diagnostic research](editor_diagnostics_verilog_research.md), [Icarus advice rules](../src/components/workbench/icarusAdvice.ts), and [VHDL range/type advice](editor_diagnostics_range_and_type_advice.md). This research extends rather than replaces the earlier 33-case study.
 - Selected examples from undergraduate teaching material and simulator documentation, then wrote original minimal programs. The [Icarus warning options documentation](https://steveicarus.github.io/iverilog/usage/command_line_flags.html) describes warnings for implicit nets, port binding and out-of-range selects; [Cornell's introductory notes](https://people.ece.cornell.edu/land/courses/ece5760/Verilog/Verilog_index.html) discuss blocking/nonblocking assignments. [Lattice's HDL coding guidelines](https://www.latticesemi.com/~/media/LatticeSemi/Documents/UserManuals/EI/HDLcodingguidelines.pdf?document_id=48203) discuss simulation/synthesis mismatches. These sources inform case selection; they do not establish a measured student error frequency.
 - Platform: Windows, HDLBoard backend from this workspace, bundled Icarus Verilog **13.0**. Each case was run through a real loopback WebSocket session with the selected top module `top`; the backend performs its ordinary port discovery and build. No custom compiler flags were supplied. The backend's second compile enables `-Wall`, excluding timescale warnings.
 - The harness fed each backend `ERROR` body, or each `LOG` line, through the actual editor parser, file-location, and Verilog advice functions. It did **not** automate a browser or visually verify the editor. Warning continuation lines were fed one at a time, as they arrive; the current stateless handling cannot attach a continuation to a preceding `LOG` line.
-- Tests and captured data are in [the temporary corpus](temp/verilog-novice-research/): `*.v` files, `cases.json`, `run.ts` and `results.json`. Run from the repository root with `node node_modules/vite-node/vite-node.mjs temp/verilog-novice-research/run.ts`. The script starts a loopback backend and uses temporary session directories. It depends on the built backend under `server/dist` and the vendored Windows Icarus installation.
+- The cases and captured data (`*.v` files, `cases.json`, `run.ts` and `results.json`) were a temporary corpus in the author's working copy (`temp/verilog-novice-research/`, which is not committed). Its script started a loopback backend with temporary session directories, and depended on the built backend under `server/dist` and the vendored Windows Icarus installation.
 - Results are not a cross-version guarantee. Verify on Icarus 12 and 13, Linux and Windows, and with the supported language-generation options before implementing text rules. Explicitly test normal board designs, portless testbenches, multiple source files and the editor UI. Header-cycle tests are outside this corpus; they were investigated separately.
 
 ## Findings and proposed improvements
 
-### P1 ? Runtime errors can have no editor marker
+### P1 — Runtime errors can have no editor marker
 
 **Measured:** `unknown_system_task.v` uses `$disply` instead of `$display`. HDLBoard returns an `ERROR runtime` body containing `unknown_system_task.v:2: Error: System task/function $disply() is not defined by any module.` The diagnostic pipeline produced **no located diagnostics**, even though the filename and line are present. The recognizer handles lowercase Icarus `error:` but not this capitalized runtime `Error:`. Compare `runtime_fatal.v`: `FATAL:` arrived in a log, and its location was recognized.
 
-**Student-facing proposal:** show ?`$disply` is not a known system task. Did you mean `$display`?? only if a unique close match is known; otherwise ?`$disply` is not defined; check the spelling and whether the required module or extension is available.? Mark the call and preserve the original runtime message. Parse the exact runtime form and severity without assuming every simulation's text is compiler output. Verify Linux/12.0 spelling and an actual browser run.
+**Student-facing proposal:** show “`$disply` is not a known system task. Did you mean `$display`?” only if a unique close match is known; otherwise “`$disply` is not defined; check the spelling and whether the required module or extension is available.” Mark the call and preserve the original runtime message. Parse the exact runtime form and severity without assuming every simulation's text is compiler output. Verify Linux/12.0 spelling and an actual browser run.
 
-### P1 ? Port width mismatch: say what gets lost or added
+### P1 — Port width mismatch: say what gets lost or added
 
 **Measured:** `port_width.v`, line 4: `Port 1 (data) of module child expects 4 bit(s), given 8.` HDLBoard shows this as a warning with no specific advice. A subsequent `LOG` line says `Pruning 4 high bits of the expression.` but it is not attached as a detail. In `output_width.v`, the corresponding continuation says `Padding 4 high bits of the port.` The direction and what is padded or pruned matter.
 
-**Proposal:** ?Port `data` of `child` expects 4 bits; the connected expression has 8. Four high bits are discarded. Check the port and signal widths.? If direction and indices are known from the correct module/instance, show a clearly labeled possible slice or extension; do not automatically select low bits or infer signedness. For output and inout connections, derive the direction from the formal declaration and the compiler's continuation rather than reusing the input explanation. Attach continuation details across consecutive log frames. Test both Icarus 12 and 13 wordings and named/positional connections.
+**Proposal:** “Port `data` of `child` expects 4 bits; the connected expression has 8. Four high bits are discarded. Check the port and signal widths.” If direction and indices are known from the correct module/instance, show a clearly labeled possible slice or extension; do not automatically select low bits or infer signedness. For output and inout connections, derive the direction from the formal declaration and the compiler's continuation rather than reusing the input explanation. Attach continuation details across consecutive log frames. Test both Icarus 12 and 13 wordings and named/positional connections.
 
-### P1 ? Bit and part selects: identify the declared range and the `x`
+### P1 — Bit and part selects: identify the declared range and the `x`
 
 **Measured:** `index_outside.v`, line 3: `Constant bit select [5] is after vector data[3:0].` The subsequent line says the result is replaced with `1'bx`; it is not attached to the warning. `part_select_width.v` similarly selects `[7:2]` from `[3:0]`, and Icarus says out-of-bounds bits become `x`. `slice_reversed.v` fails with `part select data[0:3] is out of order.` None gets tailored advice.
 
-**Proposal:** ?`data` has indices 3 down to 0; index 5 is outside that range, so this select produces `x`.? For `[0:3]` on a `[7:0]` vector, explain the declaration's direction and offer `[3:0]` only if that is a valid, clearly labeled example. Preserve the actual indices, not an assumed zero-based range; test ascending declarations, parameterized bounds, negative bounds, variable indices, partial selects, and no known range. Do not claim that a dynamic index was checked when the compiler did not report it.
+**Proposal:** “`data` has indices 3 down to 0; index 5 is outside that range, so this select produces `x`.” For `[0:3]` on a `[7:0]` vector, explain the declaration's direction and offer `[3:0]` only if that is a valid, clearly labeled example. Preserve the actual indices, not an assumed zero-based range; test ascending declarations, parameterized bounds, negative bounds, variable indices, partial selects, and no known range. Do not claim that a dynamic index was checked when the compiler did not report it.
 
-### P1 ? Module, port, parameter and port-count failures
+### P1 — Module, port, parameter and port-count failures
 
 **Measured:**
 
@@ -53,13 +53,13 @@ All four are located, but receive no tailored headline. A separate positional ex
 
 **Proposal:** explain that a module must be defined in an included project source and suggest a near module name only when unambiguous. For named ports/parameters, show the instance, its resolved module and a unique close declaration (for example `data` for `dtaa`); otherwise ask the student to compare with the declaration. For excess positional arguments, say that the instance provides four connections for a module with three ports and suggest named connections as an option. Resolve names with Verilog case sensitivity, project file scope, generated/conditional constructs, and same-name filtering in mind. Do not invent a suggestion for an unresolved or ambiguous module.
 
-### P1 ? Undefined macro and implicit net without a spelling candidate
+### P1 — Undefined macro and implicit net without a spelling candidate
 
 **Measured:** `undefined_macro.v`, line 2: `macro MAX_COUNT undefined (and assumed null) at this point.` It completed, and the resulting display output was `32`; it received no tailored advice. `implicit_no_candidate.v`: Icarus warned `implicit definition of wire 'answer'.` but there was no explanation because there was no close declared identifier. By contrast, `implicit_typo.v` already says the undeclared name may be a misspelling and that Verilog made a new unconnected wire.
 
 **Proposal:** explain that the macro has not been defined *at that point*; check spelling, definition/include order, active `ifdef` branch and project defines. For a new implicit wire, explain that Verilog created a one-bit wire automatically, that it may be unintended, and that the student can declare it explicitly; suggest a name only with a strong unambiguous match. Do not assert every implicit net is wrong. Consider an opt-in strict `default_nettype none` workflow separately, since it changes compilation behavior.
 
-### P1 ? Syntax diagnostics need targeted, cautious explanations
+### P1 — Syntax diagnostics need targeted, cautious explanations
 
 **Measured:** `wrong_assign_operator.v` (`=<`), `comparison_equals.v` (`=` in an `if`), `bad_binary_digit.v` (`4'b1020`), `bad_sensitivity.v` (missing `)`), `missing_else_colon.v` (a `case` arm missing `:`), and `missing_begin2.v` (two statements after an unbraced `if`) all produce bare `syntax error` or a generic follow-on, without a specific headline. The case-arm example also reports `Incomprehensible case expression.` at the next line. A generic previous-line semicolon suggestion can be irrelevant for these cases.
 
@@ -73,13 +73,13 @@ All four are located, but receive no tailored headline. A separate positional ex
 
 The generic syntax message must remain available. Test comments, strings, multiline code, legal operators, incomplete edits and cascade suppression; Icarus often reports a line after the actual error.
 
-### P2 ? Unclosed constructs and duplicate declarations
+### P2 — Unclosed constructs and duplicate declarations
 
 **Measured:** `missing_endmodule.v` and `syntax_lost_eof.v` yield only `syntax error` at the end of the file and `I give up.` `case_missing_endcase.v` gives the same generic result at `end`. The current output does not identify the opening construct. `duplicate_signal.v` gets a located message that `x` was already declared, plus a useful declaration detail, but does not explain the conflict in simpler words.
 
-**Proposal:** for an end-of-file error, look for an *unambiguously* unmatched `module`/`endmodule`, `begin`/`end`, or `case`/`endcase`; point at its opening line and say what may be missing. Avoid a specific claim when comments, preprocessor conditionals, generated code or malformed syntax make nesting uncertain. For duplicates, keep Icarus's existing related declaration and say ?`x` is already declared on line N; remove or rename one declaration,? only after confirming it is the same scope.
+**Proposal:** for an end-of-file error, look for an *unambiguously* unmatched `module`/`endmodule`, `begin`/`end`, or `case`/`endcase`; point at its opening line and say what may be missing. Avoid a specific claim when comments, preprocessor conditionals, generated code or malformed syntax make nesting uncertain. For duplicates, keep Icarus's existing related declaration and say “`x` is already declared on line N; remove or rename one declaration,” only after confirming it is the same scope.
 
-### P2 ? Numeric literal truncation and undiagnosed assignment widths
+### P2 — Numeric literal truncation and undiagnosed assignment widths
 
 **Measured:** `literal_truncated.v` writes `4'd31`. The warning says `Numeric constant truncated to 4 bits.` and the observed output was `15`; the warning has no tailored advice. `assign_width.v` assigns `8'hff` to a four-bit wire and completes with `narrowed=f` and **no warning** from the current pipeline.
 
@@ -98,7 +98,7 @@ These are **observations and candidates for optional educational checks**, not c
 
 ## Known good controls and qualification of existing advice
 
-`missing_semicolon.v` and `missing_semicolon_last.v` got a likely missing-semicolon headline and the previous line; `keyword_always.v` suggested `always`; `undeclared_rhs.v` suggested `counter`; `implicit_typo.v` suggested `led_out`. These are worth preserving with regression tests. `wire_procedural.v` and `reg_continuous.v` received existing wire/reg explanations. The former's wording mentions an `always` block even though the example uses `initial`; ?procedural block (`always` or `initial`)? would be more precise. Advice must remain sensitive to Verilog generation: `logic` and continuous assignment rules vary with the selected language mode.
+`missing_semicolon.v` and `missing_semicolon_last.v` got a likely missing-semicolon headline and the previous line; `keyword_always.v` suggested `always`; `undeclared_rhs.v` suggested `counter`; `implicit_typo.v` suggested `led_out`. These are worth preserving with regression tests. `wire_procedural.v` and `reg_continuous.v` received existing wire/reg explanations. The former's wording mentions an `always` block even though the example uses `initial`; “procedural block (`always` or `initial`)” would be more precise. Advice must remain sensitive to Verilog generation: `logic` and continuous assignment rules vary with the selected language mode.
 
 `missing_include.v` was located on the include line and retained the compiler's text. The separate circular-include pre-check already handles the straightforward cycle; do not duplicate it or promise that macro-dependent loops are always found.
 
@@ -113,7 +113,7 @@ These are **observations and candidates for optional educational checks**, not c
 
 ## Full measured corpus inventory
 
-The status below is the real session's final outcome; ?advice? refers to a primary, non-follow-on editor headline. The first located message is shortened for scanning. Read `results.json` for all frames and follow-on diagnostics.
+The status below is the real session's final outcome; “advice” refers to a primary, non-follow-on editor headline. The first located message is shortened for scanning; the corpus's `results.json` held all frames and follow-on diagnostics.
 
 | Case | Outcome | Primary located diagnostic or observed output | Primary advice |
 |---|---|---|---|
@@ -162,4 +162,4 @@ The status below is the real session's final outcome; ?advice? refers to a prima
 | `wrong_operator_le` | completed | yes | No |
 | `runtime_fatal` | runtime | failure example | No |
 
-The table records what the harness observed; ?No? advice does not mean the compiler message is wrong or that a new rule is necessarily desirable.
+The table records what the harness observed; “No” advice does not mean the compiler message is wrong or that a new rule is necessarily desirable.

@@ -38,7 +38,7 @@ import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './
 import type { DecodedBoard } from './boardFrame.js';
 import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
 import {
-  crashOf,
+  crashBeyondReport,
   explainingReport,
   failedRunText,
   readMemoryCapMb,
@@ -279,7 +279,8 @@ export class Session {
   /** The size guard stopped the current run (§ 7.5). */
   private waveLimitHit = false;
   private readonly sendBinary: WaveSink['sendBinary'];
-  private waveTransfer: { wave: RunWave; done: Promise<void> } | null = null;
+  /** The waveform transfer under way: resolves when it has ended. One at a time, so frames never mix. */
+  private waveSending: Promise<void> | null = null;
   private readonly maxWaveBytes: number;
   private readonly waveCheckMs: number;
   private readonly vhdlWaveFormat: WaveFormat;
@@ -366,11 +367,14 @@ export class Session {
 
   /**
    * `WAVE-GET <run>`: the newest finished run's waveform, or `WAVE-NONE` – for an older
-   * run, one still running, or one whose file is gone (§ 7.4).
+   * run, one still running, or one whose file is gone (§ 7.4). Asked again while it is
+   * being sent (the page gave up on that transfer), it is sent whole, with its own
+   * `WAVE-BEGIN`, once the first transfer has ended: their frames never mix.
    */
   handleWaveGet(run: number): Promise<void> {
+    const sending = this.waveSending;
+    if (sending !== null) return sending.then(() => this.handleWaveGet(run));
     const wave = this.wave;
-    if (wave !== null && this.waveTransfer?.wave === wave && wave.run === run) return this.waveTransfer.done;
     if (wave === null || wave.run !== run || wave.status === undefined) {
       this.send({ verb: 'WAVE-NONE', run });
       return Promise.resolve();
@@ -381,9 +385,9 @@ export class Session {
       sink: { send: this.send, sendBinary: this.sendBinary },
       isCurrent: () => !this.destroyed && this.wave === wave,
     }).finally(() => {
-      if (this.waveTransfer?.done === done) this.waveTransfer = null;
+      if (this.waveSending === done) this.waveSending = null;
     });
-    this.waveTransfer = { wave, done };
+    this.waveSending = done;
     return done;
   }
 
@@ -531,7 +535,7 @@ export class Session {
   private boardForRun(): BoardIo | undefined {
     const decoded = this.decodedBoard;
     if (!decoded.ok) {
-      this.failRun('protocol', `${RUN_REFUSED_FOR_BOARD}\n${decoded.reason}`);
+      this.refuseRun(`${RUN_REFUSED_FOR_BOARD}\n${decoded.reason}`);
       return undefined;
     }
     this.setRunBoard(decoded.board);
@@ -542,8 +546,18 @@ export class Session {
   private optionsForRun(): CompilerOptions | undefined {
     const decoded = this.decodedOptions;
     if (decoded.ok) return decoded.options;
-    this.failRun('protocol', `${RUN_REFUSED_FOR_OPTIONS}\n${decoded.reason}`);
+    this.refuseRun(`${RUN_REFUSED_FOR_OPTIONS}\n${decoded.reason}`);
     return undefined;
+  }
+
+  /**
+   * A RUN that never starts: why, as `ERROR protocol`, then `DONE refused`, since an
+   * `ERROR protocol` alone leaves a run going (a refused RESET). The page then lets go of
+   * the run and its socket, freeing the place on the server.
+   */
+  private refuseRun(text: string): void {
+    this.failRun('protocol', text);
+    this.send({ verb: 'DONE', reason: 'refused' });
   }
 
   /**
@@ -657,7 +671,7 @@ export class Session {
    * run that died with no word at all, since its student gets only a guess.
    */
   private reportFailedRun(language: SimEngine['language'], exit: SimulatorExit): void {
-    const crash = crashOf(exit);
+    const crash = crashBeyondReport(exit, this.simulatorReport);
     const report = crash === undefined ? this.simulatorReport : null;
     const logged = crash ?? (report === null ? silentExitOf(exit) : undefined);
     if (logged !== undefined) this.onCrash?.(`${simulatorName(language)} ${logged}`);

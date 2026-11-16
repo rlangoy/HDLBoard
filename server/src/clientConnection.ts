@@ -31,7 +31,9 @@ import {
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
 // 5: `ERROR busy` — the server is full; this connection was refused, or closed for a new one.
 // 6: `OPTIONS` — the project's compiler options (compilerOptions.ts), sent before RUN.
-const PROTOCOL_VERSION = '6';
+// 7: an `ERROR protocol` never ends a run: it refuses one request (RESET, WAVE-GET, a bad
+// STIM) and the run goes on, while a refused RUN ends with `DONE refused` after it.
+const PROTOCOL_VERSION = '7';
 /**
  * How long a socket told to go gets to close before it is cut. A proxy may hold the close
  * frame back (Render's did: the tab kept a dead socket open), and cutting the connection

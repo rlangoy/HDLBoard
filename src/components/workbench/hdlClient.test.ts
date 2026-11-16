@@ -67,7 +67,7 @@ const PROJECT: VhdlFile[] = [
 ];
 
 /** What a backend of this release answers HELLO with; a run waits for it. */
-const WELCOME_CURRENT = 'WELCOME 6';
+const WELCOME_CURRENT = 'WELCOME 7';
 
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
@@ -86,6 +86,7 @@ function recordingHandlers() {
     onState: vi.fn(),
     onLog: vi.fn(),
     onError: vi.fn(),
+    onRefused: vi.fn(),
     onDone: vi.fn(),
     onClosed: vi.fn(),
   };
@@ -312,9 +313,10 @@ describe('HdlClient and an older backend (docs/board_io_config_spec.md § 6.5)',
     expect(socket.sent).toContain(encodeBoardFrame(DEFAULT_BOARD.ports));
   });
 
-  test('still reports any other protocol error', () => {
+  test('an older backend\'s other protocol error is reported as an error: it may have refused the RUN', () => {
     const handlers = recordingHandlers();
     new HdlClient('ws://test', handlers).run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports });
+    FakeSocket.last!.receive('WELCOME 6');
     FakeSocket.last!.receive('ERROR protocol\nRUN refused: the last BOARD frame was not valid.');
     expect(handlers.onError).toHaveBeenCalledWith('protocol', 'RUN refused: the last BOARD frame was not valid.');
   });
@@ -396,6 +398,31 @@ describe('after a run, its place on the server is freed', () => {
     running();
     FakeSocket.last?.receive('ERROR protocol\nSTIM has 3 bits; this board takes 14.');
     expect(FakeSocket.last?.closed).toBe(false);
+  });
+
+  describe('a refused request (protocol 7)', () => {
+    const RESET_REFUSED = 'Reset ignored: too many runs and resets in a short time.';
+
+    test('is reported as refused, not as an error that ends the run', () => {
+      const handlers = recordingHandlers();
+      running(handlers);
+      FakeSocket.last?.receive(`ERROR protocol\n${RESET_REFUSED}`);
+      expect(handlers.onRefused).toHaveBeenCalledWith(RESET_REFUSED);
+      expect(handlers.onError).not.toHaveBeenCalled();
+    });
+
+    test('leaves the socket open: the run goes on', () => {
+      running();
+      FakeSocket.last?.receive(`ERROR protocol\n${RESET_REFUSED}`);
+      expect(FakeSocket.last?.closed).toBe(false);
+    });
+
+    test('a refused RUN ends with DONE refused, which frees its place on the server', () => {
+      running();
+      FakeSocket.last?.receive('ERROR protocol\nRUN refused: the last BOARD frame was not valid.');
+      FakeSocket.last?.receive('DONE refused');
+      expect(FakeSocket.last?.closed).toBe(true);
+    });
   });
 
   test('a run that dies at runtime closes the socket', () => {

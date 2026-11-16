@@ -76,7 +76,10 @@ describe('the session board', () => {
     const { session, frames } = sessionWith(engine);
     session.handleBoard(invalid());
     await session.handleRun(FILES, 'top.vhdl');
-    assert.deepEqual(frames, [{ verb: 'ERROR', stage: 'protocol', text: `${RUN_REFUSED_FOR_BOARD}\nBOARD: clock50 is missing` }]);
+    assert.deepEqual(frames, [
+      { verb: 'ERROR', stage: 'protocol', text: `${RUN_REFUSED_FOR_BOARD}\nBOARD: clock50 is missing` },
+      { verb: 'DONE', reason: 'refused' },
+    ]);
     assert.deepEqual(boards, []);
 
     session.handleBoard(valid(DE1_SOC_BOARD_IO));

@@ -216,7 +216,7 @@ async function prepare(request: PrepareRequest): Promise<PrepareResult> {
   // A certain loop is reported before Icarus runs: Icarus only stops when it runs out of files.
   const includeLoop = findIncludeLoop({ files, sources, predefined: predefinedMacros(compilerOptions.iverilog) });
   if (includeLoop !== undefined) return failure('analyze', describeIncludeLoop(includeLoop));
-  const notes =[...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
+  const notes = [...(await versionNotes(tools, dir)), ...sameNameNotes(sameNamed)];
   const optionFlags = iverilogFlags(compilerOptions.iverilog);
   const build: Build = { tools, dir, top: checked.top, sources, notes, board, optionFlags, signal };
   const ports = await readTopPorts(tools, compileRequest(build, build.top));
