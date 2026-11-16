@@ -32,6 +32,8 @@ export function filesInFolderOrder<T extends Pick<VhdlFile, 'folder'>>(files: re
 export const UPLOAD_ACCEPT = '.vhd,.vhdl,.v,.vh,.zip,.json';
 /** What the drop hint and the rejection line call the accepted files. */
 export const ACCEPTED_FILES_TEXT = '.vhd / .vhdl / .v / .vh / .zip / .json';
+/** What Project files' drop area accepts: a project file (.json) opens a project rather than joining one. */
+export const PROJECT_ACCEPTED_FILES_TEXT = 'VHDL (.vhd, .vhdl) and Verilog (.v, .vh) files, or a .zip of them';
 
 // Keep in step with server/src/engines/language.ts, which applies the same extension rules
 // on the backend (the two packages share no code).
@@ -47,6 +49,10 @@ export function languageOfName(name: string): Language | undefined {
 
 export function isVhdlFile({ name }: { readonly name: string }): boolean {
   return languageOfName(name) === 'vhdl';
+}
+
+export function isVerilogFile({ name }: { readonly name: string }): boolean {
+  return languageOfName(name) === 'verilog';
 }
 
 /** The language a folder's files are written in; a testbench in `work/` is VHDL. */

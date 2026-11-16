@@ -226,10 +226,27 @@ card; the folding one starts open). The styles are `page/Page.css`; their colour
 ### `<ProjectsPage>`
 
 The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
-computer* and *On GitHub*, then, ruled off below them, *Active project*, with an orange dot
+computer*, *On GitHub* and *New project*, then, ruled off below them, *Active project*, with an orange dot
 on its icon while the project has unsaved changes. Its card's *Project details*, and the
 project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
+
+The active project's inline submenu (`ActiveProjectNav`) has *Overview*, *Files*, and
+*Add file*. Overview returns to the top of the active page; Files scrolls to its existing
+file section. Both keep the same page mounted, preserving edits and folded cards.
+Only the selected child is highlighted. Add file goes the same way: it scrolls to *Add
+existing files*, in the *Add files* card under *Project files* (`AddFilesCard`). That card
+has *Create new file*, with a compact VHDL and Verilog button side by side (they wrap on a
+narrow page); either one puts the inline `NewFileForm` in their place, with the language
+fixed (Cancel, then the other button, changes it), a focused *File name*, a hint that names
+the file it makes, and *Cancel* and *Create file*. The name is checked as New File checks it
+(`newFile.ts`); a name that cannot be used says why under the field and the form stays. A
+file created brings the two buttons back. *Add existing files* is a
+dashed drop area with *Browse files*; dragging files over it highlights it (`useFileDrop`,
+shared with the Explorer). Importing does not open project files (a `.json` is refused with
+its own reason, in the refused-files dialog, with any other file that could not be added),
+and the page stays open, so new files show in the list and its count. The submenu is absent when no active project
+actions are supplied. The workspace always supplies them, including for its Default project.
 
 On top of Active project, `CurrentProjectCard` shows the open project: its name, *Unsaved
 changes* while the place it saves to does not hold it, *Saves to this computer: …* or
@@ -238,6 +255,23 @@ computer), Save, *Open in workspace* back to the editor, and a ⋮ menu with *Ne
 *Open from a URL or path…* and *Close project*. The lists have no such card (the open
 project is their first row); their header has a ⋮ menu with *New project* and *Open from a
 URL or path…*.
+
+*New project* (`NewProjectSection`) is one form: the project name, the board (its description
+beneath), the first file's name, and VHDL or Verilog as native radio buttons in cards. The
+board follows the open project's until another is chosen, and the file name follows the
+project name until it is typed. The line beneath the file name, and every name in it, comes
+from `newProjectForm.ts`, which asks the same `starterTopFileName` that creates the file.
+When keeping the files now in Files would name it otherwise (a file of that name is there,
+so `_2`; or the open project's board takes another name), a second sentence says so
+(`keepFilesNote`), as Keep files in `RemoveFilesDialog` would name it.
+
+The input is kept by the page while it is open (`useNewProjectFlow`): a stop in Active project
+to name and save the open project first, or Cancel in the files question, keeps it, and its
+Cancel still goes back to the section the new project was started from. A blank form starts
+over from wherever New project is opened next. Create project goes through
+`handleCreateProject`: the unsaved-changes question (`useLeaveOpenProject`), asked over the
+New File dialog so its Cancel keeps that dialog's input; then, in the render current after
+the answer, `RemoveFilesDialog` when Files has files; then the new top file opens in the editor.
 
 A list section has its place's folder or GitHub account above a search and a sort
 (`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row
@@ -970,7 +1004,7 @@ When markers change:
 
 | Event | Effect |
 |---|---|
-| Start pressed | all markers cleared; a new snapshot is taken; HDLBoard's own check adds a warning on each architecture whose entity and name an earlier one has (`duplicateArchitectures.ts`: GHDL warns only within one file, and the backend drops warnings when analysis succeeds) |
+| Start pressed | all markers cleared; a new snapshot is taken; HDLBoard's own checks add a warning on each architecture whose entity and name an earlier one has (`duplicateArchitectures.ts`: GHDL warns only within one file, and the backend drops warnings when analysis succeeds), and on each read of an `out` port in its own design (`outputReads.ts`: VHDL-2008 allows it, so GHDL is silent, but VHDL-93 tools refuse it). GHDL's `port "SW" can't be assigned` gets advice (`portModeAdvice.ts`): `SW <= LEDR;` is told to swap its two sides |
 | `ERROR` frame (`recordError`) | parse, locate, advise, add; a failed compile (`analyze`, `elaborate`) reveals the first error |
 | `LOG` frame | parse, locate, add (advice only for Icarus's implicit-wire warning); never moves the view |
 | click in the code pane (text or gutter) | the active file's markers are removed |

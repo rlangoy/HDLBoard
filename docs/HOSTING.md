@@ -134,7 +134,11 @@ number at least its minimum; any other value falls back to the default with a wa
 
 What happens over a limit:
 
-- **Upgrades:** HTTP 429 with `Retry-After: 60`.
+- **Upgrades:** the connection is refused with `ERROR busy` ("Too many connections
+  from your network in the last minute"), which the page shows, then closed with code
+  1013; no session is made. A browser cannot read an HTTP 429 to a WebSocket. The log
+  gets one line a minute for each address, however many it refuses:
+  `ERROR busy: refused <address>, over its 600 connections a minute`.
 - **Frames or bytes:** a short protocol error, then the connection is closed with
   code 1008 and its simulation stopped.
 - **Work:** a `RUN` is refused with `ERROR busy` ("Too many runs in a short time"),
@@ -145,8 +149,11 @@ What happens over a limit:
   and frees its session.
 
 Waveform downloads wait for each binary frame to be written before reading more, so
-a slow reader does not queue the whole file, and two requests for the same waveform
-share one transfer. A connection that closes takes its compile with it: the compiler is
+a slow reader does not queue the whole file. One transfer goes at a time: a second
+request for a waveform being sent gets it whole once the first has ended. A compiler's
+output is kept to its first 64 KiB on stdout and on stderr (with a line saying how
+much was left out), so a design that makes it print warnings by the megabyte cannot
+pass the output cap. A connection that closes takes its compile with it: the compiler is
 killed, so reconnecting cannot pile up compiles beyond `HDL_MAX_SESSIONS`. The output cap covers the WebSocket queue only, not simulator,
 compression, kernel or proxy memory: keep the container's CPU and memory limits too.
 
@@ -160,7 +167,8 @@ name a client (`ERROR busy`, `closed WebSocket from`) show the student's address
 decide which session is closed. Seeing `(forwarded for …)` in the log means the
 setting is missing. Students behind one NAT,
 as in most schools, share one address anyway: since the page opens a new socket for
-every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class meets 429s. For the
+every run, raise `HDL_WS_UPGRADES_PER_MINUTE` if a large class is told "Too many connections from
+your network". For the
 same reason there is no limit on sessions per address; on a full server the
 replacement policy closes one address's extra sessions first. The address table holds
 10,000 addresses; past that, the one seen longest ago is forgotten and starts again

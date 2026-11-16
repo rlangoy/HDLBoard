@@ -2,12 +2,13 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, it } from 'vitest';
+import { nameKey } from '../../project/fileName';
 import {
   availableFiles,
   filesInProject,
+  newProject,
   parseStoredProject,
   projectEntries,
-  startProject,
   withDetails,
   withEntryEdited,
   withEntryRemoved,
@@ -17,9 +18,14 @@ import {
 } from './projectFile';
 import { projectSnapshot } from './projectGitHub';
 
-/** Create Project (projectFile.ts): a new project, and the files in Files it may take. */
+/** A project's files and the files in Files it may take (projectFile.ts). */
 
 const IN_FILES = ['adder.vhd', 'adder_tb.vhd', 'notes.vhd'];
+
+/** A new, unnamed project that lists none of `fileNames` yet but offers them all (availableFiles). */
+function startProject(fileNames: readonly string[], board: string) {
+  return { ...newProject('', [], board), excluded: fileNames.map(nameKey) };
+}
 const names = (rows: readonly { name: string }[]) => rows.map((row) => row.name);
 
 describe('Create Project', () => {

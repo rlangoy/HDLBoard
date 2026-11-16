@@ -32,18 +32,29 @@ function stimStepText({ bits, holdNs }: TimedStim): string {
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
 // 5: `ERROR busy` — the server is full; the socket was refused, or closed for a new one.
 // 6: `OPTIONS` — the project's compiler options, sent before RUN.
-const PROTOCOL_VERSION = '6';
+// 7: an `ERROR protocol` only refuses a request and the run goes on; a refused RUN ends with `DONE refused`.
+const PROTOCOL_VERSION = '7';
 /**
  * The `ERROR` stage of a full server (server/src/sessionLimit.ts): this connection was
  * refused, or closed to make room for another student. The server closes the socket next.
  */
 export const BUSY_STAGE = 'busy';
+/** The `ERROR` stage of a frame the server would not act on: a refused request (protocol 7). */
+const PROTOCOL_STAGE = 'protocol';
+/** `DONE refused`: the RUN never started; the `ERROR protocol` before it said why (protocol 7). */
+export const REFUSED_REASON = 'refused';
 /** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
 const SHAPED_BOARD_PROTOCOL = 3;
 /** The first protocol that takes the OPTIONS frame; an older backend compiles with its own defaults. */
 const OPTIONS_PROTOCOL = 6;
 /** The first protocol that takes timed STIM steps; an older backend gets the final state alone. */
 const TIMED_STIM_PROTOCOL = 4;
+/**
+ * The first protocol whose `ERROR protocol` only refuses a request (a RESET or a waveform
+ * download over the server's limits, a bad STIM): the run goes on. An older backend's
+ * may have refused the RUN, so it is reported as an error, as before.
+ */
+const REFUSAL_PROTOCOL = 7;
 /** The `ERROR` stages that end a run (server/src/protocol.ts): the client then closes its socket. */
 const RUN_ENDING_STAGES: readonly string[] = ['analyze', 'elaborate', 'runtime', 'internal'];
 /** A backend that answers WELCOME without a number is the oldest one. */
@@ -66,7 +77,10 @@ export interface HdlClientHandlers {
   /** `STATE`'s payload as sent; `decodeState` reads it for the active board. */
   onState(bits: string): void;
   onLog(text: string): void;
+  /** The run ended on an error, or never started. */
   onError(stage: string, text: string): void;
+  /** The server refused one request, and why; the run goes on (protocol 7). */
+  onRefused(text: string): void;
   onDone(reason: string): void;
   onClosed(): void;
   /**
@@ -274,13 +288,17 @@ export class HdlClient {
   }
 
   /**
-   * `ERROR`: the old backend's answer to BOARD is noted. A `protocol` one leaves the run
-   * going on the server (a bad STIM, a verb an older backend does not know), so only the
-   * stages that end a run end it here.
+   * `ERROR`: the old backend's answer to BOARD is noted, and a refused request is only
+   * reported. A `protocol` one leaves the run going on the server (a bad STIM, a verb an
+   * older backend does not know), so only the stages that end a run end it here.
    */
   private handleError(stage: string, text: string): void {
     if (this.isOldBackendAnswer(stage, text)) {
       this.noteOldBackend();
+      return;
+    }
+    if (this.isRefusal(stage)) {
+      this.handlers.onRefused(text);
       return;
     }
     this.handlers.onError(stage, text);
@@ -338,13 +356,23 @@ export class HdlClient {
    * other board (§ 6.3).
    */
   private boardFrameFor(board: BoardPorts): string | undefined {
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) >= SHAPED_BOARD_PROTOCOL) return encodeBoardFrame(board);
+    if (this.backendSpeaks(SHAPED_BOARD_PROTOCOL)) return encodeBoardFrame(board);
     return fitsV1BoardFrame(board) ? encodeV1BoardFrame(board) : undefined;
   }
 
   /** `ERROR protocol` about the BOARD verb: the backend predates it, and the RUN that follows still runs. */
   private isOldBackendAnswer(stage: string, text: string): boolean {
-    return stage === 'protocol' && text.includes(UNKNOWN_BOARD_VERB);
+    return stage === PROTOCOL_STAGE && text.includes(UNKNOWN_BOARD_VERB);
+  }
+
+  /** `ERROR protocol` from a backend that ends a refused RUN with `DONE refused` (REFUSAL_PROTOCOL). */
+  private isRefusal(stage: string): boolean {
+    return stage === PROTOCOL_STAGE && this.backendSpeaks(REFUSAL_PROTOCOL);
+  }
+
+  /** The backend named `version` or a later one in WELCOME; one that has not answered yet counts as the oldest. */
+  private backendSpeaks(version: number): boolean {
+    return (this.backendVersion ?? OLDEST_PROTOCOL) >= version;
   }
 
   private noteOldBackend(): void {
@@ -385,7 +413,7 @@ export class HdlClient {
 
   /** The OPTIONS frame for this backend: undefined for one that predates it. */
   private optionsFrameFor(compilerOptions: CompilerOptions | undefined): string | undefined {
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) < OPTIONS_PROTOCOL) return undefined;
+    if (!this.backendSpeaks(OPTIONS_PROTOCOL)) return undefined;
     return `OPTIONS\n${JSON.stringify(compilerOptions ?? {})}`;
   }
 
@@ -410,7 +438,7 @@ export class HdlClient {
     const send = () => {
       const boardFrame = this.boardFrameFor(board);
       if (boardFrame === undefined) {
-        this.handlers.onError('protocol', BOARD_TEXT.oldBackendShape);
+        this.handlers.onError(PROTOCOL_STAGE, BOARD_TEXT.oldBackendShape);
         this.runEnded();
         return;
       }
@@ -441,7 +469,7 @@ export class HdlClient {
   stimSteps(steps: readonly TimedStim[]): void {
     const last = steps[steps.length - 1];
     if (last === undefined) return;
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) < TIMED_STIM_PROTOCOL) {
+    if (!this.backendSpeaks(TIMED_STIM_PROTOCOL)) {
       this.stim(last.bits);
       return;
     }

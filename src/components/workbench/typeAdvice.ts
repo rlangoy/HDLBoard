@@ -13,13 +13,14 @@
 import type { Advice, Span } from './diagnosticAdvice';
 import { typeText } from './diagnosticText';
 import type { CheckedFile } from './rangeAdvice';
-import { boundsOf, lengthOf, type DeclaredRange, type ObjectType } from './vhdlDeclarations';
+import { boundsOf, lengthOf, type DeclaredRange, type ObjectType, type PortMode } from './vhdlDeclarations';
 import { assignmentOn, codeShape, namedParts, widthOf, type Assignment } from './vhdlExpression';
 import { tokenizeVhdlLine, type Token } from './vhdlHighlight';
 
-/** A port of an entity elsewhere in the project, for a port map's widths. */
+/** A port of an entity in the project: a port map's widths, and which way it goes. */
 export interface DeclaredPort {
   readonly bits?: number;
+  readonly mode?: PortMode;
 }
 
 export type PortLookup = (entity: string, port: string) => DeclaredPort | undefined;

@@ -32,6 +32,7 @@ import {
   statementRegionHome,
 } from './vhdlStructure';
 import { nearestInGroups, uniqueNearest } from './nearestWord';
+import { adviseInputAssigned } from './portModeAdvice';
 import { adviseRangeCheck, isRangeCheck } from './rangeAdvice';
 import { adviseTypeError, type PortLookup } from './typeAdvice';
 import { splitLines } from './textLines';
@@ -323,7 +324,7 @@ function portLookup(files: ReadonlyMap<string, SourceFile>, entities: readonly D
     const object = declaring && declarations?.portAfter(declaring.line, port);
     if (object === undefined || declarations === undefined) return undefined;
     const type = declarations.typeOf(object.typeText, object.line);
-    return { bits: type?.kind === 'vector' ? lengthOf(type.range) : undefined };
+    return { bits: type?.kind === 'vector' ? lengthOf(type.range) : undefined, mode: object.mode };
   };
 }
 
@@ -789,6 +790,10 @@ const typeError: Rule = ({ diagnostic, file, index }, project) => {
   return adviseTypeError({ ...file, message: diagnostic.message, line: diagnostic.line, text, caret: index, ports: project.ports });
 };
 
+/** An input port assigned: which way it goes, and the assignment the other way round. */
+const inputAssigned: Rule = ({ diagnostic, file }, project) =>
+  adviseInputAssigned({ message: diagnostic.message, lines: file.lines, line: diagnostic.line, ports: project.ports });
+
 /**
  * Tried in order; the first advice wins. The tables are certain where distance is a
  * guess, so E is first, and the missing package comes before Rule C's "did you mean".
@@ -797,6 +802,7 @@ const typeError: Rule = ({ diagnostic, file, index }, project) => {
 const RULES: readonly Rule[] = [
   rangeError,
   typeError,
+  inputAssigned,
   extraEnd,
   entityNotFound,
   designUnitInsideArchitecture,

@@ -2,7 +2,7 @@
 
 Date: 14 November 2026
 
-Implements the compiler-message recommendations in [the research report](../verilog-novice-diagnostics-report.md). Verilog now uses the existing VHDL diagnostic presentation: error/warning gutter markers, source underlines where justified, inline explanations, related-line hints, accessible status text, and tooltips retaining the original compiler message and notes. There is no separate Verilog renderer or stylesheet.
+Implements the compiler-message recommendations in [the research report](verilog_novice_diagnostics_report.md). Verilog now uses the existing VHDL diagnostic presentation: error/warning gutter markers, source underlines where justified, inline explanations, related-line hints, accessible status text, and tooltips retaining the original compiler message and notes. There is no separate Verilog renderer or stylesheet.
 
 ## Implemented
 
@@ -48,7 +48,7 @@ The checked-in `src/components/workbench/fixtures/verilog-novice.json` contains 
 - Additional Chrome checks passed for a student `$warning` containing compiler-like wording, a repaired clean run, and console navigation retaining the full port-width warning and pruning detail.
 - A real GHDL/VHDL missing-semicolon control retained its existing red marker, underline, inline message, related compiler detail and status announcement. Clicking its console link preserved those details. The temporary browser edit was restored afterward.
 
-Temporary browser sources, the reusable inspection helper, captured UI results and command logs are under `temp/verilog-novice-research/`. The browser exposed no Pluno tool registry, so testing used the available Chrome automation connection. The helper can register its read-only inspection tool when that registry is available.
+Temporary browser sources, the reusable inspection helper, captured UI results and command logs were kept in the author's working copy under `temp/verilog-novice-research/`, which is not committed. The browser exposed no Pluno tool registry, so testing used the available Chrome automation connection. The helper can register its read-only inspection tool when that registry is available.
 
 ## Boundaries
 

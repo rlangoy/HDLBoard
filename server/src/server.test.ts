@@ -176,7 +176,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
   /** Whether `peer` answers HELLO, the way a session that kept its place does. */
   const welcomed = async (peer: Peer) => {
     peer.ws.send('HELLO 5');
-    return (await frame(peer, 'WELCOME')) === 'WELCOME 6';
+    return (await frame(peer, 'WELCOME')) === 'WELCOME 7';
   };
 
   interface Scenario {
@@ -271,5 +271,56 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
     });
     const lines = log.mock.calls.map((call) => String(call.arguments[0]));
     assert.ok(lines.includes('hdl-board: ERROR busy: closed 10.0.0.1 open 1 min (idle 1 min) to make room for 10.0.0.2'));
+  });
+});
+
+describe('a RUN refused before it reaches a session', () => {
+  let backend: BackendHandle;
+
+  before(async () => {
+    backend = startBackend({ port: await freePort() });
+    await backend.ready;
+  });
+
+  after(() => stopped(backend));
+
+  /** How long a refusal may take before the test fails rather than waits on. */
+  const ANSWER_TIMEOUT_MS = 5000;
+
+  /**
+   * The frames the backend sends back to `frames`, up to and with the first DONE. A socket
+   * closed, or no DONE in time, fails the test instead of leaving it waiting.
+   */
+  const answersTo = (frames: readonly string[]) =>
+    new Promise<string[]>((resolve, reject) => {
+      const ws = new WebSocket(`ws://${LOOPBACK}:${backend.port}/hdlsim`);
+      const texts: string[] = [];
+      const fail = (why: string) => {
+        clearTimeout(timer);
+        ws.terminate();
+        reject(new Error(`${why}; got ${JSON.stringify(texts)}`));
+      };
+      const timer = setTimeout(() => fail('no DONE in time'), ANSWER_TIMEOUT_MS);
+      ws.on('message', (data) => {
+        texts.push(String(data));
+        if (!String(data).startsWith('DONE')) return;
+        clearTimeout(timer);
+        ws.removeAllListeners('close');
+        ws.close();
+        resolve(texts);
+      });
+      ws.once('open', () => frames.forEach((frame) => ws.send(frame)));
+      ws.once('close', () => fail('closed before DONE'));
+      ws.once('error', (error) => fail(String(error)));
+    });
+
+  test('ends a RUN without files with DONE refused', async () => {
+    const texts = await answersTo(['HELLO 7', 'RUN top.vhd\n']);
+    assert.equal(texts.at(-1), 'DONE refused');
+  });
+
+  test('ends a RUN sent before HELLO with DONE refused', async () => {
+    const texts = await answersTo(['RUN top.vhd\n@@FILE top.vhd@@\nentity top is end;\n']);
+    assert.equal(texts.at(-1), 'DONE refused');
   });
 });

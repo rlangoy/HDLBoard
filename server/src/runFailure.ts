@@ -92,6 +92,17 @@ export function crashOf({ code, stderr, signal }: SimulatorExit): string | undef
 }
 
 /**
+ * How the simulator crashed, unless its own report of a stop explains the exit: a design's
+ * `std.env.stop(200)` makes GHDL exit with 200, which would otherwise read as a death by
+ * signal. A signal, or stderr naming a crash, is a crash whatever was reported.
+ */
+export function crashBeyondReport(exit: SimulatorExit, report: SimulatorReport | null): string | undefined {
+  const reportedStop = report?.stops === true;
+  const crashSaidOutright = exit.signal !== null || CRASH_TEXT.test(exit.stderr);
+  return reportedStop && !crashSaidOutright ? undefined : crashOf(exit);
+}
+
+/**
  * A failure with no word at all, on stderr or (the caller knows) stdout: the server log
  * hears of it too, since the student is told only a guess. Undefined when stderr says why.
  */

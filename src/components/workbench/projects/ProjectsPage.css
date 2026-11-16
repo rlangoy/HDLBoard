@@ -767,6 +767,33 @@
 
 /* ------------------------------------------------------- the ⋮ menu */
 
+.wb-page-nav .wb-projects-subnav {
+  margin-block-start: 4px;
+  padding-inline-start: 22px;
+}
+
+.wb-projects-subnav .wb-page-nav__icon {
+  align-items: center;
+  justify-content: center;
+}
+
+.wb-projects-subnav .wb-page-nav__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* The existing narrow sidebar becomes a horizontally scrollable strip of tabs. */
+@container page (max-width: 640px) {
+  .wb-page-nav li:has(> .wb-projects-subnav) {
+    display: flex;
+  }
+
+  .wb-page-nav .wb-projects-subnav {
+    margin-block-start: 0;
+    padding-inline-start: 0;
+  }
+}
+
 .wb-projects__menu {
   position: fixed;
   z-index: 20;
@@ -1282,5 +1309,155 @@ button.wb-active__file:hover > span {
   .wb-projects *,
   .wb-projects *::before {
     animation: none !important;
+  }
+}
+
+/* ---------------------------------- Add files, under Project files */
+
+.wb-add-files {
+  display: grid;
+  gap: 20px;
+}
+
+.wb-add-files__label {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Compact and left-aligned: they wrap rather than stretch across a wide card. */
+.wb-add-files__languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wb-add-files__language {
+  flex: 0 1 190px;
+  height: 40px;
+  font-weight: 600;
+}
+
+.wb-add-files__language svg {
+  color: var(--wb-accent);
+}
+
+.wb-add-files__drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 16px;
+  border: 2px dashed var(--wb-accent);
+  border-radius: 12px;
+  text-align: center;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.wb-add-files__drop.is-drag-over {
+  border-style: solid;
+  background: var(--wb-accent-soft);
+  box-shadow: 0 0 0 3px var(--wb-accent-soft);
+}
+
+.wb-add-files__drop-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-add-files__drop strong {
+  font-size: 15px;
+}
+
+.wb-add-files__browse {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--wb-text-muted);
+}
+
+/* The inline form of Create new file: the language fixed, a file name, Cancel and Create file. */
+.wb-new-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px 16px;
+  padding: 16px;
+  border: 1px solid var(--wb-page-card-border);
+  border-radius: 12px;
+  background: var(--wb-page-card-head-bg);
+}
+
+.wb-new-file__title {
+  display: flex;
+  margin: 0;
+  font-size: 15px;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-new-file__title svg {
+  width: 20px;
+  height: 20px;
+  color: var(--wb-accent);
+}
+
+.wb-new-file__language {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--wb-text-muted);
+}
+
+.wb-new-file__language strong {
+  color: var(--wb-text);
+}
+
+.wb-new-file__label {
+  font-weight: 600;
+}
+
+.wb-new-file__field {
+  display: grid;
+  gap: 6px;
+}
+
+.wb-new-file__name {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: var(--wb-page-card-bg);
+  color: var(--wb-text);
+  font: inherit;
+}
+
+.wb-new-file__name:focus {
+  border-color: var(--wb-accent);
+  outline: 2px solid var(--wb-accent-soft);
+}
+
+.wb-new-file__name[aria-invalid='true'] {
+  border-color: var(--wb-danger);
+}
+
+.wb-new-file__hint {
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 13px;
+}
+
+
+.wb-new-file__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@container page (max-width: 640px) {
+  .wb-new-file {
+    grid-template-columns: 1fr;
   }
 }

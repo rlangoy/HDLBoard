@@ -43,7 +43,11 @@ export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'int
 // 'completed': a batch-mode (portless-entity) run reached its own natural
 // end on its own — distinct from 'stopped' (the user clicked Stop) so the
 // frontend can tell "your design finished" from "you ended the session".
-export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed';
+// 'refused': the RUN never started (an invalid BOARD or OPTIONS frame, a RUN without files
+// or sent before HELLO); its `ERROR protocol`
+// said why. An `ERROR protocol` alone never ends a run (protocol 7).
+const DONE_REASONS = ['stopped', 'completed', 'max-cycles', 'closed', 'refused'] as const;
+export type DoneReason = (typeof DONE_REASONS)[number];
 
 /** The waveform formats (docs/waveform_viewer_spec.md W2): GHW for VHDL, VCD for Verilog. */
 export type WaveFormat = 'ghw' | 'vcd';
@@ -96,6 +100,8 @@ export type ServerFrame =
 
 export interface ProtocolError {
   message: string;
+  /** The frame was a RUN: refusing it ends that run with `DONE refused`, so the page stops waiting. */
+  run?: true;
 }
 
 /**
@@ -183,6 +189,15 @@ export function parseRunHeader(inline: string): { topFile?: string; runTarget?: 
   return { topFile: inline || undefined };
 }
 
+/** A RUN frame, or why it is refused, marked as a RUN's refusal. */
+function decodeRun(inline: string, body: string): ClientFrame | ProtocolError {
+  const files = splitRunBody(body);
+  if (isProtocolError(files)) return { ...files, run: true };
+  if (files.length === 0) return { message: 'RUN body contains no @@FILE ...@@ sections', run: true };
+  const { topFile, runTarget } = parseRunHeader(inline);
+  return runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget };
+}
+
 export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
   const nl = text.indexOf('\n');
   const head = nl === -1 ? text : text.slice(0, nl);
@@ -196,15 +211,8 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       if (!inline) return { message: 'HELLO requires a protocol version' };
       return { verb: 'HELLO', version: inline };
     }
-    case 'RUN': {
-      const files = splitRunBody(body);
-      if (isProtocolError(files)) return files;
-      if (files.length === 0) {
-        return { message: 'RUN body contains no @@FILE ...@@ sections' };
-      }
-      const { topFile, runTarget } = parseRunHeader(inline);
-      return runTarget === undefined ? { verb: 'RUN', files, topFile } : { verb: 'RUN', files, topFile, runTarget };
-    }
+    case 'RUN':
+      return decodeRun(inline, body);
     case 'BOARD': {
       const board: DecodedBoard = inline === '' ? decodeBoardBody(body) : { ok: false, reason: 'BOARD takes no inline arguments' };
       return { verb: 'BOARD', board };
@@ -324,7 +332,7 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
     }
     case 'DONE': {
       const reason = inline as DoneReason;
-      if (!['stopped', 'completed', 'max-cycles', 'closed'].includes(reason)) {
+      if (!DONE_REASONS.includes(reason)) {
         return { message: `DONE has an unknown reason: ${JSON.stringify(inline)}` };
       }
       return { verb: 'DONE', reason };

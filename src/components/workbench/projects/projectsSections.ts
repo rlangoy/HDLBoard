@@ -4,10 +4,13 @@
 import { PLACE } from './places';
 
 /** The Projects page's sections (issue #44). */
-export type ProjectsSectionId = 'all' | 'local' | 'github' | 'active';
+export type ProjectsSectionId = 'all' | 'local' | 'github' | 'active' | 'active-files' | 'new';
 
-/** A section that lists projects; `active` shows the open one instead. */
-export type ListSectionId = Exclude<ProjectsSectionId, 'active'>;
+/** The sections that show the Active project's page: Overview, and Files, a place on it. */
+export type ActiveProjectSectionId = 'active' | 'active-files';
+
+/** A section that lists projects; `active` shows the open one instead, and `new` the form for another. */
+export type ListSectionId = Exclude<ProjectsSectionId, 'active' | 'active-files' | 'new'>;
 
 export interface ProjectsSection<Id extends ProjectsSectionId = ProjectsSectionId> {
   readonly id: Id;
@@ -30,8 +33,32 @@ export const ACTIVE_SECTION: ProjectsSection<'active'> = {
   intro: 'The project open in the workspace: its details, where it is saved, and its files.',
 };
 
+/** After the project lists: a form for a new project and its first file. */
+export const NEW_SECTION: ProjectsSection<'new'> = {
+  id: 'new',
+  label: 'New project',
+  intro: 'Create a new project with a name, board, and file.',
+};
+
 export const FIRST_SECTION: ProjectsSectionId = 'all';
 
+const SECTIONS: readonly ProjectsSection[] = [...LIST_SECTIONS, ACTIVE_SECTION, NEW_SECTION];
+
 export function projectsSection(id: ProjectsSectionId): ProjectsSection {
-  return id === ACTIVE_SECTION.id ? ACTIVE_SECTION : (LIST_SECTIONS.find((section) => section.id === id) ?? LIST_SECTIONS[0]);
+  const page = pageOf(id);
+  return SECTIONS.find((section) => section.id === page) ?? LIST_SECTIONS[0];
+}
+
+/** Whether `id` shows the Active project's page, at its top or at its files. */
+export function isActiveProjectSection(id: ProjectsSectionId | null): id is ActiveProjectSectionId {
+  return id === 'active' || id === 'active-files';
+}
+
+/** The page a section shows: Files shows the Active project's page. */
+export function pageOf(id: ProjectsSectionId): Exclude<ProjectsSectionId, 'active-files'> {
+  return isActiveProjectSection(id) ? 'active' : id;
+}
+
+export function isListSection(id: ProjectsSectionId): id is ListSectionId {
+  return LIST_SECTIONS.some((section) => section.id === id);
 }

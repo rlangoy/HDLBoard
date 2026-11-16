@@ -135,9 +135,18 @@ Drop the project file with its files (or the `.zip`) onto the Files panel or the
 
 There is always a project. When no other is open, the files in Files are the **Default** project (with no description; **Download All** writes "Not set yet" in the project file while the description is empty): the start-up files, examples you open, and files you drop or make all join it, and **Save project** stores it as `default.hdlboard.json` with its files in `default/src/`, like any project. Rename it and describe it on the project page to make it your own. **Close project** goes back to the Default project, with the files Files holds.
 
-To start a new, empty project, click **New project** on the Projects page. Type its name (the project file is named after it), and under **Files you can add** click **Add to project** for each file that belongs to it, or **Add all**. Files you make or upload afterwards join the project at once. The **−** button on a file in Project Files takes it out of the project again; the file stays in Files.
+To start a new project, click **New project** in the Projects page's sidebar (or **New project** on its ⋮ menu). Fill in one form:
 
-**+** (New File) → **Project** still works too: it makes a project with every file now in Files.
+- **Project name**: the project file is named after it.
+- **Board**: the board the project is for; its description is shown under the list.
+- **File name**: the project's first file, and the entity or module in it. It follows the project name until you type your own; empty, it is named after the project.
+- **Language**: VHDL (`.vhdl`) or Verilog (`.v`).
+
+The line under the file name says exactly what **Create project** makes, e.g. *Creates Traffic_light.vhdl with an entity named Traffic_light and the DE1-SoC board's ports.* A name with spaces or other characters a design name cannot hold is made into one (`Traffic light` → `Traffic_light`), and a name that is one of the board's ports gets `_top` added. If the open project has unsaved changes, you are asked first whether to save them; with files in Files, you are asked whether the new project keeps them. The new file then opens in the editor. **Cancel** goes back to where you were and creates nothing.
+
+Files you make or upload afterwards join the project at once. Under **Files you can add** in Active project, **Add to project** adds a file already in Files. The **−** button on a file in Project Files takes it out of the project again; the file stays in Files.
+
+**+** (New File) → **Project** still works too.
 
 Files you rename or delete keep their description, or leave the project.
 

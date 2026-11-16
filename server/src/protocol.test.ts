@@ -86,3 +86,9 @@ describe('OPTIONS', () => {
     assert.equal(encodeClientFrame(decodeClientFrame(text) as Parameters<typeof encodeClientFrame>[0]), text);
   });
 });
+
+describe('a RUN frame that cannot be decoded', () => {
+  test('is marked as a RUN, so its refusal ends the run', () => {
+    assert.deepEqual(decodeClientFrame('RUN top.vhd\n'), { message: 'RUN body contains no @@FILE ...@@ sections', run: true });
+  });
+});

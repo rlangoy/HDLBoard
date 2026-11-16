@@ -31,7 +31,9 @@ import {
 // 4: timed STIM steps, `STIM <bits>/<holdNs> … <bits>` — a bouncing pushbutton.
 // 5: `ERROR busy` — the server is full; this connection was refused, or closed for a new one.
 // 6: `OPTIONS` — the project's compiler options (compilerOptions.ts), sent before RUN.
-const PROTOCOL_VERSION = '6';
+// 7: an `ERROR protocol` never ends a run: it refuses one request (RESET, WAVE-GET, a bad
+// STIM) and the run goes on, while a refused RUN ends with `DONE refused` after it.
+const PROTOCOL_VERSION = '7';
 /**
  * How long a socket told to go gets to close before it is cut. A proxy may hold the close
  * frame back (Render's did: the tab kept a dead socket open), and cutting the connection
@@ -95,9 +97,12 @@ function boundedOutput(ws: WebSocket, limits: WsLimits, clientAddress: string): 
   });
 }
 
-/** Logs it, tells the peer why (`ERROR busy`), then closes — and cuts, if the close is held up. */
-function closeBusy(peer: Peer, text: string, logLine: string): void {
-  console.log(logLine);
+/**
+ * Logs it, tells the peer why (`ERROR busy`), then closes — and cuts, if the close is held
+ * up. No `logLine`: told and closed, but not logged (one refused again within the minute).
+ */
+function closeBusy(peer: Peer, text: string, logLine: string | undefined): void {
+  if (logLine !== undefined) console.log(logLine);
   peer.output.send(encodeServerFrame({ verb: 'ERROR', stage: 'busy', text }));
   peer.output.dispose();
   peer.ws.close(CLOSE_TRY_AGAIN_LATER, 'server busy');
@@ -105,7 +110,7 @@ function closeBusy(peer: Peer, text: string, logLine: string): void {
 }
 
 /** Refuses a socket that got no place, before any session is made for it. */
-export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string; logAddress: string }): void {
+export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string | undefined; logAddress: string }): void {
   // An error while the close is in progress must not go unheard: that would end the process.
   ws.on('error', () => {});
   closeBusy({ ws, output: boundedOutput(ws, limits, reason.logAddress) }, reason.text, reason.logLine);
@@ -199,7 +204,7 @@ export class ClientConnection implements OpenSession, Peer {
     if (!this.budget.takeMessage(byteLength(data))) return this.closeForFlooding();
     if (isBinary) return this.refuseBinary();
     const frame = decodeClientFrame(data.toString('utf8'));
-    if ('message' in frame) return this.send({ verb: 'ERROR', stage: 'protocol', text: frame.message });
+    if ('message' in frame) return frame.run ? this.refuseRun(frame.message) : this.send({ verb: 'ERROR', stage: 'protocol', text: frame.message });
     this.handle(frame);
   }
 
@@ -215,13 +220,23 @@ export class ClientConnection implements OpenSession, Peer {
     this.ws.close();
   }
 
+  /**
+   * A RUN that never reaches the session: why, then `DONE refused`, as the session refuses
+   * one (Session.refuseRun). An `ERROR protocol` alone leaves a run going (protocol 7), and
+   * the page would wait on it for ever.
+   */
+  private refuseRun(text: string): void {
+    this.send({ verb: 'ERROR', stage: 'protocol', text });
+    this.send({ verb: 'DONE', reason: 'refused' });
+  }
+
   private hello(): void {
     this.helloed = true;
     this.send({ verb: 'WELCOME', version: PROTOCOL_VERSION });
   }
 
   private run(frame: Extract<ClientFrame, { verb: 'RUN' }>): void {
-    if (!this.helloed) return this.send({ verb: 'ERROR', stage: 'protocol', text: 'RUN sent before HELLO.' });
+    if (!this.helloed) return this.refuseRun('RUN sent before HELLO.');
     // A RUN over the work budget ends like one on a full server, so the page lets go of the run.
     if (!this.budget.takeWork()) return this.closeBusy(TOO_MANY_RUNS_TEXT, TOO_MANY_RUNS_LOG_LINE);
     this.session.handleRun(frame.files, frame.topFile, frame.runTarget).catch((e) => {

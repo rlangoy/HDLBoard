@@ -36,9 +36,14 @@ export type ObjectType =
 
 export type ObjectClass = 'signal' | 'variable' | 'constant' | 'port' | 'generic' | 'parameter' | 'loop';
 
+/** Which way a port's values go: `in` is read by the design, `out` driven by it. */
+export type PortMode = 'in' | 'out' | 'inout' | 'buffer' | 'linkage';
+
 export interface DeclaredObject {
   readonly name: string;
   readonly objectClass: ObjectClass;
+  /** A port's mode as written; `in`, VHDL's default, when none is. Absent on other objects. */
+  readonly mode?: PortMode;
   /** 1-based. */
   readonly line: number;
   /** The subtype indication as written, spaces collapsed: `integer range 0 to 3`. */
@@ -118,7 +123,9 @@ const PREDEFINED_RANGES: Readonly<Record<string, string | undefined>> = {
   positive: `1 to ${INTEGER_HIGH}`,
 };
 
-const MODE_WORDS = /^(?:in|out|inout|buffer|linkage)\s+/i;
+const MODE_WORDS = /^(?<mode>in|out|inout|buffer|linkage)\s+/i;
+/** What a port without a mode word is. */
+const DEFAULT_PORT_MODE: PortMode = 'in';
 const RANGE_TEXT = /^(?<left>.+?)\s+(?<direction>to|downto)\s+(?<right>.+)$/is;
 const RANGE_ATTRIBUTE = /^(?<name>\w+)'(?<attribute>range|reverse_range)$/i;
 /** `natural range 0 to 7` in a loop or an index constraint: the type in front adds nothing. */
@@ -207,6 +214,12 @@ function subtypeAndDefault(text: string): { readonly typeText: string; readonly 
   const indication = assignment < 0 ? text : text.slice(0, assignment);
   const typeText = collapse(indication).replace(MODE_WORDS, '');
   return assignment < 0 ? { typeText } : { typeText, initial: collapse(text.slice(assignment + 2)) };
+}
+
+/** `out std_logic` → `out`; a port written without a mode is `in`. */
+function portModeOf(text: string): PortMode {
+  const written = MODE_WORDS.exec(collapse(text))?.groups?.mode.toLowerCase() as PortMode | undefined;
+  return written ?? DEFAULT_PORT_MODE;
 }
 
 /** Where each line starts in the text the lines make, joined by newlines. */
@@ -438,7 +451,8 @@ export class VhdlDeclarations {
   private add(names: string, objectClass: ObjectClass, offset: number, text: string): void {
     const { typeText, initial } = subtypeAndDefault(text);
     const scope = this.scopeAround(offset);
-    for (const name of namesIn(names)) this.push({ name, objectClass, line: this.lineAt(offset), typeText, initial }, scope);
+    const mode = objectClass === 'port' ? { mode: portModeOf(text) } : {};
+    for (const name of namesIn(names)) this.push({ name, objectClass, line: this.lineAt(offset), typeText, initial, ...mode }, scope);
   }
 
   private readObjects(): void {

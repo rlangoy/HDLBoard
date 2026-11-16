@@ -122,17 +122,17 @@ describe('recording a waveform', () => {
   }
   const transfersStarted = (frames: ServerFrame[]) => frames.filter((f) => f.verb === 'WAVE-BEGIN').length;
 
-  test('a second request for a waveform being sent shares its transfer', () =>
-    withRecordedWave(async ({ s }) => {
-      const first = s.handleWaveGet(1);
-      assert.equal(s.handleWaveGet(1), first);
-      await first;
-    }));
-
-  test('a shared transfer sends the waveform once', () =>
+  // The page gave up on the first (a new view, then Download): the second must not join it halfway.
+  test('a second request for a waveform being sent gets it whole, with its own WAVE-BEGIN', () =>
     withRecordedWave(async ({ s, frames }) => {
       await Promise.all([s.handleWaveGet(1), s.handleWaveGet(1)]);
-      assert.equal(transfersStarted(frames), 1);
+      assert.equal(transfersStarted(frames), 2);
+    }));
+
+  test('the second transfer begins only once the first has ended: their frames never mix', () =>
+    withRecordedWave(async ({ s, frames }) => {
+      await Promise.all([s.handleWaveGet(1), s.handleWaveGet(1)]);
+      assert.deepEqual(verbs(frames).filter((verb) => verb.startsWith('WAVE-') && verb !== 'WAVE-READY'), ['WAVE-BEGIN', 'WAVE-END', 'WAVE-BEGIN', 'WAVE-END']);
     }));
 
   test('a request after the transfer ended sends it again', () =>

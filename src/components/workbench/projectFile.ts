@@ -301,14 +301,6 @@ export function defaultProject(
   return withSaved(project, files);
 }
 
-/**
- * Create Project: a new, empty project. The files now in Files are offered on the
- * project settings to be added (availableFiles); files made or uploaded later join at once.
- */
-export function startProject(fileNames: readonly string[], board: string): OpenProject {
-  return { ...newProject('', [], board), excluded: fileNames.map(nameKey) };
-}
-
 export type ProjectDetails = Partial<Pick<OpenProject, 'name' | 'board' | 'description' | 'fileName' | 'sourceDirectory'>>;
 
 /**

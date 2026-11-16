@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { confirmDialog } from './desktop';
 import { ACCEPTED_FILES_TEXT, hasTopDot } from './fileKinds';
@@ -9,7 +9,7 @@ import { rowsByFolder, type FileRow } from './fileRows';
 import { FileRowLabel } from './FileRowLabel';
 import { BookIcon, DeleteIcon, DownloadIcon, EditIcon, FileIcon, FilesIcon, FolderOpenIcon, FolderZipIcon, ProjectIcon, UploadIcon } from './icons';
 import { ScrollArea } from './ScrollArea';
-import { droppedFileHandles, type FileHandles } from './fileSystemAccess';
+import { useFileDrop, type FilesDropped } from './useFileDrop';
 import './FileExplorer.css';
 
 export interface FileExplorerProps {
@@ -33,7 +33,7 @@ export interface FileExplorerProps {
   /** The Examples pane is showing: its button looks pressed. */
   examplesOpen?: boolean;
   /** Files dropped anywhere on this panel — Workbench does the reading/filtering. */
-  onFilesDropped: (files: FileList, handles: Promise<FileHandles>) => void;
+  onFilesDropped: FilesDropped;
   onSetTopFile: (id: string) => void;
   /** A simulation is compiling or running: the top file can't change until it stops. */
   topLocked?: boolean;
@@ -109,36 +109,8 @@ export function FileExplorer({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
-  // A ref-counted depth rather than a plain boolean: dragging over a child
-  // element fires dragleave on the parent before dragenter on the child,
-  // so a naive "set false on dragleave" flickers the highlight off and on
-  // as the pointer crosses every row underneath it.
-  const [dragDepth, setDragDepth] = useState(0);
+  const drop = useFileDrop(onFilesDropped);
   const treeRef = useScrollShownIntoView(rows);
-
-  const handleDragEnter = (e: DragEvent<HTMLElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragDepth((d) => d + 1);
-  };
-
-  const handleDragOver = (e: DragEvent<HTMLElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault(); // required for onDrop to fire at all
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  const handleDragLeave = (e: DragEvent<HTMLElement>) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragDepth((d) => Math.max(0, d - 1));
-  };
-
-  const handleDrop = (e: DragEvent<HTMLElement>) => {
-    e.preventDefault();
-    setDragDepth(0);
-    if (e.dataTransfer.files.length > 0) onFilesDropped(e.dataTransfer.files, droppedFileHandles(e.dataTransfer));
-  };
 
   const toggleFolder = (folder: string) => {
     setCollapsed((prev) => ({ ...prev, [folder]: !prev[folder] }));
@@ -173,13 +145,10 @@ export function FileExplorer({
 
   return (
     <aside
-      className={cx('wb-files', dragDepth > 0 && 'is-drag-over')}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      className={cx('wb-files', drop.dragging && 'is-drag-over')}
+      {...drop.handlers}
     >
-      {dragDepth > 0 && (
+      {drop.dragging && (
         <div className="wb-files__drop-hint" aria-hidden="true">
           <span className="wb-icon wb-icon--upload" aria-hidden="true" />
           Drop {ACCEPTED_FILES_TEXT} files

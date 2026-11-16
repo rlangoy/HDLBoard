@@ -269,6 +269,25 @@ describe('Session: why a failed run stopped', () => {
     assert.equal(text, 'The simulation stopped:\nFATAL: top.v:9: boom');
   });
 
+  describe("a design's own stop with a status from 128 up (std.env.stop(200))", () => {
+    const STOP_200 = 'simulation stopped @5ns with status 200';
+
+    test('is the reason the student is given', async () => {
+      const { text } = await failedRun([STOP_200], { code: 200, stderr: '' }, 96);
+      assert.equal(text, 'The simulation stopped as reported above.');
+    });
+
+    test('is no crash in the server log', async () => {
+      const { logged } = await failedRun([STOP_200], { code: 200, stderr: '' });
+      assert.deepEqual(logged, []);
+    });
+
+    test('a signal after it is still a crash', async () => {
+      const { logged } = await failedRun([STOP_200], { code: null, stderr: '', signal: 'SIGKILL' });
+      assert.deepEqual(logged, ['GHDL crashed on SIGKILL']);
+    });
+  });
+
   test('a $fatal in a file whose name holds spaces is no crash', async () => {
     const { logged } = await failedRun(['FATAL: my test.v:5: fatal reason'], { code: 1, stderr: '' });
     assert.deepEqual(logged, []);

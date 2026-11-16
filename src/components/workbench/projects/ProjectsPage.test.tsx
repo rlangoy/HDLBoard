@@ -13,6 +13,7 @@ import type { OpenProjectInfo } from './openProject';
 import { ProjectsPage, type ProjectsPageProps } from './ProjectsPage';
 import type { ProjectsSectionId } from './projectsSections';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
+import { ProjectsSidebar } from './ProjectsSidebar';
 
 const ignore = () => undefined;
 
@@ -52,7 +53,9 @@ const PROPS: ProjectsPageProps = {
   info,
   saves: { toComputer: ignore, toGitHub: ignore },
   nameAsk: { missing: false, focusPending: false, onFocused: ignore, ask: ignore },
-  lists: { connection: signedOut, gitHubProjects, localProjects: local, opening: false, onOpenItem: ignore, onNewProject: ignore, onSignIn: ignore, onOpenFromUrl: ignore },
+  lists: { connection: signedOut, gitHubProjects, localProjects: local, opening: false, onOpenItem: ignore, onSignIn: ignore, onOpenFromUrl: ignore },
+  onCreateProject: ignore,
+  newProject: { language: 'vhdl', filesNow: [] },
   active: {
     project: newProject('Custom_Board', ['top.vhd'], 'de1-soc'),
     rows: [],
@@ -61,6 +64,7 @@ const PROPS: ProjectsPageProps = {
     onDetailsChange: ignore,
     board: { boards: BUILT_IN_CATALOG, onChange: ignore, locked: false, onChooseBoard: ignore },
     files: { available: [], onAddFiles: ignore, onLeaveProject: ignore, onEntryChange: ignore, onOpenFile: ignore, onRemoveEntry: ignore, onReloadFromUrl: ignore, onFolderChosen: ignore },
+    addFiles: { suggestedName: 'untitled1', existingNames: ['top.vhd'], onCreate: ignore, onBrowse: ignore, onDrop: ignore, busy: false },
     local: { saveHint: '', emptiedFolders: [], onRemoveFolder: ignore },
     github: { link: undefined, someoneElses: false, projects: gitHubProjects },
     onCloseProject: ignore,
@@ -73,9 +77,13 @@ const render = (section: ProjectsSectionId, props: Partial<ProjectsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('the sidebar', () => {
-  test('lists where projects are stored, and the active project below them', () => {
+  test('puts New project directly after On GitHub, then the active project and its children', () => {
     const labels = [...render('all').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project']);
+    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'New project', 'Active project', 'Overview', 'Files', 'Add file']);
+  });
+
+  test('marks New project while its form is shown', () => {
+    expect(render('new')).toMatch(/aria-current="page"[^>]*><span class="wb-page-nav__icon">.*?<\/span>New project</);
   });
 
   test('puts a dot on the active project while it has unsaved changes', () => {
@@ -85,6 +93,69 @@ describe('the sidebar', () => {
 
   test('marks the section shown', () => {
     expect(render('github')).toMatch(/aria-current="page"[^>]*><span class="wb-page-nav__icon">.*?<\/span>On GitHub</);
+  });
+
+  test.each([['active', 'Overview'], ['active-files', 'Files']] as const)('marks only the selected child for %s', (section, label) => {
+    const html = render(section);
+    expect([...html.matchAll(/aria-current="page"/g)]).toHaveLength(1);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*><span[^>]*>.*?</span>${label}</button>`));
+  });
+
+  test('keeps the parent navigation without a submenu when no active project actions exist', () => {
+    const html = renderToStaticMarkup(<ProjectsSidebar current="active" unsaved={false} onSelect={ignore} onBack={ignore} />);
+    expect(html).not.toContain('wb-projects-subnav');
+    expect(html).toMatch(/aria-current="page"[^>]*>.*?Active project/);
+  });
+
+  test('has Add file go to Add existing files rather than open a menu', () => {
+    const addFileTag = /<button([^>]*)>(?:(?!<button).)*?Add file<\/button>/.exec(render('active'))?.[1];
+    expect(addFileTag).toBe(' type="button" class="wb-page-nav__item"');
+  });
+
+  test('marks Add existing files as where Add file goes', () => {
+    expect(render('active-files')).toContain('data-add-existing-files');
+  });
+});
+
+test('Files keeps the overview and scrolls to its existing file section', () => {
+  const html = render('active-files');
+  expect(html).toContain('Project files (0)');
+  expect(html).toContain('wb-projects-current');
+  expect(html).toContain('>Project details<');
+  expect(html).toContain('>Storage<');
+  expect(html).toContain('data-project-files');
+});
+
+describe('adding files under Project files', () => {
+  const busyPage = () => render('active-files', { active: { ...PROPS.active, addFiles: { ...PROPS.active.addFiles, busy: true } } });
+
+  test('offers a new file in each language', () => {
+    expect(textOf(render('active-files'))).toMatch(/Create new file VHDL file Verilog file/);
+  });
+
+  test('offers the drop area with Browse files', () => {
+    expect(textOf(render('active-files'))).toMatch(/Add existing files Drag and drop files here or Browse files/);
+  });
+
+  test('puts the ways to add files after the file list', () => {
+    const html = render('active-files');
+    expect(html.indexOf('Create new file')).toBeGreaterThan(html.indexOf('No files in the project yet'));
+  });
+
+  test('points an empty project at the ways to add files', () => {
+    expect(textOf(render('active-files'))).toContain('Create new ones or add existing files in Add files below.');
+  });
+
+  test('waits with the language buttons while the project is busy', () => {
+    expect(busyPage().match(/wb-add-files__language" disabled=""/g)).toHaveLength(2);
+  });
+
+  test('puts Add files in a card of its own after Project files', () => {
+    expect(textOf(render('active-files'))).toMatch(/Project files \(0\).*Add files Create new file/);
+  });
+
+  test('waits with Browse files while the project is busy', () => {
+    expect(busyPage()).toMatch(/disabled="">Browse files/);
   });
 });
 
@@ -170,9 +241,9 @@ describe('an empty list on this computer says why', () => {
 });
 
 describe('the Active project section', () => {
-  test('has its details, storage, files and the rest, in that order', () => {
+  test('has its details, storage, files, adding files and the rest, in that order', () => {
     const titles = [...render('active').matchAll(/class="wb-page-card__toggle"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(titles).toEqual(['Project details', 'Storage', 'Project files (0)', 'Advanced']);
+    expect(titles).toEqual(['Project details', 'Storage', 'Project files (0)', 'Add files', 'Advanced']);
   });
 
   test('marks where Save writes', () => {
@@ -188,6 +259,69 @@ describe('the Active project section', () => {
     const html = render('active', { active: { ...PROPS.active, needsName: true } });
     expect(html).toContain('placeholder="Enter project name"');
     expect(textOf(html)).toContain('Project name is required before it is saved');
+  });
+});
+
+describe('the New project section', () => {
+  test('has its heading and the short description', () => {
+    expect(textOf(render('new'))).toContain('New project Create a new project with a name, board, and file.');
+  });
+
+  test('is a form inline in the page', () => {
+    expect(render('new')).toContain('<form class="wb-newproject"');
+  });
+
+  test('is not a dialog', () => {
+    expect(render('new')).not.toContain('role="dialog"');
+  });
+
+  test('has no folding header', () => {
+    expect(render('new')).not.toContain('wb-page-card__toggle');
+  });
+
+  test('asks for the project name, board, file name and language, in that order', () => {
+    const labels = [...render('new').matchAll(/class="wb-newproject__label"[^>]*>([^<]+)</g)].map((match) => match[1]);
+    expect(labels).toEqual(['Project name', 'Board', 'File name', 'Language']);
+  });
+
+  test('starts on the open project\'s board, described under the list', () => {
+    expect(textOf(render('new'))).toContain('Terasic DE1-SoC, System Builder names: KEY and HEX0 … HEX5.');
+  });
+
+  test('offers VHDL and Verilog as radio buttons, VHDL chosen', () => {
+    const radios = [...render('new').matchAll(/<input type="radio"[^>]*>/g)].map(([tag]) => [/value="(\w+)"/.exec(tag)?.[1], tag.includes('checked')]);
+    expect(radios).toEqual([['vhdl', true], ['verilog', false]]);
+  });
+
+  test('starts on the language preferred in Settings', () => {
+    const checked = [...render('new', { newProject: { language: 'verilog', filesNow: [] } }).matchAll(/<input type="radio"[^>]*>/g)].find(([tag]) => tag.includes('checked'));
+    expect(checked?.[0]).toContain('value="verilog"');
+  });
+
+  test('has Cancel and Create project, Create project the primary button', () => {
+    expect(render('new')).toMatch(/>Cancel<\/button><button type="submit" class="wb-projects__btn is-primary">Create project</);
+  });
+
+  test('says which project it replaces, and that its unsaved changes are asked about', () => {
+    expect(textOf(render('new'))).toContain('The new project replaces the open project, Custom_Board . It has unsaved changes');
+  });
+
+  test('follows the open project\'s board until another is chosen', () => {
+    const onBasys = { ...PROPS.active, project: newProject('Basys lab', [], 'basys3') };
+    expect(render('new', { active: onBasys })).toMatch(/<option value="basys3" selected="">/);
+  });
+
+  test('says nothing about the files in Files before a name is typed', () => {
+    const html = render('new', { newProject: { language: 'vhdl', filesNow: ['DE1_SoC.vhdl'] } });
+    expect(textOf(html)).not.toContain('If you keep the files');
+  });
+
+  test('names no project when the open one has no name yet', () => {
+    expect(textOf(render('new', { info: { ...info, name: '' } }))).toContain('The new project replaces the open project. It has');
+  });
+
+  test('has no ⋮ menu of its own', () => {
+    expect(render('new')).not.toContain('More: new project, open another');
   });
 });
 

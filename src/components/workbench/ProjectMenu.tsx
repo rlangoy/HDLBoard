@@ -78,11 +78,11 @@ export function ProjectMenu({ anchor, actions, onClose, header }: ProjectMenuPro
       event.preventDefault();
       event.stopPropagation();
       close();
-    } else if (event.key === 'Tab') onClose();
+    } else if (event.key === 'Tab') close();
   };
 
   const choose = (action: MenuAction) => {
-    onClose();
+    close();
     action.onSelect();
   };
 

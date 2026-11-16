@@ -396,6 +396,11 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M5 12h14', 'M12 5v14']} {...props} />;
 }
 
+/** A page with a plus at its corner: Create new file, on the Projects page. */
+export function FilePlusIcon(props: SVGProps<SVGSVGElement>) {
+  return <OutlineIcon paths={['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h5', 'M14 2v6h6l-6-6', 'M20 8v4', 'M18 15v6', 'M15 18h6']} {...props} />;
+}
+
 /** A minus: take a file out of the project. */
 export function MinusIcon(props: SVGProps<SVGSVGElement>) {
   return <OutlineIcon paths={['M5 12h14']} {...props} />;

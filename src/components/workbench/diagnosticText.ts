@@ -121,6 +121,11 @@ export const adviceText = {
 
 /** Icarus-specific wording uses the same inline and tooltip presentation as VHDL. */
 export const verilogAdviceText = {
+  /** An input port assigned in `always` (verilogPortAdvice.ts), the two sides the wrong way round. */
+  inputAssignedSwapped: (name: string, swapped: string): string =>
+    `${code(name)} is an input from the board, so the module can only read it — swap the two sides: ${code(swapped)}.`,
+  inputAssigned: (name: string): string =>
+    `${code(name)} is an input from the board, so the module can only read it — assign an ${code('output reg')} or a ${code('reg')} instead.`,
   unknownSystemTask: (name: string, suggestion?: string): string => suggestion
     ? `${code(name)} is not a known system task or function — did you mean ${code(suggestion)}?`
     : `${code(name)} is not defined — check its spelling and any required simulator extension.`,
@@ -298,6 +303,15 @@ export const typeText = {
   },
 };
 
+/** A port assigned that the design may only read (portModeAdvice.ts). */
+export const portText = {
+  /** `SW <= LEDR;`: the two sides the wrong way round, an output on the right. */
+  swapped: (input: string, fix: string): string =>
+    `${code(input)} is an input from the board, so the design can only read it — swap the two sides: ${code(fix)}.`,
+  inputAssigned: (input: string): string =>
+    `${code(input)} is an input port (in): the board drives it, so the design can only read it — assign an output port or a signal instead.`,
+};
+
 /** Where an earlier declaration is: a line of the same file, or of `fileName`. */
 export interface EarlierPlace {
   readonly line: number;
@@ -317,6 +331,15 @@ export const projectCheckText = {
       ? `${architecture} is already defined on line ${earlier.line}, and this one replaces it – ${advice}`
       : `${architecture} is already defined in ${earlier.fileName} (line ${earlier.line}), and only one of them is used – ${advice}`;
   },
+  /** An `out` port read inside its own design: VHDL-2008 allows it, VHDL-93 does not. */
+  outputRead: (port: string): string =>
+    `output port "${port}" is read here: fine in VHDL-2008, an error in VHDL-93 (many FPGA tools) – read a signal instead, and assign the port from it.`,
+  /** Verilog's `assign SW = LEDR;`: what Icarus reports as its testbench's port coerced to inout. */
+  outputDrivesInput: (output: string, input: string, swapped: string | undefined): string =>
+    `output port ${output} is coerced to inout. This assignment drives input ${input} from output ${output}; inputs can only be read.${swapped === undefined ? ' Assign an output port or a wire instead.' : ` The sides are probably reversed: ${swapped}`}`,
+  /** Verilog's `assign SW = …;` from anything else: Icarus accepts it silently, and the port gets a second driver. */
+  inputAssigned: (port: string): string =>
+    `This assignment drives input ${port}; inputs can only be read. Assign an output port or a wire instead.`,
 };
 
 /** The Quick Fix button: what it will add. */

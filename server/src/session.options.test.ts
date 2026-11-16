@@ -54,10 +54,11 @@ describe('the session compiler options', () => {
     assert.deepEqual(seen, []);
   });
 
-  test('say why the run was refused', async () => {
+  test('say why the run was refused, then end it', async () => {
     const { frames } = await runOnce((session) => session.handleOptions(decodeCompilerOptions('{"ghdl":{"x":1}}')));
     assert.deepEqual(frames, [
       { verb: 'ERROR', stage: 'protocol', text: `${RUN_REFUSED_FOR_OPTIONS}\nInvalid compiler options: ghdl.x is not a known option` },
+      { verb: 'DONE', reason: 'refused' },
     ]);
   });
 });

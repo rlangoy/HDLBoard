@@ -59,6 +59,22 @@ function pieceOf(line: string, start: number, end: number): Piece {
   return { text: trimmed, start: start + leading, end: start + leading + trimmed.length };
 }
 
+const NAME_HEAD = /^[A-Za-z]\w*/;
+
+/**
+ * The name of a value that is one name, maybe indexed or sliced (`LEDR`, `LEDR(3)`,
+ * `LEDR(7 downto 4)`); undefined for anything more (`LEDR(0) and LEDR(1)`): the index's
+ * `(` has to close at the value's end.
+ */
+export function oneNameOf(value: string): string | undefined {
+  const text = value.trim();
+  const name = NAME_HEAD.exec(text)?.[0];
+  if (name === undefined) return undefined;
+  const rest = text.slice(name.length).trimStart();
+  if (rest === '') return name;
+  return rest.startsWith('(') && closingParenthesis(codeShape(rest), 0) === rest.length - 1 ? name : undefined;
+}
+
 /** The index of the `)` that closes the `(` at `open`, in a code shape. */
 function closingParenthesis(shape: string, open: number): number | undefined {
   let depth = 0;

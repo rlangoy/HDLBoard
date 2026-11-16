@@ -16,7 +16,7 @@ import { type BoardDefinition } from '../../boards/types';
 export type NewFileLanguage = 'vhdl' | 'verilog';
 
 /** The extension a new file of each language gets; `.vhd` is what New File has always used. */
-const EXTENSION: Record<NewFileLanguage, string> = { vhdl: '.vhd', verilog: '.v' };
+export const NEW_FILE_EXTENSION: Readonly<Record<NewFileLanguage, string>> = { vhdl: '.vhd', verilog: '.v' };
 
 // A typed extension of either language is dropped, so "counter.v" with VHDL selected
 // becomes counter.vhd rather than counter.v.vhd — the radio button decides the language.
@@ -32,9 +32,25 @@ export function baseName(input: string): string {
   return input.trim().replace(SOURCE_EXTENSION, '');
 }
 
+/** What the design inside a file of each language is called. */
+export const DESIGN_UNIT: Readonly<Record<NewFileLanguage, string>> = { vhdl: 'an entity', verilog: 'a module' };
+
+const UNTITLED = 'untitled';
+
+/**
+ * What New File suggests: the first `untitled1`, `untitled2`, … that no file in Files has as
+ * its name without the extension, so it is free in either language.
+ */
+export function freeUntitledName(existingNames: readonly string[]): string {
+  const taken = new Set(existingNames.map((name) => baseName(name).toLowerCase()));
+  let number = 1;
+  while (taken.has(`${UNTITLED}${number}`)) number++;
+  return `${UNTITLED}${number}`;
+}
+
 /** The file name a typed name becomes for the chosen language. */
 export function newFileName(input: string, language: NewFileLanguage): string {
-  return `${baseName(input)}${EXTENSION[language]}`;
+  return `${baseName(input)}${NEW_FILE_EXTENSION[language]}`;
 }
 
 /**

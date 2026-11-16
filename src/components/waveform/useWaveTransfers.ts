@@ -14,11 +14,16 @@ import type { WaveClientHandlers, WaveReady } from '../workbench/hdlClient';
 import type { WaveWorker } from './useWaveWorker';
 import { needsFetch, type WaveEvent, type WaveState } from './waveState';
 
-/** What the transfer under way is for: the view, or a download of the file. */
+/**
+ * What the transfer under way is for: the view, or a download of the file. It takes
+ * frames only once its own `WAVE-BEGIN` has come: what is still arriving of a transfer
+ * given up on (`cancel`) belongs to that one, even when it is for the same run.
+ */
 interface Transfer {
   readonly run: number;
   readonly kind: 'view' | 'download';
   readonly chunks: ArrayBuffer[];
+  begun: boolean;
 }
 
 export interface TransferInput {
@@ -59,19 +64,23 @@ function useHandlers(input: TransferInput, current: MutableRefObject<Transfer | 
     return {
       onReady: (ready) => dispatch({ type: 'ready', ready }),
       onBegin: (run) => {
+        const transfer = current.current;
+        if (transfer?.run !== run || transfer.begun) return;
+        transfer.begun = true;
         const ready = stateRef.current.ready;
-        if (current.current?.run === run && current.current.kind === 'view' && ready?.run === run) {
+        if (transfer.kind === 'view' && ready?.run === run) {
           worker.post({ type: 'begin', run, format: ready.format, status: ready.status });
         }
       },
       onChunk: (chunk) => {
         const transfer = current.current;
-        if (transfer?.kind === 'download') transfer.chunks.push(chunk);
-        else if (transfer?.kind === 'view') worker.post({ type: 'chunk', run: transfer.run, chunk }, [chunk]);
+        if (!transfer?.begun) return;
+        if (transfer.kind === 'download') transfer.chunks.push(chunk);
+        else worker.post({ type: 'chunk', run: transfer.run, chunk }, [chunk]);
       },
       onEnd: (run) => {
         const transfer = current.current;
-        if (transfer?.run !== run) return;
+        if (transfer?.run !== run || !transfer.begun) return;
         current.current = null;
         if (transfer.kind === 'view') finishView(run);
         else finishDownload(transfer);
@@ -93,7 +102,7 @@ export function useWaveTransfers(input: TransferInput): WaveTransfers {
   waveGet.current = input.waveGet;
 
   const start = useCallback((run: number, kind: Transfer['kind']) => {
-    current.current = { run, kind, chunks: [] };
+    current.current = { run, kind, chunks: [], begun: false };
     waveGet.current(run);
   }, []);
 
