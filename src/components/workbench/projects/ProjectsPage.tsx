@@ -16,13 +16,15 @@ import { NewProjectSection } from './NewProjectSection';
 import type { OpenProjectInfo } from './openProject';
 import { ProjectAdvancedCard } from './ProjectAdvancedCard';
 import { ProjectDetailsCard, type BoardChoice, type NameRequest } from './ProjectDetailsCard';
+import { AddFilesCard, type AddProjectFiles } from './AddFilesCard';
 import { ProjectFilesCard, type ProjectFileActions } from './ProjectFilesCard';
 import { ProjectListSection, type ProjectListsProps } from './ProjectListSection';
-import { ACTIVE_SECTION, FIRST_SECTION, isListSection, NEW_SECTION, projectsSection, type ListSectionId, type ProjectsSectionId } from './projectsSections';
+import { ACTIVE_SECTION, FIRST_SECTION, isListSection, NEW_SECTION, pageOf, projectsSection, type ListSectionId, type ProjectsSectionId } from './projectsSections';
 import { ProjectsSidebar, SECTION_ICONS } from './ProjectsSidebar';
 import type { NameAsk } from './useProjectsPage';
 import { ProjectStorageCard, type GitHubStorage, type LocalStorage } from './ProjectStorageCard';
 import './ProjectsPage.css';
+import { useActiveProjectNavigation } from './useActiveProjectNavigation';
 
 /** The open project's own settings, for the Active project section. */
 export interface ActiveProjectProps {
@@ -36,6 +38,7 @@ export interface ActiveProjectProps {
   onDetailsChange: (details: ProjectDetails) => void;
   board: BoardChoice;
   files: ProjectFileActions;
+  addFiles: AddProjectFiles;
   local: LocalStorage;
   github: GitHubStorage;
   onCloseProject: () => void;
@@ -75,14 +78,19 @@ const TITLE_ID = 'wb-projects-title';
 
 /**
  * The Projects page (issue #44), in the editor's place like Settings: a sidebar of where
- * projects are stored, then the active project and New project at its foot. The lists
+ * projects are stored and New project, then the active project and its file actions. The lists
  * have the open project on top; Active project shows it in full, with where Save writes it.
  */
 export function ProjectsPage(props: ProjectsPageProps) {
   const { section, onClose, info, saves, lists, active, nameAsk } = props;
-  const { label, intro } = projectsSection(section);
+  const pageSection = pageOf(section);
+  const { label, intro } = projectsSection(pageSection);
   const name = nameGuard(active.needsName, nameAsk);
   const flow = useNewProjectFlow(section, props.onSectionChange, props.newProject.language);
+  const navigation = useActiveProjectNavigation(section, flow.select);
+  const sidebar = (
+    <ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={navigation.select} onBack={onClose} onAddFiles={navigation.showAddExistingFiles} />
+  );
   const shown: ShownSection = {
     page: props,
     busy: active.busy !== null || active.github.projects.busy !== null,
@@ -90,16 +98,17 @@ export function ProjectsPage(props: ProjectsPageProps) {
     name,
     flow,
     openNewProject: () => flow.select(NEW_SECTION.id),
+    unfoldAddFiles: navigation.unfoldingAddFiles,
   };
 
   return (
-    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={flow.select} onBack={onClose} />}>
-      <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
+    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={sidebar}>
+      <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[pageSection]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
         {isListSection(section) && <MoreMenuButton label="More: new project, open another" actions={listsMenu(lists, shown.openNewProject)} />}
       </PageHeader>
-      {/* Keyed by section, so another section starts at its top. */}
-      <ScrollArea key={section} className="wb-page__scroll">
-        <div className="wb-projects__body">{sectionBody(section, shown)}</div>
+      {/* Overview and Files share the mounted page and its card state. */}
+      <ScrollArea key={pageSection} className="wb-page__scroll">
+        <div ref={navigation.bodyRef} className="wb-projects__body">{sectionBody(pageSection, shown)}</div>
       </ScrollArea>
     </Page>
   );
@@ -114,10 +123,12 @@ interface ShownSection {
   name: NameGuard;
   flow: NewProjectFlow;
   openNewProject: () => void;
+  /** Add files unfolds for the sidebar's Add file (useActiveProjectNavigation). */
+  unfoldAddFiles: boolean;
 }
 
 /** The section's body: one of the lists, or a section of its own. */
-function sectionBody(section: ProjectsSectionId, shown: ShownSection): ReactNode {
+function sectionBody(section: Exclude<ProjectsSectionId, 'active-files'>, shown: ShownSection): ReactNode {
   return isListSection(section) ? listBody(section, shown) : OWN_SECTION_BODIES[section](shown);
 }
 
@@ -136,8 +147,8 @@ function listBody(section: ListSectionId, { page, name, flow, openNewProject }: 
 }
 
 /** The sections that are not lists, each drawn. */
-const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSectionId>, (shown: ShownSection) => ReactNode>> = {
-  active: ({ page, busy, saves, name, openNewProject }) => (
+const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSectionId | 'active-files'>, (shown: ShownSection) => ReactNode>> = {
+  active: ({ page, busy, saves, name, openNewProject, unfoldAddFiles }) => (
     <>
       <CurrentProjectCard
         project={page.info}
@@ -146,7 +157,7 @@ const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSection
         onOpenInWorkspace={page.onClose}
         menu={[...listsMenu(page.lists, openNewProject), closeProjectAction(page.active)]}
       />
-      <ActiveProjectSection active={page.active} info={page.info} busy={busy} name={name.request} saves={saves} />
+      <ActiveProjectSection active={page.active} info={page.info} busy={busy} name={name.request} saves={saves} unfoldAddFiles={unfoldAddFiles} />
     </>
   ),
   new: ({ page, busy, flow }) => (
@@ -216,10 +227,11 @@ interface ActiveProjectSectionProps {
   name: NameRequest;
   /** The saves, each waiting for a name first. */
   saves: ProjectSaves;
+  unfoldAddFiles: boolean;
 }
 
 /** Active project: its details, where it is saved, its files, and the rest (issue #44), each card open. */
-function ActiveProjectSection({ active, info, busy, name, saves }: ActiveProjectSectionProps) {
+function ActiveProjectSection({ active, info, busy, name, saves, unfoldAddFiles }: ActiveProjectSectionProps) {
   return (
     <>
       <ProjectDetailsCard project={active.project} onChange={active.onDetailsChange} board={active.board} name={name} />
@@ -232,7 +244,10 @@ function ActiveProjectSection({ active, info, busy, name, saves }: ActiveProject
         onSaveToComputer={saves.toComputer}
         onSaveToGitHub={saves.toGitHub}
       />
-      <ProjectFilesCard project={active.project} rows={active.rows} busy={active.busy} actions={active.files} />
+      <div data-project-files>
+        <ProjectFilesCard project={active.project} rows={active.rows} busy={active.busy} actions={active.files} />
+      </div>
+      <AddFilesCard addFiles={active.addFiles} unfold={unfoldAddFiles} />
       <ProjectAdvancedCard project={active.project} onCloseProject={active.onCloseProject} />
     </>
   );

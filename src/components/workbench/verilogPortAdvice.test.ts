@@ -10,7 +10,11 @@ import { describe, expect, test } from 'vitest';
 import { adviseDiagnostics, type AdvisedDiagnostic } from './diagnosticAdvice';
 import { locateDiagnostics, type RunSnapshot } from './diagnosticLocation';
 import { parseDiagnostics } from './diagnostics';
-import { inputAssignWarnings } from './verilogPortAdvice';
+import { inputAssignChecks, withoutExplainedCoercions } from './verilogPortAdvice';
+import { addToFiles, NO_DIAGNOSTICS } from './diagnosticStore';
+import { fullMessageText } from './diagnosticText';
+
+const inputAssignWarnings = (snapshot: RunSnapshot) => inputAssignChecks(snapshot).warnings;
 
 const HEADER = [
   'module top (',
@@ -64,16 +68,16 @@ describe('an input port assigned in always (Icarus\'s error)', () => {
 describe('inputAssignWarnings: assign to an input port, which Icarus accepts silently', () => {
   test('warns in Icarus\'s format, and swaps onto an output wire', () => {
     expect(inputAssignWarnings(run('    assign SW = LEDR;'))).toEqual([
-      `top.v:${STATEMENT_LINE}: warning: input port "SW" is driven by the board, and this assign drives it too, so it can read x – swap the two sides: assign LEDR = SW;`,
+      `top.v:${STATEMENT_LINE}: warning: output port LEDR is coerced to inout. This assignment drives input SW from output LEDR; inputs can only be read. The sides are probably reversed: assign LEDR = SW;`,
     ]);
   });
 
   test('keeps the selects on both sides', () => {
-    expect(inputAssignWarnings(run('    assign SW[0] = LEDR[0];'))[0]).toMatch(/swap the two sides: assign LEDR\[0\] = SW\[0\];$/);
+    expect(inputAssignWarnings(run('    assign SW[0] = LEDR[0];'))[0]).toMatch(/sides are probably reversed: assign LEDR\[0\] = SW\[0\];$/);
   });
 
   test('onto an output reg: no swap, assign cannot drive a reg', () => {
-    expect(inputAssignWarnings(run('    assign SW[6:0] = HEX0_N;'))[0]).toMatch(/assign an output port or a wire instead\.$/);
+    expect(inputAssignWarnings(run('    assign SW[6:0] = HEX0_N;'))[0]).toMatch(/Assign an output port or a wire instead\.$/);
   });
 
   test('an output assigned is fine', () => {
@@ -82,6 +86,18 @@ describe('inputAssignWarnings: assign to an input port, which Icarus accepts sil
 
   test('a commented-out assign is no assign', () => {
     expect(inputAssignWarnings(run('    // assign SW = LEDR;'))).toEqual([]);
+  });
+
+  test('block comments and strings cannot explain away a compiler warning', () => {
+    const checks = inputAssignChecks(run('/*', 'assign SW = LEDR;', '*/', 'initial $display("assign SW = LEDR;");'));
+    expect(checks.warnings).toEqual([]);
+    expect(checks.drivingOutputs.size).toBe(0);
+  });
+
+  test('assignments from expressions warn without claiming a reversed pair', () => {
+    const checks = inputAssignChecks(run('assign SW = LEDR & 10\'b1;'));
+    expect(checks.warnings[0]).toContain('This assignment drives input SW; inputs can only be read.');
+    expect(checks.drivingOutputs.size).toBe(0);
   });
 
   test('ports declared in the body (Verilog-1995) count too', () => {
@@ -96,5 +112,47 @@ describe('inputAssignWarnings: assign to an input port, which Icarus accepts sil
 
   test('a VHDL file is not read', () => {
     expect(inputAssignWarnings({ files: [{ id: 'top', name: 'top.vhdl', content: 'assign SW = LEDR;' }] })).toEqual([]);
+  });
+
+  test('an assign in a branch the preprocessor may leave out is not warned about', () => {
+    expect(inputAssignWarnings(run('`ifdef UNUSED', '    assign SW = LEDR;', '`endif'))).toEqual([]);
+  });
+
+  test('an assign in a branch the preprocessor may leave out explains no coercion', () => {
+    expect(inputAssignChecks(run('`ifdef UNUSED', '    assign SW = LEDR;', '`endif')).drivingOutputs.size).toBe(0);
+  });
+});
+
+describe('coercion warning in the console and editor', () => {
+  const compilerWarning = 'hdl_board_tb.v:11: warning: output port LEDR is coerced to inout.';
+
+  test('the reversed assignment is marked in the student file on line 19', () => {
+    const content = [...HEADER, ...Array<string>(18 - HEADER.length).fill(''), '    assign SW= LEDR;', 'endmodule'].join('\n');
+    const snapshot: RunSnapshot = { files: [{ id: 'design', name: 'DE1_SoC.v', content }] };
+    const checks = inputAssignChecks(snapshot);
+    const output = [...checks.warnings, withoutExplainedCoercions(compilerWarning, checks.drivingOutputs)].filter(Boolean).join('\n');
+    expect(output).toMatch(/^DE1_SoC\.v:19: warning: output port LEDR is coerced to inout\./);
+    expect(output).not.toContain('hdl_board_tb');
+    const located = adviseDiagnostics(locateDiagnostics(parseDiagnostics(output), snapshot, snapshot.files), snapshot);
+    const stored = addToFiles(NO_DIAGNOSTICS, located).design;
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ line: 19, severity: 'warning' });
+    expect(fullMessageText(stored[0])).toContain('drives input SW from output LEDR');
+    expect(fullMessageText(stored[0])).toContain('assign LEDR = SW;');
+  });
+
+  test('filters only explained generated-testbench warnings in multiline output', () => {
+    const checks = inputAssignChecks(run('assign SW = LEDR;'));
+    const unrelated = 'hdl_board_tb.v:12: warning: output port HEX0_N is coerced to inout.';
+    const userWarning = 'top.v:8: warning: output port LEDR is coerced to inout.';
+    const error = 'top.v:9: error: Unable to bind wire foo';
+    expect(withoutExplainedCoercions([compilerWarning, unrelated, userWarning, error].join('\r\n'), checks.drivingOutputs))
+      .toBe([unrelated, userWarning, error].join('\r\n'));
+  });
+
+  test('a corrected next run has no stale suppression', () => {
+    const checks = inputAssignChecks(run('assign LEDR = SW;'));
+    expect(checks.warnings).toEqual([]);
+    expect(withoutExplainedCoercions(compilerWarning, checks.drivingOutputs)).toBe(compilerWarning);
   });
 });

@@ -13,6 +13,7 @@ import type { OpenProjectInfo } from './openProject';
 import { ProjectsPage, type ProjectsPageProps } from './ProjectsPage';
 import type { ProjectsSectionId } from './projectsSections';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
+import { ProjectsSidebar } from './ProjectsSidebar';
 
 const ignore = () => undefined;
 
@@ -63,6 +64,7 @@ const PROPS: ProjectsPageProps = {
     onDetailsChange: ignore,
     board: { boards: BUILT_IN_CATALOG, onChange: ignore, locked: false, onChooseBoard: ignore },
     files: { available: [], onAddFiles: ignore, onLeaveProject: ignore, onEntryChange: ignore, onOpenFile: ignore, onRemoveEntry: ignore, onReloadFromUrl: ignore, onFolderChosen: ignore },
+    addFiles: { suggestedName: 'untitled1', existingNames: ['top.vhd'], onCreate: ignore, onBrowse: ignore, onDrop: ignore, busy: false },
     local: { saveHint: '', emptiedFolders: [], onRemoveFolder: ignore },
     github: { link: undefined, someoneElses: false, projects: gitHubProjects },
     onCloseProject: ignore,
@@ -75,9 +77,9 @@ const render = (section: ProjectsSectionId, props: Partial<ProjectsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('the sidebar', () => {
-  test('lists where projects are stored, then the active project and New project below them', () => {
+  test('puts New project directly after On GitHub, then the active project and its children', () => {
     const labels = [...render('all').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project', 'New project']);
+    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'New project', 'Active project', 'Overview', 'Files', 'Add file']);
   });
 
   test('marks New project while its form is shown', () => {
@@ -91,6 +93,69 @@ describe('the sidebar', () => {
 
   test('marks the section shown', () => {
     expect(render('github')).toMatch(/aria-current="page"[^>]*><span class="wb-page-nav__icon">.*?<\/span>On GitHub</);
+  });
+
+  test.each([['active', 'Overview'], ['active-files', 'Files']] as const)('marks only the selected child for %s', (section, label) => {
+    const html = render(section);
+    expect([...html.matchAll(/aria-current="page"/g)]).toHaveLength(1);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*><span[^>]*>.*?</span>${label}</button>`));
+  });
+
+  test('keeps the parent navigation without a submenu when no active project actions exist', () => {
+    const html = renderToStaticMarkup(<ProjectsSidebar current="active" unsaved={false} onSelect={ignore} onBack={ignore} />);
+    expect(html).not.toContain('wb-projects-subnav');
+    expect(html).toMatch(/aria-current="page"[^>]*>.*?Active project/);
+  });
+
+  test('has Add file go to Add existing files rather than open a menu', () => {
+    const addFileTag = /<button([^>]*)>(?:(?!<button).)*?Add file<\/button>/.exec(render('active'))?.[1];
+    expect(addFileTag).toBe(' type="button" class="wb-page-nav__item"');
+  });
+
+  test('marks Add existing files as where Add file goes', () => {
+    expect(render('active-files')).toContain('data-add-existing-files');
+  });
+});
+
+test('Files keeps the overview and scrolls to its existing file section', () => {
+  const html = render('active-files');
+  expect(html).toContain('Project files (0)');
+  expect(html).toContain('wb-projects-current');
+  expect(html).toContain('>Project details<');
+  expect(html).toContain('>Storage<');
+  expect(html).toContain('data-project-files');
+});
+
+describe('adding files under Project files', () => {
+  const busyPage = () => render('active-files', { active: { ...PROPS.active, addFiles: { ...PROPS.active.addFiles, busy: true } } });
+
+  test('offers a new file in each language', () => {
+    expect(textOf(render('active-files'))).toMatch(/Create new file VHDL file Verilog file/);
+  });
+
+  test('offers the drop area with Browse files', () => {
+    expect(textOf(render('active-files'))).toMatch(/Add existing files Drag and drop files here or Browse files/);
+  });
+
+  test('puts the ways to add files after the file list', () => {
+    const html = render('active-files');
+    expect(html.indexOf('Create new file')).toBeGreaterThan(html.indexOf('No files in the project yet'));
+  });
+
+  test('points an empty project at the ways to add files', () => {
+    expect(textOf(render('active-files'))).toContain('Create new ones or add existing files in Add files below.');
+  });
+
+  test('waits with the language buttons while the project is busy', () => {
+    expect(busyPage().match(/wb-add-files__language" disabled=""/g)).toHaveLength(2);
+  });
+
+  test('puts Add files in a card of its own after Project files', () => {
+    expect(textOf(render('active-files'))).toMatch(/Project files \(0\).*Add files Create new file/);
+  });
+
+  test('waits with Browse files while the project is busy', () => {
+    expect(busyPage()).toMatch(/disabled="">Browse files/);
   });
 });
 
@@ -176,9 +241,9 @@ describe('an empty list on this computer says why', () => {
 });
 
 describe('the Active project section', () => {
-  test('has its details, storage, files and the rest, in that order', () => {
+  test('has its details, storage, files, adding files and the rest, in that order', () => {
     const titles = [...render('active').matchAll(/class="wb-page-card__toggle"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(titles).toEqual(['Project details', 'Storage', 'Project files (0)', 'Advanced']);
+    expect(titles).toEqual(['Project details', 'Storage', 'Project files (0)', 'Add files', 'Advanced']);
   });
 
   test('marks where Save writes', () => {

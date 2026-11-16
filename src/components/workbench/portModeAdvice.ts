@@ -12,13 +12,11 @@ import type { Advice } from './diagnosticAdvice';
 import { portText } from './diagnosticText';
 import type { PortLookup } from './typeAdvice';
 import type { PortMode } from './vhdlDeclarations';
-import { assignmentOn, type Assignment } from './vhdlExpression';
+import { assignmentOn, oneNameOf, type Assignment } from './vhdlExpression';
 import { architectureAbove } from './vhdlStructure';
 import { architectureHeaders, sameName } from './vhdlUnits';
 
 const CANT_BE_ASSIGNED = /^port "(?<port>[^"]+)" can't be assigned$/;
-/** A value that is one name, maybe indexed or sliced: `LEDR`, `LEDR(3)`, `LEDR(7 downto 4)`. */
-const ONE_NAME = /^(?<name>[A-Za-z]\w*)\s*(?:\(.*\))?$/s;
 /** The modes of the ports the design drives: what can be swapped onto the left. */
 const DRIVEN_BY_THE_DESIGN: ReadonlySet<PortMode> = new Set(['out', 'inout', 'buffer']);
 
@@ -58,7 +56,7 @@ function swapped(assignment: Assignment, text: string, entity: string | undefine
   const endsTheStatement = text.slice(assignment.value.end).trimStart().startsWith(';');
   if (assignment.operator !== '<=' || entity === undefined || !endsTheStatement) return undefined;
   const value = assignment.value.text.trim();
-  const name = ONE_NAME.exec(value)?.groups?.name;
+  const name = oneNameOf(value);
   const mode = name === undefined ? undefined : ports(entity, name)?.mode;
   return mode !== undefined && DRIVEN_BY_THE_DESIGN.has(mode) ? `${value} <= ${assignment.target.text.trim()};` : undefined;
 }

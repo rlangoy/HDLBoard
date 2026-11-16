@@ -6,6 +6,7 @@ import { findBoard } from '../../boards/boardCatalog';
 import { starterTopFileName } from '../../boards/boardTop';
 import type { BoardCatalog } from '../../boards/types';
 import { Dialog } from './Dialog';
+import { FileNameInput, NewFileHint } from './FileNameParts';
 import { FilesIcon } from './icons';
 import { newFileName, newFileNameError, type NewFileLanguage } from './newFile';
 import { projectFileNameFor, projectNameError } from './projectFile';
@@ -126,19 +127,7 @@ function NameField({ formId, name, onName, asProject, hint, error }: NameFieldPr
       <label className="wb-newfile__label" htmlFor={`${formId}-name`}>
         {asProject ? 'Project name' : 'File name'}
       </label>
-      <input
-        id={`${formId}-name`}
-        className="wb-newfile__name"
-        type="text"
-        value={name}
-        onChange={(e) => onName(e.target.value)}
-        onFocus={(e) => e.target.select()}
-        autoFocus
-        spellCheck={false}
-        autoComplete="off"
-        aria-invalid={showError}
-        aria-describedby={errorId}
-      />
+      <FileNameInput id={`${formId}-name`} className="wb-newfile__name" value={name} onChange={onName} invalid={showError} describedBy={errorId} />
       <p id={errorId} className="wb-newfile__hint" role={showError ? 'alert' : undefined}>
         {hint}
       </p>
@@ -150,23 +139,16 @@ type HintProps = NewFileDialogProps & { name: string; language: NewFileLanguage;
 
 /** What Create will do, or why it cannot: an empty field is not worth a red line, the disabled Create says enough. */
 function Hint({ name, language, board, asProject, error, kind = 'design', boards, existingNames, openProjectName }: HintProps) {
-  if (name.trim() === '') return <>{asProject ? 'Enter a name for the new project.' : 'Enter a name for the new file.'}</>;
-  if (error !== undefined) return <span className="wb-newfile__error">{error}</span>;
+  const shownError = name.trim() === '' ? undefined : error;
   const chosen = boards === undefined ? undefined : findBoard(boards, board).board;
-  if (asProject && chosen !== undefined) {
-    return (
-      <>
-        Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, { projectName: name })}</strong>, a top file
-        for the {chosen.name} board, and opens it in the editor.{existingNames.length > 0 && ' You are asked what to do with your files.'}
-        {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
-      </>
-    );
-  }
+  if (!asProject || chosen === undefined) return <NewFileHint name={name} language={language} error={shownError} kind={kind} boardName={chosen?.name} />;
+  if (name.trim() === '') return <>Enter a name for the new project.</>;
+  if (shownError !== undefined) return <span className="wb-newfile__error">{shownError}</span>;
   return (
     <>
-      Creates <strong>{newFileName(name, language)}</strong>
-      {language === 'verilog' ? ' with a module' : ' with an entity'} of the same name
-      {kind === 'testbench' ? ': an empty testbench, no ports.' : ` and the ${chosen?.name ?? 'board'}'s ports.`}
+      Creates <strong>{projectFileNameFor(name)}</strong> with <strong>{starterTopFileName(chosen, language, { projectName: name })}</strong>, a top file
+      for the {chosen.name} board, and opens it in the editor.{existingNames.length > 0 && ' You are asked what to do with your files.'}
+      {openProjectName !== undefined && <> It replaces the open project, {openProjectName}.</>}
     </>
   );
 }

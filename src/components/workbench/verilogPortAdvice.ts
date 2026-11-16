@@ -9,7 +9,7 @@
  *   it a `reg`, which an input cannot be. `adviseInputAssignedInAlways` says what it is.
  * - `assign SW = LEDR;` Icarus accepts without a word: the port gets a driver beside the
  *   board's, and reads x when they differ. HDLBoard warns at Start
- *   (`inputAssignWarnings`), as for VHDL's output port read (outputReads.ts).
+ *   (`inputAssignChecks`), as for VHDL's output port read (outputReads.ts).
  *
  * Both offer the assignment the other way round when the other side is an output port
  * that takes it: an `output reg` in `always`, an output net for `assign`. Pure.
@@ -21,6 +21,7 @@ import { projectCheckText, verilogAdviceText } from './diagnosticText';
 import { isVerilogFile } from './fileKinds';
 import { sourceTokens } from './symbols/sourceTokens';
 import { splitLines } from './textLines';
+import { needsPreprocessing } from './verilogDirectives';
 import { tokenizeVerilog } from './verilogHighlight';
 import { modulePorts, portAt, type ModulePorts, type VerilogPort } from './verilogPorts';
 
@@ -51,23 +52,76 @@ export function adviseInputAssignedInAlways(message: string, text: string, line:
   return { headline, span: { start: statement.start, end: statement.end } };
 }
 
-/** A warning, in Icarus's format, on every `assign` to an input port of its module. */
-export function inputAssignWarnings(snapshot: RunSnapshot): string[] {
-  return snapshot.files.filter(isVerilogFile).flatMap((file) => {
-    const lines = splitLines(file.content);
-    const modules = modulePorts(sourceTokens(tokenizeVerilog(lines)));
-    return lines.flatMap((text, i) =>
-      continuousAssignmentsOn(withoutComment(text))
-        .filter((statement) => portAt(modules, i + 1, nameOf(statement.target))?.direction === 'input')
-        .map((statement) => `${file.name}:${i + 1}: warning: ${assignWarning(statement, portAt(modules, i + 1, nameOf(statement.value)))}`),
-    );
-  });
+/** HDLBoard's check of the run's `assign`s to input ports, at Start. */
+export interface InputAssignChecks {
+  /** One warning, in Icarus's format, on every `assign` to an input port of its module. */
+  readonly warnings: readonly string[];
+  /** The output ports such an `assign` reads: Icarus's coercion of each is explained by a warning. */
+  readonly drivingOutputs: ReadonlySet<string>;
 }
 
-function assignWarning(statement: Statement, valuePort: VerilogPort | undefined): string {
-  const name = nameOf(statement.target);
-  const swapped = swappedWhen(statement, valuePort, (port) => !port.variable);
-  return swapped === undefined ? projectCheckText.inputAssigned(name) : projectCheckText.inputAssignedSwapped(name, `assign ${swapped};`);
+/** An `assign` to an input port, where it is, and the port it reads if it reads one output port. */
+interface InputAssign {
+  readonly fileName: string;
+  /** 1-based. */
+  readonly line: number;
+  readonly statement: Statement;
+  readonly valuePort: VerilogPort | undefined;
+}
+
+export function inputAssignChecks(snapshot: RunSnapshot): InputAssignChecks {
+  const assigns = snapshot.files.filter(isVerilogFile).flatMap(({ name, content }) => inputAssignsIn(name, splitLines(content)));
+  const drivingOutputs = assigns.filter(readsOneOutput).map(({ statement }) => nameOf(statement.value));
+  return { warnings: assigns.map(warningFor), drivingOutputs: new Set(drivingOutputs) };
+}
+
+/**
+ * The file's `assign`s to its input ports. A file the preprocessor may change (`define,
+ * `ifdef …) is not checked, as Icarus's own advice is not (verilogDirectives.ts): an
+ * `assign` in an inactive branch is never compiled, so it is neither warned about nor lets
+ * Icarus's coercion warning be left out.
+ */
+function inputAssignsIn(fileName: string, lines: readonly string[]): InputAssign[] {
+  const tokenLines = tokenizeVerilog(lines);
+  const tokens = sourceTokens(tokenLines);
+  if (needsPreprocessing(tokens)) return [];
+  const modules = modulePorts(tokens);
+  return tokenLines.flatMap((tokens, i) =>
+    continuousAssignmentsOn(tokens.map((token) => token.type === 'comment' || token.type === 'string' ? ' '.repeat(token.text.length) : token.text).join(''))
+      .filter((statement) => portAt(modules, i + 1, nameOf(statement.target))?.direction === 'input')
+      .map((statement) => ({ fileName, line: i + 1, statement, valuePort: portAt(modules, i + 1, nameOf(statement.value)) })),
+  );
+}
+
+/** `assign SW = LEDR;`: the value is one name, an output port of the module. */
+function readsOneOutput({ statement, valuePort }: InputAssign): boolean {
+  return valuePort?.direction === 'output' && ONE_NAME.test(statement.value);
+}
+
+function warningFor(assign: InputAssign): string {
+  const input = nameOf(assign.statement.target);
+  const swapped = swappedWhen(assign.statement, assign.valuePort, (port) => !port.variable);
+  const text = readsOneOutput(assign)
+    ? projectCheckText.outputDrivesInput(nameOf(assign.statement.value), input, swapped === undefined ? undefined : `assign ${swapped};`)
+    : projectCheckText.inputAssigned(input);
+  return `${assign.fileName}:${assign.line}: warning: ${text}`;
+}
+
+/**
+ * Icarus's `hdl_board_tb.v:11: warning: output port LEDR is coerced to inout.`, for an
+ * output port that drives an input: it names HDLBoard's testbench, which the student
+ * never sees. When a warning on the student's own `assign` explains it, it is left out.
+ */
+const TESTBENCH_COERCION = /^hdl_board_tb\.v:\d+: warning: output port (?<port>[A-Za-z_][\w$]*) is coerced to inout\.$/;
+
+export function isExplainedCoercion(line: string, drivingOutputs: ReadonlySet<string>): boolean {
+  const port = TESTBENCH_COERCION.exec(line.trim())?.groups?.port;
+  return port !== undefined && drivingOutputs.has(port);
+}
+
+/** LOG and ERROR frames may contain several complete lines; keep all unrelated output. */
+export function withoutExplainedCoercions(text: string, drivingOutputs: ReadonlySet<string>): string {
+  return text.split('\n').filter((line) => !isExplainedCoercion(line, drivingOutputs)).join('\n');
 }
 
 /**

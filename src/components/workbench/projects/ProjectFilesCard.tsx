@@ -8,7 +8,7 @@ import { FoldingPageCard } from '../page/PageCard';
 import { MISSING_LOCAL_FILE, type OpenProject, type ProjectEntryRow } from '../projectFile';
 import { AutoTextArea } from './AutoTextArea';
 
-/** What can be done with the project's files; the files themselves are added, renamed and deleted in Files. */
+/** What can be done with the project's files; new files join through AddProjectFiles, and are renamed and deleted in Files. */
 export interface ProjectFileActions {
   /** Files in Files that are not in the project (availableFiles): offered to be added. */
   available: readonly string[];
@@ -60,15 +60,11 @@ export function ProjectFilesCard({ project, rows, busy, actions }: ProjectFilesC
   );
 }
 
+const EMPTY = 'No files in the project yet. Create new ones or add existing files in Add files below.';
+const EMPTY_WITH_AVAILABLE = 'No files in the project yet. Add files from the list above, or create or add them in Add files below.';
+
 function FilesTable({ rows, busy, actions }: { rows: readonly ProjectEntryRow[]; busy: boolean; actions: ProjectFileActions }) {
-  if (rows.length === 0) {
-    return (
-      <p className="wb-projects__muted">
-        No files in the project yet. {actions.available.length > 0 ? 'Add files from the list above, or make new ones' : 'Make files'} with New File or Upload File,
-        and they join the project.
-      </p>
-    );
-  }
+  if (rows.length === 0) return <p className="wb-projects__muted">{actions.available.length > 0 ? EMPTY_WITH_AVAILABLE : EMPTY}</p>;
   return (
     <table className="wb-active__files">
       <thead>

@@ -226,10 +226,27 @@ card; the folding one starts open). The styles are `page/Page.css`; their colour
 ### `<ProjectsPage>`
 
 The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
-computer* and *On GitHub*, then, ruled off below them, *Active project*, with an orange dot
-on its icon while the project has unsaved changes, and *New project*. Its card's *Project details*, and the
+computer*, *On GitHub* and *New project*, then, ruled off below them, *Active project*, with an orange dot
+on its icon while the project has unsaved changes. Its card's *Project details*, and the
 project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
+
+The active project's inline submenu (`ActiveProjectNav`) has *Overview*, *Files*, and
+*Add file*. Overview returns to the top of the active page; Files scrolls to its existing
+file section. Both keep the same page mounted, preserving edits and folded cards.
+Only the selected child is highlighted. Add file goes the same way: it scrolls to *Add
+existing files*, in the *Add files* card under *Project files* (`AddFilesCard`). That card
+has *Create new file*, with a compact VHDL and Verilog button side by side (they wrap on a
+narrow page); either one puts the inline `NewFileForm` in their place, with the language
+fixed (Cancel, then the other button, changes it), a focused *File name*, a hint that names
+the file it makes, and *Cancel* and *Create file*. The name is checked as New File checks it
+(`newFile.ts`); a name that cannot be used says why under the field and the form stays. A
+file created brings the two buttons back. *Add existing files* is a
+dashed drop area with *Browse files*; dragging files over it highlights it (`useFileDrop`,
+shared with the Explorer). Importing does not open project files (a `.json` is refused with
+its own reason, in the refused-files dialog, with any other file that could not be added),
+and the page stays open, so new files show in the list and its count. The submenu is absent when no active project
+actions are supplied. The workspace always supplies them, including for its Default project.
 
 On top of Active project, `CurrentProjectCard` shows the open project: its name, *Unsaved
 changes* while the place it saves to does not hold it, *Saves to this computer: …* or

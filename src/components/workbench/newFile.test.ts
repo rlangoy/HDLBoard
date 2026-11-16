@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { newFileContent, newFileName, newFileNameError } from './newFile';
+import { freeUntitledName, newFileContent, newFileName, newFileNameError } from './newFile';
 import { DEFAULT_BOARD } from '../../boards/boardCatalog';
 
 describe('newFileName', () => {
@@ -63,5 +63,23 @@ describe('newFileContent', () => {
     expect(content).toMatch(/^module counter \(/);
     expect(content).toMatch(/\);\n\nendmodule\n$/);
     for (const port of BOARD_PORTS) expect(content).toMatch(new RegExp(`wire(\\s+\\[\\d+:0\\])?\\s+${port}\\b`));
+  });
+});
+
+describe('freeUntitledName', () => {
+  test('starts at untitled1', () => {
+    expect(freeUntitledName([])).toBe('untitled1');
+  });
+
+  test('skips a name taken after an earlier one was deleted', () => {
+    expect(freeUntitledName(['untitled2.vhd'])).toBe('untitled1');
+  });
+
+  test('skips names taken in either language', () => {
+    expect(freeUntitledName(['untitled1.vhd', 'untitled2.v'])).toBe('untitled3');
+  });
+
+  test('skips a name taken in other letter case', () => {
+    expect(freeUntitledName(['Untitled1.vhd'])).toBe('untitled2');
   });
 });

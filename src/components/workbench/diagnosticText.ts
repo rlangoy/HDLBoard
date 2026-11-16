@@ -334,11 +334,12 @@ export const projectCheckText = {
   /** An `out` port read inside its own design: VHDL-2008 allows it, VHDL-93 does not. */
   outputRead: (port: string): string =>
     `output port "${port}" is read here: fine in VHDL-2008, an error in VHDL-93 (many FPGA tools) – read a signal instead, and assign the port from it.`,
-  /** Verilog's `assign SW = …;` to an input: Icarus accepts it, and the port gets a second driver. */
-  inputAssignedSwapped: (port: string, swapped: string): string =>
-    `input port "${port}" is driven by the board, and this assign drives it too, so it can read x – swap the two sides: ${swapped}`,
+  /** Verilog's `assign SW = LEDR;`: what Icarus reports as its testbench's port coerced to inout. */
+  outputDrivesInput: (output: string, input: string, swapped: string | undefined): string =>
+    `output port ${output} is coerced to inout. This assignment drives input ${input} from output ${output}; inputs can only be read.${swapped === undefined ? ' Assign an output port or a wire instead.' : ` The sides are probably reversed: ${swapped}`}`,
+  /** Verilog's `assign SW = …;` from anything else: Icarus accepts it silently, and the port gets a second driver. */
   inputAssigned: (port: string): string =>
-    `input port "${port}" is driven by the board, and this assign drives it too, so it can read x – assign an output port or a wire instead.`,
+    `This assignment drives input ${port}; inputs can only be read. Assign an output port or a wire instead.`,
 };
 
 /** The Quick Fix button: what it will add. */

@@ -11,7 +11,7 @@
 
 import { projectTopName, starterTopFileName, TOP_FILE_EXTENSION } from '../../../boards/boardTop';
 import type { BoardDefinition } from '../../../boards/types';
-import type { NewFileLanguage } from '../newFile';
+import { DESIGN_UNIT, type NewFileLanguage } from '../newFile';
 
 /** A new project, as chosen: its name, its board, and its top file's name and language. */
 export interface NewProjectChoice {
@@ -51,8 +51,6 @@ export const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
   { id: 'verilog', label: 'Verilog', extension: TOP_FILE_EXTENSION.verilog },
 ];
 
-/** What the design inside a file of each language is called. */
-const DESIGN_UNIT: Readonly<Record<NewFileLanguage, string>> = { vhdl: 'an entity', verilog: 'a module' };
 
 export function emptyDraft(language: NewFileLanguage): NewProjectDraft {
   return { name: '', typedFileName: null, chosenBoard: null, language };

@@ -44,6 +44,8 @@ export function fileNameRefusal(name: string, existingNames: readonly string[]):
 export const NOT_SOURCE_REASON = `Only ${ACCEPTED_FILES_TEXT} files can be added.`;
 
 export const UNREADABLE_ZIP_REASON = 'This .zip could not be opened, so none of its files were added.';
+/** A project file dropped or chosen to join the open project: it opens a project of its own instead. */
+export const PROJECT_FILE_REASON = 'This is a project file. Open it from Projects; it cannot join another project.';
 
 /**
  * Why each uploaded or dropped file may not be added, in order; `undefined` for one

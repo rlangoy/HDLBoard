@@ -72,6 +72,10 @@ describe('an input port assigned', () => {
     expect(advised('SW <= not LEDR;', 'SW')?.advice?.headline).toMatch(/assign an output port or a signal instead/);
   });
 
+  test('from an expression of indexed ports: no swap', () => {
+    expect(advised('SW <= LEDR(0) and LEDR(1);', 'SW')?.advice?.headline).toMatch(/assign an output port or a signal instead/);
+  });
+
   test('a conditional assignment: no swap, the condition would be lost', () => {
     expect(advised("SW <= LEDR when CLOCK_50 = '1' else count;", 'SW')?.advice?.headline).toMatch(/assign an output port or a signal instead/);
   });
@@ -110,5 +114,50 @@ describe('outputReadWarnings: an output port read, which VHDL-93 forbids', () =>
 
   test('a port map connects an output rather than reading it', () => {
     expect(warnings('u1: entity work.child port map (q => LEDR);')).toEqual([]);
+  });
+
+  test('an output assigned after then and else on one line is no read', () => {
+    expect(warnings("  if SW(0) = '1' then LEDR <= (others => '1'); else LEDR <= (others => '0'); end if;")).toEqual([]);
+  });
+
+  test('a second assignment on the line is no read of its target', () => {
+    expect(warnings("LEDR(0) <= SW(0); LEDR(1) <= '1';")).toEqual([]);
+  });
+
+  test('a read in a second statement on the line is still found', () => {
+    expect(warnings('count <= SW; count <= LEDR;')).toHaveLength(1);
+  });
+
+  test('a case on an output reads it', () => {
+    expect(warnings('  case LEDR is')).toHaveLength(1);
+  });
+
+  describe('a function parameter named like an output port', () => {
+    const content = [
+      ...ENTITY.slice(0, -1),
+      '    function flip(LEDR : std_logic_vector) return std_logic_vector is',
+      '        variable result : std_logic_vector(LEDR\'range);',
+      '    begin',
+      '        result := not LEDR;',
+      '        return result;',
+      '    end function;',
+      'begin',
+      '    count <= LEDR;',
+      'end architecture;',
+      '',
+    ].join('\n');
+    const shadowed = () => outputReadWarnings({ files: [{ id: 'top', name: 'top.vhdl', content }] });
+
+    test('is read in the function, not the port', () => {
+      expect(shadowed().some((warning) => warning.startsWith(`top.vhdl:${ENTITY.length + 3}:`))).toBe(false);
+    });
+
+    test('leaves the port read outside the function warned about', () => {
+      expect(shadowed()).toHaveLength(1);
+    });
+  });
+
+  test('a when condition of an assignment reads it', () => {
+    expect(warnings("count <= SW when LEDR(0) = '1' else count;")).toHaveLength(1);
   });
 });

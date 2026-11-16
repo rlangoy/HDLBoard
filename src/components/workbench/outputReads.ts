@@ -19,12 +19,21 @@ import { isVhdlFile } from './fileKinds';
 import { indexToGhdlColumn } from './ghdlColumn';
 import { splitLines } from './textLines';
 import { VhdlDeclarations, type PortMode } from './vhdlDeclarations';
-import { assignmentOn } from './vhdlExpression';
+import { assignmentOn, codeShape } from './vhdlExpression';
 import { tokenizeVhdlLine } from './vhdlHighlight';
 import { architectureHeaders, entityHeaders, sameName, type ArchitectureHeader, type EntityHeader } from './vhdlUnits';
 
-/** Where a condition is read, after its keyword. */
+/** A condition, read from after its keyword up to the keyword that ends it (or the line's end). */
 const CONDITION = /^\s*(?:if|elsif|case|while)\b/i;
+const CONDITION_END = /\b(?:then|loop|is)\b/i;
+/** A keyword that only opens what follows it on the line: `else LEDR <= '0';`. */
+const OPENING_KEYWORD = /^\s*(?:else|begin|then|loop)\b/i;
+
+/** Columns of a line, from `start` up to `end`. */
+interface Span {
+  readonly start: number;
+  readonly end: number;
+}
 
 /** One `out` port read: its name as written, and where. */
 interface OutputRead {
@@ -54,47 +63,95 @@ function outputReadsIn(content: string, lines: readonly string[]): OutputRead[] 
     const modeOf = portModesOf(architecture, entities, declarations);
     const end = Math.min(...units.filter((line) => line > architecture.line), lines.length + 1);
     const body = lines.slice(architecture.line, end - 1);
-    return body.flatMap((text, i) => readsOn(text, modeOf).map((read) => ({ ...read, line: architecture.line + 1 + i })));
+    return body.flatMap((text, i) => {
+      const line = architecture.line + 1 + i;
+      return readsOn(text, (name) => modeOf(name, line)).map((read) => ({ ...read, line }));
+    });
   });
 }
 
-/** The mode of a port of the architecture's entity, declared in the same file; undefined for any other name. */
-function portModesOf(architecture: ArchitectureHeader, entities: readonly EntityHeader[], declarations: VhdlDeclarations): ModeOf {
+/**
+ * The mode of a port of the architecture's entity, declared in the same file, where `line`
+ * sees it; undefined for any other name, and where a local of the same name (a subprogram's
+ * parameter, a variable) hides the port.
+ */
+function portModesOf(architecture: ArchitectureHeader, entities: readonly EntityHeader[], declarations: VhdlDeclarations): ModeOnLine {
   const entity = entities.find((e) => sameName(e.name, architecture.entity));
   if (entity === undefined) return () => undefined;
   const nextUnit = Math.min(...entities.map((e) => e.line).filter((line) => line > entity.line), Number.POSITIVE_INFINITY);
-  return (name) => {
+  return (name, line) => {
     const port = declarations.portAfter(entity.line, name);
-    return port !== undefined && port.line < nextUnit ? port.mode : undefined;
+    if (port === undefined || port.line >= nextUnit) return undefined;
+    const seen = declarations.objectAt(name, line);
+    return seen === undefined || seen.objectClass === 'port' ? port.mode : undefined;
   };
 }
 
+type ModeOnLine = (name: string, line: number) => PortMode | undefined;
+/** A name's port mode on one line. */
 type ModeOf = (name: string) => PortMode | undefined;
 
 /** The `out` ports the line reads, each where it is written. */
 function readsOn(text: string, modeOf: ModeOf): Omit<OutputRead, 'line'>[] {
-  const from = readingPartStart(text, modeOf);
-  if (from === undefined) return [];
+  const read = readSpans(text, modeOf);
+  const isReadAt = (index: number) => read.some((span) => index >= span.start && index < span.end);
   const reads: Omit<OutputRead, 'line'>[] = [];
   let start = 0;
   for (const { text: word, type } of tokenizeVhdlLine(text)) {
-    const isRead = start >= from && type === 'identifier' && !isAttributePrefix(text, start + word.length) && modeOf(word) === 'out';
+    const isRead = isReadAt(start) && type === 'identifier' && !isAttributePrefix(text, start + word.length) && modeOf(word) === 'out';
     if (isRead) reads.push({ port: word, index: start });
     start += word.length;
   }
   return reads;
 }
 
+/** The parts of the line that read values: in each of its statements, conditions and an assigned value. */
+function readSpans(text: string, modeOf: ModeOf): Span[] {
+  const shape = codeShape(text);
+  return statementsOf(shape).flatMap((statement) => readSpansIn(shape, statement, modeOf));
+}
+
+/** The statements on the line, each up to its `;` (a literal's `;` is filled out of the shape). */
+function statementsOf(shape: string): Span[] {
+  const statements: Span[] = [];
+  let start = 0;
+  for (let end = shape.indexOf(';'); end !== -1; end = shape.indexOf(';', start)) {
+    statements.push({ start, end });
+    start = end + 1;
+  }
+  if (shape.slice(start).trim() !== '') statements.push({ start, end: shape.length });
+  return statements;
+}
+
 /**
- * Where the part of the line that is read starts: an assignment's value, or a condition.
- * An assignment to an input port is GHDL's error already, with advice of its own
- * (portModeAdvice.ts): its value is not warned about as well.
+ * What one statement reads: the conditions it opens with (`if … then`, `case … is`), then
+ * the value of the assignment after them, `when` conditions included. An assignment to an
+ * input port is GHDL's error already, with advice of its own (portModeAdvice.ts): its
+ * value is not warned about too.
  */
-function readingPartStart(text: string, modeOf: ModeOf): number | undefined {
-  const condition = CONDITION.exec(text);
-  if (condition !== null) return condition[0].length;
-  const assignment = assignmentOn(text);
-  return assignment === undefined || modeOf(assignment.targetName) === 'in' ? undefined : assignment.value.start;
+function readSpansIn(shape: string, statement: Span, modeOf: ModeOf): Span[] {
+  const spans: Span[] = [];
+  let at = statement.start;
+  for (let part = leadingPart(shape.slice(at, statement.end)); part !== undefined; part = leadingPart(shape.slice(at, statement.end))) {
+    if (part.condition) spans.push({ start: at + part.condition.start, end: at + part.condition.end });
+    at += part.length;
+  }
+  const assignment = assignmentOn(shape.slice(at, statement.end));
+  if (assignment !== undefined && modeOf(assignment.targetName) !== 'in') spans.push({ start: at + assignment.value.start, end: statement.end });
+  return spans;
+}
+
+/** A condition or an opening keyword at the start of `rest`, and how much of `rest` it takes. */
+function leadingPart(rest: string): { length: number; condition?: Span } | undefined {
+  const condition = CONDITION.exec(rest);
+  if (condition !== null) {
+    const start = condition[0].length;
+    const close = CONDITION_END.exec(rest.slice(start));
+    if (close === null) return { length: rest.length, condition: { start, end: rest.length } };
+    return { length: start + close.index + close[0].length, condition: { start, end: start + close.index } };
+  }
+  const keyword = OPENING_KEYWORD.exec(rest);
+  return keyword === null ? undefined : { length: keyword[0].length };
 }
 
 /** `LEDR'length`: the name is followed by an attribute, which reads no value. */

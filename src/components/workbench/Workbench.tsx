@@ -43,11 +43,11 @@ import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages
 import { HelpDialog } from './HelpDialog';
 import { NewFileDialog } from './NewFileDialog';
 import type { NewProjectChoice } from './projects/newProjectForm';
-import { isListSection } from './projects/projectsSections';
+import { isActiveProjectSection, isListSection } from './projects/projectsSections';
 import { RemoveFilesDialog } from './RemoveFilesDialog';
 
 import { RefusedFilesDialog } from './RefusedFilesDialog';
-import { baseName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
+import { baseName, freeUntitledName, newFileContent, testbenchContent, type NewFileLanguage } from './newFile';
 import { ABOUT_EVENT } from './project';
 import { FileExplorer } from './FileExplorer';
 import { ExamplesPane } from './ExamplesPane';
@@ -63,7 +63,7 @@ import { SimulationCard, type SimStatus } from './SimulationCard';
 import { ConsoleOutput, type ConsoleLine, type ConsoleLink } from './ConsoleOutput';
 import { appendCapped } from './consoleLines';
 import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } from './fileKinds';
-import { fileNameRefusal, incomingFileRefusals, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
+import { fileNameRefusal, incomingFileRefusals, PROJECT_FILE_REASON, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
 import { BUSY_STAGE, HdlClient, REFUSED_REASON, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
@@ -89,7 +89,7 @@ import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagn
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
 import { outputReadWarnings } from './outputReads';
-import { inputAssignWarnings } from './verilogPortAdvice';
+import { inputAssignChecks, withoutExplainedCoercions } from './verilogPortAdvice';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { BoardSettingsPage } from './BoardSettingsPage';
@@ -265,6 +265,9 @@ const BOARD_PANE_TITLE = 'Board I/O';
  */
 type ProjectPageWhen = 'always' | 'onProblems' | 'whenEmpty';
 
+/** Where files chosen in the computer's file picker go: Upload File's, or the Projects page's add files. */
+type AddPickedFiles = (files: File[], handles: FileHandles) => Promise<void>;
+
 
 /**
  * The workbench's main page: a file tree and tabbed editor on the left
@@ -431,6 +434,8 @@ export function Workbench() {
   activeBoardName.current = activeBoard.name;
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  // What the hidden file input's choice goes to: Upload File's, or the Projects page's add files.
+  const pickedFilesTargetRef = useRef<AddPickedFiles | null>(null);
 
   // The pane geometry: side pane widths, which panes are shut, the console's
   // height, and the dividers and shortcuts that change them.
@@ -550,6 +555,7 @@ export function Workbench() {
   // where a run that dies at runtime takes the student, since its ERROR frame often only
   // says "Simulation exited unexpectedly." Cleared when a run starts.
   const lastRunError = useRef<AdvisedDiagnostic | null>(null);
+  const drivingOutputs = useRef<ReadonlySet<string>>(new Set());
 
   const clientRef = useRef<HdlClient | null>(null);
   // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
@@ -594,8 +600,10 @@ export function Workbench() {
           boardStateSeen();
         },
         onLog: (text) => {
-          appendLog(withBoardName(text, activeBoardName.current));
-          const located = recordDiagnostics(text, filesRef.current).filter((d) => d.severity === 'error');
+          const visible = withoutExplainedCoercions(text, drivingOutputs.current);
+          if (!visible.trim()) return;
+          appendLog(withBoardName(visible, activeBoardName.current));
+          const located = recordDiagnostics(visible, filesRef.current).filter((d) => d.severity === 'error');
           if (located.length > 0) lastRunError.current = located[located.length - 1];
         },
         onError: (stage, text) => {
@@ -606,8 +614,9 @@ export function Workbench() {
             const url = notice.url;
             logWithLink(notice.text, url === undefined ? undefined : { label: 'Download HDLBoard', onClick: () => window.open(url, '_blank', 'noopener') }, 'error');
           } else if (!quiet) {
-            appendLog(`${stage} error:\n${withBoardName(text, activeBoardName.current)}`, 'error');
-            const advised = recordErrorDiagnostics(text, filesRef.current);
+            const visible = withoutExplainedCoercions(text, drivingOutputs.current);
+            appendLog(`${stage} error:\n${withBoardName(visible, activeBoardName.current)}`, 'error');
+            const advised = recordErrorDiagnostics(visible, filesRef.current);
             if (REVEALING_STAGES.includes(stage)) revealFirstError(advised);
             else if (stage === 'runtime') revealFirstError(advised.length > 0 ? advised : lastRunError.current ? [lastRunError.current] : []);
           }
@@ -774,9 +783,15 @@ export function Workbench() {
   }, []);
 
   const addFile = (name: string, content: string, folder: VhdlFile['folder'] = 'vhdl'): string => {
+    const id = insertFile(name, content, folder);
+    showNewFile(id);
+    return id;
+  };
+
+  // Added from the Projects page, a file is listed there in Project files; the page stays.
+  const insertFile = (name: string, content: string, folder: VhdlFile['folder']): string => {
     const id = nextFileId();
     setFiles((prev) => [...prev, { id, name, folder, content }]);
-    showNewFile(id);
     return id;
   };
 
@@ -818,7 +833,7 @@ export function Workbench() {
   // added once the dialog's Create is pressed.
   const handleNewFile = () => setDialog('newFile');
 
-  const suggestedNewFileName = `untitled${files.filter((f) => f.name.startsWith('untitled')).length + 1}`;
+  const suggestedNewFileName = freeUntitledName(files.map((f) => f.name));
 
   const handleCreateFile = (name: string, language: NewFileLanguage, board: string) => {
     setDialog(null);
@@ -830,6 +845,12 @@ export function Workbench() {
     const id = addFile(name, content, folderForUpload(name) ?? 'vhdl');
     // Paired by override, so the new file opens in the TB pane beside its design (§ 4.6).
     if (design) tb.setPairOverride(design.id, id);
+  };
+
+  // Project files' Create new file: the new design joins the project, on the open board.
+  const createProjectFile = (name: string, language: NewFileLanguage) => {
+    insertFile(name, newDesignContent(name, language, activeBoard), folderForUpload(name) ?? 'vhdl');
+    appendLog(`Added ${name} to ${project.name}.`, 'success');
   };
 
   /** A new design with the ports of `board` (chosen in New File); one whose name clashes with a port keeps the Default names, and says why. */
@@ -858,7 +879,10 @@ export function Workbench() {
   // Chrome and Edge's own picker keeps handles to the chosen files (fileSystemAccess.ts); elsewhere the file input.
   // The Windows app uses the file input too: a file from a handle has no path on disk
   // (pathForFile gives ''), and the path is what opens a project with its own folder.
-  const handleUploadClick = () => {
+  const handleUploadClick = () => pickFiles(readAndAddFiles);
+
+  const pickFiles = (addPicked: AddPickedFiles) => {
+    pickedFilesTargetRef.current = addPicked;
     if (!canPickWithHandles() || desktopBridge()?.pathForFile) {
       uploadInputRef.current?.click();
       return;
@@ -866,7 +890,7 @@ export function Workbench() {
     pickerWait
       .wait(async () => {
         const picked = await pickFilesWithHandles(UPLOAD_ACCEPT.split(','));
-        if (picked) await readAndAddFiles(picked.files, picked.handles);
+        if (picked) await addPicked(picked.files, picked.handles);
       })
       .catch((err: unknown) => appendLog(`Upload File: ${errorText(err)}`, 'error'));
   };
@@ -880,18 +904,7 @@ export function Workbench() {
   // the dialog says which and why (fileNameRules.ts), and the console keeps a line each.
   // A .zip among them is opened first and stands for the files inside it (zipUpload.ts).
   const readAndAddFiles = async (incoming: Iterable<File>, handles: FileHandles = new Map()) => {
-    const chosen: File[] = [];
-    const unreadable: RefusedFile[] = [];
-    for (const file of incoming) {
-      if (!isZipName(file.name)) chosen.push(file);
-      else {
-        try {
-          chosen.push(...(await filesInZip(file)));
-        } catch {
-          unreadable.push({ name: file.name, reason: UNREADABLE_ZIP_REASON });
-        }
-      }
-    }
+    const { chosen, unreadable } = await unpackUpload(incoming);
     // A project file among them opens the project, with the others as its folder; from a
     // .zip, its shallowest .hdlboard.json (docs/impl_project_structure.md § 6.7).
     const zipMembers = chosen.filter((file): file is ZipMember => zipPathOf(file) !== undefined);
@@ -904,6 +917,41 @@ export function Workbench() {
       for (const { name, reason } of unreadable) appendLog(`Skipped ${name}: ${reason}`, 'error');
       return;
     }
+    addSourceFiles(chosen, unreadable, (file) => readAndAdd(file, addFile));
+  };
+
+  // Project files' Browse files and drop area: the files join the open project, which stays
+  // on the page; a project file among them is refused, since it would open another project.
+  const addFilesToProject = async (incoming: Iterable<File>) => {
+    const { chosen, unreadable } = await unpackUpload(incoming);
+    const sources: File[] = [];
+    const refused: RefusedFile[] = [...unreadable];
+    for (const file of chosen) {
+      if (isProjectUpload(file.name)) refused.push({ name: file.name, reason: PROJECT_FILE_REASON });
+      else sources.push(file);
+    }
+    addSourceFiles(sources, refused, (file) => readAndAdd(file, insertFile));
+  };
+
+  // A .zip stands for the files inside it; one that cannot be read is refused.
+  const unpackUpload = async (incoming: Iterable<File>): Promise<{ chosen: File[]; unreadable: RefusedFile[] }> => {
+    const chosen: File[] = [];
+    const unreadable: RefusedFile[] = [];
+    for (const file of incoming) {
+      if (!isZipName(file.name)) chosen.push(file);
+      else {
+        try {
+          chosen.push(...(await filesInZip(file)));
+        } catch {
+          unreadable.push({ name: file.name, reason: UNREADABLE_ZIP_REASON });
+        }
+      }
+    }
+    return { chosen, unreadable };
+  };
+
+  // Each source file whose name is free is added; the rest are refused, in the dialog and a console line each.
+  const addSourceFiles = (chosen: readonly File[], unreadable: readonly RefusedFile[], add: (file: File) => void) => {
     const reasons = incomingFileRefusals(
       chosen.map((file) => file.name),
       filesRef.current.map((file) => file.name),
@@ -911,16 +959,16 @@ export function Workbench() {
     const refused: RefusedFile[] = [...unreadable];
     chosen.forEach((file, i) => {
       const reason = reasons[i];
-      if (reason === undefined) readAndAddFile(file);
+      if (reason === undefined) add(file);
       else refused.push({ name: file.name, reason });
     });
     for (const { name, reason } of refused) appendLog(`Skipped ${name}: ${reason}`, 'error');
     if (refused.length > 0) setRefusal({ title: refused.length === 1 ? 'File not added' : 'Files not added', refused });
   };
 
-  const readAndAddFile = (file: File) => {
+  const readAndAdd = (file: File, add: (name: string, content: string, folder: VhdlFile['folder']) => void) => {
     const reader = new FileReader();
-    reader.onload = () => addFile(file.name, String(reader.result ?? ''), folderForUpload(file.name) ?? 'vhdl');
+    reader.onload = () => add(file.name, String(reader.result ?? ''), folderForUpload(file.name) ?? 'vhdl');
     reader.readAsText(file);
   };
 
@@ -1504,7 +1552,9 @@ export function Workbench() {
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
     const chosen = [...(e.target.files ?? [])];
-    if (chosen.length) navigate(() => void readAndAddFiles(chosen));
+    const addPicked = pickedFilesTargetRef.current ?? readAndAddFiles;
+    pickedFilesTargetRef.current = null;
+    if (chosen.length) navigate(() => void addPicked(chosen, new Map()));
     e.target.value = '';
   };
 
@@ -1590,7 +1640,9 @@ export function Workbench() {
    */
   const warnProjectChecks = (runFiles: RunSnapshot['files']) => {
     const snapshot = { files: runFiles };
-    const warnings = [...duplicateArchitectureWarnings(snapshot), ...outputReadWarnings(snapshot), ...inputAssignWarnings(snapshot)];
+    const inputAssignments = inputAssignChecks(snapshot);
+    drivingOutputs.current = inputAssignments.drivingOutputs;
+    const warnings = [...duplicateArchitectureWarnings(snapshot), ...outputReadWarnings(snapshot), ...inputAssignments.warnings];
     for (const warning of warnings) {
       appendLog(warning);
       recordDiagnostics(warning, runFiles);
@@ -1817,7 +1869,8 @@ export function Workbench() {
   // Whether the Active project was opened for that first save: decided as it opens, and kept while it
   // stays open, so editing the project's details does not change the page under the user.
   const [firstSaveAsked, setFirstSaveAsked] = useState(false);
-  const activeProjectShown = projectsPage.section === 'active';
+  // Overview and Files are both the Active project's page.
+  const activeProjectShown = isActiveProjectSection(projectsPage.section);
   useEffect(() => {
     if (!activeProjectShown) setFirstSaveAsked(false);
   }, [activeProjectShown]);
@@ -1855,7 +1908,11 @@ export function Workbench() {
       save: openProjectSummary.destination === 'github' ? gitHubProjects.save : handleSaveProject,
     },
     ask: unsavedQuestion.ask,
-    askForName: () => projectsPage.nameAsk.ask(true),
+    // The name field is on the Projects page: a dialog that asked (New File › Create project) closes off it.
+    askForName: () => {
+      setDialog(null);
+      projectsPage.nameAsk.ask(true);
+    },
     logError: (text) => appendLog(text, 'error'),
   });
   const showInFolder = desktopBridge()?.showInFolder;
@@ -2078,7 +2135,7 @@ export function Workbench() {
               topLocked={isSimulating}
               project={{ name: project.name, fileName: project.fileName, description: project.description, unsaved: projectUnsaved }}
               projectOpen={activeProjectShown}
-              onToggleProject={() => projectsPage.toggleSection('active')}
+              onToggleProject={() => (activeProjectShown ? projectsPage.close() : projectsPage.open('active'))}
             />
           </SidePanel>
 
@@ -2174,6 +2231,14 @@ export function Workbench() {
                     onRemoveEntry: (name) => setProject((p) => withEntryRemoved(p, name)),
                     onReloadFromUrl: (name) => void handleReloadFromUrl(name),
                     onFolderChosen: (chosen) => void handleProjectFolderChosen(chosen),
+                  },
+                  addFiles: {
+                    suggestedName: suggestedNewFileName,
+                    existingNames: fileNames,
+                    onCreate: createProjectFile,
+                    onBrowse: () => pickFiles(addFilesToProject),
+                    onDrop: (dropped) => void addFilesToProject([...dropped]),
+                    busy: projectBusy !== null || gitHubProjects.busy !== null,
                   },
                   local: { saveHint, emptiedFolders, onRemoveFolder: (folder) => void handleRemoveEmptyFolder(folder) },
                   github: { link: project.gist, someoneElses: gitHubSomeoneElses, projects: gitHubProjects },

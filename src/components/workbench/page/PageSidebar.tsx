@@ -10,6 +10,8 @@ export interface PageNavEntry<Id extends string> {
   readonly icon: ReactNode;
   /** A dot on the icon, and this said to screen readers, e.g. "Unsaved changes". */
   readonly marker?: string;
+  /** Inline child navigation; a parent with children is not itself marked current. */
+  readonly children?: ReactNode;
 }
 
 export interface PageSidebarProps<Id extends string> {
@@ -38,7 +40,7 @@ export function PageSidebar<Id extends string>({ label, groups, current, onSelec
                 <button
                   type="button"
                   className="wb-page-nav__item"
-                  aria-current={entry.id === current ? 'page' : undefined}
+                  aria-current={entry.id === current && !entry.children ? 'page' : undefined}
                   onClick={() => onSelect(entry.id)}
                 >
                   <span className="wb-page-nav__icon">
@@ -48,6 +50,7 @@ export function PageSidebar<Id extends string>({ label, groups, current, onSelec
                   {entry.label}
                   {entry.marker && <span className="wb-page__sr">, {entry.marker}</span>}
                 </button>
+                {entry.children}
               </li>
             ))}
           </ul>
