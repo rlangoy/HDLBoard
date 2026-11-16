@@ -55,16 +55,16 @@ import {
 } from './githubAuth.js';
 import { socketRequestAllowed } from './requestOrigin.js';
 import { UpgradeLimiter } from './rateLimit.js';
-import { readWsLimits, type WsLimits } from './wsLimits.js';
+import { readWsLimits, TOO_MANY_CONNECTIONS_TEXT, tooManyConnectionsLogLine, type WsLimits } from './wsLimits.js';
 import { MAX_CLIENT_FRAME_BYTES } from './frameLimits.js';
-import { CLOSE_GRACE_MS, ClientConnection, refuseBusy, type ConnectionContext } from './clientConnection.js';
+import { ClientConnection, refuseBusy, type ConnectionContext } from './clientConnection.js';
 
 const WSPATH = '/hdlsim';
 // The path's name from when GHDL was the only simulator; still accepted so an
 // older page or proxy config keeps working. New clients use WSPATH.
 const LEGACY_WSPATH = '/ghdlsim';
-const TOO_MANY_REQUESTS_RESPONSE =
-  'HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\nContent-Length: 0\r\n\r\n';
+/** Log lines a minute about one address over its connection budget: a flood of refusals is one line. */
+const REFUSAL_LOG_LINES_PER_MINUTE = 1;
 
 export interface BackendOptions {
   /** Defaults to `HDL_WS_PORT` (or the legacy `GHDL_WS_PORT`), then 9010. */
@@ -249,6 +249,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const monotonicNow = opts.now ?? (() => performance.now());
   const wsLimits = readWsLimits(opts.wsLimits);
   const upgrades = new UpgradeLimiter({ perMinute: wsLimits.upgradesPerMinute, now: monotonicNow });
+  const refusalLogLines = new UpgradeLimiter({ perMinute: REFUSAL_LOG_LINES_PER_MINUTE, now: monotonicNow });
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
   const ghdlExe = resolveGhdlExe(process.env, opts);
@@ -315,13 +316,21 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     }
     // Counted after the Origin check: another site open in one student's browser must not
     // spend the budget of everyone behind that student's address (a school's NAT).
-    if (!upgrades.take(clientAddress(req, trustedProxies))) {
-      socket.end(TOO_MANY_REQUESTS_RESPONSE);
-      setTimeout(() => socket.destroy(), CLOSE_GRACE_MS).unref();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    const address = clientAddress(req, trustedProxies);
+    if (upgrades.take(address)) wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    else wss.handleUpgrade(req, socket, head, (ws) => refuseOverBudget(ws, req, address));
   });
+
+  /**
+   * An address over its connection budget is told why, as `ERROR busy`, like a full
+   * server's newcomer: a page cannot read an HTTP 429 to a WebSocket, and showed only
+   * "stopped". No session is made. Logged at most once a minute for each address.
+   */
+  const refuseOverBudget = (ws: WebSocket, req: IncomingMessage, address: string) => {
+    const logAddress = loggedAddress(req, trustedProxies);
+    const logLine = refusalLogLines.take(address) ? tooManyConnectionsLogLine(logAddress, wsLimits.upgradesPerMinute) : undefined;
+    refuseBusy(ws, wsLimits, { text: TOO_MANY_CONNECTIONS_TEXT, logLine, logAddress });
+  };
 
   /**
    * Every live connection, so shutdown can reach them. Without this, killing
@@ -351,10 +360,11 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   };
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), logAddress: loggedAddress(req, trustedProxies), at: now() };
+    const logAddress = loggedAddress(req, trustedProxies);
+    const newcomer: Newcomer = { clientAddress: clientAddress(req, trustedProxies), logAddress, at: now() };
     const hasPlace = connections.size < maxSessions || makeRoomFor(newcomer);
     if (hasPlace) connections.add(new ClientConnection(ws, newcomer, context));
-    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections], newcomer), logAddress: loggedAddress(req, trustedProxies) });
+    else refuseBusy(ws, wsLimits, { text: fullText(maxSessions), logLine: refusedLogLine([...connections], newcomer), logAddress });
   });
 
   // Only a listen error belongs to `ready`; once listening, the listener is removed so

@@ -241,15 +241,20 @@ URL or path…*.
 
 *New project* (`NewProjectSection`) is one form: the project name, the board (its description
 beneath), the first file's name, and VHDL or Verilog as native radio buttons in cards. The
-file name follows the project name until it is typed. The line beneath it, and every name
-in it, comes from `newProjectForm.ts`, which asks the same `starterTopFileName` that creates
-the file, as a project started without Files' files gets it; when Files has files,
-`RemoveFilesDialog` names the exact file of each choice (Keep files may add `_2`, and names
-it in the open project's board's names until the board change follows). The input is kept by
-the page while it is open (a stop to save the open project, or Cancel in the files question,
-keeps it); Cancel clears it and goes back to the section it was opened from. Create project
-goes through `handleCreateProject`: the unsaved-changes question (`useLeaveOpenProject`), then
-`RemoveFilesDialog` when Files has files, then the new top file opens in the editor.
+board follows the open project's until another is chosen, and the file name follows the
+project name until it is typed. The line beneath the file name, and every name in it, comes
+from `newProjectForm.ts`, which asks the same `starterTopFileName` that creates the file.
+When keeping the files now in Files would name it otherwise (a file of that name is there,
+so `_2`; or the open project's board takes another name), a second sentence says so
+(`keepFilesNote`), as Keep files in `RemoveFilesDialog` would name it.
+
+The input is kept by the page while it is open (`useNewProjectFlow`): a stop in Active project
+to name and save the open project first, or Cancel in the files question, keeps it, and its
+Cancel still goes back to the section the new project was started from. A blank form starts
+over from wherever New project is opened next. Create project goes through
+`handleCreateProject`: the unsaved-changes question (`useLeaveOpenProject`), asked over the
+New File dialog so its Cancel keeps that dialog's input; then, in the render current after
+the answer, `RemoveFilesDialog` when Files has files; then the new top file opens in the editor.
 
 A list section has its place's folder or GitHub account above a search and a sort
 (`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row

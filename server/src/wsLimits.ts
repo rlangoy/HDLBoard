@@ -108,5 +108,18 @@ export const TOO_MANY_RESETS_TEXT =
 export const TOO_MANY_DOWNLOADS_TEXT =
   'Waveform not sent: too many waveform downloads in a short time. Wait a few seconds, then try again.';
 
+/**
+ * To the students behind an address over its connection budget (`HDL_WS_UPGRADES_PER_MINUTE`),
+ * in an `ERROR busy`: the page opens a connection for every run, and a whole class may share
+ * one school address.
+ */
+export const TOO_MANY_CONNECTIONS_TEXT =
+  'Too many connections from your network in the last minute. Wait a minute, then click Start again.';
+
+/** The server log's line for a connection over its address's budget. */
+export function tooManyConnectionsLogLine(logAddress: string, perMinute: number): string {
+  return `${BUSY_LOG_PREFIX} refused ${logAddress}, over its ${perMinute} connections a minute (HDL_WS_UPGRADES_PER_MINUTE)`;
+}
+
 /** The server log's line for a RUN refused over the work budget. */
 export const TOO_MANY_RUNS_LOG_LINE = `${BUSY_LOG_PREFIX} refused a RUN, too many runs and resets from one connection in a short time`;

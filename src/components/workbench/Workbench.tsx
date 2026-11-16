@@ -1433,15 +1433,22 @@ export function Workbench() {
 
   /**
    * New File › Create project, and Projects › New project: the open project's unsaved
-   * changes are asked about first; then, with files in Files, RemoveFilesDialog asks
-   * whether the new project keeps them.
+   * changes are asked about first, over the New File dialog, so Cancel there keeps what
+   * was typed in it. The answer takes time (a save), so the rest goes on in the render
+   * that is current by then (createAfterLeaving), never with this one's files and project.
    */
   const handleCreateProject = async (choice: NewProjectChoice) => {
+    if (await leaveOpenProject(`the new project ${choice.name}`)) createAfterLeaving.current(choice);
+  };
+
+  /** With files in Files, RemoveFilesDialog asks first whether the new project keeps them. */
+  const createProjectNow = (choice: NewProjectChoice) => {
     setDialog(null);
-    if (!(await leaveOpenProject(`the new project ${choice.name}`))) return;
-    if (filesRef.current.length === 0) removeFilesForNewProject(choice);
+    if (files.length === 0) removeFilesForNewProject(choice);
     else setProjectToCreate(choice);
   };
+  const createAfterLeaving = useRef(createProjectNow);
+  createAfterLeaving.current = createProjectNow;
 
   /** A new project's top file: the chosen board's generated top, named after `topName`, in the language chosen. */
   const boardTopFile = ({ topName, board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
@@ -2137,7 +2144,7 @@ export function Workbench() {
                 }}
                 nameAsk={projectsPage.nameAsk}
                 onCreateProject={(choice) => void handleCreateProject(choice)}
-                newProjectLanguage={firstPreferredLanguage}
+                newProject={{ language: firstPreferredLanguage, filesNow: fileNames }}
                 active={{
                   project,
                   rows: projectEntries(project, fileNames),

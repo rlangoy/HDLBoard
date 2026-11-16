@@ -27,8 +27,16 @@ export interface NewProjectDraft {
   readonly name: string;
   /** What was typed as the file name; null while the file name follows the project name. */
   readonly typedFileName: string | null;
-  readonly board: string;
+  /** The board chosen; null while it follows the open project's board, whichever that is now. */
+  readonly chosenBoard: string | null;
   readonly language: NewFileLanguage;
+}
+
+/** The files now in Files, which Keep files (RemoveFilesDialog) adds to the new project. */
+export interface FilesNow {
+  readonly names: readonly string[];
+  /** The open project's board: Keep files names the top file on it first, so all the files agree. */
+  readonly board: BoardDefinition;
 }
 
 export interface LanguageOption {
@@ -46,8 +54,13 @@ export const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
 /** What the design inside a file of each language is called. */
 const DESIGN_UNIT: Readonly<Record<NewFileLanguage, string>> = { vhdl: 'an entity', verilog: 'a module' };
 
-export function emptyDraft(board: string, language: NewFileLanguage): NewProjectDraft {
-  return { name: '', typedFileName: null, board, language };
+export function emptyDraft(language: NewFileLanguage): NewProjectDraft {
+  return { name: '', typedFileName: null, chosenBoard: null, language };
+}
+
+/** Nothing worth keeping: no name or file name typed, no board chosen. */
+export function isBlank(draft: NewProjectDraft): boolean {
+  return draft.name.trim() === '' && draft.typedFileName === null && draft.chosenBoard === null;
 }
 
 export function withTypedFileName(draft: NewProjectDraft, typed: string): NewProjectDraft {
@@ -88,6 +101,18 @@ export function topFileSummary(draft: NewProjectDraft, board: BoardDefinition): 
   if (topNameOf(draft, board) === '') return 'The file name follows the project name, or type one of your own.';
   const { fileName, designName } = plannedTopFile(draft, board);
   return `Creates ${fileName} with ${DESIGN_UNIT[draft.language]} named ${designName} and the ${board.name} board's ports.`;
+}
+
+/**
+ * Under the summary, when Keep files would name the top file otherwise than the summary
+ * says: a file of that name is in Files already (`_2`), or the open project's board takes
+ * another name. Undefined when it names it the same, or there are no files to keep.
+ */
+export function keepFilesNote(draft: NewProjectDraft, board: BoardDefinition, filesNow: FilesNow): string | undefined {
+  if (filesNow.names.length === 0 || topNameOf(draft, board) === '') return undefined;
+  const planned = plannedTopFile(draft, board).fileName;
+  const kept = starterTopFileName(filesNow.board, draft.language, { takenNames: filesNow.names, projectName: topNameOf(draft, board) });
+  return kept === planned ? undefined : `If you keep the files now in Files, it is named ${kept} instead.`;
 }
 
 /** The draft as Create project takes it. */

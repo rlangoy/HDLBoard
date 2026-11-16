@@ -97,9 +97,12 @@ function boundedOutput(ws: WebSocket, limits: WsLimits, clientAddress: string): 
   });
 }
 
-/** Logs it, tells the peer why (`ERROR busy`), then closes — and cuts, if the close is held up. */
-function closeBusy(peer: Peer, text: string, logLine: string): void {
-  console.log(logLine);
+/**
+ * Logs it, tells the peer why (`ERROR busy`), then closes — and cuts, if the close is held
+ * up. No `logLine`: told and closed, but not logged (one refused again within the minute).
+ */
+function closeBusy(peer: Peer, text: string, logLine: string | undefined): void {
+  if (logLine !== undefined) console.log(logLine);
   peer.output.send(encodeServerFrame({ verb: 'ERROR', stage: 'busy', text }));
   peer.output.dispose();
   peer.ws.close(CLOSE_TRY_AGAIN_LATER, 'server busy');
@@ -107,7 +110,7 @@ function closeBusy(peer: Peer, text: string, logLine: string): void {
 }
 
 /** Refuses a socket that got no place, before any session is made for it. */
-export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string; logAddress: string }): void {
+export function refuseBusy(ws: WebSocket, limits: WsLimits, reason: { text: string; logLine: string | undefined; logAddress: string }): void {
   // An error while the close is in progress must not go unheard: that would end the process.
   ws.on('error', () => {});
   closeBusy({ ws, output: boundedOutput(ws, limits, reason.logAddress) }, reason.text, reason.logLine);

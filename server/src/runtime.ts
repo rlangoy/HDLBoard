@@ -60,13 +60,48 @@ function killTree(child: ChildProcess): void {
   }
 }
 
+/**
+ * The most a compile step keeps of its stdout, and of its stderr: hundreds of messages,
+ * of which a student reads the first. A generate loop can make Icarus print warnings by
+ * the megabyte, and the page gets them all at once, past its connection's outgoing limit
+ * (HDL_WS_OUTGOING_BYTES), which would cut the socket instead of showing any.
+ */
+export const MAX_COMMAND_OUTPUT_CHARS = 65_536;
+
+/** The line that ends a cut output: how much more there was. */
+export function outputCutNote(droppedChars: number): string {
+  return `[HDLBoard: ${droppedChars} more characters of output not shown]`;
+}
+
+/**
+ * A stream's text from its start, up to MAX_COMMAND_OUTPUT_CHARS. Cut, it ends at the last
+ * whole line kept, then outputCutNote: a line cut in half could read as another message.
+ */
+class OutputHead {
+  private text = '';
+  private dropped = 0;
+
+  add(more: string): void {
+    const room = MAX_COMMAND_OUTPUT_CHARS - this.text.length;
+    this.text += more.slice(0, Math.max(room, 0));
+    this.dropped += Math.max(more.length - room, 0);
+  }
+
+  toString(): string {
+    if (this.dropped === 0) return this.text;
+    const wholeLines = this.text.slice(0, this.text.lastIndexOf('\n') + 1);
+    const partLine = this.text.length - wholeLines.length;
+    return `${wholeLines}${outputCutNote(this.dropped + partLine)}\n`;
+  }
+}
+
 export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS, signal }: CommandOptions): Promise<CmdResult> {
   if (signal?.aborted) return Promise.resolve(ABORTED);
   return new Promise((resolve) => {
     // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
     const child = spawn(cmd, args, { cwd, env: childEnv(), detached: process.platform !== 'win32' });
-    let out = '';
-    let err = '';
+    const out = new OutputHead();
+    const err = new OutputHead();
     let timedOut = false;
 
     const timer = setTimeout(() => {
@@ -77,15 +112,15 @@ export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT
     signal?.addEventListener('abort', abort, { once: true });
     child.on('close', () => signal?.removeEventListener('abort', abort));
 
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
+    child.stdout.on('data', (d) => out.add(String(d)));
+    child.stderr.on('data', (d) => err.add(String(d)));
     child.on('error', (e) => {
       clearTimeout(timer);
-      resolve({ code: -1, out, err: err + String(e), timedOut });
+      resolve({ code: -1, out: String(out), err: String(err) + String(e), timedOut });
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ code: code ?? -1, out, err, timedOut });
+      resolve({ code: code ?? -1, out: String(out), err: String(err), timedOut });
     });
   });
 }

@@ -3,28 +3,39 @@
 
 import { useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react';
 import { findBoard } from '../../../boards/boardCatalog';
-import type { BoardCatalog } from '../../../boards/types';
+import type { BoardCatalog, BoardDefinition } from '../../../boards/types';
 import { cx } from '../../board';
 import type { NewFileLanguage } from '../newFile';
 import { projectNameError } from '../projectFile';
 import {
   choiceOf,
   fileNameField,
+  keepFilesNote,
   LANGUAGE_OPTIONS,
   nameFromProject,
   topFileSummary,
   withTypedFileName,
+  type FilesNow,
   type NewProjectChoice,
   type NewProjectDraft,
 } from './newProjectForm';
 import type { OpenProjectInfo } from './openProject';
 import './NewProjectSection.css';
 
+/** The workspace a new project starts in. */
+export interface WorkspaceNow {
+  /** The open project's board: the form's board until another is chosen. */
+  readonly openBoard: string;
+  /** The files now in Files, which Keep files adds to the new project. */
+  readonly fileNames: readonly string[];
+}
+
 export interface NewProjectSectionProps {
   /** Kept by the page, so leaving the section (to save the open project, say) keeps what was typed. */
   draft: NewProjectDraft;
   onDraftChange: (draft: NewProjectDraft) => void;
   boards: BoardCatalog;
+  workspace: WorkspaceNow;
   /** The project a new one replaces. */
   openProject: OpenProjectInfo;
   /** A project is being opened or saved: Create project waits. */
@@ -39,11 +50,12 @@ export interface NewProjectSectionProps {
  * which file Create project makes (newProjectForm.ts). A missing name is said beside the
  * field only once Create project was pressed, and the input stays as it was.
  */
-export function NewProjectSection({ draft, onDraftChange, boards, openProject, busy, onCreate, onCancel }: NewProjectSectionProps) {
+export function NewProjectSection({ draft, onDraftChange, boards, workspace, openProject, busy, onCreate, onCancel }: NewProjectSectionProps) {
   const ids = useId();
   const nameRef = useRef<HTMLInputElement>(null);
   const [submitted, setSubmitted] = useState(false);
-  const board = findBoard(boards, draft.board).board;
+  const board = findBoard(boards, draft.chosenBoard ?? workspace.openBoard).board;
+  const filesNow: FilesNow = { names: workspace.fileNames, board: findBoard(boards, workspace.openBoard).board };
   const nameError = projectNameError(draft.name);
   const change = (patch: Partial<NewProjectDraft>) => onDraftChange({ ...draft, ...patch });
 
@@ -62,25 +74,40 @@ export function NewProjectSection({ draft, onDraftChange, boards, openProject, b
         </Field>
 
         <Field id={`${ids}-board`} label="Board" hint={board.description}>
-          {(described) => <BoardSelect {...described} boards={boards} board={board.id} onChange={(id) => change({ board: id })} />}
+          {(described) => <BoardSelect {...described} boards={boards} board={board.id} onChange={(id) => change({ chosenBoard: id })} />}
         </Field>
 
-        <Field id={`${ids}-file`} label="File name" hint={topFileSummary(draft, board)}>
-          {(described) => (
-            <TextInput
-              {...described}
-              value={fileNameField(draft, board)}
-              placeholder={nameFromProject(draft, board) || 'Follows the project name'}
-              onChange={(typed) => onDraftChange(withTypedFileName(draft, typed))}
-            />
-          )}
-        </Field>
-
+        <FileNameField id={`${ids}-file`} draft={draft} board={board} filesNow={filesNow} onDraftChange={onDraftChange} />
         <LanguageCards name={`${ids}-language`} language={draft.language} onChange={(language) => change({ language })} />
         <ReplacesNote openProject={openProject} />
         <Actions busy={busy} onCancel={onCancel} />
       </div>
     </form>
+  );
+}
+
+interface FileNameFieldProps {
+  id: string;
+  draft: NewProjectDraft;
+  board: BoardDefinition;
+  filesNow: FilesNow;
+  onDraftChange: (draft: NewProjectDraft) => void;
+}
+
+/** The file name, following the project name until typed; beneath it, the file Create project makes. */
+function FileNameField({ id, draft, board, filesNow, onDraftChange }: FileNameFieldProps) {
+  const hint = [topFileSummary(draft, board), keepFilesNote(draft, board, filesNow)].filter((line) => line !== undefined).join(' ');
+  return (
+    <Field id={id} label="File name" hint={hint}>
+      {(described) => (
+        <TextInput
+          {...described}
+          value={fileNameField(draft, board)}
+          placeholder={nameFromProject(draft, board) || 'Follows the project name'}
+          onChange={(typed) => onDraftChange(withTypedFileName(draft, typed))}
+        />
+      )}
+    </Field>
   );
 }
 

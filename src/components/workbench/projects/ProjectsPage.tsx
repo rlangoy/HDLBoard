@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useState, type ReactNode } from 'react';
-import { findBoard } from '../../../boards/boardCatalog';
 import { CloseIcon, LinkIcon, PlusIcon } from '../icons';
 import type { NewFileLanguage } from '../newFile';
 import type { MenuAction } from '../ProjectMenu';
@@ -12,7 +11,7 @@ import type { OpenProject, ProjectDetails, ProjectEntryRow } from '../projectFil
 import { ScrollArea } from '../ScrollArea';
 import { CurrentProjectCard } from './CurrentProjectCard';
 import { MoreMenuButton } from './MoreMenuButton';
-import { emptyDraft, type NewProjectChoice, type NewProjectDraft } from './newProjectForm';
+import { emptyDraft, isBlank, type NewProjectChoice, type NewProjectDraft } from './newProjectForm';
 import { NewProjectSection } from './NewProjectSection';
 import type { OpenProjectInfo } from './openProject';
 import { ProjectAdvancedCard } from './ProjectAdvancedCard';
@@ -61,8 +60,15 @@ export interface ProjectsPageProps {
   nameAsk: NameAsk;
   /** New project › Create project: asks about the open project's unsaved changes, then creates the new one. */
   onCreateProject: (choice: NewProjectChoice) => void;
-  /** The language New project starts on: the first one ticked in Settings › Languages. */
-  newProjectLanguage: NewFileLanguage;
+  newProject: NewProjectSettings;
+}
+
+/** What New project starts from. */
+export interface NewProjectSettings {
+  /** The first language ticked in Settings › Languages. */
+  readonly language: NewFileLanguage;
+  /** The files now in Files, which Keep files adds to the new project. */
+  readonly filesNow: readonly string[];
 }
 
 const TITLE_ID = 'wb-projects-title';
@@ -76,19 +82,18 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const { section, onClose, info, saves, lists, active, nameAsk } = props;
   const { label, intro } = projectsSection(section);
   const name = nameGuard(active.needsName, nameAsk);
-  const navigation = useSectionReturn(section, props.onSectionChange);
+  const flow = useNewProjectFlow(section, props.onSectionChange, props.newProject.language);
   const shown: ShownSection = {
     page: props,
     busy: active.busy !== null || active.github.projects.busy !== null,
     saves: { toComputer: name.withName(saves.toComputer), toGitHub: name.withName(saves.toGitHub) },
     name,
-    navigation,
-    draft: useNewProjectDraft(active, props.newProjectLanguage),
-    openNewProject: () => navigation.select(NEW_SECTION.id),
+    flow,
+    openNewProject: () => flow.select(NEW_SECTION.id),
   };
 
   return (
-    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={navigation.select} onBack={onClose} />}>
+    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={flow.select} onBack={onClose} />}>
       <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
         {isListSection(section) && <MoreMenuButton label="More: new project, open another" actions={listsMenu(lists, shown.openNewProject)} />}
       </PageHeader>
@@ -107,8 +112,7 @@ interface ShownSection {
   /** The saves, each waiting for a name first. */
   saves: ProjectSaves;
   name: NameGuard;
-  navigation: SectionNavigation;
-  draft: NewProjectDraftState;
+  flow: NewProjectFlow;
   openNewProject: () => void;
 }
 
@@ -117,7 +121,7 @@ function sectionBody(section: ProjectsSectionId, shown: ShownSection): ReactNode
   return isListSection(section) ? listBody(section, shown) : OWN_SECTION_BODIES[section](shown);
 }
 
-function listBody(section: ListSectionId, { page, name, navigation, openNewProject }: ShownSection) {
+function listBody(section: ListSectionId, { page, name, flow, openNewProject }: ShownSection) {
   return (
     <ProjectListSection
       {...page.lists}
@@ -125,7 +129,7 @@ function listBody(section: ListSectionId, { page, name, navigation, openNewProje
       openProject={page.info}
       onNewProject={openNewProject}
       onBackToWorkspace={page.onClose}
-      onShowDetails={() => navigation.select(ACTIVE_SECTION.id)}
+      onShowDetails={() => flow.select(ACTIVE_SECTION.id)}
       onRename={name.askForName}
     />
   );
@@ -145,57 +149,51 @@ const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSection
       <ActiveProjectSection active={page.active} info={page.info} busy={busy} name={name.request} saves={saves} />
     </>
   ),
-  new: ({ page, busy, navigation, draft }) => (
+  new: ({ page, busy, flow }) => (
     <NewProjectSection
-      draft={draft.draft}
-      onDraftChange={draft.onDraftChange}
+      draft={flow.draft}
+      onDraftChange={flow.onDraftChange}
       boards={page.active.board.boards}
+      workspace={{ openBoard: page.active.project.board, fileNames: page.newProject.filesNow }}
       openProject={page.info}
       busy={busy || page.lists.opening}
       onCreate={page.onCreateProject}
-      onCancel={() => {
-        draft.clear();
-        navigation.back();
-      }}
+      onCancel={flow.cancel}
     />
   ),
 };
 
-interface SectionNavigation {
-  readonly select: (section: ProjectsSectionId) => void;
-  /** New project's Cancel: back to the section it was opened from. */
-  readonly back: () => void;
-}
-
-/**
- * Section changes that remember where New project was opened from, so its Cancel goes
- * back there (to the first section when the page was opened at New project).
- */
-function useSectionReturn(section: ProjectsSectionId, onSectionChange: (section: ProjectsSectionId) => void): SectionNavigation {
-  const [returnTo, setReturnTo] = useState<ProjectsSectionId>(FIRST_SECTION);
-  const select = (next: ProjectsSectionId) => {
-    if (next === NEW_SECTION.id && section !== NEW_SECTION.id) setReturnTo(section);
-    onSectionChange(next);
-  };
-  return { select, back: () => onSectionChange(returnTo) };
-}
-
-interface NewProjectDraftState {
+/** The New project form's input, and where its Cancel goes back to. */
+interface NewProjectFlow {
   readonly draft: NewProjectDraft;
   readonly onDraftChange: (draft: NewProjectDraft) => void;
-  /** Back to the empty form. */
-  readonly clear: () => void;
+  /** Shows a section; going to New project remembers where from, unless a new project is under way. */
+  readonly select: (section: ProjectsSectionId) => void;
+  /** Cancel: the form emptied, and back to the section the new project was started from. */
+  readonly cancel: () => void;
 }
 
 /**
- * The New project form's input, kept while the page is open: leaving the section to save
- * the open project first, or cancelling the question about Files' files, keeps what was
- * typed; Cancel clears it. It starts on the open project's board, if that board is installed here.
+ * The New project form's input is kept while the page is open: a stop in Active project to
+ * name and save the open project first, or Cancel in the question about Files' files, keeps
+ * it, and Cancel afterwards still goes back to where the new project was started. A form
+ * left blank starts over from wherever New project is opened next; the first section when
+ * it was opened from outside the page.
  */
-function useNewProjectDraft(active: ActiveProjectProps, language: NewFileLanguage): NewProjectDraftState {
-  const startingDraft = () => emptyDraft(findBoard(active.board.boards, active.project.board).board.id, language);
-  const [draft, setDraft] = useState<NewProjectDraft>(startingDraft);
-  return { draft, onDraftChange: setDraft, clear: () => setDraft(startingDraft()) };
+function useNewProjectFlow(section: ProjectsSectionId, onSectionChange: (section: ProjectsSectionId) => void, language: NewFileLanguage): NewProjectFlow {
+  const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(language));
+  const [startedFrom, setStartedFrom] = useState<ProjectsSectionId | null>(null);
+  const select = (next: ProjectsSectionId) => {
+    const startsNewProject = next === NEW_SECTION.id && section !== NEW_SECTION.id && isBlank(draft);
+    if (startsNewProject) setStartedFrom(section);
+    onSectionChange(next);
+  };
+  const cancel = () => {
+    setDraft(emptyDraft(language));
+    setStartedFrom(null);
+    onSectionChange(startedFrom ?? FIRST_SECTION);
+  };
+  return { draft, onDraftChange: setDraft, select, cancel };
 }
 
 /** The ⋮ menu of the lists' header: starting or opening another project. */

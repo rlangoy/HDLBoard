@@ -54,7 +54,7 @@ const PROPS: ProjectsPageProps = {
   nameAsk: { missing: false, focusPending: false, onFocused: ignore, ask: ignore },
   lists: { connection: signedOut, gitHubProjects, localProjects: local, opening: false, onOpenItem: ignore, onSignIn: ignore, onOpenFromUrl: ignore },
   onCreateProject: ignore,
-  newProjectLanguage: 'vhdl',
+  newProject: { language: 'vhdl', filesNow: [] },
   active: {
     project: newProject('Custom_Board', ['top.vhd'], 'de1-soc'),
     rows: [],
@@ -229,7 +229,7 @@ describe('the New project section', () => {
   });
 
   test('starts on the language preferred in Settings', () => {
-    const checked = [...render('new', { newProjectLanguage: 'verilog' }).matchAll(/<input type="radio"[^>]*>/g)].find(([tag]) => tag.includes('checked'));
+    const checked = [...render('new', { newProject: { language: 'verilog', filesNow: [] } }).matchAll(/<input type="radio"[^>]*>/g)].find(([tag]) => tag.includes('checked'));
     expect(checked?.[0]).toContain('value="verilog"');
   });
 
@@ -239,6 +239,16 @@ describe('the New project section', () => {
 
   test('says which project it replaces, and that its unsaved changes are asked about', () => {
     expect(textOf(render('new'))).toContain('The new project replaces the open project, Custom_Board . It has unsaved changes');
+  });
+
+  test('follows the open project\'s board until another is chosen', () => {
+    const onBasys = { ...PROPS.active, project: newProject('Basys lab', [], 'basys3') };
+    expect(render('new', { active: onBasys })).toMatch(/<option value="basys3" selected="">/);
+  });
+
+  test('says nothing about the files in Files before a name is typed', () => {
+    const html = render('new', { newProject: { language: 'vhdl', filesNow: ['DE1_SoC.vhdl'] } });
+    expect(textOf(html)).not.toContain('If you keep the files');
   });
 
   test('names no project when the open one has no name yet', () => {

@@ -4,10 +4,58 @@
 import { describe, expect, test } from 'vitest';
 import { BUILT_IN_CATALOG, findBoard } from '../../../boards/boardCatalog';
 import { starterTopFileName } from '../../../boards/boardTop';
-import { choiceOf, emptyDraft, fileNameField, plannedTopFile, topFileSummary, withTypedFileName, type NewProjectDraft } from './newProjectForm';
+import {
+  choiceOf,
+  emptyDraft,
+  fileNameField,
+  isBlank,
+  keepFilesNote,
+  plannedTopFile,
+  topFileSummary,
+  withTypedFileName,
+  type NewProjectDraft,
+} from './newProjectForm';
 
 const DE1_SOC = findBoard(BUILT_IN_CATALOG, 'de1-soc').board;
-const draft = (over: Partial<NewProjectDraft> = {}): NewProjectDraft => ({ ...emptyDraft(DE1_SOC.id, 'vhdl'), ...over });
+const DEFAULT = findBoard(BUILT_IN_CATALOG, 'default').board;
+const draft = (over: Partial<NewProjectDraft> = {}): NewProjectDraft => ({ ...emptyDraft('vhdl'), ...over });
+
+describe('the note on keeping the files in Files', () => {
+  const traffic = draft({ name: 'Traffic light' });
+
+  test('says the name Keep files gives when the file is there already', () => {
+    const note = keepFilesNote(traffic, DE1_SOC, { names: ['Traffic_light.vhdl'], board: DE1_SOC });
+    expect(note).toBe('If you keep the files now in Files, it is named Traffic_light_2.vhdl instead.');
+  });
+
+  test('is the name Keep files creates (Workbench: on the open project board, with Files taken)', () => {
+    const filesNow = { names: ['Traffic_light.vhdl'], board: DEFAULT };
+    const created = starterTopFileName(DEFAULT, 'vhdl', { takenNames: filesNow.names, projectName: choiceOf(traffic, DE1_SOC).topName });
+    expect(keepFilesNote(traffic, DE1_SOC, filesNow)).toContain(created);
+  });
+
+  test('says nothing when Keep files names it the same', () => {
+    expect(keepFilesNote(traffic, DE1_SOC, { names: ['adder.vhdl'], board: DE1_SOC })).toBeUndefined();
+  });
+
+  test('says nothing with no files in Files', () => {
+    expect(keepFilesNote(traffic, DE1_SOC, { names: [], board: DE1_SOC })).toBeUndefined();
+  });
+
+  test('says nothing before a name is typed', () => {
+    expect(keepFilesNote(draft(), DE1_SOC, { names: ['DE1_SoC.vhdl'], board: DE1_SOC })).toBeUndefined();
+  });
+});
+
+describe('a blank form', () => {
+  test('has nothing typed or chosen', () => {
+    expect(isBlank(draft({ language: 'verilog' }))).toBe(true);
+  });
+
+  test('is not blank once a board is chosen', () => {
+    expect(isBlank(draft({ chosenBoard: 'basys3' }))).toBe(false);
+  });
+});
 
 describe('the file name field', () => {
   test('is empty while the project has no name', () => {

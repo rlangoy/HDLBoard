@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, runCommand } from './runtime.js';
+import { createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, MAX_COMMAND_OUTPUT_CHARS, outputCutNote, runCommand } from './runtime.js';
 import { makeTempDir } from './testSupport/sessionDir.js';
 
 const SHORT_TIMEOUT_MS = 300;
@@ -139,6 +139,30 @@ describe('runCommand', () => {
     const result = await runCommand({ cmd: 'no-such-program-hdlboard', args: [], cwd: cwdDir.path });
     assert.equal(result.code, -1);
     assert.match(result.err, /ENOENT|no-such-program/);
+  });
+
+  describe('a command that prints megabytes (a generate loop of warnings)', () => {
+    const LINE = 'warning: implicit wire\n';
+    const LINES = 100_000;
+    const flood = () => runCommand({ cmd: node, args: ['-e', `process.stderr.write(${JSON.stringify(LINE)}.repeat(${LINES}))`], cwd: cwdDir.path });
+
+    test('keeps no more than the first MAX_COMMAND_OUTPUT_CHARS, and a note', async () => {
+      const { err } = await flood();
+      assert.ok(err.length <= MAX_COMMAND_OUTPUT_CHARS + outputCutNote(LINE.length * LINES).length + 1, `kept ${err.length} characters`);
+    });
+
+    test('keeps whole lines only, then says how much is not shown', async () => {
+      const { err } = await flood();
+      const lines = err.trimEnd().split('\n');
+      assert.deepEqual(new Set(lines.slice(0, -1)), new Set([LINE.trimEnd()]));
+    });
+
+    test('ends with how many characters were left out', async () => {
+      const { err } = await flood();
+      const notShown = Number(/\[HDLBoard: (\d+) more/.exec(err)?.[1]);
+      const kept = err.length - `${outputCutNote(notShown)}\n`.length;
+      assert.equal(kept + notShown, LINE.length * LINES);
+    });
   });
 
   test('passes each argument as one argument, never through a shell', async () => {
