@@ -88,6 +88,7 @@ import { useTestbenchSplit } from './useTestbenchSplit';
 import { revealTarget, type AdvisedDiagnostic, type RevealTarget } from './diagnosticAdvice';
 import type { LocatedDiagnostic, RunSnapshot } from './diagnosticLocation';
 import { duplicateArchitectureWarnings } from './duplicateArchitectures';
+import { outputReadWarnings } from './outputReads';
 import { downloadProjectArchive, downloadSourceFile } from './download';
 import { backendPort, confirmDialog, desktopBridge, gitHubTokenStore, parseWorkspace, serializeWorkspace } from './desktop';
 import { BoardSettingsPage } from './BoardSettingsPage';
@@ -1566,7 +1567,7 @@ export function Workbench() {
       source: runSource(fileId, unitName),
     });
     logRunBoard();
-    warnDuplicateArchitectures(runFiles);
+    warnProjectChecks(runFiles);
     if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
     getClient().run(files, topFile?.name, runTarget, {
       recordWave: waveView.waveform.recording,
@@ -1581,9 +1582,13 @@ export function Workbench() {
     else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => settingsPage.open('board') });
   };
 
-  /** Two architectures of one entity with one name: in the console and the code, as a compiler warning. */
-  const warnDuplicateArchitectures = (runFiles: RunSnapshot['files']) => {
-    for (const warning of duplicateArchitectureWarnings({ files: runFiles })) {
+  /**
+   * HDLBoard's own checks at Start, in the console and the code as compiler warnings: two
+   * architectures of one entity with one name, and an output port read (VHDL-93 forbids it).
+   */
+  const warnProjectChecks = (runFiles: RunSnapshot['files']) => {
+    const snapshot = { files: runFiles };
+    for (const warning of [...duplicateArchitectureWarnings(snapshot), ...outputReadWarnings(snapshot)]) {
       appendLog(warning);
       recordDiagnostics(warning, runFiles);
     }

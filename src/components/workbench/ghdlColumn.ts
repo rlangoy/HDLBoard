@@ -42,3 +42,10 @@ export function ghdlColumnToIndex(line: string, column: number): number {
   }
   return line.length;
 }
+
+/** GHDL's 1-based column of the character at `index`: what HDLBoard's own warnings say, so they are placed as GHDL's are. */
+export function indexToGhdlColumn(line: string, index: number): number {
+  let column = 1;
+  for (const char of line.slice(0, index)) column = columnAfter(column, char);
+  return column;
+}

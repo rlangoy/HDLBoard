@@ -987,7 +987,7 @@ When markers change:
 
 | Event | Effect |
 |---|---|
-| Start pressed | all markers cleared; a new snapshot is taken; HDLBoard's own check adds a warning on each architecture whose entity and name an earlier one has (`duplicateArchitectures.ts`: GHDL warns only within one file, and the backend drops warnings when analysis succeeds) |
+| Start pressed | all markers cleared; a new snapshot is taken; HDLBoard's own checks add a warning on each architecture whose entity and name an earlier one has (`duplicateArchitectures.ts`: GHDL warns only within one file, and the backend drops warnings when analysis succeeds), and on each read of an `out` port in its own design (`outputReads.ts`: VHDL-2008 allows it, so GHDL is silent, but VHDL-93 tools refuse it). GHDL's `port "SW" can't be assigned` gets advice (`portModeAdvice.ts`): `SW <= LEDR;` is told to swap its two sides |
 | `ERROR` frame (`recordError`) | parse, locate, advise, add; a failed compile (`analyze`, `elaborate`) reveals the first error |
 | `LOG` frame | parse, locate, add (advice only for Icarus's implicit-wire warning); never moves the view |
 | click in the code pane (text or gutter) | the active file's markers are removed |
