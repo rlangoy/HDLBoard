@@ -74,25 +74,49 @@ export function outputCutNote(droppedChars: number): string {
 }
 
 /**
- * A stream's text from its start, up to MAX_COMMAND_OUTPUT_CHARS. Cut, it ends at the last
- * whole line kept, then outputCutNote: a line cut in half could read as another message.
+ * Of a cut output, the share kept from its start; the rest is kept from its end. A compile
+ * that fails after a flood of warnings prints its errors last, so the end holds what
+ * the student has to fix (and what classifyCompileFailure reads).
  */
-class OutputHead {
-  private text = '';
-  private dropped = 0;
+const HEAD_CHARS = (MAX_COMMAND_OUTPUT_CHARS * 3) / 4;
+const TAIL_CHARS = MAX_COMMAND_OUTPUT_CHARS - HEAD_CHARS;
+
+/**
+ * A stream's text, up to MAX_COMMAND_OUTPUT_CHARS: whole, or its start and its end with
+ * outputCutNote between. The start ends at its last whole line and the end begins at its
+ * first, since a line cut in half could read as another message; a part with no line
+ * break in it (one very long line) is kept as it is, so the message is not lost.
+ */
+export class BoundedOutput {
+  private head = '';
+  private tail = '';
+  private total = 0;
 
   add(more: string): void {
-    const room = MAX_COMMAND_OUTPUT_CHARS - this.text.length;
-    this.text += more.slice(0, Math.max(room, 0));
-    this.dropped += Math.max(more.length - room, 0);
+    this.total += more.length;
+    const room = Math.max(HEAD_CHARS - this.head.length, 0);
+    this.head += more.slice(0, room);
+    const rest = more.slice(room);
+    if (rest !== '') this.tail = (this.tail + rest).slice(-TAIL_CHARS);
   }
 
   toString(): string {
-    if (this.dropped === 0) return this.text;
-    const wholeLines = this.text.slice(0, this.text.lastIndexOf('\n') + 1);
-    const partLine = this.text.length - wholeLines.length;
-    return `${wholeLines}${outputCutNote(this.dropped + partLine)}\n`;
+    if (this.head.length + this.tail.length === this.total) return this.head + this.tail;
+    const head = upToLastLineBreak(this.head);
+    const tail = fromFirstLineBreak(this.tail);
+    const note = outputCutNote(this.total - head.length - tail.length);
+    return `${head}${head.endsWith('\n') ? '' : '\n'}${note}\n${tail}`;
   }
+}
+
+function upToLastLineBreak(text: string): string {
+  const end = text.lastIndexOf('\n');
+  return end === -1 ? text : text.slice(0, end + 1);
+}
+
+function fromFirstLineBreak(text: string): string {
+  const start = text.indexOf('\n');
+  return start === -1 ? text : text.slice(start + 1);
 }
 
 export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS, signal }: CommandOptions): Promise<CmdResult> {
@@ -100,8 +124,8 @@ export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT
   return new Promise((resolve) => {
     // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
     const child = spawn(cmd, args, { cwd, env: childEnv(), detached: process.platform !== 'win32' });
-    const out = new OutputHead();
-    const err = new OutputHead();
+    const out = new BoundedOutput();
+    const err = new BoundedOutput();
     let timedOut = false;
 
     const timer = setTimeout(() => {

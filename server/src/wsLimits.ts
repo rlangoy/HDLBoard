@@ -123,3 +123,10 @@ export function tooManyConnectionsLogLine(logAddress: string, perMinute: number)
 
 /** The server log's line for a RUN refused over the work budget. */
 export const TOO_MANY_RUNS_LOG_LINE = `${BUSY_LOG_PREFIX} refused a RUN, too many runs and resets from one connection in a short time`;
+
+/**
+ * Refusals a minute that one address over its budget is told the reason for, as a WebSocket
+ * with `ERROR busy`; enough for a student's page that retries. Past them, a flood is shed
+ * cheaply, with an HTTP 429 and no WebSocket at all.
+ */
+export const EXPLAINED_REFUSALS_PER_MINUTE = 5;

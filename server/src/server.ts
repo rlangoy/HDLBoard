@@ -55,7 +55,7 @@ import {
 } from './githubAuth.js';
 import { socketRequestAllowed } from './requestOrigin.js';
 import { UpgradeLimiter } from './rateLimit.js';
-import { readWsLimits, TOO_MANY_CONNECTIONS_TEXT, tooManyConnectionsLogLine, type WsLimits } from './wsLimits.js';
+import { EXPLAINED_REFUSALS_PER_MINUTE, readWsLimits, TOO_MANY_CONNECTIONS_TEXT, tooManyConnectionsLogLine, type WsLimits } from './wsLimits.js';
 import { MAX_CLIENT_FRAME_BYTES } from './frameLimits.js';
 import { ClientConnection, refuseBusy, type ConnectionContext } from './clientConnection.js';
 
@@ -250,6 +250,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
   const wsLimits = readWsLimits(opts.wsLimits);
   const upgrades = new UpgradeLimiter({ perMinute: wsLimits.upgradesPerMinute, now: monotonicNow });
   const refusalLogLines = new UpgradeLimiter({ perMinute: REFUSAL_LOG_LINES_PER_MINUTE, now: monotonicNow });
+  const explainedRefusals = new UpgradeLimiter({ perMinute: EXPLAINED_REFUSALS_PER_MINUTE, now: monotonicNow });
   const serveDir = opts.serveDir ? resolve(opts.serveDir) : null;
   // Before anything can spawn.
   const ghdlExe = resolveGhdlExe(process.env, opts);
@@ -318,8 +319,16 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     // spend the budget of everyone behind that student's address (a school's NAT).
     const address = clientAddress(req, trustedProxies);
     if (upgrades.take(address)) wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-    else wss.handleUpgrade(req, socket, head, (ws) => refuseOverBudget(ws, req, address));
+    else if (explainedRefusals.take(address)) wss.handleUpgrade(req, socket, head, (ws) => refuseOverBudget(ws, req, address));
+    else shedOverBudget(socket, req, address);
   });
+
+  /** Past the refusals explained (EXPLAINED_REFUSALS_PER_MINUTE): an HTTP 429, with no WebSocket to set up. */
+  const shedOverBudget = (socket: Duplex, req: IncomingMessage, address: string) => {
+    if (refusalLogLines.take(address)) console.log(tooManyConnectionsLogLine(loggedAddress(req, trustedProxies), wsLimits.upgradesPerMinute));
+    socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+    socket.destroy();
+  };
 
   /**
    * An address over its connection budget is told why, as `ERROR busy`, like a full

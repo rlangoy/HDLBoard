@@ -204,7 +204,7 @@ export class ClientConnection implements OpenSession, Peer {
     if (!this.budget.takeMessage(byteLength(data))) return this.closeForFlooding();
     if (isBinary) return this.refuseBinary();
     const frame = decodeClientFrame(data.toString('utf8'));
-    if ('message' in frame) return this.send({ verb: 'ERROR', stage: 'protocol', text: frame.message });
+    if ('message' in frame) return frame.run ? this.refuseRun(frame.message) : this.send({ verb: 'ERROR', stage: 'protocol', text: frame.message });
     this.handle(frame);
   }
 
@@ -220,13 +220,23 @@ export class ClientConnection implements OpenSession, Peer {
     this.ws.close();
   }
 
+  /**
+   * A RUN that never reaches the session: why, then `DONE refused`, as the session refuses
+   * one (Session.refuseRun). An `ERROR protocol` alone leaves a run going (protocol 7), and
+   * the page would wait on it for ever.
+   */
+  private refuseRun(text: string): void {
+    this.send({ verb: 'ERROR', stage: 'protocol', text });
+    this.send({ verb: 'DONE', reason: 'refused' });
+  }
+
   private hello(): void {
     this.helloed = true;
     this.send({ verb: 'WELCOME', version: PROTOCOL_VERSION });
   }
 
   private run(frame: Extract<ClientFrame, { verb: 'RUN' }>): void {
-    if (!this.helloed) return this.send({ verb: 'ERROR', stage: 'protocol', text: 'RUN sent before HELLO.' });
+    if (!this.helloed) return this.refuseRun('RUN sent before HELLO.');
     // A RUN over the work budget ends like one on a full server, so the page lets go of the run.
     if (!this.budget.takeWork()) return this.closeBusy(TOO_MANY_RUNS_TEXT, TOO_MANY_RUNS_LOG_LINE);
     this.session.handleRun(frame.files, frame.topFile, frame.runTarget).catch((e) => {

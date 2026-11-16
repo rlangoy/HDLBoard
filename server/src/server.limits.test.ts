@@ -8,6 +8,7 @@ import { describe, test } from 'node:test';
 import { WebSocket } from 'ws';
 import type { BackendOptions } from './server.js';
 import { startTestBackend } from './testSupport/testBackend.js';
+import { EXPLAINED_REFUSALS_PER_MINUTE } from './wsLimits.js';
 
 const TIMEOUT = { timeout: 5000 };
 /** RFC 6455's "Policy Violation", what a client over its message budget is closed with. */
@@ -100,6 +101,13 @@ describe('upgrade limits', () => {
       assert.equal(lines.length, 1);
     });
   });
+
+  test('past the refusals explained, a flood is shed with an HTTP 429 and no WebSocket', TIMEOUT, () =>
+    withBackend({ wsLimits: { upgradesPerMinute: 1 } }, async (open) => {
+      await open();
+      for (let i = 0; i < EXPLAINED_REFUSALS_PER_MINUTE; i++) await receivedFrame(await open(), 'ERROR busy');
+      await assert.rejects(open(), /429/);
+    }));
 
   test('with no trusted proxy, a forged X-Forwarded-For buys no new budget', TIMEOUT, () =>
     withBackend({ wsLimits: { upgradesPerMinute: 1 } }, async (open) => {

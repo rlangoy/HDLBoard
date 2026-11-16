@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, MAX_COMMAND_OUTPUT_CHARS, outputCutNote, runCommand } from './runtime.js';
+import { BoundedOutput, createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, MAX_COMMAND_OUTPUT_CHARS, outputCutNote, runCommand } from './runtime.js';
 import { makeTempDir } from './testSupport/sessionDir.js';
 
 const SHORT_TIMEOUT_MS = 300;
@@ -146,18 +146,18 @@ describe('runCommand', () => {
     const LINES = 100_000;
     const flood = () => runCommand({ cmd: node, args: ['-e', `process.stderr.write(${JSON.stringify(LINE)}.repeat(${LINES}))`], cwd: cwdDir.path });
 
-    test('keeps no more than the first MAX_COMMAND_OUTPUT_CHARS, and a note', async () => {
+    test('keeps about MAX_COMMAND_OUTPUT_CHARS, and a note', async () => {
       const { err } = await flood();
-      assert.ok(err.length <= MAX_COMMAND_OUTPUT_CHARS + outputCutNote(LINE.length * LINES).length + 1, `kept ${err.length} characters`);
+      assert.ok(err.length <= MAX_COMMAND_OUTPUT_CHARS + outputCutNote(LINE.length * LINES).length + 2, `kept ${err.length} characters`);
     });
 
-    test('keeps whole lines only, then says how much is not shown', async () => {
+    test('keeps whole lines only, around the note', async () => {
       const { err } = await flood();
-      const lines = err.trimEnd().split('\n');
-      assert.deepEqual(new Set(lines.slice(0, -1)), new Set([LINE.trimEnd()]));
+      const lines = err.trimEnd().split('\n').filter((line) => !line.startsWith('[HDLBoard:'));
+      assert.deepEqual(new Set(lines), new Set([LINE.trimEnd()]));
     });
 
-    test('ends with how many characters were left out', async () => {
+    test('says how many characters were left out', async () => {
       const { err } = await flood();
       const notShown = Number(/\[HDLBoard: (\d+) more/.exec(err)?.[1]);
       const kept = err.length - `${outputCutNote(notShown)}\n`.length;
@@ -209,5 +209,38 @@ describe('run handles', () => {
     handle.kill();
     await new Promise((resolve) => setTimeout(resolve, KILL_GRACE_MS));
     assert.ok(await gone(child.pid as number), 'the run outlived kill() and its grace period');
+  });
+});
+
+describe('BoundedOutput', () => {
+  const WARNING = 'warning: implicit wire\n';
+  const ERROR = 'top.v:12: error: Unable to bind wire foo\n1 error(s) during elaboration.\n';
+
+  const kept = (...chunks: string[]) => {
+    const output = new BoundedOutput();
+    for (const chunk of chunks) output.add(chunk);
+    return String(output);
+  };
+
+  test('keeps a short output whole', () => {
+    assert.equal(kept('one\n', 'two\n'), 'one\ntwo\n');
+  });
+
+  test('keeps the errors that end a flood of warnings', () => {
+    assert.ok(kept(WARNING.repeat(100_000), ERROR).endsWith(ERROR));
+  });
+
+  test('keeps the start of a flood too', () => {
+    assert.ok(kept(WARNING.repeat(100_000), ERROR).startsWith(WARNING));
+  });
+
+  test('keeps a cut line too long for a line break, rather than nothing', () => {
+    assert.ok(kept('x'.repeat(MAX_COMMAND_OUTPUT_CHARS * 2)).startsWith('xxxx'));
+  });
+
+  test('says how much of one long line is not shown', () => {
+    const text = kept('x'.repeat(MAX_COMMAND_OUTPUT_CHARS * 2));
+    const notShown = Number(/\[HDLBoard: (\d+) more/.exec(text)?.[1]);
+    assert.equal(text.replace(/\n?\[HDLBoard: \d+ more characters of output not shown\]\n/, '').length + notShown, MAX_COMMAND_OUTPUT_CHARS * 2);
   });
 });
