@@ -38,3 +38,10 @@ services:
       # sets it too, for a service not made from this Blueprint.
       - key: HDL_TRUSTED_PROXIES
         value: "2"
+      # Plain HTTP (the GitHub sign-in routes) passes more proxies than a
+      # WebSocket: the student, Cloudflare's edge, Render's balancer, and nginx's
+      # ::1 (measured 2026-11-16). A made-up entry from the client sits further
+      # left and is skipped. With 2, the sign-in limit would count each
+      # Cloudflare edge as one student.
+      - key: HDL_TRUSTED_HTTP_PROXIES
+        value: "4"

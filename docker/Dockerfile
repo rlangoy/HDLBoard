@@ -166,8 +166,10 @@ RUN for tool in ghdl iverilog vvp; do ln -s simlimit.sh "/usr/local/lib/hdlboard
 # X-Forwarded-For. Render's edge appends the student (after anything the
 # client sent itself) and nginx here appends ::1 (measured 2026-11-15).
 # With 0, every student is 127.0.0.1 and they share one grace period.
+# HDL_TRUSTED_HTTP_PROXIES=4: plain HTTP (GitHub sign-in) gets `<student>,
+# <Cloudflare edge>, <Render balancer>, ::1` (measured 2026-11-16).
 ENV HDL_MAX_SESSIONS=4 \
-    HDL_TRUSTED_PROXIES=2 \
+    HDL_TRUSTED_PROXIES=2     HDL_TRUSTED_HTTP_PROXIES=4 \
     HDLBOARD_SIM_MEMORY_MB=96 \
     GHDL_EXE=/usr/local/lib/hdlboard/ghdl \
     IVERILOG_EXE=/usr/local/lib/hdlboard/iverilog \

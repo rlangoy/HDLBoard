@@ -124,6 +124,10 @@ and build context `.` (the repository root). Leave `PORT` unset, or set it to
   (`ERROR busy: refused 198.51.100.7, all 4 in use`). A made-up entry from a
   client is skipped (measured 2026-11-15). Seeing `127.0.0.1 (forwarded for …)`
   in the log means the setting was overridden to `0`.
+  A plain HTTP request, such as a GitHub sign-in, passes more proxies:
+  `<student>, <Cloudflare edge>, <Render balancer>, ::1`. So the stage also
+  sets `HDL_TRUSTED_HTTP_PROXIES=4`, which keeps the sign-in limit counting
+  students, not Cloudflare edges (measured 2026-11-16).
 - **Bouncy pushbuttons are not offered** by default (`HDLBOARD_BOUNCY_BUTTONS`
   in the Dockerfile's `page-build` stage). Change that default in the
   Dockerfile to offer them.
