@@ -39,6 +39,8 @@ const PROTOCOL_VERSION = '7';
  * refused, or closed to make room for another student. The server closes the socket next.
  */
 export const BUSY_STAGE = 'busy';
+/** The `ERROR` stage of a frame the server would not act on: a refused request (protocol 7). */
+const PROTOCOL_STAGE = 'protocol';
 /** `DONE refused`: the RUN never started; the `ERROR protocol` before it said why (protocol 7). */
 export const REFUSED_REASON = 'refused';
 /** The first protocol whose BOARD frame carries a board's shape; an older backend gets the 1.6 frame. */
@@ -341,18 +343,23 @@ export class HdlClient {
    * other board (§ 6.3).
    */
   private boardFrameFor(board: BoardPorts): string | undefined {
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) >= SHAPED_BOARD_PROTOCOL) return encodeBoardFrame(board);
+    if (this.backendSpeaks(SHAPED_BOARD_PROTOCOL)) return encodeBoardFrame(board);
     return fitsV1BoardFrame(board) ? encodeV1BoardFrame(board) : undefined;
   }
 
   /** `ERROR protocol` about the BOARD verb: the backend predates it, and the RUN that follows still runs. */
   private isOldBackendAnswer(stage: string, text: string): boolean {
-    return stage === 'protocol' && text.includes(UNKNOWN_BOARD_VERB);
+    return stage === PROTOCOL_STAGE && text.includes(UNKNOWN_BOARD_VERB);
   }
 
   /** `ERROR protocol` from a backend that ends a refused RUN with `DONE refused` (REFUSAL_PROTOCOL). */
   private isRefusal(stage: string): boolean {
-    return stage === 'protocol' && (this.backendVersion ?? OLDEST_PROTOCOL) >= REFUSAL_PROTOCOL;
+    return stage === PROTOCOL_STAGE && this.backendSpeaks(REFUSAL_PROTOCOL);
+  }
+
+  /** The backend named `version` or a later one in WELCOME; one that has not answered yet counts as the oldest. */
+  private backendSpeaks(version: number): boolean {
+    return (this.backendVersion ?? OLDEST_PROTOCOL) >= version;
   }
 
   private noteOldBackend(): void {
@@ -393,7 +400,7 @@ export class HdlClient {
 
   /** The OPTIONS frame for this backend: undefined for one that predates it. */
   private optionsFrameFor(compilerOptions: CompilerOptions | undefined): string | undefined {
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) < OPTIONS_PROTOCOL) return undefined;
+    if (!this.backendSpeaks(OPTIONS_PROTOCOL)) return undefined;
     return `OPTIONS\n${JSON.stringify(compilerOptions ?? {})}`;
   }
 
@@ -418,7 +425,7 @@ export class HdlClient {
     const send = () => {
       const boardFrame = this.boardFrameFor(board);
       if (boardFrame === undefined) {
-        this.handlers.onError('protocol', BOARD_TEXT.oldBackendShape);
+        this.handlers.onError(PROTOCOL_STAGE, BOARD_TEXT.oldBackendShape);
         this.runEnded();
         return;
       }
@@ -449,7 +456,7 @@ export class HdlClient {
   stimSteps(steps: readonly TimedStim[]): void {
     const last = steps[steps.length - 1];
     if (last === undefined) return;
-    if ((this.backendVersion ?? OLDEST_PROTOCOL) < TIMED_STIM_PROTOCOL) {
+    if (!this.backendSpeaks(TIMED_STIM_PROTOCOL)) {
       this.stim(last.bits);
       return;
     }

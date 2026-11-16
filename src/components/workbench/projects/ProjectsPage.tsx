@@ -106,9 +106,9 @@ interface ShownSection {
   busy: boolean;
   /** The saves, each waiting for a name first. */
   saves: ProjectSaves;
-  name: ReturnType<typeof nameGuard>;
-  navigation: ReturnType<typeof useSectionReturn>;
-  draft: ReturnType<typeof useNewProjectDraft>;
+  name: NameGuard;
+  navigation: SectionNavigation;
+  draft: NewProjectDraftState;
   openNewProject: () => void;
 }
 
@@ -161,11 +161,17 @@ const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSection
   ),
 };
 
+interface SectionNavigation {
+  readonly select: (section: ProjectsSectionId) => void;
+  /** New project's Cancel: back to the section it was opened from. */
+  readonly back: () => void;
+}
+
 /**
  * Section changes that remember where New project was opened from, so its Cancel goes
  * back there (to the first section when the page was opened at New project).
  */
-function useSectionReturn(section: ProjectsSectionId, onSectionChange: (section: ProjectsSectionId) => void) {
+function useSectionReturn(section: ProjectsSectionId, onSectionChange: (section: ProjectsSectionId) => void): SectionNavigation {
   const [returnTo, setReturnTo] = useState<ProjectsSectionId>(FIRST_SECTION);
   const select = (next: ProjectsSectionId) => {
     if (next === NEW_SECTION.id && section !== NEW_SECTION.id) setReturnTo(section);
@@ -174,12 +180,19 @@ function useSectionReturn(section: ProjectsSectionId, onSectionChange: (section:
   return { select, back: () => onSectionChange(returnTo) };
 }
 
+interface NewProjectDraftState {
+  readonly draft: NewProjectDraft;
+  readonly onDraftChange: (draft: NewProjectDraft) => void;
+  /** Back to the empty form. */
+  readonly clear: () => void;
+}
+
 /**
  * The New project form's input, kept while the page is open: leaving the section to save
  * the open project first, or cancelling the question about Files' files, keeps what was
  * typed; Cancel clears it. It starts on the open project's board, if that board is installed here.
  */
-function useNewProjectDraft(active: ActiveProjectProps, language: NewFileLanguage) {
+function useNewProjectDraft(active: ActiveProjectProps, language: NewFileLanguage): NewProjectDraftState {
   const startingDraft = () => emptyDraft(findBoard(active.board.boards, active.project.board).board.id, language);
   const [draft, setDraft] = useState<NewProjectDraft>(startingDraft);
   return { draft, onDraftChange: setDraft, clear: () => setDraft(startingDraft()) };
@@ -227,8 +240,16 @@ function ActiveProjectSection({ active, info, busy, name, saves }: ActiveProject
   );
 }
 
+interface NameGuard {
+  readonly request: NameRequest;
+  /** Rename…: shows the name field. */
+  readonly askForName: () => void;
+  /** `save`, or, while the project has no name, the name field marked as missing. */
+  readonly withName: (save: () => void) => () => void;
+}
+
 /** A project without a name is named in its details before it is saved anywhere. */
-function nameGuard(needed: boolean, nameAsk: NameAsk) {
+function nameGuard(needed: boolean, nameAsk: NameAsk): NameGuard {
   const withName = (save: () => void) => () => (needed ? nameAsk.ask(true) : save());
   const request: NameRequest = { needed, missing: nameAsk.missing, focusPending: nameAsk.focusPending, onFocused: nameAsk.onFocused };
   return { request, askForName: () => nameAsk.ask(false), withName };

@@ -403,11 +403,17 @@ describe('after a run, its place on the server is freed', () => {
   describe('a refused request (protocol 7)', () => {
     const RESET_REFUSED = 'Reset ignored: too many runs and resets in a short time.';
 
-    test('is reported as refused, not as an error that ends the run', () => {
+    test('is reported as refused', () => {
       const handlers = recordingHandlers();
       running(handlers);
       FakeSocket.last?.receive(`ERROR protocol\n${RESET_REFUSED}`);
       expect(handlers.onRefused).toHaveBeenCalledWith(RESET_REFUSED);
+    });
+
+    test('is no error that ends the run', () => {
+      const handlers = recordingHandlers();
+      running(handlers);
+      FakeSocket.last?.receive(`ERROR protocol\n${RESET_REFUSED}`);
       expect(handlers.onError).not.toHaveBeenCalled();
     });
 

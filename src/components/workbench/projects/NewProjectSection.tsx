@@ -192,9 +192,10 @@ function LanguageCards({ name, language, onChange }: LanguageCardsProps) {
 
 /** Above the buttons: the project a new one takes the place of, and that unsaved changes are asked about first. */
 function ReplacesNote({ openProject }: { openProject: OpenProjectInfo }) {
+  const named = openProject.name.trim() !== '';
   return (
     <p className="wb-newproject__note">
-      The new project replaces the open project, <strong>{openProject.name}</strong>.
+      The new project replaces the open project{named && <>, <strong>{openProject.name}</strong></>}.
       {openProject.unsaved && ' It has unsaved changes: you are asked what to do with them first.'}
     </p>
   );

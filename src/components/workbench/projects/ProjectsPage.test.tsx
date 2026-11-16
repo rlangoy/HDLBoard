@@ -202,11 +202,16 @@ describe('the New project section', () => {
     expect(textOf(render('new'))).toContain('New project Create a new project with a name, board, and file.');
   });
 
-  test('is a form inline in the page, not a dialog, with no folding header', () => {
-    const html = render('new');
-    expect(html).toContain('<form class="wb-newproject"');
-    expect(html).not.toContain('role="dialog"');
-    expect(html).not.toContain('wb-page-card__toggle');
+  test('is a form inline in the page', () => {
+    expect(render('new')).toContain('<form class="wb-newproject"');
+  });
+
+  test('is not a dialog', () => {
+    expect(render('new')).not.toContain('role="dialog"');
+  });
+
+  test('has no folding header', () => {
+    expect(render('new')).not.toContain('wb-page-card__toggle');
   });
 
   test('asks for the project name, board, file name and language, in that order', () => {
@@ -234,6 +239,10 @@ describe('the New project section', () => {
 
   test('says which project it replaces, and that its unsaved changes are asked about', () => {
     expect(textOf(render('new'))).toContain('The new project replaces the open project, Custom_Board . It has unsaved changes');
+  });
+
+  test('names no project when the open one has no name yet', () => {
+    expect(textOf(render('new', { info: { ...info, name: '' } }))).toContain('The new project replaces the open project. It has');
   });
 
   test('has no ⋮ menu of its own', () => {

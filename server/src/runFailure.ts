@@ -97,8 +97,9 @@ export function crashOf({ code, stderr, signal }: SimulatorExit): string | undef
  * signal. A signal, or stderr naming a crash, is a crash whatever was reported.
  */
 export function crashBeyondReport(exit: SimulatorExit, report: SimulatorReport | null): string | undefined {
-  const explainedByReport = report !== null && report.stops && exit.signal === null && !CRASH_TEXT.test(exit.stderr);
-  return explainedByReport ? undefined : crashOf(exit);
+  const reportedStop = report?.stops === true;
+  const crashSaidOutright = exit.signal !== null || CRASH_TEXT.test(exit.stderr);
+  return reportedStop && !crashSaidOutright ? undefined : crashOf(exit);
 }
 
 /**

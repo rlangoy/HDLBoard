@@ -625,10 +625,11 @@ export function Workbench() {
           // tone matches 'Simulation running ...' above, since this is
           // the design finishing correctly, not being interrupted.
           // A run ended for an opened example adds nothing: the console is the example's now.
-          // A refused RUN never started, and its refusal is in the console already.
           const completed = reason === 'completed';
-          const quiet = takeFlag(quietEnd) || reason === REFUSED_REASON;
-          if (!quiet) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
+          const endedForExample = takeFlag(quietEnd);
+          // A refused RUN never started, and its refusal is in the console already.
+          const refused = reason === REFUSED_REASON;
+          if (!endedForExample && !refused) appendLog(completed ? 'Simulation complete.' : 'Simulation stopped.', completed ? 'success' : undefined);
           blankBoard();
           endRunWaveform();
         },

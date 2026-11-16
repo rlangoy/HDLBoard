@@ -45,8 +45,8 @@ export type ErrorStage = 'analyze' | 'elaborate' | 'runtime' | 'protocol' | 'int
 // frontend can tell "your design finished" from "you ended the session".
 // 'refused': the RUN never started (an invalid BOARD or OPTIONS frame); its `ERROR protocol`
 // said why. An `ERROR protocol` alone never ends a run (protocol 7).
-export type DoneReason = 'stopped' | 'completed' | 'max-cycles' | 'closed' | 'refused';
-const DONE_REASONS: readonly DoneReason[] = ['stopped', 'completed', 'max-cycles', 'closed', 'refused'];
+const DONE_REASONS = ['stopped', 'completed', 'max-cycles', 'closed', 'refused'] as const;
+export type DoneReason = (typeof DONE_REASONS)[number];
 
 /** The waveform formats (docs/waveform_viewer_spec.md W2): GHW for VHDL, VCD for Verilog. */
 export type WaveFormat = 'ghw' | 'vcd';
