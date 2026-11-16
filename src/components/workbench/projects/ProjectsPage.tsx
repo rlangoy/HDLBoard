@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { useState, type ReactNode } from 'react';
+import { findBoard } from '../../../boards/boardCatalog';
 import { CloseIcon, LinkIcon, PlusIcon } from '../icons';
+import type { NewFileLanguage } from '../newFile';
 import type { MenuAction } from '../ProjectMenu';
 import { Page } from '../page/Page';
 import { PageHeader } from '../page/PageHeader';
@@ -9,12 +12,14 @@ import type { OpenProject, ProjectDetails, ProjectEntryRow } from '../projectFil
 import { ScrollArea } from '../ScrollArea';
 import { CurrentProjectCard } from './CurrentProjectCard';
 import { MoreMenuButton } from './MoreMenuButton';
+import { emptyDraft, type NewProjectChoice, type NewProjectDraft } from './newProjectForm';
+import { NewProjectSection } from './NewProjectSection';
 import type { OpenProjectInfo } from './openProject';
 import { ProjectAdvancedCard } from './ProjectAdvancedCard';
 import { ProjectDetailsCard, type BoardChoice, type NameRequest } from './ProjectDetailsCard';
 import { ProjectFilesCard, type ProjectFileActions } from './ProjectFilesCard';
 import { ProjectListSection, type ProjectListsProps } from './ProjectListSection';
-import { projectsSection, type ProjectsSectionId } from './projectsSections';
+import { ACTIVE_SECTION, FIRST_SECTION, isListSection, NEW_SECTION, projectsSection, type ListSectionId, type ProjectsSectionId } from './projectsSections';
 import { ProjectsSidebar, SECTION_ICONS } from './ProjectsSidebar';
 import type { NameAsk } from './useProjectsPage';
 import { ProjectStorageCard, type GitHubStorage, type LocalStorage } from './ProjectStorageCard';
@@ -54,60 +59,136 @@ export interface ProjectsPageProps {
   active: ActiveProjectProps;
   /** The name field, asked for (useProjectsPage). */
   nameAsk: NameAsk;
+  /** New project › Create project: asks about the open project's unsaved changes, then creates the new one. */
+  onCreateProject: (choice: NewProjectChoice) => void;
+  /** The language New project starts on: the first one ticked in Settings › Languages. */
+  newProjectLanguage: NewFileLanguage;
 }
 
 const TITLE_ID = 'wb-projects-title';
 
 /**
  * The Projects page (issue #44), in the editor's place like Settings: a sidebar of where
- * projects are stored, and the active project at its foot. The lists have the open project
- * on top; Active project shows it in full, with where Save writes it.
+ * projects are stored, then the active project and New project at its foot. The lists
+ * have the open project on top; Active project shows it in full, with where Save writes it.
  */
-export function ProjectsPage({ section, onSectionChange, onClose, info, saves, lists, active, nameAsk }: ProjectsPageProps) {
+export function ProjectsPage(props: ProjectsPageProps) {
+  const { section, onClose, info, saves, lists, active, nameAsk } = props;
   const { label, intro } = projectsSection(section);
   const name = nameGuard(active.needsName, nameAsk);
-  const guarded: ProjectSaves = { toComputer: name.withName(saves.toComputer), toGitHub: name.withName(saves.toGitHub) };
-  const busy = active.busy !== null || active.github.projects.busy !== null;
+  const navigation = useSectionReturn(section, props.onSectionChange);
+  const shown: ShownSection = {
+    page: props,
+    busy: active.busy !== null || active.github.projects.busy !== null,
+    saves: { toComputer: name.withName(saves.toComputer), toGitHub: name.withName(saves.toGitHub) },
+    name,
+    navigation,
+    draft: useNewProjectDraft(active, props.newProjectLanguage),
+    openNewProject: () => navigation.select(NEW_SECTION.id),
+  };
 
   return (
-    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={onSectionChange} onBack={onClose} />}>
+    <Page className="wb-projects" titleId={TITLE_ID} onClose={onClose} sidebar={<ProjectsSidebar current={section} unsaved={info.unsaved} onSelect={navigation.select} onBack={onClose} />}>
       <PageHeader titleId={TITLE_ID} icon={SECTION_ICONS[section]} title={label} subtitle={intro} closeLabel="Close projects" onClose={onClose}>
-        {section !== 'active' && <MoreMenuButton label="More: new project, open another" actions={listsMenu(lists)} />}
+        {isListSection(section) && <MoreMenuButton label="More: new project, open another" actions={listsMenu(lists, shown.openNewProject)} />}
       </PageHeader>
       {/* Keyed by section, so another section starts at its top. */}
       <ScrollArea key={section} className="wb-page__scroll">
-        <div className="wb-projects__body">
-          {section === 'active' ? (
-            <>
-              <CurrentProjectCard
-                project={info}
-                busy={busy}
-                onSave={info.destination === 'github' ? guarded.toGitHub : guarded.toComputer}
-                onOpenInWorkspace={onClose}
-                menu={[...listsMenu(lists), closeProjectAction(active)]}
-              />
-              <ActiveProjectSection active={active} info={info} busy={busy} name={name.request} saves={guarded} />
-            </>
-          ) : (
-            <ProjectListSection
-              {...lists}
-              section={section}
-              openProject={info}
-              onBackToWorkspace={onClose}
-              onShowDetails={() => onSectionChange('active')}
-              onRename={name.askForName}
-            />
-          )}
-        </div>
+        <div className="wb-projects__body">{sectionBody(section, shown)}</div>
       </ScrollArea>
     </Page>
   );
 }
 
+/** What a section's body is drawn from: the page's props, and what the page worked out for them. */
+interface ShownSection {
+  page: ProjectsPageProps;
+  busy: boolean;
+  /** The saves, each waiting for a name first. */
+  saves: ProjectSaves;
+  name: ReturnType<typeof nameGuard>;
+  navigation: ReturnType<typeof useSectionReturn>;
+  draft: ReturnType<typeof useNewProjectDraft>;
+  openNewProject: () => void;
+}
+
+/** The section's body: one of the lists, or a section of its own. */
+function sectionBody(section: ProjectsSectionId, shown: ShownSection): ReactNode {
+  return isListSection(section) ? listBody(section, shown) : OWN_SECTION_BODIES[section](shown);
+}
+
+function listBody(section: ListSectionId, { page, name, navigation, openNewProject }: ShownSection) {
+  return (
+    <ProjectListSection
+      {...page.lists}
+      section={section}
+      openProject={page.info}
+      onNewProject={openNewProject}
+      onBackToWorkspace={page.onClose}
+      onShowDetails={() => navigation.select(ACTIVE_SECTION.id)}
+      onRename={name.askForName}
+    />
+  );
+}
+
+/** The sections that are not lists, each drawn. */
+const OWN_SECTION_BODIES: Readonly<Record<Exclude<ProjectsSectionId, ListSectionId>, (shown: ShownSection) => ReactNode>> = {
+  active: ({ page, busy, saves, name, openNewProject }) => (
+    <>
+      <CurrentProjectCard
+        project={page.info}
+        busy={busy}
+        onSave={page.info.destination === 'github' ? saves.toGitHub : saves.toComputer}
+        onOpenInWorkspace={page.onClose}
+        menu={[...listsMenu(page.lists, openNewProject), closeProjectAction(page.active)]}
+      />
+      <ActiveProjectSection active={page.active} info={page.info} busy={busy} name={name.request} saves={saves} />
+    </>
+  ),
+  new: ({ page, busy, navigation, draft }) => (
+    <NewProjectSection
+      draft={draft.draft}
+      onDraftChange={draft.onDraftChange}
+      boards={page.active.board.boards}
+      openProject={page.info}
+      busy={busy || page.lists.opening}
+      onCreate={page.onCreateProject}
+      onCancel={() => {
+        draft.clear();
+        navigation.back();
+      }}
+    />
+  ),
+};
+
+/**
+ * Section changes that remember where New project was opened from, so its Cancel goes
+ * back there (to the first section when the page was opened at New project).
+ */
+function useSectionReturn(section: ProjectsSectionId, onSectionChange: (section: ProjectsSectionId) => void) {
+  const [returnTo, setReturnTo] = useState<ProjectsSectionId>(FIRST_SECTION);
+  const select = (next: ProjectsSectionId) => {
+    if (next === NEW_SECTION.id && section !== NEW_SECTION.id) setReturnTo(section);
+    onSectionChange(next);
+  };
+  return { select, back: () => onSectionChange(returnTo) };
+}
+
+/**
+ * The New project form's input, kept while the page is open: leaving the section to save
+ * the open project first, or cancelling the question about Files' files, keeps what was
+ * typed; Cancel clears it. It starts on the open project's board, if that board is installed here.
+ */
+function useNewProjectDraft(active: ActiveProjectProps, language: NewFileLanguage) {
+  const startingDraft = () => emptyDraft(findBoard(active.board.boards, active.project.board).board.id, language);
+  const [draft, setDraft] = useState<NewProjectDraft>(startingDraft);
+  return { draft, onDraftChange: setDraft, clear: () => setDraft(startingDraft()) };
+}
+
 /** The ⋮ menu of the lists' header: starting or opening another project. */
-function listsMenu(lists: ProjectListsProps): MenuAction[] {
+function listsMenu(lists: ProjectListsProps, onNewProject: () => void): MenuAction[] {
   return [
-    { label: 'New project', icon: <PlusIcon aria-hidden="true" />, onSelect: lists.onNewProject, detail: 'Name it, add files, then save it' },
+    { label: 'New project', icon: <PlusIcon aria-hidden="true" />, onSelect: onNewProject, detail: 'Name it, choose a board and a language' },
     { label: 'Open from a URL or path…', icon: <LinkIcon aria-hidden="true" />, onSelect: lists.onOpenFromUrl },
   ];
 }

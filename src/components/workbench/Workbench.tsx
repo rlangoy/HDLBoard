@@ -41,7 +41,9 @@ import { useKeepProject } from './settings/useKeepProject';
 import { BOARD_FOLDING_PAGES, EXPLORER_FOLDING_PAGES, usePageFold, usePaneFolds } from './paneFolds';
 import { loadPreferredLanguages, savePreferredLanguages, type PreferredLanguages } from './languagePrefs';
 import { HelpDialog } from './HelpDialog';
-import { NewFileDialog, type NewProjectChoice } from './NewFileDialog';
+import { NewFileDialog } from './NewFileDialog';
+import type { NewProjectChoice } from './projects/newProjectForm';
+import { isListSection } from './projects/projectsSections';
 import { RemoveFilesDialog } from './RemoveFilesDialog';
 
 import { RefusedFilesDialog } from './RefusedFilesDialog';
@@ -107,7 +109,6 @@ import {
   filesInProject,
   isProjectUpload,
   newProject,
-  startProject,
   defaultProject,
   DEFAULT_PROJECT_NAME,
   withFileLeft,
@@ -391,6 +392,8 @@ export function Workbench() {
   const savedDiskRef = useRef<SaveDisk | null>(null);
   // Settings › Languages: what the Examples pane opens with (languagePrefs.ts).
   const [preferredLanguages, setPreferredLanguages] = useState(loadPreferredLanguages);
+  /** The first language ticked in Settings › Languages: what a new starter file or project starts in. */
+  const firstPreferredLanguage: NewFileLanguage = preferredLanguages.has('vhdl') ? 'vhdl' : 'verilog';
   const handlePreferredLanguagesChange = (languages: PreferredLanguages) => {
     setPreferredLanguages(languages);
     savePreferredLanguages(languages);
@@ -798,7 +801,7 @@ export function Workbench() {
   // A board of another shape has no examples: the Examples pane offers its generated
   // starter top instead (docs/board_io_v2_spec.md § 5.4), in the first language ticked.
   const handleNewStarterFile = () => {
-    const language = preferredLanguages.has('vhdl') ? 'vhdl' : 'verilog';
+    const language = firstPreferredLanguage;
     const name = starterTopFileName(activeBoard, language, { takenNames: files.map((f) => f.name) });
     addFile(name, generateBoardTop(activeBoard, language, baseName(name)), folderForUpload(name) ?? 'vhdl');
     appendLog(`Added ${name}: a starter top file for the ${activeBoard.name} board.`, 'success');
@@ -1093,7 +1096,7 @@ export function Workbench() {
   };
 
   // Read while a list is shown; Active project lists nothing.
-  const localProjects = useLocalProjects(projectsPage.section !== null && projectsPage.section !== 'active');
+  const localProjects = useLocalProjects(projectsPage.section !== null && isListSection(projectsPage.section));
 
   // Signing in from the dialog ends in the Projects page, among the projects on GitHub.
   const signedIn = gitHub.session !== null;
@@ -1423,17 +1426,22 @@ export function Workbench() {
     if (file) handleOpenFile(file.id);
   };
 
-  // New File › Create project: with files in Files, RemoveFilesDialog asks first whether the project keeps them.
-  const handleCreateProject = (choice: NewProjectChoice) => {
+  /**
+   * New File › Create project, and Projects › New project: the open project's unsaved
+   * changes are asked about first; then, with files in Files, RemoveFilesDialog asks
+   * whether the new project keeps them.
+   */
+  const handleCreateProject = async (choice: NewProjectChoice) => {
     setDialog(null);
-    if (files.length === 0) removeFilesForNewProject(choice);
+    if (!(await leaveOpenProject(`the new project ${choice.name}`))) return;
+    if (filesRef.current.length === 0) removeFilesForNewProject(choice);
     else setProjectToCreate(choice);
   };
 
-  /** A new project's top file: the chosen board's generated top, named after the project, in the language chosen. */
-  const boardTopFile = ({ name: projectName, board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
+  /** A new project's top file: the chosen board's generated top, named after `topName`, in the language chosen. */
+  const boardTopFile = ({ topName, board, language }: NewProjectChoice, takenNames: readonly string[]): VhdlFile => {
     const definition = findBoard(catalog, board).board;
-    const name = starterTopFileName(definition, language, { takenNames, projectName });
+    const name = starterTopFileName(definition, language, { takenNames, projectName: topName });
     const content = definition.origin === 'user'
       ? newFileContent(name, language, definition).text
       : generateBoardTop(definition, language, baseName(name));
@@ -1479,16 +1487,6 @@ export function Workbench() {
     setEmptiedFolders([]);
     createProject(choice.name, choice.board, [top.name], top);
   };
-
-  // Create Project (Files panel): a new, empty project; the Active project offers the files now in Files.
-  const handleStartProject = () => navigate(() => {
-    // The files it offers are in the open project's names: its board too.
-    const started = withBoardConfig(startProject(fileNames, project.board), catalog.boardConfigFor(project.board));
-    saveFolderRef.current = null;
-    replaceProject(started);
-    projectsPage.open('active');
-    appendLog('New project: give it a name, and add the files that belong to it.', 'success');
-  });
 
   const handleFilesChosen = (e: ChangeEvent<HTMLInputElement>) => {
     const chosen = [...(e.target.files ?? [])];
@@ -1923,7 +1921,7 @@ export function Workbench() {
           kind={testbenchDesign ? 'testbench' : 'design'}
           existingNames={files.map((f) => f.name)}
           onCreate={handleCreateFile}
-          onCreateProject={testbenchDesign ? undefined : handleCreateProject}
+          onCreateProject={testbenchDesign ? undefined : (choice) => void handleCreateProject(choice)}
           openProjectName={project.name}
           boards={testbenchDesign ? undefined : catalog}
           initialBoard={activeBoard.id}
@@ -1937,8 +1935,8 @@ export function Workbench() {
         <RemoveFilesDialog
           projectName={projectToCreate.name}
           fileNames={fileNames}
-          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, { takenNames: fileNames, projectName: projectToCreate.name })}
-          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, { projectName: projectToCreate.name })}
+          keepFileName={starterTopFileName(findBoard(catalog, project.board).board, projectToCreate.language, { takenNames: fileNames, projectName: projectToCreate.topName })}
+          removeFileName={starterTopFileName(findBoard(catalog, projectToCreate.board).board, projectToCreate.language, { projectName: projectToCreate.topName })}
           onKeep={() => keepFilesInNewProject(projectToCreate)}
           onRemove={() => removeFilesForNewProject(projectToCreate)}
           onCancel={() => setProjectToCreate(null)}
@@ -2128,12 +2126,13 @@ export function Workbench() {
                   localProjects,
                   opening: projectBusy !== null || gitHubProjects.busy !== null,
                   onOpenItem: (item) => void handleOpenListedProject(item),
-                  onNewProject: handleStartProject,
                   onSignIn: () => setDialog('githubSignIn'),
                   onOpenFromUrl: showOpenDialog,
                   onShowInFolder: showInFolder && ((path) => void showInFolder(path)),
                 }}
                 nameAsk={projectsPage.nameAsk}
+                onCreateProject={(choice) => void handleCreateProject(choice)}
+                newProjectLanguage={firstPreferredLanguage}
                 active={{
                   project,
                   rows: projectEntries(project, fileNames),

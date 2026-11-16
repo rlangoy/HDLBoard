@@ -52,7 +52,9 @@ const PROPS: ProjectsPageProps = {
   info,
   saves: { toComputer: ignore, toGitHub: ignore },
   nameAsk: { missing: false, focusPending: false, onFocused: ignore, ask: ignore },
-  lists: { connection: signedOut, gitHubProjects, localProjects: local, opening: false, onOpenItem: ignore, onNewProject: ignore, onSignIn: ignore, onOpenFromUrl: ignore },
+  lists: { connection: signedOut, gitHubProjects, localProjects: local, opening: false, onOpenItem: ignore, onSignIn: ignore, onOpenFromUrl: ignore },
+  onCreateProject: ignore,
+  newProjectLanguage: 'vhdl',
   active: {
     project: newProject('Custom_Board', ['top.vhd'], 'de1-soc'),
     rows: [],
@@ -73,9 +75,13 @@ const render = (section: ProjectsSectionId, props: Partial<ProjectsPageProps> = 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('the sidebar', () => {
-  test('lists where projects are stored, and the active project below them', () => {
+  test('lists where projects are stored, then the active project and New project below them', () => {
     const labels = [...render('all').matchAll(/class="wb-page-nav__item"[^>]*>.*?<\/span>([^<]+)</g)].map((match) => match[1]);
-    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project']);
+    expect(labels).toEqual(['All projects', 'On this computer', 'On GitHub', 'Active project', 'New project']);
+  });
+
+  test('marks New project while its form is shown', () => {
+    expect(render('new')).toMatch(/aria-current="page"[^>]*><span class="wb-page-nav__icon">.*?<\/span>New project</);
   });
 
   test('puts a dot on the active project while it has unsaved changes', () => {
@@ -188,6 +194,50 @@ describe('the Active project section', () => {
     const html = render('active', { active: { ...PROPS.active, needsName: true } });
     expect(html).toContain('placeholder="Enter project name"');
     expect(textOf(html)).toContain('Project name is required before it is saved');
+  });
+});
+
+describe('the New project section', () => {
+  test('has its heading and the short description', () => {
+    expect(textOf(render('new'))).toContain('New project Create a new project with a name, board, and file.');
+  });
+
+  test('is a form inline in the page, not a dialog, with no folding header', () => {
+    const html = render('new');
+    expect(html).toContain('<form class="wb-newproject"');
+    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain('wb-page-card__toggle');
+  });
+
+  test('asks for the project name, board, file name and language, in that order', () => {
+    const labels = [...render('new').matchAll(/class="wb-newproject__label"[^>]*>([^<]+)</g)].map((match) => match[1]);
+    expect(labels).toEqual(['Project name', 'Board', 'File name', 'Language']);
+  });
+
+  test('starts on the open project\'s board, described under the list', () => {
+    expect(textOf(render('new'))).toContain('Terasic DE1-SoC, System Builder names: KEY and HEX0 … HEX5.');
+  });
+
+  test('offers VHDL and Verilog as radio buttons, VHDL chosen', () => {
+    const radios = [...render('new').matchAll(/<input type="radio"[^>]*>/g)].map(([tag]) => [/value="(\w+)"/.exec(tag)?.[1], tag.includes('checked')]);
+    expect(radios).toEqual([['vhdl', true], ['verilog', false]]);
+  });
+
+  test('starts on the language preferred in Settings', () => {
+    const checked = [...render('new', { newProjectLanguage: 'verilog' }).matchAll(/<input type="radio"[^>]*>/g)].find(([tag]) => tag.includes('checked'));
+    expect(checked?.[0]).toContain('value="verilog"');
+  });
+
+  test('has Cancel and Create project, Create project the primary button', () => {
+    expect(render('new')).toMatch(/>Cancel<\/button><button type="submit" class="wb-projects__btn is-primary">Create project</);
+  });
+
+  test('says which project it replaces, and that its unsaved changes are asked about', () => {
+    expect(textOf(render('new'))).toContain('The new project replaces the open project, Custom_Board . It has unsaved changes');
+  });
+
+  test('has no ⋮ menu of its own', () => {
+    expect(render('new')).not.toContain('More: new project, open another');
   });
 });
 

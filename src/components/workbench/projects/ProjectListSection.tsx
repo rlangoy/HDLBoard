@@ -21,8 +21,6 @@ export interface ProjectListsProps extends ProjectSources {
   /** A project is being opened: every Open waits. */
   opening: boolean;
   onOpenItem: (item: ProjectListItem) => void;
-  /** Starts a new, empty project and shows it in the Active project section. */
-  onNewProject: () => void;
   onSignIn: () => void;
   /** The old way in: a project file by its URL or path. */
   onOpenFromUrl: () => void;
@@ -33,6 +31,8 @@ export interface ProjectListsProps extends ProjectSources {
 export interface ProjectListSectionProps extends ProjectListsProps {
   section: ListSectionId;
   openProject: OpenProjectInfo;
+  /** Shows the New project section. */
+  onNewProject: () => void;
   /** Open on the open project's row: back to the editor. */
   onBackToWorkspace: () => void;
   /** The open project's ⋮ › Project details and Rename. */

@@ -2,25 +2,26 @@
 // Copyright (C) 2026 Rune Langøy
 
 import type { ReactNode } from 'react';
-import { GitHubIcon, LaptopIcon, ProjectIcon, StackIcon } from '../icons';
+import { GitHubIcon, LaptopIcon, PlusIcon, ProjectIcon, StackIcon } from '../icons';
 import { PageSidebar, type PageNavEntry } from '../page/PageSidebar';
-import { ACTIVE_SECTION, LIST_SECTIONS, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
+import { ACTIVE_SECTION, LIST_SECTIONS, NEW_SECTION, type ProjectsSection, type ProjectsSectionId } from './projectsSections';
 
 export const SECTION_ICONS: Readonly<Record<ProjectsSectionId, ReactNode>> = {
   all: <StackIcon />,
   local: <LaptopIcon />,
   github: <GitHubIcon />,
   active: <ProjectIcon />,
+  new: <PlusIcon />,
 };
 
 const navEntry = (section: ProjectsSection): PageNavEntry<ProjectsSectionId> => ({ id: section.id, label: section.label, icon: SECTION_ICONS[section.id] });
 
 const LIST_ENTRIES = LIST_SECTIONS.map(navEntry);
 
-/** The lists, then, ruled off below them, the active project: a dot while it has unsaved changes. */
+/** The lists, then, ruled off below them, the active project (a dot while it has unsaved changes) and New project. */
 function navGroups(unsaved: boolean) {
   const active = { ...navEntry(ACTIVE_SECTION), marker: unsaved ? 'Unsaved changes' : undefined };
-  return [LIST_ENTRIES, [active]];
+  return [LIST_ENTRIES, [active, navEntry(NEW_SECTION)]];
 }
 
 export interface ProjectsSidebarProps {

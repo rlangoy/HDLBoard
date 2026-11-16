@@ -239,7 +239,8 @@ export function generateEmptyBoardTop(board: BoardDefinition, language: TopLangu
     ...vhdlPortLines(ports), '    );', 'end entity;', '', `architecture rtl of ${name} is`, 'begin', '', 'end architecture;', ''].join('\n');
 }
 
-const FILE_EXTENSION: Readonly<Record<TopLanguage, string>> = { vhdl: '.vhdl', verilog: '.v' };
+/** The extension of a starter top file in each language. */
+export const TOP_FILE_EXTENSION: Readonly<Record<TopLanguage, string>> = { vhdl: '.vhdl', verilog: '.v' };
 
 /** The Default board's top keeps the starter files' name: `Default` is a Verilog keyword. */
 const DEFAULT_BOARD_TOP = 'DE1_SoC';
@@ -295,7 +296,7 @@ export function projectTopName(projectName: string, board: BoardDefinition): str
 export function starterTopFileName(board: BoardDefinition, language: TopLanguage, { takenNames = [], projectName }: StarterTopNaming = {}): string {
   const stem = projectName === undefined ? boardTopName(board) : projectTopName(projectName, board);
   const taken = new Set(takenNames.map((name) => name.toLowerCase()));
-  const candidate = (n: number): string => `${n === 1 ? stem : `${stem}_${n}`}${FILE_EXTENSION[language]}`;
+  const candidate = (n: number): string => `${n === 1 ? stem : `${stem}_${n}`}${TOP_FILE_EXTENSION[language]}`;
   let n = 1;
   while (taken.has(candidate(n).toLowerCase())) n++;
   return candidate(n);

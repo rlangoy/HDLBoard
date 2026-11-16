@@ -9,14 +9,8 @@ import { Dialog } from './Dialog';
 import { FilesIcon } from './icons';
 import { newFileName, newFileNameError, type NewFileLanguage } from './newFile';
 import { projectFileNameFor, projectNameError } from './projectFile';
+import type { NewProjectChoice } from './projects/newProjectForm';
 import './NewFileDialog.css';
-
-/** New File › Create project's answer: the project, its board, and the language of its top file. */
-export interface NewProjectChoice {
-  readonly name: string;
-  readonly board: string;
-  readonly language: NewFileLanguage;
-}
 
 export interface NewFileDialogProps {
   /** Pre-filled in the name field, selected so typing replaces it. */
@@ -70,7 +64,8 @@ export function NewFileDialog(props: NewFileDialogProps) {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (error !== undefined) return;
-    if (asProject) onCreateProject?.({ name: name.trim(), board, language });
+    // The top file, and the entity or module in it, is named after the project.
+    if (asProject) onCreateProject?.({ name: name.trim(), board, language, topName: name.trim() });
     else onCreate(newFileName(name, language), language, board);
   };
 

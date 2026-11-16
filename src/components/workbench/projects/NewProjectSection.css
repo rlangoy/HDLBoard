@@ -1,0 +1,193 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* Projects › New project: one card of fields, labels above their controls, at a width
+   that stays easy to read on a wide screen. Colours are the theme's (themes/*.css). */
+
+.wb-newproject {
+  width: 100%;
+  max-width: 680px;
+}
+
+.wb-newproject__card {
+  gap: 20px;
+  padding: 24px 26px;
+}
+
+.wb-newproject__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.wb-newproject__label {
+  padding: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--wb-text);
+}
+
+.wb-newproject__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--wb-projects-field-border);
+  border-radius: 9px;
+  background: var(--wb-project-field-bg);
+  color: var(--wb-text);
+  font: inherit;
+  font-size: 14.5px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.wb-newproject__input::placeholder {
+  color: var(--wb-project-field-placeholder-fg);
+}
+
+.wb-newproject__input:hover {
+  border-color: var(--wb-accent);
+}
+
+.wb-newproject__input:focus-visible {
+  outline: none;
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 3px var(--wb-accent-soft);
+}
+
+.wb-newproject__input[aria-invalid='true'] {
+  border-color: var(--wb-danger-dark-ink);
+}
+
+.wb-newproject__select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.wb-newproject__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wb-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.wb-newproject__hint.is-error {
+  font-weight: 600;
+  color: var(--wb-danger-dark-ink);
+}
+
+/* ----------------------------------------------------------- language cards */
+
+.wb-newproject__language-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wb-newproject__language {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--wb-projects-field-border);
+  border-radius: 10px;
+  background: var(--wb-page-card-bg);
+  color: var(--wb-text);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.wb-newproject__language:hover {
+  border-color: var(--wb-accent);
+}
+
+.wb-newproject__language:has(:checked) {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark-ink);
+  box-shadow: inset 0 0 0 1px var(--wb-accent);
+}
+
+.wb-newproject__language:has(:focus-visible) {
+  outline: 2px solid var(--wb-focus-ring);
+  outline-offset: 2px;
+}
+
+/* The native radio button is the selected indicator; its own ring is replaced by the card's. */
+.wb-newproject__language input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--wb-accent);
+  cursor: pointer;
+}
+
+.wb-newproject__language input:focus-visible {
+  outline: none;
+}
+
+.wb-newproject__language-name {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.wb-newproject__extension {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  color: var(--wb-text-muted);
+}
+
+.wb-newproject__language:has(:checked) .wb-newproject__extension {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------ actions */
+
+.wb-newproject__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wb-text-muted);
+}
+
+.wb-newproject__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.wb-newproject__actions .wb-projects__btn {
+  min-width: 110px;
+  height: 40px;
+}
+
+/* ------------------------------------------------------------ narrow widths */
+
+@container page (max-width: 520px) {
+  .wb-newproject__card {
+    padding: 18px 16px;
+  }
+
+  .wb-newproject__language-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wb-newproject__actions .wb-projects__btn {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-newproject *,
+  .wb-newproject *::before {
+    transition: none !important;
+  }
+}

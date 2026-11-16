@@ -227,7 +227,7 @@ card; the folding one starts open). The styles are `page/Page.css`; their colour
 
 The Projects page (`projects/`, issue #44). Its sidebar has *All projects*, *On this
 computer* and *On GitHub*, then, ruled off below them, *Active project*, with an orange dot
-on its icon while the project has unsaved changes. Its card's *Project details*, and the
+on its icon while the project has unsaved changes, and *New project*. Its card's *Project details*, and the
 project in the Explorer, open it too (`useProjectsPage`). The Explorer and Board I/O fold away
 while it is shown and come back after if they were open (`paneFolds.ts`).
 
@@ -238,6 +238,18 @@ computer), Save, *Open in workspace* back to the editor, and a ⋮ menu with *Ne
 *Open from a URL or path…* and *Close project*. The lists have no such card (the open
 project is their first row); their header has a ⋮ menu with *New project* and *Open from a
 URL or path…*.
+
+*New project* (`NewProjectSection`) is one form: the project name, the board (its description
+beneath), the first file's name, and VHDL or Verilog as native radio buttons in cards. The
+file name follows the project name until it is typed. The line beneath it, and every name
+in it, comes from `newProjectForm.ts`, which asks the same `starterTopFileName` that creates
+the file, as a project started without Files' files gets it; when Files has files,
+`RemoveFilesDialog` names the exact file of each choice (Keep files may add `_2`, and names
+it in the open project's board's names until the board change follows). The input is kept by
+the page while it is open (a stop to save the open project, or Cancel in the files question,
+keeps it); Cancel clears it and goes back to the section it was opened from. Create project
+goes through `handleCreateProject`: the unsaved-changes question (`useLeaveOpenProject`), then
+`RemoveFilesDialog` when Files has files, then the new top file opens in the editor.
 
 A list section has its place's folder or GitHub account above a search and a sort
 (`useProjectList`, `ListToolbar`); the sidebar is the only filter. Each row
