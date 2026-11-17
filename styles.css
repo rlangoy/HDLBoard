@@ -417,8 +417,10 @@ p { margin: 0; }
   box-shadow: 0 0 0 2px var(--surface);
 }
 
-/* ---------- Projects: My Projects dialog left, text right ---------- */
-.projects .split-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 64px; }  /* wider column for the dialog */
+/* ---------- Projects: All projects page left, text right ---------- */
+.projects .split-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 64px; }  /* wider column for the screenshot */
+.projects-shot { display: block; cursor: zoom-in; transition: transform 0.2s ease, box-shadow 0.2s ease; }  /* opens the full-size screenshot */
+.projects-shot:hover { transform: translateY(-3px); box-shadow: 0 40px 80px -36px rgba(15, 23, 42, 0.45); }
 
 /* ---------- Testbench: split view, one wide screenshot ---------- */
 .testbench-intro { gap: 24px; }
