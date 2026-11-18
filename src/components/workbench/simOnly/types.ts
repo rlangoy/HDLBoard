@@ -7,6 +7,7 @@
  */
 
 import type { CodeBlock, Instance, ProjectAnalysis, TestbenchOverrides, TestbenchRegion } from '../tbDetect/types';
+import type { DriverConflict } from './driverTypes';
 
 /**
  * How badly a construct misses the hardware (§ 3.1): `never` can't be built, `ignored`
@@ -101,4 +102,6 @@ export interface DesignCheck {
   /** Every finding in hardware code, including files marked *Simulation model*. */
   readonly findings: readonly SimOnlyFinding[];
   readonly groups: CodeGroups;
+  /** Signals with more than one driver in hardware code (§ 8.1); they warn, and leave the group alone. */
+  readonly driverConflicts: readonly DriverConflict[];
 }

@@ -55,6 +55,19 @@ export const CHECK_SOURCE = 'HDLBoard design check';
 export const simOnlySummary = (fileName: string, lines: number): string =>
   `${fileName} is SIM-only: ${lines} ${lines === 1 ? 'line only works' : 'lines only work'} in simulation; they run here but not on the board.`;
 
+/** A signal with more than one driver (§ 8.1): the warning on each of its drivers. */
+export function multipleDriversText(signal: string, otherLines: readonly number[]): ConstructText {
+  const others = otherLines.length === 1 ? `line ${otherLines[0]}` : `lines ${otherLines.join(', ')}`;
+  return {
+    headline: `\`${signal}\` has more than one driver.`,
+    explanation: `\`${signal}\` is also driven on ${others}. On the FPGA a signal is one wire with one source, so Quartus refuses two: "can't resolve multiple constant drivers". In the simulator the value turns into X. Drive it from one process, or one statement: combine the cases with if / else, or \`when … else\`.`,
+  };
+}
+
+/** The console line at Start for a signal with more than one driver. */
+export const multipleDriversSummary = (fileName: string, signal: string, lines: readonly number[]): string =>
+  `${fileName}: ${signal} has more than one driver (lines ${lines.join(', ')}); the board can't build that.`;
+
 /** Added to the run's first console line when the check is off. */
 export const DESIGN_CHECK_OFF = 'Design check: Simulation only';
 

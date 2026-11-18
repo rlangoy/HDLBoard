@@ -12,7 +12,7 @@
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { detectedSimOnly, nowRtl, nowSimOnly, simOnlyTooltip } from './designCheckText';
 import { isWarnable, makesSimOnly } from './findings';
-import { CONSTRUCT_TITLE, simOnlySummary } from './simOnlyText';
+import { CONSTRUCT_TITLE, multipleDriversSummary, simOnlySummary } from './simOnlyText';
 import type { DesignCheck, FileGroup, SimOnlyFinding } from './types';
 
 /** The findings of `fileId` that its line warnings show, one per line, in line order. */
@@ -44,6 +44,18 @@ export function simOnlySummaries(check: DesignCheck, overrides: TestbenchOverrid
     const lines = warnedLines(check, overrides, file.id);
     if (lines.length === 0) return [];
     return [{ text: simOnlySummary(file.name, lines.length), fileId: file.id, line: lines[0].line }];
+  });
+}
+
+/** One console line per signal with more than one driver, linked to its first driver. */
+export function driverSummaries(check: DesignCheck, overrides: TestbenchOverrides, files: readonly { id: string; name: string }[]): SummaryLine[] {
+  return files.flatMap((file) => {
+    const conflicts = check.driverConflicts.filter((c) => c.fileId === file.id && isWarnable(c, overrides));
+    const signals = [...new Set(conflicts.map((c) => c.signal))];
+    return signals.map((signal) => {
+      const lines = conflicts.filter((c) => c.signal === signal).map((c) => c.line);
+      return { text: multipleDriversSummary(file.name, signal, lines), fileId: file.id, line: lines[0] };
+    });
   });
 }
 

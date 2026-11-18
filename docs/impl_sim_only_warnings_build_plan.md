@@ -332,7 +332,10 @@ Blocked on Q1. Whatever the answer:
 - The status line of the spec.
 - No version bump unless Rune asks for one.
 
-## 5. Phase 2 — `ghdl --synth` (after phase 1 ships)
+## 5. Phase 2 — `ghdl --synth` — future plans
+
+**Status: future plan, not scheduled.** Multiple drivers, its most common catch, is found statically instead
+(spec § 8.1). What follows is kept for when latches and the rest of `ghdl --synth` are wanted.
 
 The same rules apply. New server files go into the `NEW_CODE` list in `server/eslint.config.js`.
 
@@ -373,4 +376,4 @@ Tests: the phase 2 and protocol lists of § 9.
 - Step 3 needs both, and step 4 needs step 3.
 - Step 5 can come at any time before step 4 is wired into `Workbench`.
 - Steps 6–8 need steps 3–5.
-- Phase 2 starts once phase 1 has shipped.
+- Phase 2 is a future plan, not scheduled (§ 5).

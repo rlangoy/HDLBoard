@@ -1,6 +1,7 @@
 # Simulation-only code in designs — Implementation Plan
 
-Status: phase 1 built on branch imp_sim_only_tag (see docs/impl_sim_only_warnings_build_plan.md); phase 2 not started. Date: 2026-11-18.
+Status: phase 1 and the multiple-driver check (§ 8.1) built on branch imp_sim_only_tag (see
+docs/impl_sim_only_warnings_build_plan.md). Phase 2 (§ 7) is a **future plan**: not scheduled. Date: 2026-11-18.
 
 ## 1. Goal
 
@@ -36,7 +37,7 @@ HDLBoard should still run it, but should say so in the code:
 | S2 | *Synthesis* is the default mode. | Rune's choice: checking for the FPGA is what a course wants. A host can change the default in `settings.json` (§ 6). |
 | S3 | Only *hardware* code is checked: units reachable from the board design, or marked *Treat as design* (§ 4). | A testbench full of `wait for` is correct code. |
 | S4 | Phase 1 is static and live (in the browser, 500 ms after typing stops, with the testbench detector). | Same cost as today's detector; works in every build, for VHDL and Verilog, without a run. |
-| S5 | Phase 2 adds GHDL's own synthesis check (`ghdl --synth`) at Start, for VHDL. | It is exact, and catches latches and multiple drivers, which a regex can't (§ 3.2). |
+| S5 | **Future plan:** phase 2 adds GHDL's own synthesis check (`ghdl --synth`) at Start, for VHDL. | It is exact, and catches latches, which a static check can't (§ 3.2). Multiple drivers are caught statically, live, for both languages (§ 8.1). |
 | S6 | Code inside `-- synthesis translate_off … translate_on` or `` `ifndef SYNTHESIS `` is never warned about. | That is the standard way to say "simulation only, on purpose". The detector already finds these regions (`blank.ts`, `simOnlyRegions`). |
 | S7 | Detection scores do not change. | The new checks read the detector's results but add no weights, so the golden fixtures (`fixtures.golden.test.ts`) stay as they are. |
 | S8 | `SIM-only` is a **code group** shown to the student, not a new detector role. The role keeps its two values, `rtl` / `tb`. | The role drives pairing, the split view and saved overrides (8 files, `desktop.ts` Workspace). A SIM-only unit is still the design for all of those: the board runs it, a testbench pairs with it. The group is a second, derived field on top. One correction to the role comes with it (§ 4.2): a unit the board design uses is never a testbench. |
@@ -389,7 +390,12 @@ Quartus and GHDL use (`--synth`), and need no explanation for a student.
 A future third mode, **Synthesis (strict)**, could turn the warnings into errors that block the run, for graded labs.
 It is out of scope (S1); the setting is a mode already, so it can be added later without migrating it.
 
-## 7. Phase 2 — GHDL synthesis check (VHDL)
+## 7. Phase 2 — GHDL synthesis check (VHDL) — future plans
+
+**Status: future plan, not scheduled.** Phase 1 and the static multiple-driver check (§ 8.1) cover what a course
+needs most. Phase 2 would add what only a synthesis tool sees — latches above all — for VHDL only, at the cost of
+protocol 8 and a second GHDL process per run. The design below is kept so the work can start from it.
+
 
 1. **Verify the bundled builds** have synthesis: Windows installer, AppImage (`fetch-ghdl.sh`, v6.0.0), Docker /
    Render image. The winget GHDL 6.0.0 mcode build used for the tests in § 3.2 does.
@@ -460,9 +466,27 @@ It is out of scope (S1); the setting is a mode already, so it can be added later
 
 ## 8. Phase 3 — legal but different on hardware (category C)
 
+### 8.1 Multiple drivers (built)
+
+On the FPGA a signal is one wire with one source. Two sources fight, and Quartus refuses the design ("can't
+resolve multiple constant drivers"); the simulator resolves a `std_logic` to 'X' (the LEDs stay dark) and Icarus
+lets the last write win. A common beginner mistake: the starter's `LEDR <= SW;` left in beside a new process that
+drives `LEDR(0)`.
+
+| | |
+|---|---|
+| A driver | VHDL: one process, or one concurrent statement (`<=`, `when … else`, `with … select`). Verilog: one `always` block, one `assign`, or one `wire x = …`. Every assignment of a process or block to a signal is one driver. |
+| A clash | Two drivers of the same signal whose bits overlap: the whole signal meets any part of it; constant bits and ranges (`LEDR(0)`, `LEDR(7 downto 4)`, `LEDR[7:4]`) meet when they overlap; an index known only while running (`LEDR(i)`) meets only the whole signal. |
+| Not a clash | Different bits; one process assigning a signal twice; a comparison `a <= b`; variables and loop variables; Verilog `initial` blocks (power-up values); a driver that drives `'Z'` (a tri-state bus); anything inside a `generate` (its alternatives or loop index decide); code hidden from synthesis (S6); two architectures of one entity. |
+| Names | Only the body's declared signals (Verilog: nets and variables) and its entity's ports, which may be in another file (§ 4.1). |
+| Where | Hardware code only (§ 4), in *Synthesis* mode (§ 6); a *Simulation model* gets no warning. |
+| Shown | A live warning on every driver: "`LEDR` has more than one driver.", and in the tooltip the other drivers' lines and what to do. At Start, one console line per signal, linked to its first driver. The group does not change: the code is not simulation-only, it is wrong on both. |
+| Code | `simOnly/drivers.ts` (drivers per architecture or module, cached with the file's scan; the clashes), `driverLanguages.ts` (how each language assigns), `bits.ts`; tests `drivers.test.ts`. |
+
+### 8.2 Still to plan
+
 Static checks, the same structure as phase 1, but a separate catalogue and its own setting later if needed:
-incomplete sensitivity lists (neither GHDL nor Icarus warns; § 3.2), latches and multiple drivers in Verilog, and
-combinational loops. Follow docs/HDLBoard_VHDL_Static_Analysis_Recommendations.md: group related findings,
+incomplete sensitivity lists (neither GHDL nor Icarus warns; § 3.2), latches, and combinational loops. Follow docs/HDLBoard_VHDL_Static_Analysis_Recommendations.md: group related findings,
 distinguish concurrent from sequential assignments. Plan this phase separately when phase 1 has shipped.
 
 ## 9. Tests
@@ -551,7 +575,7 @@ distinguish concurrent from sequential assignments. Plan this phase separately w
    navigation, the RTL transition.
 7. *Show example* templates (VHDL, Verilog), using the board's clock name.
 8. Console summary at Start.
-9. Phase 2: verify the GHDL builds; protocol 8 (`SYNTH-CHECK`, `SYNTH`, `SYNTH-END`, version gating in
+9. *Future plan.* Phase 2: verify the GHDL builds; protocol 8 (`SYNTH-CHECK`, `SYNTH`, `SYNTH-END`, version gating in
    `hdlClient.ts`); `synthTargets.ts`; the server's independent `--synth` child with the run's flags; `synthAdvice.ts`
    and the suppression filter.
 10. docs/changelog.txt and help text; add the third group to docs/impl_split_screen.md § 4.5.
@@ -574,15 +598,15 @@ Steps 1–2 are independent of each other; 3 and 4 need both; 5–8 need 3 and 4
 - In *Simulation only* mode, no new warning, chip or console line appears anywhere.
 - Fresh install: the mode is *Synthesis*. `settings.json` can set *Simulation only* for everyone.
 - Typing stays as fast as today: the check runs only with the detector, not on every keystroke.
-- Phase 2: a latch in a VHDL board design gets a warning at Start explaining the missing `else`.
-- Phase 2: a testbench run warns about its DUT only, and a design that needs `-fsynopsys` gets no synthesis message.
-- Phase 2: Start takes no longer than today; the synthesis warnings arrive after the board is live.
-- Phase 2: a new client works with an older backend exactly as today, without the check.
+- *Future plan,* phase 2: a latch in a VHDL board design gets a warning at Start explaining the missing `else`.
+- *Future plan,* phase 2: a testbench run warns about its DUT only, and a design that needs `-fsynopsys` gets no synthesis message.
+- *Future plan,* phase 2: Start takes no longer than today; the synthesis warnings arrive after the board is live.
+- *Future plan,* phase 2: a new client works with an older backend exactly as today, without the check.
 
 ## 12. Open questions
 
 1. Should a teacher be able to lock the setting per project (in `.hdlboard.json`), not just per host?
-2. Should phase 2 run on every Start, or only from a *Check for hardware* button? It costs about 0.1 s for a small
+2. (Future plan.) Should phase 2 run on every Start, or only from a *Check for hardware* button? It costs about 0.1 s for a small
    design. A large design may take longer.
 3. Should tier `quiet` (`report`, `assert`, `$display`) be visible at all in designs? Plan says gutter-only.
 4. Is `SIM-only` the final label text? The badge is narrow; `SIM` alone would match `TB` / `RTL` in length, with

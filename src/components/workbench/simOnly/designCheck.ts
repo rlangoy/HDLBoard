@@ -3,22 +3,24 @@
 
 /**
  * The two modes of Settings › Editor › Design check (docs/impl_sim_only_warnings.md
- * § 6), as two functions in one table. *Simulation only* is the check that finds
- * nothing: no findings, so no warnings and no console summary, and the groups of the
- * roles alone, so no SIM-only label. Nothing downstream asks for the mode. Pure.
+ * § 6), as two functions in one table. *Synthesis* finds the simulation-only code and
+ * the signals with more than one driver (§ 8.1). *Simulation only* is the check that
+ * finds nothing: no findings, so no warnings and no console summary, and the groups of
+ * the roles alone, so no SIM-only label. Nothing downstream asks for the mode. Pure.
  */
 
+import { driverConflicts } from './drivers';
 import { simOnlyFindings } from './findings';
 import { codeGroups, groupsFromRoles } from './groups';
 import type { CheckInput, DesignCheck, DesignCheckMode } from './types';
 
 function synthesisCheck({ view, overrides }: CheckInput): DesignCheck {
   const findings = simOnlyFindings(view);
-  return { findings, groups: codeGroups({ view, overrides, findings }) };
+  return { findings, groups: codeGroups({ view, overrides, findings }), driverConflicts: driverConflicts(view) };
 }
 
 function simulationCheck({ view, overrides }: CheckInput): DesignCheck {
-  return { findings: [], groups: groupsFromRoles(view, overrides) };
+  return { findings: [], groups: groupsFromRoles(view, overrides), driverConflicts: [] };
 }
 
 export const DESIGN_CHECKS: Readonly<Record<DesignCheckMode, (input: CheckInput) => DesignCheck>> = {

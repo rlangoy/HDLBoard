@@ -6,9 +6,9 @@ import type { AdvisedDiagnostic } from '../diagnosticAdvice';
 import type { DesignCheckBadge } from '../EditorPaneHeader';
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
-import { findingDiagnostics } from './findingDiagnostics';
+import { checkDiagnostics } from './findingDiagnostics';
 import { isSimModel } from './simModels';
-import { groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
+import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
 import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
 
 export interface DesignCheckOptions {
@@ -29,7 +29,7 @@ export interface DesignCheckApi {
   readonly groupOf: (fileId: string) => FileGroup | undefined;
   /** A design pane's badge; undefined with the check off (*Simulation only*). */
   readonly badgeFor: (fileId: string) => DesignCheckBadge | undefined;
-  /** The console lines at Start, one per SIM-only file. */
+  /** The console lines at Start: one per SIM-only file, one per signal with more than one driver. */
   readonly summaries: () => SummaryLine[];
   /** For a polite live region: the last change of a file between RTL and SIM-only. */
   readonly announcement: string;
@@ -44,7 +44,7 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   const { view, overrides, mode, files, setSimModel } = options;
   const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides }), [view, overrides, mode]);
   const diagnostics = useMemo(
-    () => findingDiagnostics(check.findings, { analysis: view.raw, overrides, files }),
+    () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
     [check, view.raw, overrides, files],
   );
   const announcement = useGroupAnnouncement(check, mode, files);
@@ -58,7 +58,7 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     diagnostics,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
-    summaries: () => simOnlySummaries(check, overrides, files),
+    summaries: () => [...simOnlySummaries(check, overrides, files), ...driverSummaries(check, overrides, files)],
     announcement,
   };
 }
