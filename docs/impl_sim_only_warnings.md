@@ -1,6 +1,6 @@
 # Simulation-only code in designs — Implementation Plan
 
-Status: plan, not started. Date: 2026-11-18.
+Status: phase 1 built on branch imp_sim_only_tag (see docs/impl_sim_only_warnings_build_plan.md); phase 2 not started. Date: 2026-11-18.
 
 ## 1. Goal
 
