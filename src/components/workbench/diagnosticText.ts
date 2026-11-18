@@ -450,8 +450,12 @@ export function summarize(fileName: string, lines: readonly LineDiagnostic[]): s
   const [message] = visibleInDisplayOrder(first);
   const fix = quickFixOf(first);
   const offer = fix ? ` Quick Fix, ${QUICK_FIX_SHORTCUT}: ${quickFixTitle(fix)}.` : '';
-  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))}${offer} ${CLEAR_HINT}`;
+  const clearHint = lines.some(isClearedByEditing) ? ` ${CLEAR_HINT}` : '';
+  return `${fileName}: ${problemCountText(countSeverities(lines))}. First on line ${first.line}: ${asSentence(headlineOf(message))}${offer}${clearHint}`;
 }
+
+/** A click or an edit clears the line's markers, unless every message on it is from the live design check. */
+const isClearedByEditing = (line: LineDiagnostic): boolean => line.messages.some((m) => m.advice?.liveCheck !== true);
 
 /** "2 errors, 1 warning" — the counts a file's problem mark stands for; `''` for none. */
 export function problemCountText({ errors, warnings }: { errors: number; warnings: number }): string {

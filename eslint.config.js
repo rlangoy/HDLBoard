@@ -127,6 +127,9 @@ const NEW_CODE = [
   'src/components/workbench/verilogModuleLookup.ts',
   'src/components/workbench/verilogModuleLookup.test.ts',
   'src/components/workbench/verilogDirectives.ts',
+  // Simulation-only code in designs: the design check (docs/impl_sim_only_warnings.md).
+  'src/components/workbench/simOnly/**/*.ts',
+  'src/components/workbench/simOnly/**/*.tsx',
 ];
 
 const MAX_FUNCTION_LINES = 40;
