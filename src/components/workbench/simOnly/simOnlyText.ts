@@ -57,3 +57,31 @@ export const simOnlySummary = (fileName: string, lines: number): string =>
 
 /** Added to the run's first console line when the check is off. */
 export const DESIGN_CHECK_OFF = 'Design check: Simulation only';
+
+/** A construct in a few words, as the badge menu's *Detected* line lists it. */
+export const CONSTRUCT_TITLE: Readonly<Record<SimOnlyConstructId, string>> = {
+  'vhdl-wait-for': 'wait for',
+  'vhdl-wait-forever': 'wait;',
+  'vhdl-wait-until': 'wait until',
+  'vhdl-clock-gen': 'clock generator',
+  'vhdl-file-io': 'file I/O',
+  'vhdl-end-sim': 'end of simulation',
+  'vhdl-now': 'now',
+  'vhdl-access': 'pointer',
+  'vhdl-protected': 'protected type',
+  'vhdl-random': 'uniform',
+  'vhdl-real-signal': 'real signal',
+  'vhdl-after': 'after',
+  'vhdl-report': 'report',
+  'vlog-delay': '# delay',
+  'vlog-event-wait': 'event wait',
+  'vlog-clock-gen': 'clock generator',
+  'vlog-file-io': 'file I/O',
+  'vlog-end-sim': '$finish',
+  'vlog-time': '$time',
+  'vlog-random': '$random',
+  'vlog-verification': 'verification statement',
+  'vlog-real': 'real variable',
+  'vlog-assign-delay': 'assign #',
+  'vlog-display': '$display',
+};

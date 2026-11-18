@@ -14,7 +14,7 @@ import './FileRowLabel.css';
 export function FileRowLabel({ row }: { row: FileRow }) {
   return (
     <span className="wb-filerow">
-      <RoleIcon role={row.role} />
+      <RoleIcon role={row.role} group={row.group} />
       <span className="wb-filerow__name">{row.name}</span>
       <ProblemMark problems={row.problems} />
     </span>

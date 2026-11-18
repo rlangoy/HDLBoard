@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+import { describe, expect, test } from 'vitest';
+import { APP_DEFAULTS_FILE, parseAppDefaults } from '../appDefaults';
+import { parseOverridesForTest } from './simOnly.testSupport';
+import {
+  DEFAULT_DESIGN_CHECK, DESIGN_CHECK_STORAGE_KEY, designCheckInEffect, loadDesignCheckChoice, saveDesignCheckChoice,
+} from './designCheckMode';
+import { withSimModel, withoutSimModel } from './simModels';
+import { EMPTY_OVERRIDES } from '../tbDetect/types';
+import { withoutFile } from '../splitModel';
+
+/** docs/impl_sim_only_warnings.md § 9, Settings; and the Simulation model mark. */
+
+/** A Storage that keeps its items in a Map, or throws on every call when `blocked`. */
+function memoryStorage(blocked = false): () => Storage {
+  const items = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+  } as Storage;
+  return () => {
+    if (blocked) throw new Error('blocked');
+    return storage;
+  };
+}
+
+describe('the mode in effect', () => {
+  test('is Synthesis on a fresh install', () => {
+    expect(designCheckInEffect(null, DEFAULT_DESIGN_CHECK)).toBe('synthesis');
+  });
+
+  test('follows settings.json', () => {
+    expect(designCheckInEffect(null, 'simulation')).toBe('simulation');
+  });
+
+  test("is the student's own choice over the file", () => {
+    expect(designCheckInEffect('synthesis', 'simulation')).toBe('synthesis');
+  });
+
+  test('is the quiet one while settings.json loads', () => {
+    expect(designCheckInEffect(null, null)).toBe('simulation');
+  });
+});
+
+describe('the stored choice', () => {
+  test('round-trips', () => {
+    const storage = memoryStorage();
+    saveDesignCheckChoice('simulation', storage);
+    expect(loadDesignCheckChoice(storage)).toBe('simulation');
+  });
+
+  test('is null when none was made', () => {
+    expect(loadDesignCheckChoice(memoryStorage())).toBeNull();
+  });
+
+  test('ignores a value it does not know', () => {
+    const storage = memoryStorage();
+    storage().setItem(DESIGN_CHECK_STORAGE_KEY, 'strict');
+    expect(loadDesignCheckChoice(storage)).toBeNull();
+  });
+
+  test('never throws when storage is blocked', () => {
+    expect(() => saveDesignCheckChoice('synthesis', memoryStorage(true))).not.toThrow();
+  });
+});
+
+describe('settings.json', () => {
+  test('sets the mode', () => {
+    expect(parseAppDefaults('{ "designCheck": "simulation" }').defaults.designCheck).toBe('simulation');
+  });
+
+  test('leaves it out when the file does not say', () => {
+    expect(parseAppDefaults('{}').defaults.designCheck).toBeUndefined();
+  });
+
+  test('warns about a value it does not know', () => {
+    expect(parseAppDefaults('{ "designCheck": "strict" }').warnings).toEqual([
+      `${APP_DEFAULTS_FILE}: designCheck must be "synthesis" or "simulation".`,
+    ]);
+  });
+});
+
+describe('the Simulation model mark', () => {
+  test('is set', () => {
+    expect(withSimModel(EMPTY_OVERRIDES, 'a.vhd').simModels).toEqual({ 'a.vhd': true });
+  });
+
+  test('is dropped, and with the last one the field', () => {
+    expect(withoutSimModel(withSimModel(EMPTY_OVERRIDES, 'a.vhd'), 'a.vhd')).toEqual(EMPTY_OVERRIDES);
+  });
+
+  test('goes with its deleted file', () => {
+    const both = withSimModel(withSimModel(EMPTY_OVERRIDES, 'a.vhd'), 'b.vhd');
+    expect(withoutFile(both, 'a.vhd').simModels).toEqual({ 'b.vhd': true });
+  });
+
+  test('survives a saved workspace', () => {
+    expect(parseOverridesForTest({ roles: {}, pairs: {}, simModels: { 'a.vhd': true } }).simModels).toEqual({ 'a.vhd': true });
+  });
+
+  test('an older workspace without it reads as no marks', () => {
+    expect(parseOverridesForTest({ roles: {}, pairs: {} })).toEqual(EMPTY_OVERRIDES);
+  });
+
+  test('a mark on a file that is not there is dropped', () => {
+    expect(parseOverridesForTest({ roles: {}, pairs: {}, simModels: { 'gone.vhd': true } }).simModels).toBeUndefined();
+  });
+});

@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AdvisedDiagnostic } from '../diagnosticAdvice';
+import type { DesignCheckBadge } from '../EditorPaneHeader';
+import type { TestbenchOverrides } from '../tbDetect/types';
+import { DESIGN_CHECKS } from './designCheck';
+import { findingDiagnostics } from './findingDiagnostics';
+import { isSimModel } from './simModels';
+import { groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
+import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
+
+export interface DesignCheckOptions {
+  /** `TestbenchSplit.designView`: recomputed with the detector, 500 ms after typing stops. */
+  readonly view: DesignView;
+  readonly overrides: TestbenchOverrides;
+  readonly mode: DesignCheckMode;
+  /** The files as the editor has them now. */
+  readonly files: readonly { readonly id: string; readonly name: string; readonly content: string }[];
+  readonly setSimModel: (fileId: string, simModel: boolean) => void;
+}
+
+export interface DesignCheckApi {
+  readonly check: DesignCheck;
+  /** The live warnings, to merge with a run's diagnostics (`addToFiles`). */
+  readonly diagnostics: readonly AdvisedDiagnostic[];
+  /** A file's group for the Files panel; undefined for a file with no design unit. */
+  readonly groupOf: (fileId: string) => FileGroup | undefined;
+  /** A design pane's badge; undefined with the check off (*Simulation only*). */
+  readonly badgeFor: (fileId: string) => DesignCheckBadge | undefined;
+  /** The console lines at Start, one per SIM-only file. */
+  readonly summaries: () => SummaryLine[];
+  /** For a polite live region: the last change of a file between RTL and SIM-only. */
+  readonly announcement: string;
+}
+
+/**
+ * The design check of docs/impl_sim_only_warnings.md, for the Workbench. The check runs
+ * only when the detector's analysis, the overrides or the mode change, never per
+ * keystroke; per keystroke only the line counts are compared (findingDiagnostics.ts).
+ */
+export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
+  const { view, overrides, mode, files, setSimModel } = options;
+  const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides }), [view, overrides, mode]);
+  const diagnostics = useMemo(
+    () => findingDiagnostics(check.findings, { analysis: view.raw, overrides, files }),
+    [check, view.raw, overrides, files],
+  );
+  const announcement = useGroupAnnouncement(check, mode, files);
+  const badgeFor = (fileId: string): DesignCheckBadge | undefined => {
+    if (mode === 'simulation') return undefined;
+    const simOnly = simOnlyBadgeText(check, overrides, fileId);
+    return { ...(simOnly && { simOnly }), simModel: isSimModel(overrides, fileId), onSimModel: (on) => setSimModel(fileId, on) };
+  };
+  return {
+    check,
+    diagnostics,
+    groupOf: (fileId) => check.groups.byFile.get(fileId),
+    badgeFor,
+    summaries: () => simOnlySummaries(check, overrides, files),
+    announcement,
+  };
+}
+
+/**
+ * The latest change between RTL and SIM-only, said once (§ 5.3): fixing the last line
+ * is the reward. A change of mode changes every group at once and is not news: the
+ * student chose it (or settings.json loaded).
+ */
+function useGroupAnnouncement(check: DesignCheck, mode: DesignCheckMode, files: DesignCheckOptions['files']): string {
+  const [announcement, setAnnouncement] = useState('');
+  const previous = useRef({ mode, groups: check.groups.byFile });
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { mode, groups: check.groups.byFile };
+    if (before.mode !== mode) return;
+    const nameOf = (fileId: string) => filesRef.current.find((f) => f.id === fileId)?.name;
+    const changes = groupChanges(before.groups, check.groups.byFile, nameOf);
+    if (changes.length > 0) setAnnouncement(changes.join('. '));
+  }, [check, mode]);
+  return announcement;
+}

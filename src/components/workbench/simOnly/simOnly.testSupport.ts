@@ -3,6 +3,7 @@
 
 /** Projects for the design check's tests. */
 
+import { parseWorkspace } from '../desktop';
 import { analyzeProject, type SourceFile } from '../tbDetect/analyzeProject';
 import { TEST_BOARD_PORTS } from '../tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from '../tbDetect/types';
@@ -42,3 +43,10 @@ export const BLINK = vhdlDesign(
   BOARD_PORTS,
   "process\nbegin\n  LEDR(0) <= '1';\n  wait for 500 ms;\n  LEDR(0) <= '0';\n  wait for 500 ms;\nend process;",
 );
+
+/** The overrides a desktop workspace with the one file `a.vhd` reads back as. */
+export function parseOverridesForTest(testbench: unknown): TestbenchOverrides {
+  const file = { id: 'a.vhd', name: 'a.vhd', folder: 'vhdl', content: '' };
+  const workspace = parseWorkspace(JSON.stringify({ version: 1, files: [file], testbench }));
+  return workspace?.testbench ?? EMPTY_OVERRIDES;
+}

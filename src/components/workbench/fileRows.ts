@@ -9,6 +9,7 @@
  * Pure — no React, no state.
  */
 
+import type { FileGroup } from './simOnly/types';
 import { FOLDER_ORDER, filesInFolderOrder, type Folder } from './fileKinds';
 import type { VhdlFile } from './files';
 import type { FileRole } from './tbDetect/types';
@@ -29,6 +30,8 @@ export interface FileRow {
   /** The file Start runs (the blue dot) — independent of `shown`. */
   readonly isTop: boolean;
   readonly problems: ProblemCounts;
+  /** The design check's group (docs/impl_sim_only_warnings.md § 2.1), when the check gives one. */
+  readonly group?: FileGroup;
 }
 
 /** What a row needs from outside the file itself. */
@@ -37,6 +40,7 @@ export interface RowContext {
   readonly topFileId: string | null;
   readonly roleOf: (fileId: string) => FileRole | undefined;
   readonly problemsOf: (fileId: string) => ProblemCounts;
+  readonly groupOf?: (fileId: string) => FileGroup | undefined;
 }
 
 export interface FolderRows {
@@ -54,7 +58,13 @@ export function fileRows(files: readonly VhdlFile[], context: RowContext): FileR
     shown: context.shownIds.includes(file.id),
     isTop: file.id === context.topFileId,
     problems: context.problemsOf(file.id),
+    ...groupField(context.groupOf?.(file.id)),
   }));
+}
+
+/** Only a group the check gives is part of the row. */
+function groupField(group: FileGroup | undefined): Pick<FileRow, 'group'> {
+  return group === undefined ? {} : { group };
 }
 
 /** The rows grouped by folder, in folder order; a folder with no files is left out. */

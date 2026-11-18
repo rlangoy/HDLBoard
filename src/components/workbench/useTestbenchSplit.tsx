@@ -9,13 +9,16 @@ import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPa
 import { RoleConflictDialog } from './RoleConflictDialog';
 import type { FileMenuProps } from './FileMenu';
 import type { SplitEditorProps } from './SplitEditor';
-import { editorPropsFor, otherPane, paneFile, type EditorDisplay } from './splitPaneModels';
+import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type ModelContext } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
 import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides, type UnitRole } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
 import { useEditorSplit, type EditorSplit } from './useEditorSplit';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
-import { useTestbenchAnalysis } from './useTestbenchAnalysis';
+import { useTestbenchAnalysis, type TestbenchAnalysis } from './useTestbenchAnalysis';
+import { designView } from './simOnly/designView';
+import { withSimModel, withoutSimModel } from './simOnly/simModels';
+import type { DesignView } from './simOnly/types';
 
 export interface TestbenchSplitOptions {
   files: readonly VhdlFile[];
@@ -63,9 +66,13 @@ export interface TestbenchSplit {
   readonly focusPane: (pane: PaneRole) => void;
   readonly onFileDeleted: (id: string) => void;
   /** CodeEditor's panes, with their headers and the chip; none while nothing is shown. */
-  readonly editorSplit: (fileMenu: FileMenuProps) => SplitEditorProps | undefined;
+  readonly editorSplit: (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge']) => SplitEditorProps | undefined;
   /** The question asked when a role change would put two designs or two testbenches side by side; null otherwise. */
   readonly roleConflictDialog: ReactNode;
+  /** The project as the design check sees it (docs/impl_sim_only_warnings.md § 4). */
+  readonly designView: DesignView;
+  /** Marks a file *Simulation model*, or drops the mark (S9). */
+  readonly setSimModel: (fileId: string, simModel: boolean) => void;
 }
 
 /** A role change waiting on RoleConflictDialog. */
@@ -86,8 +93,10 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
   const { files, activeFileId, setActiveFileId } = options;
   const onViewChosen = useRef(options.onViewChosen);
   onViewChosen.current = options.onViewChosen;
-  const analysis = useTestbenchAnalysis(files, options.boardPorts);
+  const detected = useTestbenchAnalysis(files, options.boardPorts);
   const overrides = useOverrides();
+  // Everything below sees the roles with the design check's correction (docs/impl_sim_only_warnings.md § 4.2).
+  const analysis = useCorrectedAnalysis(detected, overrides);
   usePruneContradictedPairs(analysis.current, overrides);
   const [display, setDisplay] = useState<EditorDisplay | null>(null);
   const [pendingRole, setPendingRole] = useState<PendingRoleChange | null>(null);
@@ -180,7 +189,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     showFile(pair.anchorId, 'open');
   });
 
-  const editorSplit = (fileMenu: FileMenuProps) => editorPropsFor(
+  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge']) => editorPropsFor(
     {
       project: analysis.current,
       overrides: overrides.value,
@@ -197,6 +206,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       onFocusPane: focusPane,
       onCreateTestbench: options.onCreateTestbench,
       fileMenu,
+      designCheckBadge,
     },
     split,
     chip,
@@ -217,6 +227,9 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     focusPane,
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
     editorSplit,
+    designView: designView(detected.current, overrides.value),
+    setSimModel: (fileId, simModel) =>
+      overrides.set((simModel ? withSimModel : withoutSimModel)(overrides.ref.current, fileId)),
     roleConflictDialog: pendingRole && (
       <RoleConflictDialog
         fileName={files.find((f) => f.id === pendingRole.fileId)?.name ?? ''}
@@ -245,6 +258,23 @@ function usePruneContradictedPairs(project: ProjectAnalysis, overrides: ReturnTy
 }
 
 /** Overrides as state, mirrored in a ref so event handlers read the newest without waiting for a render. */
+/**
+ * The analysis with the role correction applied: a unit the board design uses, or a
+ * testbench's DUT, is a design for pairing, the split and Run. Derived on each read,
+ * never stored, so the detector's cache keeps the detected roles.
+ */
+function useCorrectedAnalysis(detected: TestbenchAnalysis, overrides: ReturnType<typeof useOverrides>): TestbenchAnalysis {
+  const { value, ref } = overrides;
+  const { current, flush } = detected;
+  return useMemo(
+    () => ({
+      current: designView(current, value).corrected,
+      flush: () => designView(flush(), ref.current).corrected,
+    }),
+    [current, flush, value, ref],
+  );
+}
+
 function useOverrides() {
   const [value, setValue] = useState<TestbenchOverrides>(EMPTY_OVERRIDES);
   const ref = useRef(value);

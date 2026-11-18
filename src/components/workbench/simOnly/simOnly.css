@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/*
+ * The SIM-only code group (docs/impl_sim_only_warnings.md § 5.3): the badge and the
+ * chip in the warning colour, which the contrast tests already cover. Text, never
+ * colour alone: the badge says SIM-only, the icon has a tooltip.
+ */
+.wb-rolebadge.is-simonly,
+.wb-roleicon.is-simonly {
+  --wb-role-ink: var(--wb-diag-warning-text);
+  --wb-role-tint: var(--wb-diag-warning-bg);
+}
+
+.wb-roleicon.is-simonly {
+  gap: 1px;
+}
+
+/* A plain design badge is quiet; a SIM-only one keeps its colour, so the student sees it. */
+.wb-rolebadge.is-plain.is-simonly {
+  border-color: var(--wb-role-ink);
+  color: var(--wb-role-ink);
+}
+
+.wb-rolebadge.is-simonly {
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+}
