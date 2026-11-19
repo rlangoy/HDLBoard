@@ -1,0 +1,105 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The problem card (DiagnosticCard.tsx): beside the gutter, over the code. Its text can
+   be selected; the Copy button copies all of it. Placed by EditorSurface (top or bottom). */
+.wb-diagcard {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100% - 70px));
+  max-height: min(360px, 70%);
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: var(--wb-menu-bg);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2); /* theme-exempt: shadow */
+  color: var(--wb-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  user-select: text;
+  cursor: auto;
+}
+
+.wb-diagcard.is-pinned {
+  border-color: var(--wb-accent);
+}
+
+.wb-diagcard__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--wb-border);
+}
+
+.wb-diagcard__where {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wb-text-muted);
+}
+
+.wb-diagcard__scroll {
+  overflow: auto;
+  padding: 8px 12px 10px;
+}
+
+.wb-diagcard__message + .wb-diagcard__message {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wb-border);
+}
+
+.wb-diagcard__headline {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.wb-diagcard__severity {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.wb-diagcard__message.is-warning .wb-diagcard__severity {
+  background: var(--wb-diag-warning-bg);
+  color: var(--wb-diag-warning-text);
+}
+
+.wb-diagcard__message.is-error .wb-diagcard__severity {
+  background: var(--wb-diag-error-bg);
+  color: var(--wb-diag-error-text);
+}
+
+.wb-diagcard__text {
+  margin: 0 0 4px;
+}
+
+.wb-diagcard__text code,
+.wb-diagcard__headline code {
+  font-family: var(--wb-code-font);
+  font-size: 0.95em;
+}
+
+.wb-diagcard__code {
+  margin: 4px 0 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--wb-surface-bg);
+  border: 1px solid var(--wb-border);
+  font-family: var(--wb-code-font);
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.wb-diagcard__source {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--wb-text-muted);
+}

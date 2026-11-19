@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type CSSProperties, type RefObject, type UIEvent } from 'react';
+import { Fragment, memo, useCallback, useId, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type CSSProperties, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { CodeText } from './CodeText';
-import { describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
+import { cardMessages, describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
+import { copyableText } from './diagnosticCardText';
+import { DiagnosticCard } from './DiagnosticCard';
+import { useDiagnosticCard } from './useDiagnosticCard';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
@@ -163,10 +166,10 @@ const EditorGutter = memo(function EditorGutter({
       {lines.map((_, i) => {
         const diagnostic = linesByNumber.get(i + 1);
         const hintFrom = hints.get(i + 1);
-        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom, i + 1);
+        // A marked line's text shows in the problem card (DiagnosticCard.tsx), not a native tooltip.
         return (
           <Fragment key={i}>
-            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title} data-line={i + 1}>
+            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} data-line={i + 1}>
               {i + 1}
             </div>
             {(extraRows.get(i + 1) ?? NO_EXTRA_ROWS).map((row, r) => (
@@ -297,6 +300,9 @@ export function EditorSurface({
   // Computed only from the stored lines, so a repeating assertion that adds
   // nothing leaves the text unchanged and the live region silent.
   const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const isMarked = useCallback((line: number) => linesByNumber.has(line) || hints.has(line), [linesByNumber, hints]);
+  const card = useDiagnosticCard(bodyRef, isMarked);
   const statusId = useId();
   useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
   const quickFix = useQuickFix(textareaRef, diagnostics, () => onDismissDiagnostics?.(file.id));
@@ -323,6 +329,7 @@ export function EditorSurface({
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
+    card.close(); // the line it describes moved away
     const { scrollTop, scrollLeft } = e.currentTarget;
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop;
@@ -338,16 +345,25 @@ export function EditorSurface({
   return (
     <>
     <div
+      ref={bodyRef}
       className="wb-editor__body"
       // A click in the text clears this file's markers (hovering does not); a click on a
-      // line number or its `!` shows that line's warnings instead. The reveal's own focus
-      // and scroll are not clicks.
+      // line number or its `!` shows that line's warnings instead, and pins its problem
+      // card. The reveal's own focus and scroll are not clicks.
       onPointerDown={(e) => {
         onFocusWithin?.();
         const line = gutterLineAt(e.target);
-        if (line !== undefined) onShowLineDiagnostics?.(file.id, line);
-        else if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+        if (line !== undefined) {
+          onShowLineDiagnostics?.(file.id, line);
+          if (isMarked(line) && e.target instanceof Element) card.pin(line, e.target.closest<HTMLElement>('[data-line]') ?? e.target as HTMLElement);
+          else card.close();
+        } else {
+          card.close();
+          if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+        }
       }}
+      onPointerOver={card.onPointerOver}
+      onPointerLeave={card.onPointerLeave}
       onFocus={onFocusWithin}
     >
       <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
@@ -424,6 +440,24 @@ export function EditorSurface({
         <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
         <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
       </div>
+      {card.state && isMarked(card.state.line) && (() => {
+        const line = card.state.line;
+        const diagnostic = linesByNumber.get(line);
+        const hintFrom = hints.get(line);
+        const description = diagnostic ? describeLine(diagnostic) : hintFrom ? describeHint(hintFrom, line) : '';
+        return (
+          <DiagnosticCard
+            line={line}
+            messages={diagnostic ? cardMessages(diagnostic) : []}
+            note={!diagnostic && hintFrom ? describeHint(hintFrom, line) : undefined}
+            copyText={copyableText({ fileName: file.name, line }, lines[line - 1], description)}
+            pinned={card.state.pinned}
+            style={card.state.style}
+            onPointerEnter={card.onCardEnter}
+            onPointerLeave={card.onCardLeave}
+          />
+        );
+      })()}
     </div>
     {/* Outside the body: a click in the dialog is not a click in the code. */}
     {pastedArchitecture.pending && (

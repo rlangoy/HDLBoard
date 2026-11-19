@@ -83,6 +83,7 @@
 }
 
 .wb-editor__body {
+  position: relative; /* anchors the problem card (DiagnosticCard.css) */
   flex: 1;
   min-height: 0;
   display: flex;

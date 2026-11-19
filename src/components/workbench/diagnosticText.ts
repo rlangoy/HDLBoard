@@ -359,6 +359,26 @@ export function quickFixTitle(fix: QuickFix): string {
 /** The keyboard shortcut of the Quick Fix, as VS Code has it. */
 export const QUICK_FIX_SHORTCUT = 'Ctrl+.';
 
+/** One message as the problem card shows it (DiagnosticCard.tsx): the headline, then who says what, and why. */
+export interface CardMessage {
+  readonly severity: LineMessage['severity'];
+  readonly headline: string;
+  /** Who the explanation is from: `HDLBoard design check`, `GHDL`; absent without advice. */
+  readonly source?: string;
+  /** The explanation, or the compiler's own sentence; may hold code lines indented by two spaces. */
+  readonly body?: string;
+  readonly details: readonly string[];
+}
+
+/** The line's messages for the problem card, in the tooltip's order. */
+export function cardMessages(line: LineDiagnostic): CardMessage[] {
+  return inDisplayOrder(line).map((m) => {
+    const headline = m.advice?.headline;
+    if (headline === undefined) return { severity: m.severity, headline: m.message, details: m.details };
+    return { severity: m.severity, headline, source: m.advice?.compiler ?? DEFAULT_COMPILER, body: m.message, details: m.details };
+  });
+}
+
 function inDisplayOrder(line: LineDiagnostic): LineMessage[] {
   return [...line.messages].sort(byDisplayOrder);
 }
