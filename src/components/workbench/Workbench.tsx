@@ -534,10 +534,10 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: RevealTarget, highlight?: string) => navigate(() => {
+  const revealLocation = useCallback((target: RevealTarget, highlight?: string, openCard?: boolean) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight });
+    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight, ...(openCard && { openCard }) });
   }), [navigate, setOverlay]);
   // Console links retain recorded advice and the file's other markers.
   const openConsoleDiagnostic = useCallback(
@@ -1655,7 +1655,7 @@ export function Workbench() {
     }
     // One line per SIM-only file, linked to its first line (docs/impl_sim_only_warnings.md § 5.2).
     for (const summary of designCheck.summaries()) {
-      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => { designCheck.showFile(summary.fileId); revealLocation(summary); } });
+      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => { designCheck.showFile(summary.fileId); revealLocation(summary, undefined, true); } });
     }
   };
 

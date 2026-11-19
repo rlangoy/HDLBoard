@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type RefObject } from 'react';
+import type { RevealRequest } from './useRevealLine';
 
 /** How long the pointer rests on a marked line number before its card opens. */
 const OPEN_DELAY_MS = 350;
@@ -26,6 +27,34 @@ export interface DiagnosticCardApi {
   readonly close: () => void;
   readonly onCardEnter: () => void;
   readonly onCardLeave: () => void;
+}
+
+/** After the reveal's scroll has settled (its scroll event closes any card), so the card sits by the line. */
+const PIN_AFTER_REVEAL_MS = 120;
+
+/**
+ * A design-check console link (*Line n*) opens the line's problem card: once the reveal
+ * has scrolled the line into view, the card is pinned there, as a click on its `!` would.
+ */
+export function usePinCardOnReveal(
+  reveal: RevealRequest | null | undefined,
+  fileId: string,
+  gutterRef: RefObject<HTMLElement>,
+  card: { readonly isMarked: (line: number) => boolean; readonly pin: (line: number, row: HTMLElement) => void },
+): void {
+  const cardRef = useRef(card);
+  cardRef.current = card;
+  const handledId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!reveal?.openCard || reveal.fileId !== fileId || handledId.current === reveal.id) return undefined;
+    handledId.current = reveal.id;
+    const { line } = reveal;
+    const timer = window.setTimeout(() => {
+      const row = gutterRef.current?.querySelector<HTMLElement>(`.wb-editor__gutter-line[data-line="${line}"]`);
+      if (row && cardRef.current.isMarked(line)) cardRef.current.pin(line, row);
+    }, PIN_AFTER_REVEAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [reveal, fileId, gutterRef]);
 }
 
 /** The gutter row a pointer event is on, with its line number. */

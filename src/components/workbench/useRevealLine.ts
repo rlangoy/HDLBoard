@@ -24,6 +24,8 @@ export interface RevealRequest {
   readonly focus?: boolean;
   /** The id of a symbol to highlight there until the next click (Go to declaration). */
   readonly highlight?: string;
+  /** Pin the line's problem card (DiagnosticCard.tsx) once it is in view: a design-check console link. */
+  readonly openCard?: boolean;
 }
 
 /** How much code stays visible left of a revealed word, in characters. */

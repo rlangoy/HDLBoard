@@ -424,6 +424,7 @@ severity, the headline, the explanation with its code lines in a code box, and w
 selected; **Copy** puts `file, line n`, the line itself and the message on the clipboard as plain text
 (`diagnosticCardText.ts`), ready to paste to a teacher or into a chat. The card stays while the pointer is on it; a
 click on the line number pins it; Esc, a scroll or a click in the code closes it. Compiler errors get the same card.
+The Start summary's *Line n* link opens it too, pinned, once the line is in view (`usePinCardOnReveal`, `RevealRequest.openCard`).
 
 **Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file, not one line per finding:
 `blink.vhd is SIM-only: 2 lines only work in simulation; they run here but not on the board.` The file name links to

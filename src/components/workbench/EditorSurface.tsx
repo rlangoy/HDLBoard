@@ -7,7 +7,7 @@ import { CodeText } from './CodeText';
 import { cardMessages, describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
 import { copyableText } from './diagnosticCardText';
 import { DiagnosticCard } from './DiagnosticCard';
-import { useDiagnosticCard } from './useDiagnosticCard';
+import { useDiagnosticCard, usePinCardOnReveal } from './useDiagnosticCard';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
@@ -303,6 +303,7 @@ export function EditorSurface({
   const bodyRef = useRef<HTMLDivElement>(null);
   const isMarked = useCallback((line: number) => linesByNumber.has(line) || hints.has(line), [linesByNumber, hints]);
   const card = useDiagnosticCard(bodyRef, isMarked);
+  usePinCardOnReveal(reveal, file.id, gutterRef, { isMarked, pin: card.pin });
   const statusId = useId();
   useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
   const quickFix = useQuickFix(textareaRef, diagnostics, () => onDismissDiagnostics?.(file.id));
