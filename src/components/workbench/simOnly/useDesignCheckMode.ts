@@ -10,7 +10,7 @@ import {
 import type { DesignCheckMode } from './types';
 
 /**
- * The Design check mode in effect, and how to change it (Settings › Editor). A choice
+ * The Design check mode in effect, and how to change it (Settings › Simulation). A choice
  * made in another tab is followed. `settings.json`'s warnings are logged by
  * useBouncyOption, which reads the same file.
  */

@@ -3,13 +3,14 @@
 
 /** Projects for the design check's tests. */
 
+import { DEFAULT_BOARD } from '../../../boards/boardCatalog';
 import { parseWorkspace } from '../desktop';
 import { analyzeProject, type SourceFile } from '../tbDetect/analyzeProject';
 import { TEST_BOARD_PORTS } from '../tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
 import { designView } from './designView';
-import type { DesignCheck, DesignCheckMode, DesignView } from './types';
+import type { DesignCheck, DesignCheckMode, DesignView, SimulatorClock } from './types';
 
 /** A file named `name`, in the folder of its language. */
 export const source = (name: string, content: string): SourceFile => ({
@@ -23,8 +24,11 @@ export function viewOf(files: readonly SourceFile[], overrides: TestbenchOverrid
   return designView(analyzeProject(files, TEST_BOARD_PORTS), overrides);
 }
 
+/** The Default board's simulator-only clock, as Workbench passes the active board's. */
+export const TEST_SIMULATOR_CLOCK: SimulatorClock = { name: DEFAULT_BOARD.ports.clock500Hz, board: DEFAULT_BOARD.ports.clock };
+
 export function checkOf(files: readonly SourceFile[], overrides: TestbenchOverrides = EMPTY_OVERRIDES, mode: DesignCheckMode = 'synthesis'): DesignCheck {
-  return DESIGN_CHECKS[mode]({ view: viewOf(files, overrides), overrides });
+  return DESIGN_CHECKS[mode]({ view: viewOf(files, overrides), overrides, simulatorClock: TEST_SIMULATOR_CLOCK });
 }
 
 /** A VHDL entity with `ports` and one architecture of `body`, the statements after `begin`. */

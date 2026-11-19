@@ -19,7 +19,7 @@ export interface AppDefaults {
   /** The Pushbuttons panel offers "Bouncy" contacts (on unless the file says otherwise). */
   readonly bouncyButtons: boolean;
   /**
-   * Settings › Editor › Design check (docs/impl_sim_only_warnings.md § 6); only when the
+   * Settings › Simulation › Design check (docs/impl_sim_only_warnings.md § 6); only when the
    * file sets it — the built-in default is the setting's own (`DEFAULT_DESIGN_CHECK`).
    */
   readonly designCheck?: DesignCheckMode;

@@ -10,7 +10,7 @@ import { checkDiagnostics } from './findingDiagnostics';
 import { NO_QUIET_WARNINGS, quietFile, showFile, showLine, withQuieted, type QuietWarnings } from './quietWarnings';
 import { isSimModel } from './simModels';
 import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
-import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
+import type { DesignCheck, DesignCheckMode, DesignView, FileGroup, SimulatorClock } from './types';
 
 export interface DesignCheckOptions {
   /** `TestbenchSplit.designView`: recomputed with the detector, 500 ms after typing stops. */
@@ -20,6 +20,8 @@ export interface DesignCheckOptions {
   /** The files as the editor has them now. */
   readonly files: readonly { readonly id: string; readonly name: string; readonly content: string }[];
   readonly setSimModel: (fileId: string, simModel: boolean) => void;
+  /** The active board's simulator-only clock (CheckInput); memoised. */
+  readonly simulatorClock?: SimulatorClock;
 }
 
 export interface DesignCheckApi {
@@ -48,8 +50,8 @@ export interface DesignCheckApi {
  * keystroke; per keystroke only the line counts are compared (findingDiagnostics.ts).
  */
 export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
-  const { view, overrides, mode, files, setSimModel } = options;
-  const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides }), [view, overrides, mode]);
+  const { view, overrides, mode, files, setSimModel, simulatorClock } = options;
+  const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides, simulatorClock }), [view, overrides, mode, simulatorClock]);
   const loud = useMemo(
     () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
     [check, view.raw, overrides, files],

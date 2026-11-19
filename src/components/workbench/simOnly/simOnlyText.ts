@@ -8,7 +8,11 @@
  * translation needs. Pure.
  */
 
-import type { RegisterProblem, RegisterProblemKind, SimOnlyConstructId } from './types';
+import type { RegisterProblem, RegisterProblemKind, SimOnlyConstructId, SimulatorClock } from './types';
+
+/** The rate of HDLBoard's slow clock (docs/ghdl_implementation_plan.md § 3.2). */
+const SIMULATOR_CLOCK_HZ = 500;
+const HZ_PER_MHZ = 1_000_000;
 
 export interface ConstructText {
   /** Shown after the line: one short sentence. */
@@ -66,6 +70,7 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: the FPGA makes a latch, not a register.', explanation: [ALLOWED, VERILOG_ALLOWED, LATCH_FIX].join('\n') },
   'vlog-assign-delay': { headline: 'The `#` delay is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the wire changes at once. Only the simulation shows the delay.' },
   'vlog-display': { headline: '`$display` only prints in simulation.', explanation: 'Synthesis ignores it. It is harmless; the board just never prints it.' },
+  'sim-clock': { headline: 'This clock only exists in the simulator: the board has no such pin.', explanation: "HDLBoard adds a slow clock so a design can count slowly enough to watch. The FPGA board has no such clock pin. On the board, use the board's own clock and count its cycles." },
 };
 
 /** Who the tooltip says the message is from: HDLBoard's own check, not the compiler. */
@@ -81,6 +86,24 @@ export function multipleDriversText(signal: string, otherLines: readonly number[
   return {
     headline: `\`${signal}\` has more than one driver.`,
     explanation: `\`${signal}\` is also driven on ${others}. On the FPGA a signal is one wire with one source, so synthesis refuses two ("multiple constant drivers", "multi-driven net"). In the simulator the value turns into X. Drive it from one process, or one statement: combine the cases with if / else, or \`when … else\`.`,
+  };
+}
+
+/** 100000 as `100 000`, as the other messages write numbers. */
+const grouped = (n: number): string => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
+
+/**
+ * A read of the board's simulator-only clock (§ 3.5): what it is, and the fix in the
+ * board's own clock, with the count that gives the same rate.
+ */
+export function simulatorClockText({ name, board }: SimulatorClock): ConstructText {
+  const cycles = grouped((board.mhz * HZ_PER_MHZ) / SIMULATOR_CLOCK_HZ);
+  return {
+    headline: `${code(name)} only exists in the simulator: the board has no such clock pin.`,
+    explanation: [
+      `HDLBoard adds ${code(name)} (${SIMULATOR_CLOCK_HZ} Hz) so a design can count slowly enough to watch. The FPGA board has no such pin, so the design can't be built as it is.`,
+      `On the board, use ${code(board.port)} (${board.mhz} MHz) instead, and count ${cycles} of its cycles for each tick of ${code(name)}.`,
+    ].join('\n'),
   };
 }
 
@@ -189,4 +212,5 @@ export const CONSTRUCT_TITLE: Readonly<Record<SimOnlyConstructId, string>> = {
   'vlog-level-storage': 'latch',
   'vlog-assign-delay': 'assign #',
   'vlog-display': '$display',
+  'sim-clock': 'simulator clock',
 };

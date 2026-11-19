@@ -1637,7 +1637,7 @@ export function Workbench() {
     if (boardInstalled) appendLog(runBoardLog(activeBoard));
     else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => settingsPage.open('board') });
     // A student who sees no SIM-only warnings can tell why (docs/impl_sim_only_warnings.md § 6).
-    if (designCheckMode.value === 'simulation') logWithLink(DESIGN_CHECK_OFF, { label: 'Settings', onClick: () => settingsPage.open('editor') });
+    if (designCheckMode.value === 'simulation') logWithLink(DESIGN_CHECK_OFF, { label: 'Settings', onClick: () => settingsPage.open('simulation') });
   };
 
   /**
@@ -1784,7 +1784,11 @@ export function Workbench() {
 
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
-  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel });
+  const simulatorClock = useMemo(
+    () => ({ name: activeBoard.ports.clock500Hz, board: activeBoard.ports.clock }),
+    [activeBoard.ports.clock500Hz, activeBoard.ports.clock],
+  );
+  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock });
   const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
   // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.
   const { quietFile: quietLiveWarnings, showFile: showLiveWarnings } = designCheck;
@@ -2213,8 +2217,8 @@ export function Workbench() {
                   layout: { value: boardLayout, onChange: changeBoardLayout },
                   bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
                 }}
-                editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference }, designCheck: designCheckMode }}
-                simulation={{ recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
+                simulation={{ designCheck: designCheckMode, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
                   check: { status: updateCheck.status, onCheck: updateCheck.checkNow },

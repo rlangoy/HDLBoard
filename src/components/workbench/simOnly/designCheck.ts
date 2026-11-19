@@ -2,9 +2,10 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The two modes of Settings › Editor › Design check (docs/impl_sim_only_warnings.md
+ * The two modes of Settings › Simulation › Design check (docs/impl_sim_only_warnings.md
  * § 6), as two functions in one table. *Synthesis* finds the simulation-only code and
- * the signals with more than one driver (§ 8.1). *Simulation only* is the check that
+ * the signals with more than one driver (§ 8.1), and reads of the board's simulator-only
+ * clock (§ 3.5). *Simulation only* is the check that
  * finds nothing: no findings, so no warnings and no console summary, and the groups of
  * the roles alone, so no SIM-only label. Nothing downstream asks for the mode. Pure.
  */
@@ -12,10 +13,12 @@
 import { driverConflicts } from './drivers';
 import { simOnlyFindings } from './findings';
 import { codeGroups, groupsFromRoles } from './groups';
+import { simulatorClockFindings } from './simulatorClock';
 import type { CheckInput, DesignCheck, DesignCheckMode } from './types';
 
-function synthesisCheck({ view, overrides }: CheckInput): DesignCheck {
-  const findings = simOnlyFindings(view);
+function synthesisCheck({ view, overrides, simulatorClock }: CheckInput): DesignCheck {
+  const clockReads = simulatorClock ? simulatorClockFindings(view, simulatorClock) : [];
+  const findings = [...simOnlyFindings(view), ...clockReads].sort((a, b) => (a.fileId === b.fileId ? a.line - b.line : 0));
   return { findings, groups: codeGroups({ view, overrides, findings }), driverConflicts: driverConflicts(view) };
 }
 

@@ -67,9 +67,16 @@ const DESIGNS: [string, string, string][] = [
   ...Object.entries(BOARD_SOURCES).map(([path, content]): [string, string, string] => [path, path.split('/').pop() ?? path, content]),
 ].filter(([, name]) => !/_tb\.(vhd|v)$/.test(name));
 
+/** The examples that show HDLBoard's slow clock: on the board they need its real clock (§ 3.5). */
+const readsSimulatorClock = (content: string) => /(?:rising_edge\(|posedge\s+)CLOCK_500Hz\b/.test(content);
+
 describe('the examples', () => {
-  test.each(DESIGNS)('%s has no finding that keeps it off the board', (_label, name, content) => {
+  test.each(DESIGNS.filter(([, , content]) => !readsSimulatorClock(content)))('%s has no finding that keeps it off the board', (_label, name, content) => {
     expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet')).toEqual([]);
+  });
+
+  test.each(DESIGNS.filter(([, , content]) => readsSimulatorClock(content)))('%s is SIM-only for its simulator clock, and nothing else', (_label, name, content) => {
+    expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet').map((f) => f.construct)).toEqual(['sim-clock']);
   });
 
   test.each(DESIGNS.filter(([, name]) => name.startsWith('keyCouter2Led')))('%s names its entity after its file', (_label, _name, content) => {

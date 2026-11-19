@@ -222,6 +222,22 @@ Sources: the Quartus runs above; Intel's register guidance, *Recommended HDL Cod
 [multiple distinct clocks](https://community.altera.com/discussions/quartus-prime/cant-infer-register-because-its-behavior-depends-on-the-edges-of-multiple-clock/188680) and
 [Error 10200](https://community.altera.com/discussions/quartus-prime/quartus-prime-verilog-error-10200-verilog-hdl-conditional-statement-error/323442).
 
+### 3.5 The simulator's own clock (built)
+
+HDLBoard gives every board a slow clock, `CLOCK_500Hz` unless the board's JSON names it (`ports.clock500Hz`), so a
+design can count slowly enough to watch. The FPGA board has no such pin, so a hardware design that **reads** it only
+works in the simulator: it gets the `sim-clock` finding (tier `never`, so the file is SIM-only) on the first line
+that reads it (`simOnly/simulatorClock.ts`). The message names the board's own clock and the count for the same
+rate: *On the board, use `CLOCK_50` (50 MHz) instead, and count 100 000 of its cycles for each tick of
+`CLOCK_500Hz`.*
+
+Not a read, and not flagged: the port declared and unused (every board's starter file declares it, marked
+*Simulator only*), a component declaration or a formal (`CLOCK_500Hz =>`, `.CLOCK_500Hz(`), a Verilog `input`
+declaration, code inside `translate_off`, and a unit without that port (a signal of the same name is its own). The
+actual of a port map is a read. The clock comes from the active board (`CheckInput.simulatorClock`); with *Simulation
+only* nothing is checked. The examples that show the slow clock (`blinkTest`, the Basys 3 and Nexys A7
+`keyCounter7Seg`) are SIM-only on purpose, and a test says so.
+
 ## 4. Which code is hardware
 
 One pure function decides it for everything that needs to know: the live warnings, the code groups, pairing, and the
@@ -462,7 +478,7 @@ A mode, chosen like the testbench split view's *Automatic / Always / Never* (rad
 
 | | |
 |---|---|
-| Where | Settings › Editor, a new card **Design check**. |
+| Where | Settings › Simulation, a card **Design check** (first on Settings › Editor; moved 2026-11-19). |
 | Mode **Synthesis** (default) | "Check designs for FPGA synthesis. Lines that only work in simulation get a warning, and the file is marked `SIM-only`." Everything in this plan is active. |
 | Mode **Simulation only** | "Don't check designs for synthesis. For models and exercises that never go to an FPGA." No live layer, no `SIM-only` group (those units show as `RTL`, as today), no console summary, no phase 2 check. Testbench detection is unchanged. |
 | Default | **Synthesis.** |

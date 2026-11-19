@@ -20,7 +20,8 @@ export type SimOnlyConstructId =
   | 'vhdl-end-sim' | 'vhdl-now' | 'vhdl-access' | 'vhdl-protected' | 'vhdl-random' | 'vhdl-real-signal'
   | 'vhdl-edge-template' | 'vhdl-after' | 'vhdl-report'
   | 'vlog-delay' | 'vlog-event-wait' | 'vlog-clock-gen' | 'vlog-file-io' | 'vlog-end-sim' | 'vlog-time'
-  | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-edge-template' | 'vlog-level-storage' | 'vlog-assign-delay' | 'vlog-display';
+  | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-edge-template' | 'vlog-level-storage' | 'vlog-assign-delay' | 'vlog-display'
+  | 'sim-clock';
 
 /**
  * Why no register can be built (§ 3.4): two clocks, both edges of one, a branch outside
@@ -37,6 +38,13 @@ export interface RegisterProblem {
   readonly clocks: readonly string[];
 }
 
+/** The board's simulator-only clock (§ 3.5), and the real clock to use instead. */
+export interface SimulatorClock {
+  /** As the board names it: `CLOCK_500Hz` by default. */
+  readonly name: string;
+  readonly board: { readonly port: string; readonly mhz: number };
+}
+
 /** One construct on one line. */
 export interface ConstructMatch {
   readonly construct: SimOnlyConstructId;
@@ -44,6 +52,8 @@ export interface ConstructMatch {
   readonly line: number;
   /** For the register checks: the names the message gives. */
   readonly register?: RegisterProblem;
+  /** For `sim-clock`: the clock the line reads, and the board's own. */
+  readonly simulatorClock?: SimulatorClock;
 }
 
 /** An instance, and whether it sits in code hidden from synthesis (§ 4.3). */
@@ -112,6 +122,8 @@ export type DesignCheckMode = 'synthesis' | 'simulation';
 export interface CheckInput {
   readonly view: DesignView;
   readonly overrides: TestbenchOverrides;
+  /** The active board's simulator-only clock; without it, reading one is not checked. */
+  readonly simulatorClock?: SimulatorClock;
 }
 
 /** What the check found, ready for the UI. */

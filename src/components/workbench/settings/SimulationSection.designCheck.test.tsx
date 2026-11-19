@@ -4,13 +4,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import type { DesignCheckMode } from '../simOnly/types';
-import { EditorSection } from './EditorSection';
+import { SimulationSection } from './SimulationSection';
 
-/** Settings › Editor › Design check (docs/impl_sim_only_warnings.md § 6). */
+/** Settings › Simulation › Design check (docs/impl_sim_only_warnings.md § 6). */
 
 const ignore = () => undefined;
 const render = (mode: DesignCheckMode) =>
-  renderToStaticMarkup(<EditorSection split={{ value: 'auto', onChange: ignore }} designCheck={{ value: mode, onChange: ignore }} />);
+  renderToStaticMarkup(<SimulationSection designCheck={{ value: mode, onChange: ignore }} recordWaves={{ value: true, onChange: ignore }} />);
 
 describe('the Design check card', () => {
   test('is shown with its title', () => {

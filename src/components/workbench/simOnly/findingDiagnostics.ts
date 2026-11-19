@@ -15,7 +15,7 @@ import { countLines } from '../diagnosticLocation';
 import type { ProjectAnalysis, TestbenchOverrides } from '../tbDetect/types';
 import type { DriverConflict } from './driverTypes';
 import { isWarnable } from './findings';
-import { CHECK_SOURCE, CONSTRUCT_TEXT, multipleDriversText, registerText, type ConstructText } from './simOnlyText';
+import { CHECK_SOURCE, CONSTRUCT_TEXT, multipleDriversText, registerText, simulatorClockText, type ConstructText } from './simOnlyText';
 import type { DesignCheck, SimOnlyFinding, Tier } from './types';
 
 /** How each tier shows: `quiet` only as the gutter's `!` and the tooltip. */
@@ -42,7 +42,14 @@ export function findingDiagnostics(findings: readonly SimOnlyFinding[], live: Li
   const shown = shownIn(live);
   return findings
     .filter(shown)
-    .map((f) => warning({ fileId: f.fileId, line: f.line }, f.register ? registerText(f.register) : CONSTRUCT_TEXT[f.construct], TIER_LOOK[f.tier].quiet));
+    .map((f) => warning({ fileId: f.fileId, line: f.line }, textOf(f), TIER_LOOK[f.tier].quiet));
+}
+
+/** A finding's message: worded with its names when it has them. */
+function textOf(f: SimOnlyFinding): ConstructText {
+  if (f.register) return registerText(f.register);
+  if (f.simulatorClock) return simulatorClockText(f.simulatorClock);
+  return CONSTRUCT_TEXT[f.construct];
 }
 
 export function driverDiagnostics(conflicts: readonly DriverConflict[], live: LiveText): AdvisedDiagnostic[] {

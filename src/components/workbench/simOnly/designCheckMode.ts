@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * Settings › Editor › Design check (docs/impl_sim_only_warnings.md § 6): the student's
+ * Settings › Simulation › Design check (docs/impl_sim_only_warnings.md § 6): the student's
  * choice is kept in this browser; until they make one, `settings.json`'s `designCheck`
  * applies, else *Synthesis*. Storage can be blocked: then the choice holds for this
  * page only. Pure, apart from the storage it is handed.
