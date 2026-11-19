@@ -19,7 +19,7 @@ const TITLE: Record<CopyState, string> = {
 };
 
 /** In a pane header, beside the file name: copies the whole file to the clipboard. */
-export function CopyCodeButton({ fileName, code, label, visibleLabel }: { code: string; visibleLabel?: string } & ({ fileName: string; label?: never } | { label: string; fileName?: never })) {
+export function CopyCodeButton({ fileName, code, label, visibleLabel, failedTitle }: { code: string; visibleLabel?: string; failedTitle?: string } & ({ fileName: string; label?: never } | { label: string; fileName?: never })) {
   const [state, setState] = useState<CopyState>('idle');
 
   useEffect(() => {
@@ -29,6 +29,8 @@ export function CopyCodeButton({ fileName, code, label, visibleLabel }: { code: 
   }, [state]);
 
   const copy = async () => setState((await copyText(code)) ? 'copied' : 'failed');
+  // What is copied may not be code: the caller can say how to copy by hand.
+  const titleOf = (s: CopyState) => (s === 'failed' && failedTitle ? failedTitle : TITLE[s]);
 
   return (
     <span className="wb-copycode-control">
@@ -36,14 +38,14 @@ export function CopyCodeButton({ fileName, code, label, visibleLabel }: { code: 
         type="button"
         className={cx('wb-copycode', state !== 'idle' && `is-${state}`)}
         aria-label={label ?? (fileName ? `Copy the code of ${fileName}` : TITLE.idle)}
-        title={state === 'idle' && label ? label : TITLE[state]}
+        title={state === 'idle' && label ? label : titleOf(state)}
         onClick={() => void copy()}
       >
         {state === 'copied' ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
         {visibleLabel && <span>{state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : visibleLabel}</span>}
       </button>
       <span className="wb-sr-only" role="status" aria-live="polite">
-        {state === 'idle' ? '' : TITLE[state]}
+        {state === 'idle' ? '' : titleOf(state)}
       </span>
     </span>
   );

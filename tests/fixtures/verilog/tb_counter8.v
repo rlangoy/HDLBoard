@@ -4,7 +4,7 @@ module tb_counter8;
     reg  [3:0] KEY_N    = 4'b1111;
     wire [9:0] LEDR;
 
-    counter8 dut (.CLOCK_50(CLOCK_50), .KEY_N(KEY_N), .LEDR(LEDR));
+    keyCouter2Led dut (.CLOCK_50(CLOCK_50), .KEY_N(KEY_N), .LEDR(LEDR));
 
     always #10 CLOCK_50 = ~CLOCK_50;
 

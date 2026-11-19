@@ -51,6 +51,8 @@ interface SharedProps {
   diagnostics: DiagnosticsByFile;
   onChange: (id: string, content: string) => void;
   onDismissDiagnostics?: (fileId: string) => void;
+  /** A click on a line number or its `!`: that line's warnings show again. */
+  onShowLineDiagnostics?: (fileId: string, line: number) => void;
   projectFiles?: readonly VhdlFile[];
 }
 
@@ -156,6 +158,7 @@ function SplitPane({
   diagnostics,
   onChange,
   onDismissDiagnostics,
+  onShowLineDiagnostics,
   projectFiles,
   symbols,
   linkedOccurrences,
@@ -187,6 +190,7 @@ function SplitPane({
               diagnostics={diagnostics[model.file.id] ?? NO_LINES}
               onChange={onChange}
               onDismissDiagnostics={onDismissDiagnostics}
+              onShowLineDiagnostics={onShowLineDiagnostics}
               projectFiles={projectFiles}
               reveal={model.reveal}
               label={label}

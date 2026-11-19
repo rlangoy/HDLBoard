@@ -119,6 +119,11 @@ export interface TestbenchOverrides {
   readonly roles: Readonly<Record<string, UnitRole>>;
   /** design fileId -> testbench fileId. */
   readonly pairs: Readonly<Record<string, string>>;
+  /**
+   * Files marked *Simulation model* (docs/impl_sim_only_warnings.md S9): hardware code
+   * meant for simulation only. They keep the SIM-only label and get no line warnings.
+   */
+  readonly simModels?: Readonly<Record<string, true>>;
 }
 
 export const EMPTY_OVERRIDES: TestbenchOverrides = { roles: {}, pairs: {} };

@@ -8,6 +8,7 @@
  * Pure — the React side asks, and renders the answers.
  */
 
+import { withoutSimModel } from './simOnly/simModels';
 import type { EditorView, PaneRole } from './editorView';
 import { contradictsCode, effectiveFile, findUnit, testbenchCandidates, unitKey } from './tbDetect';
 import type {
@@ -109,7 +110,8 @@ export function withoutFile(overrides: TestbenchOverrides, fileId: string): Test
   const roles = { ...overrides.roles };
   delete roles[fileId];
   const pairs = Object.fromEntries(Object.entries(overrides.pairs).filter(([d, t]) => d !== fileId && t !== fileId));
-  return { roles, pairs };
+  const { simModels } = withoutSimModel(overrides, fileId);
+  return simModels ? { roles, pairs, simModels } : { roles, pairs };
 }
 
 /** A role change that would leave the split with two designs or two testbenches side by side. */

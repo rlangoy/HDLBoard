@@ -158,7 +158,7 @@ describe('board detection', () => {
 
 describe('chooseTopModule', () => {
   test('takes the only module in the top file, whatever it is called', () => {
-    assert.deepEqual(chooseTopModule('keyCouter2Led.v', ['counter8']), { ok: true, name: 'counter8' });
+    assert.deepEqual(chooseTopModule('keyCouter2Led.v', ['keyCouter2Led']), { ok: true, name: 'keyCouter2Led' });
   });
 
   test('takes the module named like the file when the file declares several', () => {

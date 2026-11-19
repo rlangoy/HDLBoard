@@ -3,7 +3,10 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { cx } from '../board';
-import { ChipIcon, FileIcon, FlaskIcon } from './icons';
+import { ChipIcon, FileIcon, FlaskIcon, SimOnlyIcon } from './icons';
+import { DESIGN_CHECK_TEXT } from './simOnly/designCheckText';
+import type { FileGroup } from './simOnly/types';
+import './simOnly/simOnly.css';
 import { TEXT } from './testbenchText';
 import type { FileRole } from './tbDetect/types';
 
@@ -18,13 +21,26 @@ const ROLE_TITLE: Record<FileRole, string> = {
  * for a testbench or a file holding one, the chip for a design, the plain file icon
  * for a file with no units yet. The tooltip spells the role out.
  */
-export function RoleIcon({ role, className }: { role: FileRole | undefined; className?: string }) {
+export function RoleIcon({ role, group, className }: { role: FileRole | undefined; group?: FileGroup; className?: string }) {
+  if (group === 'sim-only' || group === 'mixed-sim-only') return <SimOnlyRoleIcon group={group} className={className} />;
   if (role === undefined) return <FileIcon className={cx('wb-roleicon', className)} width={14} height={14} aria-hidden="true" />;
   const Icon = role === 'rtl' ? ChipIcon : FlaskIcon;
   return (
     <span className={cx('wb-roleicon', `is-${role === 'rtl' ? 'rtl' : 'tb'}`, className)} title={ROLE_TITLE[role]}>
       <Icon aria-hidden="true" />
       <span className="wb-sr-only">{ROLE_TITLE[role]}</span>
+    </span>
+  );
+}
+
+/** The SIM-only chip (docs/impl_sim_only_warnings.md § 5.3), with the flask when the file also holds a testbench. */
+function SimOnlyRoleIcon({ group, className }: { group: 'sim-only' | 'mixed-sim-only'; className?: string }) {
+  const title = group === 'sim-only' ? DESIGN_CHECK_TEXT.fileRoleSimOnly : DESIGN_CHECK_TEXT.fileRoleMixedSimOnly;
+  return (
+    <span className={cx('wb-roleicon', 'is-simonly', className)} title={title}>
+      <SimOnlyIcon aria-hidden="true" />
+      {group === 'mixed-sim-only' && <FlaskIcon aria-hidden="true" />}
+      <span className="wb-sr-only">{title}</span>
     </span>
   );
 }

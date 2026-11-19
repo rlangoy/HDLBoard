@@ -224,6 +224,17 @@ export function ChipIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** A chip with a wave across it — a design that only works in simulation (docs/impl_sim_only_warnings.md § 2.1). */
+export function SimOnlyIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...roleIconProps} {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1" />
+      <path d="M6.5 1.75v2.25M9.5 1.75v2.25M6.5 12v2.25M9.5 12v2.25M1.75 6.5h2.25M1.75 9.5h2.25M12 6.5h2.25M12 9.5h2.25" />
+      <path d="M5.4 8.6c.7-1.6 1.4-1.6 2.1 0s1.4 1.6 2.1 0" />
+    </svg>
+  );
+}
+
 /** A lab flask — testbench (simulation-only) code. */
 export function FlaskIcon(props: SVGProps<SVGSVGElement>) {
   return (

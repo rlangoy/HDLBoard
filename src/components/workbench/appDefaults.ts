@@ -7,15 +7,22 @@
  * wins over the file; the file wins over the built-in default. A missing file is normal;
  * a broken one is logged and the built-in defaults are used.
  *
- *   { "bouncyButtons": false }
+ *   { "bouncyButtons": false, "designCheck": "simulation" }
  */
 
 import { fetchBoardFile, type FetchedText } from '../../boards/boardCatalog';
 import { errorText } from './errorText';
+import { isDesignCheckMode } from './simOnly/designCheckMode';
+import type { DesignCheckMode } from './simOnly/types';
 
 export interface AppDefaults {
   /** The Pushbuttons panel offers "Bouncy" contacts (on unless the file says otherwise). */
   readonly bouncyButtons: boolean;
+  /**
+   * Settings › Simulation › Design check (docs/impl_sim_only_warnings.md § 6); only when the
+   * file sets it — the built-in default is the setting's own (`DEFAULT_DESIGN_CHECK`).
+   */
+  readonly designCheck?: DesignCheckMode;
 }
 
 export const BUILT_IN_DEFAULTS: AppDefaults = { bouncyButtons: true };
@@ -28,9 +35,15 @@ export interface ParsedDefaults {
   readonly warnings: readonly string[];
 }
 
+type SettingType = 'boolean' | 'designCheck';
+
 /** Each setting the file may hold, and the type its value must have. A new setting is one more line. */
-const SETTING_TYPES: { readonly [K in keyof AppDefaults]: 'boolean' } = { bouncyButtons: 'boolean' };
-const TYPE_TEXT = { boolean: 'true or false' } as const;
+const SETTING_TYPES: { readonly [K in keyof AppDefaults]-?: SettingType } = { bouncyButtons: 'boolean', designCheck: 'designCheck' };
+const TYPE_TEXT: Readonly<Record<SettingType, string>> = { boolean: 'true or false', designCheck: '"synthesis" or "simulation"' };
+const IS_TYPE: Readonly<Record<SettingType, (value: unknown) => boolean>> = {
+  boolean: (value) => typeof value === 'boolean',
+  designCheck: isDesignCheckMode,
+};
 const IGNORED_KEYS = new Set(['$schema', '$comment']);
 const builtIn = (warning: string): ParsedDefaults => ({ defaults: BUILT_IN_DEFAULTS, warnings: [warning] });
 const isSetting = (key: string): key is keyof AppDefaults => Object.prototype.hasOwnProperty.call(SETTING_TYPES, key);
@@ -55,7 +68,7 @@ function parseEntries(entries: readonly [string, unknown][]): ParsedDefaults {
   for (const [key, value] of entries) {
     if (IGNORED_KEYS.has(key)) continue;
     if (!isSetting(key)) warnings.push(`${APP_DEFAULTS_FILE}: unknown setting "${key}" was ignored.`);
-    else if (typeof value === SETTING_TYPES[key]) defaults[key] = value;
+    else if (IS_TYPE[SETTING_TYPES[key]](value)) defaults[key] = value;
     else warnings.push(`${APP_DEFAULTS_FILE}: ${key} must be ${TYPE_TEXT[SETTING_TYPES[key]]}.`);
   }
   return { defaults: defaults as unknown as AppDefaults, warnings };
