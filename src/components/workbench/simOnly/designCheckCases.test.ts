@@ -316,7 +316,22 @@ describe('tri-state drivers', () => {
 
   test('a bus that drives a value or Z on the same bits is still no conflict', () => {
     const body = "assign LEDR[0] = SW[0] ? SW[1] : 1'bz;\nassign LEDR[0] = SW[2] ? SW[3] : 1'bz;";
-    expect(driversIn('top.v', vlog(body.replace('output reg [9:0] LEDR', 'output [9:0] LEDR')))).toEqual([]);
+    expect(driversIn('top.v', vlog(body).replace('output reg [9:0] LEDR', 'output [9:0] LEDR'))).toEqual([]);
+  });
+
+  test("a 'Z' inside a concatenated value is a bus on its own bits only", () => {
+    const body = "always @(posedge CLOCK_50) LEDR[1:0] <= {1'bz, SW[0]};\nalways @(posedge CLOCK_50) LEDR[0] <= SW[1];";
+    expect(driversIn('top.v', vlog(body))).toEqual(['LEDR@2', 'LEDR@3']);
+  });
+
+  test('each target of a concatenation is a driver of its own', () => {
+    const body = "always @(posedge CLOCK_50) {LEDR[1], LEDR[0]} <= SW[1:0];\nalways @(posedge CLOCK_50) LEDR[0] <= SW[2];";
+    expect(driversIn('top.v', vlog(body))).toEqual(['LEDR@2', 'LEDR@3']);
+  });
+
+  test("a concatenation target with 'Z' on one item drives the other", () => {
+    const body = "always @(posedge CLOCK_50) {LEDR[1], LEDR[0]} <= {1'bz, SW[0]};\nalways @(posedge CLOCK_50) LEDR[1] <= SW[1];";
+    expect(driversIn('top.v', vlog(body))).toEqual([]);
   });
 });
 
@@ -376,5 +391,46 @@ describe("VHDL: an if on clk'event", () => {
 
   test("clk'event and clk = '1' is the template", () => {
     expect(findingsIn([['top.vhd', vhdl(processWith("CLOCK_50'event and CLOCK_50 = '1'"))]])).toEqual([]);
+  });
+});
+
+describe('Verilog: the clocked branch after the resets', () => {
+  test('an enable that also reads the reset is no second clock', () => {
+    const body = 'reg [3:0] c = 0;\nalways @(posedge CLOCK_50 or negedge SW[0])\n  if (!SW[0]) c <= 0;\n  else if (SW[0] && SW[1]) c <= c + 1;';
+    expect(latchIn(body)).toEqual([]);
+  });
+});
+
+describe('Verilog: constants the check can work out', () => {
+  test.each([
+    ['a localparam bound', 'localparam N = 10;\ninteger i;\nalways @* for (i = 0; i < N; i = i + 1) LEDR[i] = SW[i];'],
+    ['a parameter expression and a sized number', "parameter W = 5;\ninteger i;\nalways @* for (i = 0; i < 2 * W; i = i + 4'd1) LEDR[i] = SW[i];"],
+    ['a declared range of parameters', "localparam N = 4;\nreg [N-1:0] q;\nalways @* begin q[N-1:0] = SW[3:0]; if (SW[4]) q[0] = SW[5]; end"],
+  ])('%s: no latch', (_label, body) => {
+    expect(latchIn(body)).toEqual([]);
+  });
+
+  test('a module parameter list in #( … ) counts too', () => {
+    const top = 'module top #(parameter N = 10) (input CLOCK_50, input [9:0] SW, output reg [9:0] LEDR);\ninteger i;\nalways @* for (i = 0; i < N; i = i + 1) LEDR[i] = SW[i];\nendmodule\n';
+    expect(findingsIn([['top.v', top]])).toEqual([]);
+  });
+});
+
+describe('Verilog case items', () => {
+  test('a default without its colon is still the default', () => {
+    expect(latchIn("always @* case (SW[1:0])\n  2'b00: LEDR = 0;\n  default LEDR = SW;\nendcase")).toEqual([]);
+  });
+});
+
+describe('Verilog: loops the check follows', () => {
+  test('a loop of more than 256 runs over a wide vector is no latch', () => {
+    expect(latchIn('reg [511:0] m;\ninteger i;\nalways @* for (i = 0; i < 512; i = i + 1) m[i] = SW[0];')).toEqual([]);
+  });
+
+  test('three nested loops of 200 runs are not followed, and the check stays quick', () => {
+    const body = 'reg [7:0] m;\ninteger i, j, k;\nalways @* for (i = 0; i < 200; i = i + 1) for (j = 0; j < 200; j = j + 1) for (k = 0; k < 200; k = k + 1) m[0] = SW[0];';
+    const started = performance.now();
+    latchIn(body);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

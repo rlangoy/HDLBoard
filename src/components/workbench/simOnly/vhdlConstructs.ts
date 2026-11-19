@@ -11,7 +11,8 @@ import type { UnitText } from '../tbDetect/rules';
 import { topLevel, unwrapped } from './brackets';
 import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
-import { EVENT_OPERAND, testsLevelOf, vhdlEdgeTemplate } from './vhdlRegisters';
+import { EVENT_OPERAND, testsLevelOf } from './vhdlEdges';
+import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;

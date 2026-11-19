@@ -11,15 +11,17 @@
  * of its declared bits. A signal whose width is not known stays whole (`q`), and covers
  * any bit of it. A bit only known while running (`q[idx]`) is `q[?]`: it covers no bit,
  * so a path that writes only it leaves the others as they were. Inside a `for` with
- * constant bounds and a constant step, an index made of the loop variables and numbers
- * (`q[i]`, `r[7 - i]`, `q[2*i + 1]`) is each bit it names as the loop runs. A `case` is
- * complete with a `default`, or when its constant labels name every value of a selector
- * of known width. A `for` with constant bounds that runs at least once is its body; any
+ * bounds and a step known before running (numbers, parameters, localparams), an index
+ * made of the loop variables, constants and numbers (`q[i]`, `r[7 - i]`, `q[2*i + 1]`) is
+ * each bit it names as the loop runs. A `case` is complete with a `default` (with or
+ * without its colon), or when its constant labels name every value of a selector of known
+ * width. A `for` with constant bounds that runs at least once is its body; any
  * other loop may run no time.
  */
 
 import { bracketed, topLevel, topLevelItems } from './brackets';
 import { everyBinding, integerValue, type Bindings } from './constantIndex';
+import type { BitRange } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
 export interface Assigned {
@@ -30,16 +32,12 @@ export interface Assigned {
   readonly every: ReadonlySet<string>;
 }
 
-/** A declared range: `[7:0]` is msb 7, lsb 0; a scalar is 0, 0. */
-export interface BitRange {
-  readonly msb: number;
-  readonly lsb: number;
-}
-
-/** The code, and the declared range of a signal when the module declares it with numbers. */
+/** The code, the declared range of a signal when it is known, and the module's constants. */
 export interface StatementContext {
   readonly text: string;
   readonly rangeOf: (name: string) => BitRange | undefined;
+  /** Parameters and localparams with a known value (`N = 8`): loop bounds and indexes may use them. */
+  readonly constants: Bindings;
   /** The loop variables in scope, with the values each runs over. */
   readonly loops: ReadonlyMap<string, readonly number[]>;
 }
@@ -47,8 +45,10 @@ export interface StatementContext {
 const NOTHING: ReadonlySet<string> = new Set();
 /** How wide a selector may be for its values to be counted: 2^8 labels at most. */
 const MAX_COUNTED_WIDTH = 8;
-/** How many bits a signal, or the runs of the loops around, may have to be followed one by one. */
+/** How many bits a signal may have to be followed one by one; a wider one stays whole. */
 const MAX_FOLLOWED_BITS = 256;
+/** How many runs a loop, or all the loops around a statement together, may have to be followed. */
+const MAX_LOOP_RUNS = 4096;
 const UNKNOWN_BIT = '[?]';
 
 /** The signal of a target: `q` for `q[0]`. */
@@ -151,8 +151,8 @@ function targetBits(ctx: StatementContext, { name, index }: WrittenTarget): stri
   const whole = ctx.rangeOf(name);
   if (index === undefined) return (whole && bitsOf(name, whole)) ?? [name];
   const unknown = [`${name}${UNKNOWN_BIT}`];
-  const bindings = everyBinding(ctx.loops);
-  if (bindings.length > MAX_FOLLOWED_BITS) return unknown;
+  const bindings = everyBinding(ctx.loops, ctx.constants, MAX_LOOP_RUNS);
+  if (bindings === undefined) return unknown;
   const bits: string[] = [];
   for (const b of bindings) {
     const range = indexRange(index, b);
@@ -238,6 +238,12 @@ function namesEveryValue(labels: readonly string[], width: number | undefined): 
   return fits && new Set(values).size === 2 ** width;
 }
 
+/** The offset of a `default` item's `:`, or of its last letter when it has none (`default q = 0;` is Verilog too). */
+function defaultEnd(text: string, i: number): number {
+  const after = skipBlanks(text, i + 'default'.length);
+  return text[after] === ':' ? after : i + 'default'.length - 1;
+}
+
 function caseStatement(ctx: StatementContext, i: number): Assigned {
   const { text } = ctx;
   const selector = parentheses(text, i);
@@ -246,8 +252,9 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
   let hasDefault = false;
   let j = skipBlanks(text, selector.after);
   while (j < text.length && wordAt(text, j) !== 'endcase') {
-    const labelEnd = caseLabelEnd(text, j);
-    if (wordAt(text, j) === 'default') hasDefault = true;
+    const isDefault = wordAt(text, j) === 'default';
+    const labelEnd = isDefault ? defaultEnd(text, j) : caseLabelEnd(text, j);
+    if (isDefault) hasDefault = true;
     else labels.push(...topLevelItems(text.slice(j, labelEnd)));
     const item = statementAssigns(ctx, labelEnd + 1);
     items.push(item);
@@ -267,25 +274,24 @@ const HOLDS: Readonly<Record<string, (a: number, b: number) => boolean>> = {
   '!=': (a, b) => a !== b,
 };
 
-/** The constant step of `i = i + 2`, `i += 2`, `i++`, `--i`; undefined for any other. */
-function stepOf(step: string, name: string): number | undefined {
+/** The constant step of `i = i + 2`, `i += STEP`, `i = i + 4'd1`, `i++`, `--i`; undefined for any other. */
+function stepOf(step: string, name: string, constants: Bindings): number | undefined {
   const s = step.replace(/\s+/g, '');
-  if (s === `${name}++` || s === `++${name}`) return 1;
-  if (s === `${name}--` || s === `--${name}`) return -1;
-  const m = new RegExp(`^${name}(?:=${name}([+-])|([+-])=)(\\d+)$`).exec(s);
-  if (!m) return undefined;
-  const amount = Number(m[3]);
+  const counted = new Map([[`${name}++`, 1], [`++${name}`, 1], [`${name}--`, -1], [`--${name}`, -1]]).get(s);
+  if (counted !== undefined) return counted;
+  const m = new RegExp(`^${name}(?:=${name}([+-])|([+-])=)(.+)$`).exec(s);
+  const amount = m ? integerValue(m[3], constants) : undefined;
+  if (m === null || amount === undefined) return undefined;
   return (m[1] ?? m[2]) === '-' ? -amount : amount;
 }
 
 /** A `for` with constant bounds: its variable, whether it surely runs, and the values it runs over when they are known. */
-function constantFor(header: string): { name: string; runs: boolean; values?: number[] } | undefined {
+function constantFor(header: string, constants: Bindings): { name: string; runs: boolean; values?: number[] } | undefined {
   const m = CONSTANT_FOR.exec(header);
   if (m === null || m[1] !== m[3]) return undefined;
-  const none: Bindings = new Map();
-  const [first, bound, holds] = [integerValue(m[2], none), integerValue(m[5], none), HOLDS[m[4]]];
+  const [first, bound, holds] = [integerValue(m[2], constants), integerValue(m[5], constants), HOLDS[m[4]]];
   if (first === undefined || bound === undefined) return undefined;
-  const step = stepOf(m[6], m[1]);
+  const step = stepOf(m[6], m[1], constants);
   return { name: m[1], runs: holds(first, bound), values: step === undefined ? undefined : loopValues(first, step, (v) => holds(v, bound)) };
 }
 
@@ -294,7 +300,7 @@ function loopValues(first: number, step: number, holds: (v: number) => boolean):
   if (step === 0) return undefined;
   const values: number[] = [];
   for (let v = first; holds(v); v += step) {
-    if (values.length === MAX_FOLLOWED_BITS) return undefined;
+    if (values.length === MAX_LOOP_RUNS) return undefined;
     values.push(v);
   }
   return values;
@@ -303,7 +309,7 @@ function loopValues(first: number, step: number, holds: (v: number) => boolean):
 /** A loop is its body when it surely runs; any other may run no time, and assigns on some path only. */
 function loopStatement(ctx: StatementContext, i: number): Assigned {
   const header = parentheses(ctx.text, i);
-  const loop = wordAt(ctx.text, i) === 'for' ? constantFor(header.inside) : undefined;
+  const loop = wordAt(ctx.text, i) === 'for' ? constantFor(header.inside, ctx.constants) : undefined;
   const inner = loop?.values ? { ...ctx, loops: new Map([...ctx.loops, [loop.name, loop.values]]) } : ctx;
   const body = statementAssigns(inner, header.after);
   return { end: body.end, some: body.some, every: loop?.runs ? body.every : NOTHING };
@@ -331,7 +337,7 @@ export function statementAssigns(ctx: StatementContext, from: number): Assigned 
 
 /** Where the statement at `from` ends. */
 export const statementEnd = (text: string, from: number): number =>
-  statementAssigns({ text, rangeOf: () => undefined, loops: new Map() }, from).end;
+  statementAssigns({ text, rangeOf: () => undefined, constants: new Map(), loops: new Map() }, from).end;
 
 /** The targets some path leaves unassigned: each may keep its value. */
 export function notAlwaysAssigned(ctx: StatementContext, assigned: Assigned): string[] {

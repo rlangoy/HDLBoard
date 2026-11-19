@@ -17,7 +17,8 @@ import { escapeRegExp } from './constructText';
 import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type BitRange, type StatementContext } from './verilogStatements';
+import { declaredRanges, verilogConstants } from './verilogDeclarations';
+import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
 
@@ -135,14 +136,17 @@ function loadedFromRegisters(branch: string, registers: readonly string[]): stri
 }
 
 /**
- * The resets and sets of a block with several edges: the leading `if` / `else if`s of its
- * chain that test one of its edges. The branch after them is the clocked one.
+ * The resets and sets of a block with several edges: the first `if` when it reads one of
+ * its edges, then each `else if` that is a level test of one alone (`!rst_n`, `set`,
+ * `rst == 0`). The branch after them is the clocked one, whatever it reads: in
+ * `else if (rst_n && en)` the reset is high anyway, and `en` is an enable.
  */
 function resetBranches({ events, body }: Pick<AlwaysBlock, 'events' | 'body'>): ChainedIf[] {
-  const chain = ifChain(body);
-  const testsAnEdge = (c: ChainedIf) => events.some((e) => reads(c.condition, e.signal));
-  const firstClocked = chain.findIndex((c) => !testsAnEdge(c));
-  return firstClocked < 0 ? chain : chain.slice(0, firstClocked);
+  const [first, ...rest] = ifChain(body);
+  if (!first || !events.some((e) => reads(first.condition, e.signal))) return [];
+  const testsALevel = (c: ChainedIf) => events.some((e) => testedLevel(c.condition, e.signal) !== undefined);
+  const clocked = rest.findIndex((c) => !testsALevel(c));
+  return [first, ...(clocked < 0 ? rest : rest.slice(0, clocked))];
 }
 
 /** The clock of an edge-triggered block: its edge no reset or set branch tests. */
@@ -196,25 +200,6 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
   return [...blocks.flatMap(edgeBlockProblem), ...clashes];
 }
 
-/** A declaration: its kind words, an optional constant range, and its names up to the next declaration word. */
-const DECLARATION = /\b(?:input|output|inout|reg|wire|logic)\b((?:\s+(?:reg|wire|logic|signed|unsigned))*)\s*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?((?:(?!\b(?:input|output|inout|reg|wire|logic)\b)[^;=()])*)/g;
-const DECLARATION_WORD = /^(?:input|output|inout|reg|wire|logic|signed|unsigned)$/;
-
-/** The ranges the module declares (`input sel` is bit 0, `input [1:0] sel` bits 1 to 0), for bits and case labels. */
-function declaredRanges(code: string): StatementContext['rangeOf'] {
-  const ranges = new Map<string, BitRange>();
-  for (const m of code.matchAll(DECLARATION)) {
-    const range = m[2] === undefined ? { msb: 0, lsb: 0 } : { msb: Number(m[2]), lsb: Number(m[3]) };
-    // `input a, b` declares both; `input a, input [1:0] b` starts another declaration at `input`.
-    for (const item of m[4].split(',')) {
-      const name = /^\s*([A-Za-z_]\w*)/.exec(item)?.[1];
-      if (name === undefined || DECLARATION_WORD.test(name)) break;
-      if (!ranges.has(name)) ranges.set(name, range);
-    }
-  }
-  return (name) => ranges.get(name);
-}
-
 /**
  * Verilog: an `always` without an edge that keeps a value: a bit some path through the
  * block leaves unassigned (an `if` without `else`, a `case` that names not every value, a
@@ -224,12 +209,13 @@ function declaredRanges(code: string): StatementContext['rangeOf'] {
  * purpose.
  */
 export function verilogLevelStorage(t: UnitText): Found[] {
-  const rangeOf = declaredRanges(t.code);
+  const constants = verilogConstants(t.code);
+  const rangeOf = declaredRanges(t.code, constants);
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
     if (edges.length > 0 || latch) return [];
     const targets = nonblockingTargets(body);
     const keepsItself = (name: string) => targets.some((m) => m[1] === name && mentions(assignedValue(body, m), name));
-    const ctx: StatementContext = { text: body, rangeOf, loops: new Map() };
+    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map() };
     const assigned = statementAssigns(ctx, 0);
     const kept = unique([...notAlwaysAssigned(ctx, assigned).map(signalOf), ...[...assigned.some].map(signalOf).filter(keepsItself)], sameName);
     return kept.length === 0 ? [] : [{ line: block.span.start, register: problem('latch', kept, []) }];

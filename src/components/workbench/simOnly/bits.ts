@@ -16,7 +16,8 @@ export type Bits =
 export const ALL_BITS: Bits = { kind: 'all' };
 const UNKNOWN_BITS: Bits = { kind: 'unknown' };
 
-const range = (a: number, b: number): Bits => ({ kind: 'range', low: Math.min(a, b), high: Math.max(a, b) });
+/** Bits `a` to `b`, in either order. */
+export const bitRange = (a: number, b: number): Bits => ({ kind: 'range', low: Math.min(a, b), high: Math.max(a, b) });
 
 /** Whether two drivers certainly drive a bit in common. The whole signal meets any part of it, even an unknown one. */
 export function overlap(a: Bits, b: Bits): boolean {
@@ -45,7 +46,7 @@ export function verilogBits(index: string | undefined): Bits {
 
 function bitsFrom(index: string, bit: RegExp, span: RegExp): Bits {
   const one = bit.exec(index);
-  if (one) return range(Number(one[1]), Number(one[1]));
+  if (one) return bitRange(Number(one[1]), Number(one[1]));
   const two = span.exec(index);
-  return two ? range(Number(two[1]), Number(two[2])) : UNKNOWN_BITS;
+  return two ? bitRange(Number(two[1]), Number(two[2])) : UNKNOWN_BITS;
 }

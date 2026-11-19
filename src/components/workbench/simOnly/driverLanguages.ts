@@ -12,6 +12,9 @@
 import type { CodeBlock, Language } from '../tbDetect/types';
 import { verilogBits, vhdlBits, type Bits } from './bits';
 import { inside, type Range } from './constructText';
+import { bracketed, topLevelItems } from './brackets';
+import { declaredRanges, verilogConstants } from './verilogDeclarations';
+import { drivenParts, splitAssignment, type Declarations } from './verilogDriverParts';
 import type { Assignment } from './driverTypes';
 
 /** A body (an architecture or a module) of a file: blanked code, the source, and where the body is. */
@@ -160,7 +163,54 @@ function verilogAssignments(body: BodyText): Assignment[] {
   ];
   const syntax = (pattern: RegExp) => ({ pattern, bits: verilogBits, tristate: VERILOG_TRISTATE });
   const procedural = assignmentsBy(body, syntax(VERILOG_PROCEDURAL), excluded).filter((a) => !afterTernaryColon(body.code, a.at));
-  return [...procedural, ...continuous(body, syntax(VERILOG_CONTINUOUS), excluded)];
+  const declarations = moduleDeclarations(body);
+  const single = [...procedural, ...continuous(body, syntax(VERILOG_CONTINUOUS), excluded)];
+  const all = [...single.flatMap((a) => (a.tristate ? splitByZ(body, a, declarations) : [a])), ...concatenationAssignments(body, excluded, declarations)];
+  return all.sort((a, b) => a.at - b.at); // in the order of the code: a driver keeps its first line
+}
+
+function moduleDeclarations(body: BodyText): Declarations {
+  const code = body.code.slice(body.from, body.to);
+  const constants = verilogConstants(code);
+  return { rangeOf: declaredRanges(code, constants), constants };
+}
+
+/** `q <= {1'bz, d}`: the bits driven with 'Z' are a bus, the others a driver; the whole of `q` when the widths are not known. */
+function splitByZ(body: BodyText, a: Assignment, d: Declarations): Assignment[] {
+  const split = splitAssignment(body.code.slice(a.at, statementEnd(body.code, a.at)));
+  const parts = split && drivenParts(split.lhs, split.rhs, d);
+  return parts ? parts.map((p) => ({ ...a, bits: p.bits, tristate: p.tristate })) : [a];
+}
+
+/** `{a, b} <=` in a block, `assign {a, b} =`: a statement whose target is a concatenation. */
+const VERILOG_CONCATENATION = /(?:;|\bbegin\b|\belse\b|\)|:|\bend\b|\bassign\b)\s*(?:#\s*(?:\([^)]*\)|[\w.]+)\s*)?\{/g;
+
+/** Each target of a concatenation is a driver of its own bits; with 'Z' in the value, as far as the widths tell. */
+function concatenationAssignments(body: BodyText, excluded: readonly Range[], d: Declarations): Assignment[] {
+  const text = body.code.slice(body.from, body.to);
+  return [...text.matchAll(VERILOG_CONCATENATION)].flatMap((m) => {
+    const open = body.from + (m.index ?? 0) + m[0].length - 1;
+    const statement = body.code.slice(open, statementEnd(body.code, open));
+    const split = splitAssignment(statement);
+    const inner = bracketed(statement, 0);
+    if (inside(open, excluded) || !split || split.lhs.trim() !== `{${inner}}` || afterTernaryColon(body.code, open)) return [];
+    const items = itemsAt(inner, open + 1);
+    const tristate = VERILOG_TRISTATE.test(body.source.slice(open, open + statement.length));
+    const parts = tristate ? drivenParts(split.lhs, split.rhs, d) : undefined;
+    if (parts) return parts.flatMap((p) => items.filter((it) => it.target === p.target).slice(0, 1).map((it) => ({ at: it.at, target: p.target, bits: p.bits, tristate: p.tristate })));
+    return items.map((it) => ({ at: it.at, target: it.target, bits: verilogBits(it.index), tristate }));
+  });
+}
+
+/** The targets of a concatenation's items, with where each stands in the file. */
+function itemsAt(inner: string, from: number): { at: number; target: string; index?: string }[] {
+  let offset = from;
+  return topLevelItems(inner).flatMap((item) => {
+    const at = offset + (item.length - item.trimStart().length);
+    offset += item.length + 1;
+    const m = /^([A-Za-z_]\w*)\s*(\[[^\]]*\])?\s*$/.exec(item.trim());
+    return m ? [{ at, target: m[1], index: m[2] }] : [];
+  });
 }
 
 /** `assign` has its target in group 1 or 3 (`wire x = …`): normalised to groups 1 and 2. */

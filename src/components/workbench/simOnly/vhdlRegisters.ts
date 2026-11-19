@@ -9,9 +9,9 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
-import { escapeRegExp } from './constructText';
 import { vhdlBits } from './bits';
 import type { Found } from './constructs';
+import { testsLevelOf } from './vhdlEdges';
 import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
@@ -35,15 +35,6 @@ function edgeOf(m: RegExpMatchArray): Edge {
 }
 
 const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map(edgeOf);
-
-/** A whole operand that is `clk'event`, the signal in group 1. */
-export const EVENT_OPERAND = /^([A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?)\s*'\s*event$/i;
-
-/** Whether `text` tests the level of the signal (`clk = '1'`, `clk /= '0'`; the literal is blanked): what gives `clk'event` its direction. */
-export function testsLevelOf(signal: string, text: string): boolean {
-  const name = escapeRegExp(tidy(signal));
-  return new RegExp(`(?<![\\w.])${name}\\s*/?=(?!>)`, 'i').test(text.replace(/\s+(?=\()/g, ''));
-}
 
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
 const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(\([^;]*?\))?\s*(?:<=|:=)/gi;
