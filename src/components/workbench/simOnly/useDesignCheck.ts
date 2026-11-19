@@ -6,7 +6,8 @@ import type { AdvisedDiagnostic } from '../diagnosticAdvice';
 import type { DesignCheckBadge } from '../EditorPaneHeader';
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
-import { checkDiagnostics, quietFile, showFile, showLine, withQuieted } from './findingDiagnostics';
+import { checkDiagnostics } from './findingDiagnostics';
+import { NO_QUIET_WARNINGS, quietFile, showFile, showLine, withQuieted, type QuietWarnings } from './quietWarnings';
 import { isSimModel } from './simModels';
 import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
 import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
@@ -53,13 +54,13 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
     [check, view.raw, overrides, files],
   );
-  const [quieted, setQuieted] = useState<ReadonlySet<string>>(() => new Set());
+  const [quieted, setQuieted] = useState<QuietWarnings>(NO_QUIET_WARNINGS);
   const diagnostics = useMemo(() => withQuieted(loud, quieted), [loud, quieted]);
   const loudRef = useRef(loud);
   loudRef.current = loud;
-  const quiet = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
-  const show = useCallback((fileId: string) => setQuieted((prev) => showFile(prev, fileId)), []);
-  const showAt = useCallback((fileId: string, line: number) => setQuieted((prev) => showLine(prev, loudRef.current, { fileId, line })), []);
+  const quietWarningsOf = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
+  const showWarningsOf = useCallback((fileId: string) => setQuieted((prev) => showFile(prev, fileId)), []);
+  const showWarningsAt = useCallback((fileId: string, line: number) => setQuieted((prev) => showLine(prev, loudRef.current, { fileId, line })), []);
   const announcement = useGroupAnnouncement(check, mode, files);
   const badgeFor = (fileId: string): DesignCheckBadge | undefined => {
     if (mode === 'simulation') return undefined;
@@ -69,9 +70,9 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   return {
     check,
     diagnostics,
-    quietFile: quiet,
-    showFile: show,
-    showLine: showAt,
+    quietFile: quietWarningsOf,
+    showFile: showWarningsOf,
+    showLine: showWarningsAt,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
     summaries: () => [...simOnlySummaries(check, overrides, files), ...driverSummaries(check, overrides, files)],

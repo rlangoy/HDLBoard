@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { AdvisedDiagnostic } from '../diagnosticAdvice';
-import { quietFile, showFile, showLine, withQuieted } from './findingDiagnostics';
+import { NO_QUIET_WARNINGS, quietFile, showFile, showLine, withQuieted } from './quietWarnings';
 
 const live = ([fileId, line, headline]: [string, number, string], quiet = false): AdvisedDiagnostic => ({
   fileId,
@@ -19,7 +19,7 @@ const A = live(['a.vhd', 22, "Can't infer a register for `count`."]);
 const A2 = live(['a.vhd', 30, '`after` is ignored on the hardware.']);
 const B = live(['b.vhd', 5, "Can't infer a register for `x`."]);
 const REPORT = live(['a.vhd', 40, '`report` / `assert` only print in simulation.'], true);
-const NONE: ReadonlySet<string> = new Set();
+const NONE = NO_QUIET_WARNINGS;
 
 describe('a click in the editor quiets the file\'s live warnings; a console link shows them again', () => {
   test('nothing is quiet at first', () => {

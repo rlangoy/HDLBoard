@@ -5,6 +5,8 @@ import { describe, expect, test } from 'vitest';
 import { EXAMPLE_FILES } from '../files';
 import { EMPTY_OVERRIDES } from '../tbDetect/types';
 import { checkDiagnostics } from './findingDiagnostics';
+import { registerText } from './simOnlyText';
+import type { RegisterProblemKind } from './types';
 import { checkOf, source, vhdlDesign, viewOf } from './simOnly.testSupport';
 
 /**
@@ -82,10 +84,13 @@ const OLD_COUNTER = vhdlDesign(
   "process (CLOCK_50, KEY_N)\nbegin\n  if falling_edge(KEY_N(1)) then\n    count <= (others => '0');\n  elsif falling_edge(KEY_N (0)) then\n    count <= count + 1;\n  end if;\nend process;",
 ).replace('\n\nbegin\n', "\nsignal count : unsigned(7 downto 0);\nbegin\n");
 
-/** The headlines of a one-file project's register findings. */
-const headlinesIn = (name: string, content: string): string[] =>
-  checkDiagnostics(checkOf([source(name, content)]), { analysis: viewOf([source(name, content)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: name, content }] })
-    .map((d) => d.advice?.headline ?? '');
+/** The editor warnings of a one-file project. */
+function warningsIn(name: string, content: string) {
+  const files = [source(name, content)];
+  return checkDiagnostics(checkOf(files), { analysis: viewOf(files).raw, overrides: EMPTY_OVERRIDES, files: [{ id: name, content }] });
+}
+
+const headlinesIn = (name: string, content: string): string[] => warningsIn(name, content).map((d) => d.advice?.headline ?? '');
 
 describe('the message names the register and its clocks, as synthesis tools do', () => {
   test('two clocks: the old keyCouter2Led', () => {
@@ -110,19 +115,18 @@ describe('the message names the register and its clocks, as synthesis tools do',
   });
 
   test('the tooltip shows what is allowed, then marks the second clock as the error', () => {
-    const [d] = checkDiagnostics(checkOf([source('k.vhd', OLD_COUNTER)]), { analysis: viewOf([source('k.vhd', OLD_COUNTER)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: 'k.vhd', content: OLD_COUNTER }] });
-    const lines = d.message.split('\n');
-    expect(lines[0]).toBe('Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:');
-    expect(lines[1]).toMatch(/if rst = '0' then\s+-- reset or set: optional, a level/);
-    expect(lines[2]).toMatch(/elsif rising_edge\(clk\) then\s+-- the one clock edge, last/);
-    expect(lines[3]).toBe('Here: `KEY_N(1)` is one clock, `KEY_N(0)` a second clock → error.');
+    const [warning] = warningsIn('k.vhd', OLD_COUNTER);
+    expect(warning.message.split('\n').slice(0, 4)).toEqual([
+      'Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:',
+      "  if rst = '0' then             -- reset or set: optional, a level",
+      '  elsif rising_edge(clk) then   -- the one clock edge, last',
+      'Here: `KEY_N(1)` is one clock, `KEY_N(0)` a second clock → error.',
+    ]);
   });
 
-  test('names no synthesis tool: the board may be Intel or AMD', () => {
-    const texts = [OLD_COUNTER].flatMap((c) =>
-      checkDiagnostics(checkOf([source('k.vhd', c)]), { analysis: viewOf([source('k.vhd', c)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: 'k.vhd', content: c }] }),
-    );
-    expect(texts.length).toBeGreaterThan(0);
-    for (const d of texts) expect(`${d.advice?.headline} ${d.message}`).not.toMatch(/Quartus|Vivado/);
+  const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'latch'];
+  test.each(KINDS)('%s names no synthesis tool: the board may be Intel or AMD', (kind) => {
+    const { headline, explanation } = registerText({ kind, registers: ['count'], clocks: ['a', 'b'] });
+    expect(`${headline} ${explanation}`).not.toMatch(/Quartus|Vivado/);
   });
 });

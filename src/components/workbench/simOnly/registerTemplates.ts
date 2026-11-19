@@ -22,19 +22,24 @@ const unique = (names: readonly string[]): string[] => {
   return names.filter((n) => !seen.has(n.toLowerCase()) && !!seen.add(n.toLowerCase()));
 };
 
+/** `event` is `clk'event`, which says no direction by itself. */
+type EdgeKind = 'rising' | 'falling' | 'event';
+
 interface Edge {
   readonly clock: string;
-  /** `rising`, `falling`, or `event` for `clk'event`. */
-  readonly kind: string;
+  readonly kind: EdgeKind;
 }
 
 /** `rising_edge(x)`, `falling_edge(x)`, `x'event`; character literals are blanked. */
 const EDGE_CALL = /\b(rising_edge|falling_edge)\s*\(\s*([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*\)|([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*'\s*event\b/gi;
 
-const edgesIn = (condition: string): Edge[] =>
-  [...condition.matchAll(EDGE_CALL)].map((m) =>
-    m[1] ? { clock: tidy(m[2]), kind: m[1].toLowerCase().startsWith('rising') ? 'rising' : 'falling' } : { clock: tidy(m[3]), kind: 'event' },
-  );
+function edgeOf(m: RegExpMatchArray): Edge {
+  const [, call, calledClock, eventClock] = m;
+  if (!call) return { clock: tidy(eventClock), kind: 'event' };
+  return { clock: tidy(calledClock), kind: call.toLowerCase() === 'rising_edge' ? 'rising' : 'falling' };
+}
+
+const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map(edgeOf);
 
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
 const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(?:\([^;]*?\))?\s*(?:<=|:=)/gi;
@@ -66,7 +71,8 @@ interface Walk {
   conditionalAssignment: boolean;
 }
 
-const top = (w: Walk): Chain | undefined => w.chains[w.chains.length - 1];
+/** The innermost `if` being read. */
+const innermostIf = (w: Walk): Chain | undefined => w.chains[w.chains.length - 1];
 
 /** What a branch with these edges does wrong, after the edges of the branches before it. */
 function violation(before: readonly Edge[], edges: readonly Edge[], at: number): Violation | undefined {
@@ -82,8 +88,9 @@ function violation(before: readonly Edge[], edges: readonly Edge[], at: number):
   return { at, kind: edge.kind === first.kind ? 'outside-edge' : 'both-edges', clocks: [first.clock] };
 }
 
-function then(w: Walk, at: number): void {
-  const chain = top(w);
+/** A condition ends at its `then`: its edges are checked against the branches before it. */
+function endCondition(w: Walk, at: number): void {
+  const chain = innermostIf(w);
   if (!chain || w.condition < 0) return;
   const edges = edgesIn(w.text.slice(w.condition, at));
   const bad = violation(chain.edges, edges, w.condition);
@@ -109,9 +116,9 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   elsif: (w, at) => {
     w.condition = at;
   },
-  then,
+  then: endCondition,
   else: (w, at) => {
-    const chain = top(w);
+    const chain = innermostIf(w);
     if (chain && !w.conditionalAssignment && chain.edges.length > 0) {
       chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
     }
@@ -172,7 +179,8 @@ function firstIfCondition(body: string): string | undefined {
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const names = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escape(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
+/** Whether the condition reads the signal as a whole name: `!KEY_N[1]` reads `KEY_N[1]`, not `KEY_N`. */
+const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escape(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
 
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
 const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
@@ -186,7 +194,7 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
   return alwaysBlocks(t).flatMap(({ block, edges, body }) => {
     if (edges.length < 2) return [];
     const condition = firstIfCondition(body);
-    if (condition !== undefined && edges.some((signal) => names(condition, signal))) return [];
+    if (condition !== undefined && edges.some((signal) => reads(condition, signal))) return [];
     const registers = unique(verilogTargets(body).map((m) => m[1]));
     return [{ line: block.span.start, register: { kind: 'no-reset-tested', registers, clocks: unique(edges) } }];
   });

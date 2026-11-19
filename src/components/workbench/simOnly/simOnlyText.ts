@@ -19,12 +19,24 @@ export interface ConstructText {
 
 const COUNT_CYCLES = "On the board, count cycles of the board's clock instead: at 50 MHz, 1 ms is 50 000 cycles.";
 const NO_FILES = 'The FPGA has no file system, so this only works in the simulator.';
-const ONE_EDGE = 'On an FPGA a register (a flip-flop) has one clock. Synthesis builds one from a single clock edge, plus an optional asynchronous reset or set tested as a level before it';
-const VHDL_TEMPLATE = "`if rst = '0' then … elsif rising_edge(clk) then … end if;`";
-const VERILOG_TEMPLATE = '`always @(posedge clk or negedge rst_n) if (!rst_n) … else …`';
 const SIM_RUNS = 'The simulator runs it anyway, but synthesis stops here.';
 const SAMPLE_IT = "To react to a button press, sample the button on the board's clock and compare it with its value one clock earlier.";
 const NO_END = 'Hardware runs for as long as it has power; there is no simulation to end.';
+
+/** What a register may have (§ 3.4), worded once: the headline's rule and the tooltip's first line. */
+const ONE_EDGE = 'one clock edge, plus an optional asynchronous reset or set';
+const RULE = `a register allows ${ONE_EDGE}`;
+const ALLOWED = `Allowed: ${ONE_EDGE} tested as a level before it:`;
+const VHDL_ALLOWED = [
+  "  if rst = '0' then             -- reset or set: optional, a level",
+  '  elsif rising_edge(clk) then   -- the one clock edge, last',
+].join('\n');
+const VERILOG_ALLOWED = [
+  '  always @(posedge clk or negedge rst_n)',
+  '    if (!rst_n) …   // reset or set: optional, tested first',
+  '    else …          // the one clock edge',
+].join('\n');
+const LATCH_FIX = `The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. Use an edge: \`always @(posedge clk)\`. ${SAMPLE_IT}`;
 
 export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>> = {
   'vhdl-wait-for': { headline: '`wait for` only works in simulation.', explanation: `The FPGA has no timer that \`wait for\` could use, so synthesis rejects this process. ${COUNT_CYCLES}` },
@@ -38,7 +50,7 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vhdl-protected': { headline: 'Protected types only work in simulation.', explanation: 'A protected type is a simulation object with procedures. Synthesis can\'t build it: use signals and processes.' },
   'vhdl-random': { headline: '`uniform` only works in simulation.', explanation: 'Random numbers from `math_real` are computed by the simulator. On the board, use a pseudo-random generator such as an LFSR.' },
   'vhdl-real-signal': { headline: 'A `real` signal only works in simulation.', explanation: 'The FPGA has no floating point wires. Use `unsigned`, `signed` or `integer` with a fixed range instead. `real` constants and generics are fine.' },
-  'vhdl-edge-template': { headline: 'This `if` has a second clock edge, or a branch after the edge: a register allows one clock edge, plus an optional asynchronous reset or set.', explanation: `${ONE_EDGE}: ${VHDL_TEMPLATE}. Here a second edge, or a branch after the edge, is part of the same \`if\`. ${SIM_RUNS} ${SAMPLE_IT}` },
+  'vhdl-edge-template': { headline: `This \`if\` has a second clock edge, or a branch after the edge: ${RULE}.`, explanation: [ALLOWED, VHDL_ALLOWED, `${SIM_RUNS} ${SAMPLE_IT}`].join('\n') },
   'vhdl-after': { headline: '`after` is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the signal changes at once. Only the simulation shows the delay.' },
   'vhdl-report': { headline: '`report` / `assert` only print in simulation.', explanation: 'Synthesis ignores them. They are harmless; the board just never prints them.' },
   'vlog-delay': { headline: 'A `#` delay only works in simulation.', explanation: `The FPGA has no timer that a \`#\` delay could use, so synthesis rejects it. ${COUNT_CYCLES}` },
@@ -50,8 +62,8 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vlog-random': { headline: '`$random` only works in simulation.', explanation: 'Random numbers are computed by the simulator. On the board, use a pseudo-random generator such as an LFSR.' },
   'vlog-verification': { headline: 'This statement only works in simulation.', explanation: '`force`, `fork`, `event`, `class` and the other verification statements are for testbenches; synthesis does not accept them.' },
   'vlog-real': { headline: 'A `real` variable only works in simulation.', explanation: 'The FPGA has no floating point wires. Use a vector of a fixed width instead. A `real` parameter is fine.' },
-  'vlog-edge-template': { headline: 'The `if` tests none of the edges of the `always`: a register allows one clock edge, plus an optional asynchronous reset or set.', explanation: `${ONE_EDGE}: ${VERILOG_TEMPLATE}. Every edge in \`@( … )\` but the clock must be a reset or set that the first \`if\` tests. ${SIM_RUNS} ${SAMPLE_IT}` },
-  'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: the FPGA makes a latch, not a register.', explanation: `The block has no \`posedge\` or \`negedge\`, but it reads a variable it assigns with \`<=\`. The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. ${ONE_EDGE}: ${VERILOG_TEMPLATE}. ${SAMPLE_IT}` },
+  'vlog-edge-template': { headline: `The \`if\` tests none of the edges of the \`always\`: ${RULE}.`, explanation: [ALLOWED, VERILOG_ALLOWED, `${SIM_RUNS} ${SAMPLE_IT}`].join('\n') },
+  'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: the FPGA makes a latch, not a register.', explanation: [ALLOWED, VERILOG_ALLOWED, LATCH_FIX].join('\n') },
   'vlog-assign-delay': { headline: 'The `#` delay is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the wire changes at once. Only the simulation shows the delay.' },
   'vlog-display': { headline: '`$display` only prints in simulation.', explanation: 'Synthesis ignores it. It is harmless; the board just never prints it.' },
 };
@@ -84,11 +96,8 @@ const REGISTER_FIX: Readonly<Record<RegisterProblemKind, string>> = {
   'outside-edge': 'Put the reset or set before the edge, as in the template, and nothing after it. A condition that should act on the clock goes inside the edge branch.',
   'combined-edges': "Test one edge in the condition. An enable is a level: `rising_edge(clk) and en = '1'`.",
   'no-reset-tested': 'Take the signals that are not resets out of `@( … )`, and test them inside the clock edge.',
-  latch: `The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. Use an edge: \`always @(posedge clk)\`. ${SAMPLE_IT}`,
+  latch: LATCH_FIX,
 };
-
-/** The rule, in the words a beginner needs: what a register may have. */
-const RULE = 'a register allows one clock edge, plus an optional asynchronous reset or set';
 
 interface Words {
   /** `` `count` ``, `` `x` and `y` ``. */
@@ -120,15 +129,8 @@ const REGISTER_HERE: Readonly<Record<RegisterProblemKind, (w: Words) => string>>
   latch: () => 'Here: no `posedge` or `negedge`, but the block keeps a value → a latch.',
 };
 
-const VHDL_ALLOWED = [
-  "  if rst = '0' then             -- reset or set: optional, a level",
-  '  elsif rising_edge(clk) then   -- the one clock edge, last',
-].join('\n');
-const VERILOG_ALLOWED = [
-  '  always @(posedge clk or negedge rst_n)',
-  '    if (!rst_n) …   // reset or set: optional, tested first',
-  '    else …          // the one clock edge',
-].join('\n');
+/** The kinds only a Verilog `always` has; their tooltip shows the Verilog shape. */
+const VERILOG_KINDS: ReadonlySet<RegisterProblemKind> = new Set(['no-reset-tested', 'latch']);
 
 /**
  * Why no register can be built (§ 3.4), for a beginner: what is wrong and the rule in
@@ -141,12 +143,12 @@ const VERILOG_ALLOWED = [
 export function registerText(problem: RegisterProblem): ConstructText {
   const { kind, registers, clocks } = problem;
   const words: Words = { registers: registers.length === 0 ? 'This register' : listed(registers), many: registers.length > 1, clocks };
-  const verilog = kind === 'no-reset-tested' || kind === 'latch';
   const explanation = [
-    'Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:',
-    verilog ? VERILOG_ALLOWED : VHDL_ALLOWED,
+    ALLOWED,
+    VERILOG_KINDS.has(kind) ? VERILOG_ALLOWED : VHDL_ALLOWED,
     REGISTER_HERE[kind](words),
-    kind === 'latch' ? REGISTER_FIX.latch : `${SIM_RUNS} ${REGISTER_FIX[kind]}`,
+    // A latch builds; the others stop synthesis.
+    kind === 'latch' ? LATCH_FIX : `${SIM_RUNS} ${REGISTER_FIX[kind]}`,
   ].join('\n');
   return { headline: REGISTER_HEADLINE[kind](words), explanation };
 }

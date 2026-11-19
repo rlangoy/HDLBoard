@@ -534,10 +534,11 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: RevealTarget, highlight?: string, openCard?: boolean) => navigate(() => {
+  /** Shows the place in the editor; `highlight` marks a symbol there, `openCard` pins the line's problem card. */
+  const revealLocation = useCallback((target: RevealTarget, also: Pick<RevealRequest, 'highlight' | 'openCard'> = {}) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight, ...(openCard && { openCard }) });
+    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), ...also });
   }), [navigate, setOverlay]);
   // Console links retain recorded advice and the file's other markers.
   const openConsoleDiagnostic = useCallback(
@@ -572,7 +573,7 @@ export function Workbench() {
     },
     explorerFolds,
     files: useCallback(() => filesRef.current, []),
-    reveal: (target) => revealLocation(target, target.symbolId),
+    reveal: (target) => revealLocation(target, { highlight: target.symbolId }),
     log: useCallback((text: string, link?: boolean) => appendLog(text, link ? 'success' : undefined, link ? 'open-waveform' : undefined), [appendLog]),
     projectKey: String(projectGeneration),
     savedViews: useProjectWaveViews(project, setProject),
@@ -1655,7 +1656,7 @@ export function Workbench() {
     }
     // One line per SIM-only file, linked to its first line (docs/impl_sim_only_warnings.md § 5.2).
     for (const summary of designCheck.summaries()) {
-      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => { designCheck.showFile(summary.fileId); revealLocation(summary, undefined, true); } });
+      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => openSummaryLine(summary) });
     }
   };
 
@@ -1795,6 +1796,11 @@ export function Workbench() {
     showLiveWarnings(diagnostic.fileId);
     openConsoleDiagnostic(diagnostic);
   }, [showLiveWarnings, openConsoleDiagnostic]);
+  /** A design-check summary's *Line n*: the file's warnings show again, and the line's problem card opens. */
+  const openSummaryLine = (summary: RevealTarget) => {
+    showLiveWarnings(summary.fileId);
+    revealLocation(summary, { openCard: true });
+  };
 
   /** The files a board change (or its Undo) made: a renamed file's markers are about text that has changed, as after an edit. */
   const replaceFilesForBoard = (next: VhdlFile[]) => {

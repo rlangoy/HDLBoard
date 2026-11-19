@@ -73,34 +73,3 @@ function warning(place: { readonly fileId: string; readonly line: number }, text
   };
 }
 
-/**
- * A live warning as the student dismissed it: a click in the editor makes the file's
- * warnings quiet (the text after the line goes; the gutter's `!` and the tooltip stay),
- * and a console link to the file shows them again. Keyed by file and headline, not
- * line, so a warning stays quiet while lines above it are added or removed.
- */
-export const liveKey = (d: Pick<AdvisedDiagnostic, 'fileId' | 'advice' | 'message'>): string => `${d.fileId}\n${d.advice?.headline ?? d.message}`;
-
-/** The live warnings, those the student dismissed made quiet. */
-export function withQuieted(diagnostics: readonly AdvisedDiagnostic[], quieted: ReadonlySet<string>): AdvisedDiagnostic[] {
-  return diagnostics.map((d) => (!d.quiet && quieted.has(liveKey(d)) ? { ...d, quiet: true } : d));
-}
-
-/** `quieted` with every live warning of `fileId` added. */
-export function quietFile(quieted: ReadonlySet<string>, diagnostics: readonly AdvisedDiagnostic[], fileId: string): ReadonlySet<string> {
-  const keys = diagnostics.filter((d) => d.fileId === fileId && !d.quiet).map(liveKey).filter((k) => !quieted.has(k));
-  return keys.length === 0 ? quieted : new Set([...quieted, ...keys]);
-}
-
-/** `quieted` without the warnings on one line: a click on its number or `!` shows them again. */
-export function showLine(quieted: ReadonlySet<string>, diagnostics: readonly AdvisedDiagnostic[], place: { readonly fileId: string; readonly line: number }): ReadonlySet<string> {
-  const keys = new Set(diagnostics.filter((d) => d.fileId === place.fileId && d.line === place.line).map(liveKey));
-  const kept = [...quieted].filter((k) => !keys.has(k));
-  return kept.length === quieted.size ? quieted : new Set(kept);
-}
-
-/** `quieted` without the warnings of `fileId`: they show again. */
-export function showFile(quieted: ReadonlySet<string>, fileId: string): ReadonlySet<string> {
-  const keys = [...quieted].filter((k) => !k.startsWith(`${fileId}\n`));
-  return keys.length === quieted.size ? quieted : new Set(keys);
-}
