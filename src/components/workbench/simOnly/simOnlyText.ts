@@ -27,6 +27,9 @@ export interface ConstructText {
 const COUNT_CYCLES = "On the board, count cycles of the board's clock instead: at 50 MHz, 1 ms is 50 000 cycles.";
 const NO_FILES = 'The FPGA has no file system, so this only works in the simulator.';
 const SIM_RUNS = 'The simulator runs it anyway, but synthesis stops here.';
+const BUILT_FROM_LATCHES = 'It still builds and runs, but from latches instead of a flip-flop: its start-up value is undefined.';
+/** The register problems that build anyway (registerShared.ts keeps them quiet). */
+const BUILDS: ReadonlySet<RegisterProblemKind> = new Set(['set-and-reset', 'async-load']);
 const SAMPLE_IT = "To react to a button press, sample the button on the board's clock and compare it with its value one clock earlier.";
 const NO_END = 'Hardware runs for as long as it has power; there is no simulation to end.';
 
@@ -123,6 +126,8 @@ const REGISTER_FIX: Readonly<Record<RegisterProblemKind, string>> = {
   'combined-edges': "Test one edge in the condition. An enable is a level: `rising_edge(clk) and en = '1'`.",
   'no-reset-tested': 'Take the signals that are not resets out of `@( … )`, and test them inside the clock edge.',
   'reset-polarity': 'Test the reset at the level its edge goes to: `negedge rst_n` with `if (!rst_n)`, `posedge rst` with `if (rst)`.',
+  'set-and-reset': 'Keep one of them asynchronous, before the edge, and test the other inside the clock edge: a synchronous set or reset.',
+  'async-load': 'Load a constant in the reset branch (`q <= 0`), and load the value inside the clock edge, where it is a normal register input.',
   latch: LATCH_FIX,
 };
 
@@ -155,6 +160,8 @@ const REGISTER_HEADLINE: Readonly<Record<RegisterProblemKind, (w: Words) => stri
   'outside-edge': (w) => `${changes(w)} outside the clock edge of ${listed(w.clocks)}: ${RULE}, nothing after the edge.`,
   'combined-edges': (w) => `One condition tests the edges of ${listed(w.clocks)} together: ${RULE}.`,
   'no-reset-tested': (w) => `The \`if\` tests none of the edges ${listed(w.clocks)}: ${RULE}, which the \`if\` tests first.`,
+  'set-and-reset': (w) => `${w.registers} ${w.many ? 'have' : 'has'} both an asynchronous reset and set, ${listed(w.clocks)}: ${RULE} — one of them, not both.`,
+  'async-load': (w) => `${changes(w)} to a value that is not fixed when ${listed(w.clocks)} is active: ${RULE}, which loads a fixed value.`,
   'reset-polarity': (w) => `${code(resetEdge(w))} starts the reset when ${code(w.clocks[0] ?? '')} goes ${levelOf(w)}, but the \`if\` tests it ${otherLevel(w)}: ${RULE}, tested at the level its edge goes to.`,
   latch: (w) => `${w.registers} ${w.many ? 'keep their' : 'keeps its'} value without a clock edge: the FPGA makes a latch, not a register.`,
 };
@@ -166,6 +173,8 @@ const REGISTER_HERE: Readonly<Record<RegisterProblemKind, (w: Words) => string>>
   'outside-edge': (w) => `Here: ${changes(w)} in a branch after the edge of ${code(w.clocks[0])} → error.`,
   'combined-edges': (w) => `Here: one condition has the edges of ${listed(w.clocks)} → error.`,
   'no-reset-tested': (w) => `Here: ${listed(w.clocks)} are all edges, and the first \`if\` tests none of them → error.`,
+  'set-and-reset': (w) => `Here: ${listed(w.clocks)} both act without the clock → built from latches.`,
+  'async-load': (w) => `Here: the branch of ${code(w.clocks[0] ?? '')} loads a signal, not a constant → built from latches.`,
   'reset-polarity': (w) => `Here: ${code(resetEdge(w))} needs ${code(resetTest(w))} → error.`,
   latch: () => 'Here: no `posedge` or `negedge`, but the block keeps a value → a latch.',
 };
@@ -185,8 +194,8 @@ export function registerText(problem: RegisterProblem): ConstructText {
     ALLOWED,
     problem.language === 'verilog' ? VERILOG_ALLOWED : VHDL_ALLOWED,
     REGISTER_HERE[kind](words),
-    // A latch builds; the others stop synthesis.
-    kind === 'latch' ? LATCH_FIX : `${SIM_RUNS} ${(problem.language === 'verilog' ? VERILOG_FIX[kind] : undefined) ?? REGISTER_FIX[kind]}`,
+    // A latch builds, and so do a reset with a set and an asynchronous load (from latches); the others stop synthesis.
+    kind === 'latch' ? LATCH_FIX : `${BUILDS.has(kind) ? BUILT_FROM_LATCHES : SIM_RUNS} ${(problem.language === 'verilog' ? VERILOG_FIX[kind] : undefined) ?? REGISTER_FIX[kind]}`,
   ].join('\n');
   return { headline: REGISTER_HEADLINE[kind](words), explanation };
 }

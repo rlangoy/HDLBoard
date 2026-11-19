@@ -12,12 +12,13 @@ import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
 import { verilogBits } from './bits';
 import type { Found } from './constructs';
-import { bracketed, unwrapped } from './brackets';
+import { bracketed, topLevelItems, unwrapped } from './brackets';
 import { escapeRegExp } from './constructText';
-import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
+import { registerFound, SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { declaredRanges, verilogConstants } from './verilogDeclarations';
+import { declaredRanges, verilogConstants, verilogSignalNames } from './verilogDeclarations';
+import { splitAssignment } from './verilogDriverParts';
 import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
@@ -110,11 +111,28 @@ function testedLevel(condition: string, signal: string): EdgeDirection | undefin
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
 const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)<=/g;
 const nonblockingTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
-const targetNames = (body: string): string[] => unique(nonblockingTargets(body).map((m) => m[1]), sameName);
+
+/** `name <=` or `name =` as a statement: what a clocked block makes a register of, blocking or not. */
+const CLOCKED_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)<?=(?!=)/g;
+
+/** The body with what each `for ( … )` header holds blanked, offsets kept: its `i = i + 1` assigns no register. */
+function withoutForHeaders(body: string): string {
+  let out = body;
+  for (const m of body.matchAll(/\bfor\s*\(/g)) {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const inside = bracketed(body, open);
+    out = out.slice(0, open + 1) + ' '.repeat(inside.length) + out.slice(open + 1 + inside.length);
+  }
+  return out;
+}
+
+/** The targets of a clocked block, blocking and nonblocking: what it makes registers of. */
+const clockedTargets = (body: string): RegExpMatchArray[] => [...withoutForHeaders(body).matchAll(CLOCKED_TARGET)];
+const targetNames = (body: string): string[] => unique(clockedTargets(body).map((m) => m[1]), sameName);
 
 /** The block's targets, with their bits. */
 const targetsWithBits = (body: string): Target[] =>
-  nonblockingTargets(body).map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
+  clockedTargets(body).map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
 
 /** What one nonblocking assignment loads: from after its `<=` to its `;`. */
 function assignedValue(body: string, m: RegExpMatchArray): string {
@@ -131,8 +149,23 @@ const problem = (kind: RegisterProblemKind, registers: readonly string[], clocks
  * a reset or set loads a constant, so such a branch is a second clock, not a reset.
  */
 function loadedFromRegisters(branch: string, registers: readonly string[]): string[] {
-  const loaded = nonblockingTargets(branch).filter((m) => registers.some((r) => mentions(assignedValue(branch, m), r)));
-  return unique(loaded.map((m) => m[1]), sameName);
+  const loaded = branchAssignments(branch).filter((a) => registers.some((r) => mentions(a.value, r)));
+  return unique(loaded.flatMap((a) => a.targets), sameName);
+}
+
+/** One assignment of a branch, blocking or not: the signals it assigns (`q`, `{hi, lo}`), and its value. */
+interface BranchAssignment {
+  readonly targets: readonly string[];
+  readonly value: string;
+}
+
+/** The assignments of a branch, statement by statement: `q = d;`, `q <= d;`, `{hi, lo} <= d;`. */
+function branchAssignments(branch: string): BranchAssignment[] {
+  return topLevelItems(branch.replace(/\b(?:begin|end)\b/g, ' '), ';').flatMap((statement) => {
+    const split = splitAssignment(statement);
+    const targets = split?.lhs.match(/[A-Za-z_]\w*(?=\s*(?:\[[^\]]*\]\s*)*(?:[,}]|$))/g);
+    return split && targets && /^\s*\{?\s*[A-Za-z_]/.test(split.lhs) ? [{ targets, value: split.rhs }] : [];
+  });
 }
 
 /**
@@ -167,28 +200,109 @@ function wrongLevel(events: readonly EdgeEvent[], resets: readonly ChainedIf[]):
   );
 }
 
-/** One `always` with several edges that is no register template. */
-function edgeBlockProblem(always: AlwaysBlock): Found[] {
-  const { block, events, edges, body } = always;
-  if (edges.length < 2) return [];
-  const registers = targetNames(body);
-  const resets = resetBranches(always);
-  const found = (register: RegisterProblem): Found[] => [{ line: block.span.start, register }];
-  if (resets.length === 0) return found(problem('no-reset-tested', registers, unique(edges, sameName)));
-  const wrong = wrongLevel(events, resets);
-  if (wrong) return found({ ...problem('reset-polarity', registers, [wrong.signal]), resetEdge: wrong.direction });
+/** What a block with several edges is read as: its edges, its resets and sets, and what it assigns. */
+interface EdgeBlock {
+  readonly always: AlwaysBlock;
+  readonly resets: readonly ChainedIf[];
+  readonly registers: readonly string[];
+  /** The module's signals and ports: a reset or set that reads one loads a value, not a constant. */
+  readonly signals: ReadonlySet<string>;
+}
+
+/** No `if` tests an edge first: none of them can be the reset or set (Quartus Error 10200). */
+const noResetTested = ({ always, resets, registers }: EdgeBlock): RegisterProblem | undefined =>
+  resets.length === 0 ? problem('no-reset-tested', registers, unique(always.edges, sameName)) : undefined;
+
+/**
+ * More than one edge that no reset or set tests: each is a clock, and a register has one
+ * (`@(posedge clk or posedge rst or posedge other)` with only `rst` tested; Quartus
+ * Critical Warning 10237 builds plain logic instead).
+ */
+function untestedEdges({ always, resets, registers }: EdgeBlock): RegisterProblem | undefined {
+  const clocks = always.events.filter((e) => !resets.some((r) => reads(r.condition, e.signal))).map((e) => e.signal);
+  return clocks.length > 1 ? problem('two-clocks', registers, unique(clocks, sameName)) : undefined;
+}
+
+function resetPolarity({ always, resets, registers }: EdgeBlock): RegisterProblem | undefined {
+  const wrong = wrongLevel(always.events, resets);
+  return wrong ? { ...problem('reset-polarity', registers, [wrong.signal]), resetEdge: wrong.direction } : undefined;
+}
+
+/**
+ * An asynchronous reset and an asynchronous set of the same register: the template has
+ * one of them. FPGA flip-flops have no such pair, so it is built from latches (Quartus
+ * Warning 13004; AMD 7-series has no such flip-flop either).
+ */
+function setAndReset({ always, resets }: EdgeBlock): RegisterProblem | undefined {
+  const assignedBy = resets.map((r) => new Set(branchAssignments(r.branch).flatMap((a) => a.targets)));
+  const both = unique(assignedBy.flatMap((names, i) => [...names].filter((n) => assignedBy.slice(i + 1).some((later) => later.has(n)))), sameName);
+  const levels = always.events.filter((e) => resets.some((r) => reads(r.condition, e.signal))).map((e) => e.signal);
+  return both.length > 0 ? problem('set-and-reset', both, unique(levels, sameName)) : undefined;
+}
+
+/** A reset branch that loads from a register of the block is a second clock (Quartus Warning 13004; the board does not count). */
+function loadsFromRegisters({ always, resets, registers }: EdgeBlock): RegisterProblem | undefined {
   const loaded = unique(resets.flatMap((r) => loadedFromRegisters(r.branch, registers)), sameName);
-  return loaded.length === 0 ? [] : found(problem('two-clocks', loaded, unique(edges, sameName)));
+  return loaded.length > 0 ? problem('two-clocks', loaded, unique(always.edges, sameName)) : undefined;
+}
+
+/**
+ * A reset branch that loads a value that is no constant (`if (reset) q <= data;`): an
+ * asynchronous load, which the FPGA builds from latches (Quartus Warning 13004).
+ */
+function loadsAValue({ always, resets, signals }: EdgeBlock): RegisterProblem | undefined {
+  for (const r of resets) {
+    const loading = branchAssignments(r.branch).filter((a) => readsASignal(a.value, signals));
+    const reset = always.events.find((e) => reads(r.condition, e.signal));
+    if (loading.length > 0 && reset) return problem('async-load', unique(loading.flatMap((a) => a.targets), sameName), [reset.signal]);
+  }
+  return undefined;
+}
+
+/** What makes a block with several edges no register template, the first that holds. */
+const EDGE_BLOCK_RULES: readonly ((b: EdgeBlock) => RegisterProblem | undefined)[] = [
+  noResetTested,
+  untestedEdges,
+  resetPolarity,
+  setAndReset,
+  loadsFromRegisters,
+  loadsAValue,
+];
+
+/** One `always` with several edges that is no register template. */
+function edgeBlockProblem(always: AlwaysBlock, signals: ReadonlySet<string>): Found[] {
+  if (always.edges.length < 2) return [];
+  const b: EdgeBlock = { always, resets: resetBranches(always), registers: targetNames(always.body), signals };
+  for (const rule of EDGE_BLOCK_RULES) {
+    const register = rule(b);
+    if (register) return [registerFound(always.block.span.start, register)];
+  }
+  return [];
+}
+
+/** A number with a base (`8'hFF`, `'0`, `4'bz`): its letters are digits, not names. */
+const LITERAL = /\d*\s*'[sS]?(?:[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+|[01xXzZ])/g;
+
+/**
+ * Whether a value reads a signal or port of the module, so it is no constant. Parameters,
+ * localparams, numbers and system functions are fixed (`INIT`, `{W{1'b0}}`, `$clog2(N)`),
+ * and so is any name the check does not know as a signal: unsure is quiet.
+ */
+function readsASignal(value: string, signals: ReadonlySet<string>): boolean {
+  const names = value.replace(LITERAL, ' ').match(/\$?[A-Za-z_]\w*/g) ?? [];
+  return names.some((name) => signals.has(name));
 }
 
 /**
  * Verilog: `always @(posedge a or posedge b)` whose first `if` tests none of the
  * edges, so none can be the asynchronous reset or set (Quartus Error 10200); whose
  * reset is tested at the other level than its edge (`negedge rst_n` with `if (rst_n)`,
- * also 10200); whose reset branch loads a value computed from a register, which makes it
- * a second clock (Quartus builds latches, Warning 13004, and the board does not count);
- * or two clocked blocks on two clocks, or both edges of one, that assign one register
- * (Quartus Error 10028).
+ * also 10200); with more than one edge no reset tests (Critical Warning 10237); with an
+ * asynchronous reset and set of one register (latches, Warning 13004); whose reset branch
+ * loads a value computed from a register, which makes it a second clock (latches too, and
+ * the board does not count), or loads a signal (an asynchronous load, latches too); or two
+ * clocked blocks on two clocks, or both edges of one, that assign one register (Quartus
+ * Error 10028).
  */
 export function verilogEdgeTemplate(t: UnitText): Found[] {
   const blocks = alwaysBlocks(t);
@@ -197,7 +311,21 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
     return clock === undefined ? [] : [{ part: always.block, clock: clock.signal, edge: clock.direction, targets: targetsWithBits(always.body) }];
   });
   const clashes = twoClocks(clocked, sameName).map((c): Found => ({ line: c.later.span.start, register: problem(c.kind, c.registers, c.clocks) }));
-  return [...blocks.flatMap(edgeBlockProblem), ...clashes];
+  const signals = verilogSignalNames(t.code);
+  return [...blocks.flatMap((always) => edgeBlockProblem(always, signals)), ...clashes];
+}
+
+/**
+ * Whether a value reads the bits its target writes: the whole signal (`x <= x + 1`), or
+ * the same index (`q[i] <= q[i] ^ a`). Another index is another bit (`q[j] <= q[j-1]`), so
+ * no feedback.
+ */
+function readsItsOwnBits(value: string, name: string, index: string): boolean {
+  const written = tidy(/^\s*(\[[^\]]*\])?/.exec(index)?.[1] ?? '');
+  return [...value.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b\\s*(\\[[^\\]]*\\])?`, 'g'))].some((m) => {
+    const read = tidy(m[1] ?? '');
+    return read === '' || written === '' || read === written;
+  });
 }
 
 /**
@@ -214,10 +342,11 @@ export function verilogLevelStorage(t: UnitText): Found[] {
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
     if (edges.length > 0 || latch) return [];
     const targets = nonblockingTargets(body);
-    const keepsItself = (name: string) => targets.some((m) => m[1] === name && mentions(assignedValue(body, m), name));
-    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map() };
+    const keepsItself = (name: string) => targets.some((m) => m[1] === name && readsItsOwnBits(assignedValue(body, m), name, m[2]));
+    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set() };
     const assigned = statementAssigns(ctx, 0);
-    const kept = unique([...notAlwaysAssigned(ctx, assigned).map(signalOf), ...[...assigned.some].map(signalOf).filter(keepsItself)], sameName);
+    const unassigned = notAlwaysAssigned(ctx, assigned).filter((bit) => !ctx.unsure.has(bit)).map(signalOf);
+    const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter(keepsItself)], sameName);
     return kept.length === 0 ? [] : [{ line: block.span.start, register: problem('latch', kept, []) }];
   });
 }

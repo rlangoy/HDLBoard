@@ -181,9 +181,17 @@ describe('Verilog latches: a value some path keeps without a clock', () => {
     ['an if without else', 2, 'always @(*) if (SW[0]) LEDR <= SW;'],
     ['a case without default', 2, "always @(*) case (SW[1:0])\n  2'b00: LEDR <= 0;\n  2'b01: LEDR <= SW;\nendcase"],
     ['each path assigning another bit', 2, 'always @(*) if (SW[0]) LEDR[0] = SW[1]; else LEDR[1] = SW[2];'],
-    ['a loop that may run no time', 3, 'integer i;\nalways @(*) for (i = 0; i < SW[3:0]; i = i + 1) LEDR = SW;'],
+    ['a constant loop that runs no time', 3, 'integer i;\nalways @(*) for (i = 0; i < 0; i = i + 1) LEDR = SW;'],
   ])('%s', (_label, line, body) => {
     expect(latchIn(body)).toEqual([`top.v:vlog-level-storage@${line}`]);
+  });
+
+  test.each([
+    ['bounded by a signal', 'integer i;\nalways @(*) for (i = 0; i < SW[3:0]; i = i + 1) LEDR = SW;'],
+    ['bounded by $clog2', 'localparam L = $clog2(10);\ninteger i;\nalways @* for (i = 0; i < (1 << L); i = i + 1) LEDR[i] = SW[i];'],
+    ['indexed through a function', 'integer i;\nfunction integer rev(input integer k); rev = 9 - k; endfunction\nalways @* for (i = 0; i < 10; i = i + 1) LEDR[rev(i)] = SW[i];'],
+  ])('a loop the check cannot run, %s, is unsure: no latch warning', (_label, body) => {
+    expect(latchIn(body)).toEqual([]);
   });
 
   test('a value that decides the block, kept without a clock', () => {
@@ -432,5 +440,100 @@ describe('Verilog: loops the check follows', () => {
     const started = performance.now();
     latchIn(body);
     expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
+describe('Verilog: what a reset branch may do', () => {
+  const kindOf = (body: string) => check([['top.v', vlog(body)]]).findings.map((f) => `${f.register?.kind}:${f.register?.registers.join(',')}`);
+
+  test('an edge that no reset tests, beside the clock, is a second clock', () => {
+    expect(kindOf("reg [3:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0] or posedge SW[1]) if (SW[0]) q <= 0; else q <= q + 1'b1;")).toEqual(['two-clocks:q']);
+  });
+
+  test('a reset that loads a signal is an asynchronous load', () => {
+    expect(kindOf('always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= SW; else LEDR <= ~SW;')).toEqual(['async-load:LEDR']);
+  });
+
+  test.each([
+    ['a replication', "localparam W = 10;\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= {W{1'b0}}; else LEDR <= SW;"],
+    ['a parameter', "localparam [9:0] INIT = 10'h2A5;\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= INIT; else LEDR <= SW;"],
+    ['a fill literal', "always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= '1; else LEDR <= SW;"],
+    ['a concatenation of numbers', "always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= {5'd0, 5'h1F}; else LEDR <= SW;"],
+  ])('a reset to %s is a constant', (_label, body) => {
+    expect(latchIn(body)).toEqual([]);
+  });
+});
+
+describe('Verilog: bits and labels from declarations', () => {
+  test('a case on parameter labels that names every state is complete', () => {
+    const body = "localparam A = 2'd0, B = 2'd1, C = 2'd2, D = 2'd3;\nreg [1:0] s = A;\nalways @* case (s)\n  A: LEDR = 0;\n  B: LEDR = SW;\n  C: LEDR = ~SW;\n  D: LEDR = 10'h3FF;\nendcase";
+    expect(latchIn(body)).toEqual([]);
+  });
+
+  test('a case on parameter labels that leaves a state out keeps the value: a latch', () => {
+    const body = "localparam A = 2'd0, B = 2'd1, C = 2'd2;\nreg [1:0] s = A;\nalways @* case (s)\n  A: LEDR = 0;\n  B: LEDR = SW;\n  C: LEDR = ~SW;\nendcase";
+    expect(latchIn(body)).toEqual(['top.v:vlog-level-storage@4']);
+  });
+
+  test('a carry chain over an array of bits reads other bits, not its own', () => {
+    const body = "reg c [9:-1];\ninteger j;\nalways @* begin\n  c[-1] = 1'b1;\n  for (j = 0; j < 10; j = j + 1) c[j] = c[j-1] & SW[j];\n  for (j = 0; j < 10; j = j + 1) LEDR[j] = c[j];\nend";
+    expect(latchIn(body)).toEqual([]);
+  });
+
+  test('a bit that reads itself keeps its value: a latch', () => {
+    expect(latchIn("reg [1:0] x;\nalways @* begin x[1] = SW[1]; x[0] <= x[0] ^ SW[0]; end")).toEqual(['top.v:vlog-level-storage@3']);
+  });
+});
+
+describe('Verilog: register shapes that build from latches are quiet', () => {
+  const quietKinds = (body: string) => {
+    const result = check([['top.v', vlog(body)]]);
+    return { kinds: result.findings.map((f) => `${f.register?.kind}:${f.tier}`), group: result.groups.byFile.get('top.v') };
+  };
+
+  test.each([
+    ['a nonblocking load', 'always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= SW; else LEDR <= ~SW;'],
+    ['a blocking load', 'always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR = SW; else LEDR = ~SW;'],
+    ['a load of a concatenation', 'always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) {LEDR[9:5], LEDR[4:0]} <= SW; else LEDR <= ~SW;'],
+  ])('an asynchronous load (%s) is noted, and the design stays RTL', (_label, body) => {
+    expect(quietKinds(body)).toEqual({ kinds: ['async-load:quiet'], group: 'rtl' });
+  });
+
+  test('an asynchronous reset and set of one register is noted, and the design stays RTL', () => {
+    const body = "always @(posedge CLOCK_50 or posedge SW[0] or posedge SW[1]) if (SW[0]) LEDR <= 0; else if (SW[1]) LEDR <= 10'h3FF; else LEDR <= SW;";
+    expect(quietKinds(body)).toEqual({ kinds: ['set-and-reset:quiet'], group: 'rtl' });
+  });
+
+  test.each([
+    ['a parameter replication', "parameter [9:0] RESET_VALUE = {10{1'b0}};\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= RESET_VALUE; else LEDR <= SW;"],
+    ['a system function of a parameter', "localparam N = 10;\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= $clog2(N); else LEDR <= SW;"],
+  ])('a reset to %s is a constant: no note', (_label, body) => {
+    expect(quietKinds(body).kinds).toEqual([]);
+  });
+});
+
+describe('Verilog: unsure is per bit', () => {
+  test('a loop the check cannot run writes q[1]; q[0], kept on one path, is still a latch', () => {
+    const body = "integer i;\nalways @* begin\n  if (SW[9]) LEDR[0] = SW[0];\n  for (i = 0; i < SW[3:0]; i = i + 1) LEDR[1] = SW[1];\n  LEDR[9:2] = SW[9:2];\nend";
+    expect(latchIn(body)).toEqual(['top.v:vlog-level-storage@3']);
+  });
+});
+
+describe('Verilog: case labels outside the selector', () => {
+  test('a negative label names no value of the selector: the case is not complete', () => {
+    const body = "localparam NEG = -1;\nalways @* case (SW[0])\n  NEG: LEDR = 0;\n  0: LEDR = SW;\nendcase";
+    expect(latchIn(body)).toEqual(['top.v:vlog-level-storage@3']);
+  });
+});
+
+describe('Verilog: clocked blocks that assign with =', () => {
+  test('two blocks on two clocks that write one register with = are two clocks', () => {
+    const body = "always @(posedge SW[0]) LEDR[0] = 1'b1;\nalways @(posedge SW[1]) LEDR[0] = 1'b0;";
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
+  });
+
+  test('a loop variable in two clocked blocks is no register shared by them', () => {
+    const body = "integer i;\nalways @(posedge SW[0]) for (i = 0; i < 5; i = i + 1) LEDR[i] <= SW[i];\nalways @(posedge SW[1]) for (i = 5; i < 10; i = i + 1) LEDR[i] <= SW[i];";
+    expect(latchIn(body)).toEqual([]);
   });
 });

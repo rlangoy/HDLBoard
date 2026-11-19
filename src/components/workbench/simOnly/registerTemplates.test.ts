@@ -18,10 +18,10 @@ const PORTS = 'a, b, c, d : in std_logic; q, r : out std_logic';
 const vhdl = (process: string) => vhdlDesign('t', PORTS, `${process}\nq <= '0'; r <= '0';`);
 const vlog = (body: string) => `module t(input a, b, c, d, output reg x = 0, output reg y = 0);\n${body}\nendmodule\n`;
 
-/** Lines of the flip-flop findings in a one-file project. */
+/** Lines of the flip-flop findings that keep a one-file project off the board (a quiet one builds, from latches). */
 const linesIn = (name: string, content: string): number[] =>
   checkOf([source(name, content)]).findings
-    .filter((f) => ['vhdl-edge-template', 'vlog-edge-template', 'vlog-level-storage'].includes(f.construct))
+    .filter((f) => ['vhdl-edge-template', 'vlog-edge-template', 'vlog-level-storage'].includes(f.construct) && f.tier !== 'quiet')
     .map((f) => f.line);
 
 const P = (body: string) => `process (a, b, c)\nbegin\n${body}\nend process;`;
@@ -141,7 +141,7 @@ describe('the message names the register and its clocks, as synthesis tools do',
     ]);
   });
 
-  const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'reset-polarity', 'latch'];
+  const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'reset-polarity', 'set-and-reset', 'async-load', 'latch'];
   test.each(KINDS.flatMap((kind) => (['vhdl', 'verilog'] as const).map((language) => [kind, language] as const)))(
     '%s in %s names no synthesis tool: the board may be Intel or AMD',
     (kind, language) => {

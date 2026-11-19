@@ -28,7 +28,7 @@ export type SimOnlyConstructId =
  * the edge, two edges in one condition, a Verilog `if` that tests no edge, or a value
  * kept without an edge (a latch).
  */
-export type RegisterProblemKind = 'two-clocks' | 'both-edges' | 'outside-edge' | 'combined-edges' | 'no-reset-tested' | 'reset-polarity' | 'latch';
+export type RegisterProblemKind = 'two-clocks' | 'both-edges' | 'outside-edge' | 'combined-edges' | 'no-reset-tested' | 'reset-polarity' | 'set-and-reset' | 'async-load' | 'latch';
 
 export interface RegisterProblem {
   readonly kind: RegisterProblemKind;

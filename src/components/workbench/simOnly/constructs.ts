@@ -13,7 +13,8 @@ import type { RuleId } from '../tbDetect/types';
 import type { RegisterProblem, SimOnlyConstructId, Tier } from './types';
 
 /** A line, or a line with the names its message gives. */
-export type Found = number | { readonly line: number; readonly register: RegisterProblem };
+/** A line where a construct is found; a register problem may set its own tier (one that builds is `quiet`). */
+export type Found = number | { readonly line: number; readonly register: RegisterProblem; readonly tier?: Tier };
 
 export interface SimOnlyConstruct {
   readonly id: SimOnlyConstructId;

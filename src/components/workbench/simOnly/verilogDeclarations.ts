@@ -33,17 +33,33 @@ function parameterList(code: string, from: number): string {
   return code.slice(from);
 }
 
+/** Each parameter and localparam of the module, as written: its name and its value's text. */
+function parameterItems(code: string): { name: string; value: string }[] {
+  return [...code.matchAll(PARAMETER)].flatMap((m) =>
+    topLevelItems(parameterList(code, (m.index ?? 0) + m[0].length)).flatMap((item) => {
+      const parameter = PARAMETER_ITEM.exec(item);
+      return parameter ? [{ name: parameter[1], value: parameter[2] }] : [];
+    }),
+  );
+}
+
 /** The module's parameters and localparams with a value made of numbers and earlier ones: `N = 8`, `W = N * 2`. */
 export function verilogConstants(code: string): Bindings {
   const constants = new Map<string, number>();
-  for (const m of code.matchAll(PARAMETER)) {
-    for (const item of topLevelItems(parameterList(code, (m.index ?? 0) + m[0].length))) {
-      const parameter = PARAMETER_ITEM.exec(item);
-      const value = parameter ? integerValue(parameter[2], constants) : undefined;
-      if (parameter && value !== undefined && !constants.has(parameter[1])) constants.set(parameter[1], value);
-    }
+  for (const { name, value } of parameterItems(code)) {
+    const known = integerValue(value, constants);
+    if (known !== undefined && !constants.has(name)) constants.set(name, known);
   }
   return constants;
+}
+
+const INTEGER = /\b(?:integer|genvar)\b([^;]*)/g;
+
+/** The signals the module declares, ports included: what a value reads when it is no constant. */
+export function verilogSignalNames(code: string): ReadonlySet<string> {
+  const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3]).map((d) => d.name));
+  const integers = [...code.matchAll(INTEGER)].flatMap((m) => declaredNames(m[1]).map((d) => d.name));
+  return new Set([...declared, ...integers]);
 }
 
 /** A declaration: its kind words, an optional range, and its names up to the next declaration word. */
@@ -62,20 +78,32 @@ function rangeOf(range: string, constants: Bindings): BitRange | undefined {
 export function declaredRanges(code: string, constants: Bindings = verilogConstants(code)): (name: string) => BitRange | undefined {
   const ranges = new Map<string, BitRange>();
   for (const m of code.matchAll(DECLARATION)) {
-    const range = m[2] === undefined ? { msb: 0, lsb: 0 } : rangeOf(m[2], constants);
-    if (!range) continue;
-    for (const name of declaredNames(m[3])) if (!ranges.has(name)) ranges.set(name, range);
+    const packed = m[2] === undefined ? undefined : rangeOf(m[2], constants);
+    for (const { name, unpacked } of declaredNames(m[3])) {
+      const range = bitsOfDeclared({ scalar: m[2] === undefined, packed }, unpacked, constants);
+      if (range && !ranges.has(name)) ranges.set(name, range);
+    }
   }
   return (name) => ranges.get(name);
 }
 
-/** The names of one declaration: `input a, b` declares both; `input a, input [1:0] b` starts another at `input`. */
-function declaredNames(list: string): string[] {
-  const names: string[] = [];
-  for (const item of list.split(',')) {
-    const name = /^\s*([A-Za-z_]\w*)/.exec(item)?.[1];
-    if (name === undefined || DECLARATION_WORD.test(name)) break;
-    names.push(name);
+/**
+ * The bits a declared name has: its packed range, or a scalar's bit 0. An array of single
+ * bits (`reg q [7:-1]`) is indexed by its one unpacked range; an array of words
+ * (`reg [7:0] ram [0:63]`) is indexed by word, so it has no bits here.
+ */
+function bitsOfDeclared({ scalar, packed }: { scalar: boolean; packed?: BitRange }, unpacked: string | undefined, constants: Bindings): BitRange | undefined {
+  if (unpacked === undefined) return scalar ? { msb: 0, lsb: 0 } : packed;
+  return scalar ? rangeOf(unpacked, constants) : undefined;
+}
+
+/** The names of one declaration, each with its unpacked range if it has one: `input a, b` declares both; `input a, input [1:0] b` starts another at `input`. */
+function declaredNames(list: string): { name: string; unpacked?: string }[] {
+  const names: { name: string; unpacked?: string }[] = [];
+  for (const item of topLevelItems(list)) {
+    const m = /^\s*([A-Za-z_]\w*)\s*(?:\[([^\]]*)\]\s*$)?/.exec(item);
+    if (!m || DECLARATION_WORD.test(m[1])) break;
+    names.push({ name: m[1], unpacked: m[2] });
   }
   return names;
 }

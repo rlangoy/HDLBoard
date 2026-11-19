@@ -11,11 +11,24 @@
 import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock, Language } from '../tbDetect/types';
 import { overlap, type Bits } from './bits';
+import type { Found } from './constructs';
+import type { RegisterProblem, RegisterProblemKind } from './types';
 import { blockText } from './constructText';
 import { isHidden } from './scan';
 
 /** A name as written, without blanks: `KEY_N (1)` is `KEY_N(1)`. */
 export const tidy = (name: string): string => name.replace(/\s+/g, '');
+
+/**
+ * The register problems that build, though not as the template: synthesis emulates the
+ * register with latches (Quartus Warning 13004), which start up undefined but run as
+ * simulated. They are shown, `quiet`, and keep the design on the board.
+ */
+const BUILT_FROM_LATCHES: ReadonlySet<RegisterProblemKind> = new Set(['set-and-reset', 'async-load']);
+
+/** A register problem at a line, with the tier its kind has. */
+export const registerFound = (line: number, register: RegisterProblem): Found =>
+  BUILT_FROM_LATCHES.has(register.kind) ? { line, register, tier: 'quiet' } : { line, register };
 
 /** Names as the language compares them: VHDL ignores case, Verilog does not (`q` and `Q` are two). */
 export type SameName = (a: string, b: string) => boolean;

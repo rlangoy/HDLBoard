@@ -40,6 +40,13 @@ export interface StatementContext {
   readonly constants: Bindings;
   /** The loop variables in scope, with the values each runs over. */
   readonly loops: ReadonlyMap<string, readonly number[]>;
+  /**
+   * Filled while walking: the bits the check could not follow, as `q[1]` or `q[?]` (what a
+   * loop whose bounds or step are not known writes, an index of a loop variable through a
+   * function). What they keep is not known either, so they get no latch warning: unsure is
+   * quiet. The other bits of the signal are judged as usual.
+   */
+  readonly unsure: Set<string>;
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
@@ -150,17 +157,32 @@ function indexedPart(index: string, part: RegExpExecArray, bindings: Bindings): 
 function targetBits(ctx: StatementContext, { name, index }: WrittenTarget): string[] {
   const whole = ctx.rangeOf(name);
   if (index === undefined) return (whole && bitsOf(name, whole)) ?? [name];
-  const unknown = [`${name}${UNKNOWN_BIT}`];
+  return followedBits(ctx, name, index) ?? unknownBit(ctx, name, index);
+}
+
+/** The bits an index names for every run of the loops around, or undefined when one of them is not known. */
+function followedBits(ctx: StatementContext, name: string, index: string): string[] | undefined {
   const bindings = everyBinding(ctx.loops, ctx.constants, MAX_LOOP_RUNS);
-  if (bindings === undefined) return unknown;
+  if (bindings === undefined) return undefined;
   const bits: string[] = [];
   for (const b of bindings) {
     const range = indexRange(index, b);
     const named = range && bitsOf(name, range);
-    if (!named) return unknown;
+    if (!named) return undefined;
     bits.push(...named);
   }
   return bits;
+}
+
+/**
+ * `q[?]`: a bit known only while running. When the index uses a loop variable (`q[f(i)]`,
+ * or loops too many to follow), the loop may well write every bit: the check is unsure.
+ */
+function unknownBit(ctx: StatementContext, name: string, index: string): string[] {
+  const usesALoop = [...ctx.loops.keys()].some((loop) => new RegExp(`\\b${loop}\\b`).test(index));
+  const bit = `${name}${UNKNOWN_BIT}`;
+  if (usesALoop) ctx.unsure.add(bit);
+  return [bit];
 }
 
 const ASSIGNS = /^<?=(?!=)/;
@@ -212,12 +234,12 @@ function ifStatement(ctx: StatementContext, i: number): Assigned {
 const BASED = /^(\d+)?\s*'[sS]?([bBoOdDhH])\s*([0-9a-fA-F_]+)$/;
 const RADIX: Readonly<Record<string, number>> = { b: 2, o: 8, d: 10, h: 16 };
 
-/** The value of a constant label (`2'b01`, `3`), or undefined for a wildcard (`2'b?1`) or a name. */
-function labelValue(label: string): number | undefined {
+/** The value of a constant label (`2'b01`, `3`, a parameter `S1`), or undefined for a wildcard (`2'b?1`) or a signal. */
+function labelValue(label: string, constants: Bindings): number | undefined {
   const plain = label.trim();
   if (/^\d+$/.test(plain)) return Number(plain);
   const m = BASED.exec(plain);
-  return m ? parseInt(m[3].replace(/_/g, ''), RADIX[m[2].toLowerCase()]) : undefined;
+  return m ? parseInt(m[3].replace(/_/g, ''), RADIX[m[2].toLowerCase()]) : integerValue(plain, constants);
 }
 
 /** The width of a case selector: a declared signal, one bit of it, or a constant part of it. */
@@ -231,10 +253,10 @@ function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): 
 }
 
 /** Whether the labels name every value the selector can have, and nothing else. */
-function namesEveryValue(labels: readonly string[], width: number | undefined): boolean {
+function namesEveryValue(labels: readonly string[], width: number | undefined, constants: Bindings): boolean {
   if (width === undefined || width > MAX_COUNTED_WIDTH) return false;
-  const values = labels.map(labelValue);
-  const fits = values.every((v) => v !== undefined && v < 2 ** width);
+  const values = labels.map((label) => labelValue(label, constants));
+  const fits = values.every((v) => v !== undefined && v >= 0 && v < 2 ** width);
   return fits && new Set(values).size === 2 ** width;
 }
 
@@ -260,7 +282,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
-  const complete = hasDefault || namesEveryValue(labels, selectorWidth(selector.inside, ctx.rangeOf));
+  const complete = hasDefault || namesEveryValue(labels, selectorWidth(selector.inside, ctx.rangeOf), ctx.constants);
   const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }
@@ -310,9 +332,16 @@ function loopValues(first: number, step: number, holds: (v: number) => boolean):
 function loopStatement(ctx: StatementContext, i: number): Assigned {
   const header = parentheses(ctx.text, i);
   const loop = wordAt(ctx.text, i) === 'for' ? constantFor(header.inside, ctx.constants) : undefined;
-  const inner = loop?.values ? { ...ctx, loops: new Map([...ctx.loops, [loop.name, loop.values]]) } : ctx;
+  const values = loop?.values;
+  const inner = loop && values ? { ...ctx, loops: new Map([...ctx.loops, [loop.name, values]]) } : ctx;
   const body = statementAssigns(inner, header.after);
+  if (!values) markUnsure(ctx, body.some);
   return { end: body.end, some: body.some, every: loop?.runs ? body.every : NOTHING };
+}
+
+/** What a loop the check cannot run writes (bounds like `$clog2(N)`, `while`, `repeat`): it may be any of those bits. */
+function markUnsure(ctx: StatementContext, written: ReadonlySet<string>): void {
+  for (const target of written) ctx.unsure.add(target);
 }
 
 /** The statements that hold others, by their first word; any other statement is simple. A Map: a name like `toString` is no keyword. */
@@ -337,7 +366,7 @@ export function statementAssigns(ctx: StatementContext, from: number): Assigned 
 
 /** Where the statement at `from` ends. */
 export const statementEnd = (text: string, from: number): number =>
-  statementAssigns({ text, rangeOf: () => undefined, constants: new Map(), loops: new Map() }, from).end;
+  statementAssigns({ text, rangeOf: () => undefined, constants: new Map(), loops: new Map(), unsure: new Set() }, from).end;
 
 /** The targets some path leaves unassigned: each may keep its value. */
 export function notAlwaysAssigned(ctx: StatementContext, assigned: Assigned): string[] {
