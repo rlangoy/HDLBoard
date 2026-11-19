@@ -248,3 +248,61 @@ describe('the simulator clock', () => {
     expect(findingsIn([['top.vhd', withClock('process (CLOCK_500Hz, SW)\nbegin\nLEDR <= SW;\nend process;')]])).toEqual([]);
   });
 });
+
+describe('a reset tested at the level of its edge, and the two edges of one clock', () => {
+  test.each([
+    ['negedge tested high', 'always @(posedge CLOCK_50 or negedge SW[0]) if (SW[0]) LEDR <= 0; else LEDR <= SW;'],
+    ['posedge tested low', "always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0] == 1'b0) LEDR <= 0; else LEDR <= SW;"],
+  ])('Verilog: a reset %s is no register template', (_label, body) => {
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['reset-polarity']);
+  });
+
+  test.each([
+    ['negedge with !', 'always @(posedge CLOCK_50 or negedge SW[0]) if (!SW[0]) LEDR <= 0; else LEDR <= SW;'],
+    ['negedge with == 0', "always @(posedge CLOCK_50 or negedge SW[0]) if (SW[0] == 1'b0) LEDR <= 0; else LEDR <= SW;"],
+    ['posedge tested high', 'always @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) LEDR <= 0; else LEDR <= SW;'],
+  ])('Verilog: a reset %s is the template', (_label, body) => {
+    expect(latchIn(body)).toEqual([]);
+  });
+
+  test('VHDL: two ifs on the rising and the falling edge of one clock assign one signal', () => {
+    const body = "process (CLOCK_50)\nbegin\nif rising_edge(CLOCK_50) then\nLEDR(0) <= '1';\nend if;\nif falling_edge(CLOCK_50) then\nLEDR(0) <= '0';\nend if;\nend process;";
+    expect(check([['top.vhd', vhdl(body)]]).findings.map((f) => f.register?.kind)).toEqual(['both-edges']);
+  });
+
+  test('Verilog: two blocks on the two edges of one clock assign one register', () => {
+    const body = "always @(posedge CLOCK_50) LEDR[0] <= 1'b1;\nalways @(negedge CLOCK_50) LEDR[0] <= 1'b0;";
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['both-edges']);
+  });
+});
+
+describe('VHDL: more wait until shapes', () => {
+  const waitFindings = (wait: string) => findingsIn([['top.vhd', vhdl(P(`${wait}\nLEDR <= SW;`))]]);
+
+  test("VHDL: wait until clk'event alone is no clocked process", () => {
+    expect(waitFindings("wait until CLOCK_50'event;")).toEqual(['top.vhd:vhdl-wait-until@11']);
+  });
+
+  test('VHDL: an edge inside a parenthesized and is still the one clock', () => {
+    expect(waitFindings("wait until (rising_edge(CLOCK_50) and SW(0) = '1') and SW(1) = '1';")).toEqual([]);
+  });
+});
+
+describe('Verilog latches bit by bit', () => {
+  test.each([
+    ['a write to a bit known only while running', 2, 'always @* LEDR[SW[3:0]] = SW[9];'],
+    ['a conditional write to a concatenation', 2, 'always @* if (SW[0]) {LEDR[3:2], LEDR[1:0]} = SW[3:0];'],
+    ['a case whose labels do not fit a one-bit selector', 2, "always @* case (SW[0])\n  2'd0: LEDR = 0;\n  2'd2: LEDR = SW;\nendcase"],
+  ])('Verilog latch: %s', (_label, line, body) => {
+    expect(latchIn(body)).toEqual([`top.v:vlog-level-storage@${line}`]);
+  });
+
+  test('Verilog: the reset branch reads every assignment to its semicolon', () => {
+    const body = "reg [3:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) begin q[0] <= 0; q[3:1] <= q[3:1] - 1'b1; end\n  else q <= SW[3:0];";
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
+  });
+
+  test('Verilog: a full-width default covers a later write to one bit', () => {
+    expect(latchIn('reg [3:0] q;\nalways @* begin q[3:0] = SW[3:0]; if (SW[4]) q[0] = SW[5]; end')).toEqual([]);
+  });
+});

@@ -42,30 +42,44 @@ const sharedTargets = (a: readonly Target[], b: readonly Target[], same: SameNam
 export interface Clocked<T> {
   readonly part: T;
   readonly clock: string;
+  /** The direction of the edge, when the code says it (`clk'event` alone does not). */
+  readonly edge?: EdgeDirection;
   readonly targets: readonly Target[];
 }
 
-/** A later template on another clock than an earlier one, and the registers they both assign. */
+export type EdgeDirection = 'rising' | 'falling';
+
+/** A later template on another clock than an earlier one, or the other edge of the same one, and the registers they both assign. */
 export interface TwoClocks<T> {
   readonly later: T;
-  readonly clocks: readonly [string, string];
+  readonly kind: 'two-clocks' | 'both-edges';
+  /** The two clocks; for `both-edges`, the one clock. */
+  readonly clocks: readonly string[];
   readonly registers: readonly string[];
 }
 
 /**
  * Templates on two clocks that assign one register (Quartus Error 10820 in VHDL,
- * 10028 in Verilog): each is a register template, but the register has two clocks.
- * Reported on the later one.
+ * 10028 in Verilog), or on the rising and the falling edge of one clock (10819): each is
+ * a register template, but the register has two clock edges. Reported on the later one.
  */
 export function twoClocks<T>(parts: readonly Clocked<T>[], same: SameName): TwoClocks<T>[] {
-  return parts.flatMap((later, i) => {
+  return parts.flatMap((later, i): TwoClocks<T>[] => {
     for (const earlier of parts.slice(0, i)) {
-      if (same(earlier.clock, later.clock)) continue;
-      const registers = sharedTargets(earlier.targets, later.targets, same);
-      if (registers.length > 0) return [{ later: later.part, clocks: [earlier.clock, later.clock] as const, registers }];
+      const kind = clockClash(earlier, later, same);
+      const registers = kind === undefined ? [] : sharedTargets(earlier.targets, later.targets, same);
+      if (kind === undefined || registers.length === 0) continue;
+      const clocks = kind === 'two-clocks' ? [earlier.clock, later.clock] : [later.clock];
+      return [{ later: later.part, kind, clocks, registers }];
     }
     return [];
   });
+}
+
+/** How two templates' edges clash: another clock, the other edge of the same clock, or not at all. */
+function clockClash<T>(a: Clocked<T>, b: Clocked<T>, same: SameName): TwoClocks<T>['kind'] | undefined {
+  if (!same(a.clock, b.clock)) return 'two-clocks';
+  return a.edge !== undefined && b.edge !== undefined && a.edge !== b.edge ? 'both-edges' : undefined;
 }
 
 /**

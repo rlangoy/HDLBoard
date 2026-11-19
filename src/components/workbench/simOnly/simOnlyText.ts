@@ -122,6 +122,7 @@ const REGISTER_FIX: Readonly<Record<RegisterProblemKind, string>> = {
   'outside-edge': 'Put the reset or set before the edge, as in the template, and nothing after it. A condition that should act on the clock goes inside the edge branch.',
   'combined-edges': "Test one edge in the condition. An enable is a level: `rising_edge(clk) and en = '1'`.",
   'no-reset-tested': 'Take the signals that are not resets out of `@( … )`, and test them inside the clock edge.',
+  'reset-polarity': 'Test the reset at the level its edge goes to: `negedge rst_n` with `if (!rst_n)`, `posedge rst` with `if (rst)`.',
   latch: LATCH_FIX,
 };
 
@@ -132,6 +133,12 @@ interface Words {
   readonly clocks: readonly string[];
 }
 
+/** The level an edge goes to: `negedge rst_n` goes low. */
+const levelOf = (edge: string): 'low' | 'high' => (edge.startsWith('negedge') ? 'low' : 'high');
+const otherLevel = (edge: string): 'low' | 'high' => (levelOf(edge) === 'low' ? 'high' : 'low');
+/** The `if` that tests a reset at the level its edge goes to: `if (!rst_n)` for `negedge rst_n`. */
+const resetTest = (edge: string, signal: string): string => (levelOf(edge) === 'low' ? `if (!${signal})` : `if (${signal})`);
+
 const changes = (w: Words) => `${w.registers} ${w.many ? 'change' : 'changes'}`;
 
 /** The text after the line: what is wrong, then the rule. */
@@ -141,6 +148,7 @@ const REGISTER_HEADLINE: Readonly<Record<RegisterProblemKind, (w: Words) => stri
   'outside-edge': (w) => `${changes(w)} outside the clock edge of ${listed(w.clocks)}: ${RULE}, nothing after the edge.`,
   'combined-edges': (w) => `One condition tests the edges of ${listed(w.clocks)} together: ${RULE}.`,
   'no-reset-tested': (w) => `The \`if\` tests none of the edges ${listed(w.clocks)}: ${RULE}, which the \`if\` tests first.`,
+  'reset-polarity': (w) => `${code(w.clocks[0])} starts the reset when ${code(w.clocks[1] ?? '')} goes ${levelOf(w.clocks[0])}, but the first \`if\` tests it ${otherLevel(w.clocks[0])}: ${RULE}, tested at the level its edge goes to.`,
   latch: (w) => `${w.registers} ${w.many ? 'keep their' : 'keeps its'} value without a clock edge: the FPGA makes a latch, not a register.`,
 };
 
@@ -151,6 +159,7 @@ const REGISTER_HERE: Readonly<Record<RegisterProblemKind, (w: Words) => string>>
   'outside-edge': (w) => `Here: ${changes(w)} in a branch after the edge of ${code(w.clocks[0])} → error.`,
   'combined-edges': (w) => `Here: one condition has the edges of ${listed(w.clocks)} → error.`,
   'no-reset-tested': (w) => `Here: ${listed(w.clocks)} are all edges, and the first \`if\` tests none of them → error.`,
+  'reset-polarity': (w) => `Here: ${code(w.clocks[0])} needs ${code(resetTest(w.clocks[0], w.clocks[1] ?? ''))} → error.`,
   latch: () => 'Here: no `posedge` or `negedge`, but the block keeps a value → a latch.',
 };
 

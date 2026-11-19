@@ -8,7 +8,7 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
-import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
+import { blockAt, escapeRegExp, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
 import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
@@ -49,20 +49,32 @@ function closingParenthesis(text: string): number {
   return -1;
 }
 
-/** The operands of the top-level `and`s of a condition. */
+/** The operands of a condition's `and`s, those of a parenthesized `and` included: `(a and b) and c` is a, b, c. */
 function conjuncts(condition: string): string[] {
   const top = topLevel(condition);
   const cuts = [...top.matchAll(/\band\b/gi)].map((m) => m.index ?? 0);
   const starts = [0, ...cuts.map((c) => c + 'and'.length)];
-  return starts.map((s, i) => unwrapped(condition.slice(s, cuts[i] ?? condition.length)));
+  const operands = starts.map((s, i) => unwrapped(condition.slice(s, cuts[i] ?? condition.length)));
+  return operands.length === 1 ? operands : operands.flatMap(conjuncts);
+}
+
+const EVENT_OPERAND = /^([A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?)\s*'\s*event$/i;
+
+/** `clk'event` says only that the clock changed: it is an edge with a level test of the same signal beside it (`clk = '1'`). */
+function hasDirection(edge: string, operands: readonly string[]): boolean {
+  const signal = EVENT_OPERAND.exec(edge)?.[1].replace(/\s+/g, '');
+  if (signal === undefined) return true;
+  const levelTest = new RegExp(`^${escapeRegExp(signal)}\\s*/?=`, 'i');
+  return operands.some((o) => o !== edge && levelTest.test(o.replace(/\s+(?=\()/g, '')));
 }
 
 /**
  * A wait a synthesis tool takes as a clock: `wait until` one clock edge, as an operand of
- * the condition's top-level `and`s (in parentheses or not), the other operands a level
+ * the condition's `and`s (in parentheses or not, nested too), the other operands a level
  * enable: `wait until rising_edge(clk) and (a = '1' or b = '1')`, `wait until clk'event and
- * clk = '1'`. Not with `for`, `or` or `on` at the top level, and not `not rising_edge(clk)`:
- * those resume the process at other times too.
+ * clk = '1'`. Not with `for`, `or` or `on` at the top level, not `not rising_edge(clk)`,
+ * and not `clk'event` without a level test of `clk`: those resume the process at other
+ * times too, or on either edge.
  */
 function isClockEdgeWait(statement: string): boolean {
   const until = /^wait\s+until\b/i.exec(statement.trim());
@@ -71,7 +83,7 @@ function isClockEdgeWait(statement: string): boolean {
   if (OTHER_WAKE_UP.test(topLevel(condition))) return false;
   const operands = conjuncts(condition);
   const edges = operands.filter((o) => EDGE_OPERAND.test(o));
-  return edges.length === 1 && operands.every((o) => EDGE_OPERAND.test(o) || !CLOCK_EDGE.test(o));
+  return edges.length === 1 && hasDirection(edges[0], operands) && operands.every((o) => EDGE_OPERAND.test(o) || !CLOCK_EDGE.test(o));
 }
 
 /** How many waits each process has that synthesis sees (not inside translate_off); counted once per unit. */

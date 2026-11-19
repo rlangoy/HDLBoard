@@ -141,7 +141,7 @@ describe('the message names the register and its clocks, as synthesis tools do',
     ]);
   });
 
-  const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'latch'];
+  const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'reset-polarity', 'latch'];
   test.each(KINDS.flatMap((kind) => (['vhdl', 'verilog'] as const).map((language) => [kind, language] as const)))(
     '%s in %s names no synthesis tool: the board may be Intel or AMD',
     (kind, language) => {

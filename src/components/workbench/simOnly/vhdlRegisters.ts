@@ -119,7 +119,8 @@ function endIf(w: Walk, at: number): void {
   const [edge] = chain.edges;
   const isOutermost = w.chains.length === 0;
   if (!isOutermost || !edge) return;
-  w.clocked.push({ part: chain.from, clock: edge.clock, targets: targetsWithBits(text) });
+  const direction = edge.kind === 'event' ? undefined : edge.kind;
+  w.clocked.push({ part: chain.from, clock: edge.clock, edge: direction, targets: targetsWithBits(text) });
 }
 
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
@@ -152,8 +153,8 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
 function processViolations(text: string): FoundAt[] {
   const walk: Walk = { text, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
-  // Two `if`s of one process on two clocks that assign one signal (Quartus Error 10820).
-  const clashes = twoClocks(walk.clocked, sameName).map((c): FoundAt => ({ at: c.later, register: problem('two-clocks', c.registers, c.clocks) }));
+  // Two `if`s of one process on two clocks, or both edges of one, that assign one signal (Quartus Errors 10820, 10819).
+  const clashes = twoClocks(walk.clocked, sameName).map((c): FoundAt => ({ at: c.later, register: problem(c.kind, c.registers, c.clocks) }));
   return [...walk.found, ...clashes].sort((a, b) => a.at - b.at);
 }
 
