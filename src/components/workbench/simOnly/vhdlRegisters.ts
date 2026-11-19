@@ -9,6 +9,7 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
+import { escapeRegExp } from './constructText';
 import { vhdlBits } from './bits';
 import type { Found } from './constructs';
 import { testsLevelOf } from './vhdlEdges';
@@ -141,11 +142,23 @@ function closeLevel(w: Walk, chain: Chain | undefined, at: number): void {
 }
 
 /** Each assignment of a branch: its target, and its value up to the `;`. */
-function assignmentsIn(body: string): { target: string; value: string }[] {
+function assignmentsIn(body: string): { target: string; index: string; value: string }[] {
   return [...body.matchAll(VHDL_TARGET)].map((m) => {
     const from = (m.index ?? 0) + m[0].length;
     const end = body.indexOf(';', from);
-    return { target: m[1], value: body.slice(from, end < 0 ? body.length : end) };
+    return { target: m[1], index: tidy(m[2] ?? ''), value: body.slice(from, end < 0 ? body.length : end) };
+  });
+}
+
+/**
+ * Whether a value reads the bits its target writes: the whole signal, or the same index
+ * (`c(0) <= c(0) xor a`). Another index is another bit (`q(0) <= q(1)`), no counting.
+ */
+function readsItsOwnBits(value: string, target: string, index: string): boolean {
+  const reads = new RegExp(`\\b${escapeRegExp(target)}\\b(?!\\s*')\\s*(\\([^()]*\\))?`, 'gi');
+  return [...value.matchAll(reads)].some((m) => {
+    const read = tidy(m[1] ?? '');
+    return read === '' || index === '' || read.toLowerCase() === index.toLowerCase();
   });
 }
 
@@ -165,7 +178,7 @@ function levelNotes(levels: readonly LevelBranch[], signals: ReadonlySet<string>
   for (const level of levels) {
     // `if a = '1' then c <= c + 1;`: a reset loads a constant, so a branch that counts is a second clock (Quartus Warning 13004; the board does not count).
     // Only an assignment that reads its own target counts: `q <= d` loads another register, an asynchronous load.
-    const counting = assignmentsIn(level.body).filter((a) => signalsRead(a.value, new Set([a.target.toLowerCase()])).length > 0);
+    const counting = assignmentsIn(level.body).filter((a) => readsItsOwnBits(a.value, a.target, a.index));
     if (counting.length > 0) return [{ at: level.at, register: problem('two-clocks', unique(counting.map((a) => a.target), sameName), levelSignals([level])) }];
   }
   const assigned = levels.map((l) => new Set(assignmentsIn(l.body).map((a) => a.target.toLowerCase())));

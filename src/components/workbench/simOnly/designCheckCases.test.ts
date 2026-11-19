@@ -610,3 +610,23 @@ describe('Verilog declarations with initial values', () => {
     expect(latchIn('reg [1:0] a = 0, b = 0;\nalways @* begin b[1:0] = SW[1:0]; if (SW[2]) b = SW[3:2]; LEDR[1:0] = b; end')).toEqual([]);
   });
 });
+
+describe('a reset that reads another bit of its own vector is no counting', () => {
+  test('Verilog: q[0] <= q[1] is an asynchronous load', () => {
+    const body = "reg [1:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) q[0] <= q[1];\n  else q <= SW[1:0];";
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => `${f.register?.kind}:${f.tier}`)).toEqual(['async-load:quiet']);
+  });
+
+  test('VHDL: q(0) <= q(1) is an asynchronous load', () => {
+    const body = "process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\nq(0) <= q(1);\nelsif rising_edge(CLOCK_50) then\nq <= SW(1 downto 0);\nend if;\nend process;";
+    expect(check([['top.vhd', vhdl(body, 'signal q : std_logic_vector(1 downto 0);')]]).findings.map((f) => `${f.register?.kind}:${f.tier}`)).toEqual(['async-load:quiet']);
+  });
+
+  test.each([
+    ['Verilog, the same bit', 'v', "reg [1:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) q[0] <= ~q[0];\n  else q <= SW[1:0];"],
+    ['VHDL, the same bit', 'vhd', "process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\nq(0) <= not q(0);\nelsif rising_edge(CLOCK_50) then\nq <= SW(1 downto 0);\nend if;\nend process;"],
+  ])('%s that reads itself is still a second clock', (_label, ext, body) => {
+    const file = ext === 'v' ? vlog(body) : vhdl(body, 'signal q : std_logic_vector(1 downto 0);');
+    expect(check([[`top.${ext}`, file]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
+  });
+});

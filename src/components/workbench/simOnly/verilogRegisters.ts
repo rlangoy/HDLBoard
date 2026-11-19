@@ -89,7 +89,6 @@ function ifChain(body: string): ChainedIf[] {
 
 /** Whether the condition reads the signal as a whole name: `!KEY_N[1]` reads `KEY_N[1]`, not `KEY_N`. */
 const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escapeRegExp(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
-const mentions = (text: string, name: string) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(text);
 
 const ZERO = "(?:\\d*'[bBdDhHoO]0+|0+)";
 const ONE = "(?:\\d*'[bBdDhHoO]0*1|0*1)";
@@ -174,22 +173,28 @@ const problem = (kind: RegisterProblemKind, registers: readonly string[], clocks
  * asynchronous load, noted by `loadsAValue`.
  */
 function countingTargets(branch: string): string[] {
-  const counting = branchAssignments(branch).filter((a) => a.targets.some((target) => mentions(a.value, target)));
+  const counting = branchAssignments(branch).filter((a) => a.written.some((w) => readsItsOwnBits(a.value, w.name, w.index)));
   return unique(counting.flatMap((a) => a.targets), sameName);
 }
 
-/** One assignment of a branch, blocking or not: the signals it assigns (`q`, `{hi, lo}`), and its value. */
+/** One assignment of a branch, blocking or not: what it assigns as written (`q[0]`, `{hi, lo}`), the signals, and its value. */
 interface BranchAssignment {
+  readonly written: readonly { readonly name: string; readonly index: string }[];
   readonly targets: readonly string[];
   readonly value: string;
 }
 
-/** The assignments of a branch, statement by statement: `q = d;`, `q <= d;`, `{hi, lo} <= d;`. */
+/** The assignments of a branch, statement by statement: `q = d;`, `q[0] <= d;`, `{hi, lo} <= d;`. */
 function branchAssignments(branch: string): BranchAssignment[] {
   return topLevelItems(branch.replace(/\b(?:begin|end)\b/g, ' '), ';').flatMap((statement) => {
     const split = splitAssignment(statement);
-    const targets = split?.lhs.match(/[A-Za-z_]\w*(?=\s*(?:\[[^\]]*\]\s*)*(?:[,}]|$))/g);
-    return split && targets && /^\s*\{?\s*[A-Za-z_]/.test(split.lhs) ? [{ targets, value: split.rhs }] : [];
+    const lhs = split?.lhs.trim() ?? '';
+    const items = lhs.startsWith('{') ? topLevelItems(bracketed(lhs, 0)) : [lhs];
+    const written = items.flatMap((item) => {
+      const m = /^\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)$/.exec(item);
+      return m ? [{ name: m[1], index: m[2].trim() }] : [];
+    });
+    return split && written.length === items.length ? [{ written, targets: written.map((w) => w.name), value: split.rhs }] : [];
   });
 }
 
