@@ -70,15 +70,27 @@ function drivenBy({ scan, language, blocks }: BodyContext, a: Assignment): Drive
   const block = blocks.find((b) => a.at >= b.from && a.at < b.to);
   if (isHidden(line, scan.hidden) || (block && block.kind !== language.drivingBlock)) return [];
   const source = block?.from ?? a.at;
-  return [{ source, signal: language.key(a.target), name: a.target, bits: [a.bits], line, tristate: a.tristate }];
+  const [bits, tristateBits] = a.tristate ? [[], [a.bits]] : [[a.bits], []];
+  return [{ source, signal: language.key(a.target), name: a.target, bits, tristateBits, line }];
 }
 
 /** A later assignment of the same source: its bits join the driver, which keeps its first line. */
 const withAssignment = (driver: Driver, later: Driver): Driver => ({
   ...driver,
   bits: [...driver.bits, ...later.bits],
-  tristate: driver.tristate || later.tristate,
+  tristateBits: [...driver.tristateBits, ...later.tristateBits],
 });
+
+/**
+ * The bits a driver drives alone: those its own 'Z' writes meet are a tri-state bus, left
+ * out. A 'Z' write to a bit known only while running may meet any of them: the whole
+ * driver is a bus then.
+ */
+function drivenAlone(driver: Driver): Driver {
+  const { bits, tristateBits } = driver;
+  if (tristateBits.some((t) => t.kind === 'unknown')) return { ...driver, bits: [] };
+  return { ...driver, bits: bits.filter((b) => !tristateBits.some((t) => overlap(t, b))) };
+}
 
 /** Every driver in hardware code that clashes with another driver of the same bits. */
 export function driverConflicts(view: DesignView): DriverConflict[] {
@@ -112,7 +124,7 @@ function signalsOf(view: DesignView, body: BodyDrivers): Set<string> {
 }
 
 function conflictsIn(body: BodyDrivers, signals: ReadonlySet<string>): DriverConflict[] {
-  const drivers = body.drivers.filter((d) => signals.has(d.signal) && !d.tristate);
+  const drivers = body.drivers.filter((d) => signals.has(d.signal)).map(drivenAlone).filter((d) => d.bits.length > 0);
   return drivers.flatMap((driver) => {
     const others = drivers.filter((d) => d !== driver && d.signal === driver.signal && clash(d, driver));
     if (others.length === 0) return [];

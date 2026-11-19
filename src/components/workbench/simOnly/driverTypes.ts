@@ -26,10 +26,12 @@ export interface Driver {
   readonly signal: string;
   /** As written in the first assignment. */
   readonly name: string;
+  /** The bits it drives with a value. */
   readonly bits: readonly Bits[];
+  /** The bits it drives with 'Z': a tri-state bus there, where several drivers are the point. */
+  readonly tristateBits: readonly Bits[];
   /** The line of its first assignment to the signal. */
   readonly line: number;
-  readonly tristate: boolean;
 }
 
 /** The drivers of one architecture or module, and the names it declares as signals. */

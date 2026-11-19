@@ -8,46 +8,22 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
-import { blockAt, escapeRegExp, linesOf, matchesIn, statementFrom } from './constructText';
+import { topLevel, unwrapped } from './brackets';
+import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
-import { vhdlEdgeTemplate } from './vhdlRegisters';
+import { EVENT_OPERAND, testsLevelOf, vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
 /** `rising_edge(`, `falling_edge(` or `'event`; character literals are blanked (`clk = '1'` reads `clk =    `). */
 const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/i;
-/** A whole operand that is one clock edge: `rising_edge(clk)`, `falling_edge(k(0))`, `clk'event`. */
-const EDGE_OPERAND = /^(?:(?:rising_edge|falling_edge)\s*\((?:[^()]|\([^()]*\))*\)|[A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?\s*'\s*event)$/i;
+/** A whole operand that is one edge call: `rising_edge(clk)`, `falling_edge(k(0))`. */
+const EDGE_CALL_OPERAND = /^(?:rising_edge|falling_edge)\s*\((?:[^()]|\([^()]*\))*\)$/i;
+/** A whole operand that is one clock edge: an edge call, or `clk'event`. */
+const isEdgeOperand = (operand: string): boolean => EDGE_CALL_OPERAND.test(operand) || EVENT_OPERAND.test(operand);
 /** Outside parentheses, what would wake the process at other times too: a timeout, an `or` condition, a sensitivity clause. */
 const OTHER_WAKE_UP = /\b(?:for|or|on)\b/i;
-
-/** The text with what is inside parentheses blanked: only the top level of the expression is left. */
-function topLevel(text: string): string {
-  let depth = 0;
-  return [...text].map((ch) => {
-    if (ch === '(') depth++;
-    const shown = depth === 0 ? ch : ' ';
-    if (ch === ')') depth--;
-    return shown;
-  }).join('');
-}
-
-/** Without the parentheses around the whole of it: `((a))` is `a`. */
-function unwrapped(text: string): string {
-  const t = text.trim();
-  return t.startsWith('(') && closingParenthesis(t) === t.length - 1 ? unwrapped(t.slice(1, -1)) : t;
-}
-
-/** The offset of the `)` that closes the `(` at offset 0. */
-function closingParenthesis(text: string): number {
-  let depth = 0;
-  for (let i = 0; i < text.length; i++) {
-    depth += text[i] === '(' ? 1 : text[i] === ')' ? -1 : 0;
-    if (depth === 0) return i;
-  }
-  return -1;
-}
 
 /** The operands of a condition's `and`s, those of a parenthesized `and` included: `(a and b) and c` is a, b, c. */
 function conjuncts(condition: string): string[] {
@@ -58,14 +34,10 @@ function conjuncts(condition: string): string[] {
   return operands.length === 1 ? operands : operands.flatMap(conjuncts);
 }
 
-const EVENT_OPERAND = /^([A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?)\s*'\s*event$/i;
-
 /** `clk'event` says only that the clock changed: it is an edge with a level test of the same signal beside it (`clk = '1'`). */
 function hasDirection(edge: string, operands: readonly string[]): boolean {
-  const signal = EVENT_OPERAND.exec(edge)?.[1].replace(/\s+/g, '');
-  if (signal === undefined) return true;
-  const levelTest = new RegExp(`^${escapeRegExp(signal)}\\s*/?=`, 'i');
-  return operands.some((o) => o !== edge && levelTest.test(o.replace(/\s+(?=\()/g, '')));
+  const signal = EVENT_OPERAND.exec(edge)?.[1];
+  return signal === undefined || testsLevelOf(signal, operands.filter((o) => o !== edge).join(' and '));
 }
 
 /**
@@ -82,8 +54,8 @@ function isClockEdgeWait(statement: string): boolean {
   const condition = unwrapped(statement.trim().slice(until[0].length));
   if (OTHER_WAKE_UP.test(topLevel(condition))) return false;
   const operands = conjuncts(condition);
-  const edges = operands.filter((o) => EDGE_OPERAND.test(o));
-  return edges.length === 1 && hasDirection(edges[0], operands) && operands.every((o) => EDGE_OPERAND.test(o) || !CLOCK_EDGE.test(o));
+  const edges = operands.filter(isEdgeOperand);
+  return edges.length === 1 && hasDirection(edges[0], operands) && operands.every((o) => isEdgeOperand(o) || !CLOCK_EDGE.test(o));
 }
 
 /** How many waits each process has that synthesis sees (not inside translate_off); counted once per unit. */

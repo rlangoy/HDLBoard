@@ -74,6 +74,15 @@ interface CardElements {
   readonly returnFocus: () => void;
 }
 
+/** Whether an Esc is the card's: from the editor's body, from the card (inside it or not), or with nothing focused. */
+export function isEditorEscape(target: EventTarget | null, body: Pick<Node, 'contains'> | null): boolean {
+  // A key event's target is an element; the page itself (body, html) when nothing has focus.
+  const element = target as Partial<Element> | null;
+  if (typeof element?.closest !== 'function' || element.tagName === 'BODY' || element.tagName === 'HTML') return true;
+  if (body?.contains(element as Element)) return true;
+  return element.closest('.wb-diagcard') !== null;
+}
+
 /**
  * The problem card of a marked line (DiagnosticCard.tsx): it opens when the pointer
  * rests on the line number or its `!`, stays while the pointer is on it, and is pinned
@@ -154,17 +163,18 @@ export function useDiagnosticCard(elements: CardElements, isMarked: (line: numbe
   }, [gutterRef, isMarked, open]);
 
   // Esc closes the card, and only the card: caught before the editor's own Esc (Find bar, Tab escape).
+  // Only an Esc from the editor, the card or no focus at all: one in a dialog or another control is theirs.
   useEffect(() => {
     if (!state) return undefined;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || !isEditorEscape(e.target, bodyRef.current)) return;
       e.stopPropagation();
       e.preventDefault();
       close();
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
-  }, [state, close]);
+  }, [state, close, bodyRef]);
 
   // The line's warning went (fixed, or the file's lines changed): its card goes too.
   const shownLine = state?.line;

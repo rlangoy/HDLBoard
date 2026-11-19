@@ -11,11 +11,15 @@
  * of its declared bits. A signal whose width is not known stays whole (`q`), and covers
  * any bit of it. A bit only known while running (`q[idx]`) is `q[?]`: it covers no bit,
  * so a path that writes only it leaves the others as they were. Inside a `for` with
- * constant bounds and a step of one, `q[i]` is each bit `i` runs over. A `case` is
+ * constant bounds and a constant step, an index made of the loop variables and numbers
+ * (`q[i]`, `r[7 - i]`, `q[2*i + 1]`) is each bit it names as the loop runs. A `case` is
  * complete with a `default`, or when its constant labels name every value of a selector
  * of known width. A `for` with constant bounds that runs at least once is its body; any
  * other loop may run no time.
  */
+
+import { bracketed, topLevel, topLevelItems } from './brackets';
+import { everyBinding, integerValue, type Bindings } from './constantIndex';
 
 /** What a statement assigns, on some path and on every path through it. */
 export interface Assigned {
@@ -37,13 +41,13 @@ export interface StatementContext {
   readonly text: string;
   readonly rangeOf: (name: string) => BitRange | undefined;
   /** The loop variables in scope, with the values each runs over. */
-  readonly loops: ReadonlyMap<string, BitRange>;
+  readonly loops: ReadonlyMap<string, readonly number[]>;
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
 /** How wide a selector may be for its values to be counted: 2^8 labels at most. */
 const MAX_COUNTED_WIDTH = 8;
-/** How many bits a signal may have to be followed bit by bit; a wider one stays whole. */
+/** How many bits a signal, or the runs of the loops around, may have to be followed one by one. */
 const MAX_FOLLOWED_BITS = 256;
 const UNKNOWN_BIT = '[?]';
 
@@ -83,53 +87,20 @@ const skipBlanks = (text: string, i: number): number => {
 };
 const wordAt = (text: string, i: number): string => /^[A-Za-z_]\w*/.exec(text.slice(i))?.[0] ?? '';
 
-/** The text inside the brackets that open at `open` (offset of the `(` or `{`). */
-function bracketed(text: string, open: number, [opening, closing]: string): string {
-  let depth = 0;
-  for (let i = open; i < text.length; i++) {
-    depth += text[i] === opening ? 1 : text[i] === closing ? -1 : 0;
-    if (depth === 0) return text.slice(open + 1, i);
-  }
-  return text.slice(open + 1);
-}
-
-/** The text inside the parentheses that open at `open` (offset of the `(`). */
-export const parenthesized = (text: string, open: number): string => bracketed(text, open, '()');
-
 /** The parentheses that open at the first `(` from `i`: what they hold, and the offset after them. */
 function parentheses(text: string, i: number): { inside: string; after: number } {
   const open = text.indexOf('(', i);
   if (open < 0) return { inside: '', after: text.length };
-  const inside = parenthesized(text, open);
+  const inside = bracketed(text, open);
   return { inside, after: open + inside.length + 2 };
 }
 
-/** The offset of a case item's `:`: the first one outside brackets and parentheses. */
+/** The offset of a case item's `:` (the first one outside brackets), or of the `;` that ends an item without one. */
 function caseLabelEnd(text: string, i: number): number {
-  let depth = 0;
-  for (let j = i; j < text.length; j++) {
-    if ('([{'.includes(text[j])) depth++;
-    else if (')]}'.includes(text[j])) depth--;
-    else if (text[j] === ':' && depth === 0) return j;
-    else if (text[j] === ';') return j;
-  }
-  return text.length;
-}
-
-/** The parts of a list at its top level: `a, {b, c}, d[1:0]` is three. */
-function topLevelItems(list: string): string[] {
-  const items: string[] = [];
-  let depth = 0;
-  let from = 0;
-  for (let i = 0; i < list.length; i++) {
-    if ('([{'.includes(list[i])) depth++;
-    else if (')]}'.includes(list[i])) depth--;
-    else if (list[i] === ',' && depth === 0) {
-      items.push(list.slice(from, i));
-      from = i + 1;
-    }
-  }
-  return [...items, list.slice(from)];
+  const semicolon = text.indexOf(';', i);
+  const item = topLevel(text.slice(i, semicolon < 0 ? text.length : semicolon));
+  const colon = item.indexOf(':');
+  return i + (colon < 0 ? item.length : colon);
 }
 
 /** A target as written: its name, its first index (`3:0`, `i`, `SW[1:0]`), and the text after its indexes. */
@@ -146,21 +117,50 @@ function writtenTarget(text: string): WrittenTarget | undefined {
   let at = skipBlanks(s, name.length);
   const indexes: string[] = [];
   while (s[at] === '[') {
-    const inside = bracketed(s, at, '[]');
+    const inside = bracketed(s, at);
     indexes.push(inside);
     at = skipBlanks(s, at + inside.length + 2);
   }
   return { name, index: indexes[0], rest: s.slice(at) };
 }
 
-/** The bits one target names: `q`, `q[3]`, `q[3:0]`, `q[i]` of a loop, `q[idx]`. */
+/** `base +: width` and `base -: width`, at the top level of an index. */
+const INDEXED_PART = /^([^:]*)([+-]):([^:]*)$/;
+
+/** The bits an index names with the loop variables at one set of values: `7 - i`, `2*i + 1 : 2*i`, `8*i +: 8`. */
+function indexRange(index: string, bindings: Bindings): BitRange | undefined {
+  const part = INDEXED_PART.exec(topLevel(index));
+  if (part) return indexedPart(index, part, bindings);
+  const [msbText, lsbText, ...more] = topLevelItems(index, ':');
+  if (more.length > 0) return undefined;
+  const msb = integerValue(msbText, bindings);
+  const lsb = lsbText === undefined ? msb : integerValue(lsbText, bindings);
+  return msb === undefined || lsb === undefined ? undefined : { msb, lsb };
+}
+
+/** `8*i +: 8` is bits 8*i to 8*i + 7; `top -: 4` is top - 3 to top. */
+function indexedPart(index: string, part: RegExpExecArray, bindings: Bindings): BitRange | undefined {
+  const base = integerValue(index.slice(0, part[1].length), bindings);
+  const width = integerValue(index.slice(part[1].length + 2), bindings);
+  if (base === undefined || width === undefined || width < 1) return undefined;
+  return part[2] === '+' ? { msb: base + width - 1, lsb: base } : { msb: base, lsb: base - width + 1 };
+}
+
+/** The bits one target names: `q`, `q[3]`, `q[3:0]`, `q[7 - i]` in a loop; `q[?]` for an index known only while running. */
 function targetBits(ctx: StatementContext, { name, index }: WrittenTarget): string[] {
   const whole = ctx.rangeOf(name);
   if (index === undefined) return (whole && bitsOf(name, whole)) ?? [name];
-  const inside = index.replace(/\s+/g, '');
-  const part = /^(\d+)(?::(\d+))?$/.exec(inside);
-  const range = part ? { msb: Number(part[1]), lsb: Number(part[2] ?? part[1]) } : ctx.loops.get(inside);
-  return (range && bitsOf(name, range)) ?? [`${name}${UNKNOWN_BIT}`];
+  const unknown = [`${name}${UNKNOWN_BIT}`];
+  const bindings = everyBinding(ctx.loops);
+  if (bindings.length > MAX_FOLLOWED_BITS) return unknown;
+  const bits: string[] = [];
+  for (const b of bindings) {
+    const range = indexRange(index, b);
+    const named = range && bitsOf(name, range);
+    if (!named) return unknown;
+    bits.push(...named);
+  }
+  return bits;
 }
 
 const ASSIGNS = /^<?=(?!=)/;
@@ -169,7 +169,7 @@ const ASSIGNS = /^<?=(?!=)/;
 function assignedBits(ctx: StatementContext, statement: string): string[] {
   const s = statement.trim();
   if (s.startsWith('{')) {
-    const concatenation = bracketed(s, 0, '{}');
+    const concatenation = bracketed(s, 0);
     if (!ASSIGNS.test(s.slice(concatenation.length + 2).trim())) return [];
     const targets = topLevelItems(concatenation).map(writtenTarget);
     return targets.flatMap((t) => (t === undefined ? [] : targetBits(ctx, t)));
@@ -248,7 +248,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
   while (j < text.length && wordAt(text, j) !== 'endcase') {
     const labelEnd = caseLabelEnd(text, j);
     if (wordAt(text, j) === 'default') hasDefault = true;
-    else labels.push(...text.slice(j, labelEnd).split(','));
+    else labels.push(...topLevelItems(text.slice(j, labelEnd)));
     const item = statementAssigns(ctx, labelEnd + 1);
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
@@ -258,7 +258,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }
 
-const CONSTANT_FOR = /^\s*(\w+)\s*=\s*(\d+)\s*;\s*(\w+)\s*(<=|<|>=|>|!=)\s*(\d+)\s*;([^;]*)$/;
+const CONSTANT_FOR = /^\s*(?:(?:integer|int|genvar)\s+)?([A-Za-z_]\w*)\s*=\s*([^;]+);\s*([A-Za-z_]\w*)\s*(<=|<|>=|>|!=)\s*([^;]+);([^;]*)$/;
 const HOLDS: Readonly<Record<string, (a: number, b: number) => boolean>> = {
   '<': (a, b) => a < b,
   '<=': (a, b) => a <= b,
@@ -266,26 +266,38 @@ const HOLDS: Readonly<Record<string, (a: number, b: number) => boolean>> = {
   '>=': (a, b) => a >= b,
   '!=': (a, b) => a !== b,
 };
-/** The last value the loop variable has inside the loop, for the condition and the first value. */
-const LAST: Readonly<Record<string, (first: number, bound: number) => number>> = {
-  '<': (_a, b) => b - 1,
-  '<=': (_a, b) => b,
-  '>': (_a, b) => b + 1,
-  '>=': (_a, b) => b,
-  '!=': (a, b) => (a < b ? b - 1 : b + 1),
-};
 
-/** `i = i + 1`, `i = i - 1`, `i++`, `i--`: a step of one. */
-const stepsByOne = (step: string, name: string): boolean =>
-  new RegExp(`^\\s*(?:${name}\\s*=\\s*${name}\\s*[+-]\\s*1|${name}\\s*(?:\\+\\+|--)|(?:\\+\\+|--)\\s*${name})\\s*$`).test(step);
+/** The constant step of `i = i + 2`, `i += 2`, `i++`, `--i`; undefined for any other. */
+function stepOf(step: string, name: string): number | undefined {
+  const s = step.replace(/\s+/g, '');
+  if (s === `${name}++` || s === `++${name}`) return 1;
+  if (s === `${name}--` || s === `--${name}`) return -1;
+  const m = new RegExp(`^${name}(?:=${name}([+-])|([+-])=)(\\d+)$`).exec(s);
+  if (!m) return undefined;
+  const amount = Number(m[3]);
+  return (m[1] ?? m[2]) === '-' ? -amount : amount;
+}
 
-/** A `for` with constant bounds: its variable, whether it surely runs, and the values it runs over in steps of one. */
-function constantFor(header: string): { name: string; runs: boolean; values?: BitRange } | undefined {
+/** A `for` with constant bounds: its variable, whether it surely runs, and the values it runs over when they are known. */
+function constantFor(header: string): { name: string; runs: boolean; values?: number[] } | undefined {
   const m = CONSTANT_FOR.exec(header);
   if (m === null || m[1] !== m[3]) return undefined;
-  const [first, bound, test] = [Number(m[2]), Number(m[5]), m[4]];
-  const runs = HOLDS[test](first, bound);
-  return { name: m[1], runs, values: runs && stepsByOne(m[6], m[1]) ? { msb: LAST[test](first, bound), lsb: first } : undefined };
+  const none: Bindings = new Map();
+  const [first, bound, holds] = [integerValue(m[2], none), integerValue(m[5], none), HOLDS[m[4]]];
+  if (first === undefined || bound === undefined) return undefined;
+  const step = stepOf(m[6], m[1]);
+  return { name: m[1], runs: holds(first, bound), values: step === undefined ? undefined : loopValues(first, step, (v) => holds(v, bound)) };
+}
+
+/** The values a loop variable takes, or undefined when the loop runs too long to follow (or forever). */
+function loopValues(first: number, step: number, holds: (v: number) => boolean): number[] | undefined {
+  if (step === 0) return undefined;
+  const values: number[] = [];
+  for (let v = first; holds(v); v += step) {
+    if (values.length === MAX_FOLLOWED_BITS) return undefined;
+    values.push(v);
+  }
+  return values;
 }
 
 /** A loop is its body when it surely runs; any other may run no time, and assigns on some path only. */

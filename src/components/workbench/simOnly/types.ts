@@ -38,6 +38,8 @@ export interface RegisterProblem {
   readonly clocks: readonly string[];
   /** The language of the code: the tooltip shows the template in it. */
   readonly language: Language;
+  /** `reset-polarity`: the edge of the reset in `@( … )` (`negedge rst_n` is falling), which its level test should match. */
+  readonly resetEdge?: 'rising' | 'falling';
 }
 
 /** The board's simulator-only clock (§ 3.5), and the real clock to use instead. */

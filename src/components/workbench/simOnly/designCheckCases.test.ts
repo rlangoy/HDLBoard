@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'vitest';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from '../tbDetect/types';
 import { BOARD_PORTS, checkOf, source, vhdlDesign } from './simOnly.testSupport';
+import { registerText } from './simOnlyText';
 
 /**
  * The design check on whole files (docs/impl_sim_only_warnings.md), by topic: cases that
@@ -304,5 +305,76 @@ describe('Verilog latches bit by bit', () => {
 
   test('Verilog: a full-width default covers a later write to one bit', () => {
     expect(latchIn('reg [3:0] q;\nalways @* begin q[3:0] = SW[3:0]; if (SW[4]) q[0] = SW[5]; end')).toEqual([]);
+  });
+});
+
+describe('tri-state drivers', () => {
+  test('a Z on one bit hides no second driver of another bit', () => {
+    const body = "always @(posedge CLOCK_50) begin LEDR[0] <= 1'bz; LEDR[1] <= SW[1]; end\nalways @(posedge CLOCK_50) LEDR[1] <= SW[2];";
+    expect(driversIn('top.v', vlog(body))).toEqual(['LEDR@2', 'LEDR@3']);
+  });
+
+  test('a bus that drives a value or Z on the same bits is still no conflict', () => {
+    const body = "assign LEDR[0] = SW[0] ? SW[1] : 1'bz;\nassign LEDR[0] = SW[2] ? SW[3] : 1'bz;";
+    expect(driversIn('top.v', vlog(body.replace('output reg [9:0] LEDR', 'output [9:0] LEDR')))).toEqual([]);
+  });
+});
+
+describe('the text says the language', () => {
+  /** The register problem of the file's first finding: a test that finds none fails here. */
+  const firstRegister = (body: string) => {
+    const register = check([['top.v', vlog(body)]]).findings[0]?.register;
+    if (!register) throw new Error('no register finding');
+    return register;
+  };
+
+  test('Verilog both edges: the fix names posedge and negedge, not rising_edge', () => {
+    const register = firstRegister("always @(posedge CLOCK_50) LEDR[0] <= 1'b1;\nalways @(negedge CLOCK_50) LEDR[0] <= 1'b0;");
+    expect(registerText(register).explanation).toMatch(/`posedge` or `negedge`/);
+  });
+
+  test('a reset polarity finding keeps the signal in clocks and its edge apart', () => {
+    const register = firstRegister('always @(posedge CLOCK_50 or negedge SW[0]) if (SW[0]) LEDR <= 0; else LEDR <= SW;');
+    const says = registerText(register).explanation.includes('`negedge SW[0]` needs `if (!SW[0])`');
+    expect([register.clocks, register.resetEdge, says]).toEqual([['SW[0]'], 'falling', true]);
+  });
+});
+
+describe('Verilog loops with index arithmetic', () => {
+  test.each([
+    ['a reversed index', 'integer i;\nalways @* for (i = 0; i < 10; i = i + 1) LEDR[9 - i] = SW[i];'],
+    ['an index plus one, with bit 0 set apart', "integer i;\nalways @* begin LEDR[0] = 1'b0; for (i = 0; i < 9; i = i + 1) LEDR[i + 1] = SW[i]; end"],
+    ['a step of two', 'integer i;\nalways @* for (i = 0; i < 10; i = i + 2) begin LEDR[i] = SW[i]; LEDR[i + 1] = SW[i + 1]; end'],
+    ['an indexed part-select', 'integer i;\nalways @* for (i = 0; i < 2; i = i + 1) LEDR[5*i +: 5] = SW[5*i +: 5];'],
+  ])('%s that covers every bit is no latch', (_label, body) => {
+    expect(latchIn(body)).toEqual([]);
+  });
+
+  test('a loop beside a bit that one path leaves unassigned is a latch', () => {
+    const body = "integer i;\nalways @* begin if (SW[9]) LEDR[0] = 1'b0; for (i = 0; i < 9; i = i + 1) LEDR[i + 1] = SW[i]; end";
+    expect(latchIn(body)).toEqual(['top.v:vlog-level-storage@3']);
+  });
+});
+
+describe('Verilog: every reset of the chain', () => {
+  test('a set tested at the other level than its edge is found too', () => {
+    const body = 'always @(posedge CLOCK_50 or negedge SW[0] or posedge SW[1])\n  if (!SW[0]) LEDR <= 0;\n  else if (!SW[1]) LEDR <= 10\'h3FF;\n  else LEDR <= SW;';
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['reset-polarity']);
+  });
+
+  test('a reset and a set, both at the level of their edges, are the template', () => {
+    expect(latchIn('always @(posedge CLOCK_50 or negedge SW[0] or posedge SW[1])\n  if (!SW[0]) LEDR <= 0;\n  else if (SW[1]) LEDR <= 10\'h3FF;\n  else LEDR <= SW;')).toEqual([]);
+  });
+});
+
+describe("VHDL: an if on clk'event", () => {
+  const processWith = (condition: string) => `process (CLOCK_50)\nbegin\nif ${condition} then\nLEDR <= SW;\nend if;\nend process;`;
+
+  test("clk'event alone takes both edges", () => {
+    expect(check([['top.vhd', vhdl(processWith("CLOCK_50'event"))]]).findings.map((f) => f.register?.kind)).toEqual(['both-edges']);
+  });
+
+  test("clk'event and clk = '1' is the template", () => {
+    expect(findingsIn([['top.vhd', vhdl(processWith("CLOCK_50'event and CLOCK_50 = '1'"))]])).toEqual([]);
   });
 });

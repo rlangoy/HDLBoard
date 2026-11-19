@@ -12,11 +12,12 @@ import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
 import { verilogBits } from './bits';
 import type { Found } from './constructs';
+import { bracketed, unwrapped } from './brackets';
 import { escapeRegExp } from './constructText';
 import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { notAlwaysAssigned, parenthesized, signalOf, statementAssigns, statementEnd, type BitRange, type StatementContext } from './verilogStatements';
+import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type BitRange, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
 
@@ -53,20 +54,35 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
   });
 }
 
-/** The `if` the statement starts with, after any `begin`: its condition, and the branch it guards. */
-interface FirstIf {
+/** One `if` of the chain the statement starts with: its condition, and the branch it guards. */
+interface ChainedIf {
   readonly condition: string;
   /** The statement run when the condition holds. */
   readonly branch: string;
 }
 
-function firstIf(body: string): FirstIf | undefined {
-  const start = /^\s*(?:begin\b(?:\s*:\s*\w+)?\s*)?if\s*\(/.exec(body);
+/** The `if` at `from` (`if (` after blanks), and where its branch ends. */
+function ifAt(body: string, from: number): (ChainedIf & { end: number }) | undefined {
+  const start = /^\s*if\s*\(/.exec(body.slice(from));
   if (!start) return undefined;
-  const open = start[0].length - 1;
-  const condition = parenthesized(body, open);
+  const open = from + start[0].length - 1;
+  const condition = bracketed(body, open);
   const branchFrom = open + condition.length + 2;
-  return { condition, branch: body.slice(branchFrom, statementEnd(body, branchFrom)) };
+  const end = statementEnd(body, branchFrom);
+  return { condition, branch: body.slice(branchFrom, end), end };
+}
+
+/** The `if` / `else if` chain the statement starts with, after any `begin`. */
+function ifChain(body: string): ChainedIf[] {
+  const chain: ChainedIf[] = [];
+  let next = /^\s*(?:begin\b(?:\s*:\s*\w+)?)?/.exec(body)?.[0].length ?? 0;
+  for (let found = ifAt(body, next); found; found = ifAt(body, next)) {
+    chain.push(found);
+    const otherwise = /^\s*else\b/.exec(body.slice(found.end));
+    if (!otherwise) break;
+    next = found.end + otherwise[0].length;
+  }
+  return chain;
 }
 
 /** Whether the condition reads the signal as a whole name: `!KEY_N[1]` reads `KEY_N[1]`, not `KEY_N`. */
@@ -75,11 +91,6 @@ const mentions = (text: string, name: string) => new RegExp(`\\b${escapeRegExp(n
 
 const ZERO = "(?:\\d*'[bBdDhHoO]0+|0+)";
 const ONE = "(?:\\d*'[bBdDhHoO]0*1|0*1)";
-
-/** Without the parentheses around the whole of it: `((a))` is `a`. */
-function unwrapped(text: string): string {
-  return text.startsWith('(') && parenthesized(text, 0).length === text.length - 2 ? unwrapped(text.slice(1, -1)) : text;
-}
 
 /**
  * The level of the signal the condition tests, when it is that test alone: `!rst_n`,
@@ -123,33 +134,46 @@ function loadedFromRegisters(branch: string, registers: readonly string[]): stri
   return unique(loaded.map((m) => m[1]), sameName);
 }
 
-/** The clock of an edge-triggered block: its edge the first `if` does not test as a reset or set. */
-function clockOf({ events, body }: AlwaysBlock): EdgeEvent | undefined {
-  if (events.length < 2) return events[0];
-  const first = firstIf(body);
-  return events.find((e) => !first || !reads(first.condition, e.signal)) ?? events[0];
+/**
+ * The resets and sets of a block with several edges: the leading `if` / `else if`s of its
+ * chain that test one of its edges. The branch after them is the clocked one.
+ */
+function resetBranches({ events, body }: Pick<AlwaysBlock, 'events' | 'body'>): ChainedIf[] {
+  const chain = ifChain(body);
+  const testsAnEdge = (c: ChainedIf) => events.some((e) => reads(c.condition, e.signal));
+  const firstClocked = chain.findIndex((c) => !testsAnEdge(c));
+  return firstClocked < 0 ? chain : chain.slice(0, firstClocked);
 }
 
-/** The reset or set the first `if` tests at the other level than its edge: `negedge rst_n` with `if (rst_n)`. */
-function wrongLevel(events: readonly EdgeEvent[], condition: string): EdgeEvent | undefined {
-  return events.find((e) => {
-    const level = reads(condition, e.signal) ? testedLevel(condition, e.signal) : undefined;
-    return level !== undefined && level !== e.direction;
-  });
+/** The clock of an edge-triggered block: its edge no reset or set branch tests. */
+function clockOf(always: AlwaysBlock): EdgeEvent | undefined {
+  const { events } = always;
+  if (events.length < 2) return events[0];
+  const resets = resetBranches(always);
+  return events.find((e) => !resets.some((r) => reads(r.condition, e.signal))) ?? events[0];
+}
+
+/** A reset or set tested at the other level than its edge: `negedge rst_n` with `if (rst_n)`. */
+function wrongLevel(events: readonly EdgeEvent[], resets: readonly ChainedIf[]): EdgeEvent | undefined {
+  return events.find((e) =>
+    resets.some((r) => {
+      const level = reads(r.condition, e.signal) ? testedLevel(r.condition, e.signal) : undefined;
+      return level !== undefined && level !== e.direction;
+    }),
+  );
 }
 
 /** One `always` with several edges that is no register template. */
-function edgeBlockProblem({ block, events, edges, body }: AlwaysBlock): Found[] {
+function edgeBlockProblem(always: AlwaysBlock): Found[] {
+  const { block, events, edges, body } = always;
   if (edges.length < 2) return [];
   const registers = targetNames(body);
-  const first = firstIf(body);
+  const resets = resetBranches(always);
   const found = (register: RegisterProblem): Found[] => [{ line: block.span.start, register }];
-  if (first === undefined || !edges.some((signal) => reads(first.condition, signal))) {
-    return found(problem('no-reset-tested', registers, unique(edges, sameName)));
-  }
-  const wrong = wrongLevel(events, first.condition);
-  if (wrong) return found(problem('reset-polarity', registers, [`${wrong.direction === 'rising' ? 'posedge' : 'negedge'} ${wrong.signal}`, wrong.signal]));
-  const loaded = loadedFromRegisters(first.branch, registers);
+  if (resets.length === 0) return found(problem('no-reset-tested', registers, unique(edges, sameName)));
+  const wrong = wrongLevel(events, resets);
+  if (wrong) return found({ ...problem('reset-polarity', registers, [wrong.signal]), resetEdge: wrong.direction });
+  const loaded = unique(resets.flatMap((r) => loadedFromRegisters(r.branch, registers)), sameName);
   return loaded.length === 0 ? [] : found(problem('two-clocks', loaded, unique(edges, sameName)));
 }
 

@@ -9,6 +9,7 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
+import { escapeRegExp } from './constructText';
 import { vhdlBits } from './bits';
 import type { Found } from './constructs';
 import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
@@ -34,6 +35,15 @@ function edgeOf(m: RegExpMatchArray): Edge {
 }
 
 const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map(edgeOf);
+
+/** A whole operand that is `clk'event`, the signal in group 1. */
+export const EVENT_OPERAND = /^([A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?)\s*'\s*event$/i;
+
+/** Whether `text` tests the level of the signal (`clk = '1'`, `clk /= '0'`; the literal is blanked): what gives `clk'event` its direction. */
+export function testsLevelOf(signal: string, text: string): boolean {
+  const name = escapeRegExp(tidy(signal));
+  return new RegExp(`(?<![\\w.])${name}\\s*/?=(?!>)`, 'i').test(text.replace(/\s+(?=\()/g, ''));
+}
 
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
 const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(\([^;]*?\))?\s*(?:<=|:=)/gi;
@@ -97,12 +107,19 @@ function violation(before: readonly Edge[], edges: readonly Edge[], at: number):
   return { at, kind: edge.kind === first.kind ? 'outside-edge' : 'both-edges', clocks: [first.clock] };
 }
 
+/** `if clk'event then` with no level test of `clk`: the register would take both edges (Quartus Error 10633). */
+function eventWithoutLevel(edges: readonly Edge[], condition: string, at: number): Violation | undefined {
+  const bare = edges.find((e) => e.kind === 'event' && !testsLevelOf(e.clock, condition));
+  return bare ? { at, kind: 'both-edges', clocks: [bare.clock] } : undefined;
+}
+
 /** A condition ends at its `then`: its edges are checked against the branches before it. */
 function endCondition(w: Walk, at: number): void {
   const chain = innermostIf(w);
   if (!chain || w.condition < 0) return;
-  const edges = edgesIn(w.text.slice(w.condition, at));
-  const bad = violation(chain.edges, edges, w.condition);
+  const condition = w.text.slice(w.condition, at);
+  const edges = edgesIn(condition);
+  const bad = violation(chain.edges, edges, w.condition) ?? eventWithoutLevel(edges, condition, w.condition);
   if (bad) chain.bad.push(bad);
   chain.edges.push(...edges);
   w.condition = -1;
