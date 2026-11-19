@@ -68,15 +68,16 @@ const DESIGNS: [string, string, string][] = [
   ...Object.entries(BOARD_SOURCES).map(([path, content]): [string, string, string] => [path, path.split('/').pop() ?? path, content]),
 ].filter(([, name]) => !/_tb\.(vhd|v)$/.test(name));
 
-/** The examples that show HDLBoard's slow clock: on the board they need its real clock (§ 3.5). */
-const readsSimulatorClock = (content: string) => /(?:rising_edge\(|posedge\s+)CLOCK_500Hz\b/.test(content);
+/** The examples that show HDLBoard's slow clock, by name: on the board they need its real clock (§ 3.5). */
+const SIMULATOR_CLOCK_EXAMPLES: readonly RegExp[] = [/(^|\/)blinkTest\.(vhdl|v)$/, /\/(basys3|nexys-a7)\/(vhdl|verilog)\/keyCounter7Seg\.(vhdl|v)$/];
+const readsSimulatorClock = (label: string) => SIMULATOR_CLOCK_EXAMPLES.some((p) => p.test(label));
 
 /** The example that shows two clocks, SIM-only on purpose. */
 const isTwoClocksExample = (name: string) => name.startsWith('keyCounterTwoClocks');
 const offTheBoard = (name: string, content: string) => checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet');
 
 describe('the examples', () => {
-  test.each(DESIGNS.filter(([, name, content]) => !readsSimulatorClock(content) && !isTwoClocksExample(name)))('%s has no finding that keeps it off the board', (_label, name, content) => {
+  test.each(DESIGNS.filter(([label, name]) => !readsSimulatorClock(label) && !isTwoClocksExample(name)))('%s has no finding that keeps it off the board', (_label, name, content) => {
     expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet')).toEqual([]);
   });
 
@@ -84,7 +85,7 @@ describe('the examples', () => {
     expect(offTheBoard(name, content).map((f) => f.register?.kind)).toEqual(['two-clocks']);
   });
 
-  test.each(DESIGNS.filter(([, , content]) => readsSimulatorClock(content)))('%s is SIM-only for its simulator clock, and nothing else', (_label, name, content) => {
+  test.each(DESIGNS.filter(([label]) => readsSimulatorClock(label)))('%s is SIM-only for its simulator clock, and nothing else', (_label, name, content) => {
     expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet').map((f) => f.construct)).toEqual(['sim-clock']);
   });
 
@@ -141,8 +142,16 @@ describe('the message names the register and its clocks, as synthesis tools do',
   });
 
   const KINDS: readonly RegisterProblemKind[] = ['two-clocks', 'both-edges', 'outside-edge', 'combined-edges', 'no-reset-tested', 'latch'];
-  test.each(KINDS)('%s names no synthesis tool: the board may be Intel or AMD', (kind) => {
-    const { headline, explanation } = registerText({ kind, registers: ['count'], clocks: ['a', 'b'] });
-    expect(`${headline} ${explanation}`).not.toMatch(/Quartus|Vivado/);
+  test.each(KINDS.flatMap((kind) => (['vhdl', 'verilog'] as const).map((language) => [kind, language] as const)))(
+    '%s in %s names no synthesis tool: the board may be Intel or AMD',
+    (kind, language) => {
+      const { headline, explanation } = registerText({ kind, registers: ['count'], clocks: ['a', 'b'], language });
+      expect(`${headline} ${explanation}`).not.toMatch(/Quartus|Vivado/);
+    },
+  );
+
+  test('a Verilog finding shows the Verilog template, a VHDL one the VHDL template', () => {
+    const shape = (language: 'vhdl' | 'verilog') => registerText({ kind: 'two-clocks', registers: ['count'], clocks: ['up', 'down'], language }).explanation;
+    expect([shape('verilog').includes('always @(posedge clk'), shape('vhdl').includes('elsif rising_edge(clk)')]).toEqual([true, true]);
   });
 });

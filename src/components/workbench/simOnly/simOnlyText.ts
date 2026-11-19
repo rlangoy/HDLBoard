@@ -154,9 +154,6 @@ const REGISTER_HERE: Readonly<Record<RegisterProblemKind, (w: Words) => string>>
   latch: () => 'Here: no `posedge` or `negedge`, but the block keeps a value → a latch.',
 };
 
-/** The kinds only a Verilog `always` has; their tooltip shows the Verilog shape. */
-const VERILOG_KINDS: ReadonlySet<RegisterProblemKind> = new Set(['no-reset-tested', 'latch']);
-
 /**
  * Why no register can be built (§ 3.4), for a beginner: what is wrong and the rule in
  * one line, then in the tooltip the allowed shape, and the student's own clocks marked
@@ -170,7 +167,7 @@ export function registerText(problem: RegisterProblem): ConstructText {
   const words: Words = { registers: registers.length === 0 ? 'This register' : listed(registers), many: registers.length > 1, clocks };
   const explanation = [
     ALLOWED,
-    VERILOG_KINDS.has(kind) ? VERILOG_ALLOWED : VHDL_ALLOWED,
+    problem.language === 'verilog' ? VERILOG_ALLOWED : VHDL_ALLOWED,
     REGISTER_HERE[kind](words),
     // A latch builds; the others stop synthesis.
     kind === 'latch' ? LATCH_FIX : `${SIM_RUNS} ${REGISTER_FIX[kind]}`,

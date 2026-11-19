@@ -71,6 +71,8 @@ export interface TestbenchSplit {
   readonly roleConflictDialog: ReactNode;
   /** The project as the design check sees it (docs/impl_sim_only_warnings.md § 4). */
   readonly designView: DesignView;
+  /** The same for the text as it is now, the analysis flushed: for decisions at Start. */
+  readonly designViewNow: () => { readonly view: DesignView; readonly overrides: TestbenchOverrides };
   /** Marks a file *Simulation model*, or drops the mark (S9). */
   readonly setSimModel: (fileId: string, simModel: boolean) => void;
 }
@@ -228,6 +230,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     onFileDeleted: (id) => overrides.set(withoutFile(overrides.ref.current, id)),
     editorSplit,
     designView: designView(detected.current, overrides.value),
+    designViewNow: () => ({ view: designView(detected.flush(), overrides.ref.current), overrides: overrides.ref.current }),
     setSimModel: (fileId, simModel) =>
       overrides.set((simModel ? withSimModel : withoutSimModel)(overrides.ref.current, fileId)),
     roleConflictDialog: pendingRole && (
@@ -257,7 +260,6 @@ function usePruneContradictedPairs(project: ProjectAnalysis, overrides: ReturnTy
   }, [project, value, set]);
 }
 
-/** Overrides as state, mirrored in a ref so event handlers read the newest without waiting for a render. */
 /**
  * The analysis with the role correction applied: a unit the board design uses, or a
  * testbench's DUT, is a design for pairing, the split and Run. Derived on each read,
@@ -275,6 +277,7 @@ function useCorrectedAnalysis(detected: TestbenchAnalysis, overrides: ReturnType
   );
 }
 
+/** Overrides as state, mirrored in a ref so event handlers read the newest without waiting for a render. */
 function useOverrides() {
   const [value, setValue] = useState<TestbenchOverrides>(EMPTY_OVERRIDES);
   const ref = useRef(value);

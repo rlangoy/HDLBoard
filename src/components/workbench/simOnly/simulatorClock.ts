@@ -12,7 +12,7 @@
 
 import type { UnitText } from '../tbDetect/rules';
 import type { Language } from '../tbDetect/types';
-import { partUnitKey } from './findings';
+import { hardwarePartKey } from './findings';
 import { escapeRegExp } from './constructText';
 import { isHidden, scannedFile, unitText, type ScannedFile } from './scan';
 import type { BoardDefinition } from '../../../boards/types';
@@ -38,8 +38,20 @@ interface Search {
   readonly name: string;
 }
 
-/** How far past a name to look for `:` or `=>`, which make it a declaration or a formal. */
-const AFTER_NAME_CHARS = 8;
+/** How far past a name to look for `:` or `=>` (after any more names of a list), which make it a declaration or a formal. */
+const AFTER_NAME_CHARS = 200;
+
+/**
+ * After the name: `:` (not `:=`), after any more names of a declaration list, or `=>`
+ * right after it. `clk => CLOCK_500Hz, q => …` is an actual followed by the next formal.
+ */
+const VHDL_DECLARED_OR_FORMAL = /^\s*(?:(?:,\s*[A-Za-z]\w*\s*)*:(?!=)|=>)/;
+
+/** Whether the offset is inside a VHDL process's sensitivity list: the process waits on it, synthesis ignores the list. */
+function inSensitivityList(t: UnitText, at: number): boolean {
+  const before = t.code.slice(Math.max(0, t.code.lastIndexOf(';', at) + 1), at);
+  return /\bprocess\s*\([^)]*$/i.test(before);
+}
 
 /**
  * Whether the name at `at` (offsets in `t.code`) is declared or named as a formal, which is
@@ -48,7 +60,8 @@ const AFTER_NAME_CHARS = 8;
  */
 function isDeclarationOrFormal(t: UnitText, language: Language, name: { readonly at: number; readonly length: number }): boolean {
   const end = name.at + name.length;
-  if (language === 'vhdl') return /^\s*(?::(?!=)|=>)/.test(t.code.slice(end, end + AFTER_NAME_CHARS));
+  // `CLOCK_500Hz, DATA : in bit` declares both names; `process (CLOCK_500Hz)` only waits on it.
+  if (language === 'vhdl') return VHDL_DECLARED_OR_FORMAL.test(t.code.slice(end, end + AFTER_NAME_CHARS)) || inSensitivityList(t, name.at);
   const statement = t.code.slice(t.code.lastIndexOf(';', name.at) + 1, name.at);
   return /\.\s*$/.test(statement) || /^\s*(?:input|output|inout)\b/.test(statement);
 }
@@ -82,8 +95,8 @@ export function simulatorClockFindings(view: DesignView, clock: SimulatorClock):
     const scan = scannedFile(file);
     const search: Search = { language: file.language, name: clock.name };
     return parts.flatMap((part): SimOnlyFinding[] => {
-      const unitRef = partUnitKey(view, part);
-      if (unitRef === undefined || !view.hardware.hardware.has(unitRef)) return [];
+      const unitRef = hardwarePartKey(view, part);
+      if (unitRef === undefined) return [];
       if (!hasClockPort(view, part, search)) return [];
       const scanned = scan.units.find((u) => u.ownsUnit === part.ownsUnit && u.unit.name === part.unitName);
       const line = scanned && firstRead(unitText(scan, scanned.unit), search, scan.hidden);

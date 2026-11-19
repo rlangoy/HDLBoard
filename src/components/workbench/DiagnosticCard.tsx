@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { forwardRef, type CSSProperties, type PointerEventHandler } from 'react';
+import { forwardRef, useEffect, useRef, type CSSProperties, type PointerEventHandler } from 'react';
 import { cx } from '../board';
 import { CodeText } from './CodeText';
 import { CopyCodeButton } from './CopyCodeButton';
@@ -17,8 +17,10 @@ export interface DiagnosticCardProps {
   readonly note?: string;
   /** The plain text Copy puts on the clipboard (diagnosticCardText.ts `copyableText`). */
   readonly copyText: string;
-  /** Opened by a click: it stays until Esc, a click elsewhere, or a scroll. */
+  /** Opened by a click or Alt+Enter: it stays until Esc or a click in the code. */
   readonly pinned: boolean;
+  /** Opened from the keyboard: Copy takes the focus. */
+  readonly autoFocus?: boolean;
   readonly style: CSSProperties;
   readonly onPointerEnter: PointerEventHandler<HTMLDivElement>;
   readonly onPointerLeave: PointerEventHandler<HTMLDivElement>;
@@ -50,9 +52,13 @@ function Body({ text }: { text: string }) {
  * pointer rests on the line number or its `!`, and stays pinned after a click there.
  */
 export const DiagnosticCard = forwardRef<HTMLDivElement, DiagnosticCardProps>(function DiagnosticCard(
-  { line, messages, note, copyText, pinned, style, onPointerEnter, onPointerLeave },
+  { line, messages, note, copyText, pinned, autoFocus = false, style, onPointerEnter, onPointerLeave },
   ref,
 ) {
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (autoFocus) barRef.current?.querySelector('button')?.focus();
+  }, [autoFocus]);
   return (
     <div
       ref={ref}
@@ -65,9 +71,9 @@ export const DiagnosticCard = forwardRef<HTMLDivElement, DiagnosticCardProps>(fu
       // A click in the card is not a click in the code: it keeps the markers and the card.
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="wb-diagcard__bar">
+      <div className="wb-diagcard__bar" ref={barRef}>
         <span className="wb-diagcard__where">Line {line}</span>
-        <CopyCodeButton code={copyText} label="Copy this message" visibleLabel="Copy" />
+        <CopyCodeButton code={copyText} label="Copy this message" visibleLabel="Copy" failedTitle="Could not copy — select the text and press Ctrl+C" />
       </div>
       <div className="wb-diagcard__scroll">
         {note !== undefined && <Body text={note} />}

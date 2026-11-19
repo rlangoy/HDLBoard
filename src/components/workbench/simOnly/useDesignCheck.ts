@@ -7,7 +7,7 @@ import type { DesignCheckBadge } from '../EditorPaneHeader';
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
 import { checkDiagnostics } from './findingDiagnostics';
-import { NO_QUIET_WARNINGS, quietFile, showFile, showLine, withQuieted, type QuietWarnings } from './quietWarnings';
+import { NO_QUIET_WARNINGS, onlyFiles, quietFile, showFile, showLine, withQuieted, type QuietWarnings } from './quietWarnings';
 import { isSimModel } from './simModels';
 import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
 import type { DesignCheck, DesignCheckMode, DesignView, FileGroup, SimulatorClock } from './types';
@@ -22,6 +22,8 @@ export interface DesignCheckOptions {
   readonly setSimModel: (fileId: string, simModel: boolean) => void;
   /** The active board's simulator-only clock (CheckInput); memoised. */
   readonly simulatorClock?: SimulatorClock;
+  /** The project as it is now, not 500 ms ago (`TestbenchSplit.designViewNow`): for the console at Start. */
+  readonly viewNow: () => { readonly view: DesignView; readonly overrides: TestbenchOverrides };
 }
 
 export interface DesignCheckApi {
@@ -38,8 +40,11 @@ export interface DesignCheckApi {
   readonly groupOf: (fileId: string) => FileGroup | undefined;
   /** A design pane's badge; undefined with the check off (*Simulation only*). */
   readonly badgeFor: (fileId: string) => DesignCheckBadge | undefined;
-  /** The console lines at Start: one per SIM-only file, one per signal with more than one driver. */
-  readonly summaries: () => SummaryLine[];
+  /**
+   * The console lines at Start for the files that run: one per SIM-only file, one per signal
+   * with more than one driver, from the code as it is now.
+   */
+  readonly summariesFor: (runFileIds: ReadonlySet<string>) => SummaryLine[];
   /** For a polite live region: the last change of a file between RTL and SIM-only. */
   readonly announcement: string;
 }
@@ -50,7 +55,7 @@ export interface DesignCheckApi {
  * keystroke; per keystroke only the line counts are compared (findingDiagnostics.ts).
  */
 export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
-  const { view, overrides, mode, files, setSimModel, simulatorClock } = options;
+  const { view, overrides, mode, files, setSimModel, simulatorClock, viewNow } = options;
   const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides, simulatorClock }), [view, overrides, mode, simulatorClock]);
   const loud = useMemo(
     () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
@@ -58,6 +63,7 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   );
   const [quieted, setQuieted] = useState<QuietWarnings>(NO_QUIET_WARNINGS);
   const diagnostics = useMemo(() => withQuieted(loud, quieted), [loud, quieted]);
+  useForgetDeletedFiles(files, setQuieted);
   const loudRef = useRef(loud);
   loudRef.current = loud;
   const quietWarningsOf = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
@@ -77,9 +83,20 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     showLine: showWarningsAt,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
-    summaries: () => [...simOnlySummaries(check, overrides, files), ...driverSummaries(check, overrides, files)],
+    summariesFor: (runFileIds) => {
+      const now = viewNow();
+      const fresh = DESIGN_CHECKS[mode]({ view: now.view, overrides: now.overrides, simulatorClock });
+      const running = files.filter((f) => runFileIds.has(f.id));
+      return [...simOnlySummaries(fresh, now.overrides, running), ...driverSummaries(fresh, now.overrides, running)];
+    },
     announcement,
   };
+}
+
+/** A deleted file's dismissed warnings go with it. */
+function useForgetDeletedFiles(files: DesignCheckOptions['files'], setQuieted: (update: (prev: QuietWarnings) => QuietWarnings) => void): void {
+  const ids = useMemo(() => new Set(files.map((f) => f.id)), [files]);
+  useEffect(() => setQuieted((prev) => onlyFiles(prev, ids)), [ids, setQuieted]);
 }
 
 /**

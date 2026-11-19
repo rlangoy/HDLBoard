@@ -183,7 +183,8 @@ counted and reset in the simulator, and Quartus refused it. Measured with **Quar
 | `if rising_edge(a) … elsif falling_edge(a)` | Error 10819: *can't infer register for x because it changes value on both rising and falling edges of the clock* | `vhdl-edge-template` |
 | `if rising_edge(a) … elsif b = '1'` (a branch after the edge; `else` the same) | Error 10818: *Can't infer register for "x" … because it does not hold its value outside the clock edge* | `vhdl-edge-template` |
 | `if rising_edge(a) and rising_edge(b)` | Error 10628: *can't implement register for two clock edges combined with a binary operator* | `vhdl-edge-template` |
-| `if rising_edge(a) …` and `if rising_edge(b) …` assigning the same signal | Error 10820 | not matched: needs the drivers of § 8.1 per clock; rare |
+| `if rising_edge(a) …` and `if rising_edge(b) …` assigning the same signal | Error 10820 | `vhdl-edge-template`, kind `two-clocks`, on the later `if` |
+| Two `always @(posedge …)` blocks on two clocks assigning one register | Error 10028: *Can't resolve multiple constant drivers* | `vlog-edge-template`, kind `two-clocks`, on the later block (the drivers check of § 8.1 warns too) |
 | `always @(posedge a or posedge b) if (c) …` (the `if` tests no edge) | Error 10200: *cannot match operand(s) in the condition to the corresponding edges in the enclosing event control of the always construct* | `vlog-edge-template` |
 | `always @(posedge up or posedge down) if (down) count <= count - 1; else count <= count + 1;` (the "reset" loads from the register: a second clock) | **Builds**, Warning 13004: *Presettable and clearable registers converted to equivalent circuits with latches. Registers power-up to an undefined state*; the board does not count | `vlog-edge-template`, kind `two-clocks` |
 | `always @(KEY_N[1:0])` keeping `count` and `key_prev` (the old Verilog example) | **Builds**, Warning 10240: *inferring latch(es) for variable "count", which holds its previous value* | `vlog-level-storage` (tier `ignored`: it builds, but the board does not behave like the simulation) |
@@ -194,6 +195,12 @@ The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and fl
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
 branch. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
 with none, a variable assigned with `<=` must not be read in the block (it keeps a value, so Quartus makes a latch).
+`always_ff` and `always_latch` are read as `always` (an `always_latch` is a latch on purpose). The latch rule asks for a
+value kept without a clock: a variable assigned from itself (`x <= x + 1`) or one that decides the block (`if (x_prev …)`);
+reading another output (`x <= a; y <= x;`) is plain logic. Each finding carries its language, so a Verilog finding
+shows the Verilog template. In VHDL, `wait until` is a clocked process only with one edge and no other wait outside
+`translate_off`.
+
 **The message names the register and its clocks**, as the tools do, but names no tool: HDLBoard boards include
 AMD/Xilinx ones (Basys 3, Nexys A7) built with Vivado. Quartus says *can't infer register for count[0] because its
 behavior depends on the edges of multiple distinct clocks* (10820); Vivado says *[Synth 8-5787] Register … is clocked
@@ -443,7 +450,13 @@ selected; **Copy** puts `file, line n`, the line itself and the message on the c
 click on the line number pins it; Esc, a scroll or a click in the code closes it. Compiler errors get the same card.
 The Start summary's *Line n* link opens it too, pinned, once the line is in view (`usePinCardOnReveal`, `RevealRequest.openCard`).
 
-**Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file, not one line per finding:
+**From the keyboard.** Alt+Enter on a line opens its problem card, pinned, with the focus on Copy; Esc closes it and
+hands the focus back to the code. Esc is caught before the editor's own Esc, so it closes only the card. A pinned card
+follows its line when the code scrolls. A dismissal is kept per occurrence (the n-th warning with a headline in the
+file), so restoring one line restores no other.
+
+**Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file The summary is built from the files of the run, analysed at Start (`designViewNow`), not from the check of 500 ms
+ago, and only for those files., not one line per finding:
 `blink.vhd is SIM-only: 2 lines only work in simulation; they run here but not on the board.` The file name links to
 the first line.
 

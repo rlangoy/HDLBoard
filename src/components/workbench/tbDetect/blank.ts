@@ -145,6 +145,11 @@ interface Branch {
   active: boolean;
   taken: boolean;
   simOnlyFrom: number | undefined;
+  /**
+   * `ifdef SYNTHESIS with SYNTHESIS undefined, as in the simulator: the branches after
+   * the first are what simulation runs and synthesis skips, so they are sim-only.
+   */
+  readonly laterBranchesSimOnly: boolean;
 }
 
 /**
@@ -184,15 +189,20 @@ function directive(state: PreState, word: string, name: string, line: number, ac
   else if (top && (word === 'elsif' || word === 'else' || word === 'endif')) {
     closeSimOnly(state, top, line);
     if (word === 'endif') state.stack.pop();
-    else nextBranch(top, word === 'else' || state.defines.has(name));
+    else {
+      nextBranch(top, word === 'else' || state.defines.has(name));
+      if (top.active && top.laterBranchesSimOnly) top.simOnlyFrom = line;
+    }
   }
 }
 
 function openBranch(state: PreState, word: string, name: string, line: number, parentActive: boolean): void {
   const holds = state.defines.has(name) === (word === 'ifdef');
   const active = parentActive && holds;
-  const simOnly = active && word === 'ifndef' && name === 'SYNTHESIS';
-  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined });
+  const isSynthesis = name === 'SYNTHESIS' && !state.defines.has(name);
+  const simOnly = active && word === 'ifndef' && isSynthesis;
+  const laterBranchesSimOnly = word === 'ifdef' && isSynthesis;
+  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined, laterBranchesSimOnly });
 }
 
 function nextBranch(top: Branch, holds: boolean): void {

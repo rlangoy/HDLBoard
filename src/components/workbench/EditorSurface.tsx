@@ -5,7 +5,7 @@ import { Fragment, memo, useCallback, useId, useLayoutEffect, useMemo, useRef, t
 import { cx } from '../board';
 import { CodeText } from './CodeText';
 import { cardMessages, describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
-import { copyableText } from './diagnosticCardText';
+import { copyableText, withCardHint } from './diagnosticCardText';
 import { DiagnosticCard } from './DiagnosticCard';
 import { gutterRowAt, useDiagnosticCard, usePinCardOnReveal, type CardState, type DiagnosticCardApi } from './useDiagnosticCard';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
@@ -44,6 +44,14 @@ export interface EditorTab {
 function isQuickFixKey(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
   return e.key === '.' && (e.ctrlKey || e.metaKey);
 }
+
+/** Alt+Enter shows the problem card of the caret's line, with Copy (the gutter is for the pointer). */
+function isProblemCardKey(e: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): boolean {
+  return e.key === 'Enter' && e.altKey && !e.ctrlKey && !e.metaKey;
+}
+
+/** The 1-based line of the textarea's caret. */
+const caretLine = (textarea: HTMLTextAreaElement): number => textarea.value.slice(0, textarea.selectionStart).split('\n').length;
 
 /** Keys that only modify another: they neither end nor start the Esc-then-Tab escape. */
 const MODIFIER_KEYS: readonly string[] = ['Shift', 'Control', 'Alt', 'Meta', 'Tab'];
@@ -184,7 +192,7 @@ function LineProblemCard({ card, fileName, lines, linesByNumber, hints }: {
   linesByNumber: ReadonlyMap<number, LineDiagnostic>;
   hints: ReadonlyMap<number, LineDiagnostic>;
 }) {
-  const { line, pinned, style } = card.state;
+  const { line, pinned, style, focused } = card.state;
   const diagnostic = linesByNumber.get(line);
   const hintFrom = hints.get(line);
   const note = !diagnostic && hintFrom ? describeHint(hintFrom, line) : undefined;
@@ -196,6 +204,7 @@ function LineProblemCard({ card, fileName, lines, linesByNumber, hints }: {
       note={note}
       copyText={copyableText({ fileName, line }, lines[line - 1], description)}
       pinned={pinned}
+      autoFocus={focused}
       style={style}
       onPointerEnter={card.onCardEnter}
       onPointerLeave={card.onCardLeave}
@@ -320,10 +329,10 @@ export function EditorSurface({
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds
   // nothing leaves the text unchanged and the live region silent.
-  const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
+  const status = useMemo(() => withCardHint(summarize(file.name, diagnostics)), [file.name, diagnostics]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const isMarked = useCallback((line: number) => linesByNumber.has(line) || hints.has(line), [linesByNumber, hints]);
-  const card = useDiagnosticCard(bodyRef, isMarked);
+  const card = useDiagnosticCard({ body: bodyRef, gutter: gutterRef, returnFocus: () => textareaRef.current?.focus() }, isMarked);
   usePinCardOnReveal(reveal, file.id, gutterRef, { isMarked, pin: card.pin });
   const statusId = useId();
   useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
@@ -367,7 +376,6 @@ export function EditorSurface({
 
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
-    card.close(); // the line it describes moved away
     const { scrollTop, scrollLeft } = e.currentTarget;
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop;
@@ -378,6 +386,7 @@ export function EditorSurface({
     if (gutterRef.current) {
       gutterRef.current.scrollTop = scrollTop;
     }
+    card.reposition(); // after the gutter moved: a pinned card follows its line
   };
 
   return (
@@ -442,6 +451,10 @@ export function EditorSurface({
           }}
           onKeyDown={(e) => {
             if (isQuickFixKey(e) && quickFix.applyAtCaret()) {
+              e.preventDefault();
+              return;
+            }
+            if (isProblemCardKey(e) && card.openAt(caretLine(e.currentTarget))) {
               e.preventDefault();
               return;
             }

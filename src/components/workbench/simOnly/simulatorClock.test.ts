@@ -22,8 +22,8 @@ const clockLines = (name: string, content: string, mode: 'synthesis' | 'simulati
 const CLOCKED_500 = "process (CLOCK_500Hz)\nbegin\nif rising_edge(CLOCK_500Hz) then\nLEDR <= SW;\nend if;\nend process;";
 
 describe('a design that reads the simulator clock is SIM-only', () => {
-  test('VHDL: on the first line that reads it', () => {
-    expect(clockLines('top.vhd', vhdl(CLOCKED_500))).toEqual([9]);
+  test('VHDL: on the first line that reads it, past the sensitivity list', () => {
+    expect(clockLines('top.vhd', vhdl(CLOCKED_500))).toEqual([11]);
   });
 
   test('Verilog: on the always that reads it', () => {
@@ -40,7 +40,7 @@ describe('a design that reads the simulator clock is SIM-only', () => {
   });
 
   test('the case of a VHDL name does not matter', () => {
-    expect(clockLines('top.vhd', vhdl(CLOCKED_500.replace(/CLOCK_500Hz/g, 'clock_500hz')))).toEqual([9]);
+    expect(clockLines('top.vhd', vhdl(CLOCKED_500.replace(/CLOCK_500Hz/g, 'clock_500hz')))).toEqual([11]);
   });
 });
 

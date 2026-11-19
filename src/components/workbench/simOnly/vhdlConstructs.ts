@@ -8,21 +8,28 @@
  */
 
 import type { UnitText } from '../tbDetect/rules';
-import { blockAt, blockText, linesOf, matchesIn, statementFrom } from './constructText';
+import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
 import { vhdlEdgeTemplate } from './registerTemplates';
+import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
 /** Character literals are blanked, so `clk'event and clk = '1'` reads `clk'event and clk =    `. */
-const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/i;
+const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/gi;
 
-/** `wait until rising_edge(clk);` as the only wait of its process: a clocked process (§ 3.3). */
+/**
+ * `wait until rising_edge(clk);` as the only wait of its process, on one clock edge: a
+ * clocked process (§ 3.3). Waits inside translate_off are not synthesized, so they don't
+ * count; `rising_edge(a) or rising_edge(b)` is two clocks.
+ */
 function isOnlyClockEdgeWait(t: UnitText, at: number): boolean {
   const block = blockAt(t, at);
   if (!block) return false;
-  const waits = blockText(t, block).match(ANY_WAIT)?.length ?? 0;
-  return waits === 1 && CLOCK_EDGE.test(statementFrom(t, at));
+  const synthesized = (wait: number) => wait >= block.from && wait < block.to && !isHidden(t.lineOf(wait), t.simOnlyRegions);
+  const waits = matchesIn(t, ANY_WAIT).filter(([wait]) => synthesized(wait)).length;
+  const edges = statementFrom(t, at).match(CLOCK_EDGE)?.length ?? 0;
+  return waits === 1 && edges === 1;
 }
 
 const FILE_DECLARATION = /\bfile\s+\w+(?:\s*,\s*\w+)*\s*:/gi;

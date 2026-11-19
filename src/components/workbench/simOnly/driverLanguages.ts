@@ -124,10 +124,28 @@ function closingParen(code: string, open: number): number {
   return code.length;
 }
 
+/** `function … endfunction` and `task … endtask`: their assignments are to locals and outputs, called from a block. */
+const VERILOG_SUBPROGRAM = /\b(?:endfunction|endtask|function|task)\b/g;
+
+/**
+ * Whether the `:` before a procedural target belongs to a `? :` in the same statement
+ * (`assign cmp = sel ? 1'b0 : q <= limit;`): then `q <= limit` is a comparison, not an
+ * assignment.
+ */
+function afterTernaryColon(code: string, at: number): boolean {
+  const statement = code.slice(code.lastIndexOf(';', at) + 1, at);
+  return /\?[^;]*:\s*$/.test(statement);
+}
+
 function verilogAssignments(body: BodyText): Assignment[] {
-  const excluded = [...nestedRegions(body, VERILOG_GENERATE, (t) => t === 'endgenerate'), ...forHeaders(body)];
+  const excluded = [
+    ...nestedRegions(body, VERILOG_GENERATE, (t) => t === 'endgenerate'),
+    ...nestedRegions(body, VERILOG_SUBPROGRAM, (t) => t.startsWith('end')),
+    ...forHeaders(body),
+  ];
   const syntax = (pattern: RegExp) => ({ pattern, bits: verilogBits, tristate: VERILOG_TRISTATE });
-  return [...assignmentsBy(body, syntax(VERILOG_PROCEDURAL), excluded), ...continuous(body, syntax(VERILOG_CONTINUOUS), excluded)];
+  const procedural = assignmentsBy(body, syntax(VERILOG_PROCEDURAL), excluded).filter((a) => !afterTernaryColon(body.code, a.at));
+  return [...procedural, ...continuous(body, syntax(VERILOG_CONTINUOUS), excluded)];
 }
 
 /** `assign` has its target in group 1 or 3 (`wire x = …`): normalised to groups 1 and 2. */

@@ -6,7 +6,7 @@
  * Pure data, no logic, structured-clone friendly like the detector's.
  */
 
-import type { CodeBlock, Instance, ProjectAnalysis, TestbenchOverrides, TestbenchRegion } from '../tbDetect/types';
+import type { CodeBlock, Instance, Language, ProjectAnalysis, TestbenchOverrides, TestbenchRegion } from '../tbDetect/types';
 import type { DriverConflict } from './driverTypes';
 
 /**
@@ -36,6 +36,8 @@ export interface RegisterProblem {
   readonly registers: readonly string[];
   /** The clocks involved, as written: `KEY_N(1)`. */
   readonly clocks: readonly string[];
+  /** The language of the code: the tooltip shows the template in it. */
+  readonly language: Language;
 }
 
 /** The board's simulator-only clock (§ 3.5), and the real clock to use instead. */
@@ -87,6 +89,11 @@ export interface HardwareView {
   readonly dutOf: ReadonlyMap<string, string>;
   /** Unit keys whose role is corrected to `rtl` for pairing (§ 4.2). */
   readonly asDesign: ReadonlySet<string>;
+  /**
+   * Files the student marked *Treat as testbench*: their code is never checked, even an
+   * architecture of a hardware entity declared in another file (§ 4.1).
+   */
+  readonly testbenchFiles: ReadonlySet<string>;
 }
 
 /** The project as the check sees it: as detected, as corrected, and which code is hardware. */

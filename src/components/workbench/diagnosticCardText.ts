@@ -6,6 +6,12 @@
  * code, and the plain text the Copy button puts on the clipboard. Pure.
  */
 
+/** How the keyboard reaches a problem card: said after the file's problem summary. */
+export const CARD_HINT = 'Alt+Enter shows the problem on the cursor line, with Copy.';
+
+/** The screen-reader summary of a file's problems, with how to open a card; nothing to add when there is none. */
+export const withCardHint = (summary: string): string => (summary === '' ? '' : `${summary} ${CARD_HINT}`);
+
 /** A run of prose lines, or of code lines (indented by two spaces in the message). */
 export interface TextBlock {
   readonly kind: 'text' | 'code';

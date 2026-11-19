@@ -27,7 +27,7 @@ interface GroupContext extends GroupInput {
 
 export function codeGroups(input: GroupInput): CodeGroups {
   const simOnlyUnits = new Set(input.findings.filter(makesSimOnly).map((f) => f.unitRef));
-  const groupOf = (key: string, fileId: string) => unitGroup({ ...input, simOnlyUnits }, key, fileId);
+  const groupOf = (key: string, files: UnitFiles) => unitGroup({ ...input, simOnlyUnits }, key, files);
   const byFile = new Map<string, FileGroup>();
   for (const file of input.view.corrected.byFile.values()) {
     const group = fileGroupOf(unitGroupsIn(input, file, groupOf));
@@ -46,12 +46,18 @@ export function groupsFromRoles(view: DesignView, overrides: TestbenchOverrides)
   return { byFile, simOnlyRegions: new Map() };
 }
 
-/** A unit's group: the student's *Treat as testbench* first, then hardware by its findings, else its role. */
-function unitGroup(context: GroupContext, key: string, fileId: string): CodeGroup {
+/** Where a unit is declared, and the file of the code being grouped: another file for an architecture of § 4.1. */
+interface UnitFiles {
+  readonly unit: string;
+  readonly code: string;
+}
+
+/** A unit's group: the student's *Treat as testbench* of the code's file first, then hardware by its findings, else its role. */
+function unitGroup(context: GroupContext, key: string, files: UnitFiles): CodeGroup {
   const { view, overrides, simOnlyUnits } = context;
-  if (overrides.roles[fileId] === 'tb') return 'tb';
-  if (!view.hardware.hardware.has(key)) return roleOfUnit(view, key, fileId);
-  const simOnly = simOnlyUnits.has(key) || overrides.simModels?.[fileId] === true;
+  if (overrides.roles[files.code] === 'tb') return 'tb';
+  if (!view.hardware.hardware.has(key)) return roleOfUnit(view, key, files.unit);
+  const simOnly = simOnlyUnits.has(key) || overrides.simModels?.[files.code] === true;
   return simOnly ? 'sim-only' : 'rtl';
 }
 
@@ -62,12 +68,12 @@ function roleOfUnit(view: DesignView, key: string, fileId: string): CodeGroup {
 }
 
 /** The groups of a file's units, and of its architectures of entities in other files (§ 4.1). */
-function unitGroupsIn(input: GroupInput, file: FileAnalysis, groupOf: (key: string, fileId: string) => CodeGroup): CodeGroup[] {
-  const own = file.units.map((u) => groupOf(unitRefKey(file.fileId, file.language, u.name), file.fileId));
+function unitGroupsIn(input: GroupInput, file: FileAnalysis, groupOf: (key: string, files: UnitFiles) => CodeGroup): CodeGroup[] {
+  const own = file.units.map((u) => groupOf(unitRefKey(file.fileId, file.language, u.name), { unit: file.fileId, code: file.fileId }));
   const parts = (input.view.parts.get(file.fileId) ?? []).filter((p) => !p.ownsUnit);
   const foreign = parts.flatMap((part) => {
     const key = partUnitKey(input.view, part);
-    return key === undefined ? [] : [groupOf(key, fileOfKey(key))];
+    return key === undefined ? [] : [groupOf(key, { unit: fileOfKey(key), code: file.fileId })];
   });
   return [...own, ...foreign];
 }

@@ -13,10 +13,21 @@ import { definedUnitKey, unitRefKey } from './unitRef';
 
 export function simOnlyFindings(view: DesignView): SimOnlyFinding[] {
   return [...view.parts.values()].flat().flatMap((part) => {
-    const unitRef = partUnitKey(view, part);
-    if (unitRef === undefined || !view.hardware.hardware.has(unitRef)) return [];
+    const unitRef = hardwarePartKey(view, part);
+    if (unitRef === undefined) return [];
     return part.matches.map((m) => ({ ...m, fileId: part.fileId, unitName: part.unitName, unitRef }));
   });
+}
+
+/**
+ * The unit key of a part that is checked: hardware, and not in a file the student marked
+ * *Treat as testbench* (an architecture in such a file is left out even when its entity
+ * is hardware).
+ */
+export function hardwarePartKey(view: DesignView, part: CodePart): string | undefined {
+  const unitRef = partUnitKey(view, part);
+  if (unitRef === undefined || !view.hardware.hardware.has(unitRef) || view.hardware.testbenchFiles.has(part.fileId)) return undefined;
+  return unitRef;
 }
 
 /** The key of the unit a part belongs to: its own, or for an architecture of § 4.1 its entity's. */

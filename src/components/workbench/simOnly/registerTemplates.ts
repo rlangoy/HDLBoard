@@ -21,6 +21,9 @@ const unique = (names: readonly string[]): string[] => {
   const seen = new Set<string>();
   return names.filter((n) => !seen.has(n.toLowerCase()) && !!seen.add(n.toLowerCase()));
 };
+const sameName = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+/* ------------------------------- VHDL ------------------------------- */
 
 /** `event` is `clk'event`, which says no direction by itself. */
 type EdgeKind = 'rising' | 'falling' | 'event';
@@ -61,10 +64,19 @@ interface Chain {
   readonly bad: Violation[];
 }
 
+/** A whole `if` of the process with a clock edge: the clock, and what the `if` assigns. */
+interface ClockedIf {
+  readonly at: number;
+  readonly clock: string;
+  readonly registers: readonly string[];
+}
+
 interface Walk {
   readonly text: string;
   readonly chains: Chain[];
   readonly found: { at: number; register: RegisterProblem }[];
+  /** The process's outermost `if`s that have an edge, in order. */
+  readonly clocked: ClockedIf[];
   /** Where the condition being read starts, or -1. */
   condition: number;
   /** Inside `x <= a when c else b`, whose `else` is not a branch. */
@@ -73,6 +85,9 @@ interface Walk {
 
 /** The innermost `if` being read. */
 const innermostIf = (w: Walk): Chain | undefined => w.chains[w.chains.length - 1];
+
+const vhdlProblem = (kind: RegisterProblemKind, registers: readonly string[], clocks: readonly string[]): RegisterProblem =>
+  ({ kind, registers, clocks, language: 'vhdl' });
 
 /** What a branch with these edges does wrong, after the edges of the branches before it. */
 function violation(before: readonly Edge[], edges: readonly Edge[], at: number): Violation | undefined {
@@ -83,7 +98,7 @@ function violation(before: readonly Edge[], edges: readonly Edge[], at: number):
   const [edge] = edges;
   // A branch without an edge after the edge (10818).
   if (!edge) return { at, kind: 'outside-edge', clocks: [first.clock] };
-  if (edge.clock.toLowerCase() !== first.clock.toLowerCase()) return { at, kind: 'two-clocks', clocks: [first.clock, edge.clock] };
+  if (!sameName(edge.clock, first.clock)) return { at, kind: 'two-clocks', clocks: [first.clock, edge.clock] };
   // Both edges of one clock (10819); the same edge twice is a branch the register can't hold.
   return { at, kind: edge.kind === first.kind ? 'outside-edge' : 'both-edges', clocks: [first.clock] };
 }
@@ -100,12 +115,14 @@ function endCondition(w: Walk, at: number): void {
   w.conditionalAssignment = false;
 }
 
-/** The `if` is complete: each bad branch is reported with what the whole `if` assigns. */
+/** The `if` is complete: each bad branch is reported with what the whole `if` assigns; an outermost clocked one is kept. */
 function endIf(w: Walk, at: number): void {
   const chain = w.chains.pop();
-  if (!chain || chain.bad.length === 0) return;
+  if (!chain) return;
   const registers = vhdlTargets(w.text.slice(chain.from, at));
-  for (const bad of chain.bad) w.found.push({ at: bad.at, register: { kind: bad.kind, registers, clocks: bad.clocks } });
+  for (const bad of chain.bad) w.found.push({ at: bad.at, register: vhdlProblem(bad.kind, registers, bad.clocks) });
+  const [edge] = chain.edges;
+  if (w.chains.length === 0 && edge) w.clocked.push({ at: chain.from, clock: edge.clock, registers });
 }
 
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
@@ -135,10 +152,24 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   },
 };
 
+/**
+ * Two `if`s of one process on two clocks that assign the same signal (Quartus Error
+ * 10820): each `if` is a register template, but the signal is one register with two
+ * clocks. Reported on the later `if`.
+ */
+function twoClockedIfs(clocked: readonly ClockedIf[]): Walk['found'] {
+  return clocked.flatMap((later, i) => {
+    const earlier = clocked.slice(0, i).find((e) => !sameName(e.clock, later.clock) && e.registers.some((r) => later.registers.some((l) => sameName(r, l))));
+    if (!earlier) return [];
+    const shared = later.registers.filter((r) => earlier.registers.some((e) => sameName(e, r)));
+    return [{ at: later.at, register: vhdlProblem('two-clocks', shared, [earlier.clock, later.clock]) }];
+  });
+}
+
 function processViolations(text: string): Walk['found'] {
-  const walk: Walk = { text, chains: [], found: [], condition: -1, conditionalAssignment: false };
+  const walk: Walk = { text, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
-  return walk.found.sort((a, b) => a.at - b.at);
+  return [...walk.found, ...twoClockedIfs(walk.clocked)].sort((a, b) => a.at - b.at);
 }
 
 /** VHDL: every branch of a process's `if` that puts a clock edge where no register can be built. */
@@ -148,12 +179,17 @@ export function vhdlEdgeTemplate(t: UnitText): Found[] {
     .flatMap((b) => processViolations(blockText(t, b)).map(({ at, register }) => ({ line: t.lineOf(b.from + at), register })));
 }
 
-const SENSITIVITY = /^always\s*@\s*(\(\s*\*\s*\)|\*|\((?:[^()]|\([^()]*\))*\))/;
+/* ------------------------------ Verilog ----------------------------- */
+
+/** `always`, `always_ff` or `always_latch` with its event control; `always_comb` has none. */
+const SENSITIVITY = /^always(_ff|_latch)?\s*@\s*(\(\s*\*\s*\)|\*|\((?:[^()]|\([^()]*\))*\))/;
 const EDGE_EVENT = /\b(?:posedge|negedge)\s+([A-Za-z_][\w.]*(?:\s*\[[^\]]*\])?)/g;
 
 interface AlwaysBlock {
   readonly block: CodeBlock;
   readonly edges: readonly string[];
+  /** `always_latch`: a latch on purpose. */
+  readonly latch: boolean;
   /** The block's statement, after `always @( … )`. */
   readonly body: string;
 }
@@ -163,8 +199,8 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
     const text = blockText(t, block);
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
-    const edges = [...head[1].matchAll(EDGE_EVENT)].map((m) => tidy(m[1]));
-    return [{ block, edges, body: text.slice(head[0].length) }];
+    const edges = [...head[2].matchAll(EDGE_EVENT)].map((m) => tidy(m[1]));
+    return [{ block, edges, latch: head[1] === '_latch', body: text.slice(head[0].length) }];
   });
 }
 
@@ -175,13 +211,22 @@ interface FirstIf {
   readonly branch: string;
 }
 
+/** The text inside the parentheses that open at `open` (offset of the `(`). */
+function parenthesized(text: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    depth += text[i] === '(' ? 1 : text[i] === ')' ? -1 : 0;
+    if (depth === 0) return text.slice(open + 1, i);
+  }
+  return text.slice(open + 1);
+}
+
 function firstIf(body: string): FirstIf | undefined {
   const start = /^\s*(?:begin\b(?:\s*:\s*\w+)?\s*)?if\s*\(/.exec(body);
   if (!start) return undefined;
-  let depth = 1;
-  let i = start[0].length;
-  for (; i < body.length && depth > 0; i++) depth += body[i] === '(' ? 1 : body[i] === ')' ? -1 : 0;
-  return { condition: body.slice(start[0].length, i - 1), branch: statementAt(body, i) };
+  const open = start[0].length - 1;
+  const condition = parenthesized(body, open);
+  return { condition, branch: statementAt(body, open + condition.length + 2) };
 }
 
 const BLOCK_TOKEN = /\b(?:begin|end)\b/g;
@@ -200,56 +245,97 @@ function statementAt(body: string, from: number): string {
 
 /** Whether the condition reads the signal as a whole name: `!KEY_N[1]` reads `KEY_N[1]`, not `KEY_N`. */
 const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escapeRegExp(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
+const mentions = (text: string, name: string) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(text);
 
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
 const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
 const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
+
+/** What one nonblocking assignment loads: from after its `<=` to its `;`. */
+const assignedValue = (body: string, m: RegExpMatchArray): string => body.slice((m.index ?? 0) + m[0].length, body.indexOf(';', m.index ?? 0));
+
+const verilogProblem = (kind: RegisterProblemKind, registers: readonly string[], clocks: readonly string[]): RegisterProblem =>
+  ({ kind, registers, clocks, language: 'verilog' });
 
 /**
  * The registers the reset branch loads from a register of the block (`count <= count - 1`):
  * a reset or set loads a constant, so such a branch is a second clock, not a reset.
  */
 function loadedFromRegisters(branch: string, registers: readonly string[]): string[] {
-  const loaded = verilogTargets(branch).filter((m) => {
-    const value = branch.slice((m.index ?? 0) + m[0].length, branch.indexOf(';', m.index ?? 0));
-    return registers.some((r) => new RegExp(`\\b${escapeRegExp(r)}\\b`).test(value));
-  });
+  const loaded = verilogTargets(branch).filter((m) => registers.some((r) => mentions(assignedValue(branch, m), r)));
   return unique(loaded.map((m) => m[1]));
+}
+
+/** The clock of an edge-triggered block: its edge the first `if` does not test as a reset or set. */
+function clockOf({ edges, body }: AlwaysBlock): string | undefined {
+  if (edges.length < 2) return edges[0];
+  const first = firstIf(body);
+  return edges.find((signal) => !first || !reads(first.condition, signal)) ?? edges[0];
+}
+
+/** One `always` with several edges that is no register template. */
+function edgeBlockProblem(always: AlwaysBlock): Found[] {
+  const { block, edges, body } = always;
+  if (edges.length < 2) return [];
+  const registers = unique(verilogTargets(body).map((m) => m[1]));
+  const first = firstIf(body);
+  if (first === undefined || !edges.some((signal) => reads(first.condition, signal))) {
+    return [{ line: block.span.start, register: verilogProblem('no-reset-tested', registers, unique(edges)) }];
+  }
+  const loaded = loadedFromRegisters(first.branch, registers);
+  if (loaded.length === 0) return [];
+  return [{ line: block.span.start, register: verilogProblem('two-clocks', loaded, unique(edges)) }];
+}
+
+/**
+ * Two edge-triggered `always` blocks on two clocks that assign the same register: one
+ * register, two clocks (Quartus: "can't resolve multiple constant drivers"). The
+ * simulator lets both write it. Reported on the later block.
+ */
+function twoClockedBlocks(blocks: readonly AlwaysBlock[]): Found[] {
+  const clocked = blocks.flatMap((always) => {
+    const clock = clockOf(always);
+    return clock === undefined ? [] : [{ always, clock, registers: unique(verilogTargets(always.body).map((m) => m[1])) }];
+  });
+  return clocked.flatMap((later, i) => {
+    const earlier = clocked.slice(0, i).find((e) => e.clock !== later.clock && e.registers.some((r) => later.registers.includes(r)));
+    if (!earlier) return [];
+    const shared = later.registers.filter((r) => earlier.registers.includes(r));
+    return [{ line: later.always.block.span.start, register: verilogProblem('two-clocks', shared, [earlier.clock, later.clock]) }];
+  });
 }
 
 /**
  * Verilog: `always @(posedge a or posedge b)` whose first `if` tests none of the
- * edges, so none can be the asynchronous reset or set (Quartus Error 10200); or whose
+ * edges, so none can be the asynchronous reset or set (Quartus Error 10200); whose
  * reset branch loads a value computed from a register, which makes it a second clock
- * (Quartus builds latches, Warning 13004, and the board does not count).
+ * (Quartus builds latches, Warning 13004, and the board does not count); or two clocked
+ * blocks on two clocks that assign one register.
  */
 export function verilogEdgeTemplate(t: UnitText): Found[] {
-  return alwaysBlocks(t).flatMap(({ block, edges, body }): Found[] => {
-    if (edges.length < 2) return [];
-    const registers = unique(verilogTargets(body).map((m) => m[1]));
-    const first = firstIf(body);
-    if (first === undefined || !edges.some((signal) => reads(first.condition, signal))) {
-      return [{ line: block.span.start, register: { kind: 'no-reset-tested', registers, clocks: unique(edges) } }];
-    }
-    const loaded = loadedFromRegisters(first.branch, registers);
-    if (loaded.length === 0) return [];
-    return [{ line: block.span.start, register: { kind: 'two-clocks', registers: loaded, clocks: unique(edges) } }];
-  });
+  const blocks = alwaysBlocks(t);
+  return [...blocks.flatMap(edgeBlockProblem), ...twoClockedBlocks(blocks)];
+}
+
+/** The conditions of the block's `if`s and `case`s: what decides which assignment runs. */
+function conditionsOf(body: string): string[] {
+  return [...body.matchAll(/\b(?:if|case[xz]?)\s*\(/g)].map((m) => parenthesized(body, (m.index ?? 0) + m[0].length - 1));
 }
 
 /**
- * Verilog: an `always` without an edge that reads a variable it assigns with `<=`.
- * It keeps a value without a clock, so synthesis builds latches (Quartus Warning 10240).
+ * Verilog: an `always` without an edge that keeps a value: a variable it assigns with `<=`
+ * from itself (`x <= x + 1`), or that decides what the block does (`if (x_prev && …)`).
+ * Without a clock that is a latch (Quartus Warning 10240). Reading another output
+ * (`x <= a; y <= x;`) is plain logic. An `always_latch` is a latch on purpose.
  */
 export function verilogLevelStorage(t: UnitText): Found[] {
-  return alwaysBlocks(t).flatMap(({ block, edges, body }) => {
-    if (edges.length > 0) return [];
+  return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
+    if (edges.length > 0 || latch) return [];
     const targets = verilogTargets(body);
-    // The prefix is `;`, `)`, `begin` or `else`, never the target itself.
-    const writes = targets.map((m) => (m.index ?? 0) + m[0].search(new RegExp(`\\b${m[1]}\\b`)));
-    const kept = unique(targets.map((m) => m[1])).filter((name) =>
-      [...body.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].some((use) => !writes.includes(use.index ?? -1)),
-    );
-    return kept.length === 0 ? [] : [{ line: block.span.start, register: { kind: 'latch', registers: kept, clocks: [] } }];
+    const conditions = conditionsOf(body);
+    const keepsItself = (name: string) => targets.some((m) => m[1] === name && mentions(assignedValue(body, m), name));
+    const decides = (name: string) => conditions.some((c) => mentions(c, name));
+    const kept = unique(targets.map((m) => m[1])).filter((name) => keepsItself(name) || decides(name));
+    return kept.length === 0 ? [] : [{ line: block.span.start, register: verilogProblem('latch', kept, []) }];
   });
 }

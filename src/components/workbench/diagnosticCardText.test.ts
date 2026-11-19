@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { copyableText, textBlocks } from './diagnosticCardText';
+import { copyableText, textBlocks, withCardHint } from './diagnosticCardText';
 
 const BODY = [
   'Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:',
@@ -34,5 +34,15 @@ describe('Copy puts where, the line itself and the message on the clipboard', ()
 
   test('an empty line is left out', () => {
     expect(copyableText({ fileName: 'a.vhd', line: 3 }, '   ', 'error: x')).toBe('a.vhd, line 3\n\nerror: x');
+  });
+});
+
+describe('the keyboard way to a problem card', () => {
+  test('is said after a file\'s problem summary', () => {
+    expect(withCardHint('a.vhd: 1 warning.')).toBe('a.vhd: 1 warning. Alt+Enter shows the problem on the cursor line, with Copy.');
+  });
+
+  test('is not said when nothing is marked', () => {
+    expect(withCardHint('')).toBe('');
   });
 });

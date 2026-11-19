@@ -33,8 +33,10 @@ interface Project {
 
 export function hardwareView(analysis: ProjectAnalysis, overrides: TestbenchOverrides, parts: ProjectParts): HardwareView {
   const project: Project = { analysis, overrides, units: unitEntries(analysis, overrides), parts: partsByUnit(analysis, parts) };
-  const entries = [...project.units.values()].filter((e) => !isMarkedTestbench(project, e.fileId));
-  const dutOf = new Map(entries.filter(isTestbench).flatMap((tb) => dutPair(project, tb)));
+  const all = [...project.units.values()];
+  const entries = all.filter((e) => !isMarkedTestbench(project, e.fileId));
+  // A testbench the student marked is still a testbench: its DUT stays hardware.
+  const dutOf = new Map(all.filter(isTestbench).flatMap((tb) => dutPair(project, tb)));
   const duts = [...dutOf.values()];
   const designs = entries.filter((e) => isDesignRoot(project, e)).map((e) => e.key);
   const boardDesigns = entries.filter((e) => e.unit.hasBoardPorts).map((e) => e.key);
@@ -42,6 +44,7 @@ export function hardwareView(analysis: ProjectAnalysis, overrides: TestbenchOver
     hardware: reachable(project, [...designs, ...duts]),
     dutOf,
     asDesign: new Set([...reachable(project, boardDesigns), ...duts]),
+    testbenchFiles: new Set(Object.keys(overrides.roles).filter((fileId) => overrides.roles[fileId] === 'tb')),
   };
 }
 

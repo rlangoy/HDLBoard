@@ -1655,10 +1655,7 @@ export function Workbench() {
       appendLog(warning);
       recordDiagnostics(warning, runFiles);
     }
-    // One line per SIM-only file, linked to its first line (docs/impl_sim_only_warnings.md § 5.2).
-    for (const summary of designCheck.summaries()) {
-      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => openSummaryLine(summary) });
-    }
+    logDesignCheck(runFiles);
   };
 
   /**
@@ -1786,7 +1783,7 @@ export function Workbench() {
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
   const simulatorClock = useMemo(() => simulatorClockOf(activeBoard), [activeBoard]);
-  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock });
+  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock, viewNow: tb.designViewNow });
   const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
   // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.
   const { quietFile: quietLiveWarnings, showFile: showLiveWarnings } = designCheck;
@@ -1802,6 +1799,15 @@ export function Workbench() {
   const openSummaryLine = (summary: RevealTarget) => {
     showLiveWarnings(summary.fileId);
     revealLocation(summary, { openCard: true });
+  };
+  /**
+   * At Start: one line per SIM-only file of the run, linked to its first line
+   * (docs/impl_sim_only_warnings.md § 5.2), from the files as they run, not the check of 500 ms ago.
+   */
+  const logDesignCheck = (runFiles: RunSnapshot['files']) => {
+    for (const summary of designCheck.summariesFor(new Set(runFiles.map((f) => f.id)))) {
+      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => openSummaryLine(summary) });
+    }
   };
 
   /** The files a board change (or its Undo) made: a renamed file's markers are about text that has changed, as after an edit. */

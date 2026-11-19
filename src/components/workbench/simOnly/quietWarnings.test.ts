@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { AdvisedDiagnostic } from '../diagnosticAdvice';
-import { NO_QUIET_WARNINGS, quietFile, showFile, showLine, withQuieted } from './quietWarnings';
+import { NO_QUIET_WARNINGS, onlyFiles, quietFile, showFile, showLine, withQuieted } from './quietWarnings';
 
 const live = ([fileId, line, headline]: [string, number, string], quiet = false): AdvisedDiagnostic => ({
   fileId,
@@ -64,5 +64,27 @@ describe('a click in the editor quiets the file\'s live warnings; a console link
   test('a click on a line without a warning changes nothing', () => {
     const quieted = quietFile(NONE, [A, A2], 'a.vhd');
     expect(showLine(quieted, [A, A2], { fileId: 'a.vhd', line: 3 })).toBe(quieted);
+  });
+});
+
+describe('two warnings with the same headline are two warnings', () => {
+  const W1 = live(['a.vhd', 10, '`wait for` only works in simulation.']);
+  const W2 = live(['a.vhd', 20, '`wait for` only works in simulation.']);
+
+  test('restoring the first line restores only the first', () => {
+    const quieted = showLine(quietFile(NONE, [W1, W2], 'a.vhd'), [W1, W2], { fileId: 'a.vhd', line: 10 });
+    expect(withQuieted([W1, W2], quieted).map((d) => d.quiet === true)).toEqual([false, true]);
+  });
+
+  test('a new one below the dismissed ones is not taken for one of them', () => {
+    const quieted = quietFile(NONE, [W1], 'a.vhd');
+    expect(withQuieted([W1, W2], quieted).map((d) => d.quiet === true)).toEqual([true, false]);
+  });
+});
+
+describe('a deleted file', () => {
+  test('takes its dismissals with it', () => {
+    const quieted = quietFile(quietFile(NONE, [A, B], 'a.vhd'), [A, B], 'b.vhd');
+    expect([...onlyFiles(quieted, new Set(['b.vhd'])).keys()]).toEqual(['b.vhd']);
   });
 });

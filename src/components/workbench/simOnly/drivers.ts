@@ -97,7 +97,7 @@ function unitKeyOf(view: DesignView, body: BodyDrivers): string | undefined {
 
 const isHardware = (view: DesignView, body: BodyDrivers): boolean => {
   const key = unitKeyOf(view, body);
-  return key !== undefined && view.hardware.hardware.has(key);
+  return key !== undefined && view.hardware.hardware.has(key) && !view.hardware.testbenchFiles.has(body.fileId);
 };
 
 /** The names a body can drive: its declared signals and its unit's ports, which may be in another file (§ 4.1). */
