@@ -93,6 +93,13 @@ describe('two warnings with the same headline are two warnings', () => {
     expect(quietFlags(warned([inserted, moved], { 5: 'wait for 5 ns;', 11: 'wait for 10 ns;' }), quieted)).toEqual([false, true]);
   });
 
+  test('an exact copy inserted above: as many stay quiet as before, the copy being the one (a known limit)', () => {
+    const quieted = quietFile(NONE, warned([W1], { 10: 'wait for 10 ns;' }), 'a.vhd');
+    const copy = live(['a.vhd', 5, HEADLINE]);
+    const moved = { ...W1, line: 11 };
+    expect(quietFlags(warned([copy, moved], { 5: 'wait for 10 ns;', 11: 'wait for 10 ns;' }), quieted)).toEqual([true, false]);
+  });
+
   test('editing the warned line shows the warning again', () => {
     const quieted = quietFile(NONE, warned([W1], { 10: 'wait for 10 ns;' }), 'a.vhd');
     expect(quietFlags(warned([W1], { 10: 'wait for 20 ns;' }), quieted)).toEqual([false]);

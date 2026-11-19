@@ -198,8 +198,17 @@ with none, a variable assigned with `<=` must not be read in the block (it keeps
 The design check reads the code as synthesis does (`blankSource(…, 'synthesis')`: SYNTHESIS defined), so an
 `ifdef SYNTHESIS branch is checked and its `else`, like `ifndef SYNTHESIS, is not. Two `if`s or blocks clash on a
 register only where their bits can meet (`LEDR(0)` and `LEDR(1)` are two registers, `bits.ts`); code inside
-`translate_off` takes part in no comparison. A latch is a value read before the block assigns it, or assigned from
-itself. A `wait until` is a clocked process only when its whole condition is one edge, with no timeout and no `or`.
+`translate_off` takes part in no comparison. A latch is a variable that some path through the block leaves unassigned (an
+`if` without `else`, a `case` without `default`; the block is walked as statements), or one assigned from itself; a
+variable every path assigns is plain logic, in any order. A `wait until` is a clocked process when its condition has one
+edge, in parentheses or with an enable joined by `and`, and no `for`, `or` or `on` (Quartus Prime 25.1 Lite builds
+`wait until (rising_edge(clk))` and `wait until rising_edge(clk) and en = '1'`). Verilog names are compared with
+case (`q` and `Q` are two registers), VHDL names without; a write inside `translate_off` takes part in no comparison.
+
+Two views of the code meet in `hardware.ts`: the hardware walk follows the instances synthesis sees, and knows the
+modules only synthesis sees (a module inside `ifdef SYNTHESIS); a testbench's DUT is found from the instances the
+simulator runs, so an `ifndef SYNTHESIS around the DUT instance still pairs it. The blanker now blanks the directives
+themselves, so a directive no longer hides the statement after it.
 
 `always_ff` and `always_latch` are read as `always` (an `always_latch` is a latch on purpose). The latch rule asks for a
 value kept without a clock: a variable assigned from itself (`x <= x + 1`) or one that decides the block (`if (x_prev …)`);
@@ -460,7 +469,8 @@ The Start summary's *Line n* link opens it too, pinned, once the line is in view
 hands the focus back to the code. Esc is caught before the editor's own Esc, so it closes only the card. A pinned card
 follows its line when the code scrolls. A dismissal is kept per occurrence (the n-th warning with a headline in the
 file, and the code on its line), so restoring one line restores no other, a copy inserted above a dismissed one is
-another warning, and editing the line shows its warning again.
+another warning, and editing the line shows its warning again. Two identical lines with the same warning cannot be told apart: a copy inserted above a
+dismissed line takes the dismissal (how many are quiet never changes, only which one).
 
 **Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file The summary is built from the files of the run, analysed at Start (`designViewNow`), not from the check of 500 ms
 ago, and only for those files., not one line per finding:

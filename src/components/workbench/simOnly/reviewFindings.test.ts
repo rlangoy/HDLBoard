@@ -180,3 +180,59 @@ describe('review 2', () => {
     expect(check(files, marked('sim.vhd')).groups.byFile.get('monitor.vhd')).not.toBe('sim-only');
   });
 });
+
+describe('review 3', () => {
+  test('a module that exists only inside `ifdef SYNTHESIS is checked when the hardware uses it', () => {
+    const top = vlog('`ifdef SYNTHESIS\nchild c (.clk(CLOCK_50), .q(LEDR[0]));\n`endif');
+    const child = '`ifdef SYNTHESIS\nmodule child(input clk, output reg q);\nalways @(posedge clk) q <= 1\'b0;\nalways @(posedge clk) q <= 1\'b1;\nendmodule\n`endif\n';
+    expect(check([['top.v', top], ['child.v', child]]).driverConflicts.map((c) => `${c.fileId}:${c.signal}`)).toEqual(['child.v:q', 'child.v:q']);
+  });
+
+  test('a DUT instance inside `ifndef SYNTHESIS still pairs the testbench with its design', () => {
+    const counter = 'module counter(output reg q);\ninitial begin #5 q = 1; end\nendmodule\n';
+    const tb = 'module counter_tb;\nwire q;\n`ifndef SYNTHESIS\ncounter dut (.q(q));\n`endif\ninitial begin #10 $finish; end\nendmodule\n';
+    expect(check([['counter.v', counter], ['counter_tb.v', tb]]).groups.byFile.get('counter.v')).toBe('sim-only');
+  });
+
+  const P = (body: string) => `process\nbegin\n${body}\nend process;`;
+  test.each([
+    ['in parentheses', 'wait until (rising_edge(CLOCK_50));'],
+    ['with an enable', "wait until rising_edge(CLOCK_50) and SW(0) = '1';"],
+  ])('VHDL: a clock-edge wait %s is a clocked process', (_label, wait) => {
+    expect(findingsIn([['top.vhd', vhdl(P(`${wait}\nLEDR <= SW;`))]])).toEqual([]);
+  });
+
+  test('a write inside translate_off in a clocked block is no second clock', () => {
+    const body = 'reg [7:0] c = 0;\nalways @(posedge SW[1]) begin\n// synthesis translate_off\n  c <= 0;\n// synthesis translate_on\nend\nalways @(posedge CLOCK_50) c <= c + 1;';
+    expect(findingsIn([['top.v', vlog(body)]])).toEqual([]);
+  });
+
+  test('Verilog q and Q are two registers', () => {
+    const body = 'reg q = 0, Q = 0;\nalways @(posedge SW[0]) q <= 1\'b1;\nalways @(posedge SW[1]) Q <= 1\'b0;';
+    expect(findingsIn([['top.v', vlog(body)]])).toEqual([]);
+  });
+
+  test('a ternary in a case selector hides no second driver', () => {
+    const body = "always @(posedge CLOCK_50) case (SW[0] ? SW[2:1] : SW[4:3])\n  2'b01: LEDR <= SW;\n  default: ;\nendcase\nalways @(posedge CLOCK_50) LEDR <= ~SW;";
+    expect(driversIn('top.v', vlog(body)).length).toBe(2);
+  });
+
+  test('Verilog: a variable read before its unconditional assignment is no latch', () => {
+    expect(findingsIn([['top.v', vlog('reg x;\nalways @(*) begin LEDR[0] <= x; x <= SW[0]; end')]])).toEqual([]);
+  });
+
+  test.each([
+    ['an if without else', 'always @(*) if (SW[0]) LEDR <= SW;'],
+    ['a case without default', "always @(*) case (SW[1:0])\n  2'b00: LEDR <= 0;\n  2'b01: LEDR <= SW;\nendcase"],
+  ])('Verilog: %s leaves a path that keeps the value: a latch', (_label, body) => {
+    expect(findingsIn([['top.v', vlog(body)]])).toEqual(['top.v:vlog-level-storage@2']);
+  });
+
+  test.each([
+    ['if with else', 'always @(*) if (SW[0]) LEDR <= SW; else LEDR <= 0;'],
+    ['a default before the if', 'always @(*) begin LEDR <= 0; if (SW[0]) LEDR <= SW; end'],
+    ['a case with default', "always @(*) case (SW[1:0])\n  2'b00: LEDR <= 0;\n  default: LEDR <= SW;\nendcase"],
+  ])('Verilog: %s assigns on every path: no latch', (_label, body) => {
+    expect(findingsIn([['top.v', vlog(body)]])).toEqual([]);
+  });
+});

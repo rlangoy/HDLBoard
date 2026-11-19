@@ -172,6 +172,8 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     const wasActive = isActive(state.stack);
     if (!wasActive) blankRange(chars, activeFrom, at);
     directive(state, match[1], match[2], lineOf(at), wasActive);
+    // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
+    blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define' && wasActive) blankRange(chars, at + match[0].length, endOfLine(code, at));
     activeFrom = at + match[0].length;
   }

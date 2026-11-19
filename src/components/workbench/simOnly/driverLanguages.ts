@@ -133,9 +133,20 @@ const VERILOG_SUBPROGRAM = /\b(?:endfunction|endtask|function|task)\b/g;
  * assignment.
  */
 function afterTernaryColon(code: string, at: number): boolean {
-  // A `?` in a literal (`2'b?1`, a casez wildcard) is no ternary: literals are left out first.
-  const statement = code.slice(code.lastIndexOf(';', at) + 1, at).replace(BASED_LITERAL, '0');
+  // A `?` in a literal (`2'b?1`, a casez wildcard) is no ternary, nor is one inside parentheses (`case (s ? a : b)`).
+  const statement = withoutParentheses(code.slice(code.lastIndexOf(';', at) + 1, at).replace(BASED_LITERAL, '0'));
   return /\?[^;]*:\s*$/.test(statement);
+}
+
+/** The text with every parenthesized group taken out, innermost first. */
+function withoutParentheses(text: string): string {
+  let before = '';
+  let after = text;
+  while (after !== before) {
+    before = after;
+    after = after.replace(/\([^()]*\)/g, ' ');
+  }
+  return after;
 }
 
 /** `4'b10?1`, `'h3F`, `8'sd5`: a based number, whose digits may hold `?`, `x` or `z`. */

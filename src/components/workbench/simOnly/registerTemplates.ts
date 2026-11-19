@@ -31,9 +31,19 @@ interface Target {
   readonly bits: Bits;
 }
 
+/** Names as the language compares them: VHDL ignores case, Verilog does not (`q` and `Q` are two). */
+type SameName = (a: string, b: string) => boolean;
+const sameVerilogName: SameName = (a, b) => a === b;
+
 /** The targets two `if`s or blocks have in common: the same signal, and bits that can be the same. */
-const sharedTargets = (a: readonly Target[], b: readonly Target[]): string[] =>
-  unique(b.filter((y) => a.some((x) => sameName(x.name, y.name) && overlap(x.bits, y.bits))).map((t) => t.name));
+const sharedTargets = (a: readonly Target[], b: readonly Target[], same: SameName): string[] =>
+  unique(b.filter((y) => a.some((x) => same(x.name, y.name) && overlap(x.bits, y.bits))).map((t) => t.name));
+
+/**
+ * Where a target pattern's target stands: its match starts at the statement before (`;`,
+ * `then`, `begin`), which may be lines earlier, outside a translate_off the target is in.
+ */
+const targetAt = (m: RegExpMatchArray): number => (m.index ?? 0) + m[0].search(new RegExp(`\\b${escapeRegExp(m[1])}\\b`));
 
 /* ------------------------------- VHDL ------------------------------- */
 
@@ -59,7 +69,9 @@ const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
 const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(\([^;]*?\))?\s*(?:<=|:=)/gi;
 const vhdlTargets = (text: string): string[] => unique([...text.matchAll(VHDL_TARGET)].map((m) => m[1]));
-const vhdlTargetBits = (text: string): Target[] => [...text.matchAll(VHDL_TARGET)].map((m) => ({ name: m[1], bits: vhdlBits(m[2]) }));
+/** The targets of `text` (from offset `from` of the process), those in code hidden from synthesis left out. */
+const vhdlTargetBits = (text: string, from: number, hidden: (at: number) => boolean): Target[] =>
+  [...text.matchAll(VHDL_TARGET)].filter((m) => !hidden(from + targetAt(m))).map((m) => ({ name: m[1], bits: vhdlBits(m[2]) }));
 
 const IF_TOKEN = /\bend\s+if\b|\b(?:elsif|if|else|then|when)\b|=>|;/gi;
 
@@ -138,7 +150,7 @@ function endIf(w: Walk, at: number): void {
   for (const bad of chain.bad) w.found.push({ at: bad.at, register: vhdlProblem(bad.kind, registers, bad.clocks) });
   const [edge] = chain.edges;
   const outermost = w.chains.length === 0;
-  if (outermost && edge && !w.hidden(chain.from)) w.clocked.push({ at: chain.from, clock: edge.clock, targets: vhdlTargetBits(w.text.slice(chain.from, at)) });
+  if (outermost && edge && !w.hidden(chain.from)) w.clocked.push({ at: chain.from, clock: edge.clock, targets: vhdlTargetBits(w.text.slice(chain.from, at), chain.from, w.hidden) });
 }
 
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
@@ -175,9 +187,9 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
  */
 function twoClockedIfs(clocked: readonly ClockedIf[]): Walk['found'] {
   return clocked.flatMap((later, i) => {
-    const earlier = clocked.slice(0, i).find((e) => !sameName(e.clock, later.clock) && sharedTargets(e.targets, later.targets).length > 0);
+    const earlier = clocked.slice(0, i).find((e) => !sameName(e.clock, later.clock) && sharedTargets(e.targets, later.targets, sameName).length > 0);
     if (!earlier) return [];
-    return [{ at: later.at, register: vhdlProblem('two-clocks', sharedTargets(earlier.targets, later.targets), [earlier.clock, later.clock]) }];
+    return [{ at: later.at, register: vhdlProblem('two-clocks', sharedTargets(earlier.targets, later.targets, sameName), [earlier.clock, later.clock]) }];
   });
 }
 
@@ -210,6 +222,8 @@ interface AlwaysBlock {
   readonly latch: boolean;
   /** The block's statement, after `always @( … )`. */
   readonly body: string;
+  /** Whether an offset of `body` is in code hidden from synthesis (translate_off inside the block). */
+  readonly hidden: (at: number) => boolean;
 }
 
 /** The unit's `always` blocks that synthesis sees: one inside translate_off takes part in no comparison. */
@@ -220,7 +234,9 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
     const edges = [...head[2].matchAll(EDGE_EVENT)].map((m) => tidy(m[1]));
-    return [{ block, edges, latch: head[1] === '_latch', body: text.slice(head[0].length) }];
+    const bodyFrom = block.from + head[0].length;
+    const hidden = (at: number) => isHidden(t.lineOf(bodyFrom + at), t.simOnlyRegions);
+    return [{ block, edges, latch: head[1] === '_latch', body: text.slice(head[0].length), hidden }];
   });
 }
 
@@ -270,8 +286,11 @@ const mentions = (text: string, name: string) => new RegExp(`\\b${escapeRegExp(n
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
 const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)<=/g;
 const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
-const verilogTargetBits = (body: string): Target[] =>
-  verilogTargets(body).map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
+/** The block's targets with their bits, those in code hidden from synthesis left out. */
+const verilogTargetBits = ({ body, hidden }: Pick<AlwaysBlock, 'body' | 'hidden'>): Target[] =>
+  verilogTargets(body)
+    .filter((m) => !hidden(targetAt(m)))
+    .map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
 
 /** What one nonblocking assignment loads: from after its `<=` to its `;`. */
 const assignedValue = (body: string, m: RegExpMatchArray): string => body.slice((m.index ?? 0) + m[0].length, body.indexOf(';', m.index ?? 0));
@@ -317,12 +336,12 @@ function edgeBlockProblem(always: AlwaysBlock): Found[] {
 function twoClockedBlocks(blocks: readonly AlwaysBlock[]): Found[] {
   const clocked = blocks.flatMap((always) => {
     const clock = clockOf(always);
-    return clock === undefined ? [] : [{ always, clock, targets: verilogTargetBits(always.body) }];
+    return clock === undefined ? [] : [{ always, clock, targets: verilogTargetBits(always) }];
   });
   return clocked.flatMap((later, i) => {
-    const earlier = clocked.slice(0, i).find((e) => e.clock !== later.clock && sharedTargets(e.targets, later.targets).length > 0);
+    const earlier = clocked.slice(0, i).find((e) => e.clock !== later.clock && sharedTargets(e.targets, later.targets, sameVerilogName).length > 0);
     if (!earlier) return [];
-    const shared = sharedTargets(earlier.targets, later.targets);
+    const shared = sharedTargets(earlier.targets, later.targets, sameVerilogName);
     return [{ line: later.always.block.span.start, register: verilogProblem('two-clocks', shared, [earlier.clock, later.clock]) }];
   });
 }
@@ -339,27 +358,134 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
   return [...blocks.flatMap(edgeBlockProblem), ...twoClockedBlocks(blocks)];
 }
 
-/** Whether the block reads `name` before its first assignment to it: then it runs on the value kept from before. */
-function readBeforeWritten(body: string, targets: readonly RegExpMatchArray[], name: string): boolean {
-  const writes = targets.filter((m) => m[1] === name).map((m) => (m.index ?? 0) + m[0].search(new RegExp(`\\b${escapeRegExp(name)}\\b`)));
-  const firstWrite = Math.min(...writes);
-  const uses = [...body.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'))].map((m) => m.index ?? 0);
-  return uses.some((at) => at < firstWrite);
+
+/* --------------------- Verilog: assigned on every path -------------------- */
+
+/** What a statement assigns, on some path and on every path through it. */
+interface Assigned {
+  /** Where the statement ends in the text. */
+  readonly end: number;
+  readonly some: ReadonlySet<string>;
+  readonly every: ReadonlySet<string>;
 }
 
+const NOTHING: ReadonlySet<string> = new Set();
+const union = (sets: readonly ReadonlySet<string>[]): Set<string> => new Set(sets.flatMap((s) => [...s]));
+const intersection = (sets: readonly ReadonlySet<string>[]): Set<string> =>
+  sets.length === 0 ? new Set() : new Set([...sets[0]].filter((x) => sets.every((s) => s.has(x))));
+
+const skipBlanks = (text: string, i: number): number => {
+  while (i < text.length && /\s/.test(text[i])) i++;
+  return i;
+};
+const wordAt = (text: string, i: number): string => /^[A-Za-z_]\w*/.exec(text.slice(i))?.[0] ?? '';
+
+/** The offset after the parenthesis that opens at the first "(" from i. */
+function afterParentheses(text: string, i: number): number {
+  const open = text.indexOf('(', i);
+  if (open < 0) return text.length;
+  return open + parenthesized(text, open).length + 2;
+}
+
+/** The offset after a case item's label: the first ":" outside brackets and parentheses. */
+function afterCaseLabel(text: string, i: number): number {
+  let depth = 0;
+  for (let j = i; j < text.length; j++) {
+    if ('([{'.includes(text[j])) depth++;
+    else if (')]}'.includes(text[j])) depth--;
+    else if (text[j] === ':' && depth === 0) return j + 1;
+    else if (text[j] === ';') return j;
+  }
+  return text.length;
+}
+
+const ASSIGNMENT = /^([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<?=(?!=)/;
+
+function simpleStatement(text: string, i: number): Assigned {
+  const semicolon = text.indexOf(';', i);
+  const end = semicolon < 0 ? text.length : semicolon + 1;
+  const target = ASSIGNMENT.exec(text.slice(i, end).trim())?.[1];
+  const assigned = target === undefined ? NOTHING : new Set([target]);
+  return { end, some: assigned, every: assigned };
+}
+
+function blockStatement(text: string, i: number): Assigned {
+  let j = skipBlanks(text, i + 'begin'.length);
+  if (text[j] === ':') {
+    j = skipBlanks(text, j + 1);
+    j += wordAt(text, j).length; // begin : name
+  }
+  const parts: Assigned[] = [];
+  for (j = skipBlanks(text, j); j < text.length && wordAt(text, j) !== 'end'; j = skipBlanks(text, j)) {
+    const part = statementAssigns(text, j);
+    parts.push(part);
+    j = Math.max(part.end, j + 1);
+  }
+  return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)) };
+}
+
+function ifStatement(text: string, i: number): Assigned {
+  const then = statementAssigns(text, afterParentheses(text, i));
+  const next = skipBlanks(text, then.end);
+  if (wordAt(text, next) !== 'else') return { end: then.end, some: then.some, every: NOTHING };
+  const otherwise = statementAssigns(text, next + 'else'.length);
+  return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection([then.every, otherwise.every]) };
+}
+
+function caseStatement(text: string, i: number): Assigned {
+  const items: Assigned[] = [];
+  let hasDefault = false;
+  let j = skipBlanks(text, afterParentheses(text, i));
+  while (j < text.length && wordAt(text, j) !== 'endcase') {
+    hasDefault ||= wordAt(text, j) === 'default';
+    const item = statementAssigns(text, afterCaseLabel(text, j));
+    items.push(item);
+    j = skipBlanks(text, Math.max(item.end, j + 1));
+  }
+  const every = hasDefault ? intersection(items.map((it) => it.every)) : NOTHING;
+  return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
+}
+
+/** A loop may run no time: what it assigns is assigned on some path only. */
+function loopStatement(text: string, i: number): Assigned {
+  const body = statementAssigns(text, afterParentheses(text, i));
+  return { end: body.end, some: body.some, every: NOTHING };
+}
+
+/** What the statement at "from" assigns, on some path and on every path (Verilog, blanked code). */
+function statementAssigns(text: string, from: number): Assigned {
+  const i = skipBlanks(text, from);
+  if (i >= text.length) return { end: text.length, some: NOTHING, every: NOTHING };
+  if (text[i] === ';') return { end: i + 1, some: NOTHING, every: NOTHING };
+  return (STATEMENT_BY_KEYWORD.get(wordAt(text, i)) ?? simpleStatement)(text, i);
+}
+
+/** The statements that hold others, by their first word; any other statement is simple. A Map: a name like `toString` is no keyword. */
+const STATEMENT_BY_KEYWORD: ReadonlyMap<string, (text: string, i: number) => Assigned> = new Map([
+  ['begin', blockStatement],
+  ['if', ifStatement],
+  ['case', caseStatement],
+  ['casez', caseStatement],
+  ['casex', caseStatement],
+  ['for', loopStatement],
+  ['while', loopStatement],
+  ['repeat', loopStatement],
+]);
+
 /**
- * Verilog: an `always` without an edge that keeps a value: a variable it assigns with `<=`
- * from itself (`x <= x + 1`), or reads before it assigns it (`if (x_prev && …) … x_prev <= …`),
- * so the block runs on its old value. Without a clock that is a latch (Quartus Warning 10240).
- * A variable assigned before it is read (`x <= a; if (x) …`, `y <= x`) is plain logic. An
- * `always_latch` is a latch on purpose.
+ * Verilog: an `always` without an edge that keeps a value: a variable some path through the
+ * block leaves unassigned (an `if` without `else`, a `case` without `default`), or one
+ * assigned from itself (`x <= x + 1`). Without a clock that is a latch (Quartus Warning
+ * 10240). A variable every path assigns is plain logic, whatever order the lines are in
+ * (`y <= x; x <= a;`). An `always_latch` is a latch on purpose.
  */
 export function verilogLevelStorage(t: UnitText): Found[] {
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
     if (edges.length > 0 || latch) return [];
     const targets = verilogTargets(body);
     const keepsItself = (name: string) => targets.some((m) => m[1] === name && mentions(assignedValue(body, m), name));
-    const kept = unique(targets.map((m) => m[1])).filter((name) => keepsItself(name) || readBeforeWritten(body, targets, name));
+    const assigned = statementAssigns(body, 0);
+    const kept = unique([...assigned.some]).filter((name) => keepsItself(name) || !assigned.every.has(name));
     return kept.length === 0 ? [] : [{ line: block.span.start, register: verilogProblem('latch', kept, []) }];
   });
 }

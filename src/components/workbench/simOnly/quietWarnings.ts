@@ -10,7 +10,10 @@
  * A warning is known by its headline and the code on its line, not by its line number:
  * it stays quiet while lines above it are added or removed, a copy inserted above it is
  * another warning, and editing the line itself shows the warning again. Two identical
- * lines with the same warning count in line order. Pure.
+ * lines with the same warning count in line order: they cannot be told apart, so a
+ * copy inserted above a dismissed line takes the dismissal and the original shows
+ * again. How many are quiet never changes, only which one; telling them apart would
+ * need the editor to track each line's identity through edits. Pure.
  */
 
 import type { AdvisedDiagnostic } from '../diagnosticAdvice';

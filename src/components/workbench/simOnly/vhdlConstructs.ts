@@ -15,20 +15,22 @@ import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
-const SIGNAL = String.raw`[A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?`;
-/**
- * The whole wait is one clock edge: `wait until rising_edge(clk)` or `wait until clk'event
- * and clk = '1'` (character literals are blanked: `clk =    `). No `for` timeout, no `or`
- * or other condition: those wake the process at other times too.
- */
-const CLOCK_EDGE_WAIT = new RegExp(
-  String.raw`^wait\s+until\s+(?:(?:rising_edge|falling_edge)\s*\(\s*${SIGNAL}\s*\)|(${SIGNAL})\s*'\s*event\s+and\s+(${SIGNAL})\s*=\s*)\s*$`,
-  'i',
-);
+/** `rising_edge(`, `falling_edge(` or `'event`; character literals are blanked (`clk = '1'` reads `clk =    `). */
+const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/gi;
+/** What would wake the process at other times too: a timeout, another condition joined by `or`, a sensitivity clause. */
+const OTHER_WAKE_UP = /\b(?:for|or|on)\b/i;
 
+/**
+ * A wait a synthesis tool takes as a clock: `wait until` one clock edge, in parentheses or
+ * not, with an enable joined by `and` if any (`wait until rising_edge(clk) and en = '1'`,
+ * `wait until clk'event and clk = '1'`). Not with `for`, `or` or `on`: those resume the
+ * process at other times too.
+ */
 function isClockEdgeWait(statement: string): boolean {
-  const m = CLOCK_EDGE_WAIT.exec(statement.trim());
-  return m !== null && (m[1] === undefined || m[1].replace(/\s+/g, '').toLowerCase() === m[2].replace(/\s+/g, '').toLowerCase());
+  const until = /^wait\s+until\b/i.exec(statement.trim());
+  if (!until) return false;
+  const condition = statement.trim().slice(until[0].length);
+  return !OTHER_WAKE_UP.test(condition) && (condition.match(CLOCK_EDGE)?.length ?? 0) === 1;
 }
 
 /** How many waits each process has that synthesis sees (not inside translate_off); counted once per unit. */
