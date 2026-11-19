@@ -537,3 +537,56 @@ describe('Verilog: clocked blocks that assign with =', () => {
     expect(latchIn(body)).toEqual([]);
   });
 });
+
+describe('VHDL: register shapes that build from latches are quiet', () => {
+  const quiet = (body: string, declarations = '') => {
+    const result = check([['top.vhd', vhdl(body, declarations)]]);
+    return { kinds: result.findings.map((f) => `${f.register?.kind}:${f.tier}`), group: result.groups.byFile.get('top.vhd') };
+  };
+  const registerWith = (reset: string) => `process (CLOCK_50, SW)\nbegin\n${reset}\nelsif rising_edge(CLOCK_50) then\nLEDR <= SW;\nend if;\nend process;`;
+
+  test('a reset that loads a signal is an asynchronous load, and the design stays RTL', () => {
+    expect(quiet(registerWith("if SW(0) = '1' then\nLEDR <= not SW;"))).toEqual({ kinds: ['async-load:quiet'], group: 'rtl' });
+  });
+
+  test('an asynchronous reset and set of one signal is noted, and the design stays RTL', () => {
+    const reset = "if SW(0) = '1' then\nLEDR <= (others => '0');\nelsif SW(1) = '1' then\nLEDR <= (others => '1');";
+    expect(quiet(registerWith(reset))).toEqual({ kinds: ['set-and-reset:quiet'], group: 'rtl' });
+  });
+
+  test.each([
+    ['an aggregate', "if SW(0) = '1' then\nLEDR <= (others => '0');"],
+    ['a constant', "if SW(0) = '1' then\nLEDR <= INIT;"],
+    ['a conversion of an attribute', "if SW(0) = '1' then\nLEDR <= std_logic_vector(to_unsigned(0, LEDR'length));"],
+  ])('a reset to %s is no note', (_label, reset) => {
+    expect(quiet(registerWith(reset), 'constant INIT : std_logic_vector(9 downto 0) := (others => \'1\');').kinds).toEqual([]);
+  });
+});
+
+describe('a branch that counts is a second clock before any quiet note', () => {
+  test('Verilog: two level branches, one that counts, are two clocks, not a set and reset', () => {
+    const body = "reg [3:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0] or posedge SW[1])\n  if (SW[0]) q <= q + 1'b1;\n  else if (SW[1]) q <= 0;\n  else q <= q - 1'b1;";
+    const result = check([['top.v', vlog(body)]]);
+    expect([result.findings.map((f) => `${f.register?.kind}:${f.tier}`), result.groups.byFile.get('top.v')]).toEqual([['two-clocks:never'], 'sim-only']);
+  });
+
+  test('VHDL: a reset branch that counts is a second clock', () => {
+    const body = "process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\nc <= c + 1;\nelsif rising_edge(CLOCK_50) then\nc <= c - 1;\nend if;\nend process;";
+    const result = check([['top.vhd', vhdl(body, 'signal c : integer range 0 to 15 := 0;')]]);
+    expect([result.findings.map((f) => f.register?.kind), result.groups.byFile.get('top.vhd')]).toEqual([['two-clocks'], 'sim-only']);
+  });
+
+  test('Verilog: a concatenation in one clocked block and its item in another are two clocks', () => {
+    const body = "reg [1:0] hi = 0, lo = 0;\nalways @(posedge SW[0]) {hi, lo} <= SW[3:0];\nalways @(posedge SW[1]) lo <= SW[5:4];";
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
+  });
+});
+
+describe('VHDL: an architecture in another file than its entity', () => {
+  const ENTITY = "library ieee;\nuse ieee.std_logic_1164.all;\nentity top is\n  port (clk, reset : in std_logic; data, d : in std_logic_vector(3 downto 0); q : out std_logic_vector(3 downto 0));\nend entity;\n";
+  const ARCHITECTURE = "architecture rtl of top is\nbegin\nprocess (clk, reset)\nbegin\nif reset = '1' then\nq <= data;\nelsif rising_edge(clk) then\nq <= d;\nend if;\nend process;\nend architecture;\n";
+
+  test("reads with its entity's ports: a reset that loads a port is an asynchronous load", () => {
+    expect(check([['top.vhd', ENTITY], ['rtl.vhd', ARCHITECTURE]]).findings.map((f) => `${f.fileId}:${f.register?.kind}:${f.tier}`)).toEqual(['rtl.vhd:async-load:quiet']);
+  });
+});

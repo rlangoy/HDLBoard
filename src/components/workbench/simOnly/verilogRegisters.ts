@@ -127,12 +127,36 @@ function withoutForHeaders(body: string): string {
 }
 
 /** The targets of a clocked block, blocking and nonblocking: what it makes registers of. */
-const clockedTargets = (body: string): RegExpMatchArray[] => [...withoutForHeaders(body).matchAll(CLOCKED_TARGET)];
-const targetNames = (body: string): string[] => unique(clockedTargets(body).map((m) => m[1]), sameName);
+/** `{hi, lo} <=` or `{hi, lo} =` as a statement. */
+const CLOCKED_CONCATENATION = /(?:^|[;)]|\bbegin\b|\belse\b)\s*\{/g;
+
+/** A target as written: its name and its index (`[3:0]`, or empty). */
+interface WrittenTarget {
+  readonly name: string;
+  readonly index: string;
+}
+
+/** The targets of a clocked block, blocking and nonblocking, each item of a concatenation too: what it makes registers of. */
+function clockedTargets(body: string): WrittenTarget[] {
+  const text = withoutForHeaders(body);
+  const single = [...text.matchAll(CLOCKED_TARGET)].map((m) => ({ at: m.index ?? 0, name: m[1], index: m[2].trim() }));
+  const concatenated = [...text.matchAll(CLOCKED_CONCATENATION)].flatMap((m) => {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const inner = bracketed(text, open);
+    if (!/^\s*<?=(?!=)/.test(text.slice(open + inner.length + 2))) return [];
+    return topLevelItems(inner).flatMap((item) => {
+      const t = /^\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)$/.exec(item);
+      return t ? [{ at: open, name: t[1], index: t[2].trim() }] : [];
+    });
+  });
+  return [...single, ...concatenated].sort((a, b) => a.at - b.at);
+}
+
+const targetNames = (body: string): string[] => unique(clockedTargets(body).map((t) => t.name), sameName);
 
 /** The block's targets, with their bits. */
 const targetsWithBits = (body: string): Target[] =>
-  clockedTargets(body).map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
+  clockedTargets(body).map((t) => ({ name: t.name, bits: verilogBits(t.index === '' ? undefined : t.index) }));
 
 /** What one nonblocking assignment loads: from after its `<=` to its `;`. */
 function assignedValue(body: string, m: RegExpMatchArray): string {
@@ -264,8 +288,9 @@ const EDGE_BLOCK_RULES: readonly ((b: EdgeBlock) => RegisterProblem | undefined)
   noResetTested,
   untestedEdges,
   resetPolarity,
-  setAndReset,
+  // What keeps the design off the board first; the quiet notes of what builds from latches after.
   loadsFromRegisters,
+  setAndReset,
   loadsAValue,
 ];
 

@@ -12,7 +12,7 @@
 import { withUnits } from '../tbDetect/analyzeProject';
 import type { FileAnalysis, ProjectAnalysis, TestbenchOverrides } from '../tbDetect/types';
 import { hardwareView } from './hardware';
-import { partsOf } from './matches';
+import { partsOf, type ForeignPorts } from './matches';
 import type { DesignView, HardwareView } from './types';
 import { unitRefKey } from './unitRef';
 
@@ -22,11 +22,22 @@ const cache = new WeakMap<ProjectAnalysis, { overrides: TestbenchOverrides; view
 export function designView(raw: ProjectAnalysis, overrides: TestbenchOverrides): DesignView {
   const cached = cache.get(raw);
   if (cached?.overrides === overrides) return cached.view;
-  const parts = new Map([...raw.byFile].map(([id, file]) => [id, partsOf(file)]));
+  const portsOf = entityPorts(raw);
+  const parts = new Map([...raw.byFile].map(([id, file]) => [id, partsOf(file, portsOf)]));
   const hardware = hardwareView(raw, overrides, parts);
   const view: DesignView = { raw, corrected: withHardwareRoles(raw, hardware), parts, hardware };
   cache.set(raw, { overrides, view });
   return view;
+}
+
+/** The ports of each VHDL entity of the project, by name: an architecture in another file reads with them. */
+function entityPorts(raw: ProjectAnalysis): ForeignPorts {
+  const ports = new Map<string, readonly string[]>();
+  for (const file of raw.byFile.values()) {
+    if (file.language !== 'vhdl') continue;
+    for (const unit of file.units) if (!ports.has(unit.name.toLowerCase())) ports.set(unit.name.toLowerCase(), unit.portNames);
+  }
+  return (name) => ports.get(name.toLowerCase()) ?? [];
 }
 
 /** `raw` with every `asDesign` testbench unit given the role `rtl`; unchanged files keep their object. */

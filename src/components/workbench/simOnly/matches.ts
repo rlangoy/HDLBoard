@@ -13,26 +13,38 @@ import { CONSTRUCTS } from './catalogue';
 import { isHidden, scannedFile, unitText, type ScannedFile, type ScannedUnit } from './scan';
 import type { CodePart, ConstructMatch } from './types';
 
-const cache = new WeakMap<FileAnalysis, readonly CodePart[]>();
+/** The ports of an entity declared in another file of the project, by its name (§ 4.1). */
+export type ForeignPorts = (entityName: string) => readonly string[];
 
-/** The file's units, and its architectures of entities declared elsewhere, with their constructs. */
-export function partsOf(file: FileAnalysis): readonly CodePart[] {
-  const cached = cache.get(file);
-  if (cached) return cached;
+const NO_PORTS: ForeignPorts = () => [];
+
+/** Per file: its parts, and the ports of the entities in other files they were read with. */
+const cache = new WeakMap<FileAnalysis, { readonly ports: string; readonly parts: readonly CodePart[] }>();
+
+/**
+ * The file's units, and its architectures of entities declared elsewhere, with their
+ * constructs. Such an architecture is read with its entity's ports (`portsOf`), which the
+ * file alone does not have; when they change, the file is read again.
+ */
+export function partsOf(file: FileAnalysis, portsOf: ForeignPorts = NO_PORTS): readonly CodePart[] {
   const scan = scannedFile(file);
-  const parts = scan.units.map((unit) => partOf(scan, unit));
-  cache.set(file, parts);
+  const foreign = scan.units.filter((u) => !u.ownsUnit).map((u) => `${u.unit.name}:${portsOf(u.unit.name).join(',')}`).join(';');
+  const cached = cache.get(file);
+  if (cached?.ports === foreign) return cached.parts;
+  const parts = scan.units.map((unit) => partOf(scan, unit, portsOf));
+  cache.set(file, { ports: foreign, parts });
   return parts;
 }
 
-function partOf(scan: ScannedFile, { unit, ownsUnit }: ScannedUnit): CodePart {
+function partOf(scan: ScannedFile, { unit, ownsUnit }: ScannedUnit, portsOf: ForeignPorts): CodePart {
+  const read = ownsUnit ? unit : { ...unit, portNames: portsOf(unit.name) };
   return {
     fileId: scan.file.fileId,
     unitName: unit.name,
     ownsUnit,
     instances: unit.instances.map((i) => ({ ...i, guarded: isHidden(i.line, scan.hidden) })),
     blocks: unit.blocks,
-    matches: constructsIn(unitText(scan, unit), scan),
+    matches: constructsIn(unitText(scan, read), scan),
   };
 }
 

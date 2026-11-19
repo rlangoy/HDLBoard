@@ -12,7 +12,7 @@ import type { UnitText } from '../tbDetect/rules';
 import { vhdlBits } from './bits';
 import type { Found } from './constructs';
 import { testsLevelOf } from './vhdlEdges';
-import { SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
+import { registerFound, SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
 const sameName = SAME_NAME.vhdl;
@@ -52,11 +52,23 @@ interface Violation {
   readonly clocks: readonly string[];
 }
 
+/** A branch before the clock edge, tested as a level: a reset or set. */
+interface LevelBranch {
+  /** Offset in the process text of its condition. */
+  readonly at: number;
+  readonly condition: string;
+  readonly body: string;
+}
+
 /** One open `if`: where it starts, the edges of its branches, and the branches that break the template. */
 interface Chain {
   readonly from: number;
   readonly edges: Edge[];
   readonly bad: Violation[];
+  /** Its branches before any edge, done. */
+  readonly levels: LevelBranch[];
+  /** The level branch being read: its condition, and where its statements start. */
+  open?: { readonly at: number; readonly condition: string; readonly from: number };
 }
 
 /** A finding at an offset of the process text. */
@@ -68,6 +80,8 @@ interface FoundAt {
 interface Walk {
   /** The process as synthesis reads it (translate_off blanked). */
   readonly text: string;
+  /** The unit's signals, ports and variables, lowercase: a reset or set that reads one loads a value. */
+  readonly signals: ReadonlySet<string>;
   readonly chains: Chain[];
   readonly found: FoundAt[];
   /** The process's outermost `if`s that have an edge, by their offset, in order. */
@@ -112,9 +126,56 @@ function endCondition(w: Walk, at: number): void {
   const edges = edgesIn(condition);
   const bad = violation(chain.edges, edges, w.condition) ?? eventWithoutLevel(edges, condition, w.condition);
   if (bad) chain.bad.push(bad);
+  if (edges.length === 0 && chain.edges.length === 0) chain.open = { at: w.condition, condition, from: at + 'then'.length };
   chain.edges.push(...edges);
   w.condition = -1;
   w.conditionalAssignment = false;
+}
+
+/** The level branch being read ends at its `elsif`, `else` or `end if`. */
+function closeLevel(w: Walk, chain: Chain | undefined, at: number): void {
+  if (!chain?.open) return;
+  const { at: conditionAt, condition, from } = chain.open;
+  chain.levels.push({ at: conditionAt, condition, body: w.text.slice(from, at) });
+  chain.open = undefined;
+}
+
+/** Each assignment of a branch: its target, and its value up to the `;`. */
+function assignmentsIn(body: string): { target: string; value: string }[] {
+  return [...body.matchAll(VHDL_TARGET)].map((m) => {
+    const from = (m.index ?? 0) + m[0].length;
+    const end = body.indexOf(';', from);
+    return { target: m[1], value: body.slice(from, end < 0 ? body.length : end) };
+  });
+}
+
+/** The signals a text reads, lowercase; `q'length` asks about `q`, it reads no value of it. */
+const signalsRead = (text: string, signals: ReadonlySet<string>): string[] =>
+  (text.match(/\b[A-Za-z]\w*\b(?!\s*')/g) ?? []).map((name) => name.toLowerCase()).filter((name) => signals.has(name));
+
+/**
+ * A reset or set branch that loads from its own register is a second clock. Else the quiet
+ * notes of a clocked `if`'s resets and sets, which Quartus builds from latches
+ * (Warning 13004): an asynchronous reset and set of one signal, or a branch that loads a
+ * signal, not a constant (`if rst = '1' then q <= data;`). Constants, generics, `others`
+ * and attributes are fixed; any name not known as a signal too: unsure is quiet.
+ */
+function levelNotes(levels: readonly LevelBranch[], signals: ReadonlySet<string>): FoundAt[] {
+  const levelSignals = (branches: readonly LevelBranch[]) => unique(branches.flatMap((l) => signalsRead(l.condition, signals)), sameName);
+  for (const level of levels) {
+    // `if a = '1' then c <= c + 1;`: a reset loads a constant, so a branch that counts is a second clock (Quartus Warning 13004; the board does not count).
+    const own = new Set(assignmentsIn(level.body).map((a) => a.target.toLowerCase()));
+    const counting = assignmentsIn(level.body).filter((a) => signalsRead(a.value, own).length > 0);
+    if (counting.length > 0) return [{ at: level.at, register: problem('two-clocks', unique(counting.map((a) => a.target), sameName), levelSignals([level])) }];
+  }
+  const assigned = levels.map((l) => new Set(assignmentsIn(l.body).map((a) => a.target.toLowerCase())));
+  const both = unique(assigned.flatMap((names, i) => [...names].filter((n) => assigned.slice(i + 1).some((later) => later.has(n)))), sameName);
+  if (both.length > 0) return [{ at: levels[1].at, register: problem('set-and-reset', both, levelSignals(levels)) }];
+  for (const level of levels) {
+    const loading = assignmentsIn(level.body).filter((a) => signalsRead(a.value, signals).length > 0);
+    if (loading.length > 0) return [{ at: level.at, register: problem('async-load', unique(loading.map((a) => a.target), sameName), levelSignals([level])) }];
+  }
+  return [];
 }
 
 /** The `if` is complete: each bad branch is reported with what the whole `if` assigns; an outermost clocked one is kept. */
@@ -125,6 +186,7 @@ function endIf(w: Walk, at: number): void {
   const registers = targetNames(text);
   for (const bad of chain.bad) w.found.push({ at: bad.at, register: problem(bad.kind, registers, bad.clocks) });
   const [edge] = chain.edges;
+  if (edge && chain.bad.length === 0) w.found.push(...levelNotes(chain.levels, w.signals));
   const isOutermost = w.chains.length === 0;
   if (!isOutermost || !edge) return;
   const direction = edge.kind === 'event' ? undefined : edge.kind;
@@ -133,20 +195,24 @@ function endIf(w: Walk, at: number): void {
 
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   if: (w, at) => {
-    w.chains.push({ from: at, edges: [], bad: [] });
+    w.chains.push({ from: at, edges: [], bad: [], levels: [] });
     w.condition = at;
   },
   elsif: (w, at) => {
+    closeLevel(w, innermostIf(w), at);
     w.condition = at;
   },
   then: endCondition,
   else: (w, at) => {
     const chain = innermostIf(w);
-    if (chain && !w.conditionalAssignment && chain.edges.length > 0) {
-      chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
-    }
+    if (!chain || w.conditionalAssignment) return;
+    closeLevel(w, chain, at);
+    if (chain.edges.length > 0) chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
   },
-  'end if': endIf,
+  'end if': (w, at) => {
+    closeLevel(w, innermostIf(w), at);
+    endIf(w, at);
+  },
   when: (w) => {
     w.conditionalAssignment = true;
   },
@@ -158,17 +224,29 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   },
 };
 
-function processViolations(text: string): FoundAt[] {
-  const walk: Walk = { text, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
+function processViolations(text: string, signals: ReadonlySet<string>): FoundAt[] {
+  const walk: Walk = { text, signals, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
   // Two `if`s of one process on two clocks, or both edges of one, that assign one signal (Quartus Errors 10820, 10819).
   const clashes = twoClocks(walk.clocked, sameName).map((c): FoundAt => ({ at: c.later, register: problem(c.kind, c.registers, c.clocks) }));
   return [...walk.found, ...clashes].sort((a, b) => a.at - b.at);
 }
 
-/** VHDL: every branch of a process's `if` that puts a clock edge where no register can be built. */
+const DECLARED = /\b(?:signal|variable)\s+([A-Za-z]\w*(?:\s*,\s*[A-Za-z]\w*)*)\s*:/gi;
+
+/** The unit's ports, signals and variables, lowercase. */
+function unitSignals(t: UnitText): Set<string> {
+  const declared = [...t.code.matchAll(DECLARED)].flatMap((m) => m[1].split(',').map((name) => name.trim()));
+  return new Set([...t.unit.portNames, ...declared].map((name) => name.toLowerCase()));
+}
+
+/**
+ * VHDL: every branch of a process's `if` that puts a clock edge where no register can be
+ * built; and, quiet, the resets and sets Quartus builds from latches.
+ */
 export function vhdlEdgeTemplate(t: UnitText): Found[] {
+  const signals = unitSignals(t);
   return t.unit.blocks
     .filter((b) => b.kind === 'process')
-    .flatMap((b) => processViolations(synthesizedBlockText(t, b)).map(({ at, register }) => ({ line: t.lineOf(b.from + at), register })));
+    .flatMap((b) => processViolations(synthesizedBlockText(t, b), signals).map(({ at, register }) => registerFound(t.lineOf(b.from + at), register)));
 }

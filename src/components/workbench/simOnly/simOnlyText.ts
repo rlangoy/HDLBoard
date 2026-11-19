@@ -127,7 +127,7 @@ const REGISTER_FIX: Readonly<Record<RegisterProblemKind, string>> = {
   'no-reset-tested': 'Take the signals that are not resets out of `@( … )`, and test them inside the clock edge.',
   'reset-polarity': 'Test the reset at the level its edge goes to: `negedge rst_n` with `if (!rst_n)`, `posedge rst` with `if (rst)`.',
   'set-and-reset': 'Keep one of them asynchronous, before the edge, and test the other inside the clock edge: a synchronous set or reset.',
-  'async-load': 'Load a constant in the reset branch (`q <= 0`), and load the value inside the clock edge, where it is a normal register input.',
+  'async-load': 'Load a constant in the reset branch, and load the value inside the clock edge, where it is a normal register input.',
   latch: LATCH_FIX,
 };
 
