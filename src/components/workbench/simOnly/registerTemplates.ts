@@ -3,58 +3,120 @@
 
 /**
  * Edge-triggered code that is not a register template (docs/impl_sim_only_warnings.md
- * § 3.4). Quartus builds a flip-flop from one clock edge, plus an optional
- * asynchronous reset or set tested as a level before it. The simulator runs other
- * shapes too, so they are found here. Pure.
+ * § 3.4). FPGA synthesis builds a register (a flip-flop) from one clock edge, plus an
+ * optional asynchronous reset or set tested as a level before it. The simulator runs
+ * other shapes too, so they are found here, with the registers and clocks involved
+ * for the message. Pure.
  */
 
 import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
+import type { Found } from './constructs';
 import { blockText } from './constructText';
+import type { RegisterProblem, RegisterProblemKind } from './types';
 
-/** `rising_edge(`, `falling_edge(`, or `'event`; character literals are blanked. */
-const EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/gi;
+/** A name as written, without blanks: `KEY_N (1)` is `KEY_N(1)`. */
+const tidy = (name: string): string => name.replace(/\s+/g, '');
+const unique = (names: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  return names.filter((n) => !seen.has(n.toLowerCase()) && !!seen.add(n.toLowerCase()));
+};
+
+interface Edge {
+  readonly clock: string;
+  /** `rising`, `falling`, or `event` for `clk'event`. */
+  readonly kind: string;
+}
+
+/** `rising_edge(x)`, `falling_edge(x)`, `x'event`; character literals are blanked. */
+const EDGE_CALL = /\b(rising_edge|falling_edge)\s*\(\s*([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*\)|([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*'\s*event\b/gi;
+
+const edgesIn = (condition: string): Edge[] =>
+  [...condition.matchAll(EDGE_CALL)].map((m) =>
+    m[1] ? { clock: tidy(m[2]), kind: m[1].toLowerCase().startsWith('rising') ? 'rising' : 'falling' } : { clock: tidy(m[3]), kind: 'event' },
+  );
+
+/** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
+const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(?:\([^;]*?\))?\s*(?:<=|:=)/gi;
+const vhdlTargets = (text: string): string[] => unique([...text.matchAll(VHDL_TARGET)].map((m) => m[1]));
+
 const IF_TOKEN = /\bend\s+if\b|\b(?:elsif|if|else|then|when)\b|=>|;/gi;
 
-/** Walking a process's `if` statements; `chains` holds, per open `if`, whether a branch had an edge. */
+interface Violation {
+  /** Offset in the process text of the branch. */
+  readonly at: number;
+  readonly kind: RegisterProblemKind;
+  readonly clocks: readonly string[];
+}
+
+/** One open `if`: where it starts, the edges of its branches, and the branches that break the template. */
+interface Chain {
+  readonly from: number;
+  readonly edges: Edge[];
+  readonly bad: Violation[];
+}
+
 interface Walk {
   readonly text: string;
-  readonly chains: boolean[];
-  /** Offsets in `text` of the branches that break the template. */
-  readonly bad: number[];
+  readonly chains: Chain[];
+  readonly found: { at: number; register: RegisterProblem }[];
   /** Where the condition being read starts, or -1. */
   condition: number;
   /** Inside `x <= a when c else b`, whose `else` is not a branch. */
   conditionalAssignment: boolean;
 }
 
-/** A condition's `then`: two edges in it (10628), a second edge (10819/10820), or a branch after the edge (10818). */
+const top = (w: Walk): Chain | undefined => w.chains[w.chains.length - 1];
+
+/** What a branch with these edges does wrong, after the edges of the branches before it. */
+function violation(before: readonly Edge[], edges: readonly Edge[], at: number): Violation | undefined {
+  // Two edges in one condition (10628).
+  if (edges.length > 1) return { at, kind: 'combined-edges', clocks: unique(edges.map((e) => e.clock)) };
+  const [first] = before;
+  if (!first) return undefined;
+  const [edge] = edges;
+  // A branch without an edge after the edge (10818).
+  if (!edge) return { at, kind: 'outside-edge', clocks: [first.clock] };
+  if (edge.clock.toLowerCase() !== first.clock.toLowerCase()) return { at, kind: 'two-clocks', clocks: [first.clock, edge.clock] };
+  // Both edges of one clock (10819); the same edge twice is a branch the register can't hold.
+  return { at, kind: edge.kind === first.kind ? 'outside-edge' : 'both-edges', clocks: [first.clock] };
+}
+
 function then(w: Walk, at: number): void {
-  const last = w.chains.length - 1;
-  if (last < 0 || w.condition < 0) return;
-  const edges = w.text.slice(w.condition, at).match(EDGE)?.length ?? 0;
-  if (edges > 1 || w.chains[last]) w.bad.push(w.condition);
-  if (edges > 0) w.chains[last] = true;
+  const chain = top(w);
+  if (!chain || w.condition < 0) return;
+  const edges = edgesIn(w.text.slice(w.condition, at));
+  const bad = violation(chain.edges, edges, w.condition);
+  if (bad) chain.bad.push(bad);
+  chain.edges.push(...edges);
   w.condition = -1;
   w.conditionalAssignment = false;
 }
 
+/** The `if` is complete: each bad branch is reported with what the whole `if` assigns. */
+function endIf(w: Walk, at: number): void {
+  const chain = w.chains.pop();
+  if (!chain || chain.bad.length === 0) return;
+  const registers = vhdlTargets(w.text.slice(chain.from, at));
+  for (const bad of chain.bad) w.found.push({ at: bad.at, register: { kind: bad.kind, registers, clocks: bad.clocks } });
+}
+
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   if: (w, at) => {
-    w.chains.push(false);
+    w.chains.push({ from: at, edges: [], bad: [] });
     w.condition = at;
   },
   elsif: (w, at) => {
     w.condition = at;
   },
   then,
-  // An `else` after the edge is a branch the flip-flop can't hold (10818).
   else: (w, at) => {
-    if (w.chains[w.chains.length - 1] && !w.conditionalAssignment) w.bad.push(at);
+    const chain = top(w);
+    if (chain && !w.conditionalAssignment && chain.edges.length > 0) {
+      chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
+    }
   },
-  'end if': (w) => {
-    w.chains.pop();
-  },
+  'end if': endIf,
   when: (w) => {
     w.conditionalAssignment = true;
   },
@@ -66,18 +128,17 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   },
 };
 
-/** The offsets in a process's text where an `if` breaks the template. */
-function processViolations(text: string): number[] {
-  const walk: Walk = { text, chains: [], bad: [], condition: -1, conditionalAssignment: false };
+function processViolations(text: string): Walk['found'] {
+  const walk: Walk = { text, chains: [], found: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
-  return walk.bad;
+  return walk.found.sort((a, b) => a.at - b.at);
 }
 
-/** VHDL: every `if` of a process that has a clock edge in a place Quartus can't build. */
-export function vhdlEdgeTemplate(t: UnitText): number[] {
+/** VHDL: every branch of a process's `if` that puts a clock edge where no register can be built. */
+export function vhdlEdgeTemplate(t: UnitText): Found[] {
   return t.unit.blocks
     .filter((b) => b.kind === 'process')
-    .flatMap((b) => processViolations(blockText(t, b)).map((at) => t.lineOf(b.from + at)));
+    .flatMap((b) => processViolations(blockText(t, b)).map(({ at, register }) => ({ line: t.lineOf(b.from + at), register })));
 }
 
 const SENSITIVITY = /^always\s*@\s*(\(\s*\*\s*\)|\*|\((?:[^()]|\([^()]*\))*\))/;
@@ -95,7 +156,7 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
     const text = blockText(t, block);
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
-    const edges = [...head[1].matchAll(EDGE_EVENT)].map((m) => m[1].replace(/\s+/g, ''));
+    const edges = [...head[1].matchAll(EDGE_EVENT)].map((m) => tidy(m[1]));
     return [{ block, edges, body: text.slice(head[0].length) }];
   });
 }
@@ -111,40 +172,39 @@ function firstIfCondition(body: string): string | undefined {
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const names = (condition: string, signal: string) =>
-  new RegExp(`(?<![\\w.])${escape(signal)}(?![\\w.]|\\s*\\[)`).test(condition.replace(/\s+(?=\[)|(?<=\[)\s+|\s+(?=\])/g, ''));
+const names = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escape(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
+
+/** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
+const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
+const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
 
 /**
  * Verilog: `always @(posedge a or posedge b)` whose first `if` tests none of the
  * edges, so none can be the asynchronous reset or set (Quartus Error 10200).
  */
-export function verilogEdgeTemplate(t: UnitText): number[] {
-  return alwaysBlocks(t)
-    .filter(({ edges, body }) => {
-      if (edges.length < 2) return false;
-      const condition = firstIfCondition(body);
-      return condition === undefined || !edges.some((signal) => names(condition, signal));
-    })
-    .map(({ block }) => block.span.start);
+export function verilogEdgeTemplate(t: UnitText): Found[] {
+  return alwaysBlocks(t).flatMap(({ block, edges, body }) => {
+    if (edges.length < 2) return [];
+    const condition = firstIfCondition(body);
+    if (condition !== undefined && edges.some((signal) => names(condition, signal))) return [];
+    const registers = unique(verilogTargets(body).map((m) => m[1]));
+    return [{ line: block.span.start, register: { kind: 'no-reset-tested', registers, clocks: unique(edges) } }];
+  });
 }
-
-/** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
-const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
 
 /**
  * Verilog: an `always` without an edge that reads a variable it assigns with `<=`.
- * It keeps a value without a clock, so Quartus builds latches (Warning 10240).
+ * It keeps a value without a clock, so synthesis builds latches (Quartus Warning 10240).
  */
-export function verilogLevelStorage(t: UnitText): number[] {
-  return alwaysBlocks(t)
-    .filter(({ edges, body }) => {
-      if (edges.length > 0) return false;
-      const targets = [...body.matchAll(NONBLOCKING_TARGET)];
-      // The prefix is `;`, `)`, `begin` or `else`, never the target itself.
-      const writes = targets.map((m) => (m.index ?? 0) + m[0].search(new RegExp(`\\b${m[1]}\\b`)));
-      return [...new Set(targets.map((m) => m[1]))].some((name) =>
-        [...body.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].some((use) => !writes.includes(use.index ?? -1)),
-      );
-    })
-    .map(({ block }) => block.span.start);
+export function verilogLevelStorage(t: UnitText): Found[] {
+  return alwaysBlocks(t).flatMap(({ block, edges, body }) => {
+    if (edges.length > 0) return [];
+    const targets = verilogTargets(body);
+    // The prefix is `;`, `)`, `begin` or `else`, never the target itself.
+    const writes = targets.map((m) => (m.index ?? 0) + m[0].search(new RegExp(`\\b${m[1]}\\b`)));
+    const kept = unique(targets.map((m) => m[1])).filter((name) =>
+      [...body.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].some((use) => !writes.includes(use.index ?? -1)),
+    );
+    return kept.length === 0 ? [] : [{ line: block.span.start, register: { kind: 'latch', registers: kept, clocks: [] } }];
+  });
 }

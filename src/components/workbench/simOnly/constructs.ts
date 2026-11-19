@@ -10,13 +10,16 @@
 
 import { ruleById, type UnitText } from '../tbDetect/rules';
 import type { RuleId } from '../tbDetect/types';
-import type { SimOnlyConstructId, Tier } from './types';
+import type { RegisterProblem, SimOnlyConstructId, Tier } from './types';
+
+/** A line, or a line with the names its message gives. */
+export type Found = number | { readonly line: number; readonly register: RegisterProblem };
 
 export interface SimOnlyConstruct {
   readonly id: SimOnlyConstructId;
   readonly tier: Tier;
   /** Lines where the construct is used as an operation, not only named (S10). */
-  readonly find: (text: UnitText) => readonly number[];
+  readonly find: (text: UnitText) => readonly Found[];
 }
 
 export function construct(id: SimOnlyConstructId, tier: Tier, find: SimOnlyConstruct['find']): SimOnlyConstruct {

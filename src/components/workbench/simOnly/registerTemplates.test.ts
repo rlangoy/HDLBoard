@@ -3,7 +3,9 @@
 
 import { describe, expect, test } from 'vitest';
 import { EXAMPLE_FILES } from '../files';
-import { checkOf, source, vhdlDesign } from './simOnly.testSupport';
+import { EMPTY_OVERRIDES } from '../tbDetect/types';
+import { checkDiagnostics } from './findingDiagnostics';
+import { checkOf, source, vhdlDesign, viewOf } from './simOnly.testSupport';
 
 /**
  * docs/impl_sim_only_warnings.md § 3.4. Every case was run through Quartus Prime 25.1
@@ -68,7 +70,50 @@ describe('the examples', () => {
     expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet')).toEqual([]);
   });
 
-  test.each(DESIGNS.filter(([, name]) => name.startsWith('keyCouter2Led')))('%s names its entity after its file', (_label, name, content) => {
+  test.each(DESIGNS.filter(([, name]) => name.startsWith('keyCouter2Led')))('%s names its entity after its file', (_label, _name, content) => {
     expect(content).toMatch(/\b(?:entity|module)\s+keyCouter2Led\b/);
+  });
+});
+
+/** The old keyCouter2Led, which a synthesis tool refuses. */
+const OLD_COUNTER = vhdlDesign(
+  'keyCouter2Led',
+  'CLOCK_50 : in std_logic; KEY_N : in std_logic_vector(3 downto 0); LEDR : out std_logic_vector(9 downto 0)',
+  "process (CLOCK_50, KEY_N)\nbegin\n  if falling_edge(KEY_N(1)) then\n    count <= (others => '0');\n  elsif falling_edge(KEY_N (0)) then\n    count <= count + 1;\n  end if;\nend process;",
+).replace('\n\nbegin\n', "\nsignal count : unsigned(7 downto 0);\nbegin\n");
+
+/** The headlines of a one-file project's register findings. */
+const headlinesIn = (name: string, content: string): string[] =>
+  checkDiagnostics(checkOf([source(name, content)]), { analysis: viewOf([source(name, content)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: name, content }] })
+    .map((d) => d.advice?.headline ?? '');
+
+describe('the message names the register and its clocks, as synthesis tools do', () => {
+  test('two clocks: the old keyCouter2Led', () => {
+    expect(headlinesIn('keyCouter2Led.vhd', OLD_COUNTER)).toEqual([
+      "Can't infer a register for `count`: its behavior depends on the edges of two clocks, `KEY_N(1)` and `KEY_N(0)`.",
+    ]);
+  });
+
+  test.each([
+    ['both edges', P("if rising_edge(a) then\nx <= c;\nelsif falling_edge(a) then\nx <= d;\nend if;"), "Can't infer a register for `x`: it changes on both the rising and the falling edge of `a`."],
+    ['a branch after the edge', P("if rising_edge(a) then\nx <= c;\nelse\ny <= d;\nend if;"), "Can't infer registers for `x` and `y`: they change outside the clock edge of `a` too."],
+    ['two edges in one condition', P("if rising_edge(a) and rising_edge(b) then\nx <= c;\nend if;"), "Can't infer a register for `x`: one condition combines the edges of `a` and `b`."],
+  ])('%s', (_label, process, headline) => {
+    expect(headlinesIn('t.vhd', vhdl(process))).toEqual([headline]);
+  });
+
+  test.each([
+    ['no reset tested', 'always @(posedge a or posedge b) if (c) x <= 0; else x <= d;', "Can't infer a register for `x`: the `if` tests none of the edges `a` and `b`, so none of them is a reset."],
+    ['a latch', 'always @(a or b) if (a && !b) x <= ~x;', '`x` keeps its value without a clock edge: synthesis makes a latch, not a register.'],
+  ])('Verilog: %s', (_label, body, headline) => {
+    expect(headlinesIn('t.v', vlog(body))).toEqual([headline]);
+  });
+
+  test('names no synthesis tool: the board may be Intel or AMD', () => {
+    const texts = [OLD_COUNTER].flatMap((c) =>
+      checkDiagnostics(checkOf([source('k.vhd', c)]), { analysis: viewOf([source('k.vhd', c)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: 'k.vhd', content: c }] }),
+    );
+    expect(texts.length).toBeGreaterThan(0);
+    for (const d of texts) expect(`${d.advice?.headline} ${d.message}`).not.toMatch(/Quartus|Vivado/);
   });
 });

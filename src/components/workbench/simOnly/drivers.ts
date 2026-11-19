@@ -4,7 +4,7 @@
 /**
  * The multiple-driver check (docs/impl_sim_only_warnings.md § 8.1). On the FPGA a
  * signal is one wire with one source; two processes, or a process and a concurrent
- * statement, that both drive the same bits fight, and Quartus refuses the design
+ * statement, that both drive the same bits fight, and synthesis refuses the design
  * ("can't resolve multiple constant drivers"). The simulator resolves it to 'X'.
  * One driver is one process / `always` block, or one concurrent statement. A driver
  * that drives 'Z' is a tri-state bus and never clashes. Pure; each body's drivers are

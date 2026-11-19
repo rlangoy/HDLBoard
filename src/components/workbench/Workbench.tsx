@@ -1655,7 +1655,7 @@ export function Workbench() {
     }
     // One line per SIM-only file, linked to its first line (docs/impl_sim_only_warnings.md § 5.2).
     for (const summary of designCheck.summaries()) {
-      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => revealLocation(summary) });
+      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => { designCheck.showFile(summary.fileId); revealLocation(summary); } });
     }
   };
 
@@ -1785,6 +1785,16 @@ export function Workbench() {
   // simulation, merged with the run's markers, and the SIM-only group of the files.
   const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel });
   const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
+  // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.
+  const { quietFile: quietLiveWarnings, showFile: showLiveWarnings } = designCheck;
+  const dismissInEditor = useCallback((fileId: string) => {
+    dismissDiagnostics(fileId);
+    quietLiveWarnings(fileId);
+  }, [dismissDiagnostics, quietLiveWarnings]);
+  const openConsoleLocation = useCallback((diagnostic: LocatedDiagnostic) => {
+    showLiveWarnings(diagnostic.fileId);
+    openConsoleDiagnostic(diagnostic);
+  }, [showLiveWarnings, openConsoleDiagnostic]);
 
   /** The files a board change (or its Undo) made: a renamed file's markers are about text that has changed, as after an edit. */
   const replaceFilesForBoard = (next: VhdlFile[]) => {
@@ -2169,7 +2179,7 @@ export function Workbench() {
               onChange={handleContentChange}
               onFilesDropped={handleFilesDropped}
               diagnostics={shownDiagnostics}
-              onDismissDiagnostics={dismissDiagnostics}
+              onDismissDiagnostics={dismissInEditor}
               projectFiles={files}
               split={tb.editorSplit(fileMenu, designCheck.badgeFor)}
               emptyProject={
@@ -2346,7 +2356,7 @@ export function Workbench() {
         lines={logLines}
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
-        onOpenLocation={openConsoleDiagnostic}
+        onOpenLocation={openConsoleLocation}
         waveButton={<WaveformButton {...waveButton} />}
         onOpenTime={waveView.links.onOpenTime}
         onOpenWaveform={waveView.links.onOpenWaveform}

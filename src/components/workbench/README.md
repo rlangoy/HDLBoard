@@ -686,7 +686,7 @@ offered by the Examples pane (`examples.ts`, below). The files are copies of `te
 `blinkTest`/`keyCouter2Led` entities, not wired into `DE1_SoC.vhdl`) — mark
 either top via its Files-panel dot to run it on its own. `blinkTest.vhdl`
 demonstrates `CLOCK_500Hz` (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a
-`KEY_N`-driven up-counter (`KEY_N(0)` is its clock, `KEY_N(1)` an asynchronous reset: the register template Quartus builds)
+`KEY_N`-driven up-counter (`KEY_N(0)` is its clock, `KEY_N(1)` an asynchronous reset: the register template synthesis builds)
 displayed on `LEDR`.
 
 `DEFAULT_SHOWN_FILE` is the file shown on first load (`DE1_SoC.vhdl`).

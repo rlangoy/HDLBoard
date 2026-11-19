@@ -22,11 +22,28 @@ export type SimOnlyConstructId =
   | 'vlog-delay' | 'vlog-event-wait' | 'vlog-clock-gen' | 'vlog-file-io' | 'vlog-end-sim' | 'vlog-time'
   | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-edge-template' | 'vlog-level-storage' | 'vlog-assign-delay' | 'vlog-display';
 
+/**
+ * Why no register can be built (§ 3.4): two clocks, both edges of one, a branch outside
+ * the edge, two edges in one condition, a Verilog `if` that tests no edge, or a value
+ * kept without an edge (a latch).
+ */
+export type RegisterProblemKind = 'two-clocks' | 'both-edges' | 'outside-edge' | 'combined-edges' | 'no-reset-tested' | 'latch';
+
+export interface RegisterProblem {
+  readonly kind: RegisterProblemKind;
+  /** What the code assigns, as written. */
+  readonly registers: readonly string[];
+  /** The clocks involved, as written: `KEY_N(1)`. */
+  readonly clocks: readonly string[];
+}
+
 /** One construct on one line. */
 export interface ConstructMatch {
   readonly construct: SimOnlyConstructId;
   readonly tier: Tier;
   readonly line: number;
+  /** For the register checks: the names the message gives. */
+  readonly register?: RegisterProblem;
 }
 
 /** An instance, and whether it sits in code hidden from synthesis (§ 4.3). */

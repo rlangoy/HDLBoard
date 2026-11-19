@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdvisedDiagnostic } from '../diagnosticAdvice';
 import type { DesignCheckBadge } from '../EditorPaneHeader';
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
-import { checkDiagnostics } from './findingDiagnostics';
+import { checkDiagnostics, quietFile, showFile, withQuieted } from './findingDiagnostics';
 import { isSimModel } from './simModels';
 import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
 import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
@@ -23,8 +23,12 @@ export interface DesignCheckOptions {
 
 export interface DesignCheckApi {
   readonly check: DesignCheck;
-  /** The live warnings, to merge with a run's diagnostics (`addToFiles`). */
+  /** The live warnings, to merge with a run's diagnostics (`addToFiles`); those dismissed are quiet. */
   readonly diagnostics: readonly AdvisedDiagnostic[];
+  /** A click in the editor: the file's live warnings lose their text after the line, and keep the gutter's `!`. */
+  readonly quietFile: (fileId: string) => void;
+  /** A console link to the file: its live warnings show again. */
+  readonly showFile: (fileId: string) => void;
   /** A file's group for the Files panel; undefined for a file with no design unit. */
   readonly groupOf: (fileId: string) => FileGroup | undefined;
   /** A design pane's badge; undefined with the check off (*Simulation only*). */
@@ -43,10 +47,16 @@ export interface DesignCheckApi {
 export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   const { view, overrides, mode, files, setSimModel } = options;
   const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides }), [view, overrides, mode]);
-  const diagnostics = useMemo(
+  const loud = useMemo(
     () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
     [check, view.raw, overrides, files],
   );
+  const [quieted, setQuieted] = useState<ReadonlySet<string>>(() => new Set());
+  const diagnostics = useMemo(() => withQuieted(loud, quieted), [loud, quieted]);
+  const loudRef = useRef(loud);
+  loudRef.current = loud;
+  const quiet = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
+  const show = useCallback((fileId: string) => setQuieted((prev) => showFile(prev, fileId)), []);
   const announcement = useGroupAnnouncement(check, mode, files);
   const badgeFor = (fileId: string): DesignCheckBadge | undefined => {
     if (mode === 'simulation') return undefined;
@@ -56,6 +66,8 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   return {
     check,
     diagnostics,
+    quietFile: quiet,
+    showFile: show,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
     summaries: () => [...simOnlySummaries(check, overrides, files), ...driverSummaries(check, overrides, files)],

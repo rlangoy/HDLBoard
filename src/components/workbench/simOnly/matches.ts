@@ -40,7 +40,9 @@ function partOf(scan: ScannedFile, { unit, ownsUnit }: ScannedUnit): CodePart {
 function constructsIn(text: UnitText, scan: ScannedFile): ConstructMatch[] {
   const seen = new Set<string>();
   const matches = CONSTRUCTS[scan.file.language].flatMap((c) =>
-    c.find(text).map((line): ConstructMatch => ({ construct: c.id, tier: c.tier, line })),
+    c.find(text).map((found): ConstructMatch =>
+      typeof found === 'number' ? { construct: c.id, tier: c.tier, line: found } : { construct: c.id, tier: c.tier, ...found },
+    ),
   );
   return matches
     .filter((m) => !isHidden(m.line, scan.hidden))

@@ -193,7 +193,17 @@ The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and fl
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
 branch. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
 with none, a variable assigned with `<=` must not be read in the block (it keeps a value, so Quartus makes a latch).
-The warning gives the template above, and the usual fix for a button: sample it on the board's clock and compare it
+**The message names the register and its clocks**, as the tools do, but names no tool: HDLBoard boards include
+AMD/Xilinx ones (Basys 3, Nexys A7) built with Vivado. Quartus says *can't infer register for count[0] because its
+behavior depends on the edges of multiple distinct clocks* (10820); Vivado says *[Synth 8-5787] Register … is clocked
+by two different clocks in the same process*
+([forum thread](https://embdev.net/topic/544440)). For the old example the warning reads:
+
+> ⚠ **Can't infer a register for `count`: its behavior depends on the edges of two clocks, `KEY_N(1)` and `KEY_N(0)`.**
+
+The matcher hands the names with the line (`ConstructMatch.register`: the kind, what the `if` assigns, the clocks), and
+`registerText` (`simOnlyText.ts`) words one headline per kind: two clocks, both edges of one clock, a change
+outside the edge, two edges in one condition, a Verilog `if` that tests no edge, a latch. The tooltip gives the template above, and the usual fix for a button: sample it on the board's clock and compare it
 with its value one clock earlier (`keyCounter7Seg` does this).
 
 Sources: the Quartus runs above; Intel's register guidance, *Recommended HDL Coding Styles* in the
@@ -390,6 +400,12 @@ Tier `ignored` wording, e.g. `after`:
 
 > ⚠ **`after 10 ns` is ignored on the hardware.** Synthesis drops the delay, so on the board `LEDR(0)` follows
 > `SW(0)` at once. Only the simulation shows the delay.
+
+**Dismissed by a click, shown again from the console.** A click in the editor clears a run's markers, and makes
+the file's live warnings *quiet*: the text after the line goes, the gutter's `!`, its tooltip and the SIM-only label
+stay (`findingDiagnostics.ts`: `quietFile`, `withQuieted`). They are keyed by file and headline, not line, so they
+stay quiet while lines above move, and a new problem still shows. A console link to the file (the Start summary's
+*Line n*, or a compiler message) shows them again (`showFile`).
 
 **Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file, not one line per finding:
 `blink.vhd is SIM-only: 2 lines only work in simulation; they run here but not on the board.` The file name links to

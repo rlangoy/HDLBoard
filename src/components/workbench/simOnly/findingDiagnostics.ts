@@ -15,7 +15,7 @@ import { countLines } from '../diagnosticLocation';
 import type { ProjectAnalysis, TestbenchOverrides } from '../tbDetect/types';
 import type { DriverConflict } from './driverTypes';
 import { isWarnable } from './findings';
-import { CHECK_SOURCE, CONSTRUCT_TEXT, multipleDriversText, type ConstructText } from './simOnlyText';
+import { CHECK_SOURCE, CONSTRUCT_TEXT, multipleDriversText, registerText, type ConstructText } from './simOnlyText';
 import type { DesignCheck, SimOnlyFinding, Tier } from './types';
 
 /** How each tier shows: `quiet` only as the gutter's `!` and the tooltip. */
@@ -42,7 +42,7 @@ export function findingDiagnostics(findings: readonly SimOnlyFinding[], live: Li
   const shown = shownIn(live);
   return findings
     .filter(shown)
-    .map((f) => warning({ fileId: f.fileId, line: f.line }, CONSTRUCT_TEXT[f.construct], TIER_LOOK[f.tier].quiet));
+    .map((f) => warning({ fileId: f.fileId, line: f.line }, f.register ? registerText(f.register) : CONSTRUCT_TEXT[f.construct], TIER_LOOK[f.tier].quiet));
 }
 
 export function driverDiagnostics(conflicts: readonly DriverConflict[], live: LiveText): AdvisedDiagnostic[] {
@@ -71,4 +71,29 @@ function warning(place: { readonly fileId: string; readonly line: number }, text
     ...(quiet && { quiet: true }),
     advice: { headline: text.headline, compiler: CHECK_SOURCE, liveCheck: true },
   };
+}
+
+/**
+ * A live warning as the student dismissed it: a click in the editor makes the file's
+ * warnings quiet (the text after the line goes; the gutter's `!` and the tooltip stay),
+ * and a console link to the file shows them again. Keyed by file and headline, not
+ * line, so a warning stays quiet while lines above it are added or removed.
+ */
+export const liveKey = (d: Pick<AdvisedDiagnostic, 'fileId' | 'advice' | 'message'>): string => `${d.fileId}\n${d.advice?.headline ?? d.message}`;
+
+/** The live warnings, those the student dismissed made quiet. */
+export function withQuieted(diagnostics: readonly AdvisedDiagnostic[], quieted: ReadonlySet<string>): AdvisedDiagnostic[] {
+  return diagnostics.map((d) => (!d.quiet && quieted.has(liveKey(d)) ? { ...d, quiet: true } : d));
+}
+
+/** `quieted` with every live warning of `fileId` added. */
+export function quietFile(quieted: ReadonlySet<string>, diagnostics: readonly AdvisedDiagnostic[], fileId: string): ReadonlySet<string> {
+  const keys = diagnostics.filter((d) => d.fileId === fileId && !d.quiet).map(liveKey).filter((k) => !quieted.has(k));
+  return keys.length === 0 ? quieted : new Set([...quieted, ...keys]);
+}
+
+/** `quieted` without the warnings of `fileId`: they show again. */
+export function showFile(quieted: ReadonlySet<string>, fileId: string): ReadonlySet<string> {
+  const keys = [...quieted].filter((k) => !k.startsWith(`${fileId}\n`));
+  return keys.length === quieted.size ? quieted : new Set(keys);
 }
