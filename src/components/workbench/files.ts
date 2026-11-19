@@ -147,6 +147,58 @@ begin
 end architecture rtl;
 `;
 
+/** Key Counter to LED with two clocks: SIM-only on purpose, it shows what synthesis rejects (docs/impl_sim_only_warnings.md § 3.4). */
+const KEY_COUNTER_TWO_CLOCKS_VHD = `library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+-- KEY0 counts up, KEY1 counts down; the count is shown on LEDR(7 downto 0).
+--
+-- SIM-ONLY ON PURPOSE: this is what NOT to write for an FPGA. It runs in
+-- the simulator, but synthesis rejects it, so HDLBoard labels it SIM-only.
+--
+-- Why: the process below reacts to two clock edges, one per key. A register
+-- (a flip-flop) on the FPGA has ONE clock input. It allows one clock edge,
+-- plus an optional asynchronous reset or set, and nothing more. There is no
+-- flip-flop that can count on the edges of two different clocks, so
+-- synthesis stops with "can't infer register for count ... because its
+-- behavior depends on the edges of multiple distinct clocks".
+--
+-- How to do it on the board: use ONE clock (CLOCK_50), and sample the keys
+-- on it: a press is a key that was released one clock ago and is pressed
+-- now. keyCounter7Seg.vhdl does exactly that.
+entity keyCounterTwoClocks is
+    port (
+        KEY_N : in  std_logic_vector(3 downto 0);
+        LEDR  : out std_logic_vector(9 downto 0)
+    );
+end entity keyCounterTwoClocks;
+
+architecture rtl of keyCounterTwoClocks is
+    signal count : unsigned(7 downto 0) := (others => '0');
+    signal up    : std_logic;   -- '1' while KEY0 is pressed
+    signal down  : std_logic;   -- '1' while KEY1 is pressed
+
+begin
+
+    up   <= not KEY_N(0);       -- the keys are active low
+    down <= not KEY_N(1);
+
+    counter : process (up, down)
+    begin
+        if rising_edge(up) then         -- first clock: KEY0 pressed
+            count <= count + 1;
+        elsif rising_edge(down) then    -- second clock: KEY1 pressed -> error
+            count <= count - 1;
+        end if;
+    end process;
+
+    LEDR(7 downto 0) <= std_logic_vector(count);
+    LEDR(9 downto 8) <= (others => '0');           -- unused LEDs off
+
+end architecture rtl;
+`;
+
 const DE1_SOC_V = `// The real DE1-SoC top-level interface: these are the board's own pin
 // names, not a stand-in for them, so this file can go straight into
 // Quartus with only a pin assignment added. Every port here is optional
@@ -251,6 +303,42 @@ module keyCouter2Led (
 
     assign LEDR[7:0] = count;
     assign LEDR[9:8] = 2'b00;          // unused LEDs off
+endmodule
+`;
+
+const KEY_COUNTER_TWO_CLOCKS_V = `// KEY0 counts up, KEY1 counts down; the count is shown on LEDR[7:0].
+//
+// SIM-ONLY ON PURPOSE: this is what NOT to write for an FPGA. It runs in
+// the simulator, but not on the board, so HDLBoard labels it SIM-only.
+//
+// Why: the always block below reacts to two clock edges, one per key. A
+// register (a flip-flop) on the FPGA has ONE clock input. It allows one
+// clock edge, plus an optional asynchronous reset or set that loads a
+// constant, and nothing more. Here down would have to be a reset, but it
+// loads count - 1, so it is really a second clock, and no flip-flop can
+// count on the edges of two different clocks. Synthesis either refuses it
+// or builds latches that power up undefined and do not count.
+//
+// How to do it on the board: use ONE clock (CLOCK_50), and sample the keys
+// on it: a press is a key that was released one clock ago and is pressed
+// now. keyCounter7Seg.v does exactly that.
+module keyCounterTwoClocks (
+    input  wire [3:0] KEY_N,
+    output wire [9:0] LEDR
+);
+    reg  [7:0] count = 8'd0;
+    wire       up    = ~KEY_N[0];   // 1 while KEY0 is pressed (active low)
+    wire       down  = ~KEY_N[1];   // 1 while KEY1 is pressed
+
+    always @(posedge up or posedge down) begin   // two clocks -> error
+        if (down)
+            count <= count - 8'd1;   // KEY1 pressed: count down
+        else
+            count <= count + 8'd1;   // KEY0 pressed: count up
+    end
+
+    assign LEDR[7:0] = count;
+    assign LEDR[9:8] = 2'b00;        // unused LEDs off
 endmodule
 `;
 
@@ -1309,6 +1397,7 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc', name: 'DE1_SoC.vhdl', folder: 'vhdl', content: DE1_SOC_VHD },
   { id: 'blink_test', name: 'blinkTest.vhdl', folder: 'vhdl', content: BLINK_TEST_VHD },
   { id: 'key_counter_2_led', name: 'keyCouter2Led.vhdl', folder: 'vhdl', content: KEY_COUNTER_2_LED_VHD },
+  { id: 'key_counter_two_clocks', name: 'keyCounterTwoClocks.vhdl', folder: 'vhdl', content: KEY_COUNTER_TWO_CLOCKS_VHD },
   { id: 'key_counter_7seg', name: 'keyCounter7Seg.vhdl', folder: 'vhdl', content: KEY_COUNTER_7SEG_VHD },
   { id: 'and_gate', name: 'and_gate.vhdl', folder: 'vhdl', content: AND_GATE_VHD },
   { id: 'and_gate_tb', name: 'and_gate_tb.vhd', folder: 'vhdl', content: AND_GATE_TB_VHD },
@@ -1319,6 +1408,7 @@ export const EXAMPLE_FILES: VhdlFile[] = [
   { id: 'de1_soc_v', name: 'DE1_SoC.v', folder: 'verilog', content: DE1_SOC_V },
   { id: 'blink_test_v', name: 'blinkTest.v', folder: 'verilog', content: BLINK_TEST_V },
   { id: 'key_counter_2_led_v', name: 'keyCouter2Led.v', folder: 'verilog', content: KEY_COUNTER_2_LED_V },
+  { id: 'key_counter_two_clocks_v', name: 'keyCounterTwoClocks.v', folder: 'verilog', content: KEY_COUNTER_TWO_CLOCKS_V },
   { id: 'key_counter_7seg_v', name: 'keyCounter7Seg.v', folder: 'verilog', content: KEY_COUNTER_7SEG_V },
   { id: 'and_gate_v', name: 'and_gate.v', folder: 'verilog', content: AND_GATE_V },
   { id: 'and_gate_tb_v', name: 'and_gate_tb.v', folder: 'verilog', content: AND_GATE_TB_V },

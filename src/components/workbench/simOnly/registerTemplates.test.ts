@@ -45,6 +45,7 @@ const VHDL: [label: string, process: string, lines: number[]][] = [
 const VERILOG: [label: string, body: string, lines: number[]][] = [
   ['the first if tests no edge (Error 10200)', 'always @(posedge a or posedge b) if (c) x <= 0; else x <= d;', [2]],
   ['a level always that keeps a value (Warning 10240, latches)', 'always @(a or b) if (a && !b) x <= ~x;', [2]],
+  ['a "reset" that loads from the register: a second clock (Warning 13004, latches)', 'always @(posedge a or posedge b) if (b) x <= x + 1; else x <= d;', [2]],
   ['an asynchronous reset (accepted)', 'always @(posedge a or posedge b) if (b) x <= 0; else x <= d;', []],
   ['an active-low reset in a begin (accepted)', 'always @(posedge a or negedge b) begin\n  if (!b) x <= 0;\n  else x <= d;\nend', []],
   ['a reset and a set (accepted)', 'always @(posedge a or posedge b or posedge c) if (b) x <= 0; else if (c) x <= 1; else x <= d;', []],
@@ -70,9 +71,17 @@ const DESIGNS: [string, string, string][] = [
 /** The examples that show HDLBoard's slow clock: on the board they need its real clock (§ 3.5). */
 const readsSimulatorClock = (content: string) => /(?:rising_edge\(|posedge\s+)CLOCK_500Hz\b/.test(content);
 
+/** The example that shows two clocks, SIM-only on purpose. */
+const isTwoClocksExample = (name: string) => name.startsWith('keyCounterTwoClocks');
+const offTheBoard = (name: string, content: string) => checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet');
+
 describe('the examples', () => {
-  test.each(DESIGNS.filter(([, , content]) => !readsSimulatorClock(content)))('%s has no finding that keeps it off the board', (_label, name, content) => {
+  test.each(DESIGNS.filter(([, name, content]) => !readsSimulatorClock(content) && !isTwoClocksExample(name)))('%s has no finding that keeps it off the board', (_label, name, content) => {
     expect(checkOf([source(name, content)]).findings.filter((f) => f.tier !== 'quiet')).toEqual([]);
+  });
+
+  test.each(DESIGNS.filter(([, name]) => isTwoClocksExample(name)))('%s is SIM-only for its two clocks, and nothing else', (_label, name, content) => {
+    expect(offTheBoard(name, content).map((f) => f.register?.kind)).toEqual(['two-clocks']);
   });
 
   test.each(DESIGNS.filter(([, , content]) => readsSimulatorClock(content)))('%s is SIM-only for its simulator clock, and nothing else', (_label, name, content) => {

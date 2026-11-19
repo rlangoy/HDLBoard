@@ -677,6 +677,9 @@ and `system`.
 `and_gate_tb.v`, `and_gate_truthtable_tb.v` under `verilog/`. `and_gate_truthtable_tb`
 tests the AND gate and prints its truth table (the Examples pane's AND Gate Truth Table
 Testbench).
+`keyCounterTwoClocks` (`.vhdl`, `.v`) is SIM-only on purpose: KEY0 counts up and KEY1 down with two clock edges
+in one process, which runs in the simulator and no FPGA can build (the Examples card *Key Counter, Two Clocks
+(SIM-only)*; docs/impl_sim_only_warnings.md § 3.4).
 `keyCounter7Seg` counts KEY0 presses 00-99 in decimal on HEX1/HEX0 (KEY1 resets),
 detecting a press as a falling edge of the key sampled on `CLOCK_50`. `STARTER_FILES` is what a first
 start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are

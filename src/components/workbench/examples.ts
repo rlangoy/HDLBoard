@@ -74,6 +74,13 @@ const CATALOGUE: readonly ExampleEntry[] = [
     files: { vhdl: ['key_counter_2_led'], verilog: ['key_counter_2_led_v'] },
   },
   {
+    key: 'key_counter_two_clocks',
+    title: 'Key Counter, Two Clocks (SIM-only)',
+    description: 'KEY0 counts up, KEY1 counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
+    role: 'design',
+    files: { vhdl: ['key_counter_two_clocks'], verilog: ['key_counter_two_clocks_v'] },
+  },
+  {
     key: 'key_counter_7seg',
     title: 'Key Counter to 7-Segment',
     description: 'Press KEY0 to count up on the 7-segment displays (00-99); KEY1 resets.',
@@ -160,10 +167,12 @@ const BOARD_EXAMPLE_FILES: ReadonlyMap<string, ReadonlyMap<string, VhdlFile>> = 
 const BOARD_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   basys3: {
     key_counter_7seg: 'Press btnC to count up on the 7-segment displays (00-99); btnU resets.',
+    key_counter_two_clocks: 'btnU counts up, btnD counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
     key_uart_tx: "Press btnC to send 'A' and btnU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on led[0], Busy on led[1].",
   },
   'nexys-a7': {
     key_counter_7seg: 'Press BTNC to count up on the 7-segment displays (00-99); BTNU resets.',
+    key_counter_two_clocks: 'BTNU counts up, BTND counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
     key_uart_tx: "Press BTNC to send 'A' and BTNU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on LED[0], Busy on LED[1].",
   },
 };

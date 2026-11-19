@@ -168,14 +168,34 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
   });
 }
 
-/** The condition of the `if` the statement starts with, after any `begin`. */
-function firstIfCondition(body: string): string | undefined {
+/** The `if` the statement starts with, after any `begin`: its condition, and the branch it guards. */
+interface FirstIf {
+  readonly condition: string;
+  /** The statement run when the condition holds: a `begin … end`, or up to its `;`. */
+  readonly branch: string;
+}
+
+function firstIf(body: string): FirstIf | undefined {
   const start = /^\s*(?:begin\b(?:\s*:\s*\w+)?\s*)?if\s*\(/.exec(body);
   if (!start) return undefined;
   let depth = 1;
   let i = start[0].length;
   for (; i < body.length && depth > 0; i++) depth += body[i] === '(' ? 1 : body[i] === ')' ? -1 : 0;
-  return body.slice(start[0].length, i - 1);
+  return { condition: body.slice(start[0].length, i - 1), branch: statementAt(body, i) };
+}
+
+const BLOCK_TOKEN = /\b(?:begin|end)\b/g;
+
+/** The statement starting at `from`: a `begin … end` block, or up to the next `;`. */
+function statementAt(body: string, from: number): string {
+  const rest = body.slice(from);
+  if (!/^\s*begin\b/.test(rest)) return rest.slice(0, rest.indexOf(';') + 1);
+  let depth = 0;
+  for (const m of rest.matchAll(BLOCK_TOKEN)) {
+    depth += m[0] === 'begin' ? 1 : -1;
+    if (depth === 0) return rest.slice(0, (m.index ?? 0) + m[0].length);
+  }
+  return rest;
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -187,16 +207,34 @@ const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:
 const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
 
 /**
+ * The registers the reset branch loads from a register of the block (`count <= count - 1`):
+ * a reset or set loads a constant, so such a branch is a second clock, not a reset.
+ */
+function loadedFromRegisters(branch: string, registers: readonly string[]): string[] {
+  const loaded = verilogTargets(branch).filter((m) => {
+    const value = branch.slice((m.index ?? 0) + m[0].length, branch.indexOf(';', m.index ?? 0));
+    return registers.some((r) => new RegExp(`\\b${escape(r)}\\b`).test(value));
+  });
+  return unique(loaded.map((m) => m[1]));
+}
+
+/**
  * Verilog: `always @(posedge a or posedge b)` whose first `if` tests none of the
- * edges, so none can be the asynchronous reset or set (Quartus Error 10200).
+ * edges, so none can be the asynchronous reset or set (Quartus Error 10200); or whose
+ * reset branch loads a value computed from a register, which makes it a second clock
+ * (Quartus builds latches, Warning 13004, and the board does not count).
  */
 export function verilogEdgeTemplate(t: UnitText): Found[] {
-  return alwaysBlocks(t).flatMap(({ block, edges, body }) => {
+  return alwaysBlocks(t).flatMap(({ block, edges, body }): Found[] => {
     if (edges.length < 2) return [];
-    const condition = firstIfCondition(body);
-    if (condition !== undefined && edges.some((signal) => reads(condition, signal))) return [];
     const registers = unique(verilogTargets(body).map((m) => m[1]));
-    return [{ line: block.span.start, register: { kind: 'no-reset-tested', registers, clocks: unique(edges) } }];
+    const first = firstIf(body);
+    if (first === undefined || !edges.some((signal) => reads(first.condition, signal))) {
+      return [{ line: block.span.start, register: { kind: 'no-reset-tested', registers, clocks: unique(edges) } }];
+    }
+    const loaded = loadedFromRegisters(first.branch, registers);
+    if (loaded.length === 0) return [];
+    return [{ line: block.span.start, register: { kind: 'two-clocks', registers: loaded, clocks: unique(edges) } }];
   });
 }
 
