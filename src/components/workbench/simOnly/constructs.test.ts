@@ -36,6 +36,10 @@ const VHDL_CASES: Record<string, [positive: string, negative: string]> = {
   'vhdl-protected': [vhdl("LEDR(0) <= '1';", 'type counter is protected\nprocedure inc;\nend protected;'), vhdl("LEDR(0) <= '1';", 'type counter is range 0 to 9;')],
   'vhdl-random': [vhdl(P('uniform(s1, s2, r);\nwait for 1 ns;')), vhdl("LEDR(0) <= '1'; -- uniform(s1, s2, r)")],
   'vhdl-real-signal': [vhdl("LEDR(0) <= '1';", 'signal level : real;'), vhdl("LEDR(0) <= '1';", 'constant SCALE : real := 2.5;')],
+  'vhdl-edge-template': [
+    vhdl(P("if falling_edge(SW(1)) then\nLEDR(0) <= '0';\nelsif falling_edge(SW(0)) then\nLEDR(0) <= '1';\nend if;").replace('process\n', 'process (SW)\n')),
+    vhdl(P("if SW(1) = '0' then\nLEDR(0) <= '0';\nelsif falling_edge(SW(0)) then\nLEDR(0) <= '1';\nend if;").replace('process\n', 'process (SW)\n')),
+  ],
   'vhdl-after': [vhdl("LEDR(0) <= SW(0) after 10 ns;"), vhdl("LEDR(0) <= SW(0);")],
   'vhdl-report': [vhdl(CLOCKED("report \"tick\";")), vhdl(CLOCKED("LEDR(0) <= SW(0); -- report"))],
 };
@@ -52,6 +56,11 @@ const VERILOG_CASES: Record<string, [positive: string, negative: string]> = {
   'vlog-random': [vlog('always @(posedge CLOCK_50) LEDR <= $random;'), vlog('always @(posedge CLOCK_50) LEDR <= {LEDR[8:0], LEDR[9] ^ LEDR[6]};')],
   'vlog-verification': [vlog('initial force LEDR = 0;'), vlog('always @(posedge CLOCK_50) LEDR <= SW; // force')],
   'vlog-real': [vlog('real level;\nalways @(posedge CLOCK_50) LEDR <= SW;'), vlog('parameter real SCALE = 2.5;\nalways @(posedge CLOCK_50) LEDR <= SW;')],
+  'vlog-edge-template': [
+    vlog('always @(posedge CLOCK_50 or posedge SW[1]) if (SW[0]) LEDR <= 0; else LEDR <= SW;'),
+    vlog('always @(posedge CLOCK_50 or posedge SW[1]) if (SW[1]) LEDR <= 0; else LEDR <= SW;'),
+  ],
+  'vlog-level-storage': [vlog('always @(SW[0]) if (SW[0]) LEDR <= LEDR + 1;'), vlog('always @(SW) LEDR <= SW;')],
   'vlog-assign-delay': [vlog('wire [9:0] y;\nassign #5 y = SW;'), vlog('wire [9:0] y;\nassign y = SW;')],
   'vlog-display': [vlog('always @(posedge CLOCK_50) $display("%b", SW);'), vlog('always @(posedge CLOCK_50) LEDR <= SW;')],
 };

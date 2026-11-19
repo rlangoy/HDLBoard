@@ -106,6 +106,7 @@ The group is recomputed with the analysis, so it changes as the student types: f
 | Random numbers | `uniform` (`math_real`) on signals | `$random`, `$urandom` | **new** |
 | Verification-only statements | — | `force`/`release`, `fork`/`join`, `event`, `program`, `class`, `randomize` | `vlog-sv-verif` (partly); `force`, `fork`, `event` **new** |
 | `real` signals or ports | `signal x : real` | `real x;` | **new** (warn only on signals and ports, never on constants and generics) |
+| A clock edge outside the register template | `if falling_edge(a) … elsif falling_edge(b)`, a branch after the edge | `always @(posedge a or posedge b)` whose `if` tests neither | **new**: `vhdl-edge-template`, `vlog-edge-template` (§ 3.4) |
 
 **B. Synthesizes, but synthesis ignores part of it, so the board behaves differently.** Still a warning, with text
 that says *ignored* rather than *won't build*.
@@ -151,6 +152,56 @@ alone.
   Tested: GHDL 6.0 synthesizes it with `-frelaxed` or `--std=93`. Without either, VHDL-2008 analysis already
   rejects it ("type of a shared variable must be a protected type"), and that is a compile error, not this feature's.
   The vendor template is a negative test.
+
+### 3.4 Edge-triggered code that is not a register template (built)
+
+Quartus builds a flip-flop from **one clock edge, plus an optional asynchronous reset or set tested as a level
+before it**:
+
+```vhdl
+if rst_n = '0' then           -- asynchronous reset (or set), a level
+    q <= (others => '0');
+elsif rising_edge(clk) then   -- the one clock edge, the last branch
+    q <= d;
+end if;
+```
+
+```verilog
+always @(posedge clk or negedge rst_n)   // the clock, and one edge per reset or set
+    if (!rst_n) q <= 0;                  // the first if tests a reset or set
+    else        q <= d;
+```
+
+GHDL and Icarus simulate other shapes without complaint, so a design can work in HDLBoard and fail in Quartus.
+The old `keyCouter2Led` example did exactly that: `if falling_edge(KEY_N(1)) … elsif falling_edge(KEY_N(0))`
+counted and reset in the simulator, and Quartus refused it. Measured with **Quartus Prime 25.1 Lite**
+(`quartus_map <top> --source=<file> --family="Cyclone V"`), 2026-11-19:
+
+| Code (in one process / always block) | Quartus | Check |
+|---|---|---|
+| `if falling_edge(b) … elsif falling_edge(a)` (the old example) | Error 10820: *can't infer register for count[0] because its behavior depends on the edges of multiple distinct clocks*; Error 10822 | `vhdl-edge-template` |
+| `if rising_edge(a) … elsif falling_edge(a)` | Error 10819: *can't infer register for x because it changes value on both rising and falling edges of the clock* | `vhdl-edge-template` |
+| `if rising_edge(a) … elsif b = '1'` (a branch after the edge; `else` the same) | Error 10818: *Can't infer register for "x" … because it does not hold its value outside the clock edge* | `vhdl-edge-template` |
+| `if rising_edge(a) and rising_edge(b)` | Error 10628: *can't implement register for two clock edges combined with a binary operator* | `vhdl-edge-template` |
+| `if rising_edge(a) …` and `if rising_edge(b) …` assigning the same signal | Error 10820 | not matched: needs the drivers of § 8.1 per clock; rare |
+| `always @(posedge a or posedge b) if (c) …` (the `if` tests no edge) | Error 10200: *cannot match operand(s) in the condition to the corresponding edges in the enclosing event control of the always construct* | `vlog-edge-template` |
+| `always @(KEY_N[1:0])` keeping `count` and `key_prev` (the old Verilog example) | **Builds**, Warning 10240: *inferring latch(es) for variable "count", which holds its previous value* | `vlog-level-storage` (tier `ignored`: it builds, but the board does not behave like the simulation) |
+| `if b = '0' … elsif falling_edge(a)` (the new example), a reset and a set before the edge, `rising_edge(a) and b = '1'`, two `if`s on two clocks assigning two signals, the same clock in two `if`s, `a'event and a = '1'` | accepted | no finding (`registerTemplates.test.ts`) |
+| `always @(negedge a or negedge b) if (!b) …`, `always @(posedge a or posedge b or posedge c) if (b) … else if (c) …`, `always @(a or b) x <= a & b;` | accepted | no finding |
+
+The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and flags a branch that has two edges in
+its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
+branch. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
+with none, a variable assigned with `<=` must not be read in the block (it keeps a value, so Quartus makes a latch).
+The warning gives the template above, and the usual fix for a button: sample it on the board's clock and compare it
+with its value one clock earlier (`keyCounter7Seg` does this).
+
+Sources: the Quartus runs above; Intel's register guidance, *Recommended HDL Coding Styles* in the
+[Quartus Prime Pro user guide: Design Recommendations](https://www.intel.com/content/www/us/en/docs/programmable/683082/25-1/recommended-hdl-coding-styles-revision.html)
+(and the templates under *Edit > Insert Template*); forum threads on the same errors, for example
+[Error 10818](https://community.altera.com/discussions/quartus-prime/synthesis-error-10818/208234),
+[multiple distinct clocks](https://community.altera.com/discussions/quartus-prime/cant-infer-register-because-its-behavior-depends-on-the-edges-of-multiple-clock/188680) and
+[Error 10200](https://community.altera.com/discussions/quartus-prime/quartus-prime-verilog-error-10200-verilog-hdl-conditional-statement-error/323442).
 
 ## 4. Which code is hardware
 

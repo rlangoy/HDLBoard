@@ -1,20 +1,19 @@
 // BTNC counts up, BTNU resets; the count is shown on the LEDs.
-module counter8 (
-    input  wire       BTNC,
-    input  wire       BTNU,
+module keyCouter2Led (
+    input  wire        BTNC,
+    input  wire        BTNU,
     output wire [15:0] LED
 );
-    reg [7:0] count    = 8'd0;
-    reg [1:0] key_prev = 2'b00;
+    reg [7:0] count = 8'd0;
 
-    // BTNU: reset, BTNC: count up. Both act on a button *press*, i.e. the
-    // edge where the active-high button goes from released to pressed.
-    always @(BTNC or BTNU) begin
-        if (key_prev[1] == 1'b0 && BTNU == 1'b1)
-            count <= 8'd0;
-        else if (key_prev[0] == 1'b0 && BTNC == 1'b1)
-            count <= count + 8'd1;
-        key_prev <= {BTNU, BTNC};
+    // A flip-flop is built from one clock edge, plus an optional
+    // asynchronous reset or set tested first. BTNC is the clock (a press is
+    // its rising edge); BTNU is the reset, active high.
+    always @(posedge BTNC or posedge BTNU) begin
+        if (BTNU)
+            count <= 8'd0;                 // BTNU held: reset
+        else
+            count <= count + 8'd1;         // BTNC pressed: count up
     end
 
     assign LED[7:0] = count;

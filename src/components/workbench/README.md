@@ -683,10 +683,10 @@ start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are
 offered by the Examples pane (`examples.ts`, below). The files are copies of `tests/fixtures/{vhdl,verilog}/`, and
 `files.fixtures.test.ts` fails if either side drifts. `blinkTest.vhdl` and
 `keyCouter2Led.vhdl` are both standalone examples (their own
-`blinkTest`/`counter8` entities, not wired into `DE1_SoC.vhdl`) — mark
+`blinkTest`/`keyCouter2Led` entities, not wired into `DE1_SoC.vhdl`) — mark
 either top via its Files-panel dot to run it on its own. `blinkTest.vhdl`
 demonstrates `CLOCK_500Hz` (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a
-`CLOCK_50`/`KEY_N`-driven up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets)
+`KEY_N`-driven up-counter (`KEY_N(0)` is its clock, `KEY_N(1)` an asynchronous reset: the register template Quartus builds)
 displayed on `LEDR`.
 
 `DEFAULT_SHOWN_FILE` is the file shown on first load (`DE1_SoC.vhdl`).

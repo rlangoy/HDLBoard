@@ -10,6 +10,7 @@
 import type { UnitText } from '../tbDetect/rules';
 import { blockAt, blockText, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
+import { vhdlEdgeTemplate } from './registerTemplates';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
@@ -69,6 +70,7 @@ export const VHDL_CONSTRUCTS: readonly SimOnlyConstruct[] = [
   construct('vhdl-protected', 'never', protectedTypes),
   construct('vhdl-random', 'never', (t) => linesOf(t, /\buniform\s*\(/gi)),
   construct('vhdl-real-signal', 'never', (t) => [...linesOf(t, REAL_SIGNAL), ...linesOf(t, REAL_PORT)]),
+  construct('vhdl-edge-template', 'never', vhdlEdgeTemplate),
   fromRule('vhdl-after', 'ignored'),
   fromRule('vhdl-assert', 'quiet', 'vhdl-report'),
 ];

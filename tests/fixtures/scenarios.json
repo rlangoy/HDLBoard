@@ -22,7 +22,7 @@
     {
       "id": "key_counter",
       "mode": "board",
-      "top": "counter8",
+      "top": "keyCouter2Led",
       "files": { "vhdl": "keyCouter2Led.vhdl", "verilog": "keyCouter2Led.v" },
       "steps": [
         { "name": "starts at zero", "expect": { "ledr": "0000000000" } },

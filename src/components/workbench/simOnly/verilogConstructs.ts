@@ -10,6 +10,7 @@
 import { ruleById, type UnitText } from '../tbDetect/rules';
 import { inside, linesOf } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
+import { verilogEdgeTemplate, verilogLevelStorage } from './registerTemplates';
 
 /** `@(posedge clk);`, `@e;`, `wait (x);` as statements: not an `always @(…)` sensitivity, which is followed by code. */
 const EVENT_WAIT = /@\s*(?:\((?:[^()]|\([^()]*\))*\)|\*|\w+)\s*;|\bwait\s*\(/g;
@@ -41,6 +42,8 @@ export const VERILOG_CONSTRUCTS: readonly SimOnlyConstruct[] = [
   construct('vlog-random', 'never', (t) => linesOf(t, /\$(?:random|urandom|urandom_range)\b/g)),
   construct('vlog-verification', 'never', (t) => [...ruleById('vlog-sv-verif').find(t), ...linesOf(t, VERIFICATION)]),
   construct('vlog-real', 'never', realVariables),
+  construct('vlog-edge-template', 'never', verilogEdgeTemplate),
+  construct('vlog-level-storage', 'ignored', verilogLevelStorage),
   fromRule('vlog-assign-delay', 'ignored'),
   fromRule('vlog-display', 'quiet'),
 ];

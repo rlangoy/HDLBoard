@@ -18,9 +18,9 @@ export type Tier = 'never' | 'ignored' | 'quiet';
 export type SimOnlyConstructId =
   | 'vhdl-wait-for' | 'vhdl-wait-forever' | 'vhdl-wait-until' | 'vhdl-clock-gen' | 'vhdl-file-io'
   | 'vhdl-end-sim' | 'vhdl-now' | 'vhdl-access' | 'vhdl-protected' | 'vhdl-random' | 'vhdl-real-signal'
-  | 'vhdl-after' | 'vhdl-report'
+  | 'vhdl-edge-template' | 'vhdl-after' | 'vhdl-report'
   | 'vlog-delay' | 'vlog-event-wait' | 'vlog-clock-gen' | 'vlog-file-io' | 'vlog-end-sim' | 'vlog-time'
-  | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-assign-delay' | 'vlog-display';
+  | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-edge-template' | 'vlog-level-storage' | 'vlog-assign-delay' | 'vlog-display';
 
 /** One construct on one line. */
 export interface ConstructMatch {

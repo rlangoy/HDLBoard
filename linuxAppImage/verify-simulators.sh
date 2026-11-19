@@ -119,7 +119,7 @@ compile_clean() { # label top sources...
 }
 compile_clean "DE1_SoC.v" DE1_SoC DE1_SoC.v
 compile_clean "blinkTest.v" blinkTest blinkTest.v
-compile_clean "keyCouter2Led.v" counter8 keyCouter2Led.v
+compile_clean "keyCouter2Led.v" keyCouter2Led keyCouter2Led.v
 compile_clean "tb_counter8.v" tb_counter8 keyCouter2Led.v tb_counter8.v
 
 out="$(clean "${VVP}" "-M${IVERILOG_DIR}" -n -i tb_counter8.vvp < /dev/null 2>&1)"
