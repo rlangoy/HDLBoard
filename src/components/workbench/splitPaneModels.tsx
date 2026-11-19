@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import type { ReactNode } from 'react';
-import { EmptyPaneHeader, PlainPaneHeader, RolePaneHeader, type PaneRun, type PaneViewControl } from './EditorPaneHeader';
+import { EmptyPaneHeader, PlainPaneHeader, RolePaneHeader, type DesignCheckBadge, type PaneRun, type PaneViewControl } from './EditorPaneHeader';
 import { narrowView, withCurrentUnit, type EditorView, type PaneRole } from './editorView';
 import { FileNameButton, type FileMenuProps } from './FileMenu';
 import type { VhdlFile } from './files';
@@ -53,6 +53,8 @@ export interface ModelContext {
   readonly onCreateTestbench: (designFileId: string) => void;
   /** The project's files for the header's file menu. */
   readonly fileMenu: FileMenuProps;
+  /** A design file's design check, for its badge (docs/impl_sim_only_warnings.md § 5.3). */
+  readonly designCheckBadge?: (fileId: string) => DesignCheckBadge | undefined;
 }
 
 export const otherPane = (pane: PaneRole): PaneRole => (pane === 'tb' ? 'rtl' : 'tb');
@@ -121,9 +123,14 @@ function plainHeader(ctx: ModelContext, { pane, target, file, end, viewControl }
       viewControl={viewControl}
       roleOverride={ctx.overrides.roles[file.id]}
       onSetRole={(role) => ctx.onSetRole(file.id, role)}
+      designCheck={designCheckOf(ctx, pane, file.id)}
     />
   );
 }
+
+/** Only a design pane shows the design check. */
+const designCheckOf = (ctx: ModelContext, pane: PaneRole, fileId: string): DesignCheckBadge | undefined =>
+  pane === 'rtl' ? ctx.designCheckBadge?.(fileId) : undefined;
 
 function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, end, viewControl }: ShownFile): ReactNode {
   return (
@@ -141,6 +148,7 @@ function roleHeader(ctx: ModelContext, d: EditorDisplay, { pane, target, file, e
       onSetRole={(role) => ctx.onSetRole(file.id, role)}
       pairOptions={pairOptions(ctx.project, ctx.overrides, file.id, pane)}
       onPairWith={(other) => (pane === 'tb' ? ctx.onPair(other, file.id) : ctx.onPair(file.id, other))}
+      designCheck={designCheckOf(ctx, pane, file.id)}
     />
   );
 }

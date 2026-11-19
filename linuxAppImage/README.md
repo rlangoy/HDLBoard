@@ -42,7 +42,8 @@ What `build.sh` does, in order:
 3. **Frontend and backend:** their own `npm run build` (only their `dist/` output is used).
 4. **`resources/`:** assembled exactly as `build.ps1` does, then the shell's own tests, then
    `electron-builder --linux dir`.
-5. **The AppImage:** `linux-unpacked/` plus `AppRun`, `hdlboard.desktop`, the icon and
+5. **The AppImage:** `linux-unpacked/` plus `AppRun`, `io.github.rlangoy.HDLBoard.desktop`, the AppStream metainfo
+   (`usr/share/metainfo/`, generated from `io.github.rlangoy.HDLBoard.metainfo.xml.in` with this build's version), the icon and
    `resources/licenses/README.txt`. The executable bits of the simulators are checked. Then
    `mksquashfs` (zstd) runs, and the result is placed behind the pinned static AppImage runtime.
 
@@ -54,6 +55,7 @@ To test a build: `linuxAppImage/smoke-test.sh [--mounted] [--in <dir>] linuxAppI
 | File | Purpose |
 |---|---|
 | `build.sh` | The whole build, as above. |
+| `io.github.rlangoy.HDLBoard.metainfo.xml.in` | AppStream metainfo template. `build.sh` fills in `@VERSION@` and `@DATE@`. The component ID matches the `.desktop` file's name. Validate with `appstreamcli validate --explain`. |
 | `fetch-ghdl.sh` | Downloads and verifies the pinned GHDL source, builds mcode with GNAT on Ubuntu 22.04, checks its libraries, writes `VERSION.txt`. `--force`, `--check`. |
 | `build-iverilog.sh` | Downloads the pinned Icarus source tag, verifies it, builds it, assembles the flat tree, writes `VERSION.txt`. `--force`, `--check`. |
 | `verify-simulators.sh` | The smoke test of both trees (step 2). `--ghdl`, `--iverilog`, `--fixtures` to point it elsewhere. |

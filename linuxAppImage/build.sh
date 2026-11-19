@@ -20,7 +20,7 @@
 #   4. resources/ for electron-builder, assembled exactly as build.ps1 does,
 #      then `electron-builder --linux dir`.
 #   5. The AppImage: linux-unpacked/ plus AppRun (the sandbox check), the
-#      .desktop entry and icon, packed with mksquashfs behind the pinned
+#      .desktop entry, AppStream metainfo and icon, packed with mksquashfs behind the pinned
 #      static AppImage runtime, which needs no libfuse2.
 #
 # Host requirements: Node.js 20+, npm, mksquashfs (squashfs-tools), curl,
@@ -211,7 +211,10 @@ cp -a "${unpacked}" "${appdir}"
 install -m 755 "${HERE}/AppRun" "${appdir}/AppRun"
 install -m 644 "${icon}" "${appdir}/hdlboard.png"
 ln -s hdlboard.png "${appdir}/.DirIcon"
-cat > "${appdir}/hdlboard.desktop" <<EOF
+# The desktop file is named after the AppStream component ID, which is how
+# software centers and AppImage integrators match it to the metainfo below.
+APP_ID="io.github.rlangoy.HDLBoard"
+cat > "${appdir}/${APP_ID}.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=HDLBoard
@@ -223,6 +226,16 @@ Terminal=false
 StartupWMClass=HDLBoard
 X-AppImage-Version=${VERSION}
 EOF
+# AppStream metainfo: the release entry follows this build's version. The date
+# is the HEAD commit's (works in a shallow CI checkout), else today's.
+release_date="$(git -C "${REPO}" log -1 --format=%cs 2> /dev/null || true)"
+[[ "${release_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || release_date="$(date -u +%F)"
+metainfo="${appdir}/usr/share/metainfo/${APP_ID}.metainfo.xml"
+mkdir -p "$(dirname "${metainfo}")"
+sed -e "s/@VERSION@/${VERSION}/g" -e "s/@DATE@/${release_date}/g" \
+  "${HERE}/${APP_ID}.metainfo.xml.in" > "${metainfo}"
+chmod 644 "${metainfo}"
+grep -q "release version=\"${VERSION}\"" "${metainfo}" || die "metainfo does not carry version ${VERSION}"
 install -m 644 "${HERE}/LICENSES.txt" "${appdir}/resources/licenses/README.txt"
 # Executable bits must survive extraResources, or spawn() fails with EACCES.
 for exe in resources/ghdl/bin/ghdl resources/iverilog/iverilog resources/iverilog/vvp resources/iverilog/ivl resources/iverilog/ivlpp; do

@@ -677,16 +677,19 @@ and `system`.
 `and_gate_tb.v`, `and_gate_truthtable_tb.v` under `verilog/`. `and_gate_truthtable_tb`
 tests the AND gate and prints its truth table (the Examples pane's AND Gate Truth Table
 Testbench).
+`keyCounterTwoClocks` (`.vhdl`, `.v`) is SIM-only on purpose: KEY0 counts up and KEY1 down with two clock edges
+in one process, which runs in the simulator and no FPGA can build (the Examples card *Key Counter, Two Clocks
+(SIM-only)*; docs/impl_sim_only_warnings.md § 3.4).
 `keyCounter7Seg` counts KEY0 presses 00-99 in decimal on HEX1/HEX0 (KEY1 resets),
 detecting a press as a falling edge of the key sampled on `CLOCK_50`. `STARTER_FILES` is what a first
 start shows in the tree: only `DE1_SoC.vhdl` and `DE1_SoC.v`. The rest are
 offered by the Examples pane (`examples.ts`, below). The files are copies of `tests/fixtures/{vhdl,verilog}/`, and
 `files.fixtures.test.ts` fails if either side drifts. `blinkTest.vhdl` and
 `keyCouter2Led.vhdl` are both standalone examples (their own
-`blinkTest`/`counter8` entities, not wired into `DE1_SoC.vhdl`) — mark
+`blinkTest`/`keyCouter2Led` entities, not wired into `DE1_SoC.vhdl`) — mark
 either top via its Files-panel dot to run it on its own. `blinkTest.vhdl`
 demonstrates `CLOCK_500Hz` (§ 3.2/§ 5.7); `keyCouter2Led.vhdl` is a
-`CLOCK_50`/`KEY_N`-driven up-counter (`KEY_N(0)` counts, `KEY_N(1)` resets)
+`KEY_N`-driven up-counter (`KEY_N(0)` is its clock, `KEY_N(1)` an asynchronous reset: the register template synthesis builds)
 displayed on `LEDR`.
 
 `DEFAULT_SHOWN_FILE` is the file shown on first load (`DE1_SoC.vhdl`).

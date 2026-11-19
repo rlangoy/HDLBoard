@@ -225,6 +225,58 @@
   background: var(--wb-success);
 }
 
+/* The language badge, and the SIM-only one beside it (docs/impl_sim_only_warnings.md § 5.3). */
+.wb-examples__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Amber, as the editor's SIM-only badge: the design only works in the simulator. */
+.wb-examples__simonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 5px;
+  border: 1px solid var(--wb-diag-warning);
+  border-radius: 5px;
+  background: var(--wb-diag-warning-bg);
+  color: var(--wb-diag-warning-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+.wb-examples__simonly svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* An example SIM-only on purpose says what it teaches. */
+.wb-examples__lesson {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--wb-diag-warning);
+  border-radius: 4px;
+  background: var(--wb-diag-warning-bg);
+  color: var(--wb-diag-warning-text);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.wb-examples__lesson-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
 .wb-examples__open {
   display: flex;
   align-items: center;

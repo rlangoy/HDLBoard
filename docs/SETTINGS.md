@@ -6,13 +6,15 @@ made in **Settings** is kept in that browser and wins over the file.
 
 ```json
 {
-  "bouncyButtons": true
+  "bouncyButtons": true,
+  "designCheck": "synthesis"
 }
 ```
 
 | Setting | Default | What it does |
 |---|---|---|
 | `bouncyButtons` | `true` | Settings › Board & I/O › Pushbuttons › **Offer bouncy pushbuttons**. On: the Pushbuttons panel's menu offers *No Bounce* and *Bouncy* contacts. Off: the choice is hidden and every press is one clean edge; a project saved as Bouncy keeps that choice and gets it back when the setting is on again. |
+| `designCheck` | `"synthesis"` | Settings › Simulation › **Design check** (docs/impl_sim_only_warnings.md). `"synthesis"`: designs are checked for FPGA synthesis; a line that only works in simulation (`wait for`, `#10`, file I/O, …) gets a warning, and the file is labelled `SIM-only` instead of `RTL`. `"simulation"` (*Simulation only*): no warnings and no `SIM-only` label, for models and exercises that never go to an FPGA. Testbenches are never checked. |
 
 `$comment` and `$schema` are allowed and ignored. Anything else, or a value of the wrong type, is
 skipped with a warning in the browser console; the rest of the file still applies. A missing file

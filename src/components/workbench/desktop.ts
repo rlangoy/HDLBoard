@@ -13,6 +13,7 @@ import type { AuthorizationCallback } from '../../github/webFlow';
 import { FOLDER_ORDER, filesInFolderOrder } from './fileKinds';
 import type { VhdlFile } from './files';
 import { parseStoredProject, type OpenProject } from './projectFile';
+import { parseSimModels } from './simOnly/simModels';
 import type { TestbenchOverrides, UnitRole } from './tbDetect/types';
 
 /** What the Windows app found in the projects folder. */
@@ -183,5 +184,5 @@ function parseOverrides(raw: unknown, known: (id: unknown) => id is string): Tes
   const entries = (value: unknown) => (value && typeof value === 'object' ? Object.entries(value) : []);
   const roles = entries(r.roles).filter(([id, role]) => known(id) && ROLES.includes(role as UnitRole));
   const pairs = entries(r.pairs).filter(([design, tb]) => known(design) && known(tb));
-  return { roles: Object.fromEntries(roles), pairs: Object.fromEntries(pairs) };
+  return { roles: Object.fromEntries(roles), pairs: Object.fromEntries(pairs), ...parseSimModels(r.simModels, known) };
 }

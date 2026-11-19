@@ -19,6 +19,10 @@ import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayou
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { useBouncyOption } from './useBouncyOption';
+import { DESIGN_CHECK_OFF } from './simOnly/simOnlyText';
+import { useDesignCheck } from './simOnly/useDesignCheck';
+import { simulatorClockOf } from './simOnly/simulatorClock';
+import { useDesignCheckMode } from './simOnly/useDesignCheckMode';
 import { useUpdateCheck } from './useUpdateCheck';
 import { UpdateBell } from './UpdateBell';
 import { BoardFit } from './BoardFit';
@@ -73,7 +77,7 @@ import { useProjectWaveViews } from './useProjectWaveViews';
 import { WaveformButton } from '../waveform/WaveformButton';
 import { WaveformPane } from '../waveform/WaveformPane';
 import { useDiagnostics } from './useDiagnostics';
-import { countSeverities, type LineDiagnostic } from './diagnosticStore';
+import { addToFiles, countSeverities, type LineDiagnostic } from './diagnosticStore';
 import { fileAfterDelete, fileRows } from './fileRows';
 import type { FileMenuProps } from './FileMenu';
 import { nextRevealId, type RevealRequest } from './useRevealLine';
@@ -369,6 +373,7 @@ export function Workbench() {
   const catalog = useBoards(project.boardConfig, project.board);
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
   const bouncyOption = useBouncyOption();
+  const designCheckMode = useDesignCheckMode();
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
@@ -532,10 +537,11 @@ export function Workbench() {
     show: showDiagnostic,
   } = diagnostics;
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const revealLocation = useCallback((target: RevealTarget, highlight?: string) => navigate(() => {
+  /** Shows the place in the editor; `highlight` marks a symbol there, `openCard` pins the line's problem card. */
+  const revealLocation = useCallback((target: RevealTarget, also: Pick<RevealRequest, 'highlight' | 'openCard'> = {}) => navigate(() => {
     setOverlay(null);
     setActiveFileId(target.fileId);
-    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), highlight });
+    setReveal({ fileId: target.fileId, line: target.line, index: target.index, id: nextRevealId(), ...also });
   }), [navigate, setOverlay]);
   // Console links retain recorded advice and the file's other markers.
   const openConsoleDiagnostic = useCallback(
@@ -570,7 +576,7 @@ export function Workbench() {
     },
     explorerFolds,
     files: useCallback(() => filesRef.current, []),
-    reveal: (target) => revealLocation(target, target.symbolId),
+    reveal: (target) => revealLocation(target, { highlight: target.symbolId }),
     log: useCallback((text: string, link?: boolean) => appendLog(text, link ? 'success' : undefined, link ? 'open-waveform' : undefined), [appendLog]),
     projectKey: String(projectGeneration),
     savedViews: useProjectWaveViews(project, setProject),
@@ -1633,6 +1639,8 @@ export function Workbench() {
   const logRunBoard = () => {
     if (boardInstalled) appendLog(runBoardLog(activeBoard));
     else logWithLink(notInstalledRunLog(project.board, DEFAULT_BOARD), { label: BOARD_TEXT.chooseBoard, onClick: () => settingsPage.open('board') });
+    // A student who sees no SIM-only warnings can tell why (docs/impl_sim_only_warnings.md § 6).
+    if (designCheckMode.value === 'simulation') logWithLink(DESIGN_CHECK_OFF, { label: 'Settings', onClick: () => settingsPage.open('simulation') });
   };
 
   /**
@@ -1649,6 +1657,7 @@ export function Workbench() {
       appendLog(warning);
       recordDiagnostics(warning, runFiles);
     }
+    logDesignCheck(runFiles);
   };
 
   /**
@@ -1773,6 +1782,36 @@ export function Workbench() {
 
   restoreOverridesRef.current = tb.restoreOverrides;
 
+  // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
+  // simulation, merged with the run's markers, and the SIM-only group of the files.
+  const simulatorClock = useMemo(() => simulatorClockOf(activeBoard), [activeBoard]);
+  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock, viewNow: tb.designViewNow });
+  const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
+  // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.
+  const { quietFile: quietLiveWarnings, showFile: showLiveWarnings } = designCheck;
+  const dismissInEditor = useCallback((fileId: string) => {
+    dismissDiagnostics(fileId);
+    quietLiveWarnings(fileId);
+  }, [dismissDiagnostics, quietLiveWarnings]);
+  const openConsoleLocation = useCallback((diagnostic: LocatedDiagnostic) => {
+    showLiveWarnings(diagnostic.fileId);
+    openConsoleDiagnostic(diagnostic);
+  }, [showLiveWarnings, openConsoleDiagnostic]);
+  /** A design-check summary's *Line n*: the file's warnings show again, and the line's problem card opens. */
+  const openSummaryLine = (summary: RevealTarget) => {
+    showLiveWarnings(summary.fileId);
+    revealLocation(summary, { openCard: true });
+  };
+  /**
+   * At Start: one line per SIM-only file of the run, linked to its first line
+   * (docs/impl_sim_only_warnings.md § 5.2), from the files as they run, not the check of 500 ms ago.
+   */
+  const logDesignCheck = (runFiles: RunSnapshot['files']) => {
+    for (const summary of designCheck.summariesFor(new Set(runFiles.map((f) => f.id)))) {
+      logWithLink(summary.text, { label: `Line ${summary.line}`, onClick: () => openSummaryLine(summary) });
+    }
+  };
+
   /** The files a board change (or its Undo) made: a renamed file's markers are about text that has changed, as after an edit. */
   const replaceFilesForBoard = (next: VhdlFile[]) => {
     const before = new Map(filesRef.current.map((file) => [file.id, file.content]));
@@ -1848,7 +1887,8 @@ export function Workbench() {
     shownIds: tb.shownFileIds,
     topFileId,
     roleOf: tb.roleOf,
-    problemsOf: (id) => countSeverities(diagnostics.byFile[id] ?? NO_LINES),
+    problemsOf: (id) => countSeverities(shownDiagnostics[id] ?? NO_LINES),
+    groupOf: designCheck.groupOf,
   });
   const fileMenu: FileMenuProps = { rows, onPick: handlePickFile, onNewFile: handleNewFile };
 
@@ -2149,13 +2189,16 @@ export function Workbench() {
           <div className="wb-center">
             {/* Under the Examples pane or the Active project the editor is inert: no caret, no typing into a hidden file. */}
             <div className="wb-center__editor" {...(overlay !== null ? { inert: '' } : {})}>
+            {/* A design turning RTL or SIM-only as the student types (docs/impl_sim_only_warnings.md § 5.3). */}
+            <p className="wb-sr-only" role="status" aria-live="polite">{designCheck.announcement}</p>
             <CodeEditor
               onChange={handleContentChange}
               onFilesDropped={handleFilesDropped}
-              diagnostics={diagnostics.byFile}
-              onDismissDiagnostics={dismissDiagnostics}
+              diagnostics={shownDiagnostics}
+              onDismissDiagnostics={dismissInEditor}
+              onShowLineDiagnostics={designCheck.showLine}
               projectFiles={files}
-              split={tb.editorSplit(fileMenu)}
+              split={tb.editorSplit(fileMenu, designCheck.badgeFor)}
               emptyProject={
                 files.length === 0 && (
                   <EmptyProject onExamples={(activeBoard.origin === 'built-in' || hasExamples(activeBoard)) ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
@@ -2181,7 +2224,7 @@ export function Workbench() {
                   bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
                 }}
                 editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
-                simulation={{ recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                simulation={{ designCheck: designCheckMode, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
                   check: { status: updateCheck.status, onCheck: updateCheck.checkNow },
@@ -2258,6 +2301,7 @@ export function Workbench() {
               onClose={() => setOverlay(null)}
               board={activeBoard}
               onNewStarterFile={handleNewStarterFile}
+              designCheck={designCheckMode.value}
             />
           )}
           </div>
@@ -2330,7 +2374,7 @@ export function Workbench() {
         lines={logLines}
         onClear={handleClearConsole}
         locate={(line) => diagnostics.locateText(line, filesRef.current)}
-        onOpenLocation={openConsoleDiagnostic}
+        onOpenLocation={openConsoleLocation}
         waveButton={<WaveformButton {...waveButton} />}
         onOpenTime={waveView.links.onOpenTime}
         onOpenWaveform={waveView.links.onOpenWaveform}

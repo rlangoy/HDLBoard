@@ -83,6 +83,11 @@ export interface Advice {
   readonly fix?: QuickFix;
   /** A few words shown on `relatedLine` itself, saying why it is pointed at. */
   readonly relatedNote?: string;
+  /**
+   * From the live design check (docs/impl_sim_only_warnings.md § 5.2), not from a run:
+   * it follows the code as it is edited, so a click or an edit does not clear it.
+   */
+  readonly liveCheck?: true;
 }
 
 export interface AdvisedDiagnostic extends LocatedDiagnostic {

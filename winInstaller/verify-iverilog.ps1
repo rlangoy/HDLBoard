@@ -145,7 +145,7 @@ try {
   Test-Banner
   Test-CleanCompile $workDir "DE1_SoC.v" "DE1_SoC" @("DE1_SoC.v")
   Test-CleanCompile $workDir "blinkTest.v" "blinkTest" @("blinkTest.v")
-  Test-CleanCompile $workDir "keyCouter2Led.v" "counter8" @("keyCouter2Led.v")
+  Test-CleanCompile $workDir "keyCouter2Led.v" "keyCouter2Led" @("keyCouter2Led.v")
   Test-CleanCompile $workDir "tb_counter8.v" "tb_counter8" @("keyCouter2Led.v", "tb_counter8.v")
   Test-BatchTestbench $workDir
   Test-BoardRun $workDir

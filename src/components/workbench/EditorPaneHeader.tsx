@@ -5,8 +5,9 @@ import { useId, type ReactNode } from 'react';
 import { CopyCodeButton } from './CopyCodeButton';
 import type { EditorView, PaneRole } from './editorView';
 import { SearchToggle } from './find/SearchToggle';
-import { ChipIcon, FlaskIcon } from './icons';
+import { ChipIcon, FlaskIcon, SimOnlyIcon } from './icons';
 import { RoleIcon, usePopover } from './RoleIcon';
+import { DESIGN_CHECK_TEXT } from './simOnly/designCheckText';
 import { SimToggle } from './SimToggle';
 import { TEXT, detectedAs, regionCount } from './testbenchText';
 import type { AnalyzedUnit, FileRole, UnitRole } from './tbDetect/types';
@@ -47,6 +48,15 @@ export interface PaneViewControl {
   readonly onUseSetting: () => void;
 }
 
+/** What a design pane's badge shows of the design check (docs/impl_sim_only_warnings.md § 5.3). */
+export interface DesignCheckBadge {
+  /** Set while the file is SIM-only: the badge's tooltip and the menu's *Detected* line. */
+  readonly simOnly?: { readonly tooltip: string; readonly detected: string };
+  /** The file is marked *Simulation model* (S9). */
+  readonly simModel: boolean;
+  readonly onSimModel: (simModel: boolean) => void;
+}
+
 /** What every pane header with a file has (docs/cleanup_file_tabs.md § 5.2, § 5.3). */
 interface FilePaneHeaderProps {
   fileName: string;
@@ -59,6 +69,8 @@ interface FilePaneHeaderProps {
   end?: ReactNode;
   /** The role badge's View group. */
   viewControl: PaneViewControl;
+  /** A design pane's design check; absent for a testbench pane, or with the check off. */
+  designCheck?: DesignCheckBadge;
 }
 
 export interface RolePaneHeaderProps extends FilePaneHeaderProps {
@@ -108,7 +120,7 @@ export interface PlainPaneHeaderProps extends FilePaneHeaderProps {
  * no tint; an untinted RTL badge whose menu can show a testbench beside it
  * (docs/impl_search.md D18, D19); a divider sets Play apart from the name.
  */
-export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewControl, roleOverride, onSetRole }: PlainPaneHeaderProps) {
+export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewControl, roleOverride, onSetRole, designCheck }: PlainPaneHeaderProps) {
   return (
     <div className="wb-panehead is-plain">
       {run && (
@@ -117,7 +129,7 @@ export function PlainPaneHeader({ fileName, nameButton, code, run, end, viewCont
           <span className="wb-panehead__divider" aria-hidden="true" />
         </>
       )}
-      <PlainRoleBadge viewControl={viewControl} roleOverride={roleOverride} onSetRole={onSetRole} />
+      <PlainRoleBadge viewControl={viewControl} roleOverride={roleOverride} onSetRole={onSetRole} designCheck={designCheck} />
       {nameButton}
       <CopyCodeButton fileName={fileName} code={code} />
       <span className="wb-panehead__divider" aria-hidden="true" />
@@ -179,16 +191,19 @@ function RegionNavigator({ regions }: { regions: RegionNav }) {
 function BadgeMenu({
   pane,
   plain = false,
+  simOnly,
   children,
 }: {
   pane: PaneRole;
   /** The untinted RTL badge of a design with no testbench. */
   plain?: boolean;
+  /** A design that only works in simulation: the SIM-only badge, with this tooltip. */
+  simOnly?: string;
   children: (choose: (action: () => void) => void) => ReactNode;
 }) {
   const menu = usePopover<HTMLSpanElement>();
   const menuId = useId();
-  const Icon = pane === 'tb' ? FlaskIcon : ChipIcon;
+  const look = badgeLook(pane, simOnly);
   const choose = (action: () => void) => {
     action();
     menu.setOpen(false);
@@ -197,15 +212,15 @@ function BadgeMenu({
     <span className="wb-panehead__badge-wrap" ref={menu.rootRef}>
       <button
         type="button"
-        className={`wb-rolebadge is-${pane}${plain ? ' is-plain' : ''}`}
+        className={`wb-rolebadge is-${look.kind}${plain ? ' is-plain' : ''}`}
         aria-haspopup="menu"
         aria-expanded={menu.open}
         aria-controls={menu.open ? menuId : undefined}
-        title={pane === 'tb' ? TEXT.tbTooltip : TEXT.rtlTooltip}
+        title={look.title}
         onClick={() => menu.setOpen(!menu.open)}
       >
-        <Icon aria-hidden="true" />
-        <span className="wb-rolebadge__label">{pane === 'tb' ? TEXT.tbLabel : TEXT.rtlLabel}</span>
+        <look.Icon aria-hidden="true" />
+        <span className="wb-rolebadge__label">{look.label}</span>
       </button>
       {menu.open && (
         <div className="wb-menu" role="menu" id={menuId}>
@@ -216,20 +231,35 @@ function BadgeMenu({
   );
 }
 
+/** The badge's label, icon, tooltip and colour: TB, RTL, or SIM-only for a design that only works in simulation. */
+function badgeLook(pane: PaneRole, simOnlyTooltip: string | undefined) {
+  if (pane === 'tb') return { kind: 'tb', Icon: FlaskIcon, label: TEXT.tbLabel, title: TEXT.tbTooltip };
+  if (simOnlyTooltip !== undefined) return { kind: 'simonly', Icon: SimOnlyIcon, label: DESIGN_CHECK_TEXT.simOnlyLabel, title: simOnlyTooltip };
+  return { kind: 'rtl', Icon: ChipIcon, label: TEXT.rtlLabel, title: TEXT.rtlTooltip };
+}
+
+/** What the menu says detection found: the student's own mark, the SIM-only findings, or the role. */
+function detectedText({ roleOverride, unit, designCheck }: Pick<RolePaneHeaderProps, 'roleOverride' | 'unit' | 'designCheck'>): string {
+  if (roleOverride) return TEXT.roleFromOverride;
+  if (designCheck?.simOnly) return designCheck.simOnly.detected;
+  return unit ? detectedAs(unit.role, unit.confidence) : TEXT.noEvidence;
+}
+
 /** The role badge of a split pane: the view (D19), detection, role override, pairing. */
-function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith, viewControl }: RolePaneHeaderProps) {
+function RoleBadge({ pane, unit, roleOverride, onSetRole, pairOptions, onPairWith, viewControl, designCheck }: RolePaneHeaderProps) {
   const pairList = usePopover<HTMLDivElement>();
   return (
-    <BadgeMenu pane={pane}>
+    <BadgeMenu pane={pane} simOnly={designCheck?.simOnly?.tooltip}>
       {(choose) => (
         <>
           <ViewGroup pane={pane} control={viewControl} onChoose={choose} />
           <p className="wb-menu__info" role="presentation">
-            {roleOverride ? TEXT.roleFromOverride : unit ? detectedAs(unit.role, unit.confidence) : TEXT.noEvidence}
+            {detectedText({ roleOverride, unit, designCheck })}
           </p>
           <MenuItem checked={roleOverride === 'tb'} onClick={() => choose(() => onSetRole('tb'))} label={TEXT.treatAsTestbench} />
           <MenuItem checked={roleOverride === 'rtl'} onClick={() => choose(() => onSetRole('rtl'))} label={TEXT.treatAsDesign} />
           <MenuItem checked={roleOverride === undefined} onClick={() => choose(() => onSetRole(undefined))} label={TEXT.useDetection} />
+          {designCheck && <SimModelItem designCheck={designCheck} onChoose={choose} />}
           <div ref={pairList.rootRef}>
             <button type="button" role="menuitem" className="wb-menu__item" aria-expanded={pairList.open} onClick={() => pairList.setOpen(!pairList.open)}>
               {TEXT.pairWith}
@@ -278,21 +308,45 @@ function PlainRoleBadge({
   viewControl,
   roleOverride,
   onSetRole,
+  designCheck,
 }: {
   viewControl: PaneViewControl;
   roleOverride: UnitRole | undefined;
   onSetRole: (role: UnitRole | undefined) => void;
+  designCheck?: DesignCheckBadge;
 }) {
   return (
-    <BadgeMenu pane="rtl" plain>
+    <BadgeMenu pane="rtl" plain simOnly={designCheck?.simOnly?.tooltip}>
       {(choose) => (
         <>
+          {designCheck?.simOnly && <p className="wb-menu__info" role="presentation">{designCheck.simOnly.detected}</p>}
           <ShowBesideItem pane="rtl" control={viewControl} onChoose={choose} />
           <MenuItem onClick={() => choose(() => onSetRole('tb'))} label={TEXT.treatAsTestbench} />
           {roleOverride && <MenuItem onClick={() => choose(() => onSetRole(undefined))} label={TEXT.useDetection} />}
+          {designCheck && <SimModelItem designCheck={designCheck} onChoose={choose} />}
         </>
       )}
     </BadgeMenu>
+  );
+}
+
+/** *Simulation model*: a check item; keeps the SIM-only label and hides the line warnings (S9). */
+function SimModelItem({ designCheck, onChoose }: { designCheck: DesignCheckBadge; onChoose: (action: () => void) => void }) {
+  const { simModel, onSimModel } = designCheck;
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={simModel}
+      className="wb-menu__item"
+      title={DESIGN_CHECK_TEXT.simModelHint}
+      onClick={() => onChoose(() => onSimModel(!simModel))}
+    >
+      <span className="wb-menu__check" aria-hidden="true">
+        {simModel ? '✓' : ''}
+      </span>
+      {DESIGN_CHECK_TEXT.simModel}
+    </button>
   );
 }
 

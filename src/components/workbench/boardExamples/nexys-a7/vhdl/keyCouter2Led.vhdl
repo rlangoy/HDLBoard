@@ -3,27 +3,29 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 -- BTNC counts up, BTNU resets; the count is shown on the LEDs.
-entity counter8 is
+entity keyCouter2Led is
     port (
-        BTNC    : in  std_logic;
-        BTNU    : in  std_logic;
-        LED : out std_logic_vector(15 downto 0)
+        BTNC : in  std_logic;
+        BTNU : in  std_logic;
+        LED  : out std_logic_vector(15 downto 0)
     );
-end entity counter8;
+end entity keyCouter2Led;
 
-architecture rtl of counter8 is
+architecture rtl of keyCouter2Led is
     signal count : unsigned(7 downto 0) := (others => '0');
-
 
 begin
 
-    process (BTNC, BTNU)
+    -- A flip-flop is built from one clock edge, plus an optional
+    -- asynchronous reset or set tested as a level before it. BTNC is the
+    -- clock (a press is its rising edge); BTNU is the reset, active high.
+    counter : process (BTNC, BTNU)
     begin
-       if rising_edge(BTNU) then
-                count <= (others => '0');          -- BTNU: reset
-       elsif rising_edge(BTNC) then
-                count <= count + 1;                -- BTNC: count up
-       end if;
+        if BTNU = '1' then
+            count <= (others => '0');          -- BTNU held: reset
+        elsif rising_edge(BTNC) then
+            count <= count + 1;                -- BTNC pressed: count up
+        end if;
     end process;
 
     LED(7 downto 0) <= std_logic_vector(count);

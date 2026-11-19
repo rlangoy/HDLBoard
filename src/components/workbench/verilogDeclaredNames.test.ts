@@ -73,7 +73,7 @@ describe('verilogDeclaredNames: the Verilog fixtures', () => {
 
   test('keyCouter2Led.v', () => {
     expect(verilogDeclaredNames(fixture('keyCouter2Led.v')).sort()).toEqual(
-      ['counter8', 'CLOCK_50', 'KEY_N', 'LEDR', 'count', 'key_prev'].sort(),
+      ['keyCouter2Led', 'CLOCK_50', 'KEY_N', 'LEDR', 'count'].sort(),
     );
   });
 

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { Fragment, memo, useId, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type CSSProperties, type RefObject, type UIEvent } from 'react';
+import { Fragment, memo, useCallback, useId, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type CSSProperties, type PointerEvent, type RefObject, type UIEvent } from 'react';
 import { cx } from '../board';
 import { CodeText } from './CodeText';
-import { describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
+import { cardMessages, describeHint, describeLine, hintNote, inlineText, summarize } from './diagnosticText';
+import { copyableText, withCardHint } from './diagnosticCardText';
+import { DiagnosticCard } from './DiagnosticCard';
+import { gutterRowAt, useDiagnosticCard, usePinCardOnReveal, type CardState, type DiagnosticCardApi } from './useDiagnosticCard';
 import { hintLines, isFollowOnLine, isQuietLine, visibleSpans, type LineDiagnostic } from './diagnosticStore';
 import { OverlayScrollbar, SCROLLBAR_PX, useScrollMetrics } from './OverlayScrollbar';
 import { isOverflowing } from './scrollThumb';
@@ -41,6 +44,14 @@ export interface EditorTab {
 function isQuickFixKey(e: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
   return e.key === '.' && (e.ctrlKey || e.metaKey);
 }
+
+/** Alt+Enter shows the problem card of the caret's line, with Copy (the gutter is for the pointer). */
+function isProblemCardKey(e: { key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): boolean {
+  return e.key === 'Enter' && e.altKey && !e.ctrlKey && !e.metaKey;
+}
+
+/** The 1-based line of the textarea's caret. */
+const caretLine = (textarea: HTMLTextAreaElement): number => textarea.value.slice(0, textarea.selectionStart).split('\n').length;
 
 /** Keys that only modify another: they neither end nor start the Esc-then-Tab escape. */
 const MODIFIER_KEYS: readonly string[] = ['Shift', 'Control', 'Alt', 'Meta', 'Tab'];
@@ -136,7 +147,8 @@ const HighlightedLine = memo(function HighlightedLine({
 });
 
 /**
- * Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue).
+ * Line numbers; a marked line gets a glyph and an edge (colour is never the only cue), and
+ * its text shows in the problem card (DiagnosticCard.tsx) when the pointer rests on it.
  * Memoised: a symbol highlight changes nothing here, so hovering skips every line number.
  */
 const EditorGutter = memo(function EditorGutter({
@@ -157,10 +169,9 @@ const EditorGutter = memo(function EditorGutter({
       {lines.map((_, i) => {
         const diagnostic = linesByNumber.get(i + 1);
         const hintFrom = hints.get(i + 1);
-        const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom, i + 1);
         return (
           <Fragment key={i}>
-            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title}>
+            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} data-line={i + 1}>
               {i + 1}
             </div>
             {(extraRows.get(i + 1) ?? NO_EXTRA_ROWS).map((row, r) => (
@@ -173,12 +184,42 @@ const EditorGutter = memo(function EditorGutter({
   );
 });
 
+/** The problem card of the card's line: its messages, or the note of the message that points at it. */
+function LineProblemCard({ card, fileName, lines, linesByNumber, hints }: {
+  card: { readonly state: CardState } & Pick<DiagnosticCardApi, 'onCardEnter' | 'onCardLeave'>;
+  fileName: string;
+  lines: readonly string[];
+  linesByNumber: ReadonlyMap<number, LineDiagnostic>;
+  hints: ReadonlyMap<number, LineDiagnostic>;
+}) {
+  const { line, pinned, style, focused } = card.state;
+  const diagnostic = linesByNumber.get(line);
+  const hintFrom = hints.get(line);
+  const note = !diagnostic && hintFrom ? describeHint(hintFrom, line) : undefined;
+  const description = diagnostic ? describeLine(diagnostic) : note ?? '';
+  return (
+    <DiagnosticCard
+      line={line}
+      messages={diagnostic ? cardMessages(diagnostic) : []}
+      note={note}
+      copyText={copyableText({ fileName, line }, lines[line - 1], description)}
+      pinned={pinned}
+      autoFocus={focused}
+      style={style}
+      onPointerEnter={card.onCardEnter}
+      onPointerLeave={card.onCardLeave}
+    />
+  );
+}
+
 export interface EditorSurfaceProps {
   file: EditorTab;
   /** This file's compiler problems. */
   diagnostics: readonly LineDiagnostic[];
   onChange: (id: string, content: string) => void;
   onDismissDiagnostics?: (fileId: string) => void;
+  /** A click on a line number or its `!`: that line's warnings show again. */
+  onShowLineDiagnostics?: (fileId: string, line: number) => void;
   reveal?: RevealRequest | null;
   /** The textarea's accessible name; defaults to "<name> source". */
   label?: string;
@@ -225,6 +266,7 @@ export function EditorSurface({
   diagnostics,
   onChange,
   onDismissDiagnostics,
+  onShowLineDiagnostics,
   reveal,
   label,
   announces = true,
@@ -287,7 +329,11 @@ export function EditorSurface({
   const hints = useMemo(() => hintLines(diagnostics), [diagnostics]);
   // Computed only from the stored lines, so a repeating assertion that adds
   // nothing leaves the text unchanged and the live region silent.
-  const status = useMemo(() => summarize(file.name, diagnostics), [file.name, diagnostics]);
+  const status = useMemo(() => withCardHint(summarize(file.name, diagnostics)), [file.name, diagnostics]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const isMarked = useCallback((line: number) => linesByNumber.has(line) || hints.has(line), [linesByNumber, hints]);
+  const card = useDiagnosticCard({ body: bodyRef, gutter: gutterRef, returnFocus: () => textareaRef.current?.focus() }, isMarked);
+  usePinCardOnReveal(reveal, file.id, gutterRef, { isMarked, pin: card.pin });
   const statusId = useId();
   useRevealLine(textareaRef, { ...file, extraRowsAbove: (line) => extraRowsAbove(line, extraRows) }, reveal);
   const quickFix = useQuickFix(textareaRef, diagnostics, () => onDismissDiagnostics?.(file.id));
@@ -312,6 +358,22 @@ export function EditorSurface({
     applyEdit(textarea, textarea.selectionStart, textarea.selectionEnd, unfenced);
   };
 
+  // A click in the text clears this file's markers (hovering does not); a click on a line
+  // number or its `!` shows that line's warnings instead, and pins its problem card.
+  // The reveal's own focus and scroll are not clicks.
+  const handleBodyPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    onFocusWithin?.();
+    const row = gutterRowAt(e.target);
+    if (row) {
+      onShowLineDiagnostics?.(file.id, row.line);
+      if (isMarked(row.line)) card.pin(row);
+      else card.close();
+      return;
+    }
+    card.close();
+    if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+  };
+
   const handleScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     hovered.clear(); // the text moved under the pointer; the next pointer move highlights again
     const { scrollTop, scrollLeft } = e.currentTarget;
@@ -324,18 +386,17 @@ export function EditorSurface({
     if (gutterRef.current) {
       gutterRef.current.scrollTop = scrollTop;
     }
+    card.reposition(); // after the gutter moved: a pinned card follows its line
   };
 
   return (
     <>
     <div
+      ref={bodyRef}
       className="wb-editor__body"
-      // A click in the text or on a line number clears this file's markers
-      // (hovering does not). The reveal's own focus and scroll are not clicks.
-      onPointerDown={() => {
-        onFocusWithin?.();
-        if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
-      }}
+      onPointerDown={handleBodyPointerDown}
+      onPointerOver={card.onPointerOver}
+      onPointerLeave={card.onPointerLeave}
       onFocus={onFocusWithin}
     >
       <p id={statusId} className="wb-sr-only" role="status" aria-live="polite">
@@ -393,6 +454,10 @@ export function EditorSurface({
               e.preventDefault();
               return;
             }
+            if (isProblemCardKey(e) && card.openAt(caretLine(e.currentTarget))) {
+              e.preventDefault();
+              return;
+            }
             // A key that may move the caret clears the extra rows first: below them the
             // drawn text is not where the textarea's caret is.
             if (extraRowCount > 0 && !MODIFIER_KEYS.includes(e.key)) onDismissDiagnostics?.(file.id);
@@ -412,6 +477,9 @@ export function EditorSurface({
         <OverlayScrollbar targetRef={textareaRef} axis="y" metrics={scroll.y} endInset={cornerInset} />
         <OverlayScrollbar targetRef={textareaRef} axis="x" metrics={scroll.x} endInset={cornerInset} />
       </div>
+      {card.state && isMarked(card.state.line) && (
+        <LineProblemCard card={{ ...card, state: card.state }} fileName={file.name} lines={lines} linesByNumber={linesByNumber} hints={hints} />
+      )}
     </div>
     {/* Outside the body: a click in the dialog is not a click in the code. */}
     {pastedArchitecture.pending && (
