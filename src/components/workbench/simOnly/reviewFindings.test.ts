@@ -125,3 +125,58 @@ describe('the simulator clock', () => {
     expect(findingsIn([['top.vhd', withClock('process (CLOCK_500Hz, SW)\nbegin\nLEDR <= SW;\nend process;')]])).toEqual([]);
   });
 });
+
+describe('review 2', () => {
+  test('VHDL: two bits of a vector, each on its own clock, are two registers', () => {
+    const body = "process (SW)\nbegin\nif rising_edge(SW(0)) then\nLEDR(0) <= '1';\nend if;\nif rising_edge(SW(1)) then\nLEDR(1) <= '0';\nend if;\nend process;";
+    expect(findingsIn([['top.vhd', vhdl(body)]])).toEqual([]);
+  });
+
+  test('Verilog: two bits of a vector, each on its own clock, are two registers', () => {
+    expect(findingsIn([['top.v', vlog('always @(posedge SW[0]) LEDR[0] <= 1\'b1;\nalways @(posedge SW[1]) LEDR[1] <= 1\'b0;')]])).toEqual([]);
+  });
+
+  test('Verilog: the same bit on two clocks is still one register with two clocks', () => {
+    const body = 'always @(posedge SW[0]) LEDR[0] <= 1\'b1;\nalways @(posedge SW[1]) LEDR[0] <= 1\'b0;';
+    expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
+  });
+
+  test('`ifdef SYNTHESIS: the branch synthesis reads is checked', () => {
+    const body = '`ifdef SYNTHESIS\nalways @(posedge CLOCK_50) LEDR <= SW;\nalways @(posedge CLOCK_50) LEDR <= ~SW;\n`else\nalways @(posedge CLOCK_50) LEDR <= SW;\n`endif';
+    expect(driversIn('top.v', vlog(body))).toEqual(['LEDR@3', 'LEDR@4']);
+  });
+
+  test('an always inside translate_off is no second clock', () => {
+    const body = 'reg [7:0] c = 0;\n// synthesis translate_off\nalways @(posedge SW[1]) c <= 0;\n// synthesis translate_on\nalways @(posedge CLOCK_50) c <= c + 1;';
+    expect(findingsIn([['top.v', vlog(body)]])).toEqual([]);
+  });
+
+  test('Verilog: a variable assigned before it decides the block is no latch', () => {
+    expect(findingsIn([['top.v', vlog('reg x;\nalways @(*) begin x <= SW[0]; if (x) LEDR[0] <= SW[1]; else LEDR[0] <= SW[2]; end')]])).toEqual([]);
+  });
+
+  const P = (body: string) => `process\nbegin\n${body}\nend process;`;
+  test.each([
+    ['with a timeout', 'wait until rising_edge(CLOCK_50) for 10 ns;'],
+    ['with a level beside the edge', "wait until rising_edge(CLOCK_50) or SW(0) = '1';"],
+  ])('VHDL: a clock-edge wait %s is not a clocked process', (_label, wait) => {
+    expect(findingsIn([['top.vhd', vhdl(P(`${wait}\nLEDR <= SW;`))]])).toEqual(['top.vhd:vhdl-wait-until@11']);
+  });
+
+  test("VHDL: wait until clk'event and clk = '1' is still a clocked process", () => {
+    expect(findingsIn([['top.vhd', vhdl(P("wait until CLOCK_50'event and CLOCK_50 = '1';\nLEDR <= SW;"))]])).toEqual([]);
+  });
+
+  test('a casez wildcard is no ternary: the second driver is found', () => {
+    const body = "always @(posedge CLOCK_50) casez (SW[1:0])\n  2'b?1: LEDR <= SW;\n  default: ;\nendcase\nalways @(posedge CLOCK_50) LEDR <= ~SW;";
+    expect(driversIn('top.v', vlog(body)).length).toBe(2);
+  });
+
+  test('an architecture marked Treat as testbench pulls no child into the hardware', () => {
+    const entity = "library ieee;\nuse ieee.std_logic_1164.all;\nentity top is\n  port (LEDR : out std_logic_vector(9 downto 0));\nend entity;\n";
+    const architecture = "architecture sim of top is\nbegin\nm : entity work.monitor port map (a => '0');\nend architecture;\n";
+    const monitor = 'entity monitor is\n  port (a : in bit);\nend entity;\narchitecture sim of monitor is\nbegin\nprocess begin\n  wait for 1 ms;\nend process;\nend architecture;\n';
+    const files: Files = [['top.vhd', entity], ['sim.vhd', architecture], ['monitor.vhd', monitor]];
+    expect(check(files, marked('sim.vhd')).groups.byFile.get('monitor.vhd')).not.toBe('sim-only');
+  });
+});

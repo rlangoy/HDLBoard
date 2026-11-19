@@ -195,6 +195,12 @@ The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and fl
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
 branch. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
 with none, a variable assigned with `<=` must not be read in the block (it keeps a value, so Quartus makes a latch).
+The design check reads the code as synthesis does (`blankSource(…, 'synthesis')`: SYNTHESIS defined), so an
+`ifdef SYNTHESIS branch is checked and its `else`, like `ifndef SYNTHESIS, is not. Two `if`s or blocks clash on a
+register only where their bits can meet (`LEDR(0)` and `LEDR(1)` are two registers, `bits.ts`); code inside
+`translate_off` takes part in no comparison. A latch is a value read before the block assigns it, or assigned from
+itself. A `wait until` is a clocked process only when its whole condition is one edge, with no timeout and no `or`.
+
 `always_ff` and `always_latch` are read as `always` (an `always_latch` is a latch on purpose). The latch rule asks for a
 value kept without a clock: a variable assigned from itself (`x <= x + 1`) or one that decides the block (`if (x_prev …)`);
 reading another output (`x <= a; y <= x;`) is plain logic. Each finding carries its language, so a Verilog finding
@@ -453,7 +459,8 @@ The Start summary's *Line n* link opens it too, pinned, once the line is in view
 **From the keyboard.** Alt+Enter on a line opens its problem card, pinned, with the focus on Copy; Esc closes it and
 hands the focus back to the code. Esc is caught before the editor's own Esc, so it closes only the card. A pinned card
 follows its line when the code scrolls. A dismissal is kept per occurrence (the n-th warning with a headline in the
-file), so restoring one line restores no other.
+file, and the code on its line), so restoring one line restores no other, a copy inserted above a dismissed one is
+another warning, and editing the line shows its warning again.
 
 **Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file The summary is built from the files of the run, analysed at Start (`designViewNow`), not from the check of 500 ms
 ago, and only for those files., not one line per finding:

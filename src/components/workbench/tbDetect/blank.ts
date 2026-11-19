@@ -22,7 +22,13 @@ export interface BlankedSource {
 
 const TRANSLATE = /^(?:--|\/\/)\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/i;
 
-export function blankSource(language: Language, source: string): BlankedSource {
+/**
+ * `simulation` evaluates `ifdef as the simulator does (SYNTHESIS undefined); `synthesis` as
+ * a synthesis tool does, with SYNTHESIS defined: the design check reads that view.
+ */
+export type SourceView = 'simulation' | 'synthesis';
+
+export function blankSource(language: Language, source: string, view: SourceView = 'simulation'): BlankedSource {
   const lineOf = lineIndex(source);
   const pragmas = new PragmaRegions(lineOf);
   const chars = source.split('');
@@ -30,7 +36,7 @@ export function blankSource(language: Language, source: string): BlankedSource {
   lex(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
   if (language === 'vhdl') return { code: chars.join(''), simOnlyRegions: pragmas.regions };
-  const pre = preprocessVerilog(chars.join(''), lineOf);
+  const pre = preprocessVerilog(chars.join(''), lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
   return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start) };
 }
 
@@ -157,9 +163,9 @@ interface Branch {
  * (an unknown macro is undefined, as with iverilog without -D) and blanks the
  * inactive branches. An active `ifndef SYNTHESIS branch is a sim-only region.
  */
-function preprocessVerilog(code: string, lineOf: LineOf): { code: string; regions: LineSpan[] } {
+function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): { code: string; regions: LineSpan[] } {
   const chars = code.split('');
-  const state = { defines: new Set<string>(), stack: [] as Branch[], regions: [] as LineSpan[] };
+  const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[] };
   let activeFrom = 0;
   for (const match of code.matchAll(DIRECTIVE)) {
     const at = match.index ?? 0;

@@ -86,7 +86,9 @@ const isDesignRoot = (p: Project, e: UnitEntry): boolean => e.role === 'rtl' || 
 function instantiated(p: Project, key: string, withGuarded: boolean): string[] {
   const language = p.units.get(key)?.language;
   if (language === undefined) return [];
-  const instances = (p.parts.get(key) ?? []).flatMap((part) => part.instances).filter((i) => withGuarded || !i.guarded);
+  // An architecture in another file the student marked *Treat as testbench* is not the unit's hardware: its instances don't count.
+  const parts = (p.parts.get(key) ?? []).filter((part) => part.ownsUnit || !isMarkedTestbench(p, part.fileId));
+  const instances = parts.flatMap((part) => part.instances).filter((i) => withGuarded || !i.guarded);
   const targets = instances.map((i) => definedUnitKey(p.analysis, language, i.name));
   return [...new Set(targets)].filter((k): k is string => k !== undefined && k !== key && !isMarkedTestbench(p, fileOfKey(k)));
 }

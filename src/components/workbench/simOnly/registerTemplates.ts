@@ -12,7 +12,9 @@
 import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
 import type { Found } from './constructs';
+import { overlap, verilogBits, vhdlBits, type Bits } from './bits';
 import { blockText, escapeRegExp } from './constructText';
+import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
 /** A name as written, without blanks: `KEY_N (1)` is `KEY_N(1)`. */
@@ -22,6 +24,16 @@ const unique = (names: readonly string[]): string[] => {
   return names.filter((n) => !seen.has(n.toLowerCase()) && !!seen.add(n.toLowerCase()));
 };
 const sameName = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+/** A signal a register template assigns, with the bits: `LEDR(0)` and `LEDR(1)` are two registers. */
+interface Target {
+  readonly name: string;
+  readonly bits: Bits;
+}
+
+/** The targets two `if`s or blocks have in common: the same signal, and bits that can be the same. */
+const sharedTargets = (a: readonly Target[], b: readonly Target[]): string[] =>
+  unique(b.filter((y) => a.some((x) => sameName(x.name, y.name) && overlap(x.bits, y.bits))).map((t) => t.name));
 
 /* ------------------------------- VHDL ------------------------------- */
 
@@ -45,8 +57,9 @@ function edgeOf(m: RegExpMatchArray): Edge {
 const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map(edgeOf);
 
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
-const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(?:\([^;]*?\))?\s*(?:<=|:=)/gi;
+const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(\([^;]*?\))?\s*(?:<=|:=)/gi;
 const vhdlTargets = (text: string): string[] => unique([...text.matchAll(VHDL_TARGET)].map((m) => m[1]));
+const vhdlTargetBits = (text: string): Target[] => [...text.matchAll(VHDL_TARGET)].map((m) => ({ name: m[1], bits: vhdlBits(m[2]) }));
 
 const IF_TOKEN = /\bend\s+if\b|\b(?:elsif|if|else|then|when)\b|=>|;/gi;
 
@@ -68,11 +81,13 @@ interface Chain {
 interface ClockedIf {
   readonly at: number;
   readonly clock: string;
-  readonly registers: readonly string[];
+  readonly targets: readonly Target[];
 }
 
 interface Walk {
   readonly text: string;
+  /** Whether an offset of `text` is in code hidden from synthesis (translate_off). */
+  readonly hidden: (at: number) => boolean;
   readonly chains: Chain[];
   readonly found: { at: number; register: RegisterProblem }[];
   /** The process's outermost `if`s that have an edge, in order. */
@@ -122,7 +137,8 @@ function endIf(w: Walk, at: number): void {
   const registers = vhdlTargets(w.text.slice(chain.from, at));
   for (const bad of chain.bad) w.found.push({ at: bad.at, register: vhdlProblem(bad.kind, registers, bad.clocks) });
   const [edge] = chain.edges;
-  if (w.chains.length === 0 && edge) w.clocked.push({ at: chain.from, clock: edge.clock, registers });
+  const outermost = w.chains.length === 0;
+  if (outermost && edge && !w.hidden(chain.from)) w.clocked.push({ at: chain.from, clock: edge.clock, targets: vhdlTargetBits(w.text.slice(chain.from, at)) });
 }
 
 const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
@@ -159,15 +175,14 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
  */
 function twoClockedIfs(clocked: readonly ClockedIf[]): Walk['found'] {
   return clocked.flatMap((later, i) => {
-    const earlier = clocked.slice(0, i).find((e) => !sameName(e.clock, later.clock) && e.registers.some((r) => later.registers.some((l) => sameName(r, l))));
+    const earlier = clocked.slice(0, i).find((e) => !sameName(e.clock, later.clock) && sharedTargets(e.targets, later.targets).length > 0);
     if (!earlier) return [];
-    const shared = later.registers.filter((r) => earlier.registers.some((e) => sameName(e, r)));
-    return [{ at: later.at, register: vhdlProblem('two-clocks', shared, [earlier.clock, later.clock]) }];
+    return [{ at: later.at, register: vhdlProblem('two-clocks', sharedTargets(earlier.targets, later.targets), [earlier.clock, later.clock]) }];
   });
 }
 
-function processViolations(text: string): Walk['found'] {
-  const walk: Walk = { text, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
+function processViolations(text: string, hidden: Walk['hidden']): Walk['found'] {
+  const walk: Walk = { text, hidden, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
   return [...walk.found, ...twoClockedIfs(walk.clocked)].sort((a, b) => a.at - b.at);
 }
@@ -176,7 +191,10 @@ function processViolations(text: string): Walk['found'] {
 export function vhdlEdgeTemplate(t: UnitText): Found[] {
   return t.unit.blocks
     .filter((b) => b.kind === 'process')
-    .flatMap((b) => processViolations(blockText(t, b)).map(({ at, register }) => ({ line: t.lineOf(b.from + at), register })));
+    .flatMap((b) => {
+      const hidden = (at: number) => isHidden(t.lineOf(b.from + at), t.simOnlyRegions);
+      return processViolations(blockText(t, b), hidden).map(({ at, register }) => ({ line: t.lineOf(b.from + at), register }));
+    });
 }
 
 /* ------------------------------ Verilog ----------------------------- */
@@ -194,8 +212,10 @@ interface AlwaysBlock {
   readonly body: string;
 }
 
+/** The unit's `always` blocks that synthesis sees: one inside translate_off takes part in no comparison. */
 function alwaysBlocks(t: UnitText): AlwaysBlock[] {
   return t.unit.blocks.flatMap((block) => {
+    if (isHidden(block.span.start, t.simOnlyRegions)) return [];
     const text = blockText(t, block);
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
@@ -248,8 +268,10 @@ const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${es
 const mentions = (text: string, name: string) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(text);
 
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
-const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
+const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)<=/g;
 const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(NONBLOCKING_TARGET)];
+const verilogTargetBits = (body: string): Target[] =>
+  verilogTargets(body).map((m) => ({ name: m[1], bits: verilogBits(m[2].trim() === '' ? undefined : m[2].trim()) }));
 
 /** What one nonblocking assignment loads: from after its `<=` to its `;`. */
 const assignedValue = (body: string, m: RegExpMatchArray): string => body.slice((m.index ?? 0) + m[0].length, body.indexOf(';', m.index ?? 0));
@@ -295,12 +317,12 @@ function edgeBlockProblem(always: AlwaysBlock): Found[] {
 function twoClockedBlocks(blocks: readonly AlwaysBlock[]): Found[] {
   const clocked = blocks.flatMap((always) => {
     const clock = clockOf(always);
-    return clock === undefined ? [] : [{ always, clock, registers: unique(verilogTargets(always.body).map((m) => m[1])) }];
+    return clock === undefined ? [] : [{ always, clock, targets: verilogTargetBits(always.body) }];
   });
   return clocked.flatMap((later, i) => {
-    const earlier = clocked.slice(0, i).find((e) => e.clock !== later.clock && e.registers.some((r) => later.registers.includes(r)));
+    const earlier = clocked.slice(0, i).find((e) => e.clock !== later.clock && sharedTargets(e.targets, later.targets).length > 0);
     if (!earlier) return [];
-    const shared = later.registers.filter((r) => earlier.registers.includes(r));
+    const shared = sharedTargets(earlier.targets, later.targets);
     return [{ line: later.always.block.span.start, register: verilogProblem('two-clocks', shared, [earlier.clock, later.clock]) }];
   });
 }
@@ -317,25 +339,27 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
   return [...blocks.flatMap(edgeBlockProblem), ...twoClockedBlocks(blocks)];
 }
 
-/** The conditions of the block's `if`s and `case`s: what decides which assignment runs. */
-function conditionsOf(body: string): string[] {
-  return [...body.matchAll(/\b(?:if|case[xz]?)\s*\(/g)].map((m) => parenthesized(body, (m.index ?? 0) + m[0].length - 1));
+/** Whether the block reads `name` before its first assignment to it: then it runs on the value kept from before. */
+function readBeforeWritten(body: string, targets: readonly RegExpMatchArray[], name: string): boolean {
+  const writes = targets.filter((m) => m[1] === name).map((m) => (m.index ?? 0) + m[0].search(new RegExp(`\\b${escapeRegExp(name)}\\b`)));
+  const firstWrite = Math.min(...writes);
+  const uses = [...body.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'))].map((m) => m.index ?? 0);
+  return uses.some((at) => at < firstWrite);
 }
 
 /**
  * Verilog: an `always` without an edge that keeps a value: a variable it assigns with `<=`
- * from itself (`x <= x + 1`), or that decides what the block does (`if (x_prev && …)`).
- * Without a clock that is a latch (Quartus Warning 10240). Reading another output
- * (`x <= a; y <= x;`) is plain logic. An `always_latch` is a latch on purpose.
+ * from itself (`x <= x + 1`), or reads before it assigns it (`if (x_prev && …) … x_prev <= …`),
+ * so the block runs on its old value. Without a clock that is a latch (Quartus Warning 10240).
+ * A variable assigned before it is read (`x <= a; if (x) …`, `y <= x`) is plain logic. An
+ * `always_latch` is a latch on purpose.
  */
 export function verilogLevelStorage(t: UnitText): Found[] {
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
     if (edges.length > 0 || latch) return [];
     const targets = verilogTargets(body);
-    const conditions = conditionsOf(body);
     const keepsItself = (name: string) => targets.some((m) => m[1] === name && mentions(assignedValue(body, m), name));
-    const decides = (name: string) => conditions.some((c) => mentions(c, name));
-    const kept = unique(targets.map((m) => m[1])).filter((name) => keepsItself(name) || decides(name));
+    const kept = unique(targets.map((m) => m[1])).filter((name) => keepsItself(name) || readBeforeWritten(body, targets, name));
     return kept.length === 0 ? [] : [{ line: block.span.start, register: verilogProblem('latch', kept, []) }];
   });
 }

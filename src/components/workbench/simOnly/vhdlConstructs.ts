@@ -15,21 +15,44 @@ import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
-/** Character literals are blanked, so `clk'event and clk = '1'` reads `clk'event and clk =    `. */
-const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/gi;
+const SIGNAL = String.raw`[A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?`;
+/**
+ * The whole wait is one clock edge: `wait until rising_edge(clk)` or `wait until clk'event
+ * and clk = '1'` (character literals are blanked: `clk =    `). No `for` timeout, no `or`
+ * or other condition: those wake the process at other times too.
+ */
+const CLOCK_EDGE_WAIT = new RegExp(
+  String.raw`^wait\s+until\s+(?:(?:rising_edge|falling_edge)\s*\(\s*${SIGNAL}\s*\)|(${SIGNAL})\s*'\s*event\s+and\s+(${SIGNAL})\s*=\s*)\s*$`,
+  'i',
+);
+
+function isClockEdgeWait(statement: string): boolean {
+  const m = CLOCK_EDGE_WAIT.exec(statement.trim());
+  return m !== null && (m[1] === undefined || m[1].replace(/\s+/g, '').toLowerCase() === m[2].replace(/\s+/g, '').toLowerCase());
+}
+
+/** How many waits each process has that synthesis sees (not inside translate_off); counted once per unit. */
+function synthesizedWaitsPerBlock(t: UnitText): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const [at] of matchesIn(t, ANY_WAIT)) {
+    const block = blockAt(t, at);
+    if (block && !isHidden(t.lineOf(at), t.simOnlyRegions)) counts.set(block.from, (counts.get(block.from) ?? 0) + 1);
+  }
+  return counts;
+}
 
 /**
- * `wait until rising_edge(clk);` as the only wait of its process, on one clock edge: a
- * clocked process (§ 3.3). Waits inside translate_off are not synthesized, so they don't
- * count; `rising_edge(a) or rising_edge(b)` is two clocks.
+ * `wait until rising_edge(clk);` as the only wait of its process: a clocked process
+ * (§ 3.3). Waits inside translate_off are not synthesized, so they don't count;
+ * `rising_edge(a) or rising_edge(b)`, a timeout or a level is no clock edge alone.
  */
-function isOnlyClockEdgeWait(t: UnitText, at: number): boolean {
-  const block = blockAt(t, at);
-  if (!block) return false;
-  const synthesized = (wait: number) => wait >= block.from && wait < block.to && !isHidden(t.lineOf(wait), t.simOnlyRegions);
-  const waits = matchesIn(t, ANY_WAIT).filter(([wait]) => synthesized(wait)).length;
-  const edges = statementFrom(t, at).match(CLOCK_EDGE)?.length ?? 0;
-  return waits === 1 && edges === 1;
+function waitUntilLines(t: UnitText): number[] {
+  const waits = synthesizedWaitsPerBlock(t);
+  const isClockedProcess = (at: number) => {
+    const block = blockAt(t, at);
+    return block !== undefined && waits.get(block.from) === 1 && isClockEdgeWait(statementFrom(t, at));
+  };
+  return linesOf(t, WAIT_UNTIL, (at) => !isClockedProcess(at));
 }
 
 const FILE_DECLARATION = /\bfile\s+\w+(?:\s*,\s*\w+)*\s*:/gi;
@@ -68,7 +91,7 @@ const REAL_PORT = /:\s*(?:in|out|inout|buffer)\s+real\b/gi;
 export const VHDL_CONSTRUCTS: readonly SimOnlyConstruct[] = [
   fromRule('vhdl-wait-for', 'never'),
   fromRule('vhdl-wait-forever', 'never'),
-  construct('vhdl-wait-until', 'never', (t) => linesOf(t, WAIT_UNTIL, (at) => !isOnlyClockEdgeWait(t, at))),
+  construct('vhdl-wait-until', 'never', waitUntilLines),
   fromRule('vhdl-clock-gen', 'never'),
   construct('vhdl-file-io', 'never', fileOperations),
   construct('vhdl-end-sim', 'never', endOfSimulation),

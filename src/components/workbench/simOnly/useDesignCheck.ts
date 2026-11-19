@@ -62,13 +62,16 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     [check, view.raw, overrides, files],
   );
   const [quieted, setQuieted] = useState<QuietWarnings>(NO_QUIET_WARNINGS);
-  const diagnostics = useMemo(() => withQuieted(loud, quieted), [loud, quieted]);
+  // A dismissed warning is known by its line's code (quietWarnings.ts), as the editor has it now.
+  const lineText = useMemo(() => lineTextOf(files), [files]);
+  const warned = useMemo(() => ({ warnings: loud, lineText }), [loud, lineText]);
+  const diagnostics = useMemo(() => withQuieted(warned, quieted), [warned, quieted]);
   useForgetDeletedFiles(files, setQuieted);
-  const loudRef = useRef(loud);
-  loudRef.current = loud;
-  const quietWarningsOf = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
+  const warnedRef = useRef(warned);
+  warnedRef.current = warned;
+  const quietWarningsOf = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, warnedRef.current, fileId)), []);
   const showWarningsOf = useCallback((fileId: string) => setQuieted((prev) => showFile(prev, fileId)), []);
-  const showWarningsAt = useCallback((fileId: string, line: number) => setQuieted((prev) => showLine(prev, loudRef.current, { fileId, line })), []);
+  const showWarningsAt = useCallback((fileId: string, line: number) => setQuieted((prev) => showLine(prev, warnedRef.current, { fileId, line })), []);
   const announcement = useGroupAnnouncement(check, mode, files);
   const badgeFor = (fileId: string): DesignCheckBadge | undefined => {
     if (mode === 'simulation') return undefined;
@@ -91,6 +94,12 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     },
     announcement,
   };
+}
+
+/** The code of a line of a file, as the editor has it. */
+function lineTextOf(files: DesignCheckOptions['files']): (fileId: string, line: number) => string {
+  const lines = new Map(files.map((f) => [f.id, f.content.split('\n')]));
+  return (fileId, line) => lines.get(fileId)?.[line - 1] ?? '';
 }
 
 /** A deleted file's dismissed warnings go with it. */

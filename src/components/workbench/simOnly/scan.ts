@@ -43,11 +43,20 @@ export function scannedFile(file: FileAnalysis): ScannedFile {
 }
 
 function scanFile(file: FileAnalysis): ScannedFile {
-  const blanked = blankSource(file.language, file.content);
+  // As synthesis reads it: `ifdef SYNTHESIS code is checked, `ifndef SYNTHESIS (and the else of `ifdef SYNTHESIS) is not.
+  const blanked = blankSource(file.language, file.content, 'synthesis');
   const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions };
-  const own = file.units.map((unit) => ({ unit, ownsUnit: true }));
+  const own = synthesisUnits(file, blanked.code).map((unit) => ({ unit, ownsUnit: true }));
   const foreign = foreignArchitectures(base).map((unit) => ({ unit, ownsUnit: false }));
   return { ...base, units: [...own, ...foreign] };
+}
+
+/**
+ * The file's units as synthesis sees them. VHDL has no preprocessor, so they are the
+ * detector's; a Verilog `ifdef SYNTHESIS may hold blocks and instances the simulator's view lacks.
+ */
+function synthesisUnits(file: FileAnalysis, code: string): readonly DesignUnit[] {
+  return file.language === 'vhdl' ? file.units : designUnits('verilog', code, new Set());
 }
 
 export const isHidden = (line: number, hidden: readonly LineSpan[]): boolean => hidden.some((s) => line >= s.start && line <= s.end);

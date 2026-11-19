@@ -133,9 +133,13 @@ const VERILOG_SUBPROGRAM = /\b(?:endfunction|endtask|function|task)\b/g;
  * assignment.
  */
 function afterTernaryColon(code: string, at: number): boolean {
-  const statement = code.slice(code.lastIndexOf(';', at) + 1, at);
+  // A `?` in a literal (`2'b?1`, a casez wildcard) is no ternary: literals are left out first.
+  const statement = code.slice(code.lastIndexOf(';', at) + 1, at).replace(BASED_LITERAL, '0');
   return /\?[^;]*:\s*$/.test(statement);
 }
+
+/** `4'b10?1`, `'h3F`, `8'sd5`: a based number, whose digits may hold `?`, `x` or `z`. */
+const BASED_LITERAL = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+/g;
 
 function verilogAssignments(body: BodyText): Assignment[] {
   const excluded = [
