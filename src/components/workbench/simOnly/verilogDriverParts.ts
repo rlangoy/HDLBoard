@@ -11,6 +11,7 @@
  */
 
 import { bitRange, type Bits } from './bits';
+import { MAX_WIRING_BITS, wiringCycles, type SourceBit, type TargetBit } from './bitWiring';
 import { bracketed, topLevel, topLevelItems, unwrapped } from './brackets';
 import { integerValue, type Bindings } from './constantIndex';
 import type { BitRange } from './verilogDeclarations';
@@ -28,17 +29,9 @@ export interface Declarations {
   readonly constants: Bindings;
 }
 
-/** How many bits a part may have to be lined up; a wider assignment is read as a whole. */
-const MAX_LINED_UP_BITS = 1024;
 const LITERAL = /^(\d+)\s*'[sS]?([bBoOhHdD])\s*([0-9a-fA-FxXzZ?_]+)$/;
 const DIGIT_BITS: Readonly<Record<string, number>> = { b: 1, o: 3, h: 4 };
 const NAME_SELECT = /^([A-Za-z_]\w*)\s*(?:\[([^\]]*)\])?$/;
-
-/** One bit of a target, msb first in a list: `q`, bit 3. */
-interface TargetBit {
-  readonly target: string;
-  readonly bit: number;
-}
 
 /** The bits a name or a constant select of it names, msb first. */
 function selectedBits(text: string, d: Declarations): { name: string; bits: number[] } | undefined {
@@ -46,7 +39,7 @@ function selectedBits(text: string, d: Declarations): { name: string; bits: numb
   if (!m) return undefined;
   const [, name, index] = m;
   const range = index === undefined ? d.rangeOf(name) : selectRange(index, d.constants);
-  if (!range || Math.abs(range.msb - range.lsb) + 1 > MAX_LINED_UP_BITS) return undefined;
+  if (!range || Math.abs(range.msb - range.lsb) + 1 > MAX_WIRING_BITS) return undefined;
   const step = range.msb >= range.lsb ? -1 : 1;
   const bits = Array.from({ length: Math.abs(range.msb - range.lsb) + 1 }, (_, k) => range.msb + step * k);
   return { name, bits };
@@ -66,7 +59,7 @@ function targetBits(lhs: string, d: Declarations): TargetBit[] | undefined {
   const bits: TargetBit[] = [];
   for (const item of items) {
     const selected = selectedBits(item, d);
-    if (!selected) return undefined;
+    if (!selected || bits.length + selected.bits.length > MAX_WIRING_BITS) return undefined;
     bits.push(...selected.bits.map((bit) => ({ target: selected.name, bit })));
   }
   return bits;
@@ -78,33 +71,40 @@ function concatenationItems(text: string): string[] | undefined {
   return t.startsWith('{') && bracketed(t, 0).length === t.length - 2 ? topLevelItems(bracketed(t, 0)) : undefined;
 }
 
-/** Whether each bit of a value is 'Z', msb first; undefined when its width is not known. */
-function valueBits(value: string, d: Declarations): boolean[] | undefined {
+/** Each source bit in positional order, including named wires and high-impedance literals. */
+function valueBits(value: string, d: Declarations): SourceBit[] | undefined {
   const t = unwrapped(value);
-  const replication = /^\{\s*([^{}]+?)\s*\{([\s\S]*)\}\s*\}$/.exec(t);
+  const replication = /^\{\s*([^,{}]+?)\s*\{([\s\S]*)\}\s*\}$/.exec(t);
   if (replication) return replicated(replication[1], `{${replication[2]}}`, d);
   const items = concatenationItems(t);
-  if (items) return joined(items.map((item) => valueBits(item, d)));
+  if (items) return joined(items, d);
   const literal = LITERAL.exec(t);
   if (literal) return literalBits(literal);
   const selected = selectedBits(t, d);
-  return selected?.bits.map(() => false);
+  return selected?.bits.map((bit) => ({ target: selected.name, bit }));
 }
 
-function replicated(count: string, inner: string, d: Declarations): boolean[] | undefined {
+function replicated(count: string, inner: string, d: Declarations): SourceBit[] | undefined {
   const n = integerValue(count, d.constants);
   const one = valueBits(inner, d);
-  if (n === undefined || one === undefined || n * one.length > MAX_LINED_UP_BITS) return undefined;
+  if (!Number.isSafeInteger(n) || n === undefined || n <= 0 || !one?.length || n * one.length > MAX_WIRING_BITS) return undefined;
   return Array.from({ length: n }, () => one).flat();
 }
 
-const joined = (parts: readonly (boolean[] | undefined)[]): boolean[] | undefined =>
-  parts.every((p): p is boolean[] => p !== undefined) ? parts.flat() : undefined;
+function joined(items: string[], d: Declarations): SourceBit[] | undefined {
+  const bits: SourceBit[] = [];
+  for (const item of items) {
+    const part = valueBits(item, d);
+    if (!part || bits.length + part.length > MAX_WIRING_BITS) return undefined;
+    bits.push(...part);
+  }
+  return bits;
+}
 
 /** `4'b10zz` bit by bit, `8'hzF` four bits a digit, `2'dz` all 'Z' or none; padded to its size with its top digit's kind. */
 function literalBits([, size, base, digits]: RegExpExecArray): boolean[] | undefined {
   const width = Number(size);
-  if (width > MAX_LINED_UP_BITS) return undefined;
+  if (width < 1 || width > MAX_WIRING_BITS) return undefined;
   const clean = digits.replace(/_/g, '');
   const per = DIGIT_BITS[base.toLowerCase()];
   const isZ = (ch: string) => /[zZ?]/.test(ch);
@@ -121,7 +121,17 @@ export function drivenParts(lhs: string, rhs: string, d: Declarations): DrivenPa
   const targets = targetBits(lhs, d);
   const values = valueBits(rhs.replace(/^\s*#\s*(?:\([^)]*\)|[\w.]+)/, ''), d);
   if (!targets || !values || targets.length !== values.length) return undefined;
-  return runs(targets, values).map((r) => ({ target: r.target, tristate: r.tristate, bits: bitRange(r.from, r.to) }));
+  return runs(targets, values.map((bit) => bit === true)).map((r) => ({ target: r.target, tristate: r.tristate, bits: bitRange(r.from, r.to) }));
+}
+
+/** A concatenation is unsigned. Verilog truncates or zero-extends it at the left. */
+export function concatenationCycles(lhs: string, rhs: string, d: Declarations): string[] | undefined {
+  if (!unwrapped(rhs).startsWith('{')) return undefined;
+  const sources = valueBits(rhs, d);
+  const targets = targetBits(lhs, d);
+  if (!sources || !targets?.length) return undefined;
+  const padding = Array<SourceBit>(Math.max(0, targets.length - sources.length)).fill(false);
+  return wiringCycles(targets, [...padding, ...sources.slice(-targets.length)]);
 }
 
 /** Neighbouring bits of one target that are all value or all 'Z', as runs. */

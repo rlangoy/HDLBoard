@@ -18,7 +18,7 @@ import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBi
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 import { declaredRanges, verilogConstants, verilogSignalNames } from './verilogDeclarations';
-import { splitAssignment } from './verilogDriverParts';
+import { concatenationCycles, splitAssignment, type Declarations } from './verilogDriverParts';
 import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
@@ -172,13 +172,15 @@ const problem = (kind: RegisterProblemKind, registers: readonly string[], clocks
  * that counts is a second clock, not a reset. Loading another register (`q <= d`) is an
  * asynchronous load, noted by `loadsAValue`.
  */
-function countingTargets(branch: string): string[] {
-  const counting = branchAssignments(branch).filter((a) => a.written.some((w) => readsItsOwnBits(a.value, w.name, w.index)));
-  return unique(counting.flatMap((a) => a.targets), sameName);
+function countingTargets(branch: string, d: Declarations): string[] {
+  return unique(branchAssignments(branch).flatMap((a) =>
+    concatenationCycles(a.lhs, a.value, d) ?? a.written.filter((w) => readsItsOwnBits(a.value, w.name, w.index)).map((w) => w.name),
+  ), sameName);
 }
 
 /** One assignment of a branch, blocking or not: what it assigns as written (`q[0]`, `{hi, lo}`), the signals, and its value. */
 interface BranchAssignment {
+  readonly lhs: string;
   readonly written: readonly { readonly name: string; readonly index: string }[];
   readonly targets: readonly string[];
   readonly value: string;
@@ -194,7 +196,7 @@ function branchAssignments(branch: string): BranchAssignment[] {
       const m = /^\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)$/.exec(item);
       return m ? [{ name: m[1], index: m[2].trim() }] : [];
     });
-    return split && written.length === items.length ? [{ written, targets: written.map((w) => w.name), value: split.rhs }] : [];
+    return split && written.length === items.length ? [{ lhs, written, targets: written.map((w) => w.name), value: split.rhs }] : [];
   });
 }
 
@@ -232,6 +234,7 @@ function wrongLevel(events: readonly EdgeEvent[], resets: readonly ChainedIf[]):
 
 /** What a block with several edges is read as: its edges, its resets and sets, and what it assigns. */
 interface EdgeBlock {
+  readonly declarations: Declarations;
   readonly always: AlwaysBlock;
   readonly resets: readonly ChainedIf[];
   readonly registers: readonly string[];
@@ -271,8 +274,8 @@ function setAndReset({ always, resets }: EdgeBlock): RegisterProblem | undefined
 }
 
 /** A reset branch that counts is a second clock (Quartus Warning 13004; the board does not count). */
-function countsInAReset({ always, resets }: EdgeBlock): RegisterProblem | undefined {
-  const counting = unique(resets.flatMap((r) => countingTargets(r.branch)), sameName);
+function countsInAReset({ always, resets, declarations }: EdgeBlock): RegisterProblem | undefined {
+  const counting = unique(resets.flatMap((r) => countingTargets(r.branch, declarations)), sameName);
   return counting.length > 0 ? problem('two-clocks', counting, unique(always.edges, sameName)) : undefined;
 }
 
@@ -301,9 +304,9 @@ const EDGE_BLOCK_RULES: readonly ((b: EdgeBlock) => RegisterProblem | undefined)
 ];
 
 /** One `always` with several edges that is no register template. */
-function edgeBlockProblem(always: AlwaysBlock, signals: ReadonlySet<string>): Found[] {
+function edgeBlockProblem(always: AlwaysBlock, signals: ReadonlySet<string>, declarations: Declarations): Found[] {
   if (always.edges.length < 2) return [];
-  const b: EdgeBlock = { always, resets: resetBranches(always), registers: targetNames(always.body), signals };
+  const b: EdgeBlock = { always, resets: resetBranches(always), registers: targetNames(always.body), signals, declarations };
   for (const rule of EDGE_BLOCK_RULES) {
     const register = rule(b);
     if (register) return [registerFound(always.block.span.start, register)];
@@ -344,7 +347,9 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
   const clashes = twoClocks(clocked, sameName).map((c): Found => ({ line: c.later.span.start, register: problem(c.kind, c.registers, c.clocks) }));
   // What the module declares, and what it assigns, which is a signal whatever its declaration says.
   const signals = new Set([...verilogSignalNames(t.code), ...targetNames(t.code)]);
-  return [...blocks.flatMap((always) => edgeBlockProblem(always, signals)), ...clashes];
+  const constants = verilogConstants(t.code);
+  const declarations = { constants, rangeOf: declaredRanges(t.code, constants) };
+  return [...blocks.flatMap((always) => edgeBlockProblem(always, signals, declarations)), ...clashes];
 }
 
 /**
@@ -386,12 +391,14 @@ export function verilogLevelStorage(t: UnitText): Found[] {
   const rangeOf = declaredRanges(t.code, constants);
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
     if (edges.length > 0 || latch) return [];
-    const targets = nonblockingTargets(body);
-    const keepsItself = (name: string) => targets.some((m) => m[1] === name && readsItsOwnBits(assignedValue(body, m), name, m[2]));
+    const feedback = nonblockingTargets(body).flatMap((m) => {
+      const value = assignedValue(body, m);
+      return concatenationCycles(m[1] + m[2], value, { constants, rangeOf }) ?? (readsItsOwnBits(value, m[1], m[2]) ? [m[1]] : []);
+    });
     const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set() };
     const assigned = statementAssigns(ctx, 0);
     const unassigned = notAlwaysAssigned(ctx, assigned).filter((bit) => !ctx.unsure.has(bit)).map(signalOf);
-    const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter(keepsItself)], sameName);
+    const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter((name) => feedback.includes(name))], sameName);
     return kept.length === 0 ? [] : [{ line: block.span.start, register: problem('latch', kept, []) }];
   });
 }

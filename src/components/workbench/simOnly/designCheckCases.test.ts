@@ -672,3 +672,44 @@ describe('bitwise operators keep each bit in its place', () => {
     expect(check([[name, file]]).findings.map((f) => `${f.register?.kind}:${f.tier}`)).toEqual(['async-load:quiet']);
   });
 });
+
+describe('feedback through concatenated wires', () => {
+  const resultOf = (name: string, file: string) => {
+    const result = check([[name, file]]);
+    return [result.groups.byFile.get(name), result.findings.map((f) => f.register?.kind)];
+  };
+
+  test.each([
+    ['LEDR[3:0]', "{LEDR[2:0], 1'b0}", 'rtl'],
+    ['LEDR', "{SW[9:4], LEDR[2:0], 1'b0}", 'rtl'],
+    ['LEDR[3:0]', "{1'b0, LEDR[3:1]}", 'rtl'],
+    ['LEDR[3:0]', "{LEDR[2:1], {LEDR[0], 1'b0}}", 'rtl'],
+    ['LEDR[3:0]', "{2{LEDR[2], 1'b0}}", 'rtl'],
+    ['LEDR[3:0]', "{2{LEDR[0], 1'b0}}", 'rtl'],
+    ['LEDR[3:0]', "{2{1'b0, LEDR[2]}}", 'sim-only'],
+    ['LEDR[3:0]', "{LEDR[3], LEDR[2:0], 1'b0}", 'rtl'],
+    ['LEDR[3:0]', "{LEDR[2:0], LEDR[3]}", 'sim-only'],
+    ['LEDR[3:0]', "{LEDR[3], SW[2:0]}", 'sim-only'],
+  ])('combinational %s <= %s is %s', (lhs, rhs, group) => {
+    const body = `always @* ${lhs} <= ${rhs};`;
+    expect(resultOf('top.v', vlog(body))).toEqual([group, group === 'rtl' ? [] : ['latch']]);
+  });
+
+  test.each([
+    ['v', "q <= {q[2:0], 1'b0};", 'rtl'],
+    ['v', "q <= {q[2:0], q[3]};", 'sim-only'],
+    ['vhd', "q <= q(2 downto 0) & '0';", 'rtl'],
+    ['vhd', "q <= '0' & q(3 downto 1);", 'rtl'],
+    ['vhd', 'q <= q(2 downto 0) & q(3);', 'sim-only'],
+  ])('%s reset wiring %s is %s', (language, assignment, group) => {
+    const file = language === 'v'
+      ? vlog(`reg [3:0] q;\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) ${assignment} else q <= SW[3:0];`)
+      : vhdl(`process(CLOCK_50, SW) begin\nif SW(0) = '1' then ${assignment}\nelsif rising_edge(CLOCK_50) then q <= SW(3 downto 0); end if;\nend process;`, 'signal q : std_logic_vector(3 downto 0);');
+    expect(resultOf(`top.${language}`, file)).toEqual([group, [group === 'rtl' ? 'async-load' : 'two-clocks']]);
+  });
+});
+
+test('Verilog reset indices that differ by case can select different bits', () => {
+  const body = "localparam I = 0, i = 1;\nreg [3:0] q;\nalways @(posedge CLOCK_50 or posedge SW[0]) if (SW[0]) q[I] <= q[i]; else q <= SW[3:0];";
+  expect(check([['top.v', vlog(body)]]).findings.map((f) => f.register?.kind)).toEqual(['async-load']);
+});

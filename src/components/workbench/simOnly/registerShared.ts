@@ -46,7 +46,7 @@ export type BitAlignment = 'aligned' | 'mixed';
  * Indexes known only while running and written differently do not feed back here.
  */
 export function feedsBack(read: SelectedBits, written: SelectedBits, alignment: BitAlignment): boolean {
-  if (read.text === '' || written.text === '' || read.text.toLowerCase() === written.text.toLowerCase()) return true;
+  if (read.text === '' || written.text === '' || read.text === written.text) return true;
   const [r, w] = [read.bits, written.bits];
   if (r.kind !== 'range' || w.kind !== 'range' || !overlap(r, w)) return false;
   return alignment === 'mixed' || r.low === w.low;

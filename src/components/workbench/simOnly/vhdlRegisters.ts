@@ -13,6 +13,7 @@ import { escapeRegExp } from './constructText';
 import { ALL_BITS, vhdlBits } from './bits';
 import type { Found } from './constructs';
 import { testsLevelOf } from './vhdlEdges';
+import { vhdlConcatFeedback, vhdlWiringBounds, type BoundsOf } from './vhdlWiring';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
@@ -79,6 +80,7 @@ interface FoundAt {
 }
 
 interface Walk {
+  readonly boundsOf: BoundsOf;
   /** The process as synthesis reads it (translate_off blanked). */
   readonly text: string;
   /** The unit's signals, ports and variables, lowercase: a reset or set that reads one loads a value. */
@@ -156,7 +158,7 @@ function assignmentsIn(body: string): { target: string; index: string; value: st
  */
 function readsItsOwnBits(value: string, target: string, index: string): boolean {
   // Compared as written without blanks; the bits read from the text as written (`3 downto 0`).
-  const select = (raw: string): SelectedBits => ({ text: tidy(raw), bits: raw.trim() === '' ? ALL_BITS : vhdlBits(raw.trim()) });
+  const select = (raw: string): SelectedBits => ({ text: tidy(raw).toLowerCase(), bits: raw.trim() === '' ? ALL_BITS : vhdlBits(raw.trim()) });
   const reads = new RegExp(`\\b${escapeRegExp(target)}\\b(?!\\s*')\\s*(\\([^()]*\\))?`, 'gi');
   return [...value.matchAll(reads)].some((m) => feedsBack(select(m[1] ?? ''), select(index), vhdlAlignment(value)));
 }
@@ -185,12 +187,14 @@ const signalsRead = (text: string, signals: ReadonlySet<string>): string[] =>
  * signal, not a constant (`if rst = '1' then q <= data;`). Constants, generics, `others`
  * and attributes are fixed; any name not known as a signal too: unsure is quiet.
  */
-function levelNotes(levels: readonly LevelBranch[], signals: ReadonlySet<string>): FoundAt[] {
+function levelNotes(levels: readonly LevelBranch[], { signals, boundsOf }: Pick<Walk, 'signals' | 'boundsOf'>): FoundAt[] {
   const levelSignals = (branches: readonly LevelBranch[]) => unique(branches.flatMap((l) => signalsRead(l.condition, signals)), sameName);
   for (const level of levels) {
     // `if a = '1' then c <= c + 1;`: a reset loads a constant, so a branch that counts is a second clock (Quartus Warning 13004; the board does not count).
     // Only an assignment that reads its own target counts: `q <= d` loads another register, an asynchronous load.
-    const counting = assignmentsIn(level.body).filter((a) => readsItsOwnBits(a.value, a.target, a.index));
+    const counting = assignmentsIn(level.body).filter((a) =>
+      vhdlConcatFeedback(a.target + a.index, a.value, boundsOf) ?? readsItsOwnBits(a.value, a.target, a.index),
+    );
     if (counting.length > 0) return [{ at: level.at, register: problem('two-clocks', unique(counting.map((a) => a.target), sameName), levelSignals([level])) }];
   }
   const assigned = levels.map((l) => new Set(assignmentsIn(l.body).map((a) => a.target.toLowerCase())));
@@ -211,7 +215,7 @@ function endIf(w: Walk, at: number): void {
   const registers = targetNames(text);
   for (const bad of chain.bad) w.found.push({ at: bad.at, register: problem(bad.kind, registers, bad.clocks) });
   const [edge] = chain.edges;
-  if (edge && chain.bad.length === 0) w.found.push(...levelNotes(chain.levels, w.signals));
+  if (edge && chain.bad.length === 0) w.found.push(...levelNotes(chain.levels, w));
   const isOutermost = w.chains.length === 0;
   if (!isOutermost || !edge) return;
   const direction = edge.kind === 'event' ? undefined : edge.kind;
@@ -249,8 +253,8 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
   },
 };
 
-function processViolations(text: string, signals: ReadonlySet<string>): FoundAt[] {
-  const walk: Walk = { text, signals, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
+function processViolations(text: string, context: Pick<Walk, 'signals' | 'boundsOf'>): FoundAt[] {
+  const walk: Walk = { text, ...context, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
   for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
   // Two `if`s of one process on two clocks, or both edges of one, that assign one signal (Quartus Errors 10820, 10819).
   const clashes = twoClocks(walk.clocked, sameName).map((c): FoundAt => ({ at: c.later, register: problem(c.kind, c.registers, c.clocks) }));
@@ -271,7 +275,11 @@ function unitSignals(t: UnitText): Set<string> {
  */
 export function vhdlEdgeTemplate(t: UnitText): Found[] {
   const signals = unitSignals(t);
+  const boundsAt = vhdlWiringBounds(t.code);
   return t.unit.blocks
     .filter((b) => b.kind === 'process')
-    .flatMap((b) => processViolations(synthesizedBlockText(t, b), signals).map(({ at, register }) => registerFound(t.lineOf(b.from + at), register)));
+    .flatMap((b) => {
+      const boundsOf = boundsAt(t.lineOf(b.from) - t.lineOf(t.base) + 1);
+      return processViolations(synthesizedBlockText(t, b), { signals, boundsOf }).map(({ at, register }) => registerFound(t.lineOf(b.from + at), register));
+    });
 }
