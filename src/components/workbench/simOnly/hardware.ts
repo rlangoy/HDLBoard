@@ -155,9 +155,11 @@ function dutPair(p: Project, tb: UnitEntry): [string, string][] {
 /**
  * The units a testbench may test: every instance the simulator runs, guarded or not, in
  * any of its architectures (an `ifndef SYNTHESIS around the DUT instance changes nothing).
+ * The testbench's own code as synthesis reads it is no source: an instance inside `ifdef
+ * SYNTHESIS is one the simulator never runs.
  */
 function simulatedTargets(p: Project, tb: UnitEntry): string[] {
-  const inParts = (p.parts.get(tb.key) ?? []).flatMap((part) => part.instances);
+  const inParts = (p.parts.get(tb.key) ?? []).filter((part) => !part.ownsUnit).flatMap((part) => part.instances);
   return targetsOf(p, tb.key, [...tb.simulatedInstances, ...inParts]);
 }
 

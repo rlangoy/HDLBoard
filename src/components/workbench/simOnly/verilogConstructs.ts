@@ -10,7 +10,7 @@
 import { ruleById, type UnitText } from '../tbDetect/rules';
 import { inside, linesOf } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
-import { verilogEdgeTemplate, verilogLevelStorage } from './registerTemplates';
+import { verilogEdgeTemplate, verilogLevelStorage } from './verilogRegisters';
 
 /** `@(posedge clk);`, `@e;`, `wait (x);` as statements: not an `always @(…)` sensitivity, which is followed by code. */
 const EVENT_WAIT = /@\s*(?:\((?:[^()]|\([^()]*\))*\)|\*|\w+)\s*;|\bwait\s*\(/g;

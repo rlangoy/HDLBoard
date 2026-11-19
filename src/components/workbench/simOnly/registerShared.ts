@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Rune Langøy
+
+/**
+ * What the register checks of both languages share (docs/impl_sim_only_warnings.md
+ * § 3.4): names as each language compares them, the signals a register template
+ * assigns with their bits, and the one rule both check — two clocks on one register.
+ * Pure.
+ */
+
+import type { UnitText } from '../tbDetect/rules';
+import type { CodeBlock, Language } from '../tbDetect/types';
+import { overlap, type Bits } from './bits';
+import { blockText } from './constructText';
+import { isHidden } from './scan';
+
+/** A name as written, without blanks: `KEY_N (1)` is `KEY_N(1)`. */
+export const tidy = (name: string): string => name.replace(/\s+/g, '');
+
+/** Names as the language compares them: VHDL ignores case, Verilog does not (`q` and `Q` are two). */
+export type SameName = (a: string, b: string) => boolean;
+export const SAME_NAME: Readonly<Record<Language, SameName>> = {
+  vhdl: (a, b) => a.toLowerCase() === b.toLowerCase(),
+  verilog: (a, b) => a === b,
+};
+
+/** Each name once, the first spelling kept. */
+export const unique = (names: readonly string[], same: SameName): string[] =>
+  names.filter((name, i) => names.findIndex((other) => same(other, name)) === i);
+
+/** A signal a register template assigns, with the bits: `LEDR(0)` and `LEDR(1)` are two registers. */
+export interface Target {
+  readonly name: string;
+  readonly bits: Bits;
+}
+
+/** The targets two `if`s or blocks have in common: the same signal, and bits that can be the same. */
+const sharedTargets = (a: readonly Target[], b: readonly Target[], same: SameName): string[] =>
+  unique(b.filter((y) => a.some((x) => same(x.name, y.name) && overlap(x.bits, y.bits))).map((t) => t.name), same);
+
+/** A register template of the code — an `if` with an edge, an edge-triggered block — with its clock and targets. */
+export interface Clocked<T> {
+  readonly part: T;
+  readonly clock: string;
+  readonly targets: readonly Target[];
+}
+
+/** A later template on another clock than an earlier one, and the registers they both assign. */
+export interface TwoClocks<T> {
+  readonly later: T;
+  readonly clocks: readonly [string, string];
+  readonly registers: readonly string[];
+}
+
+/**
+ * Templates on two clocks that assign one register (Quartus Error 10820 in VHDL,
+ * 10028 in Verilog): each is a register template, but the register has two clocks.
+ * Reported on the later one.
+ */
+export function twoClocks<T>(parts: readonly Clocked<T>[], same: SameName): TwoClocks<T>[] {
+  return parts.flatMap((later, i) => {
+    for (const earlier of parts.slice(0, i)) {
+      if (same(earlier.clock, later.clock)) continue;
+      const registers = sharedTargets(earlier.targets, later.targets, same);
+      if (registers.length > 0) return [{ later: later.part, clocks: [earlier.clock, later.clock] as const, registers }];
+    }
+    return [];
+  });
+}
+
+/**
+ * A block's code as synthesis reads it: lines inside translate_off blanked (newlines
+ * kept, so offsets and lines stay). A debug write there takes part in no check.
+ */
+export function synthesizedBlockText(t: UnitText, block: CodeBlock): string {
+  const text = blockText(t, block);
+  if (t.simOnlyRegions.length === 0) return text;
+  let out = '';
+  let lineStart = 0;
+  for (const line of text.split('\n')) {
+    out += isHidden(t.lineOf(block.from + lineStart), t.simOnlyRegions) ? line.replace(/[^\n]/g, ' ') : line;
+    out += '\n';
+    lineStart += line.length + 1;
+  }
+  return out.slice(0, -1);
+}

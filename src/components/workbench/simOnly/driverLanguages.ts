@@ -127,6 +127,9 @@ function closingParen(code: string, open: number): number {
 /** `function … endfunction` and `task … endtask`: their assignments are to locals and outputs, called from a block. */
 const VERILOG_SUBPROGRAM = /\b(?:endfunction|endtask|function|task)\b/g;
 
+/** `4'b10?1`, `'h3F`, `8'sd5`: a based number, whose digits may hold `?`, `x` or `z`. */
+const BASED_LITERAL = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+/g;
+
 /**
  * Whether the `:` before a procedural target belongs to a `? :` in the same statement
  * (`assign cmp = sel ? 1'b0 : q <= limit;`): then `q <= limit` is a comparison, not an
@@ -148,9 +151,6 @@ function withoutParentheses(text: string): string {
   }
   return after;
 }
-
-/** `4'b10?1`, `'h3F`, `8'sd5`: a based number, whose digits may hold `?`, `x` or `z`. */
-const BASED_LITERAL = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+/g;
 
 function verilogAssignments(body: BodyText): Assignment[] {
   const excluded = [

@@ -10,27 +10,68 @@
 import type { UnitText } from '../tbDetect/rules';
 import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
-import { vhdlEdgeTemplate } from './registerTemplates';
+import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
 /** `rising_edge(`, `falling_edge(` or `'event`; character literals are blanked (`clk = '1'` reads `clk =    `). */
-const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/gi;
-/** What would wake the process at other times too: a timeout, another condition joined by `or`, a sensitivity clause. */
+const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/i;
+/** A whole operand that is one clock edge: `rising_edge(clk)`, `falling_edge(k(0))`, `clk'event`. */
+const EDGE_OPERAND = /^(?:(?:rising_edge|falling_edge)\s*\((?:[^()]|\([^()]*\))*\)|[A-Za-z]\w*(?:\.\w+)*(?:\s*\([^()]*\))?\s*'\s*event)$/i;
+/** Outside parentheses, what would wake the process at other times too: a timeout, an `or` condition, a sensitivity clause. */
 const OTHER_WAKE_UP = /\b(?:for|or|on)\b/i;
 
+/** The text with what is inside parentheses blanked: only the top level of the expression is left. */
+function topLevel(text: string): string {
+  let depth = 0;
+  return [...text].map((ch) => {
+    if (ch === '(') depth++;
+    const shown = depth === 0 ? ch : ' ';
+    if (ch === ')') depth--;
+    return shown;
+  }).join('');
+}
+
+/** Without the parentheses around the whole of it: `((a))` is `a`. */
+function unwrapped(text: string): string {
+  const t = text.trim();
+  return t.startsWith('(') && closingParenthesis(t) === t.length - 1 ? unwrapped(t.slice(1, -1)) : t;
+}
+
+/** The offset of the `)` that closes the `(` at offset 0. */
+function closingParenthesis(text: string): number {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    depth += text[i] === '(' ? 1 : text[i] === ')' ? -1 : 0;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
+/** The operands of the top-level `and`s of a condition. */
+function conjuncts(condition: string): string[] {
+  const top = topLevel(condition);
+  const cuts = [...top.matchAll(/\band\b/gi)].map((m) => m.index ?? 0);
+  const starts = [0, ...cuts.map((c) => c + 'and'.length)];
+  return starts.map((s, i) => unwrapped(condition.slice(s, cuts[i] ?? condition.length)));
+}
+
 /**
- * A wait a synthesis tool takes as a clock: `wait until` one clock edge, in parentheses or
- * not, with an enable joined by `and` if any (`wait until rising_edge(clk) and en = '1'`,
- * `wait until clk'event and clk = '1'`). Not with `for`, `or` or `on`: those resume the
- * process at other times too.
+ * A wait a synthesis tool takes as a clock: `wait until` one clock edge, as an operand of
+ * the condition's top-level `and`s (in parentheses or not), the other operands a level
+ * enable: `wait until rising_edge(clk) and (a = '1' or b = '1')`, `wait until clk'event and
+ * clk = '1'`. Not with `for`, `or` or `on` at the top level, and not `not rising_edge(clk)`:
+ * those resume the process at other times too.
  */
 function isClockEdgeWait(statement: string): boolean {
   const until = /^wait\s+until\b/i.exec(statement.trim());
   if (!until) return false;
-  const condition = statement.trim().slice(until[0].length);
-  return !OTHER_WAKE_UP.test(condition) && (condition.match(CLOCK_EDGE)?.length ?? 0) === 1;
+  const condition = unwrapped(statement.trim().slice(until[0].length));
+  if (OTHER_WAKE_UP.test(topLevel(condition))) return false;
+  const operands = conjuncts(condition);
+  const edges = operands.filter((o) => EDGE_OPERAND.test(o));
+  return edges.length === 1 && operands.every((o) => EDGE_OPERAND.test(o) || !CLOCK_EDGE.test(o));
 }
 
 /** How many waits each process has that synthesis sees (not inside translate_off); counted once per unit. */
@@ -45,8 +86,9 @@ function synthesizedWaitsPerBlock(t: UnitText): Map<number, number> {
 
 /**
  * `wait until rising_edge(clk);` as the only wait of its process: a clocked process
- * (§ 3.3). Waits inside translate_off are not synthesized, so they don't count;
- * `rising_edge(a) or rising_edge(b)`, a timeout or a level is no clock edge alone.
+ * (§ 3.3), an enable joined by `and` included. Waits inside translate_off are not
+ * synthesized, so they don't count; `rising_edge(a) or rising_edge(b)`, a timeout or an
+ * `or` condition wakes the process at other times too.
  */
 function waitUntilLines(t: UnitText): number[] {
   const waits = synthesizedWaitsPerBlock(t);

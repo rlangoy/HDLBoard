@@ -50,12 +50,13 @@ export interface DesignCheckApi {
 }
 
 /**
- * The design check of docs/impl_sim_only_warnings.md, for the Workbench. The check runs
+ * The design check of docs/impl_sim_only_warnings.md, for the Workbench. The live check runs
  * only when the detector's analysis, the overrides or the mode change, never per
- * keystroke; per keystroke only the line counts are compared (findingDiagnostics.ts).
+ * keystroke; per keystroke only the line counts are compared (findingDiagnostics.ts). At
+ * Start, `summariesFor` runs it once more on the code as it is then.
  */
 export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
-  const { view, overrides, mode, files, setSimModel, simulatorClock, viewNow } = options;
+  const { view, overrides, mode, files, setSimModel, simulatorClock } = options;
   const check = useMemo(() => DESIGN_CHECKS[mode]({ view, overrides, simulatorClock }), [view, overrides, mode, simulatorClock]);
   const loud = useMemo(
     () => checkDiagnostics(check, { analysis: view.raw, overrides, files }),
@@ -86,14 +87,16 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     showLine: showWarningsAt,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
-    summariesFor: (runFileIds) => {
-      const now = viewNow();
-      const fresh = DESIGN_CHECKS[mode]({ view: now.view, overrides: now.overrides, simulatorClock });
-      const running = files.filter((f) => runFileIds.has(f.id));
-      return [...simOnlySummaries(fresh, now.overrides, running), ...driverSummaries(fresh, now.overrides, running)];
-    },
+    summariesFor: (runFileIds) => startSummaries({ ...options, files: files.filter((f) => runFileIds.has(f.id)) }),
     announcement,
   };
+}
+
+/** The console lines at Start for `files`, from a check of the code as it is now, not the live one of 500 ms ago. */
+function startSummaries({ viewNow, mode, simulatorClock, files }: DesignCheckOptions): SummaryLine[] {
+  const now = viewNow();
+  const check = DESIGN_CHECKS[mode]({ view: now.view, overrides: now.overrides, simulatorClock });
+  return [...simOnlySummaries(check, now.overrides, files), ...driverSummaries(check, now.overrides, files)];
 }
 
 /** The code of a line of a file, as the editor has it. */

@@ -69,9 +69,12 @@ function roleOfUnit(view: DesignView, key: string, fileId: string): CodeGroup {
 
 /** The groups of a file's units, and of its architectures of entities in other files (§ 4.1). */
 function unitGroupsIn(input: GroupInput, file: FileAnalysis, groupOf: (key: string, files: UnitFiles) => CodeGroup): CodeGroup[] {
-  const own = file.units.map((u) => groupOf(unitRefKey(file.fileId, file.language, u.name), { unit: file.fileId, code: file.fileId }));
-  const parts = (input.view.parts.get(file.fileId) ?? []).filter((p) => !p.ownsUnit);
-  const foreign = parts.flatMap((part) => {
+  // The units the simulator sees, and those only synthesis sees (a module inside `ifdef SYNTHESIS).
+  const fileParts = input.view.parts.get(file.fileId) ?? [];
+  const ownNames = [...file.units.map((u) => u.name), ...fileParts.filter((p) => p.ownsUnit).map((p) => p.unitName)];
+  const ownKeys = new Set(ownNames.map((name) => unitRefKey(file.fileId, file.language, name)));
+  const own = [...ownKeys].map((key) => groupOf(key, { unit: file.fileId, code: file.fileId }));
+  const foreign = fileParts.filter((p) => !p.ownsUnit).flatMap((part) => {
     const key = partUnitKey(input.view, part);
     return key === undefined ? [] : [groupOf(key, { unit: fileOfKey(key), code: file.fileId })];
   });
