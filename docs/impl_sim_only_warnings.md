@@ -199,7 +199,16 @@ behavior depends on the edges of multiple distinct clocks* (10820); Vivado says 
 by two different clocks in the same process*
 ([forum thread](https://embdev.net/topic/544440)). For the old example the warning reads:
 
-> ⚠ **Can't infer a register for `count`: its behavior depends on the edges of two clocks, `KEY_N(1)` and `KEY_N(0)`.**
+> ⚠ **`count` uses two clocks, `KEY_N(1)` and `KEY_N(0)`: a register allows one clock edge, plus an optional asynchronous reset or set.**
+>
+> Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:
+> `  if rst = '0' then             -- reset or set: optional, a level`
+> `  elsif rising_edge(clk) then   -- the one clock edge, last`
+> Here: `KEY_N(1)` is one clock, `KEY_N(0)` a second clock → error.
+> The simulator runs it anyway, but synthesis stops here. Choose one of them as the clock, …
+
+The headline is written for a beginner: what is wrong, then the rule. The tooltip shows the allowed shape with
+comments, and marks the student's own clocks with "→ error".
 
 The matcher hands the names with the line (`ConstructMatch.register`: the kind, what the `if` assigns, the clocks), and
 `registerText` (`simOnlyText.ts`) words one headline per kind: two clocks, both edges of one clock, a change
@@ -405,7 +414,9 @@ Tier `ignored` wording, e.g. `after`:
 the file's live warnings *quiet*: the text after the line goes, the gutter's `!`, its tooltip and the SIM-only label
 stay (`findingDiagnostics.ts`: `quietFile`, `withQuieted`). They are keyed by file and headline, not line, so they
 stay quiet while lines above move, and a new problem still shows. A console link to the file (the Start summary's
-*Line n*, or a compiler message) shows them again (`showFile`).
+*Line n*, or a compiler message) shows them again (`showFile`), and so does a click on a line number or its `!`, for
+that line (`showLine`; the gutter click no longer clears the run's markers). The `!` sits past the pane divider's
+grab strip, which used to cover it.
 
 **Console.** At Start (`warnProjectChecks`), one summary line per SIM-only file, not one line per finding:
 `blink.vhd is SIM-only: 2 lines only work in simulation; they run here but not on the board.` The file name links to

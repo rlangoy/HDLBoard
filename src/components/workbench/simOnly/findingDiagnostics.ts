@@ -92,6 +92,13 @@ export function quietFile(quieted: ReadonlySet<string>, diagnostics: readonly Ad
   return keys.length === 0 ? quieted : new Set([...quieted, ...keys]);
 }
 
+/** `quieted` without the warnings on one line: a click on its number or `!` shows them again. */
+export function showLine(quieted: ReadonlySet<string>, diagnostics: readonly AdvisedDiagnostic[], place: { readonly fileId: string; readonly line: number }): ReadonlySet<string> {
+  const keys = new Set(diagnostics.filter((d) => d.fileId === place.fileId && d.line === place.line).map(liveKey));
+  const kept = [...quieted].filter((k) => !keys.has(k));
+  return kept.length === quieted.size ? quieted : new Set(kept);
+}
+
 /** `quieted` without the warnings of `fileId`: they show again. */
 export function showFile(quieted: ReadonlySet<string>, fileId: string): ReadonlySet<string> {
   const keys = [...quieted].filter((k) => !k.startsWith(`${fileId}\n`));

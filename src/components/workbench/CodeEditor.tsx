@@ -21,6 +21,8 @@ export interface CodeEditorProps {
   diagnostics?: DiagnosticsByFile;
   /** The student clicked in, or edited, this file's code pane: its markers should go. */
   onDismissDiagnostics?: (fileId: string) => void;
+  /** A click on a line number or its `!`: that line's warnings show again. */
+  onShowLineDiagnostics?: (fileId: string, line: number) => void;
   /**
    * The one or two panes, each under its header (docs/impl_split_screen.md § 6.5,
    * docs/cleanup_file_tabs.md F3); none while nothing is shown.
@@ -84,6 +86,7 @@ export function CodeEditor({
   onFilesDropped,
   diagnostics = NO_DIAGNOSTICS,
   onDismissDiagnostics,
+  onShowLineDiagnostics,
   split,
   emptyProject,
   projectFiles,
@@ -93,7 +96,7 @@ export function CodeEditor({
     <div className={cx('wb-editor', drop.dragging && 'is-drag-over')} {...drop.handlers}>
       {drop.dragging && <DropHint />}
       {split ? (
-        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} projectFiles={projectFiles} />
+        <SplitEditor {...split} diagnostics={diagnostics} onChange={onChange} onDismissDiagnostics={onDismissDiagnostics} onShowLineDiagnostics={onShowLineDiagnostics} projectFiles={projectFiles} />
       ) : (
         emptyProject
       )}

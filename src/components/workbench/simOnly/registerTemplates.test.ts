@@ -90,23 +90,32 @@ const headlinesIn = (name: string, content: string): string[] =>
 describe('the message names the register and its clocks, as synthesis tools do', () => {
   test('two clocks: the old keyCouter2Led', () => {
     expect(headlinesIn('keyCouter2Led.vhd', OLD_COUNTER)).toEqual([
-      "Can't infer a register for `count`: its behavior depends on the edges of two clocks, `KEY_N(1)` and `KEY_N(0)`.",
+      '`count` uses two clocks, `KEY_N(1)` and `KEY_N(0)`: a register allows one clock edge, plus an optional asynchronous reset or set.',
     ]);
   });
 
   test.each([
-    ['both edges', P("if rising_edge(a) then\nx <= c;\nelsif falling_edge(a) then\nx <= d;\nend if;"), "Can't infer a register for `x`: it changes on both the rising and the falling edge of `a`."],
-    ['a branch after the edge', P("if rising_edge(a) then\nx <= c;\nelse\ny <= d;\nend if;"), "Can't infer registers for `x` and `y`: they change outside the clock edge of `a` too."],
-    ['two edges in one condition', P("if rising_edge(a) and rising_edge(b) then\nx <= c;\nend if;"), "Can't infer a register for `x`: one condition combines the edges of `a` and `b`."],
+    ['both edges', P("if rising_edge(a) then\nx <= c;\nelsif falling_edge(a) then\nx <= d;\nend if;"), '`x` uses both edges of `a`: a register allows one clock edge, plus an optional asynchronous reset or set.'],
+    ['a branch after the edge', P("if rising_edge(a) then\nx <= c;\nelse\ny <= d;\nend if;"), '`x` and `y` change outside the clock edge of `a`: a register allows one clock edge, plus an optional asynchronous reset or set, nothing after the edge.'],
+    ['two edges in one condition', P("if rising_edge(a) and rising_edge(b) then\nx <= c;\nend if;"), 'One condition tests the edges of `a` and `b` together: a register allows one clock edge, plus an optional asynchronous reset or set.'],
   ])('%s', (_label, process, headline) => {
     expect(headlinesIn('t.vhd', vhdl(process))).toEqual([headline]);
   });
 
   test.each([
-    ['no reset tested', 'always @(posedge a or posedge b) if (c) x <= 0; else x <= d;', "Can't infer a register for `x`: the `if` tests none of the edges `a` and `b`, so none of them is a reset."],
-    ['a latch', 'always @(a or b) if (a && !b) x <= ~x;', '`x` keeps its value without a clock edge: synthesis makes a latch, not a register.'],
+    ['no reset tested', 'always @(posedge a or posedge b) if (c) x <= 0; else x <= d;', 'The `if` tests none of the edges `a` and `b`: a register allows one clock edge, plus an optional asynchronous reset or set, which the `if` tests first.'],
+    ['a latch', 'always @(a or b) if (a && !b) x <= ~x;', '`x` keeps its value without a clock edge: the FPGA makes a latch, not a register.'],
   ])('Verilog: %s', (_label, body, headline) => {
     expect(headlinesIn('t.v', vlog(body))).toEqual([headline]);
+  });
+
+  test('the tooltip shows what is allowed, then marks the second clock as the error', () => {
+    const [d] = checkDiagnostics(checkOf([source('k.vhd', OLD_COUNTER)]), { analysis: viewOf([source('k.vhd', OLD_COUNTER)]).raw, overrides: EMPTY_OVERRIDES, files: [{ id: 'k.vhd', content: OLD_COUNTER }] });
+    const lines = d.message.split('\n');
+    expect(lines[0]).toBe('Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:');
+    expect(lines[1]).toMatch(/if rst = '0' then\s+-- reset or set: optional, a level/);
+    expect(lines[2]).toMatch(/elsif rising_edge\(clk\) then\s+-- the one clock edge, last/);
+    expect(lines[3]).toBe('Here: `KEY_N(1)` is one clock, `KEY_N(0)` a second clock → error.');
   });
 
   test('names no synthesis tool: the board may be Intel or AMD', () => {

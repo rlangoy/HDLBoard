@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { AdvisedDiagnostic } from '../diagnosticAdvice';
-import { quietFile, showFile, withQuieted } from './findingDiagnostics';
+import { quietFile, showFile, showLine, withQuieted } from './findingDiagnostics';
 
 const live = ([fileId, line, headline]: [string, number, string], quiet = false): AdvisedDiagnostic => ({
   fileId,
@@ -54,5 +54,15 @@ describe('a click in the editor quiets the file\'s live warnings; a console link
     const once = quietFile(NONE, [A, REPORT], 'a.vhd');
     expect(quietFile(once, [A, REPORT], 'a.vhd')).toBe(once);
     expect(withQuieted([REPORT], once)).toEqual([REPORT]);
+  });
+
+  test('a click on a line number or its ! shows the warnings of that line only', () => {
+    const quieted = showLine(quietFile(NONE, [A, A2], 'a.vhd'), [A, A2], { fileId: 'a.vhd', line: 22 });
+    expect(withQuieted([A, A2], quieted).map((d) => d.quiet === true)).toEqual([false, true]);
+  });
+
+  test('a click on a line without a warning changes nothing', () => {
+    const quieted = quietFile(NONE, [A, A2], 'a.vhd');
+    expect(showLine(quieted, [A, A2], { fileId: 'a.vhd', line: 3 })).toBe(quieted);
   });
 });

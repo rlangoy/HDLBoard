@@ -38,7 +38,7 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vhdl-protected': { headline: 'Protected types only work in simulation.', explanation: 'A protected type is a simulation object with procedures. Synthesis can\'t build it: use signals and processes.' },
   'vhdl-random': { headline: '`uniform` only works in simulation.', explanation: 'Random numbers from `math_real` are computed by the simulator. On the board, use a pseudo-random generator such as an LFSR.' },
   'vhdl-real-signal': { headline: 'A `real` signal only works in simulation.', explanation: 'The FPGA has no floating point wires. Use `unsigned`, `signed` or `integer` with a fixed range instead. `real` constants and generics are fine.' },
-  'vhdl-edge-template': { headline: "Can't infer a register from this `if`.", explanation: `${ONE_EDGE}: ${VHDL_TEMPLATE}. Here a second edge, or a branch after the edge, is part of the same \`if\`. ${SIM_RUNS} ${SAMPLE_IT}` },
+  'vhdl-edge-template': { headline: 'This `if` has a second clock edge, or a branch after the edge: a register allows one clock edge, plus an optional asynchronous reset or set.', explanation: `${ONE_EDGE}: ${VHDL_TEMPLATE}. Here a second edge, or a branch after the edge, is part of the same \`if\`. ${SIM_RUNS} ${SAMPLE_IT}` },
   'vhdl-after': { headline: '`after` is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the signal changes at once. Only the simulation shows the delay.' },
   'vhdl-report': { headline: '`report` / `assert` only print in simulation.', explanation: 'Synthesis ignores them. They are harmless; the board just never prints them.' },
   'vlog-delay': { headline: 'A `#` delay only works in simulation.', explanation: `The FPGA has no timer that a \`#\` delay could use, so synthesis rejects it. ${COUNT_CYCLES}` },
@@ -50,8 +50,8 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vlog-random': { headline: '`$random` only works in simulation.', explanation: 'Random numbers are computed by the simulator. On the board, use a pseudo-random generator such as an LFSR.' },
   'vlog-verification': { headline: 'This statement only works in simulation.', explanation: '`force`, `fork`, `event`, `class` and the other verification statements are for testbenches; synthesis does not accept them.' },
   'vlog-real': { headline: 'A `real` variable only works in simulation.', explanation: 'The FPGA has no floating point wires. Use a vector of a fixed width instead. A `real` parameter is fine.' },
-  'vlog-edge-template': { headline: "Can't infer a register: the `if` tests none of the edges of the `always`.", explanation: `${ONE_EDGE}: ${VERILOG_TEMPLATE}. Every edge in \`@( … )\` but the clock must be a reset or set that the first \`if\` tests. ${SIM_RUNS} ${SAMPLE_IT}` },
-  'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: synthesis makes a latch, not a register.', explanation: `The block has no \`posedge\` or \`negedge\`, but it reads a variable it assigns with \`<=\`. The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. ${ONE_EDGE}: ${VERILOG_TEMPLATE}. ${SAMPLE_IT}` },
+  'vlog-edge-template': { headline: 'The `if` tests none of the edges of the `always`: a register allows one clock edge, plus an optional asynchronous reset or set.', explanation: `${ONE_EDGE}: ${VERILOG_TEMPLATE}. Every edge in \`@( … )\` but the clock must be a reset or set that the first \`if\` tests. ${SIM_RUNS} ${SAMPLE_IT}` },
+  'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: the FPGA makes a latch, not a register.', explanation: `The block has no \`posedge\` or \`negedge\`, but it reads a variable it assigns with \`<=\`. The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. ${ONE_EDGE}: ${VERILOG_TEMPLATE}. ${SAMPLE_IT}` },
   'vlog-assign-delay': { headline: 'The `#` delay is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the wire changes at once. Only the simulation shows the delay.' },
   'vlog-display': { headline: '`$display` only prints in simulation.', explanation: 'Synthesis ignores it. It is harmless; the board just never prints it.' },
 };
@@ -87,43 +87,68 @@ const REGISTER_FIX: Readonly<Record<RegisterProblemKind, string>> = {
   latch: `The simulator runs the block once per change; a latch reacts all the time, so the board does not behave like the simulation. Use an edge: \`always @(posedge clk)\`. ${SAMPLE_IT}`,
 };
 
-interface HeadlineWords {
-  /** `a register for \`count\``. */
-  readonly target: string;
-  readonly its: string;
-  readonly itChanges: string;
-  readonly clocks: string;
+/** The rule, in the words a beginner needs: what a register may have. */
+const RULE = 'a register allows one clock edge, plus an optional asynchronous reset or set';
+
+interface Words {
+  /** `` `count` ``, `` `x` and `y` ``. */
   readonly registers: string;
+  readonly many: boolean;
+  readonly clocks: readonly string[];
 }
 
-const REGISTER_HEADLINE: Readonly<Record<RegisterProblemKind, (w: HeadlineWords) => string>> = {
-  'two-clocks': (w) => `Can't infer ${w.target}: ${w.its} behavior depends on the edges of two clocks, ${w.clocks}.`,
-  'both-edges': (w) => `Can't infer ${w.target}: ${w.itChanges} on both the rising and the falling edge of ${w.clocks}.`,
-  'outside-edge': (w) => `Can't infer ${w.target}: ${w.itChanges} outside the clock edge of ${w.clocks} too.`,
-  'combined-edges': (w) => `Can't infer ${w.target}: one condition combines the edges of ${w.clocks}.`,
-  'no-reset-tested': (w) => `Can't infer ${w.target}: the \`if\` tests none of the edges ${w.clocks}, so none of them is a reset.`,
-  latch: (w) => `${w.registers} ${w.its === 'its' ? 'keeps its' : 'keep their'} value without a clock edge: synthesis makes a latch, not a register.`,
+const code = (name: string) => `\`${name}\``;
+const changes = (w: Words) => `${w.registers} ${w.many ? 'change' : 'changes'}`;
+
+/** The text after the line: what is wrong, then the rule. */
+const REGISTER_HEADLINE: Readonly<Record<RegisterProblemKind, (w: Words) => string>> = {
+  'two-clocks': (w) => `${w.registers} ${w.many ? 'use' : 'uses'} two clocks, ${listed(w.clocks)}: ${RULE}.`,
+  'both-edges': (w) => `${w.registers} ${w.many ? 'use' : 'uses'} both edges of ${listed(w.clocks)}: ${RULE}.`,
+  'outside-edge': (w) => `${changes(w)} outside the clock edge of ${listed(w.clocks)}: ${RULE}, nothing after the edge.`,
+  'combined-edges': (w) => `One condition tests the edges of ${listed(w.clocks)} together: ${RULE}.`,
+  'no-reset-tested': (w) => `The \`if\` tests none of the edges ${listed(w.clocks)}: ${RULE}, which the \`if\` tests first.`,
+  latch: (w) => `${w.registers} ${w.many ? 'keep their' : 'keeps its'} value without a clock edge: the FPGA makes a latch, not a register.`,
 };
 
-function registerHeadline({ kind, registers, clocks }: RegisterProblem): string {
-  const many = registers.length > 1;
-  const target = registers.length === 0 ? 'a register' : `${many ? 'registers for' : 'a register for'} ${listed(registers)}`;
-  const [its, itChanges] = many ? ['their', 'they change'] : ['its', 'it changes'];
-  return REGISTER_HEADLINE[kind]({ target, its, itChanges, clocks: listed(clocks), registers: listed(registers) });
-}
+/** The tooltip's pointer at the student's own code. */
+const REGISTER_HERE: Readonly<Record<RegisterProblemKind, (w: Words) => string>> = {
+  'two-clocks': (w) => `Here: ${code(w.clocks[0])} is one clock, ${code(w.clocks[1])} a second clock → error.`,
+  'both-edges': (w) => `Here: the rising and the falling edge of ${code(w.clocks[0])} are two clock edges → error.`,
+  'outside-edge': (w) => `Here: ${changes(w)} in a branch after the edge of ${code(w.clocks[0])} → error.`,
+  'combined-edges': (w) => `Here: one condition has the edges of ${listed(w.clocks)} → error.`,
+  'no-reset-tested': (w) => `Here: ${listed(w.clocks)} are all edges, and the first \`if\` tests none of them → error.`,
+  latch: () => 'Here: no `posedge` or `negedge`, but the block keeps a value → a latch.',
+};
+
+const VHDL_ALLOWED = [
+  "  if rst = '0' then             -- reset or set: optional, a level",
+  '  elsif rising_edge(clk) then   -- the one clock edge, last',
+].join('\n');
+const VERILOG_ALLOWED = [
+  '  always @(posedge clk or negedge rst_n)',
+  '    if (!rst_n) …   // reset or set: optional, tested first',
+  '    else …          // the one clock edge',
+].join('\n');
 
 /**
- * Why no register can be built (§ 3.4), naming the registers and clocks as synthesis
- * tools do ("can't infer register for count[0] because its behavior depends on the
- * edges of multiple distinct clocks"; "Register count_reg … is clocked by two different
- * clocks in the same process"), without naming a tool: the board may be Intel or AMD.
+ * Why no register can be built (§ 3.4), for a beginner: what is wrong and the rule in
+ * one line, then in the tooltip the allowed shape, and the student's own clocks marked
+ * "→ error". It names the registers and clocks, as synthesis tools do ("can't infer
+ * register for count[0] because its behavior depends on the edges of multiple distinct
+ * clocks"; "Register count_reg … is clocked by two different clocks in the same
+ * process"), and names no tool: the board may be Intel or AMD.
  */
 export function registerText(problem: RegisterProblem): ConstructText {
-  const verilog = problem.kind === 'no-reset-tested' || problem.kind === 'latch';
-  const template = `${ONE_EDGE}: ${verilog ? VERILOG_TEMPLATE : VHDL_TEMPLATE}.`;
-  const fix = REGISTER_FIX[problem.kind];
-  const explanation = problem.kind === 'latch' ? `${fix} ${template}` : `${template} ${SIM_RUNS} ${fix}`;
-  return { headline: registerHeadline(problem), explanation };
+  const { kind, registers, clocks } = problem;
+  const words: Words = { registers: registers.length === 0 ? 'This register' : listed(registers), many: registers.length > 1, clocks };
+  const verilog = kind === 'no-reset-tested' || kind === 'latch';
+  const explanation = [
+    'Allowed: one clock edge, plus an optional asynchronous reset or set tested as a level before it:',
+    verilog ? VERILOG_ALLOWED : VHDL_ALLOWED,
+    REGISTER_HERE[kind](words),
+    kind === 'latch' ? REGISTER_FIX.latch : `${SIM_RUNS} ${REGISTER_FIX[kind]}`,
+  ].join('\n');
+  return { headline: REGISTER_HEADLINE[kind](words), explanation };
 }
 
 /** The console line at Start for a signal with more than one driver. */

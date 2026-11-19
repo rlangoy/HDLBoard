@@ -6,7 +6,7 @@ import type { AdvisedDiagnostic } from '../diagnosticAdvice';
 import type { DesignCheckBadge } from '../EditorPaneHeader';
 import type { TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
-import { checkDiagnostics, quietFile, showFile, withQuieted } from './findingDiagnostics';
+import { checkDiagnostics, quietFile, showFile, showLine, withQuieted } from './findingDiagnostics';
 import { isSimModel } from './simModels';
 import { driverSummaries, groupChanges, simOnlyBadgeText, simOnlySummaries, type SummaryLine } from './simOnlyReport';
 import type { DesignCheck, DesignCheckMode, DesignView, FileGroup } from './types';
@@ -29,6 +29,8 @@ export interface DesignCheckApi {
   readonly quietFile: (fileId: string) => void;
   /** A console link to the file: its live warnings show again. */
   readonly showFile: (fileId: string) => void;
+  /** A click on a line number or its `!`: the line's live warnings show again. */
+  readonly showLine: (fileId: string, line: number) => void;
   /** A file's group for the Files panel; undefined for a file with no design unit. */
   readonly groupOf: (fileId: string) => FileGroup | undefined;
   /** A design pane's badge; undefined with the check off (*Simulation only*). */
@@ -57,6 +59,7 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
   loudRef.current = loud;
   const quiet = useCallback((fileId: string) => setQuieted((prev) => quietFile(prev, loudRef.current, fileId)), []);
   const show = useCallback((fileId: string) => setQuieted((prev) => showFile(prev, fileId)), []);
+  const showAt = useCallback((fileId: string, line: number) => setQuieted((prev) => showLine(prev, loudRef.current, { fileId, line })), []);
   const announcement = useGroupAnnouncement(check, mode, files);
   const badgeFor = (fileId: string): DesignCheckBadge | undefined => {
     if (mode === 'simulation') return undefined;
@@ -68,6 +71,7 @@ export function useDesignCheck(options: DesignCheckOptions): DesignCheckApi {
     diagnostics,
     quietFile: quiet,
     showFile: show,
+    showLine: showAt,
     groupOf: (fileId) => check.groups.byFile.get(fileId),
     badgeFor,
     summaries: () => [...simOnlySummaries(check, overrides, files), ...driverSummaries(check, overrides, files)],

@@ -139,6 +139,12 @@ const HighlightedLine = memo(function HighlightedLine({
  * Line numbers; a marked line gets a glyph, an edge and a tooltip (colour is never the only cue).
  * Memoised: a symbol highlight changes nothing here, so hovering skips every line number.
  */
+/** The line number of the gutter row a pointer event hit, if it hit one. */
+function gutterLineAt(target: EventTarget): number | undefined {
+  const row = target instanceof Element ? target.closest<HTMLElement>('.wb-editor__gutter-line[data-line]') : null;
+  return row ? Number(row.dataset.line) : undefined;
+}
+
 const EditorGutter = memo(function EditorGutter({
   lines,
   linesByNumber,
@@ -160,7 +166,7 @@ const EditorGutter = memo(function EditorGutter({
         const title = diagnostic ? describeLine(diagnostic) : hintFrom && describeHint(hintFrom, i + 1);
         return (
           <Fragment key={i}>
-            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title}>
+            <div className={cx('wb-editor__gutter-line', markerClasses(diagnostic, hintFrom))} title={title} data-line={i + 1}>
               {i + 1}
             </div>
             {(extraRows.get(i + 1) ?? NO_EXTRA_ROWS).map((row, r) => (
@@ -179,6 +185,8 @@ export interface EditorSurfaceProps {
   diagnostics: readonly LineDiagnostic[];
   onChange: (id: string, content: string) => void;
   onDismissDiagnostics?: (fileId: string) => void;
+  /** A click on a line number or its `!`: that line's warnings show again. */
+  onShowLineDiagnostics?: (fileId: string, line: number) => void;
   reveal?: RevealRequest | null;
   /** The textarea's accessible name; defaults to "<name> source". */
   label?: string;
@@ -225,6 +233,7 @@ export function EditorSurface({
   diagnostics,
   onChange,
   onDismissDiagnostics,
+  onShowLineDiagnostics,
   reveal,
   label,
   announces = true,
@@ -330,11 +339,14 @@ export function EditorSurface({
     <>
     <div
       className="wb-editor__body"
-      // A click in the text or on a line number clears this file's markers
-      // (hovering does not). The reveal's own focus and scroll are not clicks.
-      onPointerDown={() => {
+      // A click in the text clears this file's markers (hovering does not); a click on a
+      // line number or its `!` shows that line's warnings instead. The reveal's own focus
+      // and scroll are not clicks.
+      onPointerDown={(e) => {
         onFocusWithin?.();
-        if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
+        const line = gutterLineAt(e.target);
+        if (line !== undefined) onShowLineDiagnostics?.(file.id, line);
+        else if (diagnostics.length > 0) onDismissDiagnostics?.(file.id);
       }}
       onFocus={onFocusWithin}
     >

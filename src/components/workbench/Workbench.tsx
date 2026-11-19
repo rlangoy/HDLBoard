@@ -2180,6 +2180,7 @@ export function Workbench() {
               onFilesDropped={handleFilesDropped}
               diagnostics={shownDiagnostics}
               onDismissDiagnostics={dismissInEditor}
+              onShowLineDiagnostics={designCheck.showLine}
               projectFiles={files}
               split={tb.editorSplit(fileMenu, designCheck.badgeFor)}
               emptyProject={
