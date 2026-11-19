@@ -169,12 +169,13 @@ const problem = (kind: RegisterProblemKind, registers: readonly string[], clocks
   ({ kind, registers, clocks, language: 'verilog' });
 
 /**
- * The registers the reset branch loads from a register of the block (`count <= count - 1`):
- * a reset or set loads a constant, so such a branch is a second clock, not a reset.
+ * The registers a reset branch computes from themselves (`count <= count - 1`): a branch
+ * that counts is a second clock, not a reset. Loading another register (`q <= d`) is an
+ * asynchronous load, noted by `loadsAValue`.
  */
-function loadedFromRegisters(branch: string, registers: readonly string[]): string[] {
-  const loaded = branchAssignments(branch).filter((a) => registers.some((r) => mentions(a.value, r)));
-  return unique(loaded.flatMap((a) => a.targets), sameName);
+function countingTargets(branch: string): string[] {
+  const counting = branchAssignments(branch).filter((a) => a.targets.some((target) => mentions(a.value, target)));
+  return unique(counting.flatMap((a) => a.targets), sameName);
 }
 
 /** One assignment of a branch, blocking or not: the signals it assigns (`q`, `{hi, lo}`), and its value. */
@@ -264,10 +265,10 @@ function setAndReset({ always, resets }: EdgeBlock): RegisterProblem | undefined
   return both.length > 0 ? problem('set-and-reset', both, unique(levels, sameName)) : undefined;
 }
 
-/** A reset branch that loads from a register of the block is a second clock (Quartus Warning 13004; the board does not count). */
-function loadsFromRegisters({ always, resets, registers }: EdgeBlock): RegisterProblem | undefined {
-  const loaded = unique(resets.flatMap((r) => loadedFromRegisters(r.branch, registers)), sameName);
-  return loaded.length > 0 ? problem('two-clocks', loaded, unique(always.edges, sameName)) : undefined;
+/** A reset branch that counts is a second clock (Quartus Warning 13004; the board does not count). */
+function countsInAReset({ always, resets }: EdgeBlock): RegisterProblem | undefined {
+  const counting = unique(resets.flatMap((r) => countingTargets(r.branch)), sameName);
+  return counting.length > 0 ? problem('two-clocks', counting, unique(always.edges, sameName)) : undefined;
 }
 
 /**
@@ -289,7 +290,7 @@ const EDGE_BLOCK_RULES: readonly ((b: EdgeBlock) => RegisterProblem | undefined)
   untestedEdges,
   resetPolarity,
   // What keeps the design off the board first; the quiet notes of what builds from latches after.
-  loadsFromRegisters,
+  countsInAReset,
   setAndReset,
   loadsAValue,
 ];
@@ -336,7 +337,8 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
     return clock === undefined ? [] : [{ part: always.block, clock: clock.signal, edge: clock.direction, targets: targetsWithBits(always.body) }];
   });
   const clashes = twoClocks(clocked, sameName).map((c): Found => ({ line: c.later.span.start, register: problem(c.kind, c.registers, c.clocks) }));
-  const signals = verilogSignalNames(t.code);
+  // What the module declares, and what it assigns, which is a signal whatever its declaration says.
+  const signals = new Set([...verilogSignalNames(t.code), ...targetNames(t.code)]);
   return [...blocks.flatMap((always) => edgeBlockProblem(always, signals)), ...clashes];
 }
 

@@ -154,7 +154,7 @@ const signalsRead = (text: string, signals: ReadonlySet<string>): string[] =>
   (text.match(/\b[A-Za-z]\w*\b(?!\s*')/g) ?? []).map((name) => name.toLowerCase()).filter((name) => signals.has(name));
 
 /**
- * A reset or set branch that loads from its own register is a second clock. Else the quiet
+ * A reset or set branch that computes a register from itself (`c <= c + 1`) is a second clock. Else the quiet
  * notes of a clocked `if`'s resets and sets, which Quartus builds from latches
  * (Warning 13004): an asynchronous reset and set of one signal, or a branch that loads a
  * signal, not a constant (`if rst = '1' then q <= data;`). Constants, generics, `others`
@@ -164,8 +164,8 @@ function levelNotes(levels: readonly LevelBranch[], signals: ReadonlySet<string>
   const levelSignals = (branches: readonly LevelBranch[]) => unique(branches.flatMap((l) => signalsRead(l.condition, signals)), sameName);
   for (const level of levels) {
     // `if a = '1' then c <= c + 1;`: a reset loads a constant, so a branch that counts is a second clock (Quartus Warning 13004; the board does not count).
-    const own = new Set(assignmentsIn(level.body).map((a) => a.target.toLowerCase()));
-    const counting = assignmentsIn(level.body).filter((a) => signalsRead(a.value, own).length > 0);
+    // Only an assignment that reads its own target counts: `q <= d` loads another register, an asynchronous load.
+    const counting = assignmentsIn(level.body).filter((a) => signalsRead(a.value, new Set([a.target.toLowerCase()])).length > 0);
     if (counting.length > 0) return [{ at: level.at, register: problem('two-clocks', unique(counting.map((a) => a.target), sameName), levelSignals([level])) }];
   }
   const assigned = levels.map((l) => new Set(assignmentsIn(l.body).map((a) => a.target.toLowerCase())));

@@ -590,3 +590,23 @@ describe('VHDL: an architecture in another file than its entity', () => {
     expect(check([['top.vhd', ENTITY], ['rtl.vhd', ARCHITECTURE]]).findings.map((f) => `${f.fileId}:${f.register?.kind}:${f.tier}`)).toEqual(['rtl.vhd:async-load:quiet']);
   });
 });
+
+describe('a reset that loads another register is an asynchronous load, not a second clock', () => {
+  test('VHDL: q <= d; d <= (others => 0) in the reset branch', () => {
+    const body = "process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\nq <= d;\nd <= (others => '0');\nelsif rising_edge(CLOCK_50) then\nd <= SW(3 downto 0);\nq <= d;\nend if;\nend process;";
+    const result = check([['top.vhd', vhdl(body, 'signal q, d : std_logic_vector(3 downto 0);')]]);
+    expect([result.findings.map((f) => `${f.register?.kind}:${f.tier}`), result.groups.byFile.get('top.vhd')]).toEqual([['async-load:quiet'], 'rtl']);
+  });
+
+  test('Verilog: q <= d; d <= 0 in the reset branch', () => {
+    const body = "reg [3:0] q = 0, d = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) begin q <= d; d <= 0; end\n  else begin d <= SW[3:0]; q <= d; end";
+    const result = check([['top.v', vlog(body)]]);
+    expect([result.findings.map((f) => `${f.register?.kind}:${f.tier}`), result.groups.byFile.get('top.v')]).toEqual([['async-load:quiet'], 'rtl']);
+  });
+});
+
+describe('Verilog declarations with initial values', () => {
+  test('reg [1:0] a = 0, b = 0; gives b its two bits: a part-select default covers a whole write', () => {
+    expect(latchIn('reg [1:0] a = 0, b = 0;\nalways @* begin b[1:0] = SW[1:0]; if (SW[2]) b = SW[3:2]; LEDR[1:0] = b; end')).toEqual([]);
+  });
+});

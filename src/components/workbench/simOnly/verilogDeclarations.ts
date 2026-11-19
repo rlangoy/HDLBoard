@@ -62,8 +62,8 @@ export function verilogSignalNames(code: string): ReadonlySet<string> {
   return new Set([...declared, ...integers]);
 }
 
-/** A declaration: its kind words, an optional range, and its names up to the next declaration word. */
-const DECLARATION = /\b(?:input|output|inout|reg|wire|logic)\b((?:\s+(?:reg|wire|logic|signed|unsigned))*)\s*(?:\[([^\]]*)\])?((?:(?!\b(?:input|output|inout|reg|wire|logic)\b)[^;=()])*)/g;
+/** A declaration: its kind words, an optional range, and its names (with any initial values) up to the next declaration word. */
+const DECLARATION = /\b(?:input|output|inout|reg|wire|logic)\b((?:\s+(?:reg|wire|logic|signed|unsigned))*)\s*(?:\[([^\]]*)\])?((?:(?!\b(?:input|output|inout|reg|wire|logic)\b)[^;()])*)/g;
 const DECLARATION_WORD = /^(?:input|output|inout|reg|wire|logic|signed|unsigned)$/;
 
 /** `7:0`, `N-1:0` with `N` known; undefined for anything else. */
@@ -101,7 +101,8 @@ function bitsOfDeclared({ scalar, packed }: { scalar: boolean; packed?: BitRange
 function declaredNames(list: string): { name: string; unpacked?: string }[] {
   const names: { name: string; unpacked?: string }[] = [];
   for (const item of topLevelItems(list)) {
-    const m = /^\s*([A-Za-z_]\w*)\s*(?:\[([^\]]*)\]\s*$)?/.exec(item);
+    // `q`, `q [7:0]` (an array of bits), `q = 4'd0` (with an initial value).
+    const m = /^\s*([A-Za-z_]\w*)\s*(?:\[([^\]]*)\]\s*)?(?:=[\s\S]*)?$/.exec(item);
     if (!m || DECLARATION_WORD.test(m[1])) break;
     names.push({ name: m[1], unpacked: m[2] });
   }
