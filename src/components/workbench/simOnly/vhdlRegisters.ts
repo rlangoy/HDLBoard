@@ -10,10 +10,10 @@
 
 import type { UnitText } from '../tbDetect/rules';
 import { escapeRegExp } from './constructText';
-import { vhdlBits } from './bits';
+import { ALL_BITS, vhdlBits } from './bits';
 import type { Found } from './constructs';
 import { testsLevelOf } from './vhdlEdges';
-import { registerFound, SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
+import { feedsBack, registerFound, SAME_NAME, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
 const sameName = SAME_NAME.vhdl;
@@ -146,7 +146,7 @@ function assignmentsIn(body: string): { target: string; index: string; value: st
   return [...body.matchAll(VHDL_TARGET)].map((m) => {
     const from = (m.index ?? 0) + m[0].length;
     const end = body.indexOf(';', from);
-    return { target: m[1], index: tidy(m[2] ?? ''), value: body.slice(from, end < 0 ? body.length : end) };
+    return { target: m[1], index: (m[2] ?? '').trim(), value: body.slice(from, end < 0 ? body.length : end) };
   });
 }
 
@@ -155,11 +155,10 @@ function assignmentsIn(body: string): { target: string; index: string; value: st
  * (`c(0) <= c(0) xor a`). Another index is another bit (`q(0) <= q(1)`), no counting.
  */
 function readsItsOwnBits(value: string, target: string, index: string): boolean {
+  // Compared as written without blanks; the bits read from the text as written (`3 downto 0`).
+  const select = (raw: string): SelectedBits => ({ text: tidy(raw), bits: raw.trim() === '' ? ALL_BITS : vhdlBits(raw.trim()) });
   const reads = new RegExp(`\\b${escapeRegExp(target)}\\b(?!\\s*')\\s*(\\([^()]*\\))?`, 'gi');
-  return [...value.matchAll(reads)].some((m) => {
-    const read = tidy(m[1] ?? '');
-    return read === '' || index === '' || read.toLowerCase() === index.toLowerCase();
-  });
+  return [...value.matchAll(reads)].some((m) => feedsBack(select(m[1] ?? ''), select(index), tidy(value) === tidy(m[0])));
 }
 
 /** The signals a text reads, lowercase; `q'length` asks about `q`, it reads no value of it. */

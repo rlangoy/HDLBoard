@@ -14,7 +14,7 @@ import { verilogBits } from './bits';
 import type { Found } from './constructs';
 import { bracketed, topLevelItems, unwrapped } from './brackets';
 import { escapeRegExp } from './constructText';
-import { registerFound, SAME_NAME, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
+import { feedsBack, registerFound, SAME_NAME, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 import { declaredRanges, verilogConstants, verilogSignalNames } from './verilogDeclarations';
@@ -353,11 +353,11 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
  * no feedback.
  */
 function readsItsOwnBits(value: string, name: string, index: string): boolean {
-  const written = tidy(/^\s*(\[[^\]]*\])?/.exec(index)?.[1] ?? '');
-  return [...value.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b\\s*(\\[[^\\]]*\\])?`, 'g'))].some((m) => {
-    const read = tidy(m[1] ?? '');
-    return read === '' || written === '' || read === written;
-  });
+  const select = (text: string): SelectedBits => ({ text, bits: verilogBits(text === '' ? undefined : text) });
+  const written = select(tidy(/^\s*(\[[^\]]*\])?/.exec(index)?.[1] ?? ''));
+  return [...value.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b\\s*(\\[[^\\]]*\\])?`, 'g'))].some((m) =>
+    feedsBack(select(tidy(m[1] ?? '')), written, tidy(value) === tidy(m[0])),
+  );
 }
 
 /**

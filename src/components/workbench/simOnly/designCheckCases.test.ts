@@ -630,3 +630,23 @@ describe('a reset that reads another bit of its own vector is no counting', () =
     expect(check([[`top.${ext}`, file]]).findings.map((f) => f.register?.kind)).toEqual(['two-clocks']);
   });
 });
+
+describe('overlapping selects in a reset branch', () => {
+  const kinds = (name: string, file: string) => check([[name, file]]).findings.map((f) => `${f.register?.kind}:${f.tier}`);
+  const vhdlReset = (assignment: string) => vhdl(`process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\n${assignment}\nelsif rising_edge(CLOCK_50) then\nq <= SW(3 downto 0);\nend if;\nend process;`, 'signal q : unsigned(3 downto 0);');
+  const vlogReset = (assignment: string) => vlog(`reg [3:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) ${assignment}\n  else q <= SW[3:0];`);
+
+  test.each([
+    ['Verilog', 'top.v', vlogReset("q[3:0] <= q[2:0] + 1'b1;")],
+    ['VHDL', 'top.vhd', vhdlReset("q(3 downto 0) <= ('0' & q(2 downto 0)) + 1;")],
+  ])('%s: bits that overlap inside an expression feed back: a second clock', (_label, name, file) => {
+    expect(kinds(name, file)).toEqual(['two-clocks:never']);
+  });
+
+  test.each([
+    ['Verilog', 'top.v', vlogReset('q[2:0] <= q[3:1];')],
+    ['VHDL', 'top.vhd', vhdlReset('q(2 downto 0) <= q(3 downto 1);')],
+  ])('%s: a plain shifted copy has no bit reading itself: an asynchronous load', (_label, name, file) => {
+    expect(kinds(name, file)).toEqual(['async-load:quiet']);
+  });
+});
