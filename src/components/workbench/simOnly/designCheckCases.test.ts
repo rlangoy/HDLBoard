@@ -650,3 +650,25 @@ describe('overlapping selects in a reset branch', () => {
     expect(kinds(name, file)).toEqual(['async-load:quiet']);
   });
 });
+
+describe('bitwise operators keep each bit in its place', () => {
+  test('a combinational bitwise chain over a shifted select is no latch', () => {
+    expect(latchIn('reg [9:0] q;\nalways @* begin q[9:3] <= SW[9:3]; q[2:0] <= ~q[3:1]; LEDR <= q; end')).toEqual([]);
+  });
+
+  test('a combinational bitwise read of the same bits keeps the value: a latch', () => {
+    expect(latchIn('reg [9:0] q;\nalways @* begin q[9:3] <= SW[9:3]; q[2:0] <= ~q[2:0]; LEDR <= q; end')).toEqual(['top.v:vlog-level-storage@3']);
+  });
+
+  test('a reduction mixes the bits: it feeds back', () => {
+    expect(latchIn('reg [9:0] q;\nalways @* begin q[9:3] <= SW[9:3]; q[2:0] <= {2\'b0, &q[3:1]}; LEDR <= q; end')).toEqual(['top.v:vlog-level-storage@3']);
+  });
+
+  test.each([
+    ['Verilog', 'top.v', "reg [3:0] q = 0;\nalways @(posedge CLOCK_50 or posedge SW[0])\n  if (SW[0]) q[2:0] <= ~q[3:1] & SW[2:0];\n  else q <= SW[3:0];"],
+    ['VHDL', 'top.vhd', "process (CLOCK_50, SW)\nbegin\nif SW(0) = '1' then\nq(2 downto 0) <= not q(3 downto 1);\nelsif rising_edge(CLOCK_50) then\nq <= SW(3 downto 0);\nend if;\nend process;"],
+  ])('%s: a shifted bitwise reset is an asynchronous load, not a second clock', (_label, name, body) => {
+    const file = name.endsWith('.v') ? vlog(body) : vhdl(body, 'signal q : std_logic_vector(3 downto 0);');
+    expect(check([[name, file]]).findings.map((f) => `${f.register?.kind}:${f.tier}`)).toEqual(['async-load:quiet']);
+  });
+});

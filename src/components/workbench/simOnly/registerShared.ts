@@ -31,17 +31,25 @@ export const registerFound = (line: number, register: RegisterProblem): Found =>
   BUILT_FROM_LATCHES.has(register.kind) ? { line, register, tier: 'quiet' } : { line, register };
 
 /**
+ * How a value lines up with its target, bit by bit: `aligned` when each bit of it comes
+ * from the same position of each operand (a copy, or only bitwise operators: `~q[3:1]`,
+ * `a & q[2:0]`), `mixed` when an operator mixes positions (`+`, a reduction, a
+ * concatenation).
+ */
+export type BitAlignment = 'aligned' | 'mixed';
+
+/**
  * Whether one read of a register in a value feeds back into the bits written: the whole
- * signal or the same bits; constant bits that overlap inside an expression
- * (`q[3:0] <= q[2:0] + 1`, where arithmetic mixes the bits); or a plain copy in which a bit
- * lands on itself. A plain shifted copy (`q[1:0] <= q[2:1]`) has no bit reading itself.
+ * signal or the same bits; or constant bits that overlap, where a mixed value
+ * (`q[3:0] <= q[2:0] + 1`) reads them all, and an aligned one only when a bit lands on
+ * itself. A shifted copy or bitwise chain (`q[2:0] <= ~q[3:1]`) has no bit reading itself.
  * Indexes known only while running and written differently do not feed back here.
  */
-export function feedsBack(read: SelectedBits, written: SelectedBits, isWholeValue: boolean): boolean {
+export function feedsBack(read: SelectedBits, written: SelectedBits, alignment: BitAlignment): boolean {
   if (read.text === '' || written.text === '' || read.text.toLowerCase() === written.text.toLowerCase()) return true;
   const [r, w] = [read.bits, written.bits];
   if (r.kind !== 'range' || w.kind !== 'range' || !overlap(r, w)) return false;
-  return !isWholeValue || r.low === w.low;
+  return alignment === 'mixed' || r.low === w.low;
 }
 
 /** A select as written (`[3:0]`, `(2 downto 0)`, or empty for the whole signal), and its bits. */

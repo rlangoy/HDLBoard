@@ -14,7 +14,7 @@ import { verilogBits } from './bits';
 import type { Found } from './constructs';
 import { bracketed, topLevelItems, unwrapped } from './brackets';
 import { escapeRegExp } from './constructText';
-import { feedsBack, registerFound, SAME_NAME, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
+import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 import { declaredRanges, verilogConstants, verilogSignalNames } from './verilogDeclarations';
@@ -352,11 +352,24 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
  * the same index (`q[i] <= q[i] ^ a`). Another index is another bit (`q[j] <= q[j-1]`), so
  * no feedback.
  */
+/** A number, a name or a select, as one operand. */
+const VERILOG_OPERAND = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+|[A-Za-z_]\w*(?:\s*\[[^\]]*\])*|\d+/g;
+
+/**
+ * `aligned` when the value is operands joined only by bitwise operators (`~ & | ^`), a
+ * unary `&`, `|` or `^` (a reduction, which mixes the bits) excepted; else `mixed`.
+ */
+function verilogAlignment(value: string): BitAlignment {
+  const shape = value.replace(VERILOG_OPERAND, 'X').replace(/\s+/g, '');
+  const onlyBitwise = /^[X~&|^()]*$/.test(shape) && !/(?:^|[~&|^(])[&|^]/.test(shape);
+  return onlyBitwise ? 'aligned' : 'mixed';
+}
+
 function readsItsOwnBits(value: string, name: string, index: string): boolean {
   const select = (text: string): SelectedBits => ({ text, bits: verilogBits(text === '' ? undefined : text) });
   const written = select(tidy(/^\s*(\[[^\]]*\])?/.exec(index)?.[1] ?? ''));
   return [...value.matchAll(new RegExp(`\\b${escapeRegExp(name)}\\b\\s*(\\[[^\\]]*\\])?`, 'g'))].some((m) =>
-    feedsBack(select(tidy(m[1] ?? '')), written, tidy(value) === tidy(m[0])),
+    feedsBack(select(tidy(m[1] ?? '')), written, verilogAlignment(value)),
   );
 }
 
