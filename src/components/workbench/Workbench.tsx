@@ -2295,6 +2295,7 @@ export function Workbench() {
               onClose={() => setOverlay(null)}
               board={activeBoard}
               onNewStarterFile={handleNewStarterFile}
+              designCheck={designCheckMode.value}
             />
           )}
           </div>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cx } from '../board';
 import { BUILT_IN_BOARDS } from '../../boards/boardCatalog';
 import { isDefaultShape } from '../../boards/shapeChange';
@@ -9,7 +9,9 @@ import type { BoardDefinition } from '../../boards/types';
 import { BoardResourceLinks } from './BoardResourceLinks';
 import { BOARD_TEXT, examplesNotice, ownExamplesNotice } from './boardText';
 import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL, examplesFor, filterExamples, hasExamples as boardHasExamples, type Example, type ExampleLanguage } from './examples';
-import { BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
+import { AlertIcon, BookIcon, CloseIcon, FolderOpenIcon, InfoIcon, SearchIcon } from './icons';
+import { simOnlyExamples, type SimOnlyReasons } from './simOnly/exampleCheck';
+import type { DesignCheckMode } from './simOnly/types';
 import type { PreferredLanguages } from './languagePrefs';
 import { ScrollArea } from './ScrollArea';
 import './ExamplesPane.css';
@@ -27,6 +29,8 @@ export interface ExamplesPaneProps {
   board: BoardDefinition;
   /** Add the board's generated starter top to the project (§ 5.4). */
   onNewStarterFile: () => void;
+  /** Settings › Simulation › Design check: with *Simulation only*, no card is marked SIM-only. */
+  designCheck: DesignCheckMode;
 }
 
 /**
@@ -34,11 +38,13 @@ export interface ExamplesPaneProps {
  * mounted underneath, so its scroll position and undo history survive). Each card copies
  * its example into the Files panel; the built-in files are never edited.
  */
-export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewStarterFile }: ExamplesPaneProps) {
+export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewStarterFile, designCheck }: ExamplesPaneProps) {
   const [query, setQuery] = useState('');
   const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
   const shown = filterExamples(examplesFor(board), query, languages, board);
+  // What the editor's badge will say once a card is opened (docs/impl_sim_only_warnings.md § 5.3).
+  const simOnly = useMemo(() => simOnlyExamples(examplesFor(board), board, designCheck), [board, designCheck]);
   // The examples are written for the Default shape and for the boards with files of their own; any other board gets a notice instead (§ 5.4).
   const hasExamples = boardHasExamples(board);
 
@@ -94,7 +100,7 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewSt
           ) : (
             <ul className="wb-examples__grid">
               {shown.map((example) => (
-                <ExampleCard key={example.id} example={example} onOpen={onOpen} />
+                <ExampleCard key={example.id} example={example} simOnly={simOnly.get(example.id)} onOpen={onOpen} />
               ))}
             </ul>
           )}
@@ -160,11 +166,18 @@ function LanguageFilter({ languages, onChange }: LanguageFilterProps) {
 
 interface ExampleCardProps {
   example: Example;
+  /** Why the example only works in the simulator; absent when it runs on the board. */
+  simOnly?: SimOnlyReasons;
   onOpen: (example: Example) => void;
 }
 
-/** One example: its role dot, title, description, language badge and Open button. */
-function ExampleCard({ example, onOpen }: ExampleCardProps) {
+/** The tooltip of a card's SIM-only badge: the lesson of an example SIM-only on purpose, else what makes it so. */
+function simOnlyTitle(example: Example, reasons: SimOnlyReasons): string {
+  return example.lesson ?? `Runs in the simulator, not on the board (${reasons.join(', ')}): the design check marks it SIM-only.`;
+}
+
+/** One example: its role dot, title, description, language and SIM-only badges, and Open button. */
+function ExampleCard({ example, simOnly, onOpen }: ExampleCardProps) {
   const language = LANGUAGE_LABEL[example.language];
   return (
     <li className="wb-examples__card">
@@ -173,12 +186,26 @@ function ExampleCard({ example, onOpen }: ExampleCardProps) {
         {example.title}
       </h3>
       <p className="wb-examples__card-text">{example.description}</p>
-      <span className={cx('wb-examples__badge', `is-${example.language}`)}>{language}</span>
+      {example.lesson && (
+        <p className="wb-examples__lesson">
+          <AlertIcon className="wb-examples__lesson-icon" aria-hidden="true" />
+          {example.lesson}
+        </p>
+      )}
+      <div className="wb-examples__badges">
+        <span className={cx('wb-examples__badge', `is-${example.language}`)}>{language}</span>
+        {simOnly && (
+          <span className="wb-examples__simonly" title={simOnlyTitle(example, simOnly)}>
+            <AlertIcon aria-hidden="true" />
+            SIM-only
+          </span>
+        )}
+      </div>
       <button
         type="button"
         className="wb-examples__open"
         onClick={() => onOpen(example)}
-        aria-label={`Open ${example.title} (${language})`}
+        aria-label={`Open ${example.title} (${language}${simOnly ? ', SIM-only' : ''})`}
       >
         <FolderOpenIcon aria-hidden="true" />
         Open

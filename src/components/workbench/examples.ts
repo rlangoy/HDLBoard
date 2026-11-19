@@ -38,6 +38,8 @@ export interface Example {
   role: 'design' | 'testbench';
   /** EXAMPLE_FILES ids. The first is the one opened in the editor; the rest come along so it runs (a testbench's design). */
   fileIds: readonly string[];
+  /** An example SIM-only on purpose: what it teaches, shown on its card. */
+  lesson?: string;
 }
 
 /** One catalogue entry, written once for both languages. */
@@ -47,6 +49,7 @@ interface ExampleEntry {
   description: string;
   usesHex?: boolean;
   role: Example['role'];
+  lesson?: string;
   /** EXAMPLE_FILES ids in each language, the file to open first. */
   files: Record<ExampleLanguage, readonly string[]>;
 }
@@ -75,8 +78,9 @@ const CATALOGUE: readonly ExampleEntry[] = [
   },
   {
     key: 'key_counter_two_clocks',
-    title: 'Key Counter, Two Clocks (SIM-only)',
-    description: 'KEY0 counts up, KEY1 counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
+    title: 'Key Counter, Two Clocks',
+    description: 'KEY0 counts up, KEY1 counts down, with two clock edges in one process.',
+    lesson: 'Synthesis error, on purpose: a register has one clock. It runs in the simulator, but no FPGA can build it.',
     role: 'design',
     files: { vhdl: ['key_counter_two_clocks'], verilog: ['key_counter_two_clocks_v'] },
   },
@@ -167,12 +171,12 @@ const BOARD_EXAMPLE_FILES: ReadonlyMap<string, ReadonlyMap<string, VhdlFile>> = 
 const BOARD_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   basys3: {
     key_counter_7seg: 'Press btnC to count up on the 7-segment displays (00-99); btnU resets.',
-    key_counter_two_clocks: 'btnU counts up, btnD counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
+    key_counter_two_clocks: 'btnU counts up, btnD counts down, with two clock edges in one process.',
     key_uart_tx: "Press btnC to send 'A' and btnU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on led[0], Busy on led[1].",
   },
   'nexys-a7': {
     key_counter_7seg: 'Press BTNC to count up on the 7-segment displays (00-99); BTNU resets.',
-    key_counter_two_clocks: 'BTNU counts up, BTND counts down, with two clock edges in one process: it runs in the simulator, but no FPGA can build it. Shows why the design check labels it SIM-only.',
+    key_counter_two_clocks: 'BTNU counts up, BTND counts down, with two clock edges in one process.',
     key_uart_tx: "Press BTNC to send 'A' and BTNU to send 'B' over RS-232 (8N1, 9600 baud). Tx is shown on LED[0], Busy on LED[1].",
   },
 };
@@ -252,6 +256,14 @@ function onBoard(source: VhdlFile, board: BoardDefinition): Translation {
   if (writtenForBoard(board)) return { text: source.content };
   const language = languageOfName(source.name);
   return language === undefined ? { text: source.content } : translateFromDefault(source.content, language, board);
+}
+
+/** The example's files as a copy on `board` would have them: the board's own, or the built-in ones in its names. */
+export function exampleSources(example: Example, board: BoardDefinition): VhdlFile[] {
+  return example.fileIds.map((id) => {
+    const source = exampleFile(id, board);
+    return { ...source, content: onBoard(source, board).text };
+  });
 }
 
 /**
