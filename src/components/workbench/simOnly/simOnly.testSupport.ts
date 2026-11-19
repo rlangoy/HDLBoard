@@ -10,6 +10,7 @@ import { TEST_BOARD_PORTS } from '../tbDetect/fixtures.testSupport';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from '../tbDetect/types';
 import { DESIGN_CHECKS } from './designCheck';
 import { designView } from './designView';
+import { simulatorClockOf } from './simulatorClock';
 import type { DesignCheck, DesignCheckMode, DesignView, SimulatorClock } from './types';
 
 /** A file named `name`, in the folder of its language. */
@@ -25,7 +26,7 @@ export function viewOf(files: readonly SourceFile[], overrides: TestbenchOverrid
 }
 
 /** The Default board's simulator-only clock, as Workbench passes the active board's. */
-export const TEST_SIMULATOR_CLOCK: SimulatorClock = { name: DEFAULT_BOARD.ports.clock500Hz, board: DEFAULT_BOARD.ports.clock };
+export const TEST_SIMULATOR_CLOCK: SimulatorClock = simulatorClockOf(DEFAULT_BOARD);
 
 export function checkOf(files: readonly SourceFile[], overrides: TestbenchOverrides = EMPTY_OVERRIDES, mode: DesignCheckMode = 'synthesis'): DesignCheck {
   return DESIGN_CHECKS[mode]({ view: viewOf(files, overrides), overrides, simulatorClock: TEST_SIMULATOR_CLOCK });

@@ -13,10 +13,13 @@
 import type { UnitText } from '../tbDetect/rules';
 import type { Language } from '../tbDetect/types';
 import { partUnitKey } from './findings';
+import { escapeRegExp } from './constructText';
 import { isHidden, scannedFile, unitText, type ScannedFile } from './scan';
+import type { BoardDefinition } from '../../../boards/types';
 import type { CodePart, DesignView, SimOnlyFinding, SimulatorClock } from './types';
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A board's simulator-only clock, and its real one for the fix. */
+export const simulatorClockOf = (board: BoardDefinition): SimulatorClock => ({ name: board.ports.clock500Hz, board: board.ports.clock });
 
 /** Where a unit's body starts: after the VHDL entity (at `architecture`), after the Verilog module header. */
 function bodyStart(t: UnitText, language: Language): number | undefined {
@@ -39,11 +42,11 @@ interface Search {
 const AFTER_NAME_CHARS = 8;
 
 /**
- * Whether the name at `at` (offsets in `t.code`) is declared or named as a formal, not
- * read: `CLOCK_500Hz : in std_logic` and `CLOCK_500Hz =>` in VHDL, `.CLOCK_500Hz(` and an
+ * Whether the name at `at` (offsets in `t.code`) is declared or named as a formal, which is
+ * not a read: `CLOCK_500Hz : in std_logic` and `CLOCK_500Hz =>` in VHDL, `.CLOCK_500Hz(` and an
  * `input` declaration in Verilog. The actual of a port map is a read.
  */
-function isNotARead(t: UnitText, language: Language, name: { readonly at: number; readonly length: number }): boolean {
+function isDeclarationOrFormal(t: UnitText, language: Language, name: { readonly at: number; readonly length: number }): boolean {
   const end = name.at + name.length;
   if (language === 'vhdl') return /^\s*(?::(?!=)|=>)/.test(t.code.slice(end, end + AFTER_NAME_CHARS));
   const statement = t.code.slice(t.code.lastIndexOf(';', name.at) + 1, name.at);
@@ -54,11 +57,11 @@ function isNotARead(t: UnitText, language: Language, name: { readonly at: number
 function firstRead(t: UnitText, search: Search, hidden: ScannedFile['hidden']): number | undefined {
   const start = bodyStart(t, search.language);
   if (start === undefined) return undefined;
-  const pattern = new RegExp(`(?<![\\w$])${escape(search.name)}(?![\\w$])`, search.language === 'vhdl' ? 'gi' : 'g');
+  const pattern = new RegExp(`(?<![\\w$])${escapeRegExp(search.name)}(?![\\w$])`, search.language === 'vhdl' ? 'gi' : 'g');
   for (const m of t.code.slice(start).matchAll(pattern)) {
     const at = start + (m.index ?? 0);
     const line = t.lineOf(t.base + at);
-    if (!isNotARead(t, search.language, { at, length: m[0].length }) && !isHidden(line, hidden)) return line;
+    if (!isDeclarationOrFormal(t, search.language, { at, length: m[0].length }) && !isHidden(line, hidden)) return line;
   }
   return undefined;
 }

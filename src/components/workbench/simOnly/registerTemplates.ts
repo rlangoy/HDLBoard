@@ -12,7 +12,7 @@
 import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
 import type { Found } from './constructs';
-import { blockText } from './constructText';
+import { blockText, escapeRegExp } from './constructText';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
 /** A name as written, without blanks: `KEY_N (1)` is `KEY_N(1)`. */
@@ -198,9 +198,8 @@ function statementAt(body: string, from: number): string {
   return rest;
 }
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Whether the condition reads the signal as a whole name: `!KEY_N[1]` reads `KEY_N[1]`, not `KEY_N`. */
-const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escape(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
+const reads = (condition: string, signal: string) => new RegExp(`(?<![\\w.])${escapeRegExp(signal)}(?![\\w.]|\\[)`).test(tidy(condition));
 
 /** `name <=` as a statement: after `;`, `)`, `begin`, `else`, or at the start. */
 const NONBLOCKING_TARGET = /(?:^|[;)]|\bbegin\b|\belse\b)\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*<=/g;
@@ -213,7 +212,7 @@ const verilogTargets = (body: string): RegExpMatchArray[] => [...body.matchAll(N
 function loadedFromRegisters(branch: string, registers: readonly string[]): string[] {
   const loaded = verilogTargets(branch).filter((m) => {
     const value = branch.slice((m.index ?? 0) + m[0].length, branch.indexOf(';', m.index ?? 0));
-    return registers.some((r) => new RegExp(`\\b${escape(r)}\\b`).test(value));
+    return registers.some((r) => new RegExp(`\\b${escapeRegExp(r)}\\b`).test(value));
   });
   return unique(loaded.map((m) => m[1]));
 }

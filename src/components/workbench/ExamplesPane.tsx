@@ -42,9 +42,10 @@ export function ExamplesPane({ initialLanguages, onOpen, onClose, board, onNewSt
   const [query, setQuery] = useState('');
   const [languages, setLanguages] = useState<ReadonlySet<ExampleLanguage>>(initialLanguages);
   const searchRef = useRef<HTMLInputElement>(null);
-  const shown = filterExamples(examplesFor(board), query, languages, board);
+  const offered = useMemo(() => examplesFor(board), [board]);
+  const shown = filterExamples(offered, query, languages, board);
   // What the editor's badge will say once a card is opened (docs/impl_sim_only_warnings.md § 5.3).
-  const simOnly = useMemo(() => simOnlyExamples(examplesFor(board), board, designCheck), [board, designCheck]);
+  const simOnly = useMemo(() => simOnlyExamples(offered, board, designCheck), [offered, board, designCheck]);
   // The examples are written for the Default shape and for the boards with files of their own; any other board gets a notice instead (§ 5.4).
   const hasExamples = boardHasExamples(board);
 

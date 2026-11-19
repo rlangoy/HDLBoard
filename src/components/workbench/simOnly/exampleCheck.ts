@@ -16,6 +16,7 @@ import { DESIGN_CHECKS } from './designCheck';
 import { designView } from './designView';
 import { CONSTRUCT_TITLE } from './simOnlyText';
 import { isSimOnlyGroup } from './simOnlyReport';
+import { simulatorClockOf } from './simulatorClock';
 import type { DesignCheckMode } from './types';
 
 /** Why an example is SIM-only: the constructs in a few words (`simulator clock`, `flip-flop template`). */
@@ -24,8 +25,7 @@ export type SimOnlyReasons = readonly string[];
 function reasonsOf(example: Example, board: BoardDefinition, mode: DesignCheckMode): SimOnlyReasons | undefined {
   const files = exampleSources(example, board);
   const view = designView(analyzeProject(files, boardDesignPortNames(board)), EMPTY_OVERRIDES);
-  const simulatorClock = { name: board.ports.clock500Hz, board: board.ports.clock };
-  const check = DESIGN_CHECKS[mode]({ view, overrides: EMPTY_OVERRIDES, simulatorClock });
+  const check = DESIGN_CHECKS[mode]({ view, overrides: EMPTY_OVERRIDES, simulatorClock: simulatorClockOf(board) });
   const [opened] = files;
   if (!opened || !isSimOnlyGroup(check.groups.byFile.get(opened.id))) return undefined;
   const reasons = check.findings.filter((f) => f.fileId === opened.id && f.tier !== 'quiet').map((f) => CONSTRUCT_TITLE[f.construct]);

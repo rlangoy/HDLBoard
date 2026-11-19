@@ -14,6 +14,9 @@ import type { RegisterProblem, RegisterProblemKind, SimOnlyConstructId, Simulato
 const SIMULATOR_CLOCK_HZ = 500;
 const HZ_PER_MHZ = 1_000_000;
 
+/** A name as code: `count` in backticks. */
+const code = (name: string) => `\`${name}\``;
+
 export interface ConstructText {
   /** Shown after the line: one short sentence. */
   readonly headline: string;
@@ -129,7 +132,6 @@ interface Words {
   readonly clocks: readonly string[];
 }
 
-const code = (name: string) => `\`${name}\``;
 const changes = (w: Words) => `${w.registers} ${w.many ? 'change' : 'changes'}`;
 
 /** The text after the line: what is wrong, then the rule. */

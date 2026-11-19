@@ -33,3 +33,6 @@ export const blockAt = (t: UnitText, at: number) => t.unit.blocks.find((b) => at
 
 /** The unit's code of a block. */
 export const blockText = (t: UnitText, block: Range): string => t.code.slice(block.from - t.base, block.to - t.base);
+
+/** `text` as a literal inside a regular expression. */
+export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

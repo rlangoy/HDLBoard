@@ -21,6 +21,7 @@ import { bouncingStims, createButtonRandoms } from './bouncyButtons';
 import { useBouncyOption } from './useBouncyOption';
 import { DESIGN_CHECK_OFF } from './simOnly/simOnlyText';
 import { useDesignCheck } from './simOnly/useDesignCheck';
+import { simulatorClockOf } from './simOnly/simulatorClock';
 import { useDesignCheckMode } from './simOnly/useDesignCheckMode';
 import { useUpdateCheck } from './useUpdateCheck';
 import { UpdateBell } from './UpdateBell';
@@ -1784,10 +1785,7 @@ export function Workbench() {
 
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
-  const simulatorClock = useMemo(
-    () => ({ name: activeBoard.ports.clock500Hz, board: activeBoard.ports.clock }),
-    [activeBoard.ports.clock500Hz, activeBoard.ports.clock],
-  );
+  const simulatorClock = useMemo(() => simulatorClockOf(activeBoard), [activeBoard]);
   const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock });
   const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
   // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.

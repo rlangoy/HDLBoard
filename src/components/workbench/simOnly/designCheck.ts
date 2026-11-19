@@ -18,7 +18,8 @@ import type { CheckInput, DesignCheck, DesignCheckMode } from './types';
 
 function synthesisCheck({ view, overrides, simulatorClock }: CheckInput): DesignCheck {
   const clockReads = simulatorClock ? simulatorClockFindings(view, simulatorClock) : [];
-  const findings = [...simOnlyFindings(view), ...clockReads].sort((a, b) => (a.fileId === b.fileId ? a.line - b.line : 0));
+  // Per file in line order: the summary's *Line n* is a file's first warned line.
+  const findings = [...simOnlyFindings(view), ...clockReads].sort((a, b) => a.fileId.localeCompare(b.fileId) || a.line - b.line);
   return { findings, groups: codeGroups({ view, overrides, findings }), driverConflicts: driverConflicts(view) };
 }
 
