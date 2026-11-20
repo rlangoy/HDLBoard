@@ -46,13 +46,19 @@ function bitsOf(operand: string, boundsOf: BoundsOf): TargetBit[] | undefined {
   return Array.from({ length: width }, (_, i) => ({ target, bit: left + i * Math.sign(right - left) }));
 }
 
-/** Literals are blanked by the lexer. Infer their widths only when there is a
- * unique split of the remaining bits (VHDL requires an exact width match). */
+/** A `'0'` or `'1'` is one bit; other literals are blanked by the lexer. Infer their widths
+ * only when there is a unique split of the remaining bits (VHDL requires an exact width match). */
 function alignParts(items: string[], width: number, boundsOf: BoundsOf): SourceBit[] | undefined {
-  const parts: (TargetBit[] | undefined)[] = [];
+  const parts: (SourceBit[] | undefined)[] = [];
   let remaining = width;
   let blanks = 0;
   for (const item of items) {
+    if (/^'[01]'$/.test(item.trim())) {
+      if (!remaining) return undefined;
+      parts.push([false]);
+      remaining--;
+      continue;
+    }
     if (item === '') {
       blanks++;
       parts.push(undefined);

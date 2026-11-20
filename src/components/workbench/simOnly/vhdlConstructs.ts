@@ -7,17 +7,17 @@
  * import (S10). Pure.
  */
 
-import type { UnitText } from '../tbDetect/rules';
-import { topLevel, unwrapped } from './brackets';
+import { withoutUseClauses, type UnitText } from '../tbDetect/rules';
+import { bracketed, topLevel, unwrapped } from './brackets';
 import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
-import { EVENT_OPERAND, testsLevelOf } from './vhdlEdges';
+import { conjuncts, EVENT_OPERAND, testsLevelOf } from './vhdlEdges';
 import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
 const WAIT_UNTIL = /\bwait\s+(?:until|on)\b/gi;
 const ANY_WAIT = /\bwait\b/gi;
-/** `rising_edge(`, `falling_edge(` or `'event`; character literals are blanked (`clk = '1'` reads `clk =    `). */
+/** `rising_edge(`, `falling_edge(` or `'event`. */
 const CLOCK_EDGE = /\b(?:rising_edge|falling_edge)\s*\(|'\s*event\b/i;
 /** A whole operand that is one edge call: `rising_edge(clk)`, `falling_edge(k(0))`. */
 const EDGE_CALL_OPERAND = /^(?:rising_edge|falling_edge)\s*\((?:[^()]|\([^()]*\))*\)$/i;
@@ -26,19 +26,10 @@ const isEdgeOperand = (operand: string): boolean => EDGE_CALL_OPERAND.test(opera
 /** Outside parentheses, what would wake the process at other times too: a timeout, an `or` condition, a sensitivity clause. */
 const OTHER_WAKE_UP = /\b(?:for|or|on)\b/i;
 
-/** The operands of a condition's `and`s, those of a parenthesized `and` included: `(a and b) and c` is a, b, c. */
-function conjuncts(condition: string): string[] {
-  const top = topLevel(condition);
-  const cuts = [...top.matchAll(/\band\b/gi)].map((m) => m.index ?? 0);
-  const starts = [0, ...cuts.map((c) => c + 'and'.length)];
-  const operands = starts.map((s, i) => unwrapped(condition.slice(s, cuts[i] ?? condition.length)));
-  return operands.length === 1 ? operands : operands.flatMap(conjuncts);
-}
-
 /** `clk'event` says only that the clock changed: it is an edge with a level test of the same signal beside it (`clk = '1'`). */
 function hasDirection(edge: string, operands: readonly string[]): boolean {
   const signal = EVENT_OPERAND.exec(edge)?.[1];
-  return signal === undefined || testsLevelOf(signal, operands.filter((o) => o !== edge).join(' and '));
+  return signal === undefined || operands.some((operand) => testsLevelOf(signal, operand));
 }
 
 /**
@@ -96,10 +87,11 @@ const BARE_END_CALL = /(?:^|;|\bbegin\b|\bthen\b|\belse\b)\s*(stop|finish)\s*[;(
 
 /** `std.env.finish`, or `finish;` once `std.env` is used; never the `use` clause alone (S10). */
 function endOfSimulation(t: UnitText): number[] {
-  const qualified = linesOf(t, ENV_CALL);
+  const calls = { ...t, code: withoutUseClauses(t.code) };
+  const qualified = linesOf(calls, ENV_CALL);
   if (!USES_ENV.test(t.code)) return qualified;
   // The match may start at the `;` that ends the line before: the call's line is that of the match's end.
-  const bare = matchesIn(t, BARE_END_CALL).map(([at, m]) => t.lineOf(at + m[0].length - 1));
+  const bare = matchesIn(calls, BARE_END_CALL).map(([at, m]) => t.lineOf(at + m[0].length - 1));
   return [...qualified, ...bare];
 }
 
@@ -115,7 +107,15 @@ function protectedTypes(t: UnitText): number[] {
 }
 
 const REAL_SIGNAL = /\bsignal\s+\w+(?:\s*,\s*\w+)*\s*:\s*real\b/gi;
-const REAL_PORT = /:\s*(?:in|out|inout|buffer)\s+real\b/gi;
+const REAL_PORT = /:\s*(?:(?:in|out|inout|buffer)\s+)?real\b/gi;
+
+function realPorts(t: UnitText): number[] {
+  return matchesIn(t, /\bport\s*\(/gi).flatMap(([at, match]) => {
+    const open = at + match[0].length - 1;
+    const ports = bracketed(t.code, open - t.base);
+    return linesOf({ ...t, code: ports, base: open + 1 }, REAL_PORT);
+  });
+}
 
 export const VHDL_CONSTRUCTS: readonly SimOnlyConstruct[] = [
   fromRule('vhdl-wait-for', 'never'),
@@ -128,7 +128,7 @@ export const VHDL_CONSTRUCTS: readonly SimOnlyConstruct[] = [
   construct('vhdl-access', 'never', (t) => linesOf(t, /\baccess\b|\bnew\b|\bdeallocate\s*\(/gi)),
   construct('vhdl-protected', 'never', protectedTypes),
   construct('vhdl-random', 'never', (t) => linesOf(t, /\buniform\s*\(/gi)),
-  construct('vhdl-real-signal', 'never', (t) => [...linesOf(t, REAL_SIGNAL), ...linesOf(t, REAL_PORT)]),
+  construct('vhdl-real-signal', 'never', (t) => [...linesOf(t, REAL_SIGNAL), ...realPorts(t)]),
   construct('vhdl-edge-template', 'never', vhdlEdgeTemplate),
   fromRule('vhdl-after', 'ignored'),
   fromRule('vhdl-assert', 'quiet', 'vhdl-report'),

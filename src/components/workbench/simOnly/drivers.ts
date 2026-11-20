@@ -12,12 +12,14 @@
  */
 
 import type { CodeBlock, FileAnalysis } from '../tbDetect/types';
-import { overlap } from './bits';
+import { bitRange, overlap, type Bits } from './bits';
 import { DRIVER_LANGUAGES, type BodyText, type DriverLanguage } from './driverLanguages';
 import type { Assignment, BodyDrivers, Driver, DriverConflict } from './driverTypes';
 import { isHidden, scannedFile, type ScannedFile, type ScannedUnit } from './scan';
 import type { DesignView } from './types';
 import { definedUnitKey, unitRefKey } from './unitRef';
+import { declaredRanges, verilogConstants } from './verilogDeclarations';
+import { vhdlWiringBounds } from './vhdlWiring';
 
 const cache = new WeakMap<FileAnalysis, readonly BodyDrivers[]>();
 
@@ -42,7 +44,7 @@ function bodiesOf(scan: ScannedFile, { unit, ownsUnit }: ScannedUnit): BodyDrive
   return ranges.map((r) => {
     const body: BodyText = { code: scan.code, source: scan.file.content, from: r.from, to: r.to };
     const blocks = unit.blocks.filter((b) => b.from >= r.from && b.to <= r.to);
-    const drivers = driversIn({ scan, language, blocks }, language.assignments(body));
+    const drivers = withoutReleasedBits(driversIn({ scan, language, blocks }, language.assignments(body)), scan, r);
     return { fileId: scan.file.fileId, unitName: unit.name, ownsUnit, drivers, declared: language.declared(body) };
   });
 }
@@ -81,15 +83,51 @@ const withAssignment = (driver: Driver, later: Driver): Driver => ({
   tristateBits: [...driver.tristateBits, ...later.tristateBits],
 });
 
+/** The drivers with the bits they release (`'Z'`) taken out; declared bounds are read only when one releases part of a vector. */
+function withoutReleasedBits(drivers: Driver[], scan: ScannedFile, { from, to }: { from: number; to: number }): Driver[] {
+  if (!drivers.some((d) => d.tristateBits.length > 0 && d.bits.length > 0)) return drivers;
+  const boundsOf = driverBounds(scan, from, to);
+  return drivers.map((d) => drivenAlone(d, boundsOf));
+}
+
 /**
  * The bits a driver drives alone: those its own 'Z' writes meet are a tri-state bus, left
  * out. A 'Z' write to a bit known only while running may meet any of them: the whole
- * driver is a bus then.
+ * driver is a bus then. So is a write whose bits cannot be laid against the 'Z' (a vector
+ * of unknown bounds).
  */
-function drivenAlone(driver: Driver): Driver {
-  const { bits, tristateBits } = driver;
-  if (tristateBits.some((t) => t.kind === 'unknown')) return { ...driver, bits: [] };
-  return { ...driver, bits: bits.filter((b) => !tristateBits.some((t) => overlap(t, b))) };
+function drivenAlone(driver: Driver, boundsOf: (driver: Driver) => Bits | undefined): Driver {
+  if (!driver.tristateBits.length) return driver;
+  let bits = driver.bits;
+  for (const z of driver.tristateBits) {
+    if (z.kind !== 'range') return { ...driver, bits: [] };
+    bits = bits.flatMap((b) => {
+      const range = b.kind === 'all' ? boundsOf(driver) : b;
+      if (range?.kind !== 'range') return [];
+      if (!overlap(z, range)) return [range];
+      const before = range.low < z.low ? [bitRange(range.low, z.low - 1)] : [];
+      const after = range.high > z.high ? [bitRange(z.high + 1, range.high)] : [];
+      return [...before, ...after];
+    });
+  }
+  return { ...driver, bits };
+}
+
+/** The declared bit range of a driver's signal in the body `from`..`to`, to cut released bits out of a whole-vector write. */
+function driverBounds(scan: ScannedFile, from: number, to: number): (driver: Driver) => Bits | undefined {
+  if (scan.file.language === 'vhdl') {
+    const at = vhdlWiringBounds(scan.code);
+    return (driver) => {
+      const range = at(driver.line)(driver.name);
+      return range && bitRange(range.left, range.right);
+    };
+  }
+  const module = scan.code.slice(from, to);
+  const ranges = declaredRanges(module, verilogConstants(module));
+  return (driver) => {
+    const range = ranges(driver.name);
+    return range && bitRange(range.msb, range.lsb);
+  };
 }
 
 /** Every driver in hardware code that clashes with another driver of the same bits. */
@@ -124,7 +162,7 @@ function signalsOf(view: DesignView, body: BodyDrivers): Set<string> {
 }
 
 function conflictsIn(body: BodyDrivers, signals: ReadonlySet<string>): DriverConflict[] {
-  const drivers = body.drivers.filter((d) => signals.has(d.signal)).map(drivenAlone).filter((d) => d.bits.length > 0);
+  const drivers = body.drivers.filter((d) => signals.has(d.signal) && d.bits.length > 0);
   return drivers.flatMap((driver) => {
     const others = drivers.filter((d) => d !== driver && d.signal === driver.signal && clash(d, driver));
     if (others.length === 0) return [];

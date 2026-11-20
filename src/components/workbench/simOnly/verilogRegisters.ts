@@ -12,7 +12,7 @@ import type { UnitText } from '../tbDetect/rules';
 import type { CodeBlock } from '../tbDetect/types';
 import { verilogBits } from './bits';
 import type { Found } from './constructs';
-import { bracketed, topLevelItems, unwrapped } from './brackets';
+import { bracketed, closingBracket, topLevelItems, unwrapped } from './brackets';
 import { escapeRegExp } from './constructText';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
@@ -24,7 +24,7 @@ import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type State
 const sameName = SAME_NAME.verilog;
 
 /** `always`, `always_ff` or `always_latch` with its event control; `always_comb` has none. */
-const SENSITIVITY = /^always(_ff|_latch)?\s*@\s*(\(\s*\*\s*\)|\*|\((?:[^()]|\([^()]*\))*\))/;
+const SENSITIVITY = /^(?:always_comb\b|always(_ff|_latch)?\s*@\s*(\(\s*\*\s*\)|\*|\((?:[^()]|\([^()]*\))*\)))/;
 const EDGE_EVENT = /\b(posedge|negedge)\s+([A-Za-z_][\w.]*(?:\s*\[[^\]]*\])?)/g;
 
 /** One `posedge x` or `negedge x` of the event control. */
@@ -51,7 +51,7 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
     const text = synthesizedBlockText(t, block);
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
-    const events = [...head[2].matchAll(EDGE_EVENT)].map((m): EdgeEvent => ({ signal: tidy(m[2]), direction: m[1] === 'posedge' ? 'rising' : 'falling' }));
+    const events = [...(head[2] ?? '').matchAll(EDGE_EVENT)].map((m): EdgeEvent => ({ signal: tidy(m[2]), direction: m[1] === 'posedge' ? 'rising' : 'falling' }));
     return [{ block, events, edges: events.map((e) => e.signal), latch: head[1] === '_latch', body: text.slice(head[0].length) }];
   });
 }
@@ -327,6 +327,90 @@ function readsASignal(value: string, signals: ReadonlySet<string>): boolean {
   return names.some((name) => signals.has(name));
 }
 
+/** A generate `if … else`: its first arm from `first`, the `else` arm from `otherwise` to `end` (file offsets). */
+interface GenerateChoice {
+  readonly first: number;
+  readonly otherwise: number;
+  readonly end: number;
+}
+
+const BEGIN_OR_END = /\b(begin|end)\b(?:\s*:\s*\w+)?/g;
+const IF_OPEN = /\bif\s*\(/g;
+
+/** Where each `begin` (its offset) has its `end`, labels (`end : name`) included. */
+function blockEnds(text: string): Map<number, number> {
+  const ends = new Map<number, number>();
+  const open: number[] = [];
+  for (const token of text.matchAll(BEGIN_OR_END)) {
+    const at = token.index ?? 0;
+    if (token[1] === 'begin') {
+      open.push(at);
+      continue;
+    }
+    const start = open.pop();
+    if (start !== undefined) ends.set(start, at + token[0].length);
+  }
+  return ends;
+}
+
+/**
+ * The generate `if … else` choices of a module: an `if` outside every procedural block.
+ * Only one arm of each is built, so blocks in its two arms never drive a register together.
+ */
+class GenerateChoices {
+  readonly found: GenerateChoice[] = [];
+  private readonly text: string;
+  private readonly ends: Map<number, number>;
+
+  constructor(private readonly t: UnitText) {
+    this.text = t.code;
+    this.ends = blockEnds(t.code);
+    for (const m of this.text.matchAll(IF_OPEN)) {
+      const at = m.index ?? 0;
+      if (!this.inProceduralBlock(t.base + at)) this.choiceEnd(at + m[0].length - 1);
+    }
+  }
+
+  /** Whether block `a` lies in the first arm of a choice and block `b` in its `else` arm. */
+  apart(a: CodeBlock, b: CodeBlock): boolean {
+    return this.found.some((c) => c.first <= a.from && a.from < c.otherwise && c.otherwise <= b.from && b.from < c.end);
+  }
+
+  private inProceduralBlock(offset: number): boolean {
+    return this.t.unit.blocks.some((b) => b.from <= offset && offset < b.to);
+  }
+
+  /** The end of the `if (…) item [else item]` whose condition opens at `open`; a choice with an `else` is kept. */
+  private choiceEnd(open: number): number {
+    const close = closingBracket(this.text, open);
+    if (close < 0) return this.text.length;
+    const first = this.skipSpace(close + 1);
+    const after = this.skipSpace(this.itemEnd(first));
+    const alternative = /^else\b\s*/.exec(this.text.slice(after));
+    if (!alternative) return after;
+    const otherwise = after + alternative[0].length;
+    const end = this.itemEnd(otherwise);
+    const { base } = this.t;
+    this.found.push({ first: base + first, otherwise: base + otherwise, end: base + end });
+    return end;
+  }
+
+  /** The end of the module item at `start`: a `begin … end`, a nested `if`, or one statement (an `always` with its event control). */
+  private itemEnd(start: number): number {
+    const blockEnd = this.ends.get(start);
+    if (blockEnd !== undefined) return blockEnd;
+    const rest = this.text.slice(start);
+    const conditional = /^if\s*\(/.exec(rest);
+    if (conditional) return this.choiceEnd(start + conditional[0].length - 1);
+    const head = SENSITIVITY.exec(rest);
+    return statementEnd(this.text, start + (head?.[0].length ?? 0));
+  }
+
+  private skipSpace(i: number): number {
+    return i + (/^\s*/.exec(this.text.slice(i))?.[0].length ?? 0);
+  }
+}
+
 /**
  * Verilog: `always @(posedge a or posedge b)` whose first `if` tests none of the
  * edges, so none can be the asynchronous reset or set (Quartus Error 10200); whose
@@ -344,7 +428,9 @@ export function verilogEdgeTemplate(t: UnitText): Found[] {
     const clock = clockOf(always);
     return clock === undefined ? [] : [{ part: always.block, clock: clock.signal, edge: clock.direction, targets: targetsWithBits(always.body) }];
   });
-  const clashes = twoClocks(clocked, sameName).map((c): Found => ({ line: c.later.span.start, register: problem(c.kind, c.registers, c.clocks) }));
+  const choices = clocked.length > 1 ? new GenerateChoices(t) : undefined;
+  const apart = (a: CodeBlock, b: CodeBlock) => choices?.apart(a, b) ?? false;
+  const clashes = twoClocks(clocked, sameName, apart).map((c): Found => ({ line: c.later.span.start, register: problem(c.kind, c.registers, c.clocks) }));
   // What the module declares, and what it assigns, which is a signal whatever its declaration says.
   const signals = new Set([...verilogSignalNames(t.code), ...targetNames(t.code)]);
   const constants = verilogConstants(t.code);

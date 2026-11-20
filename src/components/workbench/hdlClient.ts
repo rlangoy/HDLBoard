@@ -241,8 +241,8 @@ export class HdlClient {
   private waveOffered = false;
   // The waveform run numbers the handlers see: unique in the page, though sessions repeat theirs.
   private readonly waveRuns = new WaveRunNumbers();
-  // The synthesis check whose answer this socket waits for, and when it stops waiting.
-  private synthAwaited: { readonly id: number; readonly timer: ReturnType<typeof setTimeout> } | null = null;
+  // The synthesis check whose answer this socket waits for, and its timer once compilation is over.
+  private synthAwaited: { readonly id: number; readonly timer?: ReturnType<typeof setTimeout> } | null = null;
   // The run ended while its check was still out: the socket closes once the answer is in.
   private closeAfterSynth = false;
 
@@ -299,6 +299,7 @@ export class HdlClient {
         break;
       case 'READY':
         this.everReady = true;
+        this.startSynthTimer();
         this.handlers.onReady();
         break;
       case 'STATE':
@@ -357,6 +358,7 @@ export class HdlClient {
    * waveform keeps it open, as the waveform goes with its session on the server.
    */
   private runEnded(): void {
+    this.startSynthTimer();
     if (this.waveOffered) return;
     // Its session on the server runs the check; closing now would kill it unanswered.
     if (this.synthAwaited !== null) this.closeAfterSynth = true;
@@ -374,9 +376,13 @@ export class HdlClient {
     if (this.synthAwaited?.id === result.id) this.synthAnswered();
   }
 
-  /** Waits for check `id`'s answer, for SYNTH_ANSWER_WAIT_MS at most: then it has none. */
-  private awaitSynth(id: number): void {
-    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
+  /**
+   * Starts the clock on the awaited check, once: at READY or at the run's end, whichever
+   * comes first, so the compile time does not count. After SYNTH_ANSWER_WAIT_MS it has no answer.
+   */
+  private startSynthTimer(): void {
+    if (!this.synthAwaited || this.synthAwaited.timer !== undefined) return;
+    const { id } = this.synthAwaited;
     const timer = setTimeout(() => {
       this.synthAnswered();
       this.handlers.onSynthResult?.({ id, outcome: { kind: 'no-answer' }, text: '' });
@@ -417,7 +423,7 @@ export class HdlClient {
       return;
     }
     ws.send(`SYNTH-CHECK ${request.id}\n${JSON.stringify({ top: request.top, files: request.files })}`);
-    this.awaitSynth(request.id);
+    this.synthAwaited = { id: request.id };
   }
 
   /**

@@ -24,6 +24,53 @@ const vhdl = (body: string, declarations = '') => vhdlDesign('top', BOARD_PORTS,
 const P = (body: string) => `process\nbegin\n${body}\nend process;`;
 const latchIn = (body: string) => findingsIn([['top.v', vlog(body)]]);
 
+describe('Quartus synthesis regressions', () => {
+  const branch = (clock: string) => 'always @(posedge ' + clock + ') LEDR <= SW;';
+  const alternatives = 'parameter P=1;\ngenerate if(P) begin : a\n' + branch('SW[0]') + '\nend else begin : b\n' + branch('SW[1]') + '\nend endgenerate';
+
+  test('only compares clocks in generate arms that can coexist', () => {
+    expect(latchIn(alternatives)).toEqual([]);
+    expect(latchIn(alternatives.replace('end else', branch('CLOCK_50') + '\nend else'))).toHaveLength(1);
+  });
+
+  test.each([
+    ['always_comb if (SW[0]) LEDR = SW;', 1],
+    ['always_latch if (SW[0]) LEDR = SW;', 0],
+    ["always @* casez(SW[1:0]) 2'b0?: LEDR=SW; 2'b1?: LEDR=~SW; endcase", 0],
+    ["always @* casex(SW[1:0]) 2'b0x: LEDR=SW; 2'b1x: LEDR=~SW; endcase", 0],
+    ["always @* casez(SW[1:0]) 2'b0?: LEDR=SW; 2'b10: LEDR=~SW; endcase", 1],
+    ["always @* casez(SW[1:0]) 'b0?: LEDR=SW; endcase", 1],
+    ["always @* casez(SW[1:0]) 'b0?: LEDR=SW; 'b1?: LEDR=~SW; endcase", 0],
+    ["always @* casex(SW[1:0]) 'b0x: LEDR=SW; endcase", 1],
+    ["always @* casex(SW[1:0]) 'b0x: LEDR=SW; 'b1x: LEDR=~SW; endcase", 0],
+    ["always @* casez(SW[1:0]) 'h?: LEDR=SW; endcase", 0],
+    ["always @* case(SW[0]) 1'b10: LEDR=SW; 1'b1: LEDR=~SW; endcase", 0],
+  ] as const)('%s', (body, findings) => expect(latchIn(body)).toHaveLength(findings));
+
+  test('a released bit leaves a driver on its neighbours', () => {
+    const writes = "always @(posedge CLOCK_50) begin LEDR <= SW; if (SW[2]) LEDR[1] <= 1'bz; end\n";
+    expect(driversIn('top.v', vlog(writes + 'always @(posedge CLOCK_50) LEDR[0] <= SW[2];'))).toHaveLength(2);
+    expect(driversIn('top.v', vlog(writes + 'always @(posedge CLOCK_50) LEDR[1] <= SW[2];'))).toEqual([]);
+  });
+
+  test.each([["'1' = CLOCK_50", 0], ["CLOCK_50 = SW(0)", 1]] as const)('event and %s', (level, count) => {
+    const edge = "CLOCK_50'event and " + level;
+    const clocked = 'process(CLOCK_50) begin if ' + edge + ' then LEDR <= SW; end if; end process;';
+    expect(findingsIn([['top.vhd', vhdl(clocked)]])).toHaveLength(count);
+    expect(findingsIn([['top.vhd', vhdl(P('wait until ' + edge + '; LEDR <= SW;'))]])).toHaveLength(count);
+  });
+
+  test('a real generic and a procedure import are elaboration-time declarations', () => {
+    const design = vhdl('LEDR <= SW;').replace('entity top is', 'use std.env.finish;\nentity top is\ngeneric (gain : in real := 3.0);');
+    expect(check([['top.vhd', design]]).groups.byFile.get('top.vhd')).toBe('rtl');
+  });
+
+  test('a nameless directive leaves the module keyword on the same line', () => {
+    const design = '`ifdef OFF\n`endif ' + vlog('always @* LEDR=SW;');
+    expect(check([['top.v', design]]).groups.byFile.get('top.v')).toBe('rtl');
+  });
+});
+
 describe('which code is checked', () => {
   const COUNTER = vhdlDesign('counter', 'q : out std_logic', "process begin\n  q <= '1';\n  wait for 1 ms;\nend process;");
   const COUNTER_TB = 'entity counter_tb is\nend entity;\narchitecture sim of counter_tb is\n  signal q : bit;\nbegin\n  dut : entity work.counter port map (q => q);\n  process begin wait for 10 ns; wait; end process;\nend architecture;\n';

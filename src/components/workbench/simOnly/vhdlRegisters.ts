@@ -27,7 +27,7 @@ interface Edge {
   readonly kind: EdgeKind;
 }
 
-/** `rising_edge(x)`, `falling_edge(x)`, `x'event`; character literals are blanked. */
+/** `rising_edge(x)`, `falling_edge(x)`, `x'event`. */
 const EDGE_CALL = /\b(rising_edge|falling_edge)\s*\(\s*([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*\)|([A-Za-z_][\w.]*(?:\s*\([^()]*\))?)\s*'\s*event\b/gi;
 
 function edgeOf(m: RegExpMatchArray): Edge {
@@ -164,12 +164,12 @@ function readsItsOwnBits(value: string, target: string, index: string): boolean 
 }
 
 /**
- * `aligned` when the value is names, selects and blanked literals joined only by `not`,
+ * `aligned` when the value is names, selects and literals joined only by `not`,
  * `and`, `or`, `xor`, `nand`, `nor` and `xnor`; else `mixed` (`+`, `&` concatenation, a
  * function).
  */
 function vhdlAlignment(value: string): BitAlignment {
-  const shape = value
+  const shape = value.replace(/'[01]'/g, ' ')
     .replace(/\b(?:not|and|or|xor|nand|nor|xnor)\b/gi, '~')
     .replace(/[A-Za-z]\w*(?:\s*\([^()]*\))?/g, 'X')
     .replace(/\s+/g, '');

@@ -13,8 +13,11 @@ export type Bindings = ReadonlyMap<string, number>;
 
 const TOKEN = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-F_]+|\d+|[A-Za-z_]\w*|[-+*/%()]|\S/g;
 /** `8'd10`, `4'hF`, `'b1010`: digits only. */
-const BASED = /^\d*\s*'[sS]?([bBoOdDhH])\s*([0-9a-fA-F_]+)$/;
-const RADIX: Readonly<Record<string, number>> = { b: 2, o: 8, d: 10, h: 16 };
+const BASED = /^(?<size>\d*)\s*'(?<signed>s?)(?<base>[bodh])\s*(?<digits>[0-9a-f_]+)$/i;
+/** An unsized based literal (`'hF`) has at least this many bits. */
+export const UNSIZED_LITERAL_WIDTH = 32;
+const VALID_DIGITS: Readonly<Record<string, RegExp>> = { b: /^[01]+$/, o: /^[0-7]+$/, d: /^\d+$/, h: /^[0-9a-f]+$/i };
+const PREFIX: Readonly<Record<string, string>> = { b: '0b', o: '0o', d: '', h: '0x' };
 
 /** The value of `expression`, or undefined when it holds anything not known. */
 export function integerValue(expression: string, bindings: Bindings): number | undefined {
@@ -55,8 +58,20 @@ const product = (r: Reader) => chain(r, '*/%', factor);
 /** A number as written: `10`, `8'd10`, `4'hF`. */
 function literalValue(token: string): number | undefined {
   if (/^\d+$/.test(token)) return Number(token);
-  const based = BASED.exec(token);
-  return based ? parseInt(based[2].replace(/_/g, ''), RADIX[based[1].toLowerCase()]) : undefined;
+  const based = BASED.exec(token)?.groups;
+  if (!based) return undefined;
+  const digits = based.digits.replace(/_/g, '');
+  const base = based.base.toLowerCase();
+  if (!VALID_DIGITS[base].test(digits)) return undefined;
+  return sizedValue(BigInt(PREFIX[base] + digits), based.size, based.signed !== '');
+}
+
+/** `raw` cut or extended to the literal's width, read as signed or unsigned; undefined when that is no safe integer. */
+function sizedValue(raw: bigint, size: string, signed: boolean): number | undefined {
+  const width = size ? Number(size) : Math.max(UNSIZED_LITERAL_WIDTH, raw.toString(2).length);
+  if (!Number.isSafeInteger(width) || width < 1) return undefined;
+  const value = Number(signed ? BigInt.asIntN(width, raw) : BigInt.asUintN(width, raw));
+  return Number.isSafeInteger(value) ? value : undefined;
 }
 
 function factor(r: Reader): number | undefined {

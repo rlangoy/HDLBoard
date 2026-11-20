@@ -104,9 +104,10 @@ export interface TwoClocks<T> {
  * 10028 in Verilog), or on the rising and the falling edge of one clock (10819): each is
  * a register template, but the register has two clock edges. Reported on the later one.
  */
-export function twoClocks<T>(parts: readonly Clocked<T>[], same: SameName): TwoClocks<T>[] {
+export function twoClocks<T>(parts: readonly Clocked<T>[], same: SameName, exclusive?: (a: T, b: T) => boolean): TwoClocks<T>[] {
   return parts.flatMap((later, i): TwoClocks<T>[] => {
     for (const earlier of parts.slice(0, i)) {
+      if (exclusive?.(earlier.part, later.part)) continue;
       const kind = clockClash(earlier, later, same);
       const registers = kind === undefined ? [] : sharedTargets(earlier.targets, later.targets, same);
       if (kind === undefined || registers.length === 0) continue;

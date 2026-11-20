@@ -34,6 +34,10 @@ describe('VHDL', () => {
     expect(vhdl("if clk'event and clk = '1' then")).toBe("if clk'event and clk =     then");
   });
 
+  test("the synthesis view keeps the bits '0' and '1', and blanks other character literals", () => {
+    expect(blankSource('vhdl', "if clk = '1' then y <= 'Z';", 'synthesis').code).toBe("if clk = '1' then y <=    ;");
+  });
+
   test("keeps a qualified expression: unsigned'(x)", () => {
     expect(vhdl("y <= unsigned'(\"01\");")).toBe("y <= unsigned'(    );");
   });

@@ -24,7 +24,7 @@ export interface ScannedUnit {
 
 export interface ScannedFile {
   readonly file: FileAnalysis;
-  /** Same length as the source; comments, strings and character literals are spaces. */
+  /** Same length as the source; comments, strings and character literals are spaces, but VHDL's `'0'` and `'1'` stay. */
   readonly code: string;
   readonly lineOf: LineOf;
   /** translate_off .. translate_on and `ifndef SYNTHESIS regions. */

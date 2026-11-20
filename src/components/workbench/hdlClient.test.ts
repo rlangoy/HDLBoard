@@ -599,6 +599,16 @@ describe('the synthesis check', () => {
     expect(FakeSocket.last?.closed).toBe(true);
   });
 
+  test('allows compilation to finish before timing the synthesis answer', () => {
+    vi.useFakeTimers();
+    const { socket, handlers } = startChecked(WELCOME_CURRENT);
+    vi.advanceTimersByTime(SYNTH_ANSWER_WAIT_MS + 1);
+    expect(handlers.onSynthResult).not.toHaveBeenCalled();
+    socket?.receive('READY');
+    vi.advanceTimersByTime(SYNTH_ANSWER_WAIT_MS);
+    expect(handlers.onSynthResult).toHaveBeenCalledWith({ id: 3, outcome: { kind: 'no-answer' }, text: '' });
+  });
+
   test('gives up waiting after SYNTH_ANSWER_WAIT_MS, with no answer', () => {
     vi.useFakeTimers();
     const { socket, handlers } = startChecked(WELCOME_CURRENT);
