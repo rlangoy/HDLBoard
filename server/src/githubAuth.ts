@@ -131,38 +131,68 @@ export function isGitHubAuthPath(path: string): boolean {
   return path.startsWith(`${GITHUB_AUTH_PATH}/`);
 }
 
+/** What the GitHub sign-in routes answer with: the forwarder, and the budget of sign-ins per address. */
+export interface GitHubAuthService {
+  readonly forwarder: GitHubAuthForwarder;
+  /** Omitted, every sign-in is admitted. */
+  readonly admitSignIn?: SignInAdmission;
+}
+
+/** One request and where its answer goes, with the CORS headers it gets. */
+interface Exchange {
+  readonly request: IncomingMessage;
+  readonly response: ServerResponse;
+  readonly headers: Record<string, string>;
+  /** The path after GITHUB_AUTH_PATH: `device/code`. */
+  readonly routeName: string;
+}
+
+/** An answer given before the body is read: none (a preflight), or a result with headers of its own. */
+type EarlyAnswer = { readonly kind: 'empty' } | { readonly kind: 'json'; readonly result: ForwardResult; readonly headers?: Record<string, string> };
+
+const ORIGIN_NOT_ALLOWED: ForwardResult = { status: 403, body: { error: 'origin_not_allowed' } };
+const METHOD_NOT_ALLOWED: ForwardResult = { status: 405, body: { error: 'method_not_allowed' } };
+const BAD_REQUEST: ForwardResult = { status: 400, body: { error: 'bad_request' } };
+const ADMIT_ALL: SignInAdmission = () => true;
+
 /**
  * Answers one request under GITHUB_AUTH_PATH. In development the page comes from
  * Vite on another port of the same host, so a page on the backend's own host name
  * may call these routes cross-origin; any other site may not.
  */
-export async function handleGitHubAuthRequest(
-  forwarder: GitHubAuthForwarder,
-  request: IncomingMessage,
-  response: ServerResponse,
-  admitSignIn: SignInAdmission = () => true,
-): Promise<void> {
-  const corsHeaders = corsHeadersFor(request);
-  if (corsHeaders === null) return sendJson(response, { status: 403, body: { error: 'origin_not_allowed' } }, {});
+export async function handleGitHubAuthRequest(service: GitHubAuthService, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const headers = corsHeadersFor(request);
+  if (headers === null) return sendJson(response, ORIGIN_NOT_ALLOWED, {});
+  const exchange: Exchange = { request, response, headers, routeName: (request.url ?? '').split('?')[0].slice(GITHUB_AUTH_PATH.length + 1) };
+  const early = earlyAnswer(service, exchange);
+  if (early === undefined) return forwardBody(service.forwarder, exchange);
+  if (early.kind === 'empty') return sendEmpty(response, headers);
+  sendJson(response, early.result, { ...headers, ...early.headers });
+}
 
-  const routeName = (request.url ?? '').split('?')[0].slice(GITHUB_AUTH_PATH.length + 1);
-  if (request.method === 'OPTIONS') return sendEmpty(response, corsHeaders);
-  if (request.method === 'GET' && routeName === 'config') {
-    return sendJson(response, { status: 200, body: forwarder.config }, corsHeaders);
-  }
-  if (request.method !== 'POST') return sendJson(response, { status: 405, body: { error: 'method_not_allowed' } }, corsHeaders);
-  // Before the body is read or checked: a refused request costs no more than a few bytes.
-  if (SIGN_IN_ROUTES.has(routeName) && !admitSignIn(request)) {
-    return sendJson(response, TOO_MANY_SIGN_INS, { ...corsHeaders, 'Retry-After': String(SIGN_IN_RETRY_AFTER_SECONDS) });
-  }
+/**
+ * The answer that needs no body: a preflight, the public config, a wrong method, or a
+ * sign-in over its budget — refused before the body is read, so it costs a few bytes.
+ */
+function earlyAnswer({ forwarder, admitSignIn = ADMIT_ALL }: GitHubAuthService, { request, routeName }: Exchange): EarlyAnswer | undefined {
+  const method = request.method;
+  if (method === 'OPTIONS') return { kind: 'empty' };
+  if (method === 'GET' && routeName === 'config') return { kind: 'json', result: { status: 200, body: forwarder.config } };
+  if (method !== 'POST') return { kind: 'json', result: METHOD_NOT_ALLOWED };
+  const refusedSignIn = SIGN_IN_ROUTES.has(routeName) && !admitSignIn(request);
+  if (refusedSignIn) return { kind: 'json', result: TOO_MANY_SIGN_INS, headers: { 'Retry-After': String(SIGN_IN_RETRY_AFTER_SECONDS) } };
+  return undefined;
+}
 
+/** A POST to a route: its JSON body passed on to github.com, or a 400 when it is no JSON object. */
+async function forwardBody(forwarder: GitHubAuthForwarder, { request, response, headers, routeName }: Exchange): Promise<void> {
   let params: Record<string, unknown>;
   try {
     params = await readJsonBody(request);
   } catch {
-    return sendJson(response, { status: 400, body: { error: 'bad_request' } }, corsHeaders);
+    return sendJson(response, BAD_REQUEST, headers);
   }
-  sendJson(response, await forwarder.forward(routeName, params), corsHeaders);
+  sendJson(response, await forwarder.forward(routeName, params), headers);
 }
 
 const TOO_MANY_SIGN_INS: ForwardResult = {
