@@ -63,6 +63,29 @@ export interface RunPlan {
    * other options than its own. Absent: none (Icarus's `vvp` takes none).
    */
   readonly runFlags?: readonly string[];
+  /** What the run's synthesis check repeats of this compile (synthCheck.ts); absent, the engine has none (Verilog). */
+  readonly synth?: SynthInputs;
+}
+
+/** The run's compile as its synthesis check must repeat it (docs/impl_sim_only_warnings.md § 7). */
+export interface SynthInputs {
+  /** GHDL's flags of the run (ghdlFlags.ts). */
+  readonly flags: readonly string[];
+  /** The student's files in the order they analysed. */
+  readonly order: readonly string[];
+}
+
+/** What the synthesis check asks for: the hardware top and the files it may read (the client's choice). */
+export interface SynthTarget {
+  readonly top: string;
+  /** File names, a subset of the run's. */
+  readonly files: readonly string[];
+}
+
+/** One synthesis check as a command, run in a folder of its own that holds the files it names. */
+export interface SynthCommand {
+  readonly cmd: string;
+  readonly args: readonly string[];
 }
 
 /**
@@ -116,6 +139,8 @@ export interface SimEngine {
   prepare(request: PrepareRequest): Promise<PrepareResult>;
   startBoardRun(plan: RunPlan, files: BoardFiles): RunHandle;
   startBatchRun(plan: RunPlan, run: BatchRunOptions): BatchHandle;
+  /** The synthesis check of `target` after `plan`'s compile; absent, the engine has no such check. */
+  synthCommand?(inputs: SynthInputs, target: SynthTarget): SynthCommand;
 }
 
 /** How one start of a batch run is wired. */

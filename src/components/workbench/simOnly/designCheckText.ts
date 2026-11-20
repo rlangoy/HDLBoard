@@ -12,6 +12,13 @@ export const DESIGN_CHECK_TEXT = {
   synthesisHint: 'Check designs for FPGA synthesis. Lines that only work in simulation get a warning, and the file is marked SIM-only.',
   simulation: 'Simulation only',
   simulationHint: "Don't check designs for synthesis. For models and exercises that never go to an FPGA.",
+  toolCheckTitle: 'How Synthesis checks',
+  quickCheck: 'Quick check',
+  quickCheckHint: "HDLBoard's own check, live while you type. Nothing more runs when you press Start.",
+  toolCheck: 'Quick check + GHDL check (VHDL)',
+  toolCheckHint:
+    "Also checks a VHDL design with GHDL's synthesis when you press Start, beside the simulation, which never waits for it. " +
+    'Its findings can mark the design SIM-only. GHDL may accept designs that still cannot be synthesized, so a pass is no guarantee. Verilog gets the quick check only.',
   simOnlyLabel: 'SIM-only',
   fileRoleSimOnly: 'Simulation-only design: runs in the simulator, not on the board',
   fileRoleMixedSimOnly: 'Simulation-only design + testbench',

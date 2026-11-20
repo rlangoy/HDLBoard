@@ -310,7 +310,7 @@ export function startBackend(opts: BackendOptions = {}): BackendHandle {
     // GitHub sign-in for the page, in both modes: the page reaches it where it reaches the socket.
     if (isGitHubAuthPath(decodedPath(req) ?? '')) {
       // Unhandled, a rejection here (a client gone mid-answer) would end the process.
-      handleGitHubAuthRequest(githubAuth, req, res, admitGitHubSignIn).catch(() => res.destroy());
+      handleGitHubAuthRequest({ forwarder: githubAuth, admitSignIn: admitGitHubSignIn }, req, res).catch(() => res.destroy());
     } else if (serveDir) {
       void serveStatic(serveDir, req, res);
     } else {

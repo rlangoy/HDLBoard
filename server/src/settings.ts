@@ -77,6 +77,14 @@ export const MAX_WAVE_BYTES: IntSetting = { name: 'HDL_MAX_WAVE_BYTES', fallback
 /** How often the session checks the waveform file's size while a run is going. */
 export const WAVE_CHECK_MS: IntSetting = { name: 'HDL_WAVE_CHECK_MS', fallback: 250 };
 
+/**
+ * How long a synthesis check beside a run may take (synthCheck.ts); GHDL needs about 0.2 s,
+ * Icarus up to about 1 s for a student design. Past it the check is stopped: *Could not verify*.
+ */
+export const SYNTH_TIMEOUT_MS: IntSetting = { name: 'HDL_SYNTH_TIMEOUT_MS', fallback: 4000, minimum: 100 };
+/** How many synthesis checks may run at once on the whole server; one more is answered `busy`. 0: none run. */
+export const SYNTH_MAX_CONCURRENT: IntSetting = { name: 'HDL_SYNTH_MAX_CONCURRENT', fallback: 2 };
+
 const WHOLE_NUMBER = /^\d+$/;
 
 /** The setting's value: its own name first, then its legacy name, then the fallback. */

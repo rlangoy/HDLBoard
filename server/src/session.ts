@@ -36,7 +36,9 @@ import { DEFAULT_BOARD_IO, type BoardIo } from './engines/boardPorts.js';
 import { DEFAULT_COMPILER_OPTIONS, type CompilerOptions, type DecodedCompilerOptions } from './compilerOptions.js';
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
-import { type ErrorStage, type ServerFrame, type StimStep, type VhdlFileInput, type WaveFormat, type WaveStatus } from './protocol.js';
+import {
+  type ErrorStage, type ServerFrame, type StimStep, type SynthCheckRequest, type VhdlFileInput, type WaveFormat, type WaveStatus,
+} from './protocol.js';
 import {
   crashBeyondReport,
   explainingReport,
@@ -48,7 +50,9 @@ import {
   type SimulatorExit,
   type SimulatorReport,
 } from './runFailure.js';
-import { MAX_WAVE_BYTES, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
+import { MAX_WAVE_BYTES, SYNTH_TIMEOUT_MS, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
+import { SessionSynthCheck } from './sessionSynthCheck.js';
+import { SERVER_SYNTH_SLOTS, type SynthSlots } from './synthCheck.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
 
@@ -188,6 +192,15 @@ export interface SessionOptions {
    * undefined for none. Defaults to `HDLBOARD_SIM_MEMORY_MB` (`readMemoryCapMb`).
    */
   readonly memoryCapMb?: number;
+  /** How long a synthesis check may take; defaults to `HDL_SYNTH_TIMEOUT_MS`. */
+  readonly synthTimeoutMs?: number;
+  /** The checks that may run at once; defaults to the server's (`HDL_SYNTH_MAX_CONCURRENT`). */
+  readonly synthSlots?: SynthSlots;
+}
+
+/** How long a synthesis check may take, and how many may run at once: the options', else the server's. */
+function synthLimitsOf(options: SessionOptions): { readonly timeoutMs: number; readonly slots: SynthSlots } {
+  return { timeoutMs: options.synthTimeoutMs ?? readIntSetting(SYNTH_TIMEOUT_MS), slots: options.synthSlots ?? SERVER_SYNTH_SLOTS };
 }
 
 /** The cap the options give, even an explicit undefined (no cap), else the host's. */
@@ -288,6 +301,8 @@ export class Session {
   private readonly onCrash: SessionOptions['onCrash'];
   private readonly memoryCapMb: number | undefined;
   private idleSinceMs: number;
+  /** The synthesis checks beside the runs (protocol 8). */
+  private readonly synthCheck: SessionSynthCheck;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
   constructor(
@@ -306,6 +321,7 @@ export class Session {
     this.onCrash = options.onCrash;
     this.memoryCapMb = memoryCapOf(options);
     this.idleSinceMs = this.now();
+    this.synthCheck = new SessionSynthCheck({ dir: this.dir, send, ...synthLimitsOf(options) });
   }
 
   /** Every state change goes through here, so `idleSince` cannot miss the end of a run. */
@@ -363,6 +379,16 @@ export class Session {
   /** `OPTIONS`: the compiler options of the next runs. Like `BOARD`, an invalid one is reported by the next RUN. */
   handleOptions(decoded: DecodedCompilerOptions): void {
     this.decodedOptions = decoded;
+  }
+
+  /** `SYNTH-CHECK`: check the next RUN's hardware top for synthesis, beside the simulation (protocol 8). */
+  handleSynthCheck(request: SynthCheckRequest): void {
+    this.synthCheck.ask(request);
+  }
+
+  /** The RUN a `SYNTH-CHECK` was for was refused before it reached the session: its check is skipped. */
+  refuseSynthCheck(): void {
+    this.synthCheck.refuseAsked();
   }
 
   /**
@@ -470,6 +496,8 @@ export class Session {
   }
 
   async handleRun(files: VhdlFileInput[], topFile?: string, runTarget?: string): Promise<void> {
+    // The check asked for is this run's alone; one still running for the last run is no longer news.
+    const synth = this.synthCheck.takeForRun();
     // Cleared first: the run being replaced is not offered, its waveform is obsolete (W10).
     this.clearWave();
     this.stopActive('stopped');
@@ -477,14 +505,17 @@ export class Session {
     const request = ++this.runRequest;
 
     const board = this.boardForRun();
-    if (board === undefined) return;
-    const compilerOptions = this.optionsForRun();
-    if (compilerOptions === undefined) return;
+    const compilerOptions = board === undefined ? undefined : this.optionsForRun();
+    if (board === undefined || compilerOptions === undefined) {
+      this.synthCheck.skip(synth);
+      return;
+    }
 
     const engine = this.chooseEngine(topFile);
     const refusal = refusalBeforeCompile(files, topFile, engine);
     if (refusal !== undefined) {
       this.failRun('analyze', refusal);
+      this.synthCheck.skip(synth);
       return;
     }
 
@@ -500,8 +531,12 @@ export class Session {
     });
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
-    if (prepared === undefined || this.destroyed || request !== this.runRequest) return;
+    if (prepared === undefined || this.destroyed || request !== this.runRequest) {
+      this.synthCheck.skip(synth);
+      return;
+    }
     this.startPrepared(engine, prepared);
+    this.synthCheck.start(synth, { engine, prepared, files });
   }
 
   /** A finished compile: its failure, or the run it prepared. */
@@ -997,6 +1032,7 @@ export class Session {
   destroy(): void {
     this.destroyed = true;
     this.compileAbort.abort();
+    this.synthCheck.close();
     this.stopWaveWatchdog();
     this.stopOutputPolling();
     this.stopPacing();

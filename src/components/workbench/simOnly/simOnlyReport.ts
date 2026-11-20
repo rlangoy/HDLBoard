@@ -23,12 +23,18 @@ function warnedLines(check: DesignCheck, overrides: TestbenchOverrides, fileId: 
 
 export const isSimOnlyGroup = (group: FileGroup | undefined): boolean => group === 'sim-only' || group === 'mixed-sim-only';
 
-/** The SIM-only badge's tooltip and *Detected* line, or undefined when the file is not SIM-only. */
+/**
+ * The SIM-only badge's tooltip and *Detected* line, or undefined when the file is not
+ * SIM-only: the live findings, and GHDL's on other lines, named as GHDL's.
+ */
 export function simOnlyBadgeText(check: DesignCheck, overrides: TestbenchOverrides, fileId: string) {
   if (!isSimOnlyGroup(check.groups.byFile.get(fileId))) return undefined;
-  const lines = warnedLines(check, overrides, fileId);
-  const detected = detectedSimOnly(lines.map((f) => ({ title: CONSTRUCT_TITLE[f.construct], line: f.line })));
-  return { tooltip: simOnlyTooltip(lines.length), detected };
+  const live = warnedLines(check, overrides, fileId).map((f) => ({ title: CONSTRUCT_TITLE[f.construct], line: f.line }));
+  const synthesized = check.toolFindings
+    .filter((f) => f.fileId === fileId && isWarnable(f, overrides))
+    .map((f) => ({ title: `${f.title} (GHDL)`, line: f.line }));
+  const lines = [...live, ...synthesized].filter((f, i, all) => all.findIndex((g) => g.line === f.line) === i).sort((a, b) => a.line - b.line);
+  return { tooltip: simOnlyTooltip(lines.length), detected: detectedSimOnly(lines) };
 }
 
 export interface SummaryLine {

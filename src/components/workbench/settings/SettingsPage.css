@@ -196,6 +196,24 @@
   padding: 12px 14px;
 }
 
+/* Choices that belong to the one above: Design check › Synthesis's quick or tool check. */
+.wb-settings-suboptions {
+  margin-left: 30px;
+}
+
+.wb-settings-choice.is-disabled,
+.wb-settings-choice.is-disabled input {
+  cursor: not-allowed;
+}
+
+.wb-settings-choice.is-disabled {
+  opacity: 0.55;
+}
+
+.wb-settings-choice.is-disabled:hover {
+  border-color: var(--wb-settings-choice-border);
+}
+
 .wb-settings-option input {
   margin-top: 1px;
 }

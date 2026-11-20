@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { APP_DEFAULTS_FILE, parseAppDefaults } from '../appDefaults';
 import { parseOverridesForTest } from './simOnly.testSupport';
@@ -8,6 +9,7 @@ import {
   DEFAULT_DESIGN_CHECK, DESIGN_CHECK_STORAGE_KEY, designCheckInEffect, loadDesignCheckChoice, saveDesignCheckChoice,
 } from './designCheckMode';
 import { withSimModel, withoutSimModel } from './simModels';
+import { DEFAULT_SYNTHESIS_TOOL_CHECK, synthesisToolCheckInEffect } from './useSynthesisToolCheck';
 import { EMPTY_OVERRIDES } from '../tbDetect/types';
 import { withoutFile } from '../splitModel';
 
@@ -106,5 +108,44 @@ describe('the Simulation model mark', () => {
 
   test('a mark on a file that is not there is dropped', () => {
     expect(parseOverridesForTest({ roles: {}, pairs: {}, simModels: { 'gone.vhd': true } }).simModels).toBeUndefined();
+  });
+});
+
+/** Settings › Simulation › Design check › Synthesis: Quick check, or + GHDL check for VHDL (§ 7). */
+describe('the synthesis tool check in effect', () => {
+  test('is off on a fresh install, and while settings.json loads', () => {
+    expect(synthesisToolCheckInEffect(null, null)).toBe(false);
+    expect(synthesisToolCheckInEffect(null, DEFAULT_SYNTHESIS_TOOL_CHECK)).toBe(false);
+  });
+
+  test("follows settings.json, under the student's own choice", () => {
+    expect(synthesisToolCheckInEffect(null, true)).toBe(true);
+    expect(synthesisToolCheckInEffect(false, true)).toBe(false);
+  });
+
+  test('settings.json may set it, as a boolean only', () => {
+    expect(parseAppDefaults('{ "synthesisToolCheck": true }')).toEqual({ defaults: { bouncyButtons: true, synthesisToolCheck: true }, warnings: [] });
+    expect(parseAppDefaults('{ "synthesisToolCheck": "yes" }').warnings).toEqual([`${APP_DEFAULTS_FILE}: synthesisToolCheck must be true or false.`]);
+  });
+});
+
+/** What a fresh install starts with: *Synthesis*, and under it *Quick check*. */
+describe('the defaults of the Design check', () => {
+  const shipped = parseAppDefaults(readFileSync(new URL('../../../../public/settings.json', import.meta.url), 'utf8'));
+
+  test('are Synthesis without a settings.json', () => {
+    expect(designCheckInEffect(null, DEFAULT_DESIGN_CHECK)).toBe('synthesis');
+  });
+
+  test('are the quick check alone without a settings.json', () => {
+    expect(synthesisToolCheckInEffect(null, DEFAULT_SYNTHESIS_TOOL_CHECK)).toBe(false);
+  });
+
+  test("are Synthesis with the settings.json HDLBoard ships", () => {
+    expect(shipped.defaults.designCheck).toBe('synthesis');
+  });
+
+  test('are the quick check alone with the settings.json HDLBoard ships', () => {
+    expect(shipped.defaults.synthesisToolCheck).toBe(false);
   });
 });

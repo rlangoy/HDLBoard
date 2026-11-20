@@ -15,13 +15,16 @@ import type { DriverConflict } from './driverTypes';
  */
 export type Tier = 'never' | 'ignored' | 'quiet';
 
+/** The tiers that keep code off the board (findings.ts `OFF_THE_BOARD`): a SIM-only finding has one. */
+export type SimOnlyTier = Exclude<Tier, 'quiet'>;
+
 export type SimOnlyConstructId =
   | 'vhdl-wait-for' | 'vhdl-wait-forever' | 'vhdl-wait-until' | 'vhdl-clock-gen' | 'vhdl-file-io'
   | 'vhdl-end-sim' | 'vhdl-now' | 'vhdl-access' | 'vhdl-protected' | 'vhdl-random' | 'vhdl-real-signal'
   | 'vhdl-edge-template' | 'vhdl-after' | 'vhdl-report'
   | 'vlog-delay' | 'vlog-event-wait' | 'vlog-clock-gen' | 'vlog-file-io' | 'vlog-end-sim' | 'vlog-time'
   | 'vlog-random' | 'vlog-verification' | 'vlog-real' | 'vlog-edge-template' | 'vlog-level-storage' | 'vlog-assign-delay' | 'vlog-display'
-  | 'sim-clock';
+  | 'sim-clock' | 'synth-check';
 
 /**
  * Why no register can be built (§ 3.4): two clocks, both edges of one, a branch outside
@@ -128,11 +131,48 @@ export interface CodeGroups {
 
 export type DesignCheckMode = 'synthesis' | 'simulation';
 
+/**
+ * What a synthesis tool's message means for the design (§ 7): it cannot be built as
+ * written, synthesis builds something else than the simulation runs, or the tool could not say.
+ */
+export type SynthEffect = 'cannot-synthesize' | 'changed' | 'not-verified';
+
+/** HDLBoard's words for a message: the sentence after the line, and the card's explanation. */
+export interface FindingText {
+  readonly headline: string;
+  readonly explanation: string;
+}
+
+/**
+ * A message of GHDL's synthesis check at Start, on a line of hardware code (§ 7). Only the
+ * allowlisted messages have a tier, and only they make the design SIM-only.
+ */
+export interface ToolFinding {
+  readonly fileId: string;
+  readonly line: number;
+  readonly effect: SynthEffect;
+  /** The tier that makes the unit SIM-only; absent, the group stays as it is. */
+  readonly tier?: SimOnlyTier;
+  /** The key of the unit the line belongs to (`unitRefKey`). */
+  readonly unitRef: string;
+  readonly unitName: string;
+  /** What the tool printed, without its file and line. */
+  readonly toolMessage: string;
+  /** A few words for the badge's *Detected* line: `latch`. */
+  readonly title: string;
+  readonly text: FindingText;
+}
+
+/** A finding of GHDL's that makes its design SIM-only. */
+export type TieredFinding = ToolFinding & { readonly tier: SimOnlyTier };
+
 export interface CheckInput {
   readonly view: DesignView;
   readonly overrides: TestbenchOverrides;
   /** The active board's simulator-only clock; without it, reading one is not checked. */
   readonly simulatorClock?: SimulatorClock;
+  /** The synthesis check's findings for the code as it is now; absent, none (§ 7). */
+  readonly toolFindings?: readonly ToolFinding[];
 }
 
 /** What the check found, ready for the UI. */
@@ -142,4 +182,9 @@ export interface DesignCheck {
   readonly groups: CodeGroups;
   /** Signals with more than one driver in hardware code (§ 8.1); they warn, and leave the group alone. */
   readonly driverConflicts: readonly DriverConflict[];
+  /**
+   * The synthesis check's findings that make their design SIM-only, in code that is still
+   * hardware (§ 7). With the live findings they decide the groups; a pass never clears a live one.
+   */
+  readonly toolFindings: readonly TieredFinding[];
 }

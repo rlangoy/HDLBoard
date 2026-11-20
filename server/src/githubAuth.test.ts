@@ -115,7 +115,7 @@ describe('the /github-auth routes over HTTP', () => {
 
   before(async () => {
     const forwarder = new GitHubAuthForwarder(WITHOUT_SECRET, fakeGitHub({ user_code: 'ABCD-1234' }).fetchFn);
-    server = createServer((req, res) => void handleGitHubAuthRequest(forwarder, req, res));
+    server = createServer((req, res) => void handleGitHubAuthRequest({ forwarder }, req, res));
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
@@ -166,7 +166,7 @@ describe('the sign-in admission', () => {
       admitted++;
       return open;
     };
-    server = createServer((req, res) => void handleGitHubAuthRequest(forwarder, req, res, admit));
+    server = createServer((req, res) => void handleGitHubAuthRequest({ forwarder, admitSignIn: admit }, req, res));
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });

@@ -77,6 +77,7 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vlog-assign-delay': { headline: 'The `#` delay is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the wire changes at once. Only the simulation shows the delay.' },
   'vlog-display': { headline: '`$display` only prints in simulation.', explanation: 'Synthesis ignores it. It is harmless; the board just never prints it.' },
   'sim-clock': { headline: 'This clock only exists in the simulator: the board has no such pin.', explanation: "HDLBoard adds a slow clock so a design can count slowly enough to watch. The FPGA board has no such clock pin. On the board, use the board's own clock and count its cycles." },
+  'synth-check': { headline: 'Synthesis cannot build this line as written.', explanation: 'The synthesis check at Start found it. Its own message is in the problem card.' },
 };
 
 /** Who the tooltip says the message is from: HDLBoard's own check, not the compiler. */
@@ -237,4 +238,5 @@ export const CONSTRUCT_TITLE: Readonly<Record<SimOnlyConstructId, string>> = {
   'vlog-assign-delay': 'assign #',
   'vlog-display': '$display',
   'sim-clock': 'simulator clock',
+  'synth-check': 'synthesis check',
 };

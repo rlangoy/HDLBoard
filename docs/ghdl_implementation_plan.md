@@ -1287,6 +1287,7 @@ sevenSegment HEX0 HEX1 HEX2 HEX3 HEX4 HEX5
 | `LOG` | — | free text | Console line. | `status` |
 | `ERROR` | stage | error text | Failure, classified. | `error` |
 | `DONE` | reason | — | Session ended: `stopped`/`completed`/`max-cycles`/`closed`. | `status` |
+| `SYNTH-RESULT` | id, outcome | tool text | Protocol 8: the answer to `SYNTH-CHECK <id>`. The outcome is `exit <code>`, `timeout`, `crash`, `unavailable`, `busy`, `skipped` or `refused`. It may arrive after `DONE`. | — |
 | `PONG` | — | — | Answer to `PING`. | — |
 
 **`STATE` layout** — 10 + 6×7 = **52 characters**:
@@ -1334,7 +1335,11 @@ misinterpreted. A server that does not support the requested version replies
 verbs are additive.
 
 In practice the version is informational: the backend accepts any `HELLO` version and answers
-with its own. Version 2 added `BOARD`. A backend older than that answers `BOARD` with
+with its own. Version 8 added `SYNTH-CHECK <id>` (client → server, right before `RUN`, with the body
+`{"top":"<unit>","files":[…]}`), which asks for a synthesis check of that run's hardware top
+beside the simulation, and its answer `SYNTH-RESULT` (docs/impl_sim_only_warnings.md § 7). A client
+sends it only to a backend that answered `WELCOME 8` or later, so an older backend gets exactly the
+frames it got before. Version 2 added `BOARD`. A backend older than that answers `BOARD` with
 `ERROR protocol` `Unknown verb: "BOARD"` and runs with the Default names; the client then says
 once that the backend is older than the page, and sends no more `BOARD` frames on that connection.
 

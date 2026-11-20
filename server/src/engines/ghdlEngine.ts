@@ -24,7 +24,9 @@ import { checkBoardPortShapes, shapeErrors, shapeNotes, type DeclaredPort } from
 import { explainUnconnectedPorts, planExtraPorts, type TopSource } from './extraPorts.js';
 import { ghdlPosition, portDeclarations } from './vhdlPorts.js';
 import { sameNameNotes } from './sameNameNotes.js';
-import type { BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, WaveRequest } from './types.js';
+import type {
+  BoardFiles, BoardTiming, PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, SynthCommand, SynthInputs, SynthTarget, WaveRequest,
+} from './types.js';
 import type { WaveFormat } from '../protocol.js';
 
 const TB_ENTITY = 'hdl_board_tb';
@@ -60,6 +62,9 @@ async function analyzeFile(workspace: Workspace, name: string): Promise<string |
   return result.err || `ghdl -a failed on ${name} with no output.`;
 }
 
+/** The analysis of a run's files: the errors of those that never analysed, or the order they analysed in. */
+type Analysis = { readonly errors: string } | { readonly errors?: undefined; readonly order: readonly string[] };
+
 /**
  * Files are analysed to a fixed point rather than strictly in the order submitted: a
  * `RUN`'s files are not guaranteed top-entity-last (§ 6.3), so a project whose top
@@ -68,24 +73,28 @@ async function analyzeFile(workspace: Workspace, name: string): Promise<string |
  * analyses whatever is still pending; a pass that analyses nothing new means the
  * remaining failures are real, not just waiting on an unanalysed dependency.
  *
- * Returns the errors of the files that never analysed, or `undefined` when all did.
+ * Returns the errors of the files that never analysed, or, when all did, the order they
+ * analysed in: one in which every file finds what it uses, as the synthesis check reads them.
  */
-async function analyzeToFixedPoint(workspace: Workspace, files: readonly VhdlFileInput[]): Promise<string | undefined> {
+async function analyzeToFixedPoint(workspace: Workspace, files: readonly VhdlFileInput[]): Promise<Analysis> {
   let pending = files.map((file) => file.name);
+  const order: string[] = [];
   const lastErrors = new Map<string, string>();
   while (pending.length > 0) {
     const stillFailing: string[] = [];
     for (const name of pending) {
       const error = await analyzeFile(workspace, name);
-      if (error !== undefined) {
+      if (error === undefined) {
+        order.push(name);
+      } else {
         lastErrors.set(name, error);
         stillFailing.push(name);
       }
     }
-    if (stillFailing.length === pending.length) return stillFailing.map((name) => lastErrors.get(name)).join('\n');
+    if (stillFailing.length === pending.length) return { errors: stillFailing.map((name) => lastErrors.get(name)).join('\n') };
     pending = stillFailing;
   }
-  return undefined;
+  return { order };
 }
 
 /** A standalone testbench supplies its own stimuli, so its polling timing is never used. */
@@ -114,8 +123,8 @@ function boardPlan({ dir, flags }: Workspace, timing: BoardTiming, messages: rea
 
 /**
  * The first line of `ghdl --version` — "GHDL 6.0.0 (6.0.0.r0.ge589c69) [Dunoon edition]" —
- * so the console names the GHDL actually running (the Windows app ships 5.0.1, the
- * Docker image builds 6.0.0, a Linux host has whatever its distribution packages).
+ * so the console names the GHDL actually running (the Windows app and the Docker image
+ * ship 6.0.0, a Linux host has whatever its distribution packages).
  * It never changes for a given executable, so it is read once; a failed read is
  * tried again on the next run rather than cached.
  */
@@ -248,8 +257,8 @@ async function prepareAnalysed(request: PrepareRequest): Promise<PrepareResult> 
   // Every file is analysed before our own port scan, so a genuine syntax error gets
   // GHDL's real diagnosis under `analyze` instead of being intercepted early by
   // `findTopEntity`'s regex heuristic, which runs on source not yet known to be VHDL.
-  const analysisErrors = await analyzeToFixedPoint(workspace, files);
-  if (analysisErrors !== undefined) return failure('analyze', analysisErrors);
+  const analysis = await analyzeToFixedPoint(workspace, files);
+  if (analysis.errors !== undefined) return failure('analyze', analysis.errors);
 
   const top = findTopEntity([...files], board, topFile, runTarget);
   if ('message' in top) return failure('elaborate', top.message);
@@ -260,10 +269,33 @@ async function prepareAnalysed(request: PrepareRequest): Promise<PrepareResult> 
   const reanalysisError = others.length > 0 ? await analyzeFile(workspace, top.fileName) : undefined;
   if (reanalysisError !== undefined) return failure('analyze', reanalysisError);
   const notes = [...warnings, ...sameNameNotes({ unitKind: 'entity', names: [top.name], topFile: top.fileName, otherFiles: others })];
+  const synth: SynthInputs = { flags: workspace.flags, order: synthOrder(analysis.order, top.fileName, others) };
 
-  if (top.ports.size === 0) return withWave(await prepareBatch(workspace, top.name, notes), wave);
+  if (top.ports.size === 0) return withSynth(withWave(await prepareBatch(workspace, top.name, notes), wave), synth);
   const topContent = files.find((file) => file.name === top.fileName)?.content ?? '';
-  return prepareBoard({ workspace, top, topContent, board }, notes);
+  return withSynth(await prepareBoard({ workspace, top, topContent, board }, notes), synth);
+}
+
+/** The order the synthesis check reads the files in: as they analysed, the top's last when it was analysed again. */
+function synthOrder(analysed: readonly string[], topFile: string, sameNamed: readonly string[]): readonly string[] {
+  return sameNamed.length > 0 ? [...analysed.filter((name) => name !== topFile), topFile] : analysed;
+}
+
+/** A prepared run carries what its synthesis check repeats of the compile. */
+function withSynth(result: PrepareResult, synth: SynthInputs): PrepareResult {
+  return result.ok ? { ok: true, plan: { ...result.plan, synth } } : result;
+}
+
+/**
+ * GHDL's synthesis check (docs/impl_sim_only_warnings.md § 7): `ghdl --synth` reads the
+ * files again, in the order they analysed, with the run's flags. Read again rather than
+ * taken from the run's library, so `-- synthesis translate_off` is honoured and the next
+ * run may clear the library meanwhile. `--out=none`: no netlist on stdout. `-Wno-pragma`:
+ * no warning about a comment that starts with "synthesis".
+ */
+export function ghdlSynthCommand(inputs: SynthInputs, target: SynthTarget): SynthCommand {
+  const files = inputs.order.filter((name) => target.files.includes(name));
+  return { cmd: getGhdlExe(), args: ['--synth', ...inputs.flags, '--out=none', '-Wno-pragma', ...files, '-e', target.top] };
 }
 
 /** What `ghdl -r` runs: the plan's target, with the options its units were compiled with. */
@@ -289,4 +321,5 @@ export const ghdlEngine: SimEngine = {
   startBoardRun,
   startBatchRun: (plan, { onOutput, timeoutMs, waveFile }) =>
     runBatch(runTargetOf(plan), onOutput, timeoutMs, waveArguments(plan.wave, waveFile)),
+  synthCommand: ghdlSynthCommand,
 };

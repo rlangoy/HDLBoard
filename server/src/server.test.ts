@@ -176,7 +176,7 @@ describe('a full server (HDL_MAX_SESSIONS, HDL_IDLE_GRACE_SECONDS, HDL_REPLACE_A
   /** Whether `peer` answers HELLO, the way a session that kept its place does. */
   const welcomed = async (peer: Peer) => {
     peer.ws.send('HELLO 5');
-    return (await frame(peer, 'WELCOME')) === 'WELCOME 7';
+    return (await frame(peer, 'WELCOME')) === 'WELCOME 8';
   };
 
   interface Scenario {
