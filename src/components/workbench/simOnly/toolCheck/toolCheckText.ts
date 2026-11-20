@@ -78,8 +78,9 @@ export function multipleAssignmentsText(signal: string): FindingText {
 export const passedLine = (top: string): string =>
   `GHDL synthesis check of ${top}: no problems found. GHDL is not Quartus: a design it accepts may still fail to build there.`;
 
+/** Covers both verdicts: a line that cannot be built, and one synthesis builds otherwise (a latch). */
 export const foundLine = (top: string, lines: number): string =>
-  `GHDL synthesis check of ${top}: ${lines} ${lines === 1 ? 'line' : 'lines'} cannot be built as written.`;
+  `GHDL synthesis check of ${top}: ${lines} ${lines === 1 ? 'line does' : 'lines do'} not run on the FPGA as written.`;
 
 export const unverifiedLine = (top: string, reason: UnverifiedReason): string =>
   `GHDL synthesis check of ${top}: could not verify — ${REASON_TEXT[reason]}.`;

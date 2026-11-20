@@ -292,7 +292,7 @@ describe('the console lines of an answer', () => {
 
   test('say what the answer means, then each line once, linked', () => {
     expect(lines).toEqual([
-      { text: 'GHDL synthesis check of top: 1 line cannot be built as written.' },
+      { text: 'GHDL synthesis check of top: 1 line does not run on the FPGA as written.' },
       { text: '  top.vhd: Synthesis makes a latch here: a value is kept without a clock edge.', at: { fileId: 'top.vhd', line: 7 } },
     ]);
   });
