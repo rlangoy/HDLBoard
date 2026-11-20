@@ -1,7 +1,7 @@
 # Simulation-only code in designs — Implementation Plan
 
 Status: phase 1 and the multiple-driver check (§ 8.1) built on branch imp_sim_only_tag (see
-docs/impl_sim_only_warnings_build_plan.md). Phase 2 (§ 7), the GHDL/Icarus check at Start, built 2026-11-20.
+docs/impl_sim_only_warnings_build_plan.md). Phase 2 (§ 7), GHDL's synthesis check at Start (VHDL), built 2026-11-20.
 
 ## 1. Goal
 
@@ -37,7 +37,7 @@ HDLBoard should still run it, but should say so in the code:
 | S2 | *Synthesis* is the default mode. | Rune's choice: checking for the FPGA is what a course wants. A host can change the default in `settings.json` (§ 6). |
 | S3 | Only *hardware* code is checked: units reachable from the board design, or marked *Treat as design* (§ 4). | A testbench full of `wait for` is correct code. |
 | S4 | Phase 1 is static and live (in the browser, 500 ms after typing stops, with the testbench detector). | Same cost as today's detector; works in every build, for VHDL and Verilog, without a run. |
-| S5 | Phase 2 adds GHDL's own synthesis check (`ghdl --synth`) at Start, beside the run, when the student chooses *Quick check + GHDL/Icarus check* (§ 7). Icarus's `-S -tnull` runs for Verilog, as advice only. | GHDL catches latches, which a static check can't (§ 3.2). Icarus refuses legal Quartus code, so its findings never classify (§ 7.1). Multiple drivers are caught statically, live, for both languages (§ 8.1). |
+| S5 | Phase 2 adds GHDL's own synthesis check (`ghdl --synth`) at Start, beside the run, when the student chooses *Quick check + GHDL check (VHDL)* (§ 7). Verilog gets no tool check. | GHDL catches latches, which a static check can't (§ 3.2). Icarus's `-S -tnull` refuses legal Quartus code and crashes on a legal template, so it was tried and left out (§ 7.1). Multiple drivers are caught statically, live, for both languages (§ 8.1). |
 | S6 | Code inside `-- synthesis translate_off … translate_on` or `` `ifndef SYNTHESIS `` is never warned about. | That is the standard way to say "simulation only, on purpose". The detector already finds these regions (`blank.ts`, `simOnlyRegions`). |
 | S7 | Detection scores do not change. | The new checks read the detector's results but add no weights, so the golden fixtures (`fixtures.golden.test.ts`) stay as they are. |
 | S8 | `SIM-only` is a **code group** shown to the student, not a new detector role. The role keeps its two values, `rtl` / `tb`. | The role drives pairing, the split view and saved overrides (8 files, `desktop.ts` Workspace). A SIM-only unit is still the design for all of those: the board runs it, a testbench pairs with it. The group is a second, derived field on top. One correction to the role comes with it (§ 4.2): a unit the board design uses is never a testbench. |
@@ -134,7 +134,7 @@ drivers, combinational loops). This is a separate feature: phase 2 covers part o
 
 So GHDL is exact for category A and catches some of C. Its wording is not student-friendly, so it needs HDLBoard
 advice (phase 2). It misses B and incomplete sensitivity lists, so the static checks are needed anyway.
-Verilog has no synthesis tool in HDLBoard (Icarus has none, Yosys is not bundled), so Verilog relies on phase 1
+Verilog has no usable synthesis tool in HDLBoard (Icarus's `-S` refuses legal Quartus code, § 7.1; Yosys is not bundled), so Verilog relies on phase 1
 alone.
 
 ### 3.3 Things that look simulation-only but are not (false positives to avoid)
@@ -512,7 +512,7 @@ A mode, chosen like the testbench split view's *Automatic / Always / Never* (rad
 | Where | Settings › Simulation, a card **Design check** (first on Settings › Editor; moved 2026-11-19). |
 | Mode **Synthesis** (default) | "Check designs for FPGA synthesis. Lines that only work in simulation get a warning, and the file is marked `SIM-only`." Everything in this plan is active. |
 | Mode **Simulation only** | "Don't check designs for synthesis. For models and exercises that never go to an FPGA." No live layer, no `SIM-only` group (those units show as `RTL`, as today), no console summary, no phase 2 check. Testbench detection is unchanged. |
-| Under **Synthesis** | Two choices: *Quick check* (the default, the live check alone) or *Quick check + GHDL/Icarus check*, which also runs the tool's synthesis check at Start (§ 7). Stored as `hdlboard.synthesisToolCheck.v1` (`on`/`off`); `settings.json` key `synthesisToolCheck`. Shown but not choosable under *Simulation only*. |
+| Under **Synthesis** | Two choices: *Quick check* (the default, the live check alone) or *Quick check + GHDL check (VHDL)*, which also runs GHDL's synthesis check at Start (§ 7). Stored as `hdlboard.synthesisToolCheck.v1` (`on`/`off`); `settings.json` key `synthesisToolCheck`. Shown but not choosable under *Simulation only*. |
 | Default | **Synthesis.** |
 | Stored | This browser's site storage, like the other editor choices (`hdlboard.designCheck.v1`: `'synthesis' \| 'simulation'`); other open tabs follow it. |
 | Start-up default | `public/settings.json` key `designCheck` (`"synthesis"` or `"simulation"`, default `"synthesis"`), documented in docs/SETTINGS.md next to `bouncyButtons`. A student's own choice still wins. |
@@ -524,13 +524,13 @@ Quartus and GHDL use (`--synth`), and need no explanation for a student.
 A future third mode, **Synthesis (strict)**, could turn the warnings into errors that block the run, for graded labs.
 It is out of scope (S1); the setting is a mode already, so it can be added later without migrating it.
 
-## 7. Phase 2 — the synthesis check at Start (GHDL, and Icarus as advice) — built
+## 7. Phase 2 — GHDL's synthesis check at Start (VHDL) — built
 
-**Status: built 2026-11-20.** Settings › Simulation › Design check › *Synthesis* offers two choices:
-**Quick check** (the live check of § 5, the default) and **Quick check + GHDL/Icarus check**. With the
-second, Start also runs `ghdl --synth` (VHDL) or `iverilog -S -tnull` (Verilog) on the run's hardware top,
-beside the simulation. The simulation never waits for it, and nothing about the check can stop the run.
-`settings.json` key `synthesisToolCheck` (boolean, default `false`, docs/SETTINGS.md).
+**Status: built 2026-11-20; made VHDL only the same day.** Settings › Simulation › Design check › *Synthesis*
+offers **Quick check** (the live check of § 5, the default) and **Quick check + GHDL check (VHDL)**. With
+the second, Start also runs `ghdl --synth` on a VHDL run's hardware top, beside the simulation. The
+simulation never waits for it, and nothing about the check can stop the run. Verilog runs get the quick
+check only. `settings.json` key `synthesisToolCheck` (boolean, default `false`, docs/SETTINGS.md).
 
 ### 7.1 What the tools say (measured)
 
@@ -551,8 +551,8 @@ off stdout, and `-Wno-pragma` drops the warning about a comment that starts with
 | A `std_logic_unsigned` design, with the run's `-fsynopsys` | exit 0 | the run's flags are repeated |
 | A top that is not there | `cannot find entity or configuration …` (no file and line) | could not verify, said for the design |
 
-Icarus Verilog 13.0 (the bundled tree, Windows and AppImage) refuses legal Quartus code, so **its
-findings never classify a design** (decision D1 of the build plan):
+**Why Verilog has no tool check.** Icarus Verilog 13.0's `iverilog -S -tnull -DSYNTHESIS` was tried
+first, and it refuses legal Quartus code:
 
 | Design | `iverilog -S -tnull` |
 |---|---|
@@ -560,8 +560,10 @@ findings never classify a design** (decision D1 of the build plan):
 | keyCouter2Led.v (one edge plus an asynchronous reset on a bit of a vector) | `Too many clocks for synchronous logic`, then a segmentation fault |
 | `initial $readmemh` (a ROM) | `Process not synthesized` (a warning) |
 | A testbench full of `#` delays | exit 0, only `Process not synthesized` |
-| `` `ifndef SYNTHESIS `` around a `$display` | fails without `-DSYNTHESIS`; the check passes it |
-| and_gate.v, counter8.v (no start values) | exit 0 |
+
+Since the course writes registers with start values, almost every Verilog design would end in *Could
+not verify*, and the check would teach nothing. So the Verilog engine has no `synthCommand`, and the
+page never asks for one. Yosys, which could do better, is not bundled (S5).
 
 ### 7.2 What is checked
 
@@ -574,10 +576,11 @@ findings never classify a design** (decision D1 of the build plan):
   - a unit two run files declare, or a VHDL `configuration` in the run (the console says so);
   - a target file marked *Simulation model* or *Treat as testbench*;
   - a run with no unit to name;
+  - a Verilog run;
   - *Simulation only*.
 - **Files:** the run's files minus those whose every unit is a non-hardware testbench. Packages and headers declare no unit and stay.
 - **Generics and parameters:** synthesized with their defaults. `Instance` records no generic maps. A generic without a default is *Could not verify*.
-- **Options:** the run's own. GHDL gets `plan.runFlags`; Icarus gets the project's option flags (generation, defines) plus `-DSYNTHESIS`, `-I.`, `-s <top>` and the timescale file first.
+- **Options:** the run's own: GHDL's flags of the run (`--std`, `-fsynopsys`, `-frelaxed`).
 
 ### 7.3 Protocol 8
 
@@ -589,7 +592,7 @@ findings never classify a design** (decision D1 of the build plan):
   - `exit <code>`;
   - `timeout`;
   - `crash` (`runFailure.ts` `crashOf`);
-  - `unavailable` (no tool, a GHDL without `--synth`, an Icarus without `null-s.conf`);
+  - `unavailable` (no GHDL, a GHDL without `--synth`, or a Verilog run: its engine has no check);
   - `busy`;
   - `skipped` (the run did not compile or start);
   - `refused` (a file the `RUN` did not send).
@@ -598,13 +601,11 @@ findings never classify a design** (decision D1 of the build plan):
 
 ### 7.4 The server
 
-`server/src/synthCheck.ts`, `Session.startSynth`:
+`server/src/synthCheck.ts` (the process) and `sessionSynthCheck.ts` (one session's requests and answers):
 
 - **Start:** after the run has started (`READY` sent). The check is never awaited, and is not run for a run that did not compile.
 - **Folder:** its own, `<session>/synth-<id>/`, holding a copy of the files it reads. The next run's `writeSources` and `clearWorkLibrary`, and a Windows lock of a killed tool, cannot race it. The folder is removed afterwards.
-- **Command:** one child at below-normal priority (`runCommand`'s `lowPriority`).
-  - GHDL: `ghdl --synth <flags> --out=none -Wno-pragma <files in the order they analysed> -e <top>`. The analysis order comes from `analyzeToFixedPoint`, so a top sent before its children still works.
-  - Icarus: `iverilog -B… <options> -S -tnull -DSYNTHESIS -Wno-timescale -I. -s <top> _hdlboard_ts.v <sources>`.
+- **Command:** one child at below-normal priority (`runCommand`'s `lowPriority`): `ghdl --synth <flags> --out=none -Wno-pragma <files in the order they analysed> -e <top>`. The analysis order comes from `analyzeToFixedPoint`, so a top sent before its children still works.
 - **Limits:**
   - `HDL_SYNTH_TIMEOUT_MS` (4000 ms) per check.
   - `HDL_SYNTH_MAX_CONCURRENT` (2) checks on the whole server; one more is answered `busy`.
@@ -614,7 +615,7 @@ findings never classify a design** (decision D1 of the build plan):
 
 ### 7.5 What the answer means
 
-`simOnly/toolCheck/classify.ts` (pure). Only an allowlisted GHDL message is a verdict:
+`simOnly/toolCheck/classify.ts` (pure). Only an allowlisted message is a verdict:
 
 | Message | Shown as | SIM-only |
 |---|---|---|
@@ -623,7 +624,6 @@ findings never classify a design** (decision D1 of the build plan):
 | `latch infered for net` | *Changed by synthesis*, latch text | yes, tier `ignored` |
 | `multiple assignments for "<signal>"` | *Cannot be synthesized*, two-drivers text | no (§ 8.1) |
 | any other GHDL error | *Could not verify*, GHDL's own text | no |
-| any Icarus message | *Could not verify*: a quiet note (gutter and card only), with what it usually means | never |
 | `timeout`, `crash`, `unavailable`, `busy`, `refused`, no answer, older backend | *Could not verify*, with the reason in the console; for a crash, what it printed is ignored | no |
 
 GHDL's warnings are dropped: they are about the netlist, not the board. GHDL exit 0 is *passed*, and the
@@ -631,7 +631,7 @@ console says GHDL is not Quartus.
 
 ### 7.6 Showing it
 
-`simOnly/toolCheck/toolFindings.ts`, `useToolCheck.ts`:
+`simOnly/toolCheck/toolFindings.ts`, `checkSession.ts` (the start and answer flow, no React), `useToolCheck.ts`:
 
 - **Placement:** each message is located with `locateDiagnostics` against the checked files and placed in the code part whose ranges hold its line, as synthesis reads the file.
   - A line inside translate_off or `` `ifndef SYNTHESIS `` is dropped.
@@ -641,14 +641,14 @@ console says GHDL is not Quartus.
   - A pass only ever lacks tool findings: it clears no live finding and no *Simulation model* mark.
 - **Warnings:** one message per line.
   - A tool finding on a line the live check warns about adds the tool's text as a detail of that warning: "GHDL synthesis check: latch infered …".
-  - Any other finding is a warning of its own. Its headline is HDLBoard's, its body starts with *Cannot be synthesized* / *Changed by synthesis* / *Could not verify*, its source is *GHDL synthesis check* or *Icarus synthesis check (advice only)*, and the tool's own message is its detail.
+  - Any other finding is a warning of its own. Its headline is HDLBoard's, its body starts with *Cannot be synthesized* / *Changed by synthesis* / *Could not verify*, its source is *GHDL synthesis check*, and GHDL's own message is its detail.
   - Tool warnings are quieted by a click like the live ones.
 - **Freshness:** the answer belongs to the exact text it checked.
   - It applies only while every checked file still reads so (`fitsFiles`). An edit removes it at once and the group falls back to the live check; undoing the edit brings it back.
   - A newer Start drops it, and so do turning the option off and *Simulation only*.
   - When the group changes only because the answer went stale, there is no "now RTL" announcement.
 - **Cache:** an answer is kept (16 entries, the one used longest ago goes first) under the target, the compiler options, the backend and the checked files' fingerprint, with an exact compare of their text on a hit. Start on unchanged code shows the last answer again without a new check.
-  - Only lasting answers are kept: passed, found, an unknown GHDL error, Icarus's advice. A timeout, crash, busy server or missing tool is tried again.
+  - Only lasting answers are kept: passed, found, an unknown GHDL error. A timeout, crash, busy server or missing tool is tried again.
 - **Console:** one line for the answer, then up to five findings with their *Line n* links, which open the problem card, and up to three design-level messages.
 
 ## 8. Phase 3 — legal but different on hardware (category C)
@@ -789,7 +789,7 @@ Steps 1–2 are independent of each other; 3 and 4 need both; 5–8 need 3 and 4
 - Phase 2: a testbench run warns about its DUT only, and a design that needs `-fsynopsys` gets no synthesis message.
 - Phase 2: Start takes no longer than today; the synthesis warnings arrive after the board is live.
 - Phase 2: a new client works with an older backend exactly as today, without the check.
-- Phase 2: the app's own Verilog examples stay RTL with the check on (Icarus is advice only).
+- Phase 2: the app's own Verilog examples stay RTL with the check on (Verilog gets no tool check).
 
 ## 12. Open questions
 

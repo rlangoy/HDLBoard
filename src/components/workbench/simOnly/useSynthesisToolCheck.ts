@@ -8,7 +8,7 @@ import { loadStoredChoice, saveStoredChoice } from '../storedChoice';
 
 /**
  * Settings › Simulation › Design check › *Synthesis*: the live quick check alone, or also
- * GHDL's or Icarus's own synthesis check at Start (docs/impl_sim_only_warnings.md § 7).
+ * GHDL's own synthesis check at Start, for VHDL (docs/impl_sim_only_warnings.md § 7).
  * The student's choice is kept in this browser; until they make one, `settings.json`'s
  * `synthesisToolCheck` applies, else off. It means nothing in *Simulation only* mode.
  */

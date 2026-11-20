@@ -11,7 +11,7 @@ import type { Setting } from './settingsSections';
 export interface SimulationSectionProps {
   /** Whether designs are checked for FPGA synthesis (docs/impl_sim_only_warnings.md § 6). */
   designCheck?: Setting<DesignCheckMode>;
-  /** *Synthesis* also runs GHDL's or Icarus's own check at Start (docs/impl_sim_only_warnings.md § 7); off by default. */
+  /** *Synthesis* also runs GHDL's own check at Start, for VHDL (docs/impl_sim_only_warnings.md § 7); off by default. */
   toolCheck?: Setting<boolean>;
   /** Waveforms are recorded for testbench runs (docs/waveform_viewer_spec.md FR-1); on by default. */
   recordWaves: Setting<boolean>;

@@ -78,12 +78,13 @@ export interface SynthCheckRequest {
   readonly files: readonly string[];
 }
 
-/** How the server ended a check (server/src/protocol.ts `SynthOutcome`). */
-export type SynthStop = 'timeout' | 'crash' | 'unavailable' | 'busy' | 'skipped' | 'refused';
-const SYNTH_STOPS: readonly SynthStop[] = ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'];
+/** How the server ended a check without an exit code (server/src/protocol.ts `SynthOutcome`). */
+const SYNTH_STOPS = ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'] as const;
+export type SynthStop = (typeof SYNTH_STOPS)[number];
+const isSynthStop = (word: string): word is SynthStop => (SYNTH_STOPS as readonly string[]).includes(word);
 
 /**
- * How a check ended: the tool's exit code, the server's reason, or the page's own —
+ * How a check ended: GHDL's exit code, the server's reason, or the page's own —
  * `unsupported` (the backend predates protocol 8), `no-answer` (none came in time).
  */
 export type SynthOutcome = { readonly kind: 'exit'; readonly code: number } | { readonly kind: SynthStop | 'unsupported' | 'no-answer' };
@@ -91,19 +92,19 @@ export type SynthOutcome = { readonly kind: 'exit'; readonly code: number } | { 
 export interface SynthResult {
   readonly id: number;
   readonly outcome: SynthOutcome;
-  /** What the tool printed. */
+  /** What GHDL printed. */
   readonly text: string;
 }
 
 const CHECK_NUMBER = /^\d{1,15}$/;
 
-/** `SYNTH-RESULT <id> exit <code>` or `SYNTH-RESULT <id> <stop>`, with the tool's text as the body; undefined when malformed. */
+/** `SYNTH-RESULT <id> exit <code>` or `SYNTH-RESULT <id> <stop>`, with GHDL's text as the body; undefined when malformed. */
 export function parseSynthResult(inline: string, body: string): SynthResult | undefined {
   const [idText = '', kind = '', code, ...rest] = inline.split(' ');
   if (!CHECK_NUMBER.test(idText) || rest.length > 0) return undefined;
   const id = Number(idText);
   if (kind === 'exit') return code !== undefined && CHECK_NUMBER.test(code) ? { id, outcome: { kind: 'exit', code: Number(code) }, text: body } : undefined;
-  return code === undefined && SYNTH_STOPS.includes(kind as SynthStop) ? { id, outcome: { kind: kind as SynthStop }, text: body } : undefined;
+  return code === undefined && isSynthStop(kind) ? { id, outcome: { kind }, text: body } : undefined;
 }
 
 /** What the frames sent before a RUN set for it. They go with every RUN, so a reconnect needs no state. */
@@ -394,12 +395,19 @@ export class HdlClient {
 
   /** The socket is gone: its check can no longer be answered. */
   private stopAwaitingSynth(): void {
-    const awaited = this.synthAwaited;
-    if (awaited === null) return;
-    clearTimeout(awaited.timer);
+    const id = this.synthAwaited?.id;
+    this.forgetSynthWait();
+    if (id !== undefined) this.handlers.onSynthResult?.({ id, outcome: { kind: 'no-answer' }, text: '' });
+  }
+
+  /**
+   * Stops waiting without a word: a newer RUN cancels the last run's check on the server,
+   * which never answers it, and the page has moved on from it too.
+   */
+  private forgetSynthWait(): void {
+    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
     this.synthAwaited = null;
     this.closeAfterSynth = false;
-    this.handlers.onSynthResult?.({ id: awaited.id, outcome: { kind: 'no-answer' }, text: '' });
   }
 
   /** Sends the run's SYNTH-CHECK when this backend takes one; an older backend's run goes unchecked, and says so. */
@@ -522,14 +530,14 @@ export class HdlClient {
    * (the file currently marked as top in the Files panel), is sent as
    * `RUN`'s inline arg so the backend elaborates that file's design
    * rather than guessing from board-port matches — see `portDetect.ts`'s
-   * `findTopEntity`. `settings` go in the WAVE, BOARD and OPTIONS frames just before the RUN.
+   * `findTopEntity`. `settings` go in the WAVE, BOARD, OPTIONS and SYNTH-CHECK frames just before the RUN.
    */
   run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, settings: RunSettings): void {
     const { recordWave, board, compilerOptions, synthCheck } = settings;
     // The last run's waveform goes when this run starts (W10), on the server too.
     this.waveOffered = false;
-    // This run uses the socket: a close waiting for the last run's check is off.
-    this.closeAfterSynth = false;
+    // This run uses the socket, and the last run's check will never be answered.
+    this.forgetSynthWait();
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
@@ -599,8 +607,7 @@ export class HdlClient {
   }
 
   close(): void {
-    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
-    this.synthAwaited = null;
+    this.forgetSynthWait();
     this.detachSocket()?.close();
   }
 }

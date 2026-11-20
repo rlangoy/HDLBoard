@@ -36,12 +36,12 @@ describe('the Synthesis check choices', () => {
       />,
     );
 
-  test('sit under Synthesis: Quick check, or + GHDL/Icarus check', () => {
+  test('sit under Synthesis: Quick check, or + GHDL check (VHDL)', () => {
     const html = renderWith('synthesis', false);
     expect(html.match(/<strong>[^<]+<\/strong>/g)?.slice(0, 4)).toEqual([
       '<strong>Synthesis</strong>',
       '<strong>Quick check</strong>',
-      '<strong>Quick check + GHDL/Icarus check</strong>',
+      '<strong>Quick check + GHDL check (VHDL)</strong>',
       '<strong>Simulation only</strong>',
     ]);
   });

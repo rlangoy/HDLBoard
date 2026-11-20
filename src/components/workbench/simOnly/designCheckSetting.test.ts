@@ -110,7 +110,7 @@ describe('the Simulation model mark', () => {
   });
 });
 
-/** Settings › Simulation › Design check › Synthesis: Quick check, or + GHDL/Icarus check (§ 7). */
+/** Settings › Simulation › Design check › Synthesis: Quick check, or + GHDL check for VHDL (§ 7). */
 describe('the synthesis tool check in effect', () => {
   test('is off on a fresh install, and while settings.json loads', () => {
     expect(synthesisToolCheckInEffect(null, null)).toBe(false);

@@ -2,28 +2,23 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The synthesis check on the real tools (docs/impl_sim_only_warnings.md § 7): what
- * `ghdl --synth` and `iverilog -S -tnull` say about the designs the page classifies by,
+ * The synthesis check on the real GHDL (docs/impl_sim_only_warnings.md § 7): what
+ * `ghdl --synth` says about the designs the page classifies by,
  * read the way the session runs them — from the run's compile, in a folder of their own.
  */
 
 import assert from 'node:assert/strict';
 import { before, describe, test, type TestContext } from 'node:test';
 import { DEFAULT_BOARD_IO } from '../engines/boardPorts.js';
-import { ghdlEngine } from '../engines/ghdlEngine.js';
-import type { SimEngine } from '../engines/types.js';
-import { verilogEngine } from '../engines/verilogEngine.js';
+import { ghdlEngine, ghdlSynthCommand } from '../engines/ghdlEngine.js';
 import { setGhdlExe } from '../ghdl.js';
 import type { VhdlFileInput } from '../protocol.js';
 import { runSynthCheck, SynthSlots, type SynthReport } from '../synthCheck.js';
 import { readFixture } from '../testSupport/fixture.js';
-import { icarusForTests } from '../testSupport/icarus.js';
 import { requireTool } from '../testSupport/requireTool.js';
 import { makeTempDir } from '../testSupport/sessionDir.js';
-import { setToolPaths } from '../verilog/tools.js';
 
 const ghdl = requireTool('ghdl');
-const icarus = icarusForTests();
 let nextId = 1;
 
 interface Check {
@@ -36,14 +31,14 @@ interface Check {
 }
 
 /** Compiles the run as the session does, then checks `top` as the session would. */
-async function checkOn(engine: SimEngine, t: TestContext, { files, top, checked }: Check): Promise<SynthReport> {
+async function checkWithGhdl(t: TestContext, { files, top, checked }: Check): Promise<SynthReport> {
   const dir = makeTempDir('hdlboard-synth-');
   t.after(() => dir.cleanup());
-  const prepared = await engine.prepare({ board: DEFAULT_BOARD_IO, dir: dir.path, files, topFile: files[0]?.name });
+  const prepared = await ghdlEngine.prepare({ board: DEFAULT_BOARD_IO, dir: dir.path, files, topFile: files[0]?.name });
   assert.ok(prepared.ok, prepared.ok ? '' : prepared.text);
-  assert.ok(prepared.plan.synth && engine.synthCommand);
+  assert.ok(prepared.plan.synth);
   const names = checked ?? files.map((file) => file.name);
-  const command = engine.synthCommand(prepared.plan.synth, { top, files: names });
+  const command = ghdlSynthCommand(prepared.plan.synth, { top, files: names });
   const report = await runSynthCheck(
     {
       dir: dir.path,
@@ -227,7 +222,7 @@ describe('ghdl --synth beside a run', { skip: ghdl.skip }, () => {
   before(() => {
     if (ghdl.exe) setGhdlExe(ghdl.exe);
   });
-  const check = (t: TestContext, request: Check) => checkOn(ghdlEngine, t, request);
+  const check = checkWithGhdl;
 
   test('rejects the wait for of the blink process', async (t) => {
     const report = await check(t, { files: [BLINK_WAIT], top: 'DE1_SoC' });
@@ -291,46 +286,5 @@ describe('ghdl --synth beside a run', { skip: ghdl.skip }, () => {
     const report = await check(t, { files: [INVERTER], top: 'nosuchunit' });
     assert.equal(exitOf(report), 1);
     assert.match(report.text, /cannot find entity or configuration nosuchunit/);
-  });
-});
-
-const verilog = (name: string): VhdlFileInput => ({ name, content: readFixture('verilog', name) });
-
-const GUARDED_DISPLAY = {
-  name: 'fifo_ctrl.v',
-  content: `module fifo_ctrl (input wire clk, input wire push, input wire full, output wire overflow);
-    assign overflow = push & full;
-\`ifndef SYNTHESIS
-    always @(posedge clk)
-        if (push && full) $display("push while full at %0t", $time);
-\`endif
-endmodule
-`,
-};
-
-describe('iverilog -S -tnull beside a run (advisory)', { skip: icarus.skip }, () => {
-  before(() => setToolPaths(icarus.tools));
-  const check = (t: TestContext, request: Check) => checkOn(verilogEngine, t, request);
-
-  test('passes a design without start values', async (t) => {
-    const report = await check(t, { files: [verilog('and_gate.v')], top: 'and_gate' });
-    assert.equal(exitOf(report), 0, report.text);
-  });
-
-  test('defines SYNTHESIS, as the live check reads the code', async (t) => {
-    const report = await check(t, { files: [GUARDED_DISPLAY], top: 'fifo_ctrl' });
-    assert.equal(exitOf(report), 0, report.text);
-  });
-
-  test('refuses registers with a start value, legal on the FPGA: why its findings never classify', async (t) => {
-    const report = await check(t, { files: [verilog('blinkTest.v')], top: 'blinkTest' });
-    assert.equal(exitOf(report), 1);
-    assert.match(report.text, /driven by more than one process/);
-  });
-
-  test('fails on a legal asynchronous reset', async (t) => {
-    const report = await check(t, { files: [verilog('keyCouter2Led.v')], top: 'keyCouter2Led' });
-    assert.notEqual(exitOf(report), 0, report.text);
-    assert.match(report.text, /Too many clocks/);
   });
 });

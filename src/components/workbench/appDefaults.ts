@@ -24,7 +24,7 @@ export interface AppDefaults {
    */
   readonly designCheck?: DesignCheckMode;
   /**
-   * Settings › Simulation › Design check › *Quick check + GHDL/Icarus check*
+   * Settings › Simulation › Design check › *Quick check + GHDL check (VHDL)*
    * (docs/impl_sim_only_warnings.md § 7); only when the file sets it — built in, it is off.
    */
   readonly synthesisToolCheck?: boolean;

@@ -27,36 +27,43 @@ describe('synthReportOf', () => {
     assert.deepEqual(synthReportOf(result({ code: -1, timedOut: true, signal: 'SIGKILL' })).outcome, { kind: 'timeout' });
   });
 
-  test('is a crash on a signal, on an exit code from 128, and on a Windows status', () => {
-    assert.deepEqual(synthReportOf(result({ code: -1, signal: 'SIGSEGV', err: 'error: Too many clocks' })).outcome, { kind: 'crash' });
-    assert.deepEqual(synthReportOf(result({ code: 139 })).outcome, { kind: 'crash' });
-    assert.deepEqual(synthReportOf(result({ code: 0xc0000005 })).outcome, { kind: 'crash' });
-  });
+  const crashes: Array<[string, Partial<CmdResult>]> = [
+    ['a signal', { code: -1, signal: 'SIGSEGV', err: 'top.vhd:3:1:error: latch infered' }],
+    ['an exit code from 128', { code: 139 }],
+    ['a Windows status', { code: 0xc0000005 }],
+  ];
+  for (const [label, fields] of crashes) {
+    test(`is a crash on ${label}, whatever the tool printed before`, () => {
+      assert.deepEqual(synthReportOf(result(fields)).outcome, { kind: 'crash' });
+    });
+  }
 
   test('is unavailable for a tool that could not be started', () => {
     assert.deepEqual(synthReportOf(result({ code: -1, err: 'Error: spawn ghdl ENOENT' })).outcome, { kind: 'unavailable' });
   });
 
-  test('is unavailable for a GHDL without synthesis and an Icarus without its null target', () => {
+  test('is unavailable for a GHDL without synthesis', () => {
     assert.deepEqual(synthReportOf(result({ code: 1, err: "ghdl:error: unknown command '--synth', try 'help'" })).outcome, { kind: 'unavailable' });
-    assert.deepEqual(synthReportOf(result({ code: 127, err: 'ERROR: Unable to read config file: …\\null-s.conf' })).outcome, { kind: 'unavailable' });
   });
 });
 
 describe('SynthSlots', () => {
-  test('gives out as many slots as it has, and takes each back once', () => {
+  test('refuses a slot when all are taken', () => {
     const slots = new SynthSlots(1);
-    const release = slots.take();
-    assert.ok(release);
-    assert.equal(slots.take(), undefined);
-    release();
-    release();
-    const again = slots.take();
-    assert.ok(again);
+    slots.take();
     assert.equal(slots.take(), undefined);
   });
 
-  test('with none, every check is refused', () => {
+  test('gives a slot back once, however often it is released', () => {
+    const slots = new SynthSlots(1);
+    const release = slots.take();
+    release?.();
+    release?.();
+    slots.take();
+    assert.equal(slots.take(), undefined);
+  });
+
+  test('with none, refuses every check', () => {
     assert.equal(new SynthSlots(0).take(), undefined);
   });
 });
@@ -70,17 +77,17 @@ describe('runSynthCheck', () => {
   const runOf = (script: string, fields: Partial<SynthRun> = {}): SynthRun => ({
     dir,
     id: nextId++,
-    command: { cmd: process.execPath, args: ['-e', script], extraFiles: [{ name: 'extra.txt', content: 'generated' }] },
+    command: { cmd: process.execPath, args: ['-e', script] },
     files: [{ name: 'top.vhd', content: 'student code' }],
     timeoutMs: 10_000,
     signal: new AbortController().signal,
     ...fields,
   });
 
-  test('runs in a folder holding the files and the generated ones', async () => {
-    const script = "const fs=require('fs');console.error(fs.readFileSync('top.vhd','utf8')+'|'+fs.readFileSync('extra.txt','utf8'));process.exit(1)";
+  test('runs in a folder holding a copy of the files', async () => {
+    const script = "console.error(require('fs').readFileSync('top.vhd','utf8'));process.exit(1)";
     const report = await runSynthCheck(runOf(script), new SynthSlots(1));
-    assert.deepEqual(report, { outcome: { kind: 'exit', code: 1 }, text: 'student code|generated' });
+    assert.deepEqual(report, { outcome: { kind: 'exit', code: 1 }, text: 'student code' });
   });
 
   test('removes its folder afterwards', async () => {

@@ -18,24 +18,24 @@ import { simOnlyFindings } from './findings';
 import { codeGroups, groupsFromRoles } from './groups';
 import { simulatorClockFindings } from './simulatorClock';
 import { isHardwareFinding } from './toolCheck/toolFindings';
-import type { CheckInput, DesignCheck, DesignCheckMode, SimOnlyFinding, ToolFinding } from './types';
+import type { CheckInput, DesignCheck, DesignCheckMode, SimOnlyFinding, TieredFinding, ToolFinding } from './types';
 
-/** A tool finding as the groups count it: a finding of the `synth-check` construct at its tier. */
-function groupedAs(finding: ToolFinding & { readonly tier: 'never' | 'ignored' }): SimOnlyFinding {
+/** GHDL's finding as the groups count it: a finding of the `synth-check` construct at its tier. */
+function groupedAs(finding: TieredFinding): SimOnlyFinding {
   const { fileId, line, tier, unitName, unitRef } = finding;
   return { construct: 'synth-check', tier, line, fileId, unitName, unitRef };
 }
 
-const makesSimOnly = (finding: ToolFinding): finding is ToolFinding & { readonly tier: 'never' | 'ignored' } => finding.tier !== undefined;
+const hasTier = (finding: ToolFinding): finding is TieredFinding => finding.tier !== undefined;
 
 function synthesisCheck({ view, overrides, simulatorClock, toolFindings = [] }: CheckInput): DesignCheck {
   const clockReads = simulatorClock ? simulatorClockFindings(view, simulatorClock) : [];
   // Per file in line order: the summary's *Line n* is a file's first warned line.
   const findings = [...simOnlyFindings(view), ...clockReads].sort((a, b) => a.fileId.localeCompare(b.fileId) || a.line - b.line);
   // In code that is still hardware: the student may have marked its file *Treat as testbench* since.
-  const tool = toolFindings.filter(makesSimOnly).filter((f) => isHardwareFinding(view, f));
-  const groups = codeGroups({ view, overrides, findings: [...findings, ...tool.map(groupedAs)] });
-  return { findings, groups, driverConflicts: driverConflicts(view), toolFindings: tool };
+  const synthesized = toolFindings.filter(hasTier).filter((f) => isHardwareFinding(view, f));
+  const groups = codeGroups({ view, overrides, findings: [...findings, ...synthesized.map(groupedAs)] });
+  return { findings, groups, driverConflicts: driverConflicts(view), toolFindings: synthesized };
 }
 
 function simulationCheck({ view, overrides }: CheckInput): DesignCheck {

@@ -15,10 +15,10 @@ export const DESIGN_CHECK_TEXT = {
   toolCheckTitle: 'How Synthesis checks',
   quickCheck: 'Quick check',
   quickCheckHint: "HDLBoard's own check, live while you type. Nothing more runs when you press Start.",
-  toolCheck: 'Quick check + GHDL/Icarus check',
+  toolCheck: 'Quick check + GHDL check (VHDL)',
   toolCheckHint:
-    'Also checks the design with GHDL (VHDL) or Icarus Verilog when you press Start, beside the simulation, which never waits for it. ' +
-    'GHDL can mark a design SIM-only; Icarus only adds notes. Neither is a Quartus check: a design they accept may still not fit or build.',
+    "Also checks a VHDL design with GHDL's synthesis when you press Start, beside the simulation, which never waits for it. " +
+    'Its findings can mark the design SIM-only. GHDL is not Quartus: a design it accepts may still not fit or build. Verilog gets the quick check only.',
   simOnlyLabel: 'SIM-only',
   fileRoleSimOnly: 'Simulation-only design: runs in the simulator, not on the board',
   fileRoleMixedSimOnly: 'Simulation-only design + testbench',

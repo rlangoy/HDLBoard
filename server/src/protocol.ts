@@ -57,16 +57,17 @@ export type WaveStatus = 'complete' | 'stopped' | 'timeout' | 'size-limit';
 const WAVE_STATUSES: readonly WaveStatus[] = ['complete', 'stopped', 'timeout', 'size-limit'];
 
 /**
- * How a synthesis check ended (protocol 8, docs/impl_sim_only_warnings.md § 7): the tool's
+ * How a synthesis check ended (protocol 8, docs/impl_sim_only_warnings.md § 7): GHDL's
  * exit code, or why it gave none. The server says only what happened to the process;
  * what the messages mean is the page's to decide.
  * - `timeout`: stopped at HDL_SYNTH_TIMEOUT_MS. `crash`: died on a signal or a crash status.
- * - `unavailable`: the tool could not be started, or has no synthesis.
+ * - `unavailable`: GHDL could not be started, or has no synthesis, or the run is Verilog.
  * - `busy`: the server's checks were all taken (HDL_SYNTH_MAX_CONCURRENT).
  * - `skipped`: the run did not compile, or never started. `refused`: the request named a file the run did not send.
  */
 export const SYNTH_STOPS = ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'] as const;
 export type SynthStop = (typeof SYNTH_STOPS)[number];
+const isSynthStop = (word: string): word is SynthStop => (SYNTH_STOPS as readonly string[]).includes(word);
 export type SynthOutcome = { readonly kind: 'exit'; readonly code: number } | { readonly kind: SynthStop };
 
 /** What a `SYNTH-CHECK` asks for: the hardware top and the run's files it may read. */
@@ -79,8 +80,8 @@ export interface SynthCheckRequest {
 
 /** The most files one check may name: a project's, never more than a RUN can carry. */
 export const MAX_SYNTH_FILES = 256;
-/** A unit name a check may name: a plain VHDL or Verilog identifier, never an option. */
-const SYNTH_TOP = /^[A-Za-z_][A-Za-z0-9_$]{0,254}$/;
+/** A unit name a check may name: a plain VHDL identifier, never an option. */
+const SYNTH_TOP = /^[A-Za-z][A-Za-z0-9_]{0,254}$/;
 const MAX_SYNTH_FILE_NAME = 255;
 
 export type ClientFrame =
@@ -125,7 +126,7 @@ export type ServerFrame =
   | { verb: 'WAVE-END'; run: number }
   // That run's waveform is not available (a newer run replaced it, or it was never written).
   | { verb: 'WAVE-NONE'; run: number }
-  // How check `id` ended, and what the tool printed (protocol 8). One per SYNTH-CHECK of a RUN that compiled or was refused.
+  // How check `id` ended, and what GHDL printed (protocol 8). One per SYNTH-CHECK of a RUN that compiled or was refused.
   | { verb: 'SYNTH-RESULT'; id: number; outcome: SynthOutcome; text: string }
   | { verb: 'PONG' };
 
@@ -251,7 +252,7 @@ function decodeSynthOutcome(text: string): SynthOutcome | undefined {
     const exitCode = code === undefined || rest.length > 0 ? undefined : runNumber(code);
     return exitCode === undefined ? undefined : { kind: 'exit', code: exitCode };
   }
-  return code === undefined && (SYNTH_STOPS as readonly string[]).includes(kind) ? { kind: kind as SynthStop } : undefined;
+  return code === undefined && isSynthStop(kind) ? { kind } : undefined;
 }
 
 const encodeSynthOutcome = (outcome: SynthOutcome): string => (outcome.kind === 'exit' ? `exit ${outcome.code}` : outcome.kind);

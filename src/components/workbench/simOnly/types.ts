@@ -15,6 +15,9 @@ import type { DriverConflict } from './driverTypes';
  */
 export type Tier = 'never' | 'ignored' | 'quiet';
 
+/** The tiers that keep code off the board (findings.ts `OFF_THE_BOARD`): a SIM-only finding has one. */
+export type SimOnlyTier = Exclude<Tier, 'quiet'>;
+
 export type SimOnlyConstructId =
   | 'vhdl-wait-for' | 'vhdl-wait-forever' | 'vhdl-wait-until' | 'vhdl-clock-gen' | 'vhdl-file-io'
   | 'vhdl-end-sim' | 'vhdl-now' | 'vhdl-access' | 'vhdl-protected' | 'vhdl-random' | 'vhdl-real-signal'
@@ -128,9 +131,6 @@ export interface CodeGroups {
 
 export type DesignCheckMode = 'synthesis' | 'simulation';
 
-/** The tools of the synthesis check at Start (docs/impl_sim_only_warnings.md § 7). */
-export type SynthTool = 'ghdl' | 'icarus';
-
 /**
  * What a synthesis tool's message means for the design (§ 7): it cannot be built as
  * written, synthesis builds something else than the simulation runs, or the tool could not say.
@@ -144,16 +144,15 @@ export interface FindingText {
 }
 
 /**
- * A message of the synthesis check at Start, on a line of hardware code (§ 7). Only GHDL's
- * allowlisted messages have a tier, and only they make the design SIM-only; Icarus's never do.
+ * A message of GHDL's synthesis check at Start, on a line of hardware code (§ 7). Only the
+ * allowlisted messages have a tier, and only they make the design SIM-only.
  */
 export interface ToolFinding {
   readonly fileId: string;
   readonly line: number;
-  readonly tool: SynthTool;
   readonly effect: SynthEffect;
   /** The tier that makes the unit SIM-only; absent, the group stays as it is. */
-  readonly tier?: 'never' | 'ignored';
+  readonly tier?: SimOnlyTier;
   /** The key of the unit the line belongs to (`unitRefKey`). */
   readonly unitRef: string;
   readonly unitName: string;
@@ -162,9 +161,10 @@ export interface ToolFinding {
   /** A few words for the badge's *Detected* line: `latch`. */
   readonly title: string;
   readonly text: FindingText;
-  /** Shown only in the gutter and the problem card: Icarus's advice. */
-  readonly quiet: boolean;
 }
+
+/** A finding of GHDL's that makes its design SIM-only. */
+export type TieredFinding = ToolFinding & { readonly tier: SimOnlyTier };
 
 export interface CheckInput {
   readonly view: DesignView;
@@ -186,5 +186,5 @@ export interface DesignCheck {
    * The synthesis check's findings that make their design SIM-only, in code that is still
    * hardware (§ 7). With the live findings they decide the groups; a pass never clears a live one.
    */
-  readonly toolFindings: readonly ToolFinding[];
+  readonly toolFindings: readonly TieredFinding[];
 }

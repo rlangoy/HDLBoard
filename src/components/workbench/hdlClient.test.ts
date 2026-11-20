@@ -629,3 +629,24 @@ describe('parseSynthResult', () => {
     }
   });
 });
+
+describe('a run after a checked one', () => {
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('closes its socket at once when it ends: the last check was cancelled with the last run, and is never answered', () => {
+    const client = new HdlClient('ws://test', { ...recordingHandlers(), onSynthResult: vi.fn() });
+    const settings = { recordWave: false, board: DEFAULT_BOARD.ports };
+    client.run(PROJECT, 'top.vhd', null, { ...settings, synthCheck: { id: 1, top: 'top', files: ['top.vhd'] } });
+    const socket = FakeSocket.last;
+    socket?.receive(WELCOME_CURRENT);
+    client.run(PROJECT, 'top.vhd', null, settings);
+    socket?.receive('DONE completed');
+    expect(socket?.closed).toBe(true);
+  });
+});

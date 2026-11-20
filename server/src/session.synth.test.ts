@@ -31,7 +31,7 @@ const planOf = (dir: string): RunPlan => ({
 });
 
 /** The check's "tool": Node running `script` in the check's folder. */
-const nodeTool = (script: string): SynthCommand => ({ cmd: process.execPath, args: ['-e', script], extraFiles: [] });
+const nodeTool = (script: string): SynthCommand => ({ cmd: process.execPath, args: ['-e', script] });
 
 interface EngineSetup {
   readonly tool?: SynthCommand;

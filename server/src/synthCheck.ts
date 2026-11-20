@@ -3,8 +3,8 @@
 
 /**
  * The synthesis check beside a run (docs/impl_sim_only_warnings.md § 7, protocol 8):
- * `ghdl --synth` or `iverilog -S -tnull` on the run's hardware top, at low priority and
- * under a time limit, while the simulation runs. It never delays or stops the run: the
+ * `ghdl --synth` on the run's hardware top, at low priority and under a time limit,
+ * while the simulation runs. VHDL only: Icarus's synthesis refuses legal Quartus code. It never delays or stops the run: the
  * session starts it after the run has started and forgets it if a newer run comes.
  *
  * Each check works in a folder of its own, holding a copy of the files it reads, so the
@@ -25,8 +25,8 @@ import { readIntSetting, SYNTH_MAX_CONCURRENT } from './settings.js';
 const CLEANUP_RETRIES = 10;
 const CLEANUP_RETRY_MS = 100;
 
-/** What a tool says when it has no synthesis at all: a GHDL built without it, an Icarus without its `null` target. */
-const NO_SYNTHESIS = /unknown command '--synth'|Unable to read config file/i;
+/** What a GHDL built without synthesis says. */
+const NO_SYNTHESIS = /unknown command '--synth'/i;
 
 /** A limit on how many checks run at once, shared by every session of the server. */
 export class SynthSlots {
@@ -75,12 +75,13 @@ export function synthReportOf(result: CmdResult): SynthReport {
   if (result.timedOut) return { outcome: { kind: 'timeout' }, text };
   const signal = result.signal ?? null;
   // `runCommand` gives code -1 and no signal when the program could not be started at all.
-  if ((result.code === -1 && signal === null) || NO_SYNTHESIS.test(text)) return { outcome: { kind: 'unavailable' }, text };
+  const couldNotStart = result.code === -1 && signal === null;
+  if (couldNotStart || NO_SYNTHESIS.test(text)) return { outcome: { kind: 'unavailable' }, text };
   if (crashOf({ code: result.code, stderr: text, signal }) !== undefined) return { outcome: { kind: 'crash' }, text };
   return { outcome: { kind: 'exit', code: result.code }, text };
 }
 
-/** Writes the check's folder: the student's files and the tool's generated ones. */
+/** Writes the check's folder: a copy of the files it reads. */
 async function writeFolder(folder: string, files: readonly VhdlFileInput[]): Promise<void> {
   await fs.mkdir(folder, { recursive: true });
   for (const file of files) await fs.writeFile(join(folder, file.name), file.content);
@@ -96,7 +97,7 @@ export async function runSynthCheck(run: SynthRun, slots: SynthSlots = SERVER_SY
   if (release === undefined) return { outcome: { kind: 'busy' }, text: '' };
   const folder = join(run.dir, `synth-${run.id}`);
   try {
-    await writeFolder(folder, [...run.files, ...run.command.extraFiles]);
+    await writeFolder(folder, run.files);
     if (run.signal.aborted) return undefined;
     const { cmd, args } = run.command;
     const result = await runCommand({ cmd, args, cwd: folder, timeoutMs: run.timeoutMs, signal: run.signal, lowPriority: true });

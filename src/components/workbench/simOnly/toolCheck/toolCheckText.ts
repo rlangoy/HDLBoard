@@ -2,20 +2,15 @@
 // Copyright (C) 2026 Rune Langøy
 
 /**
- * The words of the synthesis check at Start (docs/impl_sim_only_warnings.md § 7): who
+ * The words of GHDL's synthesis check at Start (docs/impl_sim_only_warnings.md § 7): who
  * says it, what a message means for the board, and the console lines. English, like the
  * rest of the design check (designCheckText.ts). Pure.
  */
 
-import type { FindingText, SynthEffect, SynthTool } from '../types';
+import type { FindingText, SynthEffect } from '../types';
 
 /** Who a message is from, as the problem card names it. */
-export const TOOL_SOURCE: Readonly<Record<SynthTool, string>> = {
-  ghdl: 'GHDL synthesis check',
-  icarus: 'Icarus synthesis check (advice only)',
-};
-
-export const TOOL_NAME: Readonly<Record<SynthTool, string>> = { ghdl: 'GHDL', icarus: 'Icarus' };
+export const GHDL_SOURCE = 'GHDL synthesis check';
 
 /** The sentence that says what a message means for the board, before HDLBoard's explanation. */
 export const EFFECT_TEXT: Readonly<Record<SynthEffect, string>> = {
@@ -25,20 +20,18 @@ export const EFFECT_TEXT: Readonly<Record<SynthEffect, string>> = {
 };
 
 /** Why a check gave no answer about the design. */
-export type UnverifiedReason =
-  | 'timeout' | 'crash' | 'unavailable' | 'busy' | 'refused' | 'skipped' | 'unsupported' | 'no-answer' | 'tool-error' | 'advisory';
+export type UnverifiedReason = 'timeout' | 'crash' | 'unavailable' | 'busy' | 'refused' | 'skipped' | 'unsupported' | 'no-answer' | 'tool-error';
 
-const REASON_TEXT: Readonly<Record<UnverifiedReason, (tool: string) => string>> = {
-  timeout: () => 'it took too long and was stopped',
-  crash: (tool) => `${tool} crashed`,
-  unavailable: (tool) => `${tool} on this server has no synthesis`,
-  busy: () => 'the server was busy with other checks; press Start again later',
-  refused: () => 'the server refused the request',
-  skipped: () => 'the run did not start',
-  unsupported: () => 'the simulation backend is older than this page (it needs protocol 8)',
-  'no-answer': () => 'no answer came from the simulation backend',
-  'tool-error': (tool) => `${tool} stopped on something HDLBoard cannot explain`,
-  advisory: () => "Icarus's synthesis refuses some code that Quartus builds",
+const REASON_TEXT: Readonly<Record<UnverifiedReason, string>> = {
+  timeout: 'it took too long and was stopped',
+  crash: 'GHDL crashed',
+  unavailable: 'GHDL on this server has no synthesis',
+  busy: 'the server was busy with other checks; press Start again later',
+  refused: 'the server refused the request',
+  skipped: 'the run did not start',
+  unsupported: 'the simulation backend is older than this page (it needs protocol 8)',
+  'no-answer': 'no answer came from the simulation backend',
+  'tool-error': 'GHDL stopped on something HDLBoard cannot explain',
 };
 
 // ------------------------------------------------------------ what GHDL's messages mean
@@ -80,65 +73,37 @@ export function multipleAssignmentsText(signal: string): FindingText {
   };
 }
 
-// ------------------------------------------------------------ what Icarus's messages mean
-
-export const ICARUS_TEXT = {
-  startValues: {
-    headline: 'Icarus cannot synthesize this; the FPGA may still build it.',
-    explanation:
-      'Icarus\'s synthesis refuses a register with a start value (`reg x = 0;`) as well as one driven from two blocks. Quartus builds a start value as the power-up value. Two drivers are an error there too, and HDLBoard\'s own check warns about those.',
-  },
-  processNotSynthesized: {
-    headline: 'Icarus left this block as simulation code.',
-    explanation:
-      'Icarus could not turn the block into logic. That is expected for an `initial` block that sets start values or loads a ROM (Quartus builds those), and for code with delays or waits, which never runs on the board.',
-  },
-  tooManyClocks: {
-    headline: 'Icarus cannot synthesize this edge list; Quartus may still build it.',
-    explanation:
-      'Icarus\'s synthesis handles only some asynchronous-reset templates. A block of one clock edge plus a reset tested first is a register Quartus builds.',
-  },
-  unknown: {
-    headline: 'Icarus\'s synthesis stopped here.',
-    explanation:
-      'Icarus\'s synthesis is limited and refuses some code that Quartus builds, so HDLBoard cannot say what this means for the board. Icarus\'s own message is below.',
-  },
-} as const satisfies Readonly<Record<string, FindingText>>;
-
 // ------------------------------------------------------------ the console
 
-const subject = (tool: SynthTool, top: string): string =>
-  tool === 'ghdl' ? `GHDL synthesis check of ${top}` : `Icarus synthesis check of ${top} (advice only)`;
+export const passedLine = (top: string): string =>
+  `GHDL synthesis check of ${top}: no problems found. GHDL is not Quartus: a design it accepts may still fail to build there.`;
 
-export function passedLine(tool: SynthTool, top: string): string {
-  return tool === 'ghdl'
-    ? `${subject(tool, top)}: no problems found. GHDL is not Quartus: a design it accepts may still fail to build there.`
-    : `${subject(tool, top)}: no problems found.`;
-}
+export const foundLine = (top: string, lines: number): string =>
+  `GHDL synthesis check of ${top}: ${lines} ${lines === 1 ? 'line' : 'lines'} cannot be built as written.`;
 
-export function foundLine(tool: SynthTool, top: string, lines: number): string {
-  const counted = `${lines} ${lines === 1 ? 'line' : 'lines'}`;
-  return tool === 'ghdl' ? `${subject(tool, top)}: ${counted} cannot be built as written.` : `${subject(tool, top)}: ${counted} with notes.`;
-}
-
-export function unverifiedLine(tool: SynthTool, top: string, reason: UnverifiedReason): string {
-  return `${subject(tool, top)}: could not verify — ${REASON_TEXT[reason](TOOL_NAME[tool])}.`;
-}
+export const unverifiedLine = (top: string, reason: UnverifiedReason): string =>
+  `GHDL synthesis check of ${top}: could not verify — ${REASON_TEXT[reason]}.`;
 
 /** One finding in the console: its file and HDLBoard's headline; the link goes to the line. */
 export const findingLine = (fileName: string, headline: string): string => `  ${fileName}: ${headline}`;
 
-/** A message with no reliable place: the tool's own words, said for the design as a whole. */
-export const designMessageLine = (tool: SynthTool, message: string): string => `  ${TOOL_NAME[tool]}: ${message}`;
+/** A message with no reliable place: GHDL's own words, said for the design as a whole. */
+export const designMessageLine = (message: string): string => `  GHDL: ${message}`;
 
 /** At Start, when the code is what was checked last: the last answer again, without a new check. */
-export const unchangedNote = (tool: SynthTool): string => `${TOOL_NAME[tool]} synthesis check: the code is unchanged since the last check; its result follows.`;
+export const UNCHANGED_NOTE = 'GHDL synthesis check: the code is unchanged since the last check; its result follows.';
 
 /** Why a run is not checked, when that is news to the student. */
-export const SKIP_TEXT = {
+export const TOLD_SKIP_TEXT = {
   noDut: 'Synthesis check skipped: this testbench tests no design HDLBoard can find.',
   ambiguous: 'Synthesis check skipped: the unit to check is not clear (two files declare it, or a configuration chooses it).',
-  noTop: 'Synthesis check skipped: the unit that runs is not clear.',
 } as const;
 
-export type SkipReason = keyof typeof SKIP_TEXT | 'sim-model' | 'treated-as-testbench';
+/**
+ * Why a run is not checked. Only the told ones are news; a Verilog run (the check is VHDL
+ * only), a run with no unit to name, and the student's own *Simulation model* or *Treat as
+ * testbench* mark are not.
+ */
+export type SkipReason = keyof typeof TOLD_SKIP_TEXT | 'not-vhdl' | 'noTop' | 'sim-model' | 'treated-as-testbench';
+
+export const isToldSkip = (reason: SkipReason): reason is keyof typeof TOLD_SKIP_TEXT => reason in TOLD_SKIP_TEXT;

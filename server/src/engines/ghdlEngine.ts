@@ -295,7 +295,7 @@ function withSynth(result: PrepareResult, synth: SynthInputs): PrepareResult {
  */
 export function ghdlSynthCommand(inputs: SynthInputs, target: SynthTarget): SynthCommand {
   const files = inputs.order.filter((name) => target.files.includes(name));
-  return { cmd: getGhdlExe(), args: ['--synth', ...inputs.flags, '--out=none', '-Wno-pragma', ...files, '-e', target.top], extraFiles: [] };
+  return { cmd: getGhdlExe(), args: ['--synth', ...inputs.flags, '--out=none', '-Wno-pragma', ...files, '-e', target.top] };
 }
 
 /** What `ghdl -r` runs: the plan's target, with the options its units were compiled with. */

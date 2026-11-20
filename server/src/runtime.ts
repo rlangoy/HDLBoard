@@ -86,7 +86,8 @@ export function outputCutNote(droppedChars: number): string {
  * that fails after a flood of warnings prints its errors last, so the end holds what
  * the student has to fix (and what classifyCompileFailure reads).
  */
-const HEAD_CHARS = (MAX_COMMAND_OUTPUT_CHARS * 3) / 4;
+const HEAD_SHARE = 0.75;
+const HEAD_CHARS = MAX_COMMAND_OUTPUT_CHARS * HEAD_SHARE;
 const TAIL_CHARS = MAX_COMMAND_OUTPUT_CHARS - HEAD_CHARS;
 
 /**

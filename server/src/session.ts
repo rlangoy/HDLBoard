@@ -37,7 +37,7 @@ import { DEFAULT_COMPILER_OPTIONS, type CompilerOptions, type DecodedCompilerOpt
 import { describeStimFields, sameStimMeaning, stateLength, stimLength } from './engines/boardShape.js';
 import type { DecodedBoard } from './boardFrame.js';
 import {
-  type ErrorStage, type ServerFrame, type StimStep, type SynthCheckRequest, type SynthOutcome, type VhdlFileInput, type WaveFormat, type WaveStatus,
+  type ErrorStage, type ServerFrame, type StimStep, type SynthCheckRequest, type VhdlFileInput, type WaveFormat, type WaveStatus,
 } from './protocol.js';
 import {
   crashBeyondReport,
@@ -51,7 +51,8 @@ import {
   type SimulatorReport,
 } from './runFailure.js';
 import { MAX_WAVE_BYTES, SYNTH_TIMEOUT_MS, WAVE_CHECK_MS, readIntSetting, readVhdlWaveFormat } from './settings.js';
-import { runSynthCheck, SERVER_SYNTH_SLOTS, type SynthSlots } from './synthCheck.js';
+import { SessionSynthCheck } from './sessionSynthCheck.js';
+import { SERVER_SYNTH_SLOTS, type SynthSlots } from './synthCheck.js';
 import { isOwnDumpNotice, OWN_DUMP_MISSING_MESSAGE, sizeLimitMessage } from './wave/waveConsole.js';
 import { sendWaveFile, type WaveSink } from './wave/waveTransfer.js';
 
@@ -202,13 +203,6 @@ function synthLimitsOf(options: SessionOptions): { readonly timeoutMs: number; r
   return { timeoutMs: options.synthTimeoutMs ?? readIntSetting(SYNTH_TIMEOUT_MS), slots: options.synthSlots ?? SERVER_SYNTH_SLOTS };
 }
 
-/** A run that has compiled (or failed to), and the files its RUN sent: what its synthesis check starts from. */
-interface CompiledRun {
-  readonly engine: SimEngine;
-  readonly prepared: PrepareResult;
-  readonly files: readonly VhdlFileInput[];
-}
-
 /** The cap the options give, even an explicit undefined (no cap), else the host's. */
 function memoryCapOf(options: SessionOptions): number | undefined {
   return 'memoryCapMb' in options ? options.memoryCapMb : readMemoryCapMb();
@@ -307,12 +301,8 @@ export class Session {
   private readonly onCrash: SessionOptions['onCrash'];
   private readonly memoryCapMb: number | undefined;
   private idleSinceMs: number;
-  /** The synthesis check the next RUN asked for (`SYNTH-CHECK`); it holds for that RUN only. */
-  private synthRequest: SynthCheckRequest | null = null;
-  /** Kills the synthesis check still running, which a newer RUN or the session's end makes obsolete. */
-  private synthAbort: AbortController | null = null;
-  private readonly synthTimeoutMs: number;
-  private readonly synthSlots: SynthSlots;
+  /** The synthesis checks beside the runs (protocol 8). */
+  private readonly synthCheck: SessionSynthCheck;
 
   /** `chooseEngine` is replaceable so tests can drive a run without a real simulator. */
   constructor(
@@ -331,7 +321,7 @@ export class Session {
     this.onCrash = options.onCrash;
     this.memoryCapMb = memoryCapOf(options);
     this.idleSinceMs = this.now();
-    ({ timeoutMs: this.synthTimeoutMs, slots: this.synthSlots } = synthLimitsOf(options));
+    this.synthCheck = new SessionSynthCheck({ dir: this.dir, send, ...synthLimitsOf(options) });
   }
 
   /** Every state change goes through here, so `idleSince` cannot miss the end of a run. */
@@ -393,13 +383,12 @@ export class Session {
 
   /** `SYNTH-CHECK`: check the next RUN's hardware top for synthesis, beside the simulation (protocol 8). */
   handleSynthCheck(request: SynthCheckRequest): void {
-    this.synthRequest = request;
+    this.synthCheck.ask(request);
   }
 
   /** The RUN a `SYNTH-CHECK` was for was refused before it reached the session: its check is skipped. */
   refuseSynthCheck(): void {
-    this.answerSynth(this.synthRequest, { kind: 'skipped' });
-    this.synthRequest = null;
+    this.synthCheck.refuseAsked();
   }
 
   /**
@@ -508,9 +497,7 @@ export class Session {
 
   async handleRun(files: VhdlFileInput[], topFile?: string, runTarget?: string): Promise<void> {
     // The check asked for is this run's alone; one still running for the last run is no longer news.
-    const synth = this.synthRequest;
-    this.synthRequest = null;
-    this.cancelSynth();
+    const synth = this.synthCheck.takeForRun();
     // Cleared first: the run being replaced is not offered, its waveform is obsolete (W10).
     this.clearWave();
     this.stopActive('stopped');
@@ -520,7 +507,7 @@ export class Session {
     const board = this.boardForRun();
     const compilerOptions = board === undefined ? undefined : this.optionsForRun();
     if (board === undefined || compilerOptions === undefined) {
-      this.answerSynth(synth, { kind: 'skipped' });
+      this.synthCheck.skip(synth);
       return;
     }
 
@@ -528,7 +515,7 @@ export class Session {
     const refusal = refusalBeforeCompile(files, topFile, engine);
     if (refusal !== undefined) {
       this.failRun('analyze', refusal);
-      this.answerSynth(synth, { kind: 'skipped' });
+      this.synthCheck.skip(synth);
       return;
     }
 
@@ -545,46 +532,11 @@ export class Session {
     // Closed, or superseded by a newer RUN while compiling: starting now would leave a
     // simulator running that nothing tracks, and even a failure is no longer news.
     if (prepared === undefined || this.destroyed || request !== this.runRequest) {
-      this.answerSynth(synth, { kind: 'skipped' });
+      this.synthCheck.skip(synth);
       return;
     }
     this.startPrepared(engine, prepared);
-    this.startSynth(synth, { engine, prepared, files });
-  }
-
-  /**
-   * The synthesis check of a run that has started (docs/impl_sim_only_warnings.md § 7):
-   * launched beside the simulation, never awaited. A run that did not compile is not
-   * checked: its compile errors already say more. Only a newer RUN or the session's end
-   * stops the check, not Stop or the run's own end: a testbench may finish before it does.
-   */
-  private startSynth(request: SynthCheckRequest | null, { engine, prepared, files }: CompiledRun): void {
-    if (request === null) return;
-    if (!prepared.ok) return this.answerSynth(request, { kind: 'skipped' });
-    const sent = new Map(files.map((file) => [file.name, file]));
-    const chosen = request.files.flatMap((name) => sent.get(name) ?? []);
-    if (chosen.length !== request.files.length) return this.answerSynth(request, { kind: 'refused' });
-    const inputs = prepared.plan.synth;
-    if (inputs === undefined || engine.synthCommand === undefined) return this.answerSynth(request, { kind: 'unavailable' });
-    const command = engine.synthCommand(inputs, { top: request.top, files: request.files });
-    const abort = new AbortController();
-    this.synthAbort = abort;
-    const run = { dir: this.dir, id: request.id, command, files: chosen, timeoutMs: this.synthTimeoutMs, signal: abort.signal };
-    void runSynthCheck(run, this.synthSlots).then((report) => {
-      if (this.synthAbort === abort) this.synthAbort = null;
-      if (report !== undefined) this.answerSynth(request, report.outcome, report.text);
-    });
-  }
-
-  /** The answer to a check: one `SYNTH-RESULT` per `SYNTH-CHECK` of a run, unless the session has ended. */
-  private answerSynth(request: SynthCheckRequest | null, outcome: SynthOutcome, text = ''): void {
-    if (request === null || this.destroyed) return;
-    this.send({ verb: 'SYNTH-RESULT', id: request.id, outcome, text });
-  }
-
-  private cancelSynth(): void {
-    this.synthAbort?.abort();
-    this.synthAbort = null;
+    this.synthCheck.start(synth, { engine, prepared, files });
   }
 
   /** A finished compile: its failure, or the run it prepared. */
@@ -1080,7 +1032,7 @@ export class Session {
   destroy(): void {
     this.destroyed = true;
     this.compileAbort.abort();
-    this.cancelSynth();
+    this.synthCheck.close();
     this.stopWaveWatchdog();
     this.stopOutputPolling();
     this.stopPacing();

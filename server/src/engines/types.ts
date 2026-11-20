@@ -63,34 +63,29 @@ export interface RunPlan {
    * other options than its own. Absent: none (Icarus's `vvp` takes none).
    */
   readonly runFlags?: readonly string[];
-  /** What the run's synthesis check repeats of this compile (synthCheck.ts); absent, the engine has none. */
+  /** What the run's synthesis check repeats of this compile (synthCheck.ts); absent, the engine has none (Verilog). */
   readonly synth?: SynthInputs;
 }
 
-/**
- * The run's compile as its synthesis check must repeat it (docs/impl_sim_only_warnings.md
- * § 7): the same options, the files in an order the tool reads them in.
- */
+/** The run's compile as its synthesis check must repeat it (docs/impl_sim_only_warnings.md § 7). */
 export interface SynthInputs {
-  /** The compile options of the run: GHDL's flags, or Icarus's option flags (defines, generation). */
+  /** GHDL's flags of the run (ghdlFlags.ts). */
   readonly flags: readonly string[];
-  /** The student's source files in the order the compile read them: GHDL's analysis order. */
+  /** The student's files in the order they analysed. */
   readonly order: readonly string[];
 }
 
 /** What the synthesis check asks for: the hardware top and the files it may read (the client's choice). */
 export interface SynthTarget {
   readonly top: string;
-  /** Source file names, a subset of the run's; headers among them are copied, not compiled. */
+  /** File names, a subset of the run's. */
   readonly files: readonly string[];
 }
 
-/** One synthesis check as a command, run in a folder of its own that holds `files` and `extraFiles`. */
+/** One synthesis check as a command, run in a folder of its own that holds the files it names. */
 export interface SynthCommand {
   readonly cmd: string;
   readonly args: readonly string[];
-  /** Generated files the check needs beside the student's: Icarus's timescale file. */
-  readonly extraFiles: readonly VhdlFileInput[];
 }
 
 /**

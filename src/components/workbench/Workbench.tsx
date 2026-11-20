@@ -374,7 +374,7 @@ export function Workbench() {
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
   const bouncyOption = useBouncyOption();
   const designCheckMode = useDesignCheckMode();
-  // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's or Icarus's too at Start.
+  // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's too at Start (VHDL).
   const synthesisToolCheck = useSynthesisToolCheck();
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
@@ -1633,7 +1633,7 @@ export function Workbench() {
     logRunBoard();
     warnProjectChecks(runFiles);
     if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
-    // GHDL's or Icarus's synthesis check, beside the run: it never delays it (docs/impl_sim_only_warnings.md § 7).
+    // GHDL's synthesis check (VHDL), beside the run: it never delays it (docs/impl_sim_only_warnings.md § 7).
     const synthCheck = toolCheck.start({
       runFiles,
       topFileId: fileId,
