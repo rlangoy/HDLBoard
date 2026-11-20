@@ -1,5 +1,6 @@
 {
   "$comment": "Start-up defaults. A choice made in Settings overrides these in that browser. See docs/SETTINGS.md.",
   "bouncyButtons": true,
-  "designCheck": "synthesis"
+  "designCheck": "synthesis",
+  "synthesisToolCheck": false
 }

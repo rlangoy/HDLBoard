@@ -23,6 +23,8 @@ import { DESIGN_CHECK_OFF } from './simOnly/simOnlyText';
 import { useDesignCheck } from './simOnly/useDesignCheck';
 import { simulatorClockOf } from './simOnly/simulatorClock';
 import { useDesignCheckMode } from './simOnly/useDesignCheckMode';
+import { useSynthesisToolCheck } from './simOnly/useSynthesisToolCheck';
+import { useToolCheck, type ToolConsoleLine } from './simOnly/toolCheck/useToolCheck';
 import { useUpdateCheck } from './useUpdateCheck';
 import { UpdateBell } from './UpdateBell';
 import { BoardFit } from './BoardFit';
@@ -70,7 +72,7 @@ import { UPLOAD_ACCEPT, folderAfterRename, folderForUpload, topAfterDelete } fro
 import { fileNameRefusal, incomingFileRefusals, PROJECT_FILE_REASON, UNREADABLE_ZIP_REASON, type RefusedFile } from './fileNameRules';
 import { filesInZip, isZipName, projectFileInZip, zipPathOf, type ZipMember } from './zipUpload';
 import { DEFAULT_SHOWN_FILE, TOP_LEVEL_ENTITY, type VhdlFile } from './files';
-import { BUSY_STAGE, HdlClient, REFUSED_REASON, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl } from './hdlClient';
+import { BUSY_STAGE, HdlClient, REFUSED_REASON, busyNotice, filesForRun, hdlBackendHttpUrl, hdlBackendUrl, type SynthResult } from './hdlClient';
 import { NoWaveformDialog } from '../waveform/NoWaveformDialog';
 import { useWaveformView } from '../waveform/useWaveformView';
 import { useProjectWaveViews } from './useProjectWaveViews';
@@ -372,6 +374,8 @@ export function Workbench() {
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
   const bouncyOption = useBouncyOption();
   const designCheckMode = useDesignCheckMode();
+  // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's or Icarus's too at Start.
+  const synthesisToolCheck = useSynthesisToolCheck();
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
@@ -564,6 +568,8 @@ export function Workbench() {
   const drivingOutputs = useRef<ReadonlySet<string>>(new Set());
 
   const clientRef = useRef<HdlClient | null>(null);
+  // The synthesis check's answers reach the check of this render (the client's handlers are made once).
+  const synthResultRef = useRef<(result: SynthResult) => void>(() => {});
   // The waveform viewer (docs/waveform_viewer_spec.md): recorded for testbench runs, fetched when opened.
   const waveView = useWaveformView({
     waveGet: (run) => clientRef.current?.waveGet(run),
@@ -656,6 +662,7 @@ export function Workbench() {
           blankBoard();
         },
         onOldBackend: () => appendLog(BOARD_TEXT.oldBackend, 'error'),
+        onSynthResult: (result) => synthResultRef.current(result),
         wave: waveHandlers,
       });
     }
@@ -1626,10 +1633,19 @@ export function Workbench() {
     logRunBoard();
     warnProjectChecks(runFiles);
     if (topFile) hintForeignNames(topFile, runTarget ?? unitName);
+    // GHDL's or Icarus's synthesis check, beside the run: it never delays it (docs/impl_sim_only_warnings.md § 7).
+    const synthCheck = toolCheck.start({
+      runFiles,
+      topFileId: fileId,
+      unitName: runTarget ?? unitName,
+      compilerOptions: project.compilerOptions,
+      backend: hdlBackendUrl(HDL_WS_PORT),
+    });
     getClient().run(files, topFile?.name, runTarget, {
       recordWave: waveView.waveform.recording,
       board: activeBoard.ports,
       compilerOptions: project.compilerOptions,
+      ...(synthCheck && { synthCheck }),
     });
   };
 
@@ -1783,7 +1799,29 @@ export function Workbench() {
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
   const simulatorClock = useMemo(() => simulatorClockOf(activeBoard), [activeBoard]);
-  const designCheck = useDesignCheck({ view: tb.designView, overrides: tb.overrides, mode: designCheckMode.value, files, setSimModel: tb.setSimModel, simulatorClock, viewNow: tb.designViewNow });
+  // A line of the synthesis check's answer; *Line n* opens the line's problem card, as the Start summary's does.
+  const logToolCheck = (line: ToolConsoleLine) => {
+    const at = line.at;
+    if (at === undefined) appendLog(line.text);
+    else logWithLink(line.text, { label: `Line ${at.line}`, onClick: () => openSummaryLine(at) });
+  };
+  const toolCheck = useToolCheck({
+    enabled: designCheckMode.value === 'synthesis' && synthesisToolCheck.value,
+    files,
+    log: logToolCheck,
+    viewNow: tb.designViewNow,
+  });
+  synthResultRef.current = toolCheck.receive;
+  const designCheck = useDesignCheck({
+    view: tb.designView,
+    overrides: tb.overrides,
+    mode: designCheckMode.value,
+    files,
+    setSimModel: tb.setSimModel,
+    simulatorClock,
+    viewNow: tb.designViewNow,
+    tool: toolCheck,
+  });
   const shownDiagnostics = useMemo(() => addToFiles(diagnostics.byFile, designCheck.diagnostics), [diagnostics.byFile, designCheck.diagnostics]);
   // A click in the editor clears the run's markers and quiets the live warnings; a console link shows them again.
   const { quietFile: quietLiveWarnings, showFile: showLiveWarnings } = designCheck;
@@ -2222,7 +2260,7 @@ export function Workbench() {
                   bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
                 }}
                 editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
-                simulation={{ designCheck: designCheckMode, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
                   check: { status: updateCheck.status, onCheck: updateCheck.checkNow },

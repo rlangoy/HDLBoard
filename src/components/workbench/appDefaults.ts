@@ -7,7 +7,7 @@
  * wins over the file; the file wins over the built-in default. A missing file is normal;
  * a broken one is logged and the built-in defaults are used.
  *
- *   { "bouncyButtons": false, "designCheck": "simulation" }
+ *   { "bouncyButtons": false, "designCheck": "simulation", "synthesisToolCheck": true }
  */
 
 import { fetchBoardFile, type FetchedText } from '../../boards/boardCatalog';
@@ -23,6 +23,11 @@ export interface AppDefaults {
    * file sets it — the built-in default is the setting's own (`DEFAULT_DESIGN_CHECK`).
    */
   readonly designCheck?: DesignCheckMode;
+  /**
+   * Settings › Simulation › Design check › *Quick check + GHDL/Icarus check*
+   * (docs/impl_sim_only_warnings.md § 7); only when the file sets it — built in, it is off.
+   */
+  readonly synthesisToolCheck?: boolean;
 }
 
 export const BUILT_IN_DEFAULTS: AppDefaults = { bouncyButtons: true };
@@ -38,7 +43,11 @@ export interface ParsedDefaults {
 type SettingType = 'boolean' | 'designCheck';
 
 /** Each setting the file may hold, and the type its value must have. A new setting is one more line. */
-const SETTING_TYPES: { readonly [K in keyof AppDefaults]-?: SettingType } = { bouncyButtons: 'boolean', designCheck: 'designCheck' };
+const SETTING_TYPES: { readonly [K in keyof AppDefaults]-?: SettingType } = {
+  bouncyButtons: 'boolean',
+  designCheck: 'designCheck',
+  synthesisToolCheck: 'boolean',
+};
 const TYPE_TEXT: Readonly<Record<SettingType, string>> = { boolean: 'true or false', designCheck: '"synthesis" or "simulation"' };
 const IS_TYPE: Readonly<Record<SettingType, (value: unknown) => boolean>> = {
   boolean: (value) => typeof value === 'boolean',

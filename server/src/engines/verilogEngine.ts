@@ -25,12 +25,12 @@ import { getToolPaths } from '../verilog/tools.js';
 import { findOwnDump } from '../verilog/dumpDetection.js';
 import { OWN_DUMP_MISSING_MESSAGE } from '../wave/waveConsole.js';
 import { WAVE_MODULE_FILE_NAME, WAVE_MODULE_NAME, waveModuleSource, wavePlusarg } from '../verilog/waveModule.js';
-import type { ToolPaths } from '../verilog/toolPaths.js';
+import { compilerFlags, type ToolPaths } from '../verilog/toolPaths.js';
 import { boardTimingFor, TIMING_WITHOUT_CLOCK_50 } from './boardTiming.js';
 import { sameNameNotes, type SameNameDeclarations } from './sameNameNotes.js';
 import type { BoardIo } from './boardPorts.js';
 import { checkBoardPortShapes, shapeNotes, type DeclaredPort } from './boardShapeCheck.js';
-import type { PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine } from './types.js';
+import type { PlannedWave, PrepareRequest, PrepareResult, RunPlan, SimEngine, SynthCommand, SynthInputs, SynthTarget } from './types.js';
 
 /** Every platform paces through stdin: Verilog can block in `$fgets` on it, and there is no `mkfifo` on Windows. */
 const PACING: RunPlan['pacing'] = 'stdin';
@@ -124,8 +124,13 @@ const compileRequest = (build: Build, target: string, extras: Extras = {}): Comp
   signal: build.signal,
 });
 
+/** What the synthesis check repeats of this compile: the option flags, and the sources compiled. */
+const synthInputsOf = (build: Build): SynthInputs => ({ flags: build.optionFlags, order: build.sources });
+
 function batchPlan(build: Build, messages: readonly string[], wave: PlannedWave | undefined): RunPlan {
-  const plan: RunPlan = { mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages };
+  const plan: RunPlan = {
+    mode: 'batch', dir: build.dir, runTarget: build.top, timing: TIMING_WITHOUT_CLOCK_50, pacing: PACING, messages, synth: synthInputsOf(build),
+  };
   return wave === undefined ? plan : { ...plan, wave };
 }
 
@@ -148,7 +153,23 @@ function planWave(files: readonly VhdlFileInput[]): Recording {
 
 function boardPlan(build: Build, ports: readonly Port[], messages: readonly string[]): RunPlan {
   const timing = boardTimingFor(boardPortSpellings(ports, build.board).has(build.board.clock.port.toLowerCase()));
-  return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages };
+  return { mode: 'board', dir: build.dir, runTarget: SIMULATION_FILE_NAME, timing, pacing: PACING, messages, synth: synthInputsOf(build) };
+}
+
+/**
+ * Icarus's synthesis check (docs/impl_sim_only_warnings.md § 7): `iverilog -S -tnull`
+ * with the run's option flags, `SYNTHESIS` defined as the live check reads the code, and
+ * the timescale file first, as every compile has it. Advisory only: Icarus's synthesis
+ * refuses legal Quartus code, so the page never classifies a design by it.
+ */
+export function iverilogSynthCommand(inputs: SynthInputs, target: SynthTarget): SynthCommand {
+  const tools = getToolPaths();
+  const sources = inputs.order.filter((name) => target.files.includes(name));
+  return {
+    cmd: tools.iverilog,
+    args: [...compilerFlags(tools), ...inputs.flags, '-S', '-tnull', '-DSYNTHESIS', '-Wno-timescale', '-I.', '-s', target.top, TIMESCALE_FILE_NAME, ...sources],
+    extraFiles: [{ name: TIMESCALE_FILE_NAME, content: TIMESCALE_SOURCE }],
+  };
 }
 
 /**
@@ -238,4 +259,5 @@ export const verilogEngine: SimEngine = {
     const plusargs = usesHelper(plan.wave) && waveFile !== undefined ? [wavePlusarg(waveFile)] : [];
     return startVerilogBatchRun(getToolPaths(), { dir: plan.dir, timeoutMs, plusargs }, onOutput);
   },
+  synthCommand: iverilogSynthCommand,
 };

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { decodeClientFrame, encodeClientFrame, parseRunHeader } from './protocol.js';
+import { decodeClientFrame, decodeServerFrame, encodeClientFrame, encodeServerFrame, parseRunHeader } from './protocol.js';
 
 /** docs/impl_split_screen.md D20: `RUN <topFile> [@<unit>]`. */
 
@@ -90,5 +90,66 @@ describe('OPTIONS', () => {
 describe('a RUN frame that cannot be decoded', () => {
   test('is marked as a RUN, so its refusal ends the run', () => {
     assert.deepEqual(decodeClientFrame('RUN top.vhd\n'), { message: 'RUN body contains no @@FILE ...@@ sections', run: true });
+  });
+});
+
+/** Protocol 8: the synthesis check beside a run (docs/impl_sim_only_warnings.md § 7). */
+describe('SYNTH-CHECK', () => {
+  test('carries a check number, a top and file names', () => {
+    assert.deepEqual(decodeClientFrame('SYNTH-CHECK 3\n{"top":"counter","files":["counter.vhd","pkg.vhd"]}'), {
+      verb: 'SYNTH-CHECK',
+      id: 3,
+      top: 'counter',
+      files: ['counter.vhd', 'pkg.vhd'],
+    });
+  });
+
+  test('round-trips', () => {
+    const frame = { verb: 'SYNTH-CHECK', id: 12, top: 'blink', files: ['blink.v'] } as const;
+    assert.deepEqual(decodeClientFrame(encodeClientFrame(frame)), frame);
+  });
+
+  test('names each file once', () => {
+    const decoded = decodeClientFrame('SYNTH-CHECK 1\n{"top":"a","files":["a.vhd","a.vhd"]}');
+    assert.deepEqual('files' in decoded && decoded.files, ['a.vhd']);
+  });
+
+  test('is a protocol error, not a refused RUN, when it is malformed', () => {
+    for (const text of [
+      'SYNTH-CHECK\n{"top":"a","files":["a.vhd"]}',
+      'SYNTH-CHECK x\n{"top":"a","files":["a.vhd"]}',
+      'SYNTH-CHECK 1\nnot json',
+      'SYNTH-CHECK 1\n{"top":"-e","files":["a.vhd"]}',
+      'SYNTH-CHECK 1\n{"top":"a b","files":["a.vhd"]}',
+      'SYNTH-CHECK 1\n{"top":"a","files":[]}',
+      'SYNTH-CHECK 1\n{"top":"a","files":[""]}',
+      'SYNTH-CHECK 1\n{"top":"a","files":"a.vhd"}',
+      'SYNTH-CHECK 1\nnull',
+    ]) {
+      const decoded = decodeClientFrame(text);
+      assert.ok('message' in decoded, text);
+      assert.equal('run' in decoded, false, text);
+    }
+  });
+});
+
+describe('SYNTH-RESULT', () => {
+  test('round-trips an exit code with the tool text', () => {
+    const frame = { verb: 'SYNTH-RESULT', id: 4, outcome: { kind: 'exit', code: 1 }, text: 'top.vhd:3:1:error: latch infered\nmore' } as const;
+    assert.equal(encodeServerFrame(frame), 'SYNTH-RESULT 4 exit 1\ntop.vhd:3:1:error: latch infered\nmore');
+    assert.deepEqual(decodeServerFrame(encodeServerFrame(frame)), frame);
+  });
+
+  test('round-trips every stop', () => {
+    for (const kind of ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'] as const) {
+      const frame = { verb: 'SYNTH-RESULT', id: 9, outcome: { kind }, text: '' } as const;
+      assert.deepEqual(decodeServerFrame(encodeServerFrame(frame)), frame);
+    }
+  });
+
+  test('refuses an unknown outcome or a bad number', () => {
+    for (const text of ['SYNTH-RESULT 1 melted', 'SYNTH-RESULT x exit 0', 'SYNTH-RESULT 1 exit', 'SYNTH-RESULT 1 exit -1', 'SYNTH-RESULT 1', 'SYNTH-RESULT 1 timeout 3']) {
+      assert.ok('message' in decodeServerFrame(text), text);
+    }
   });
 });

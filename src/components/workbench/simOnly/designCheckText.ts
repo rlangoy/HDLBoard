@@ -12,6 +12,13 @@ export const DESIGN_CHECK_TEXT = {
   synthesisHint: 'Check designs for FPGA synthesis. Lines that only work in simulation get a warning, and the file is marked SIM-only.',
   simulation: 'Simulation only',
   simulationHint: "Don't check designs for synthesis. For models and exercises that never go to an FPGA.",
+  toolCheckTitle: 'How Synthesis checks',
+  quickCheck: 'Quick check',
+  quickCheckHint: "HDLBoard's own check, live while you type. Nothing more runs when you press Start.",
+  toolCheck: 'Quick check + GHDL/Icarus check',
+  toolCheckHint:
+    'Also checks the design with GHDL (VHDL) or Icarus Verilog when you press Start, beside the simulation, which never waits for it. ' +
+    'GHDL can mark a design SIM-only; Icarus only adds notes. Neither is a Quartus check: a design they accept may still not fit or build.',
   simOnlyLabel: 'SIM-only',
   fileRoleSimOnly: 'Simulation-only design: runs in the simulator, not on the board',
   fileRoleMixedSimOnly: 'Simulation-only design + testbench',

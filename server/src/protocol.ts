@@ -56,6 +56,33 @@ const WAVE_FORMATS: readonly WaveFormat[] = ['ghw', 'vcd'];
 export type WaveStatus = 'complete' | 'stopped' | 'timeout' | 'size-limit';
 const WAVE_STATUSES: readonly WaveStatus[] = ['complete', 'stopped', 'timeout', 'size-limit'];
 
+/**
+ * How a synthesis check ended (protocol 8, docs/impl_sim_only_warnings.md § 7): the tool's
+ * exit code, or why it gave none. The server says only what happened to the process;
+ * what the messages mean is the page's to decide.
+ * - `timeout`: stopped at HDL_SYNTH_TIMEOUT_MS. `crash`: died on a signal or a crash status.
+ * - `unavailable`: the tool could not be started, or has no synthesis.
+ * - `busy`: the server's checks were all taken (HDL_SYNTH_MAX_CONCURRENT).
+ * - `skipped`: the run did not compile, or never started. `refused`: the request named a file the run did not send.
+ */
+export const SYNTH_STOPS = ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'] as const;
+export type SynthStop = (typeof SYNTH_STOPS)[number];
+export type SynthOutcome = { readonly kind: 'exit'; readonly code: number } | { readonly kind: SynthStop };
+
+/** What a `SYNTH-CHECK` asks for: the hardware top and the run's files it may read. */
+export interface SynthCheckRequest {
+  /** The page's own number for the check, echoed in its `SYNTH-RESULT`. */
+  readonly id: number;
+  readonly top: string;
+  readonly files: readonly string[];
+}
+
+/** The most files one check may name: a project's, never more than a RUN can carry. */
+export const MAX_SYNTH_FILES = 256;
+/** A unit name a check may name: a plain VHDL or Verilog identifier, never an option. */
+const SYNTH_TOP = /^[A-Za-z_][A-Za-z0-9_$]{0,254}$/;
+const MAX_SYNTH_FILE_NAME = 255;
+
 export type ClientFrame =
   | { verb: 'HELLO'; version: string }
   // `topFile`: the submitted file whose declared entity should be
@@ -78,6 +105,8 @@ export type ClientFrame =
   | { verb: 'WAVE'; on: boolean }
   // Asks for the waveform of run `run`; answered with WAVE-BEGIN … WAVE-END, or WAVE-NONE (§ 7.4).
   | { verb: 'WAVE-GET'; run: number }
+  // A synthesis check of the next RUN's hardware top (protocol 8); it holds for that RUN only.
+  | ({ verb: 'SYNTH-CHECK' } & SynthCheckRequest)
   | { verb: 'RESET' }
   | { verb: 'STOP' }
   | { verb: 'PING' };
@@ -96,6 +125,8 @@ export type ServerFrame =
   | { verb: 'WAVE-END'; run: number }
   // That run's waveform is not available (a newer run replaced it, or it was never written).
   | { verb: 'WAVE-NONE'; run: number }
+  // How check `id` ended, and what the tool printed (protocol 8). One per SYNTH-CHECK of a RUN that compiled or was refused.
+  | { verb: 'SYNTH-RESULT'; id: number; outcome: SynthOutcome; text: string }
   | { verb: 'PONG' };
 
 export interface ProtocolError {
@@ -189,6 +220,50 @@ export function parseRunHeader(inline: string): { topFile?: string; runTarget?: 
   return { topFile: inline || undefined };
 }
 
+/**
+ * `SYNTH-CHECK <id>` with a JSON body `{"top":"<unit>","files":["<name>",…]}`. Invalid,
+ * it is a protocol error alone: the RUN after it runs, unchecked.
+ */
+function decodeSynthCheck(inline: string, body: string): ClientFrame | ProtocolError {
+  const id = runNumber(inline);
+  if (id === undefined) return { message: `SYNTH-CHECK requires a check number, got: ${JSON.stringify(inline)}` };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { message: 'SYNTH-CHECK body is not JSON' };
+  }
+  const request = parsed as { top?: unknown; files?: unknown };
+  if (typeof request !== 'object' || request === null || typeof request.top !== 'string' || !SYNTH_TOP.test(request.top)) {
+    return { message: 'SYNTH-CHECK needs a unit name as "top"' };
+  }
+  const { files } = request;
+  const isName = (name: unknown): name is string => typeof name === 'string' && name !== '' && name.length <= MAX_SYNTH_FILE_NAME;
+  if (!Array.isArray(files) || files.length === 0 || files.length > MAX_SYNTH_FILES || !files.every(isName)) {
+    return { message: `SYNTH-CHECK needs 1 to ${MAX_SYNTH_FILES} file names as "files"` };
+  }
+  return { verb: 'SYNTH-CHECK', id, top: request.top, files: [...new Set(files)] };
+}
+
+function decodeSynthOutcome(text: string): SynthOutcome | undefined {
+  const [kind = '', code, ...rest] = text.split(' ');
+  if (kind === 'exit') {
+    const exitCode = code === undefined || rest.length > 0 ? undefined : runNumber(code);
+    return exitCode === undefined ? undefined : { kind: 'exit', code: exitCode };
+  }
+  return code === undefined && (SYNTH_STOPS as readonly string[]).includes(kind) ? { kind: kind as SynthStop } : undefined;
+}
+
+const encodeSynthOutcome = (outcome: SynthOutcome): string => (outcome.kind === 'exit' ? `exit ${outcome.code}` : outcome.kind);
+
+function decodeSynthResult(inline: string, body: string): ServerFrame | ProtocolError {
+  const space = inline.indexOf(' ');
+  const id = runNumber(space === -1 ? inline : inline.slice(0, space));
+  const outcome = space === -1 ? undefined : decodeSynthOutcome(inline.slice(space + 1));
+  if (id === undefined || outcome === undefined) return { message: `SYNTH-RESULT has a bad check number or outcome: ${JSON.stringify(inline)}` };
+  return { verb: 'SYNTH-RESULT', id, outcome, text: body };
+}
+
 /** A RUN frame, or why it is refused, marked as a RUN's refusal. */
 function decodeRun(inline: string, body: string): ClientFrame | ProtocolError {
   const files = splitRunBody(body);
@@ -239,6 +314,8 @@ export function decodeClientFrame(text: string): ClientFrame | ProtocolError {
       const run = runNumber(inline);
       return run === undefined ? { message: `WAVE-GET requires a run number, got: ${JSON.stringify(inline)}` } : { verb: 'WAVE-GET', run };
     }
+    case 'SYNTH-CHECK':
+      return decodeSynthCheck(inline, body);
     case 'RESET':
       return { verb: 'RESET' };
     case 'STOP':
@@ -291,6 +368,8 @@ export function encodeClientFrame(frame: ClientFrame): string {
       return `WAVE ${frame.on ? 'on' : 'off'}`;
     case 'WAVE-GET':
       return `WAVE-GET ${frame.run}`;
+    case 'SYNTH-CHECK':
+      return `SYNTH-CHECK ${frame.id}\n${JSON.stringify({ top: frame.top, files: frame.files })}`;
     case 'RESET':
       return 'RESET';
     case 'STOP':
@@ -352,6 +431,8 @@ export function decodeServerFrame(text: string): ServerFrame | ProtocolError {
       if (run === undefined) return { message: `${verb} requires a run number, got: ${JSON.stringify(inline)}` };
       return { verb, run };
     }
+    case 'SYNTH-RESULT':
+      return decodeSynthResult(inline, body);
     case 'PONG':
       return { verb: 'PONG' };
     default:
@@ -381,6 +462,8 @@ export function encodeServerFrame(frame: ServerFrame): string {
       return `WAVE-END ${frame.run}`;
     case 'WAVE-NONE':
       return `WAVE-NONE ${frame.run}`;
+    case 'SYNTH-RESULT':
+      return `SYNTH-RESULT ${frame.id} ${encodeSynthOutcome(frame.outcome)}\n${frame.text}`;
     case 'PONG':
       return 'PONG';
   }

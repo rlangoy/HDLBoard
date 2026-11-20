@@ -64,6 +64,11 @@ const NEW_CODE = [
   'src/compilerOptions.test.ts',
   'src/session.options.test.ts',
   'src/integration/compilerOptions.test.ts',
+  // The synthesis check beside a run (docs/impl_sim_only_warnings.md § 7).
+  'src/synthCheck.ts',
+  'src/synthCheck.test.ts',
+  'src/session.synth.test.ts',
+  'src/integration/synthCheck.test.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

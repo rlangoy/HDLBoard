@@ -25,3 +25,39 @@ describe('the Design check card', () => {
     expect(render('simulation')).toMatch(/is-selected"><input[^>]*value="simulation"/);
   });
 });
+
+describe('the Synthesis check choices', () => {
+  const renderWith = (mode: DesignCheckMode, toolCheck: boolean) =>
+    renderToStaticMarkup(
+      <SimulationSection
+        designCheck={{ value: mode, onChange: ignore }}
+        toolCheck={{ value: toolCheck, onChange: ignore }}
+        recordWaves={{ value: true, onChange: ignore }}
+      />,
+    );
+
+  test('sit under Synthesis: Quick check, or + GHDL/Icarus check', () => {
+    const html = renderWith('synthesis', false);
+    expect(html.match(/<strong>[^<]+<\/strong>/g)?.slice(0, 4)).toEqual([
+      '<strong>Synthesis</strong>',
+      '<strong>Quick check</strong>',
+      '<strong>Quick check + GHDL/Icarus check</strong>',
+      '<strong>Simulation only</strong>',
+    ]);
+  });
+
+  test('check the choice in effect', () => {
+    expect(renderWith('synthesis', true)).toMatch(/is-selected"><input[^>]*value="tool"/);
+    expect(renderWith('synthesis', false)).toMatch(/is-selected"><input[^>]*value="quick"/);
+  });
+
+  test('cannot be chosen under Simulation only', () => {
+    const inputOf = (html: string, value: string) => html.match(/<input [^>]*>/g)?.find((tag) => tag.includes(`value="${value}"`)) ?? '';
+    expect(inputOf(renderWith('simulation', false), 'tool')).toContain('disabled=""');
+    expect(inputOf(renderWith('synthesis', false), 'tool')).not.toContain('disabled');
+  });
+
+  test('are not shown without the setting', () => {
+    expect(render('synthesis')).not.toContain('Quick check');
+  });
+});

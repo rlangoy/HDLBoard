@@ -13,6 +13,7 @@ import type { TestbenchOverrides } from '../tbDetect/types';
 import { detectedSimOnly, nowRtl, nowSimOnly, simOnlyTooltip } from './designCheckText';
 import { isWarnable, makesSimOnly } from './findings';
 import { CONSTRUCT_TITLE, multipleDriversSummary, simOnlySummary } from './simOnlyText';
+import { TOOL_NAME } from './toolCheck/toolCheckText';
 import type { DesignCheck, FileGroup, SimOnlyFinding } from './types';
 
 /** The findings of `fileId` that its line warnings show, one per line, in line order. */
@@ -23,12 +24,18 @@ function warnedLines(check: DesignCheck, overrides: TestbenchOverrides, fileId: 
 
 export const isSimOnlyGroup = (group: FileGroup | undefined): boolean => group === 'sim-only' || group === 'mixed-sim-only';
 
-/** The SIM-only badge's tooltip and *Detected* line, or undefined when the file is not SIM-only. */
+/**
+ * The SIM-only badge's tooltip and *Detected* line, or undefined when the file is not
+ * SIM-only: the live findings, and the synthesis check's on other lines, named with its tool.
+ */
 export function simOnlyBadgeText(check: DesignCheck, overrides: TestbenchOverrides, fileId: string) {
   if (!isSimOnlyGroup(check.groups.byFile.get(fileId))) return undefined;
-  const lines = warnedLines(check, overrides, fileId);
-  const detected = detectedSimOnly(lines.map((f) => ({ title: CONSTRUCT_TITLE[f.construct], line: f.line })));
-  return { tooltip: simOnlyTooltip(lines.length), detected };
+  const live = warnedLines(check, overrides, fileId).map((f) => ({ title: CONSTRUCT_TITLE[f.construct], line: f.line }));
+  const tool = check.toolFindings
+    .filter((f) => f.fileId === fileId && isWarnable(f, overrides))
+    .map((f) => ({ title: `${f.title} (${TOOL_NAME[f.tool]})`, line: f.line }));
+  const lines = [...live, ...tool].filter((f, i, all) => all.findIndex((g) => g.line === f.line) === i).sort((a, b) => a.line - b.line);
+  return { tooltip: simOnlyTooltip(lines.length), detected: detectedSimOnly(lines) };
 }
 
 export interface SummaryLine {

@@ -12,6 +12,7 @@
  */
 
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { constants as osConstants, setPriority } from 'node:os';
 import { childEnv } from './childEnv.js';
 
 export interface CmdResult {
@@ -19,6 +20,8 @@ export interface CmdResult {
   out: string;
   err: string;
   timedOut: boolean;
+  /** The signal that ended the process, when one did (a crash, or a kill). */
+  signal?: NodeJS.Signals | null;
 }
 
 export interface CommandOptions {
@@ -29,6 +32,11 @@ export interface CommandOptions {
   readonly timeoutMs?: number;
   /** Aborted, the command is killed with every process it started, or never started. */
   readonly signal?: AbortSignal;
+  /**
+   * Runs below normal priority, so it never takes the CPU from a simulation: the
+   * synthesis check beside a live board (synthCheck.ts).
+   */
+  readonly lowPriority?: boolean;
 }
 
 const ABORTED: CmdResult = { code: -1, out: '', err: 'Stopped: the session ended.', timedOut: false };
@@ -119,11 +127,22 @@ function fromFirstLineBreak(text: string): string {
   return start === -1 ? text : text.slice(start + 1);
 }
 
-export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS, signal }: CommandOptions): Promise<CmdResult> {
+/** Lowers a child's priority; a platform or a process that refuses changes nothing else. */
+function lowerPriority(child: ChildProcess): void {
+  if (child.pid === undefined) return;
+  try {
+    setPriority(child.pid, osConstants.priority.PRIORITY_BELOW_NORMAL);
+  } catch {
+    // It runs at normal priority, as every other command does.
+  }
+}
+
+export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS, signal, lowPriority = false }: CommandOptions): Promise<CmdResult> {
   if (signal?.aborted) return Promise.resolve(ABORTED);
   return new Promise((resolve) => {
     // Its own process group on POSIX, so a timeout reaches the tools it starts too (killTree).
     const child = spawn(cmd, args, { cwd, env: childEnv(), detached: process.platform !== 'win32' });
+    if (lowPriority) lowerPriority(child);
     const out = new BoundedOutput();
     const err = new BoundedOutput();
     let timedOut = false;
@@ -142,9 +161,9 @@ export function runCommand({ cmd, args, cwd, timeoutMs = DEFAULT_COMMAND_TIMEOUT
       clearTimeout(timer);
       resolve({ code: -1, out: String(out), err: String(err) + String(e), timedOut });
     });
-    child.on('close', (code) => {
+    child.on('close', (code, closeSignal) => {
       clearTimeout(timer);
-      resolve({ code: code ?? -1, out: String(out), err: String(err), timedOut });
+      resolve({ code: code ?? -1, out: String(out), err: String(err), timedOut, signal: closeSignal });
     });
   });
 }

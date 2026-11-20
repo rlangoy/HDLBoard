@@ -8,6 +8,7 @@ import {
   DEFAULT_DESIGN_CHECK, DESIGN_CHECK_STORAGE_KEY, designCheckInEffect, loadDesignCheckChoice, saveDesignCheckChoice,
 } from './designCheckMode';
 import { withSimModel, withoutSimModel } from './simModels';
+import { DEFAULT_SYNTHESIS_TOOL_CHECK, synthesisToolCheckInEffect } from './useSynthesisToolCheck';
 import { EMPTY_OVERRIDES } from '../tbDetect/types';
 import { withoutFile } from '../splitModel';
 
@@ -106,5 +107,23 @@ describe('the Simulation model mark', () => {
 
   test('a mark on a file that is not there is dropped', () => {
     expect(parseOverridesForTest({ roles: {}, pairs: {}, simModels: { 'gone.vhd': true } }).simModels).toBeUndefined();
+  });
+});
+
+/** Settings › Simulation › Design check › Synthesis: Quick check, or + GHDL/Icarus check (§ 7). */
+describe('the synthesis tool check in effect', () => {
+  test('is off on a fresh install, and while settings.json loads', () => {
+    expect(synthesisToolCheckInEffect(null, null)).toBe(false);
+    expect(synthesisToolCheckInEffect(null, DEFAULT_SYNTHESIS_TOOL_CHECK)).toBe(false);
+  });
+
+  test("follows settings.json, under the student's own choice", () => {
+    expect(synthesisToolCheckInEffect(null, true)).toBe(true);
+    expect(synthesisToolCheckInEffect(false, true)).toBe(false);
+  });
+
+  test('settings.json may set it, as a boolean only', () => {
+    expect(parseAppDefaults('{ "synthesisToolCheck": true }')).toEqual({ defaults: { bouncyButtons: true, synthesisToolCheck: true }, warnings: [] });
+    expect(parseAppDefaults('{ "synthesisToolCheck": "yes" }').warnings).toEqual([`${APP_DEFAULTS_FILE}: synthesisToolCheck must be true or false.`]);
   });
 });

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { HdlClient, busyNotice } from './hdlClient';
+import { HdlClient, SYNTH_ANSWER_WAIT_MS, busyNotice, parseSynthResult } from './hdlClient';
 import type { VhdlFile } from './files';
 import { builtInBoard, DEFAULT_BOARD } from '../../boards/boardCatalog';
 import { encodeBoardFrame, encodeV1BoardFrame } from '../../boards/boardFrame';
@@ -67,7 +67,7 @@ const PROJECT: VhdlFile[] = [
 ];
 
 /** What a backend of this release answers HELLO with; a run waits for it. */
-const WELCOME_CURRENT = 'WELCOME 7';
+const WELCOME_CURRENT = 'WELCOME 8';
 
 const lastFrame = (): string => {
   const sent = FakeSocket.last?.sent ?? [];
@@ -531,5 +531,101 @@ describe('a full server (ERROR busy)', () => {
 
   test('busyNotice keeps a text without a link as it is', () => {
     expect(busyNotice('The server is busy.')).toEqual({ text: 'The server is busy.' });
+  });
+});
+
+/** Protocol 8: the synthesis check beside a run (docs/impl_sim_only_warnings.md § 7). */
+describe('the synthesis check', () => {
+  const CHECK = { id: 3, top: 'top', files: ['top.vhd'] };
+
+  beforeEach(() => {
+    FakeSocket.last = undefined;
+    FakeSocket.initialState = FakeSocket.OPEN;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function startChecked(welcome: string) {
+    const handlers = { ...recordingHandlers(), onSynthResult: vi.fn() };
+    const client = new HdlClient('ws://test', handlers);
+    client.run(PROJECT, 'top.vhd', null, { recordWave: false, board: DEFAULT_BOARD.ports, synthCheck: CHECK });
+    const socket = FakeSocket.last;
+    socket?.receive(welcome);
+    return { client, handlers, socket };
+  }
+
+  const verbs = (socket: FakeSocket | undefined) => (socket?.sent ?? []).map((frame) => frame.split(/\s/)[0]);
+
+  test('goes right before RUN, with the unit and the files as JSON', () => {
+    const { socket } = startChecked(WELCOME_CURRENT);
+    expect(verbs(socket)).toEqual(['WAVE', 'BOARD', 'OPTIONS', 'SYNTH-CHECK', 'RUN']);
+    expect(socket?.sent.find((frame) => frame.startsWith('SYNTH-CHECK'))).toBe('SYNTH-CHECK 3\n{"top":"top","files":["top.vhd"]}');
+  });
+
+  test('is never sent to a protocol-7 backend, which gets exactly the frames it got before', () => {
+    const { socket, handlers } = startChecked('WELCOME 7');
+    expect(verbs(socket)).toEqual(['WAVE', 'BOARD', 'OPTIONS', 'RUN']);
+    expect(handlers.onSynthResult).toHaveBeenCalledWith({ id: 3, outcome: { kind: 'unsupported' }, text: '' });
+  });
+
+  test('is not sent when the run asks for none', () => {
+    runWith('top.vhd');
+    expect(verbs(FakeSocket.last)).not.toContain('SYNTH-CHECK');
+  });
+
+  test('hands its answer on', () => {
+    const { socket, handlers } = startChecked(WELCOME_CURRENT);
+    socket?.receive('SYNTH-RESULT 3 exit 1\ntop.vhd:7:10:error: latch infered for net "q"');
+    expect(handlers.onSynthResult).toHaveBeenCalledWith({ id: 3, outcome: { kind: 'exit', code: 1 }, text: 'top.vhd:7:10:error: latch infered for net "q"' });
+  });
+
+  test('keeps a finished run\'s socket open until its answer is in, then closes it', () => {
+    const { socket } = startChecked(WELCOME_CURRENT);
+    socket?.receive('READY');
+    socket?.receive('DONE completed');
+    expect(socket?.closed).toBe(false);
+    socket?.receive('SYNTH-RESULT 3 exit 0\n');
+    expect(socket?.closed).toBe(true);
+  });
+
+  test('closes a finished run\'s socket at once without a check', () => {
+    runWith('top.vhd');
+    FakeSocket.last?.receive('READY');
+    FakeSocket.last?.receive('DONE completed');
+    expect(FakeSocket.last?.closed).toBe(true);
+  });
+
+  test('gives up waiting after SYNTH_ANSWER_WAIT_MS, with no answer', () => {
+    vi.useFakeTimers();
+    const { socket, handlers } = startChecked(WELCOME_CURRENT);
+    socket?.receive('DONE completed');
+    vi.advanceTimersByTime(SYNTH_ANSWER_WAIT_MS);
+    expect(handlers.onSynthResult).toHaveBeenCalledWith({ id: 3, outcome: { kind: 'no-answer' }, text: '' });
+    expect(socket?.closed).toBe(true);
+  });
+
+  test('has no answer when its socket closes first', () => {
+    const { socket, handlers } = startChecked(WELCOME_CURRENT);
+    socket?.onclose?.();
+    expect(handlers.onSynthResult).toHaveBeenCalledWith({ id: 3, outcome: { kind: 'no-answer' }, text: '' });
+  });
+});
+
+describe('parseSynthResult', () => {
+  test('reads an exit code and every stop', () => {
+    expect(parseSynthResult('4 exit 0', 'x')).toEqual({ id: 4, outcome: { kind: 'exit', code: 0 }, text: 'x' });
+    for (const kind of ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'] as const) {
+      expect(parseSynthResult(`4 ${kind}`, '')).toEqual({ id: 4, outcome: { kind }, text: '' });
+    }
+  });
+
+  test('refuses anything else', () => {
+    for (const inline of ['', 'x exit 0', '4 exit', '4 exit -1', '4 melted', '4 timeout 2', '4 exit 0 0']) {
+      expect(parseSynthResult(inline, '')).toBeUndefined();
+    }
   });
 });

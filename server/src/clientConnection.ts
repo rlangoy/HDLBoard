@@ -33,7 +33,9 @@ import {
 // 6: `OPTIONS` — the project's compiler options (compilerOptions.ts), sent before RUN.
 // 7: an `ERROR protocol` never ends a run: it refuses one request (RESET, WAVE-GET, a bad
 // STIM) and the run goes on, while a refused RUN ends with `DONE refused` after it.
-const PROTOCOL_VERSION = '7';
+// 8: `SYNTH-CHECK <id>` before a RUN asks for a synthesis check of its hardware top beside
+// the simulation; `SYNTH-RESULT <id> <outcome>` answers it (docs/impl_sim_only_warnings.md § 7).
+const PROTOCOL_VERSION = '8';
 /**
  * How long a socket told to go gets to close before it is cut. A proxy may hold the close
  * frame back (Render's did: the tab kept a dead socket open), and cutting the connection
@@ -135,6 +137,7 @@ export class ClientConnection implements OpenSession, Peer {
     BOARD: (frame) => this.session.handleBoard(frame.board),
     // Invalid options too: the RUN that follows says why.
     OPTIONS: (frame) => this.session.handleOptions(frame.options),
+    'SYNTH-CHECK': (frame) => this.session.handleSynthCheck(frame),
     'WAVE-GET': (frame) => this.waveGet(frame.run),
     RESET: () => this.reset(),
     STOP: () => this.session.handleStop(),
@@ -228,6 +231,8 @@ export class ClientConnection implements OpenSession, Peer {
   private refuseRun(text: string): void {
     this.send({ verb: 'ERROR', stage: 'protocol', text });
     this.send({ verb: 'DONE', reason: 'refused' });
+    // A check asked for this RUN is answered too, and never left for a later one.
+    this.session.refuseSynthCheck();
   }
 
   private hello(): void {

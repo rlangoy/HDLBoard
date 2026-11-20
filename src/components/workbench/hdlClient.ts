@@ -33,7 +33,9 @@ function stimStepText({ bits, holdNs }: TimedStim): string {
 // 5: `ERROR busy` — the server is full; the socket was refused, or closed for a new one.
 // 6: `OPTIONS` — the project's compiler options, sent before RUN.
 // 7: an `ERROR protocol` only refuses a request and the run goes on; a refused RUN ends with `DONE refused`.
-const PROTOCOL_VERSION = '7';
+// 8: `SYNTH-CHECK <id>` before a RUN asks for a synthesis check of its hardware top beside the
+// simulation; `SYNTH-RESULT <id> <outcome>` answers it (docs/impl_sim_only_warnings.md § 7).
+const PROTOCOL_VERSION = '8';
 /**
  * The `ERROR` stage of a full server (server/src/sessionLimit.ts): this connection was
  * refused, or closed to make room for another student. The server closes the socket next.
@@ -57,10 +59,52 @@ const TIMED_STIM_PROTOCOL = 4;
 const REFUSAL_PROTOCOL = 7;
 /** The `ERROR` stages that end a run (server/src/protocol.ts): the client then closes its socket. */
 const RUN_ENDING_STAGES: readonly string[] = ['analyze', 'elaborate', 'runtime', 'internal'];
+/** The first protocol that takes SYNTH-CHECK; an older backend runs the design unchecked. */
+const SYNTH_PROTOCOL = 8;
+/**
+ * How long a finished run's socket stays open for its synthesis check's answer: longer than
+ * the server's own limit (HDL_SYNTH_TIMEOUT_MS, 4 s), so a check that ends there is still heard.
+ */
+export const SYNTH_ANSWER_WAIT_MS = 10_000;
 /** A backend that answers WELCOME without a number is the oldest one. */
 const OLDEST_PROTOCOL = 1;
 /** What a backend older than the BOARD frame answers it with: it then runs with the Default names. */
 const UNKNOWN_BOARD_VERB = `Unknown verb: "${BOARD_VERB}"`;
+
+/** A synthesis check of the run's hardware top (protocol 8): the page's number for it, the unit, the files it reads. */
+export interface SynthCheckRequest {
+  readonly id: number;
+  readonly top: string;
+  readonly files: readonly string[];
+}
+
+/** How the server ended a check (server/src/protocol.ts `SynthOutcome`). */
+export type SynthStop = 'timeout' | 'crash' | 'unavailable' | 'busy' | 'skipped' | 'refused';
+const SYNTH_STOPS: readonly SynthStop[] = ['timeout', 'crash', 'unavailable', 'busy', 'skipped', 'refused'];
+
+/**
+ * How a check ended: the tool's exit code, the server's reason, or the page's own —
+ * `unsupported` (the backend predates protocol 8), `no-answer` (none came in time).
+ */
+export type SynthOutcome = { readonly kind: 'exit'; readonly code: number } | { readonly kind: SynthStop | 'unsupported' | 'no-answer' };
+
+export interface SynthResult {
+  readonly id: number;
+  readonly outcome: SynthOutcome;
+  /** What the tool printed. */
+  readonly text: string;
+}
+
+const CHECK_NUMBER = /^\d{1,15}$/;
+
+/** `SYNTH-RESULT <id> exit <code>` or `SYNTH-RESULT <id> <stop>`, with the tool's text as the body; undefined when malformed. */
+export function parseSynthResult(inline: string, body: string): SynthResult | undefined {
+  const [idText = '', kind = '', code, ...rest] = inline.split(' ');
+  if (!CHECK_NUMBER.test(idText) || rest.length > 0) return undefined;
+  const id = Number(idText);
+  if (kind === 'exit') return code !== undefined && CHECK_NUMBER.test(code) ? { id, outcome: { kind: 'exit', code: Number(code) }, text: body } : undefined;
+  return code === undefined && SYNTH_STOPS.includes(kind as SynthStop) ? { id, outcome: { kind: kind as SynthStop }, text: body } : undefined;
+}
 
 /** What the frames sent before a RUN set for it. They go with every RUN, so a reconnect needs no state. */
 export interface RunSettings {
@@ -68,6 +112,8 @@ export interface RunSettings {
   readonly recordWave: boolean;
   /** The board's port names (BOARD). */
   readonly board: BoardPorts;
+  /** A synthesis check beside the run (SYNTH-CHECK); absent, none. Answered through `onSynthResult`. */
+  readonly synthCheck?: SynthCheckRequest;
   /** The project file's compilerOptions (OPTIONS); omitted, every option at its default. */
   readonly compilerOptions?: CompilerOptions;
 }
@@ -83,6 +129,8 @@ export interface HdlClientHandlers {
   onRefused(text: string): void;
   onDone(reason: string): void;
   onClosed(): void;
+  /** A synthesis check's answer (protocol 8), or the page's own when none can come. */
+  onSynthResult?(result: SynthResult): void;
   /**
    * The backend does not know the BOARD frame, so it simulates with the Default names.
    * Called once per connection; no more BOARD frames are sent on it.
@@ -192,6 +240,10 @@ export class HdlClient {
   private waveOffered = false;
   // The waveform run numbers the handlers see: unique in the page, though sessions repeat theirs.
   private readonly waveRuns = new WaveRunNumbers();
+  // The synthesis check whose answer this socket waits for, and when it stops waiting.
+  private synthAwaited: { readonly id: number; readonly timer: ReturnType<typeof setTimeout> } | null = null;
+  // The run ended while its check was still out: the socket closes once the answer is in.
+  private closeAfterSynth = false;
 
   constructor(url: string, handlers: HdlClientHandlers) {
     this.url = url;
@@ -223,6 +275,7 @@ export class HdlClient {
         this.handlers.onError('internal', `Could not reach the simulation backend at ${this.url}.`);
       }
       this.handlers.onClosed();
+      this.stopAwaitingSynth();
     };
     ws.onerror = () => {
       // onclose fires right after in every browser; nothing extra to do here.
@@ -259,6 +312,9 @@ export class HdlClient {
       case 'DONE':
         this.handlers.onDone(inline);
         this.runEnded();
+        break;
+      case 'SYNTH-RESULT':
+        this.handleSynthResult(inline, body);
         break;
       case 'WAVE-READY':
       case 'WAVE-BEGIN':
@@ -300,7 +356,60 @@ export class HdlClient {
    * waveform keeps it open, as the waveform goes with its session on the server.
    */
   private runEnded(): void {
-    if (!this.waveOffered) this.detachSocket()?.close();
+    if (this.waveOffered) return;
+    // Its session on the server runs the check; closing now would kill it unanswered.
+    if (this.synthAwaited !== null) this.closeAfterSynth = true;
+    else this.detachSocket()?.close();
+  }
+
+  /** A `SYNTH-RESULT`: handed on, and the socket of a finished run closes once its own check is answered. */
+  private handleSynthResult(inline: string, body: string): void {
+    const result = parseSynthResult(inline, body);
+    if (result === undefined) {
+      console.warn(`HdlClient: dropped a malformed SYNTH-RESULT: ${JSON.stringify(inline)}`);
+      return;
+    }
+    this.handlers.onSynthResult?.(result);
+    if (this.synthAwaited?.id === result.id) this.synthAnswered();
+  }
+
+  /** Waits for check `id`'s answer, for SYNTH_ANSWER_WAIT_MS at most: then it has none. */
+  private awaitSynth(id: number): void {
+    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
+    const timer = setTimeout(() => {
+      this.synthAnswered();
+      this.handlers.onSynthResult?.({ id, outcome: { kind: 'no-answer' }, text: '' });
+    }, SYNTH_ANSWER_WAIT_MS);
+    this.synthAwaited = { id, timer };
+  }
+
+  /** The awaited check is answered (or given up on): a finished run's socket may close now. */
+  private synthAnswered(): void {
+    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
+    this.synthAwaited = null;
+    if (!this.closeAfterSynth) return;
+    this.closeAfterSynth = false;
+    this.detachSocket()?.close();
+  }
+
+  /** The socket is gone: its check can no longer be answered. */
+  private stopAwaitingSynth(): void {
+    const awaited = this.synthAwaited;
+    if (awaited === null) return;
+    clearTimeout(awaited.timer);
+    this.synthAwaited = null;
+    this.closeAfterSynth = false;
+    this.handlers.onSynthResult?.({ id: awaited.id, outcome: { kind: 'no-answer' }, text: '' });
+  }
+
+  /** Sends the run's SYNTH-CHECK when this backend takes one; an older backend's run goes unchecked, and says so. */
+  private sendSynthCheck(ws: WebSocket, request: SynthCheckRequest): void {
+    if (!this.backendSpeaks(SYNTH_PROTOCOL)) {
+      this.handlers.onSynthResult?.({ id: request.id, outcome: { kind: 'unsupported' }, text: '' });
+      return;
+    }
+    ws.send(`SYNTH-CHECK ${request.id}\n${JSON.stringify({ top: request.top, files: request.files })}`);
+    this.awaitSynth(request.id);
   }
 
   /**
@@ -313,6 +422,7 @@ export class HdlClient {
     if (ws === null) return;
     ws.close();
     this.handlers.onClosed();
+    this.stopAwaitingSynth();
   }
 
   /** Forgets the socket: nothing it still sends, nor its close, reaches the handlers. */
@@ -415,9 +525,11 @@ export class HdlClient {
    * `findTopEntity`. `settings` go in the WAVE, BOARD and OPTIONS frames just before the RUN.
    */
   run(files: VhdlFile[], topFileName: string | undefined, runTarget: string | null, settings: RunSettings): void {
-    const { recordWave, board, compilerOptions } = settings;
+    const { recordWave, board, compilerOptions, synthCheck } = settings;
     // The last run's waveform goes when this run starts (W10), on the server too.
     this.waveOffered = false;
+    // This run uses the socket: a close waiting for the last run's check is off.
+    this.closeAfterSynth = false;
     const ws = this.ensureSocket();
     const sourceFiles = filesForRun(files, topFileName);
     const body = sourceFiles.map((f) => `@@FILE ${f.name}@@\n${f.content}`).join('\n');
@@ -436,6 +548,8 @@ export class HdlClient {
       // OPTIONS too, always: a project without options must not keep the last project's.
       const optionsFrame = this.optionsFrameFor(compilerOptions);
       if (optionsFrame !== undefined) ws.send(optionsFrame);
+      // SYNTH-CHECK last: it holds for the RUN right after it (docs/impl_sim_only_warnings.md § 7).
+      if (synthCheck !== undefined) this.sendSynthCheck(ws, synthCheck);
       ws.send(`${head}\n${body}`);
     };
     // Still connecting: `onopen` (ensureSocket) sends HELLO first; the run waits for WELCOME.
@@ -485,6 +599,8 @@ export class HdlClient {
   }
 
   close(): void {
+    if (this.synthAwaited !== null) clearTimeout(this.synthAwaited.timer);
+    this.synthAwaited = null;
     this.detachSocket()?.close();
   }
 }

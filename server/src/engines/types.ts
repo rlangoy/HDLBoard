@@ -63,6 +63,34 @@ export interface RunPlan {
    * other options than its own. Absent: none (Icarus's `vvp` takes none).
    */
   readonly runFlags?: readonly string[];
+  /** What the run's synthesis check repeats of this compile (synthCheck.ts); absent, the engine has none. */
+  readonly synth?: SynthInputs;
+}
+
+/**
+ * The run's compile as its synthesis check must repeat it (docs/impl_sim_only_warnings.md
+ * § 7): the same options, the files in an order the tool reads them in.
+ */
+export interface SynthInputs {
+  /** The compile options of the run: GHDL's flags, or Icarus's option flags (defines, generation). */
+  readonly flags: readonly string[];
+  /** The student's source files in the order the compile read them: GHDL's analysis order. */
+  readonly order: readonly string[];
+}
+
+/** What the synthesis check asks for: the hardware top and the files it may read (the client's choice). */
+export interface SynthTarget {
+  readonly top: string;
+  /** Source file names, a subset of the run's; headers among them are copied, not compiled. */
+  readonly files: readonly string[];
+}
+
+/** One synthesis check as a command, run in a folder of its own that holds `files` and `extraFiles`. */
+export interface SynthCommand {
+  readonly cmd: string;
+  readonly args: readonly string[];
+  /** Generated files the check needs beside the student's: Icarus's timescale file. */
+  readonly extraFiles: readonly VhdlFileInput[];
 }
 
 /**
@@ -116,6 +144,8 @@ export interface SimEngine {
   prepare(request: PrepareRequest): Promise<PrepareResult>;
   startBoardRun(plan: RunPlan, files: BoardFiles): RunHandle;
   startBatchRun(plan: RunPlan, run: BatchRunOptions): BatchHandle;
+  /** The synthesis check of `target` after `plan`'s compile; absent, the engine has no such check. */
+  synthCommand?(inputs: SynthInputs, target: SynthTarget): SynthCommand;
 }
 
 /** How one start of a batch run is wired. */
