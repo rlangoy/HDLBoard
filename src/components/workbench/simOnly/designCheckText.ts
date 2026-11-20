@@ -18,7 +18,7 @@ export const DESIGN_CHECK_TEXT = {
   toolCheck: 'Quick check + GHDL check (VHDL)',
   toolCheckHint:
     "Also checks a VHDL design with GHDL's synthesis when you press Start, beside the simulation, which never waits for it. " +
-    'Its findings can mark the design SIM-only. GHDL is not Quartus: a design it accepts may still not fit or build. Verilog gets the quick check only.',
+    'Its findings can mark the design SIM-only. GHDL may accept designs that still cannot be synthesized, so a pass is no guarantee. Verilog gets the quick check only.',
   simOnlyLabel: 'SIM-only',
   fileRoleSimOnly: 'Simulation-only design: runs in the simulator, not on the board',
   fileRoleMixedSimOnly: 'Simulation-only design + testbench',

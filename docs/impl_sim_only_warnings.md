@@ -626,8 +626,7 @@ page never asks for one. Yosys, which could do better, is not bundled (S5).
 | any other GHDL error | *Could not verify*, GHDL's own text | no |
 | `timeout`, `crash`, `unavailable`, `busy`, `refused`, no answer, older backend | *Could not verify*, with the reason in the console; for a crash, what it printed is ignored | no |
 
-GHDL's warnings are dropped: they are about the netlist, not the board. GHDL exit 0 is *passed*, and the
-console says GHDL is not Quartus.
+GHDL's warnings are dropped: they are about the netlist, not the board. GHDL exit 0 is *passed*, and the console says it is no guarantee: GHDL may accept designs that still cannot be synthesized.
 
 ### 7.6 Showing it
 

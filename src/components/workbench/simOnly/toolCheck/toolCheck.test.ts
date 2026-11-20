@@ -297,7 +297,7 @@ describe('the console lines of an answer', () => {
     ]);
   });
 
-  test('of a pass say GHDL is not Quartus', () => {
-    expect(consoleLines(answerFor(files, ''), project)[0]?.text).toContain('GHDL is not Quartus');
+  test('of a pass say it is no guarantee', () => {
+    expect(consoleLines(answerFor(files, ''), project)[0]?.text).toContain('GHDL may accept designs that still cannot be synthesized');
   });
 });

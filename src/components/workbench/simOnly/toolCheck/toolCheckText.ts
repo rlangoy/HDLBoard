@@ -60,7 +60,7 @@ export const GHDL_TEXT = {
   unknown: {
     headline: 'GHDL\'s synthesis stopped here.',
     explanation:
-      'HDLBoard cannot say what this means for the board: it may be a limit of GHDL\'s synthesis rather than of the FPGA, and Quartus may still build it. GHDL\'s own message is below.',
+      'HDLBoard cannot say what this means for the board: it may be a limit of GHDL\'s synthesis rather than of the FPGA. GHDL\'s own message is below.',
   },
 } as const satisfies Readonly<Record<string, FindingText>>;
 
@@ -69,14 +69,14 @@ export function multipleAssignmentsText(signal: string): FindingText {
   return {
     headline: `\`${signal}\` is assigned in more than one place.`,
     explanation:
-      `Synthesis finds two drivers of the same bits of \`${signal}\`. On the FPGA a signal is one wire with one source, so Quartus refuses this too. Drive it from one process or one statement.`,
+      `Synthesis finds two drivers of the same bits of \`${signal}\`. On the FPGA a signal is one wire with one source, so synthesis refuses this. Drive it from one process or one statement.`,
   };
 }
 
 // ------------------------------------------------------------ the console
 
 export const passedLine = (top: string): string =>
-  `GHDL synthesis check of ${top}: no problems found. GHDL is not Quartus: a design it accepts may still fail to build there.`;
+  `GHDL synthesis check of ${top}: no problems found. GHDL may accept designs that still cannot be synthesized for the FPGA, so this is no guarantee.`;
 
 /** Covers both verdicts: a line that cannot be built, and one synthesis builds otherwise (a latch). */
 export const foundLine = (top: string, lines: number): string =>

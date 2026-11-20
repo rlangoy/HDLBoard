@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { APP_DEFAULTS_FILE, parseAppDefaults } from '../appDefaults';
 import { parseOverridesForTest } from './simOnly.testSupport';
@@ -125,5 +126,26 @@ describe('the synthesis tool check in effect', () => {
   test('settings.json may set it, as a boolean only', () => {
     expect(parseAppDefaults('{ "synthesisToolCheck": true }')).toEqual({ defaults: { bouncyButtons: true, synthesisToolCheck: true }, warnings: [] });
     expect(parseAppDefaults('{ "synthesisToolCheck": "yes" }').warnings).toEqual([`${APP_DEFAULTS_FILE}: synthesisToolCheck must be true or false.`]);
+  });
+});
+
+/** What a fresh install starts with: *Synthesis*, and under it *Quick check*. */
+describe('the defaults of the Design check', () => {
+  const shipped = parseAppDefaults(readFileSync(new URL('../../../../public/settings.json', import.meta.url), 'utf8'));
+
+  test('are Synthesis without a settings.json', () => {
+    expect(designCheckInEffect(null, DEFAULT_DESIGN_CHECK)).toBe('synthesis');
+  });
+
+  test('are the quick check alone without a settings.json', () => {
+    expect(synthesisToolCheckInEffect(null, DEFAULT_SYNTHESIS_TOOL_CHECK)).toBe(false);
+  });
+
+  test("are Synthesis with the settings.json HDLBoard ships", () => {
+    expect(shipped.defaults.designCheck).toBe('synthesis');
+  });
+
+  test('are the quick check alone with the settings.json HDLBoard ships', () => {
+    expect(shipped.defaults.synthesisToolCheck).toBe(false);
   });
 });
