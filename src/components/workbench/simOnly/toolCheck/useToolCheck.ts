@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SynthCheckRequest, SynthResult } from '../../hdlClient';
 import type { ToolFinding } from '../types';
 import { CheckSession, type CheckRun, type ProjectNow, type StartOutcome } from './checkSession';
 import { fitsFiles, shownFindings, type CheckedFile, type ToolCheckResult } from './toolFindings';
 import {
-  designMessageLine, findingLine, foundLine, isToldSkip, passedLine, TOLD_SKIP_TEXT, UNCHANGED_NOTE, unverifiedLine,
+  designLevelLine, designMessageLine, findingLine, foundLine, isToldSkip, passedLine, TOLD_SKIP_TEXT, UNCHANGED_NOTE, unverifiedLine,
 } from './toolCheckText';
 
 /** A console line of the check; `at`, the line its *Line n* link opens. */
@@ -46,7 +46,11 @@ const NO_FINDINGS: readonly ToolFinding[] = [];
 /** The headline of an answer: passed, how many lines, or why it could not verify. */
 function answerLine(result: ToolCheckResult, shown: readonly ToolFinding[]): string {
   if (result.status === 'passed') return passedLine(result.top);
-  if (result.status === 'found') return foundLine(result.top, new Set(shown.map((f) => `${f.fileId}:${f.line}`)).size);
+  if (result.status === 'found') {
+    const verdicts = shown.filter((f) => f.effect !== 'not-verified');
+    if (verdicts.length === 0) return designLevelLine(result.top);
+    return foundLine(result.top, new Set(verdicts.map((f) => `${f.fileId}:${f.line}`)).size);
+  }
   return unverifiedLine(result.top, result.reason ?? 'tool-error');
 }
 
@@ -69,6 +73,10 @@ export function consoleLines(result: ToolCheckResult, project: ProjectNow): Tool
 export function useToolCheck({ enabled, files, log, viewNow }: ToolCheckOptions): ToolCheckApi {
   const [session] = useState(() => new CheckSession());
   const [result, setResult] = useState<ToolCheckResult | null>(null);
+  // Switched off, the check still out is dropped at once, before its answer can arrive and show.
+  useLayoutEffect(() => {
+    if (!enabled) session.forget();
+  }, [enabled, session]);
   // The client's handlers are made once: an answer reads the newest console and project.
   const latest = useRef({ log, viewNow });
   latest.current = { log, viewNow };

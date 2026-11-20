@@ -82,6 +82,10 @@ export const passedLine = (top: string): string =>
 export const foundLine = (top: string, lines: number): string =>
   `GHDL synthesis check of ${top}: ${lines} ${lines === 1 ? 'line does' : 'lines do'} not run on the FPGA as written.`;
 
+/** A problem GHDL found, though no line shown carries a verdict (it is in a package, say). */
+export const designLevelLine = (top: string): string =>
+  `GHDL synthesis check of ${top}: found a design-level synthesis problem.`;
+
 export const unverifiedLine = (top: string, reason: UnverifiedReason): string =>
   `GHDL synthesis check of ${top}: could not verify — ${REASON_TEXT[reason]}.`;
 
@@ -97,7 +101,7 @@ export const UNCHANGED_NOTE = 'GHDL synthesis check: the code is unchanged since
 /** Why a run is not checked, when that is news to the student. */
 export const TOLD_SKIP_TEXT = {
   noDut: 'Synthesis check skipped: this testbench tests no design HDLBoard can find.',
-  ambiguous: 'Synthesis check skipped: the unit to check is not clear (two files declare it, or a configuration chooses it).',
+  ambiguous: 'Synthesis check skipped: multiple declarations, architectures, or a configuration make the hardware target ambiguous.',
 } as const;
 
 /**

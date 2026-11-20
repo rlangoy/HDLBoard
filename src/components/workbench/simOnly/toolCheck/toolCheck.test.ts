@@ -51,6 +51,20 @@ describe('what the check checks', () => {
     expect(targetOf(files, 'counter_tb.vhd')).toEqual({ kind: 'check', target: { top: 'counter', topFileId: 'counter.vhd', fileIds: ['counter.vhd'] } });
   });
 
+  test('skips a DUT whose binding cannot be expressed by the entity name', () => {
+    const other = 'architecture other of counter is begin end architecture;';
+    const bench = source('counter_tb.vhd', COUNTER_TB.replace('work.counter ', 'work.counter(rtl) '));
+    for (const designs of [[source('counter.vhd', COUNTER + other)], [source('counter.vhd', COUNTER), source('other.vhd', other)]]) {
+      expect(targetOf([...designs, bench], bench.id)).toEqual({ kind: 'skip', reason: 'ambiguous' });
+    }
+  });
+
+  test('keeps a package declared in a testbench file', () => {
+    const files = [source('top.vhd', LATCH), source('mixed.vhd', PACKAGE + LONELY_TB)];
+    const choice = targetOf(files, 'top.vhd');
+    expect(choice.kind === 'check' && choice.target.fileIds).toEqual(['top.vhd', 'mixed.vhd']);
+  });
+
   test('a testbench file the student marked Treat as design is read', () => {
     const files = [source('top.vhd', LATCH), source('lonely_tb.vhd', LONELY_TB)];
     const choice = targetOf(files, 'top.vhd', marked({ roles: { 'lonely_tb.vhd': 'rtl' } }));
@@ -295,6 +309,17 @@ describe('the console lines of an answer', () => {
       { text: 'GHDL synthesis check of top: 1 line does not run on the FPGA as written.' },
       { text: '  top.vhd: Synthesis makes a latch here: a value is kept without a clock edge.', at: { fileId: 'top.vhd', line: 7 } },
     ]);
+  });
+
+  test('counts only verdicts on visible lines', () => {
+    const mixed = answerFor(files, LATCH_TEXT + 'top.vhd:8:1:error: unexpected diagnostic');
+    expect(consoleLines(mixed, project)[0].text).toContain('1 line does');
+  });
+
+  test('reports a synthesis problem at design level for a package', () => {
+    const mixed = [source('top.vhd', PACKAGE + LATCH)];
+    const result = answerFor(mixed, 'top.vhd:4:3:error: variable with access type is not synthesizable');
+    expect(consoleLines(result, { view: viewOf(mixed), overrides: EMPTY_OVERRIDES })[0].text).toContain('design-level synthesis problem');
   });
 
   test('of a pass say it is no guarantee', () => {

@@ -11,6 +11,7 @@
 
 import { unitKey } from '../../tbDetect/analyzeProject';
 import type { FileAnalysis, TestbenchOverrides, UnitRole } from '../../tbDetect/types';
+import { scannedFile } from '../scan';
 import { isSimModel } from '../simModels';
 import type { DesignView } from '../types';
 import { fileOfKey, unitRefKey } from '../unitRef';
@@ -48,6 +49,10 @@ const sameVhdlName = (a: string, b: string): boolean => unitKey('vhdl', a) === u
 
 /** A VHDL `configuration … of …`: it, not the library's last architecture, decides what is built. */
 const CONFIGURATION = /^\s*configuration\s+\w+\s+of\s+\w+/im;
+/** `architecture rtl of counter is`, the entity in group 1. */
+const ARCHITECTURE_OF = /\barchitecture\s+\w+\s+of\s+(\w+)\s+is\b/gi;
+/** `package p is` or `package body p is`. */
+const PACKAGE = /\bpackage\s+(?:body\s+)?\w+\s+is\b/i;
 
 /** The unit of `file` the run elaborates: the one named, the only one, or the only board design. */
 function runUnit(file: FileAnalysis, unitName: string | null) {
@@ -100,8 +105,22 @@ function reasonNotToCheck(input: TargetInput, unit: CheckedUnit): SkipReason | u
   const fileId = fileOfKey(unit.key);
   if (input.overrides.roles[fileId] === 'tb') return 'treated-as-testbench';
   if (isSimModel(input.overrides, fileId)) return 'sim-model';
-  const configured = input.runFiles.some((f) => CONFIGURATION.test(f.content));
-  return configured || declarationsOf(input, unit.name) > 1 ? 'ambiguous' : undefined;
+  return ambiguousBinding(input, unit.name) || declarationsOf(input, unit.name) > 1 ? 'ambiguous' : undefined;
+}
+
+/** Whether a configuration, or a second architecture of entity `name`, picks what GHDL's name-only target cannot. */
+function ambiguousBinding(input: TargetInput, name: string): boolean {
+  let architectures = 0;
+  for (const { id } of input.runFiles) {
+    const file = input.view.raw.byFile.get(id);
+    if (file?.language !== 'vhdl') continue;
+    const { code } = scannedFile(file);
+    if (CONFIGURATION.test(code)) return true;
+    for (const match of code.matchAll(ARCHITECTURE_OF)) {
+      if (sameVhdlName(match[1], name)) architectures++;
+    }
+  }
+  return architectures > 1;
 }
 
 /**
@@ -110,6 +129,8 @@ function reasonNotToCheck(input: TargetInput, unit: CheckedUnit): SkipReason | u
  */
 function mayHoldHardware({ view, overrides }: TargetInput, file: FileAnalysis | undefined): boolean {
   if (file === undefined || file.units.length === 0) return true;
+  // Even in a file marked as a testbench: the design may use the package.
+  if (file.language === 'vhdl' && PACKAGE.test(scannedFile(file).code)) return true;
   const marked = overrides.roles[file.fileId];
   if (marked !== undefined) return marked === 'rtl';
   return file.units.some((u) => view.hardware.hardware.has(unitRefKey(file.fileId, file.language, u.name)) || u.role === 'rtl');

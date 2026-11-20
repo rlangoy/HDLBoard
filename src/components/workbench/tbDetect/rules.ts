@@ -77,10 +77,15 @@ function vhdlClockGens(t: UnitText): Range[] {
     .map(([at, m]) => ({ from: at, to: at + m[0].length }));
 }
 
-const VHDL_END_SIM = /\bstd\.env\.(?:stop|finish)\b|\buse\s+std\.env\b|(?:^|;|\bbegin\b|\bthen\b|\belse\b)\s*(?:stop|finish)\s*[;(]/gim;
+const VHDL_END_SIM = /\bstd\.env\.(?:stop|finish)\b|(?:^|;|\bbegin\b|\bthen\b|\belse\b)\s*(?:stop|finish)\s*[;(]/gim;
+
+/** `code` with its `use …;` clauses blanked, line breaks kept: `use std.env.finish;` calls nothing. */
+export function withoutUseClauses(code: string): string {
+  return code.replace(/\buse\b[^;]*;/gi, (clause) => clause.replace(/[^\r\n]/g, ' '));
+}
 
 function vhdlEndSim(t: UnitText): number[] {
-  return matchesOf(t, VHDL_END_SIM).map(([at, m]) => t.lineOf(at + m[0].length - 1));
+  return matchesOf({ ...t, code: withoutUseClauses(t.code) }, VHDL_END_SIM).map(([at, m]) => t.lineOf(at + m[0].length - 1));
 }
 
 const VHDL_RULES: readonly DetectionRule[] = [

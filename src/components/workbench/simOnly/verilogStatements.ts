@@ -20,7 +20,7 @@
  */
 
 import { bracketed, topLevel, topLevelItems } from './brackets';
-import { everyBinding, integerValue, type Bindings } from './constantIndex';
+import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
 import type { BitRange } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
@@ -52,6 +52,8 @@ export interface StatementContext {
 const NOTHING: ReadonlySet<string> = new Set();
 /** How wide a selector may be for its values to be counted: 2^8 labels at most. */
 const MAX_COUNTED_WIDTH = 8;
+/** How wide a wildcard case label may be for its pattern to be built. */
+const MAX_WILDCARD_LABEL_BITS = 256;
 /** How many bits a signal may have to be followed one by one; a wider one stays whole. */
 const MAX_FOLLOWED_BITS = 256;
 /** How many runs a loop, or all the loops around a statement together, may have to be followed. */
@@ -231,17 +233,6 @@ function ifStatement(ctx: StatementContext, i: number): Assigned {
   return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
 }
 
-const BASED = /^(\d+)?\s*'[sS]?([bBoOdDhH])\s*([0-9a-fA-F_]+)$/;
-const RADIX: Readonly<Record<string, number>> = { b: 2, o: 8, d: 10, h: 16 };
-
-/** The value of a constant label (`2'b01`, `3`, a parameter `S1`), or undefined for a wildcard (`2'b?1`) or a signal. */
-function labelValue(label: string, constants: Bindings): number | undefined {
-  const plain = label.trim();
-  if (/^\d+$/.test(plain)) return Number(plain);
-  const m = BASED.exec(plain);
-  return m ? parseInt(m[3].replace(/_/g, ''), RADIX[m[2].toLowerCase()]) : integerValue(plain, constants);
-}
-
 /** The width of a case selector: a declared signal, one bit of it, or a constant part of it. */
 function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): number | undefined {
   const s = selector.replace(/\s+/g, '');
@@ -252,12 +243,74 @@ function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): 
   return part ? Math.abs(Number(part[1]) - Number(part[2])) + 1 : undefined;
 }
 
-/** Whether the labels name every value the selector can have, and nothing else. */
-function namesEveryValue(labels: readonly string[], width: number | undefined, constants: Bindings): boolean {
-  if (width === undefined || width > MAX_COUNTED_WIDTH) return false;
-  const values = labels.map((label) => labelValue(label, constants));
-  const fits = values.every((v) => v !== undefined && v >= 0 && v < 2 ** width);
-  return fits && new Set(values).size === 2 ** width;
+type CaseKind = 'case' | 'casez' | 'casex';
+
+interface CaseSelector {
+  readonly kind: CaseKind;
+  readonly width?: number;
+  readonly constants: Bindings;
+}
+
+/** Equal-width case operands compare their bit patterns even for a negative signed literal. */
+function caseValue(label: string, { width, constants }: CaseSelector): number | undefined {
+  const value = integerValue(label, constants);
+  if (value === undefined || value >= 0 || width === undefined) return value;
+  const size = /^(\d+)\s*'/.exec(label);
+  return Number(size?.[1]) === width ? value + 2 ** width : value;
+}
+
+/** A based label with an `x`, `z` or `?` digit: `2'b1?`, `'hz`. */
+const WILDCARD_DIGIT = /'[sS]?[bBoOhH]\s*[0-9a-f_xz?]*[xz?]/i;
+const WILDCARD_LABEL = /^(?<size>\d*)\s*'(?<signed>s?)(?<base>[boh])\s*(?<digits>[0-9a-fxz?_]+)$/i;
+const DIGIT_BASE: Readonly<Record<string, number>> = { b: 2, o: 8, h: 16 };
+
+/** One written digit as a regex over its bits: `.` for a bit that matches anything. */
+function wildcardDigit(digit: string, radix: number, kind: CaseKind): string {
+  const group = Math.log2(radix);
+  if ('z?'.includes(digit) || (kind === 'casex' && digit === 'x')) return '.'.repeat(group);
+  const n = parseInt(digit, radix);
+  // A fixed X in casez cannot match a binary selector.
+  return Number.isNaN(n) ? 'x'.repeat(group) : n.toString(2).padStart(group, '0');
+}
+
+/** A label's width in bits: as written, or for an unsized one all its written bits and 32 at least. */
+function labelSize(written: string, digitBits: number): number | undefined {
+  const size = written ? Number(written) : Math.max(UNSIZED_LITERAL_WIDTH, digitBits);
+  return size >= 1 && size <= MAX_WILDCARD_LABEL_BITS ? size : undefined;
+}
+
+/** The selector values a wildcard label matches, its written digits cut or extended to the label's size. */
+function wildcardPattern(label: string, width: number, kind: CaseKind): { pattern: RegExp; size: number } | undefined {
+  const m = WILDCARD_LABEL.exec(label)?.groups;
+  if (!m) return undefined;
+  const radix = DIGIT_BASE[m.base.toLowerCase()];
+  const digits = [...m.digits.replace(/_/g, '').toLowerCase()].map((d) => wildcardDigit(d, radix, kind)).join('');
+  const size = labelSize(m.size, digits.length);
+  // A signed operand of a different width needs the selector's signedness to extend it.
+  if (size === undefined || (m.signed && size !== width)) return undefined;
+  // A leading x or z extends to the left; any other digit extends with zeros.
+  const bits = digits.slice(-size).padStart(size, /^[.x]/.test(digits) ? digits[0] : '0');
+  return { pattern: new RegExp('^' + bits + '$'), size };
+}
+
+/**
+ * Whether the labels name every value the selector can have. When that cannot be counted
+ * (a selector of unknown or great width, a wildcard label that cannot be read) a casez or
+ * casex with wildcards is taken as complete, so no latch is reported that may not be one.
+ */
+function namesEveryValue(labels: readonly string[], selector: CaseSelector): boolean {
+  const { width, kind } = selector;
+  const wildcards = kind === 'case' ? [] : labels.filter((label) => WILDCARD_DIGIT.test(label));
+  if (width === undefined || width > MAX_COUNTED_WIDTH) return wildcards.length > 0;
+  const covered = new Set(labels.map((label) => caseValue(label.trim(), selector)));
+  for (const label of wildcards) {
+    const wildcard = wildcardPattern(label.trim(), width, kind);
+    if (!wildcard) return true;
+    for (let n = 0; n < 2 ** width; n++) {
+      if (wildcard.pattern.test(n.toString(2).padStart(wildcard.size, '0'))) covered.add(n);
+    }
+  }
+  return Array.from({ length: 2 ** width }, (_, n) => covered.has(n)).every(Boolean);
 }
 
 /** The offset of a `default` item's `:`, or of its last letter when it has none (`default q = 0;` is Verilog too). */
@@ -282,7 +335,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
-  const complete = hasDefault || namesEveryValue(labels, selectorWidth(selector.inside, ctx.rangeOf), ctx.constants);
+  const complete = hasDefault || namesEveryValue(labels, { width: selectorWidth(selector.inside, ctx.rangeOf), constants: ctx.constants, kind: wordAt(text, i) as CaseKind });
   const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }

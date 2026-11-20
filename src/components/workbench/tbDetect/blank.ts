@@ -32,8 +32,8 @@ export function blankSource(language: Language, source: string, view: SourceView
   const lineOf = lineIndex(source);
   const pragmas = new PragmaRegions(lineOf);
   const chars = source.split('');
-  const lex = language === 'vhdl' ? lexVhdl : lexVerilog;
-  lex(source, chars, pragmas);
+  if (language === 'vhdl') lexVhdl(source, chars, pragmas, view);
+  else lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
   if (language === 'vhdl') return { code: chars.join(''), simOnlyRegions: pragmas.regions };
   const pre = preprocessVerilog(chars.join(''), lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
@@ -63,16 +63,23 @@ class PragmaRegions {
 
 /* ------------------------------- VHDL ------------------------------- */
 
-function lexVhdl(src: string, chars: string[], pragmas: PragmaRegions): void {
+function lexVhdl(src: string, chars: string[], pragmas: PragmaRegions, view: SourceView): void {
   let i = 0;
   while (i < src.length) {
     const c = src[i];
     if (c === '-' && src[i + 1] === '-') i = lineComment(src, chars, pragmas, i);
     else if (c === '/' && src[i + 1] === '*') i = blockComment(src, chars, i);
     else if (c === '"') i = vhdlString(src, chars, i);
+    // Synthesis reads clock levels (`clk = '1'`) and constant bits, so '0' and '1' stay code there.
+    else if (view === 'synthesis' && isBitLiteral(src, i)) i += 3;
     else if (c === "'" && isCharacterLiteral(src, i)) i = blanked(chars, i, i + 3);
     else i++;
   }
+}
+
+/** `'0'` or `'1'`. */
+function isBitLiteral(src: string, i: number): boolean {
+  return src[i] === "'" && (src[i + 1] === '0' || src[i + 1] === '1') && src[i + 2] === "'";
 }
 
 /** `'1'` is a character literal; `clk'event` and `unsigned'(…)` are ticks and stay code. */
@@ -144,7 +151,7 @@ function blanked(chars: string[], from: number, to: number): number {
 
 /* -------------------- Verilog conditional compilation -------------------- */
 
-const DIRECTIVE = /`(define|undef|ifdef|ifndef|elsif|else|endif)\b[ \t]*(\w*)/g;
+const DIRECTIVE = /`(?:(define|undef|ifdef|ifndef|elsif)\b[ \t]*(\w*)|(else|endif)\b)/g;
 
 interface Branch {
   readonly parentActive: boolean;
@@ -171,7 +178,7 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     const at = match.index ?? 0;
     const wasActive = isActive(state.stack);
     if (!wasActive) blankRange(chars, activeFrom, at);
-    directive(state, match[1], match[2], lineOf(at), wasActive);
+    directive(state, match[1] ?? match[3], match[2], lineOf(at), wasActive);
     // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
     blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define' && wasActive) blankRange(chars, at + match[0].length, endOfLine(code, at));
