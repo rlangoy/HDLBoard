@@ -140,6 +140,7 @@ const NEW_CODE = [
   'src/components/workbench/useTopFileHint.ts',
   'src/components/workbench/useTopFileHint.test.ts',
   'src/components/workbench/useTopFileSuggestion.tsx',
+  'src/components/workbench/useTopFileSuggestion.test.ts',
   'src/components/workbench/useStoredSwitch.ts',
 ];
 

@@ -73,7 +73,8 @@ export const startAsItIs = (topFileName: string | null): string =>
 /** The chip's button for a screen reader, which does not see its tooltip. */
 export const makeTopLabel = (label: string): string => `Make ${label} the Top-File`;
 
-export const chipTitle = (suggestion: TopFileSuggestion): string => `${looksLikeTheTop(suggestion)} ${whatTheTopFileIs(suggestion)}`;
+export const chipTitle = (suggestion: TopFileSuggestion): string =>
+  `${looksLikeTheTop(suggestion)} ${whatTheTopFileIs(suggestion)}`;
 
 /** "SW", "SW and LEDR", "SW, KEY and LEDR". */
 function wordList(words: readonly string[]): string {

@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { PaneRun } from './EditorPaneHeader';
 import {
-  narrowView, paneOf, pairKey, resolveView, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type PaneRole, type WorkingPane,
+  narrowView, paneOf, pairKey, resolveView, showsSuggestion, withCurrentUnit,
+  type EditorView, type PairEvent, type PaneRole, type WorkingPane,
 } from './editorView';
 import type { VhdlFile } from './files';
 import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
@@ -61,6 +62,8 @@ export interface TestbenchSplit {
   readonly shownFileIds: readonly string[];
   /** A file's role from the current analysis, with its override applied; for the file lists. */
   readonly roleOf: (fileId: string) => FileRole | undefined;
+  /** A file's analysis as last made, with its role override applied: for what a render shows, never forcing a new one. */
+  readonly shownFileAnalysis: (fileId: string) => FileAnalysis | undefined;
   /** A file's analysis, up to date and with its role override applied. */
   readonly fileAnalysis: (fileId: string) => FileAnalysis | undefined;
   /** The testbench units that could run this design unit instead of the board (§ 4.10). */
@@ -87,6 +90,9 @@ export interface TestbenchSplit {
   /** Marks a file *Simulation model*, or drops the mark (S9). */
   readonly setSimModel: (fileId: string, simModel: boolean) => void;
 }
+
+/** A design file's design-check badge, for its pane header. */
+type Badge = ModelContext['designCheckBadge'];
 
 /** A role change waiting on RoleConflictDialog. */
 interface PendingRoleChange {
@@ -202,7 +208,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     showFile(pair.anchorId, 'open');
   });
 
-  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], topChip?: PaneChip | null) => editorPropsFor(
+  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: Badge, topChip?: PaneChip | null) => editorPropsFor(
     {
       project: analysis.current,
       overrides: overrides.value,
@@ -234,6 +240,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     shownFileIds: display ? shownFileIds(display, narrowView(display.view, display.focusedPane, split.canSplit)) : [],
     roleOf: (fileId) => effectiveFile(analysis.current, overrides.value, fileId)?.role,
     setPairOverride: (designId, tbId) => overrides.set(withPair(overrides.ref.current, designId, tbId)),
+    shownFileAnalysis: (fileId) => effectiveFile(analysis.current, overrides.value, fileId),
     fileAnalysis: (fileId) => effectiveFile(analysis.flush(), overrides.ref.current, fileId),
     testbenchesFor: (fileId, unitName) =>
       testbenchesFor(analysis.flush(), overrides.ref.current, fileId, unitName, recentFileIds.current),

@@ -2,9 +2,10 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useState, type ReactNode } from 'react';
-import type { PaneRole, WorkingPane } from './editorView';
+import { routeRun, type PaneRole, type WorkingPane } from './editorView';
 import type { Setting } from './settings/settingsSections';
 import type { PaneChip } from './splitPaneModels';
+import type { FileAnalysis } from './tbDetect/types';
 import { TopFileChip } from './TopFileChip';
 import { TopFileDialog } from './TopFileDialog';
 import {
@@ -17,8 +18,8 @@ export interface TopFileSuggestionOptions {
   readonly topFileId: string | null;
   /** The unit of the Top-File that Start runs, when one was chosen. */
   readonly topUnit: string | null;
-  /** What Start runs as things are (`file` or `file › unit`); null when no file is the Top-File. */
-  readonly topFileName: string | null;
+  /** What Start runs now, resolved as Start resolves it; null when no file is the Top-File. */
+  readonly running: RunningTop | null;
   /** The pane the offer is about: the testbench pane while one is on screen, else the design pane. */
   readonly working: WorkingPane | null;
   /** The active board's own port names, lower case (`portKeysOf`). */
@@ -37,6 +38,28 @@ export interface TopFileSuggestionOptions {
   readonly onStartUnit: (unit: TopUnit) => void;
 }
 
+export interface RunningTop {
+  /** `file`, or `file › unit` when Start names the unit: what the question's *Start …* button says. */
+  readonly label: string;
+  /** The file and unit: declines last while it stays the same. */
+  readonly key: string;
+}
+
+/**
+ * What Start runs for this Top-File and remembered unit, as `routeRun` resolves it when
+ * Start is pressed: a remembered unit that was renamed away is not what runs, so it is
+ * not what the label names either. Null without a Top-File.
+ */
+export function runningTopOf(
+  topFile: { readonly id: string; readonly name: string } | undefined,
+  topUnit: string | null,
+  analysisOf: (fileId: string) => FileAnalysis | undefined,
+): RunningTop | null {
+  if (!topFile) return null;
+  const { unitName, runTarget } = routeRun(analysisOf(topFile.id), topUnit);
+  return { label: runTarget ? `${topFile.name} › ${runTarget}` : topFile.name, key: `${topFile.id} › ${unitName}` };
+}
+
 export interface TopFileSuggestionApi {
   /** Start: runs at once, or first asks whether the file on screen should be the Top-File. */
   readonly start: () => void;
@@ -52,7 +75,7 @@ export interface TopFileSuggestionApi {
  */
 export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFileSuggestionApi {
   const { boardPorts, working, topFileId, topUnit } = options;
-  const declined = useDeclinedUnits(`${topFileId} › ${topUnit}`);
+  const declined = useDeclinedUnits(options.running);
   const [asked, setAsked] = useState<TopFileSuggestion | null>(null);
   const suggestionIn = (marked: MarkedProject) =>
     topFileSuggestion({ ...marked, boardPorts, working, topFileId, topUnit, declined: declined.units });
@@ -82,7 +105,7 @@ export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFile
     dialog: asked && (
       <Question
         suggestion={asked}
-        topFileName={options.topFileName}
+        running={options.running}
         onStartSuggested={options.onStartUnit}
         onStartTop={options.onStartTop}
         onDecline={declined.add}
@@ -95,7 +118,7 @@ export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFile
 
 interface QuestionProps {
   readonly suggestion: TopFileSuggestion;
-  readonly topFileName: string | null;
+  readonly running: RunningTop | null;
   readonly onStartSuggested: (unit: TopUnit) => void;
   readonly onStartTop: () => void;
   /** Keeps the unit off the Top-File until the Top-File changes. */
@@ -105,11 +128,11 @@ interface QuestionProps {
 }
 
 /** The question at Start: each answer closes it first, then starts what was chosen. */
-function Question({ suggestion, topFileName, onStartSuggested, onStartTop, onDecline, onStopAsking, onClose }: QuestionProps) {
+function Question({ suggestion, running, onStartSuggested, onStartTop, onDecline, onStopAsking, onClose }: QuestionProps) {
   return (
     <TopFileDialog
       suggestion={suggestion}
-      topFileName={topFileName}
+      topFileName={running?.label ?? null}
       onMakeTopAndStart={() => {
         onClose();
         onStartSuggested(suggestion);
@@ -131,11 +154,13 @@ interface Declined {
 }
 
 /**
- * The units declined since the Top-File (`top`: its file and unit) last changed. Every
- * change starts the list afresh, a change back to an earlier Top-File too: the list is
- * dropped as the change is rendered, not compared with the Top-File it was made under.
+ * The units declined since what Start runs (`top`: its file and resolved unit) last
+ * changed. Naming a unit Start already ran is no change. Every change starts the list
+ * afresh, a change back to an earlier Top-File too: the list is dropped as the change is
+ * rendered, not compared with the Top-File it was made under.
  */
-function useDeclinedUnits(top: string): Declined {
+function useDeclinedUnits(running: RunningTop | null): Declined {
+  const top = running?.key ?? null;
   const [declined, setDeclined] = useState({ top, units: NO_DECLINED_UNITS });
   const isTopChanged = declined.top !== top;
   if (isTopChanged) setDeclined({ top, units: NO_DECLINED_UNITS });

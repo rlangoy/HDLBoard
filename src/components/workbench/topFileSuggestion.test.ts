@@ -50,11 +50,12 @@ function suggest(asked: Asked) {
   const { files, shown, pane = 'rtl', unit = null, top, topUnit = null, overrides = EMPTY_OVERRIDES } = asked;
   const { declined = NO_DECLINED_UNITS, board = DE1_SOC } = asked;
   // As Workbench reads it: role detection by every board-design name, the offer by the active board's own.
-  const { corrected, parts } = designView(analyzeProject(files, boardDesignPortNames(board)), overrides);
+  const { corrected, parts, hardware } = designView(analyzeProject(files, boardDesignPortNames(board)), overrides);
   return topFileSuggestion({
     project: corrected,
     overrides,
     parts,
+    dutOf: hardware.dutOf,
     boardPorts: portKeysOf(board),
     working: shown === null ? null : { pane, fileId: shown, unitName: unit },
     topFileId: top,
@@ -232,9 +233,9 @@ describe('a testbench', () => {
     expect(suggest({ files: [LAB1, LAB2, TB], shown: 'lab2_tb.vhd', top: 'lab1.vhd' })?.kind).toBe('testbench');
   });
 
-  test('is what a board design the student marked Treat as testbench is offered as', () => {
+  test('marked by the student on a board design is offered as the board run it gets', () => {
     const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'lab2.vhd': 'tb' } };
-    expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd', overrides })?.kind).toBe('testbench');
+    expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd', overrides })?.kind).toBe('board-design');
   });
 
   test('offers its testbench while another design is top', () => {
@@ -266,6 +267,40 @@ ${TB.content}`);
 ${TB.content}`);
     const declined = NO_DECLINED_UNITS.with({ fileId: 'lab2.vhd', unitName: 'lab2_tb' });
     expect(suggest({ files: [LAB1, mixed], shown: 'lab2.vhd', top: 'lab1.vhd', declined })?.unitName).toBe('lab2');
+  });
+});
+
+describe('the Top-File’s own file', () => {
+  test('offers none of its other board designs: two would take turns', () => {
+    const pair = source('pair.v', 'module board(input [9:0] SW, output [9:0] LEDR);\nendmodule\nmodule backup(input [9:0] SW, output [9:0] LEDR);\nendmodule\n');
+    expect(suggest({ files: [pair], shown: 'pair.v', unit: 'board', top: 'pair.v', topUnit: 'board' })).toBeNull();
+  });
+});
+
+describe('Verilog headers', () => {
+  const independent = verilogBoardDesign('independent');
+  const wrapper = { ...source('wrap.vh', 'module wrap(input [9:0] SW, output [9:0] LEDR);\n  independent u(.SW(SW), .LEDR(LEDR));\nendmodule\n'), folder: 'verilog' as const };
+
+  test('that no source includes do not hide a root they instantiate', () => {
+    expect(suggest({ files: [LAB1, independent, wrapper], shown: 'independent.v', top: 'lab1.vhd' })?.fileId).toBe('independent.v');
+  });
+
+  test('that a source includes do', () => {
+    const includer = source('main.v', '`include "wrap.vh"\nmodule main;\nendmodule\n');
+    expect(suggest({ files: [LAB1, independent, wrapper, includer], shown: 'independent.v', top: 'lab1.vhd' })).toBeNull();
+  });
+});
+
+describe('the design a testbench is said to test', () => {
+  test('is the one the editor pairs it with, not the first it instantiates', () => {
+    const helper = source('helper.vhd', vhdlDesign('helper', 'a : in std_logic', ''));
+    const counter = source('counter.vhd', vhdlDesign('counter', 'a : in std_logic', ''));
+    const tb = source(
+      'counter_tb.vhd',
+      `library ieee;\nuse ieee.std_logic_1164.all;\nentity counter_tb is\nend entity;\narchitecture sim of counter_tb is\n  signal a : std_logic;\nbegin\n  setup: entity work.helper port map (a => a);\n  dut: entity work.counter port map (a => a);\n  process\n  begin\n    a <= '1';\n    wait for 10 ns;\n    wait;\n  end process;\nend architecture;\n`,
+    );
+    const suggestion = suggest({ files: [LAB1, helper, counter, tb], pane: 'tb', shown: 'counter_tb.vhd', top: 'lab1.vhd' });
+    expect(suggestion?.kind === 'testbench' && suggestion.dutName).toBe('counter');
   });
 });
 

@@ -87,8 +87,8 @@ import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import { useTopFileHint } from './useTopFileHint';
-import { useTopFileSuggestion } from './useTopFileSuggestion';
-import type { TopUnit } from './topFileSuggestion';
+import { runningTopOf, useTopFileSuggestion } from './useTopFileSuggestion';
+import { markedProjectOf, type TopUnit } from './topFileSuggestion';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -1818,21 +1818,21 @@ export function Workbench() {
 
   restoreOverridesRef.current = tb.restoreOverrides;
 
-  // What Start runs, as the Simulation card names it: "alu.v › alu_tb" when a unit was chosen (§ 4.10).
-  const topFileOnly = files.find((f) => f.id === topFileId)?.name;
-  const topRunLabel = topFileOnly && (topUnit ? `${topFileOnly} › ${topUnit}` : topFileOnly);
+  // What Start runs now, resolved as Start resolves it, so the "Top:" line and the question's
+  // *Start …* button name the unit that really runs: "alu.v › alu_tb" when Start names it (§ 4.10).
+  const runningTop = runningTopOf(files.find((f) => f.id === topFileId), topUnit, tb.shownFileAnalysis);
 
   const topSuggestion = useTopFileSuggestion({
     hint: topFileHint,
     topFileId,
     topUnit,
-    topFileName: topRunLabel ?? null,
+    running: runningTop,
     working: tb.workingPane,
     boardPorts: activeBoardPorts,
-    shownProject: { project: tb.designView.corrected, overrides: tb.overrides, parts: tb.designView.parts },
+    shownProject: markedProjectOf(tb.designView, tb.overrides),
     projectNow: () => {
       const { view, overrides } = tb.designViewNow();
-      return { project: view.corrected, overrides, parts: view.parts };
+      return markedProjectOf(view, overrides);
     },
     simulating: isSimulating,
     onMakeTop: makeTopUnit,
@@ -2039,7 +2039,7 @@ export function Workbench() {
   });
   const showInFolder = desktopBridge()?.showInFolder;
 
-  const topFileName = topRunLabel ?? (topUnit ? `${TOP_LEVEL_ENTITY} › ${topUnit}` : TOP_LEVEL_ENTITY);
+  const topFileName = runningTop?.label ?? TOP_LEVEL_ENTITY;
 
 
   return (

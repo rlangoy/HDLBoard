@@ -17,11 +17,13 @@
 
 import { routeRun, type WorkingPane } from './editorView';
 import { hasTopDot, isVerilogHeader } from './fileKinds';
-import type { ProjectParts } from './simOnly/types';
+import type { DesignView, ProjectParts } from './simOnly/types';
 import { definedUnitKey, unitRefKey } from './simOnly/unitRef';
 import { findUnit } from './tbDetect/analyzeProject';
 import { effectiveFile } from './tbDetect/pairing';
-import type { AnalyzedUnit, FileAnalysis, Instance, Language, ProjectAnalysis, TestbenchOverrides, UnitRole } from './tbDetect/types';
+import type {
+  AnalyzedUnit, FileAnalysis, Instance, Language, ProjectAnalysis, TestbenchOverrides, UnitRole,
+} from './tbDetect/types';
 
 /** How many board ports the question names as its evidence: "uses SW, KEY and LEDR". */
 export const MAX_PORTS_NAMED = 3;
@@ -46,6 +48,13 @@ export interface MarkedProject {
   readonly overrides: TestbenchOverrides;
   /** The design check's parts: they hold the architectures written in another file than their entity. */
   readonly parts: ProjectParts;
+  /** Testbench unit key -> the design it tests, as the editor pairs them (the design check's `hardware.dutOf`). */
+  readonly dutOf: ReadonlyMap<string, string>;
+}
+
+/** The project as the design check sees it, in the shape the offer reads. */
+export function markedProjectOf(view: DesignView, overrides: TestbenchOverrides): MarkedProject {
+  return { project: view.corrected, overrides, parts: view.parts, dutOf: view.hardware.dutOf };
 }
 
 export interface TopFileQuestion extends MarkedProject {
@@ -134,31 +143,40 @@ const OFFERS: Readonly<Record<UnitRole, (offer: Offer) => TopFileSuggestion | nu
  * same way). A testbench that is not top does not count: testing a board design is no
  * reason to keep it off top.
  */
-function boardDesignOffer({ question, file, graph, running }: Offer): BoardDesignSuggestion | null {
+function boardDesignOffer(offer: Offer): TopFileSuggestion | null {
+  const { question, file, graph, running } = offer;
+  // The Top-File's own designs are not offered: the file is top already, and another of
+  // its units runs from its pane's Play. Offering one would make two designs take turns.
+  if (file.fileId === question.topFileId) return null;
   const used = instantiatedByDesigns(graph);
   const isRoot = (key: string) => !used.has(key) && !running.has(key);
   const unit = file.units.find((u) => drivesTheBoard(u, question.boardPorts) && isRoot(keyOf(file, u)));
-  if (!unit) return null;
-  const boardPorts = activeBoardPorts(unit, question.boardPorts).slice(0, MAX_PORTS_NAMED);
-  return { kind: 'board-design', ...suggestionBase(file, unit), boardPorts };
+  return unit ? suggestionFor(offer, unit) : null;
 }
 
 /** The testbench the pane shows (else the file's first), unless Start runs it already. */
-function testbenchOffer({ question, file, graph, running }: Offer): TestbenchSuggestion | null {
+function testbenchOffer(offer: Offer): TopFileSuggestion | null {
+  const { question, file, running } = offer;
   const unit = shownTestbench(file, question.working?.unitName ?? null);
-  if (!unit || running.has(keyOf(file, unit))) return null;
-  return { kind: 'testbench', ...suggestionBase(file, unit), dutName: designUnder(graph, keyOf(file, unit)) };
+  return unit && !running.has(keyOf(file, unit)) ? suggestionFor(offer, unit) : null;
+}
+
+/**
+ * The offer as the run it starts: a unit with a port of the board runs on the board,
+ * whatever its role (the backend's rule, server/src/engines), so a board design marked
+ * *Treat as testbench* is described as the board run it gets.
+ */
+function suggestionFor({ question, file, graph }: Offer, unit: AnalyzedUnit): TopFileSuggestion {
+  const base = suggestionBase(file, unit);
+  const boardPorts = activeBoardPorts(unit, question.boardPorts);
+  if (boardPorts.length > 0) return { kind: 'board-design', ...base, boardPorts: boardPorts.slice(0, MAX_PORTS_NAMED) };
+  const dutKey = question.dutOf.get(keyOf(file, unit));
+  return { kind: 'testbench', ...base, dutName: (dutKey && graph.get(dutKey)?.name) ?? null };
 }
 
 function shownTestbench(file: FileAnalysis, unitName: string | null): AnalyzedUnit | undefined {
   const shown = findUnit(file, unitName);
   return shown?.role === 'tb' ? shown : file.units.find((u) => u.role === 'tb');
-}
-
-/** The first design a testbench instantiates, as written: the design it tests. */
-function designUnder(graph: ReadonlyMap<string, GraphNode>, testbenchKey: string): string | null {
-  const targets = graph.get(testbenchKey)?.targets ?? [];
-  return targets.map((target) => graph.get(target)).find((node) => node?.role === 'rtl')?.name ?? null;
 }
 
 function suggestionBase(file: FileAnalysis, unit: AnalyzedUnit): SuggestionBase {
@@ -220,7 +238,29 @@ interface GraphNode {
  */
 function runFileIds({ project, topFileId }: TopFileQuestion): Set<string> {
   const files = [...project.byFile.values()];
-  return new Set(files.filter((f) => hasTopDot(f.folder) || f.fileId === topFileId).map((f) => f.fileId));
+  const included = includedHeaders(files);
+  const isCompiled = (f: FileAnalysis) => hasTopDot(f.folder) && (!isVerilogHeader(f.name) || included.has(f.name));
+  return new Set(files.filter((f) => isCompiled(f) || f.fileId === topFileId).map((f) => f.fileId));
+}
+
+const INCLUDE = /`include\s+"([^"]+)"/g;
+
+/**
+ * The Verilog headers a source includes, directly or through another included header,
+ * by file name: Icarus compiles a header only there, so one nobody includes never runs.
+ */
+function includedHeaders(files: readonly FileAnalysis[]): Set<string> {
+  const byName = new Map(files.map((f) => [f.name, f]));
+  const included = new Set<string>();
+  const pending = files.filter((f) => f.language === 'verilog' && !isVerilogHeader(f.name));
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
+    const names = [...file.content.matchAll(INCLUDE)].map((m) => m[1].split('/').pop() ?? m[1]);
+    for (const header of names.map((name) => byName.get(name)).filter((h): h is FileAnalysis => h !== undefined)) {
+      if (!included.has(header.name)) pending.push(header);
+      included.add(header.name);
+    }
+  }
+  return included;
 }
 
 /** Each unit of the run's files with its role (the student's marks applied) and the units it instantiates. */
