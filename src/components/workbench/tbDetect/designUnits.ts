@@ -255,13 +255,14 @@ function withoutRangesAndValues(list: string): string {
   return list.replace(/\[[^\]]*\]/g, blank).replace(/=[^,)]*/g, blank);
 }
 
-// A statement label (`u1:`), or the name after `begin :`; `begin` itself is a keyword, not a label.
-const LEADING_NOISE = /^\s*(?:(?!begin\b)(?:[A-Za-z_]\w*)\s*:(?!:)|:\s*[A-Za-z_]\w*)/;
+// A statement or case label (`u1:`, `IDLE:`, `0:`, `2'b01:`), or the name after `begin :`;
+// `begin` itself is a keyword, not a label.
+const LEADING_NOISE = /^\s*(?:(?!begin\b)(?:[A-Za-z_]\w*|\d[\w']*)\s*:(?!:)|:\s*[A-Za-z_]\w*)/;
 
 function verilogInstances(code: string, body: Range, lineOf: LineOf): Instance[] {
   const instances: Instance[] = [];
   let at = body.from;
-  for (const statement of code.slice(body.from, body.to).split(';')) {
+  for (const statement of forHeadersJoined(code.slice(body.from, body.to)).split(';')) {
     const found = instanceIn(statement);
     if (found) instances.push({ name: found.name, line: lineOf(at + found.offset) });
     at += statement.length + 1;
@@ -291,6 +292,17 @@ function instanceIn(statement: string): { name: string; offset: number } | undef
 
 /** The keywords whose `( … )` condition comes before the statement they guard, as in `generate if (W > 0) begin`. */
 const CONDITION_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'case', 'while', 'repeat']);
+
+/** The text with the `;` inside each `for ( … )` header blanked, the length kept: a header is not three statements. */
+function forHeadersJoined(text: string): string {
+  let joined = text;
+  for (const header of text.matchAll(/\bfor\s*\(/g)) {
+    const open = (header.index ?? 0) + header[0].length - 1;
+    const close = skipBalanced(text, open);
+    joined = joined.slice(0, open) + text.slice(open, close).replace(/;/g, ' ') + joined.slice(close);
+  }
+  return joined;
+}
 
 /** `rest` after the `( … )` condition of `keyword`, when it has one. */
 function afterCondition(rest: string, keyword: string): string {

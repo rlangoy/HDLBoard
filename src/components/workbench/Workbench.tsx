@@ -1727,13 +1727,13 @@ export function Workbench() {
   };
 
   /**
-   * The unit becomes top, named when its file holds more than one unit (as a pane's Play
-   * names it), so Start runs that unit and not a testbench or helper beside it.
+   * The unit becomes top by name, so Start runs that unit: not a testbench added to the
+   * file later, and not a helper the backend sees behind an inactive `ifdef.
    */
   const makeTopUnit = ({ fileId, unitName }: TopUnit) => {
     if (isSimulating) return;
     setTopFileId(fileId);
-    setTopUnit(routeRun(tb.fileAnalysis(fileId), unitName).runTarget);
+    setTopUnit(unitName);
   };
 
   /** Make the unit top and run exactly it. Only Start asks first: a pane's Play makes its own file top already. */

@@ -98,13 +98,17 @@ export interface RunRoute {
 /**
  * B4 / D24: which unit a Start or tab Play runs, and which pane gets focus.
  * topUnit still declared in the file -> that unit; else the first testbench unit;
- * else the first design unit. runTarget is null when the file declares one unit.
+ * else the first design unit. runTarget names the unit when the file declares more
+ * than one, and always when it was chosen by name: the backend may see a unit the
+ * editor does not (a module behind an inactive `ifdef), or one added to the file later.
  */
 export function routeRun(file: FileAnalysis | undefined, topUnit: string | null): RunRoute {
   const units = file?.units ?? [];
-  const unit = findUnit(file, topUnit) ?? units.find((u) => u.role === 'tb') ?? units[0];
+  const chosen = findUnit(file, topUnit);
+  const unit = chosen ?? units.find((u) => u.role === 'tb') ?? units[0];
   if (!unit) return { unitName: null, pane: 'rtl', runTarget: null };
-  return { unitName: unit.name, pane: unit.role, runTarget: units.length > 1 ? unit.name : null };
+  const isNamed = chosen !== undefined || units.length > 1;
+  return { unitName: unit.name, pane: unit.role, runTarget: isNamed ? unit.name : null };
 }
 
 /** Which pane shows `fileId` in `pair`, preferring the pane whose unit is `unitName` in a self pair. */

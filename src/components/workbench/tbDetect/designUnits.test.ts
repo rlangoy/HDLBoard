@@ -94,6 +94,16 @@ describe('Verilog units', () => {
     expect(units('verilog', src)[0].instances.map((i) => i.name)).toEqual(['child']);
   });
 
+  test('an instance inside a generate for is found', () => {
+    const src = 'module top(input [9:0] SW);\ngenvar i;\nfor (i = 0; i < 1; i = i + 1) begin : g\n  leaf u_leaf (.SW(SW));\nend\nendmodule';
+    expect(units('verilog', src)[0].instances.map((i) => i.name)).toEqual(['leaf']);
+  });
+
+  test('an instance in a generate case branch is found', () => {
+    const src = "module top(input [9:0] SW);\ncase (1)\n  2'b01: begin : one\n    leaf u_leaf (.SW(SW));\n  end\nendcase\nendmodule";
+    expect(units('verilog', src)[0].instances.map((i) => i.name)).toEqual(['leaf']);
+  });
+
   test('a statement after an if condition is not an instance', () => {
     expect(units('verilog', 'module m;\nalways @* if (a) q = b(c);\nendmodule')[0].instances).toEqual([]);
   });

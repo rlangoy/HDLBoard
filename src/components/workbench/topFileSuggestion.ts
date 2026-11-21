@@ -11,7 +11,7 @@
  */
 
 import { routeRun } from './editorView';
-import { hasTopDot } from './fileKinds';
+import { hasTopDot, isVerilogHeader } from './fileKinds';
 import type { ProjectParts } from './simOnly/types';
 import { definedUnitKey, unitRefKey } from './simOnly/unitRef';
 import { effectiveFile } from './tbDetect/pairing';
@@ -77,12 +77,12 @@ function declinedFiles(fileIds: ReadonlySet<string>): DeclinedFiles {
   };
 }
 
-/** The shown file, when it is a design file that is not top yet and was not declined. */
+/** The shown file, when it is a design source (no header) that is not top yet and was not declined. */
 function candidateFile({ project, overrides, shownFileId, topFileId, declined }: TopFileQuestion): FileAnalysis | undefined {
   const isOtherFile = shownFileId !== null && shownFileId !== topFileId;
   const file = isOtherFile ? effectiveFile(project, overrides, shownFileId) : undefined;
-  const isOffered = file !== undefined && hasTopDot(file.folder) && !declined.has(file.fileId);
-  return isOffered ? file : undefined;
+  const isRunnable = file !== undefined && hasTopDot(file.folder) && !isVerilogHeader(file.name);
+  return isRunnable && !declined.has(file.fileId) ? file : undefined;
 }
 
 /** A design (never a testbench) that declares a port of the active board. */
@@ -101,7 +101,7 @@ function activeBoardPorts(unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): 
  * design is no reason to keep it off top.
  */
 function unitsUsedByDesigns(question: TopFileQuestion): Set<string> {
-  const graph = instanceGraph(question);
+  const graph = instanceGraph(question, runFileIds(question));
   const used = new Set<string>();
   for (const [key, node] of graph) {
     if (node.role === 'rtl') node.targets.filter((target) => target !== key).forEach((target) => used.add(target));
@@ -135,18 +135,28 @@ interface GraphNode {
   readonly targets: readonly string[];
 }
 
-/** Each unit with its role (the student's marks applied) and the units it instantiates. */
-function instanceGraph(marked: MarkedProject): Map<string, GraphNode> {
+/**
+ * The files a run can include: the design folders, and the Top-File itself, which may be a
+ * testbench in work/ that a pane's Play ran. Any other work/ file never runs, so a design it
+ * instantiates is still a root.
+ */
+function runFileIds({ project, topFileId }: TopFileQuestion): Set<string> {
+  const files = [...project.byFile.values()];
+  return new Set(files.filter((f) => hasTopDot(f.folder) || f.fileId === topFileId).map((f) => f.fileId));
+}
+
+/** Each unit of the run's files with its role (the student's marks applied) and the units it instantiates. */
+function instanceGraph(marked: MarkedProject, runFiles: ReadonlySet<string>): Map<string, GraphNode> {
   const { project, overrides } = marked;
   const graph = new Map<string, GraphNode>();
-  const files = [...project.byFile.keys()].map((fileId) => effectiveFile(project, overrides, fileId));
+  const files = [...runFiles].map((fileId) => effectiveFile(project, overrides, fileId));
   for (const file of files.filter((f): f is FileAnalysis => f !== undefined)) {
     for (const unit of file.units) {
       const targets = keysOf(project, file.language, unit.instances);
       graph.set(unitRefKey(file.fileId, file.language, unit.name), { role: unit.role, targets });
     }
   }
-  for (const foreign of foreignArchitectures(marked)) {
+  for (const foreign of foreignArchitectures(marked, runFiles)) {
     const node = graph.get(foreign.ownerKey);
     if (node) graph.set(foreign.ownerKey, { ...node, targets: [...node.targets, ...foreign.targets] });
   }
@@ -157,10 +167,11 @@ function instanceGraph(marked: MarkedProject): Map<string, GraphNode> {
  * The instances in VHDL architectures written in another file than their entity: they
  * belong to the entity. One in a file the student marked *Treat as testbench* does not.
  */
-function foreignArchitectures({ project, overrides, parts }: MarkedProject): { ownerKey: string; targets: string[] }[] {
+function foreignArchitectures(marked: MarkedProject, runFiles: ReadonlySet<string>): { ownerKey: string; targets: string[] }[] {
+  const { project, overrides, parts } = marked;
   return [...parts].flatMap(([fileId, fileParts]) => {
     const language = project.byFile.get(fileId)?.language;
-    if (language === undefined || overrides.roles[fileId] === 'tb') return [];
+    if (language === undefined || !runFiles.has(fileId) || overrides.roles[fileId] === 'tb') return [];
     return fileParts
       .filter((part) => !part.ownsUnit)
       .flatMap((part) => {

@@ -40,7 +40,8 @@ export const makeTopAndStart = (fileName: string): string => `Make ${fileName} t
 export const startAsItIs = (topFileName: string | null): string =>
   topFileName === null ? 'Start without a Top-File' : `Start ${topFileName}`;
 
-export const chipText = (fileName: string): string => `${fileName} uses the board`;
+/** The chip's button for a screen reader, which does not see its tooltip. */
+export const makeTopLabel = (fileName: string): string => `Make ${fileName} the Top-File`;
 
 export const chipTitle = (suggestion: TopFileSuggestion): string =>
   `${looksLikeTheTop(suggestion)} ${TOP_FILE_TEXT.whatTheTopFileIs}`;

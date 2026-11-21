@@ -192,6 +192,23 @@ describe('the hierarchy of the Top-File', () => {
   });
 });
 
+describe('files that never run', () => {
+  test('do not hide a root: a work/ design that instantiates it', () => {
+    const inWork: SourceFile = { ...boardDesignUsing('wrapper', 'lab2'), folder: 'work' };
+    expect(suggest({ files: [LAB1, LAB2, inWork], shown: 'lab2.vhd', top: 'lab1.vhd' })?.fileId).toBe('lab2.vhd');
+  });
+
+  test('do not hide a root: a work/ architecture that instantiates it', () => {
+    const inWork: SourceFile = { ...architectureUsing('lab1', 'lab2'), folder: 'work' };
+    expect(suggest({ files: [entityOnly('lab1'), inWork, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd' })?.fileId).toBe('lab2.vhd');
+  });
+
+  test('are never offered: a Verilog header, which only an include compiles', () => {
+    const header: SourceFile = { ...source('leaf.vh', 'module leaf(input [9:0] SW, output [9:0] LEDR);\nendmodule\n'), folder: 'verilog' };
+    expect(suggest({ files: [LAB1, header], shown: 'leaf.vh', top: 'lab1.vhd' })).toBeNull();
+  });
+});
+
 describe('the board ports named as evidence', () => {
   test('are the active board’s own: DE1-SoC names on a Basys 3 are no reason to offer', () => {
     const de1Names = source('old.vhd', vhdlDesign('old', 'CLOCK_50 : in std_logic; HEX0_N : out std_logic_vector(6 downto 0)', ''));

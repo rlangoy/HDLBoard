@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { TOP_FILE_TEXT, chipText, chipTitle } from './topFileText';
+import { TOP_FILE_TEXT, chipTitle, makeTopLabel } from './topFileText';
 import type { TopFileSuggestion } from './topFileSuggestion';
 
 export interface TopFileChipProps {
@@ -12,16 +12,16 @@ export interface TopFileChipProps {
 
 /**
  * The pane header's quiet offer, before Start is ever pressed: the file on screen looks
- * like the Top-File and is not it. Shaped like the testbench suggestion chip, in the
- * Top-File's blue with the Files dot, so the two read as one thing. `role="status"`,
- * and it never takes focus.
+ * like the Top-File and is not it. Only the action is shown, so it fits a narrow pane;
+ * the reason is its tooltip, and a screen reader hears the file's name. Shaped like the
+ * testbench suggestion chip, in the Top-File's blue with the Files dot, so the two read
+ * as one thing. `role="status"`, and it never takes focus.
  */
 export function TopFileChip({ suggestion, onMakeTop, onDismiss }: TopFileChipProps) {
   return (
     <div className="wb-tbchip wb-tbchip--top" role="status" title={chipTitle(suggestion)}>
       <span className="wb-tbchip__dot" aria-hidden="true" />
-      <span className="wb-tbchip__text">{chipText(suggestion.fileName)}</span>
-      <button type="button" className="wb-tbchip__open" onClick={onMakeTop}>
+      <button type="button" className="wb-tbchip__open" aria-label={makeTopLabel(suggestion.fileName)} onClick={onMakeTop}>
         {TOP_FILE_TEXT.makeTop}
       </button>
       <button
