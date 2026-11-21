@@ -393,44 +393,47 @@
   color: var(--wb-accent-dark-ink);
 }
 
-/* Folds to its ⓘ when the header is tight: the chip gives up its room before
- * anything else, and once the button is narrower than icon + label, the label
- * wraps onto a second line that the fixed height clips away. The words never
- * break and the header never overflows; the full reason stays in the tooltip. */
+/* Folds as the header gets tight, giving up its room before anything else:
+ * first the label goes, then the ×, and the ⓘ always stays. The label and the
+ * × wrap onto a second line that the fixed height clips away, so the words never
+ * break and the header never overflows. The full reason stays in the tooltip,
+ * and the ⓘ still sets the Top File. */
 .wb-tbchip--top {
   flex: 0 1000 auto;
-  min-width: 54px; /* ⓘ and × always stay */
+  column-gap: 4px;
+  box-sizing: border-box;
+  min-width: 28px; /* the ⓘ */
   padding: 0 3px;
   overflow: hidden;
 }
 
-.wb-tbchip__fold {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-content: flex-start;
-  column-gap: 5px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 8px 0 3px;
-  overflow: hidden;
-  white-space: nowrap;
+.wb-tbchip__info {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  padding: 0;
 }
 
 .wb-tbchip__icon {
-  flex: none;
   width: 14px;
   height: 14px;
-  margin: 3px 0;
   color: var(--wb-accent);
 }
 
-.wb-tbchip__label {
-  line-height: 20px;
-}
-
-.wb-tbchip__dismiss {
-  flex: none;
+/* Reversed so the label, last in the markup, is the first to wrap away. */
+.wb-tbchip__rest {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 0 2px;
+  min-width: 0;
+  height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* ---- narrow panes (docs/cleanup_file_tabs.md § 5.3) ---------------
