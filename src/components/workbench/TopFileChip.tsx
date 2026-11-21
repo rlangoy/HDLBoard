@@ -21,7 +21,7 @@ export function TopFileChip({ suggestion, onMakeTop, onDismiss }: TopFileChipPro
   return (
     <div className="wb-tbchip wb-tbchip--top" role="status" title={chipTitle(suggestion)}>
       <span className="wb-tbchip__dot" aria-hidden="true" />
-      <button type="button" className="wb-tbchip__open" aria-label={makeTopLabel(suggestion.fileName)} onClick={onMakeTop}>
+      <button type="button" className="wb-tbchip__open" aria-label={makeTopLabel(suggestion.label)} onClick={onMakeTop}>
         {TOP_FILE_TEXT.makeTop}
       </button>
       <button

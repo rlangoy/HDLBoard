@@ -4,7 +4,9 @@
 import { useState } from 'react';
 import { Dialog } from './Dialog';
 import { ChipIcon } from './icons';
-import { TOP_FILE_TEXT, looksLikeTheTop, makeTopAndStart, makeTopTitle, startAsItIs, whatStartRunsNow } from './topFileText';
+import {
+  TOP_FILE_TEXT, looksLikeTheTop, makeTopAndStart, makeTopTitle, startAsItIs, whatStartRunsNow, whatTheTopFileIs,
+} from './topFileText';
 import type { TopFileSuggestion } from './topFileSuggestion';
 import './TopFileDialog.css';
 
@@ -36,7 +38,7 @@ export function TopFileDialog(props: TopFileDialogProps) {
     <Dialog
       open
       onClose={onClose}
-      title={makeTopTitle(suggestion.fileName)}
+      title={makeTopTitle(suggestion.label)}
       icon={<ChipIcon />}
       footer={
         <div className="wb-dialog__actions">
@@ -47,7 +49,7 @@ export function TopFileDialog(props: TopFileDialogProps) {
             {startAsItIs(topFileName)}
           </button>
           <button type="button" className="wb-dialog__close" autoFocus onClick={thenStart(onMakeTopAndStart)}>
-            {makeTopAndStart(suggestion.fileName)}
+            {makeTopAndStart(suggestion.label)}
           </button>
         </div>
       }
@@ -63,7 +65,7 @@ export function TopFileDialog(props: TopFileDialogProps) {
 function Explanation({ suggestion, topFileName }: Pick<TopFileDialogProps, 'suggestion' | 'topFileName'>) {
   return (
     <>
-      <p>{TOP_FILE_TEXT.whatTheTopFileIs}</p>
+      <p>{whatTheTopFileIs(suggestion)}</p>
       <p>
         {looksLikeTheTop(suggestion)} {whatStartRunsNow(topFileName)}
       </p>

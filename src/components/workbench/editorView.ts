@@ -16,6 +16,17 @@ export type EditorView = 'tb' | 'both' | 'rtl';
 export type PairEvent = 'open' | 'run';
 export type PaneRole = 'tb' | 'rtl';
 
+/**
+ * The pane whose unit the student works on, for the Top-File offer: the testbench pane
+ * while one is on screen (in a dual view too), else the design pane.
+ */
+export interface WorkingPane {
+  readonly pane: PaneRole;
+  readonly fileId: string;
+  /** As the code reads now; null when the file declares no unit. */
+  readonly unitName: string | null;
+}
+
 /** In a column too narrow for two panes, Both shows the focused pane only (§ 4.9). */
 export const narrowView = (view: EditorView, focusedPane: PaneRole, canSplit: boolean): EditorView =>
   view === 'both' && !canSplit ? focusedPane : view;

@@ -3,13 +3,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { PaneRun } from './EditorPaneHeader';
-import { narrowView, paneOf, pairKey, resolveView, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type PaneRole } from './editorView';
+import {
+  narrowView, paneOf, pairKey, resolveView, showsSuggestion, withCurrentUnit, type EditorView, type PairEvent, type PaneRole, type WorkingPane,
+} from './editorView';
 import type { VhdlFile } from './files';
 import { roleConflict, testbenchesFor, withPair, withRole, withoutContradictedPairs, withoutFile, type TestbenchChoice } from './splitModel';
 import { RoleConflictDialog } from './RoleConflictDialog';
 import type { FileMenuProps } from './FileMenu';
 import type { SplitEditorProps } from './SplitEditor';
-import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type ModelContext } from './splitPaneModels';
+import { editorPropsFor, otherPane, paneFile, type EditorDisplay, type ModelContext, type PaneChip } from './splitPaneModels';
 import { effectiveFile, findPair } from './tbDetect';
 import { EMPTY_OVERRIDES, type EditorPair, type FileAnalysis, type FileRole, type PaneTarget, type ProjectAnalysis, type TestbenchOverrides, type UnitRole } from './tbDetect/types';
 import { TestbenchSuggestion } from './TestbenchSuggestion';
@@ -53,6 +55,8 @@ export interface TestbenchSplit {
   readonly setPairOverride: (designId: string, tbId: string) => void;
   /** The testbench in the TB pane while that pane is on screen (the Waveform button runs it), else null. */
   readonly shownTestbench: PaneTarget | null;
+  /** The testbench pane while one is on screen, else the design pane; null while nothing is shown. */
+  readonly workingPane: WorkingPane | null;
   /** The files in the editor's panes now, as the panes show them. */
   readonly shownFileIds: readonly string[];
   /** A file's role from the current analysis, with its override applied; for the file lists. */
@@ -66,10 +70,14 @@ export interface TestbenchSplit {
   readonly focusPane: (pane: PaneRole) => void;
   readonly onFileDeleted: (id: string) => void;
   /**
-   * CodeEditor's panes, with their headers and the chip; none while nothing is shown. The
-   * testbench chip wins over `otherChip` (the Top-File's): one chip at a time.
+   * CodeEditor's panes, with their headers and chips; none while nothing is shown. `topChip`
+   * (the Top-File's) goes on its own pane; where the testbench chip is too, that one wins.
    */
-  readonly editorSplit: (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], otherChip?: ReactNode) => SplitEditorProps | undefined;
+  readonly editorSplit: (
+    fileMenu: FileMenuProps,
+    designCheckBadge?: ModelContext['designCheckBadge'],
+    topChip?: PaneChip | null,
+  ) => SplitEditorProps | undefined;
   /** The question asked when a role change would put two designs or two testbenches side by side; null otherwise. */
   readonly roleConflictDialog: ReactNode;
   /** The project as the design check sees it (docs/impl_sim_only_warnings.md § 4). */
@@ -194,7 +202,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     showFile(pair.anchorId, 'open');
   });
 
-  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], otherChip?: ReactNode) => editorPropsFor(
+  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], topChip?: PaneChip | null) => editorPropsFor(
     {
       project: analysis.current,
       overrides: overrides.value,
@@ -214,7 +222,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       designCheckBadge,
     },
     split,
-    chip ?? otherChip,
+    { suggestion: chip, top: topChip ?? null },
   );
 
   return {
@@ -222,6 +230,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     overrides: overrides.value,
     restoreOverrides: overrides.set,
     shownTestbench: shownTestbenchOf(display, split.canSplit, analysis.current, overrides.value),
+    workingPane: workingPaneOf(display, split.canSplit, analysis.current, overrides.value),
     shownFileIds: display ? shownFileIds(display, narrowView(display.view, display.focusedPane, split.canSplit)) : [],
     roleOf: (fileId) => effectiveFile(analysis.current, overrides.value, fileId)?.role,
     setPairOverride: (designId, tbId) => overrides.set(withPair(overrides.ref.current, designId, tbId)),
@@ -421,6 +430,20 @@ function useSuggestionChip(
       onDismiss={() => setDismissed(new Set([...dismissed, key]))}
     />
   );
+}
+
+function workingPaneOf(
+  display: EditorDisplay | null,
+  canSplit: boolean,
+  project: ProjectAnalysis,
+  overrides: TestbenchOverrides,
+): WorkingPane | null {
+  const testbench = shownTestbenchOf(display, canSplit, project, overrides);
+  if (testbench) return { pane: 'tb', fileId: testbench.fileId, unitName: testbench.unitName };
+  const design = display?.pair.rtl;
+  if (!design) return null;
+  const current = withCurrentUnit(design, effectiveFile(project, overrides, design.fileId), 'rtl');
+  return { pane: 'rtl', fileId: current.fileId, unitName: current.unitName };
 }
 
 function shownTestbenchOf(

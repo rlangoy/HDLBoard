@@ -1818,12 +1818,16 @@ export function Workbench() {
 
   restoreOverridesRef.current = tb.restoreOverrides;
 
+  // What Start runs, as the Simulation card names it: "alu.v › alu_tb" when a unit was chosen (§ 4.10).
+  const topFileOnly = files.find((f) => f.id === topFileId)?.name;
+  const topRunLabel = topFileOnly && (topUnit ? `${topFileOnly} › ${topUnit}` : topFileOnly);
+
   const topSuggestion = useTopFileSuggestion({
     hint: topFileHint,
     topFileId,
     topUnit,
-    topFileName: files.find((f) => f.id === topFileId)?.name ?? null,
-    shownFileId: activeFileId,
+    topFileName: topRunLabel ?? null,
+    working: tb.workingPane,
     boardPorts: activeBoardPorts,
     shownProject: { project: tb.designView.corrected, overrides: tb.overrides, parts: tb.designView.parts },
     projectNow: () => {
@@ -2035,9 +2039,7 @@ export function Workbench() {
   });
   const showInFolder = desktopBridge()?.showInFolder;
 
-  const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
-  // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
-  const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
+  const topFileName = topRunLabel ?? (topUnit ? `${TOP_LEVEL_ENTITY} › ${topUnit}` : TOP_LEVEL_ENTITY);
 
 
   return (

@@ -907,14 +907,17 @@ shows; a `waveGet` for a run whose session is gone answers `onNone`.
 (Files panel highlight and pane header), then runs it; `handleRunPane` (Play in
 a pane header) first makes that pane's file top, then does the same.
 
-Before that, Start may ask a question (`useTopFileSuggestion.tsx`). If the file in
-the focused pane looks like the Top-File and isn't it, `TopFileDialog` asks
-*Make lab2.vhd the Top-File?*. "Looks like the Top-File" means a design with a
-port of the active board, which no other design and nothing in the current top's
-hierarchy instantiates (`topFileSuggestion.ts`). The same suggestion shows earlier,
-as `TopFileChip` in the rightmost pane header, unless the testbench chip is
-there. *Start lab1.vhd* and the chip's × leave the file alone until the Top-File
-changes. Settings › General › *Suggest the Top-File* (`useTopFileHint.ts`,
+Before that, Start may ask a question (`useTopFileSuggestion.tsx`). If the unit on
+screen looks like the Top-File and Start would run something else, `TopFileDialog`
+asks *Make lab2.vhd the Top-File?* (`topFileSuggestion.ts`). The split's
+`workingPane` decides what is on screen: the testbench pane while one is shown,
+alone or beside its design, else the design pane. A testbench there is offered
+unless Start runs it already. A design is offered when it has a port of the active
+board and no other design, nor the current top's hierarchy, instantiates it. The
+same offer shows earlier, as `TopFileChip` in that pane's header (the testbench
+suggestion chip wins where both would sit). *Start lab1.vhd* and the chip's ×
+leave the unit alone until the Top-File changes. The Waveform button is not
+affected: it still runs the testbench on screen. Settings › General › *Suggest the Top-File* (`useTopFileHint.ts`,
 `settings.json` key `topFileHint`) turns both off. Play never asks: it makes its
 own file top.
 

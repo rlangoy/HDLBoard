@@ -9,7 +9,8 @@ import { designView } from './simOnly/designView';
 import { BOARD_PORTS, source, vhdlDesign } from './simOnly/simOnly.testSupport';
 import { analyzeProject, type SourceFile } from './tbDetect/analyzeProject';
 import { EMPTY_OVERRIDES, type TestbenchOverrides } from './tbDetect/types';
-import { MAX_PORTS_NAMED, NO_DECLINED_FILES, topFileSuggestion, type DeclinedFiles } from './topFileSuggestion';
+import type { PaneRole } from './editorView';
+import { MAX_PORTS_NAMED, NO_DECLINED_UNITS, topFileSuggestion, type DeclinedUnits, type TopFileSuggestion } from './topFileSuggestion';
 
 /** A design wired to the board: SW in, LEDR out. */
 const boardDesign = (name: string, body = 'LEDR <= SW;') => source(`${name}.vhd`, vhdlDesign(name, BOARD_PORTS, body));
@@ -31,17 +32,23 @@ const verilogBoardDesign = (name: string) =>
 interface Asked {
   readonly files: readonly SourceFile[];
   readonly shown: string | null;
+  /** The pane the shown file is worked on in; the design pane unless a test says otherwise. */
+  readonly pane?: PaneRole;
+  /** The unit that pane shows; the file's own choice when left out. */
+  readonly unit?: string | null;
   readonly top: string | null;
   readonly topUnit?: string | null;
   readonly overrides?: TestbenchOverrides;
-  readonly declined?: DeclinedFiles;
+  readonly declined?: DeclinedUnits;
   /** The active board; the DE1-SoC unless a test says otherwise. */
   readonly board?: BoardDefinition;
 }
 
 const DE1_SOC = builtInBoard('de1-soc');
 
-function suggest({ files, shown, top, topUnit = null, overrides = EMPTY_OVERRIDES, declined = NO_DECLINED_FILES, board = DE1_SOC }: Asked) {
+function suggest(asked: Asked) {
+  const { files, shown, pane = 'rtl', unit = null, top, topUnit = null, overrides = EMPTY_OVERRIDES } = asked;
+  const { declined = NO_DECLINED_UNITS, board = DE1_SOC } = asked;
   // As Workbench reads it: role detection by every board-design name, the offer by the active board's own.
   const { corrected, parts } = designView(analyzeProject(files, boardDesignPortNames(board)), overrides);
   return topFileSuggestion({
@@ -49,12 +56,15 @@ function suggest({ files, shown, top, topUnit = null, overrides = EMPTY_OVERRIDE
     overrides,
     parts,
     boardPorts: portKeysOf(board),
-    shownFileId: shown,
+    working: shown === null ? null : { pane, fileId: shown, unitName: unit },
     topFileId: top,
     topUnit,
     declined,
   });
 }
+
+/** The board ports a board-design offer names; undefined for no offer, or a testbench's. */
+const boardPortsOf = (suggestion: TopFileSuggestion | null) => (suggestion?.kind === 'board-design' ? suggestion.boardPorts : undefined);
 
 const LAB1 = boardDesign('lab1');
 const LAB2 = boardDesign('lab2');
@@ -73,12 +83,12 @@ describe('a file that looks like the Top-File', () => {
   });
 
   test('is named with the board ports it uses, as written', () => {
-    expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd' })?.boardPorts).toEqual(['LEDR', 'SW', 'CLOCK_50']);
+    expect(boardPortsOf(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd' }))).toEqual(['LEDR', 'SW', 'CLOCK_50']);
   });
 
   test(`names at most ${MAX_PORTS_NAMED} board ports`, () => {
     const wide = source('wide.vhd', vhdlDesign('wide', `${BOARD_PORTS}; KEY : in std_logic_vector(3 downto 0)`, 'LEDR <= SW;'));
-    expect(suggest({ files: [LAB1, wide], shown: 'wide.vhd', top: 'lab1.vhd' })?.boardPorts).toHaveLength(MAX_PORTS_NAMED);
+    expect(boardPortsOf(suggest({ files: [LAB1, wide], shown: 'wide.vhd', top: 'lab1.vhd' }))).toHaveLength(MAX_PORTS_NAMED);
   });
 
   test('is a board design its own testbench instantiates, while another design is top', () => {
@@ -131,14 +141,7 @@ describe('no suggestion', () => {
     expect(suggest({ files: [LAB2, testbenchOf('lab2')], shown: 'lab2.vhd', top: 'lab2_tb.vhd' })).toBeNull();
   });
 
-  test('for a testbench', () => {
-    expect(suggest({ files: [LAB1, LAB2, testbenchOf('lab2')], shown: 'lab2_tb.vhd', top: 'lab1.vhd' })).toBeNull();
-  });
 
-  test('for a board design the student marked Treat as testbench', () => {
-    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'lab2.vhd': 'tb' } };
-    expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd', overrides })).toBeNull();
-  });
 
   test('for a design without board ports', () => {
     const adder = source('adder.vhd', vhdlDesign('adder', 'a, b : in std_logic; s : out std_logic', 's <= a xor b;'));
@@ -150,8 +153,8 @@ describe('no suggestion', () => {
     expect(suggest({ files: [LAB1, work], shown: 'lab2.vhd', top: 'lab1.vhd' })).toBeNull();
   });
 
-  test('for a file the student declined this session', () => {
-    const declined = NO_DECLINED_FILES.with('lab2.vhd');
+  test('for a unit the student declined this session', () => {
+    const declined = NO_DECLINED_UNITS.with({ fileId: 'lab2.vhd', unitName: 'lab2' });
     expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd', declined })).toBeNull();
   });
 });
@@ -221,13 +224,60 @@ describe('the board ports named as evidence', () => {
   });
 });
 
-describe('the declined files', () => {
+describe('a testbench', () => {
+  const TB = testbenchOf('lab2');
+  const inTbPane = { pane: 'tb', shown: 'lab2_tb.vhd' } as const;
+
+  test('is offered as a testbench when shown alone in the design pane, before the split opens', () => {
+    expect(suggest({ files: [LAB1, LAB2, TB], shown: 'lab2_tb.vhd', top: 'lab1.vhd' })?.kind).toBe('testbench');
+  });
+
+  test('is what a board design the student marked Treat as testbench is offered as', () => {
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'lab2.vhd': 'tb' } };
+    expect(suggest({ files: [LAB1, LAB2], shown: 'lab2.vhd', top: 'lab1.vhd', overrides })?.kind).toBe('testbench');
+  });
+
+  test('offers its testbench while another design is top', () => {
+    expect(suggest({ files: [LAB1, LAB2, TB], ...inTbPane, top: 'lab1.vhd' })?.kind).toBe('testbench');
+  });
+
+  test('names the design the testbench tests', () => {
+    const suggestion = suggest({ files: [LAB1, LAB2, TB], ...inTbPane, top: 'lab1.vhd' });
+    expect(suggestion?.kind === 'testbench' && suggestion.dutName).toBe('lab2');
+  });
+
+  test('offers it while its own design is top', () => {
+    expect(suggest({ files: [LAB2, TB], ...inTbPane, top: 'lab2.vhd' })?.unitName).toBe('lab2_tb');
+  });
+
+  test('does not offer it when Start runs it already', () => {
+    expect(suggest({ files: [LAB2, TB], ...inTbPane, top: 'lab2_tb.vhd' })).toBeNull();
+  });
+
+  test('offers the testbench of a mixed Top-File while Start runs its design, by file and unit', () => {
+    const mixed = source('lab2.vhd', `${LAB2.content}
+${TB.content}`);
+    const suggestion = suggest({ files: [mixed], pane: 'tb', shown: 'lab2.vhd', unit: 'lab2_tb', top: 'lab2.vhd', topUnit: 'lab2' });
+    expect(suggestion?.label).toBe('lab2.vhd › lab2_tb');
+  });
+
+  test('declines per unit: a declined testbench leaves the design in its file on offer', () => {
+    const mixed = source('lab2.vhd', `${LAB2.content}
+${TB.content}`);
+    const declined = NO_DECLINED_UNITS.with({ fileId: 'lab2.vhd', unitName: 'lab2_tb' });
+    expect(suggest({ files: [LAB1, mixed], shown: 'lab2.vhd', top: 'lab1.vhd', declined })?.unitName).toBe('lab2');
+  });
+});
+
+describe('the declined units', () => {
+  const LAB2_UNIT = { fileId: 'lab2.vhd', unitName: 'lab2' };
+
   test('start empty', () => {
-    expect(NO_DECLINED_FILES.has('lab2.vhd')).toBe(false);
+    expect(NO_DECLINED_UNITS.has(LAB2_UNIT)).toBe(false);
   });
 
   test('leave the set they grew from unchanged', () => {
-    NO_DECLINED_FILES.with('lab2.vhd');
-    expect(NO_DECLINED_FILES.has('lab2.vhd')).toBe(false);
+    NO_DECLINED_UNITS.with(LAB2_UNIT);
+    expect(NO_DECLINED_UNITS.has(LAB2_UNIT)).toBe(false);
   });
 });

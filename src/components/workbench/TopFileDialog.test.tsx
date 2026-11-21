@@ -4,12 +4,30 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { TopFileDialog } from './TopFileDialog';
-import type { TopFileSuggestion } from './topFileSuggestion';
+import type { BoardDesignSuggestion, TestbenchSuggestion, TopFileSuggestion } from './topFileSuggestion';
 
-const LAB2: TopFileSuggestion = { fileId: 'lab2', fileName: 'lab2.vhd', unitName: 'lab2', unitKind: 'entity', boardPorts: ['SW', 'KEY', 'LEDR'] };
+const LAB2: BoardDesignSuggestion = {
+  kind: 'board-design',
+  fileId: 'lab2',
+  fileName: 'lab2.vhd',
+  label: 'lab2.vhd',
+  unitName: 'lab2',
+  unitKind: 'entity',
+  boardPorts: ['SW', 'KEY', 'LEDR'],
+};
+
+const LAB2_TB: TestbenchSuggestion = {
+  kind: 'testbench',
+  fileId: 'lab2_tb',
+  fileName: 'lab2_tb.vhd',
+  label: 'lab2_tb.vhd',
+  unitName: 'lab2_tb',
+  unitKind: 'entity',
+  dutName: 'lab2',
+};
 const nothing = () => undefined;
 
-function textOf(topFileName: string | null, suggestion = LAB2): string {
+function textOf(topFileName: string | null, suggestion: TopFileSuggestion = LAB2): string {
   const html = renderToStaticMarkup(
     <TopFileDialog
       suggestion={suggestion}
@@ -37,10 +55,30 @@ describe('TopFileDialog', () => {
   });
 
   test('calls a Verilog unit a module', () => {
-    expect(textOf('lab1.vhd', { ...LAB2, fileName: 'lab3.v', unitName: 'lab3', unitKind: 'module', boardPorts: ['SW'] })).toContain(
-      'lab3.v (module lab3) uses SW,',
-    );
+    const lab3: BoardDesignSuggestion = { ...LAB2, fileName: 'lab3.v', label: 'lab3.v', unitName: 'lab3', unitKind: 'module', boardPorts: ['SW'] };
+    expect(textOf('lab1.vhd', lab3)).toContain('lab3.v (module lab3) uses SW,');
   });
+
+  test('names the unit when the file holds more than one', () => {
+    expect(textOf('lab1.vhd', { ...LAB2_TB, label: 'lab2.vhd › lab2_tb' })).toContain('Make lab2.vhd › lab2_tb the Top-File?');
+  });
+});
+
+describe('TopFileDialog for a testbench', () => {
+  test('says a testbench Top-File runs without the board', () => {
+    expect(textOf('lab1.vhd', LAB2_TB)).toContain('A testbench as the Top-File runs without the board');
+  });
+
+  test('names the design it tests', () => {
+    expect(textOf('lab1.vhd', LAB2_TB)).toContain('lab2_tb.vhd (entity lab2_tb) is a testbench for lab2.');
+  });
+
+  test('says only that it is a testbench when its design is unknown', () => {
+    expect(textOf('lab1.vhd', { ...LAB2_TB, dutName: null })).toContain('lab2_tb.vhd (entity lab2_tb) is a testbench.');
+  });
+});
+
+describe('TopFileDialog, both kinds', () => {
 
   test('says what Start would run otherwise', () => {
     expect(textOf('lab1.vhd')).toContain('Now Start would run lab1.vhd.');
