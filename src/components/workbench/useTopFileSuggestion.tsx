@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useState, type ReactNode } from 'react';
-import { routeRun, type PaneRole, type WorkingPane } from './editorView';
+import { routeRun, type WorkingPane } from './editorView';
 import type { Setting } from './settings/settingsSections';
 import type { PaneChip } from './splitPaneModels';
 import type { FileAnalysis } from './tbDetect/types';
@@ -74,12 +74,14 @@ export interface TopFileSuggestionApi {
 
 /**
  * Offers the unit on screen as the Top-File, at Start and in its pane's header
- * (topFileSuggestion.ts). A unit the student keeps off the Top-File, with *Start lab1.vhd*
- * or the chip's ×, is not offered again until the Top-File changes; that is never stored.
+ * (topFileSuggestion.ts). A unit the student keeps off the Top-File with *Start lab1.vhd*
+ * is not offered again until the Top-File changes; that is never stored. The chip's × only
+ * hides the chip, until another file is on screen.
  */
 export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFileSuggestionApi {
   const { board, working, topFileId, topUnit } = options;
   const declined = useDeclinedUnits(options.running);
+  const chipHidden = useHiddenChip(working?.fileId ?? null);
   const [asked, setAsked] = useState<TopFileSuggestion | null>(null);
   const suggestionIn = (marked: MarkedProject) =>
     topFileSuggestion({ ...marked, board, working, topFileId, topUnit, declined: declined.units });
@@ -95,17 +97,10 @@ export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFile
     const now = suggestionIn(options.projectNow());
     if (now && isSameUnit(now, shown)) options.onMakeTop(now);
   };
-  const chipSuggestion = isOffering && asked === null ? suggestionIn(options.shownProject) : null;
+  const chipSuggestion = isOffering && asked === null && !chipHidden.isHidden ? suggestionIn(options.shownProject) : null;
   return {
     start,
-    chip: chipSuggestion && working && onPane(
-      working.pane,
-      <TopFileChip
-        suggestion={chipSuggestion}
-        onMakeTop={() => makeTopIfStillSuggested(chipSuggestion)}
-        onDismiss={() => declined.add(chipSuggestion)}
-      />,
-    ),
+    chip: chipOn(working, chipSuggestion, { onMakeTop: makeTopIfStillSuggested, onDismiss: chipHidden.hide }),
     dialog: asked && (
       <Question
         suggestion={asked}
@@ -172,6 +167,32 @@ function useDeclinedUnits(running: RunningTop | null): Declined {
   return { units, add: (unit) => setDeclined({ top, units: units.with(unit) }) };
 }
 
+interface HiddenChip {
+  readonly isHidden: boolean;
+  readonly hide: () => void;
+}
+
+/**
+ * Whether the chip's × hid the chip for the file on screen. Showing another file shows it
+ * again, coming back to this one too: the flag is dropped as the switch is rendered.
+ */
+function useHiddenChip(fileId: string | null): HiddenChip {
+  const [hidden, setHidden] = useState({ fileId, isHidden: false });
+  const isFileChanged = hidden.fileId !== fileId;
+  if (isFileChanged) setHidden({ fileId, isHidden: false });
+  return { isHidden: !isFileChanged && hidden.isHidden, hide: () => setHidden({ fileId, isHidden: true }) };
+}
+
 const isSameUnit = (a: TopUnit, b: TopUnit): boolean => a.fileId === b.fileId && a.unitName === b.unitName;
 
-const onPane = (pane: PaneRole, node: ReactNode): PaneChip => ({ pane, node });
+interface ChipActions {
+  readonly onMakeTop: (shown: TopFileSuggestion) => void;
+  readonly onDismiss: () => void;
+}
+
+/** The chip, on the pane its offer is about; null when there is nothing to offer. */
+function chipOn(working: WorkingPane | null, suggestion: TopFileSuggestion | null, actions: ChipActions): PaneChip | null {
+  if (!working || !suggestion) return null;
+  const node = <TopFileChip suggestion={suggestion} onMakeTop={() => actions.onMakeTop(suggestion)} onDismiss={actions.onDismiss} />;
+  return { pane: working.pane, node };
+}
