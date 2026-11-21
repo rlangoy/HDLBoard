@@ -20,9 +20,18 @@ export interface TopFileChipProps {
 export function TopFileChip({ suggestion, onMakeTop, onDismiss }: TopFileChipProps) {
   return (
     <div className="wb-tbchip wb-tbchip--top" role="status" title={chipTitle(suggestion)}>
-      <span className="wb-tbchip__dot" aria-hidden="true" />
-      <button type="button" className="wb-tbchip__open" aria-label={makeTopLabel(suggestion.label)} onClick={onMakeTop}>
-        {TOP_FILE_TEXT.makeTop}
+      <button
+        type="button"
+        className="wb-tbchip__open wb-tbchip__fold"
+        aria-label={makeTopLabel(suggestion.label)}
+        onClick={onMakeTop}
+      >
+        <svg className="wb-tbchip__icon" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="8" cy="4.9" r="1" fill="currentColor" />
+          <path d="M8 7.2v4.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <span className="wb-tbchip__label">{TOP_FILE_TEXT.makeTop}</span>
       </button>
       <button
         type="button"
