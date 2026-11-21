@@ -2,40 +2,47 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
-import { activeIncludes, dependsOnOutsideMacros } from './verilogDirectiveScan';
+import { scanVerilog } from './verilogDirectiveScan';
+
+const includesOf = (content: string) => scanVerilog(content).includes;
+const isConditional = (content: string) => scanVerilog(content).conditional;
 
 describe('the headers a file includes', () => {
   test('are named as written, without their folder', () => {
-    expect(activeIncludes('`include "lib/defs.vh"\nmodule m; endmodule\n')).toEqual(['defs.vh']);
+    expect(includesOf('`include "lib/defs.vh"\nmodule m; endmodule\n')).toEqual(['defs.vh']);
   });
 
   test('leave out one in a comment', () => {
-    expect(activeIncludes('// `include "spare.vh"\nmodule m; endmodule\n')).toEqual([]);
+    expect(includesOf('// `include "spare.vh"\nmodule m; endmodule\n')).toEqual([]);
   });
 
   test('leave out one in an inactive `ifdef branch', () => {
-    expect(activeIncludes('`ifdef SPARE\n`include "spare.vh"\n`endif\n')).toEqual([]);
+    expect(includesOf('`ifdef SPARE\n`include "spare.vh"\n`endif\n')).toEqual([]);
   });
 
   test('keep one in a branch the file’s own `define makes active', () => {
-    expect(activeIncludes('`define SPARE\n`ifdef SPARE\n`include "spare.vh"\n`endif\n')).toEqual(['spare.vh']);
+    expect(includesOf('`define SPARE\n`ifdef SPARE\n`include "spare.vh"\n`endif\n')).toEqual(['spare.vh']);
   });
 });
 
-describe('a file whose code a macro from elsewhere picks', () => {
-  test('is one testing a macro it does not define', () => {
-    expect(dependsOnOutsideMacros('`ifdef BOARD_BUILD\nmodule a; endmodule\n`endif\n')).toBe(true);
+describe('conditional compilation', () => {
+  test('is an `ifdef on any macro, the file’s own too: an include or -D may change it', () => {
+    expect(isConditional('`define FAST\n`ifndef FAST\nmodule a; endmodule\n`endif\n')).toBe(true);
   });
 
-  test('is not one testing only its own macros', () => {
-    expect(dependsOnOutsideMacros('`define FAST\n`ifndef FAST\nmodule a; endmodule\n`endif\n')).toBe(false);
+  test('is an `ifdef SYNTHESIS too: the compiler options may define it', () => {
+    expect(isConditional('`ifdef SYNTHESIS\nmodule a; endmodule\n`endif\n')).toBe(true);
   });
 
-  test('is not one testing only SYNTHESIS, which the editor and the simulator both leave undefined', () => {
-    expect(dependsOnOutsideMacros('`ifdef SYNTHESIS\nmodule a; endmodule\n`endif\n')).toBe(false);
+  test('is not one in a comment', () => {
+    expect(isConditional('// `ifdef BOARD_BUILD\nmodule a; endmodule\n')).toBe(false);
   });
 
-  test('is not one whose test is in a comment', () => {
-    expect(dependsOnOutsideMacros('// `ifdef BOARD_BUILD\nmodule a; endmodule\n')).toBe(false);
+  test('is not one in a string', () => {
+    expect(isConditional('module a;\n  localparam HELP = "`ifdef DEBUG";\nendmodule\n')).toBe(false);
+  });
+
+  test('is not a file without any', () => {
+    expect(isConditional('`timescale 1ns/1ps\nmodule a; endmodule\n')).toBe(false);
   });
 });

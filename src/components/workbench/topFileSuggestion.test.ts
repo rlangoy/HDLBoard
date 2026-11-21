@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { builtInBoard } from '../../boards/boardCatalog';
-import { boardDesignPortNames, portKeysOf } from '../../boards/boardPorts';
+import { boardDesignPortNames, boardRunPortNames, portKeysOf } from '../../boards/boardPorts';
 import type { BoardDefinition } from '../../boards/types';
 import { designView } from './simOnly/designView';
 import { BOARD_PORTS, source, vhdlDesign } from './simOnly/simOnly.testSupport';
@@ -57,6 +57,7 @@ function suggest(asked: Asked) {
     parts,
     dutOf: hardware.dutOf,
     boardPorts: portKeysOf(board),
+    wiredPorts: boardRunPortNames(board),
     working: shown === null ? null : { pane, fileId: shown, unitName: unit },
     topFileId: top,
     topUnit,
@@ -317,16 +318,27 @@ describe('a file with two board designs', () => {
   });
 });
 
-describe('a Verilog file whose `ifdef tests a macro', () => {
+describe('a Verilog file with conditional compilation', () => {
   const choosing = (define: string) =>
     source('mode.v', `${define}\`ifdef BOARD_BUILD\nmodule enabled_board(input [9:0] SW, output [9:0] LEDR);\nendmodule\n\`else\nmodule fallback_board(input [9:0] SW, output [9:0] LEDR);\nendmodule\n\`endif\n`);
 
-  test('from elsewhere is not offered: the simulator may compile the other module', () => {
+  test('on a macro from elsewhere is not offered: the simulator may compile the other module', () => {
     expect(suggest({ files: [LAB1, choosing('`include "mode.vh"\n')], shown: 'mode.v', top: 'lab1.vhd' })).toBeNull();
   });
 
-  test('it defines itself is offered as the editor reads it', () => {
-    expect(suggest({ files: [LAB1, choosing('`define BOARD_BUILD\n')], shown: 'mode.v', top: 'lab1.vhd' })?.unitName).toBe('enabled_board');
+  test('on a macro it defines itself is not offered either: a define in an inactive branch, or -D, can change it', () => {
+    expect(suggest({ files: [LAB1, choosing('`define BOARD_BUILD\n')], shown: 'mode.v', top: 'lab1.vhd' })).toBeNull();
+  });
+
+  test('only in a string is offered: no directive there', () => {
+    const helpful = source('helpful.v', 'module helpful(input [9:0] SW, output [9:0] LEDR);\n  localparam HELP = "`ifdef DEBUG";\nendmodule\n');
+    expect(suggest({ files: [LAB1, helpful], shown: 'helpful.v', top: 'lab1.vhd' })?.unitName).toBe('helpful');
+  });
+
+  test('in the Top-File makes its hierarchy uncertain: a child is not offered in its place', () => {
+    const top = source('top.v', '`ifdef WRAPPED\n`include "wrapper.vh"\n`endif\nmodule top(input [9:0] SW, output [9:0] LEDR);\nendmodule\n');
+    const leaf = verilogBoardDesign('leaf');
+    expect(suggest({ files: [top, leaf], shown: 'leaf.v', top: 'top.v' })).toBeNull();
   });
 });
 
@@ -339,13 +351,20 @@ describe('a header included only where nothing compiles it', () => {
     expect(suggest({ files: [LAB1, independent, spare, includer], shown: 'independent.v', top: 'lab1.vhd' })?.fileId).toBe('independent.v');
   });
 
-  test('in an inactive `ifdef branch does not hide a root it instantiates', () => {
+  test('in an `ifdef branch makes the hierarchy uncertain: -D or another header may include it', () => {
     const includer = source('main.v', '`ifdef SPARE\n`include "spare.vh"\n`endif\nmodule main;\nendmodule\n');
-    expect(suggest({ files: [LAB1, independent, spare, includer], shown: 'independent.v', top: 'lab1.vhd' })?.fileId).toBe('independent.v');
+    expect(suggest({ files: [LAB1, independent, spare, includer], shown: 'independent.v', top: 'lab1.vhd' })).toBeNull();
   });
 });
 
 describe('the run a testbench offer describes', () => {
+  test('is a board run for a VHDL testbench whose only port is the legacy rst, on a board with a reset button', () => {
+    const resetOnly = source('reset_tb.vhd', vhdlDesign('reset_tb', 'rst : in std_logic', ''));
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'reset_tb.vhd': 'tb' } };
+    const asked = { files: [LAB1, resetOnly], pane: 'tb' as const, shown: 'reset_tb.vhd', top: 'lab1.vhd', overrides, board: builtInBoard('nexys-a7') };
+    expect(suggest(asked)?.kind).toBe('board-design');
+  });
+
   test('is a board run for a VHDL testbench with ports, as GHDL runs it', () => {
     const sensor = source('sensor_tb.vhd', vhdlDesign('sensor_tb', 'probe : in std_logic', ''));
     const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'sensor_tb.vhd': 'tb' } };

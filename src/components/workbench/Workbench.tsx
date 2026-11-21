@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
-import { boardDesignPortNames, portKeysOf } from '../../boards/boardPorts';
+import { boardDesignPortNames, boardRunPortNames, portKeysOf } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
@@ -1786,6 +1786,7 @@ export function Workbench() {
   const boardPorts = useMemo(() => boardDesignPortNames(activeBoard), [activeBoard]);
   // The Top-File offer names only the active board's own ports: the legacy names above are for roles.
   const activeBoardPorts = useMemo(() => portKeysOf(activeBoard), [activeBoard]);
+  const boardRunPorts = useMemo(() => boardRunPortNames(activeBoard), [activeBoard]);
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1832,6 +1833,7 @@ export function Workbench() {
     running: runningTop,
     working: tb.workingPane,
     boardPorts: activeBoardPorts,
+    wiredPorts: boardRunPorts,
     shownProject: markedProjectOf(tb.designView, tb.overrides),
     projectNow: () => {
       const { view, overrides } = tb.designViewNow();

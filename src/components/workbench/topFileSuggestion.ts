@@ -17,7 +17,7 @@
 
 import { routeRun, type WorkingPane } from './editorView';
 import { hasTopDot, isVerilogHeader } from './fileKinds';
-import { activeIncludes, dependsOnOutsideMacros } from './verilogDirectiveScan';
+import { scanVerilog } from './verilogDirectiveScan';
 import type { DesignView, ProjectParts } from './simOnly/types';
 import { definedUnitKey, unitRefKey } from './simOnly/unitRef';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -61,6 +61,8 @@ export function markedProjectOf(view: DesignView, overrides: TestbenchOverrides)
 export interface TopFileQuestion extends MarkedProject {
   /** The active board's own port names, lower case (`portKeysOf`), not the legacy ones every board accepts. */
   readonly boardPorts: ReadonlySet<string>;
+  /** The names a board run wires, lower case (`boardRunPortNames`): the board's, and the legacy `rst` with a reset button. */
+  readonly wiredPorts: ReadonlySet<string>;
   /** The pane the student works in; null while no file is shown. */
   readonly working: WorkingPane | null;
   readonly topFileId: string | null;
@@ -107,8 +109,7 @@ export const NO_DECLINED_UNITS: DeclinedUnits = declinedUnits(new Set());
 export function topFileSuggestion(question: TopFileQuestion): TopFileSuggestion | null {
   const file = workingFile(question);
   if (!file || !question.working) return null;
-  const graph = instanceGraph(question, runFileIds(question));
-  const offer: Offer = { question, file, graph, running: reachableFrom(graph, runUnitKey(question)) };
+  const offer: Offer = { question, file, hierarchy: once(() => hierarchyOf(question)) };
   // The unit on screen decides: a testbench is one in either pane (shown alone, before the split opens).
   const suggestion = OFFERS[unitOnScreen(file, question.working)?.role ?? question.working.pane](offer);
   return suggestion && !question.declined.has(suggestion) ? suggestion : null;
@@ -135,16 +136,41 @@ function unitOnScreen(file: FileAnalysis, working: WorkingPane): AnalyzedUnit | 
 function workingFile({ project, overrides, working }: TopFileQuestion): FileAnalysis | undefined {
   const file = working ? effectiveFile(project, overrides, working.fileId) : undefined;
   const isSource = file !== undefined && hasTopDot(file.folder) && !isVerilogHeader(file.name);
-  return isSource && !(file.language === 'verilog' && dependsOnOutsideMacros(file.content)) ? file : undefined;
+  return isSource && !isConditionallyCompiled(file) ? file : undefined;
 }
 
 /** What one pane's offer reads. */
 interface Offer {
   readonly question: TopFileQuestion;
   readonly file: FileAnalysis;
+  /** Built on first use: an offer the pane or the Top-File already rules out never needs it. */
+  readonly hierarchy: () => Hierarchy;
+}
+
+interface Hierarchy {
   readonly graph: ReadonlyMap<string, GraphNode>;
   /** The unit Start runs now and every unit it reaches. */
   readonly running: ReadonlySet<string>;
+  /** A compiled Verilog file uses conditional compilation: which instances Icarus compiles is not known. */
+  readonly uncertain: boolean;
+}
+
+function hierarchyOf(question: TopFileQuestion): Hierarchy {
+  const runFiles = runFileIds(question);
+  const graph = instanceGraph(question, runFiles);
+  const uncertain = [...runFiles].some((fileId) => isConditionallyCompiled(question.project.byFile.get(fileId)));
+  return { graph, running: reachableFrom(graph, runUnitKey(question)), uncertain };
+}
+
+/** Whether a Verilog file's `ifdef may make Icarus compile other code than the editor shows (verilogDirectiveScan.ts). */
+function isConditionallyCompiled(file: FileAnalysis | undefined): boolean {
+  return file?.language === 'verilog' && scanVerilog(file.content).conditional;
+}
+
+/** `make()`, run on the first call only. */
+function once<T>(make: () => T): () => T {
+  let made: { readonly value: T } | undefined;
+  return () => (made ??= { value: make() }).value;
 }
 
 /** Each kind of unit has its own kind of offer. */
@@ -160,10 +186,13 @@ const OFFERS: Readonly<Record<UnitRole, (offer: Offer) => TopFileSuggestion | nu
  * reason to keep it off top.
  */
 function boardDesignOffer(offer: Offer): TopFileSuggestion | null {
-  const { question, file, graph, running } = offer;
+  const { question, file } = offer;
   // The Top-File's own designs are not offered: the file is top already, and another of
   // its units runs from its pane's Play. Offering one would make two designs take turns.
   if (file.fileId === question.topFileId) return null;
+  // Whether a design is a root rests on the hierarchy; with conditional compilation it may be a part.
+  const { graph, running, uncertain } = offer.hierarchy();
+  if (uncertain) return null;
   const used = instantiatedByDesigns(graph);
   const isRoot = (key: string) => !used.has(key) && !running.has(key);
   const qualifies = (u: AnalyzedUnit) => drivesTheBoard(u, question.boardPorts) && isRoot(keyOf(file, u));
@@ -188,9 +217,9 @@ function paneUnitOrOnlyOne(
 
 /** The testbench the pane shows (else the file's first), unless Start runs it already. */
 function testbenchOffer(offer: Offer): TopFileSuggestion | null {
-  const { question, file, running } = offer;
+  const { question, file, hierarchy } = offer;
   const unit = shownTestbench(file, question.working?.unitName ?? null);
-  return unit && !running.has(keyOf(file, unit)) ? suggestionFor(offer, unit) : null;
+  return unit && !hierarchy().running.has(keyOf(file, unit)) ? suggestionFor(offer, unit) : null;
 }
 
 /**
@@ -198,16 +227,17 @@ function testbenchOffer(offer: Offer): TopFileSuggestion | null {
  * whatever its role (the backend's rule, server/src/engines), so a board design marked
  * *Treat as testbench* is described as the board run it gets.
  */
-function suggestionFor({ question, file, graph }: Offer, unit: AnalyzedUnit): TopFileSuggestion {
+function suggestionFor({ question, file, hierarchy }: Offer, unit: AnalyzedUnit): TopFileSuggestion {
   const base = suggestionBase(file, unit);
-  const boardPorts = activeBoardPorts(unit, question.boardPorts);
-  if (boardPorts.length > 0) return { kind: 'board-design', ...base, boardPorts: boardPorts.slice(0, MAX_PORTS_NAMED) };
+  // The ports a board run wires, the legacy `rst` too: what the student will see on the board.
+  const wired = activeBoardPorts(unit, question.wiredPorts);
+  if (wired.length > 0) return { kind: 'board-design', ...base, boardPorts: wired.slice(0, MAX_PORTS_NAMED) };
   // GHDL runs a VHDL entity on its own only without ports; Icarus any module without a board port.
   if (file.language === 'vhdl' && unit.hasPorts) {
     return { kind: 'ported-testbench', ...base, ports: unit.portNames.slice(0, MAX_PORTS_NAMED) };
   }
   const dutKey = question.dutOf.get(keyOf(file, unit));
-  return { kind: 'testbench', ...base, dutName: (dutKey && graph.get(dutKey)?.name) ?? null };
+  return { kind: 'testbench', ...base, dutName: (dutKey && hierarchy().graph.get(dutKey)?.name) ?? null };
 }
 
 function shownTestbench(file: FileAnalysis, unitName: string | null): AnalyzedUnit | undefined {
@@ -288,7 +318,7 @@ function includedHeaders(files: readonly FileAnalysis[]): Set<string> {
   const included = new Set<string>();
   const pending = files.filter((f) => f.language === 'verilog' && !isVerilogHeader(f.name));
   for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
-    const headers = activeIncludes(file.content).map((name) => byName.get(name));
+    const headers = scanVerilog(file.content).includes.map((name) => byName.get(name));
     for (const header of headers.filter((h): h is FileAnalysis => h !== undefined)) {
       if (!included.has(header.name)) pending.push(header);
       included.add(header.name);

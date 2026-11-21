@@ -34,6 +34,14 @@ export function boardDesignPortNames(active: BoardDefinition): ReadonlySet<strin
   return new Set([...BUILT_IN_PORT_NAMES, ...portKeysOf(active), LEGACY_RESET_PORT]);
 }
 
+/**
+ * The names a board run wires, lower case: the board's own, and the legacy `rst`, which the
+ * backend drives from the reset button on a board with one (server/src/engines/vhdlBoardText.ts).
+ */
+export function boardRunPortNames(active: BoardDefinition): ReadonlySet<string> {
+  return active.ports.resetButton === undefined ? portKeysOf(active) : new Set([...portKeysOf(active), LEGACY_RESET_PORT]);
+}
+
 // --- Renames between boards (§ 9) -----------------------------------------------------
 
 /** One port renamed: `KEY_N` → `KEY`. */
