@@ -4,7 +4,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
 import { TopFileDialog } from './TopFileDialog';
-import type { BoardDesignSuggestion, TestbenchSuggestion, TopFileSuggestion } from './topFileSuggestion';
+import type {
+  BoardDesignSuggestion, PortedTestbenchSuggestion, TestbenchSuggestion, TopFileSuggestion,
+} from './topFileSuggestion';
 
 const LAB2: BoardDesignSuggestion = {
   kind: 'board-design',
@@ -78,7 +80,27 @@ describe('TopFileDialog for a testbench', () => {
   });
 });
 
-describe('TopFileDialog, both kinds', () => {
+describe('TopFileDialog for a VHDL testbench with ports', () => {
+  const SENSOR: PortedTestbenchSuggestion = {
+    kind: 'ported-testbench',
+    fileId: 'sensor_tb',
+    fileName: 'sensor_tb.vhd',
+    label: 'sensor_tb.vhd',
+    unitName: 'sensor_tb',
+    unitKind: 'entity',
+    ports: ['probe'],
+  };
+
+  test('names its ports', () => {
+    expect(textOf('lab1.vhd', SENSOR)).toContain('sensor_tb.vhd (entity sensor_tb) is a testbench with ports (probe).');
+  });
+
+  test('says it runs on the board, where none of its ports is wired', () => {
+    expect(textOf('lab1.vhd', SENSOR)).toContain('A testbench with ports runs on the board, where none of its ports is wired');
+  });
+});
+
+describe('TopFileDialog, every kind', () => {
 
   test('says what Start would run otherwise', () => {
     expect(textOf('lab1.vhd')).toContain('Now Start would run lab1.vhd.');

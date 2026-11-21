@@ -8,7 +8,7 @@
  * English; one file is all a later translation needs. Pure.
  */
 
-import type { BoardDesignSuggestion, TestbenchSuggestion, TopFileSuggestion } from './topFileSuggestion';
+import type { TopFileSuggestion } from './topFileSuggestion';
 
 export const TOP_FILE_TEXT = {
   whereToChangeIt: 'You can change the Top-File any time with the dot beside a file name in Files.',
@@ -30,25 +30,35 @@ interface KindText<S extends TopFileSuggestion> {
   readonly evidence: (suggestion: S) => string;
 }
 
-const BOARD_DESIGN_TEXT: KindText<BoardDesignSuggestion> = {
-  whatTheTopFileIs: "Start runs the Top-File: the design wired to the board's switches, buttons, LEDs and displays.",
-  evidence: ({ fileName, unitKind, unitName, boardPorts }) =>
-    `${fileName} (${unitKind} ${unitName}) uses ${wordList(boardPorts)}, so it looks like one.`,
-};
+type TextOfEachKind = { readonly [K in TopFileSuggestion['kind']]: KindText<Extract<TopFileSuggestion, { kind: K }>> };
 
-const TESTBENCH_TEXT: KindText<TestbenchSuggestion> = {
-  whatTheTopFileIs:
-    'Start runs the Top-File. A testbench as the Top-File runs without the board: it drives its design itself, ' +
-    'and you see the result in Simulator Output and the waveform.',
-  evidence: ({ fileName, unitKind, unitName, dutName }) =>
-    `${fileName} (${unitKind} ${unitName}) is a testbench${dutName === null ? '' : ` for ${dutName}`}.`,
+const TEXT_OF_EACH_KIND: TextOfEachKind = {
+  'board-design': {
+    whatTheTopFileIs: "Start runs the Top-File: the design wired to the board's switches, buttons, LEDs and displays.",
+    evidence: ({ fileName, unitKind, unitName, boardPorts }) =>
+      `${fileName} (${unitKind} ${unitName}) uses ${wordList(boardPorts)}, so it looks like one.`,
+  },
+  testbench: {
+    whatTheTopFileIs:
+      'Start runs the Top-File. A testbench as the Top-File runs without the board: it drives its design itself, ' +
+      'and you see the result in Simulator Output and the waveform.',
+    evidence: ({ fileName, unitKind, unitName, dutName }) =>
+      `${fileName} (${unitKind} ${unitName}) is a testbench${dutName === null ? '' : ` for ${dutName}`}.`,
+  },
+  'ported-testbench': {
+    whatTheTopFileIs:
+      'Start runs the Top-File. A testbench with ports runs on the board, where none of its ports is wired, so the board shows ' +
+      'nothing. Without ports it runs on its own, with its result in Simulator Output and the waveform.',
+    evidence: ({ fileName, unitKind, unitName, ports }) =>
+      `${fileName} (${unitKind} ${unitName}) is a testbench with ports (${wordList(ports)}).`,
+  },
 };
 
 /** The text of the suggestion's own kind. */
-function textOf(suggestion: TopFileSuggestion): { readonly whatTheTopFileIs: string; readonly evidence: string } {
-  return suggestion.kind === 'testbench'
-    ? { whatTheTopFileIs: TESTBENCH_TEXT.whatTheTopFileIs, evidence: TESTBENCH_TEXT.evidence(suggestion) }
-    : { whatTheTopFileIs: BOARD_DESIGN_TEXT.whatTheTopFileIs, evidence: BOARD_DESIGN_TEXT.evidence(suggestion) };
+function textOf<S extends TopFileSuggestion>(suggestion: S): { readonly whatTheTopFileIs: string; readonly evidence: string } {
+  // The table is indexed by the same kind the suggestion carries, so its entry reads this suggestion.
+  const text = TEXT_OF_EACH_KIND[suggestion.kind] as unknown as KindText<S>;
+  return { whatTheTopFileIs: text.whatTheTopFileIs, evidence: text.evidence(suggestion) };
 }
 
 /** "Start runs the Top-File: …", as the kind of Top-File offered works. */

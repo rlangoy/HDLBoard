@@ -304,6 +304,61 @@ describe('the design a testbench is said to test', () => {
   });
 });
 
+describe('a file with two board designs', () => {
+  const variants = source('variants.v', 'module alpha(input [9:0] SW, output [9:0] LEDR);\nendmodule\nmodule beta(input [9:0] SW, output [9:0] LEDR);\nendmodule\n');
+
+  test('offers the one its pane shows, as the pane’s Play runs it', () => {
+    expect(suggest({ files: [LAB1, variants], shown: 'variants.v', unit: 'beta', top: 'lab1.vhd' })?.unitName).toBe('beta');
+  });
+
+  test('offers none when its pane shows neither: there is no one clear design', () => {
+    const withHelper = source('variants.v', `module helper(input a);\nendmodule\n${variants.content}`);
+    expect(suggest({ files: [LAB1, withHelper], shown: 'variants.v', unit: 'helper', top: 'lab1.vhd' })).toBeNull();
+  });
+});
+
+describe('a Verilog file whose `ifdef tests a macro', () => {
+  const choosing = (define: string) =>
+    source('mode.v', `${define}\`ifdef BOARD_BUILD\nmodule enabled_board(input [9:0] SW, output [9:0] LEDR);\nendmodule\n\`else\nmodule fallback_board(input [9:0] SW, output [9:0] LEDR);\nendmodule\n\`endif\n`);
+
+  test('from elsewhere is not offered: the simulator may compile the other module', () => {
+    expect(suggest({ files: [LAB1, choosing('`include "mode.vh"\n')], shown: 'mode.v', top: 'lab1.vhd' })).toBeNull();
+  });
+
+  test('it defines itself is offered as the editor reads it', () => {
+    expect(suggest({ files: [LAB1, choosing('`define BOARD_BUILD\n')], shown: 'mode.v', top: 'lab1.vhd' })?.unitName).toBe('enabled_board');
+  });
+});
+
+describe('a header included only where nothing compiles it', () => {
+  const independent = verilogBoardDesign('independent');
+  const spare = { ...source('spare.vh', 'module spare(input [9:0] SW, output [9:0] LEDR);\n  independent u(.SW(SW), .LEDR(LEDR));\nendmodule\n'), folder: 'verilog' as const };
+
+  test('in a comment does not hide a root it instantiates', () => {
+    const includer = source('main.v', '// `include "spare.vh"\nmodule main;\nendmodule\n');
+    expect(suggest({ files: [LAB1, independent, spare, includer], shown: 'independent.v', top: 'lab1.vhd' })?.fileId).toBe('independent.v');
+  });
+
+  test('in an inactive `ifdef branch does not hide a root it instantiates', () => {
+    const includer = source('main.v', '`ifdef SPARE\n`include "spare.vh"\n`endif\nmodule main;\nendmodule\n');
+    expect(suggest({ files: [LAB1, independent, spare, includer], shown: 'independent.v', top: 'lab1.vhd' })?.fileId).toBe('independent.v');
+  });
+});
+
+describe('the run a testbench offer describes', () => {
+  test('is a board run for a VHDL testbench with ports, as GHDL runs it', () => {
+    const sensor = source('sensor_tb.vhd', vhdlDesign('sensor_tb', 'probe : in std_logic', ''));
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'sensor_tb.vhd': 'tb' } };
+    expect(suggest({ files: [LAB1, sensor], pane: 'tb', shown: 'sensor_tb.vhd', top: 'lab1.vhd', overrides })?.kind).toBe('ported-testbench');
+  });
+
+  test('is a run on its own for a Verilog testbench without board ports, as Icarus runs it', () => {
+    const sensor = source('sensor_tb.v', 'module sensor_tb(input probe);\n  initial begin #10 $finish; end\nendmodule\n');
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'sensor_tb.v': 'tb' } };
+    expect(suggest({ files: [LAB1, sensor], pane: 'tb', shown: 'sensor_tb.v', top: 'lab1.vhd', overrides })?.kind).toBe('testbench');
+  });
+});
+
 describe('the declined units', () => {
   const LAB2_UNIT = { fileId: 'lab2.vhd', unitName: 'lab2' };
 

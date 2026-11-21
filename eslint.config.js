@@ -141,6 +141,8 @@ const NEW_CODE = [
   'src/components/workbench/useTopFileHint.test.ts',
   'src/components/workbench/useTopFileSuggestion.tsx',
   'src/components/workbench/useTopFileSuggestion.test.ts',
+  'src/components/workbench/verilogDirectiveScan.ts',
+  'src/components/workbench/verilogDirectiveScan.test.ts',
   'src/components/workbench/useStoredSwitch.ts',
 ];
 

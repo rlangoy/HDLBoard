@@ -17,6 +17,7 @@
 
 import { routeRun, type WorkingPane } from './editorView';
 import { hasTopDot, isVerilogHeader } from './fileKinds';
+import { activeIncludes, dependsOnOutsideMacros } from './verilogDirectiveScan';
 import type { DesignView, ProjectParts } from './simOnly/types';
 import { definedUnitKey, unitRefKey } from './simOnly/unitRef';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -89,7 +90,17 @@ export interface TestbenchSuggestion extends SuggestionBase {
   readonly dutName: string | null;
 }
 
-export type TopFileSuggestion = BoardDesignSuggestion | TestbenchSuggestion;
+/**
+ * A VHDL testbench with ports: GHDL runs an entity on its own only when it has none, so
+ * this one gets a board run, where none of its ports is wired to the board.
+ */
+export interface PortedTestbenchSuggestion extends SuggestionBase {
+  readonly kind: 'ported-testbench';
+  /** Its ports, as written, at most MAX_PORTS_NAMED. */
+  readonly ports: readonly string[];
+}
+
+export type TopFileSuggestion = BoardDesignSuggestion | TestbenchSuggestion | PortedTestbenchSuggestion;
 
 export const NO_DECLINED_UNITS: DeclinedUnits = declinedUnits(new Set());
 
@@ -116,10 +127,15 @@ function unitOnScreen(file: FileAnalysis, working: WorkingPane): AnalyzedUnit | 
   return findUnit(file, working.unitName) ?? file.units.find((u) => u.role === working.pane) ?? file.units[0];
 }
 
-/** The working pane's file, when it is a design source a run can start from (no header). */
+/**
+ * The working pane's file, when it is a design source a run can start from (no header)
+ * whose units the editor reads as the simulator compiles them: a Verilog file whose
+ * `ifdef tests a macro from elsewhere may compile another module than the one offered.
+ */
 function workingFile({ project, overrides, working }: TopFileQuestion): FileAnalysis | undefined {
   const file = working ? effectiveFile(project, overrides, working.fileId) : undefined;
-  return file && hasTopDot(file.folder) && !isVerilogHeader(file.name) ? file : undefined;
+  const isSource = file !== undefined && hasTopDot(file.folder) && !isVerilogHeader(file.name);
+  return isSource && !(file.language === 'verilog' && dependsOnOutsideMacros(file.content)) ? file : undefined;
 }
 
 /** What one pane's offer reads. */
@@ -150,8 +166,24 @@ function boardDesignOffer(offer: Offer): TopFileSuggestion | null {
   if (file.fileId === question.topFileId) return null;
   const used = instantiatedByDesigns(graph);
   const isRoot = (key: string) => !used.has(key) && !running.has(key);
-  const unit = file.units.find((u) => drivesTheBoard(u, question.boardPorts) && isRoot(keyOf(file, u)));
+  const qualifies = (u: AnalyzedUnit) => drivesTheBoard(u, question.boardPorts) && isRoot(keyOf(file, u));
+  const unit = paneUnitOrOnlyOne(file, question, qualifies);
   return unit ? suggestionFor(offer, unit) : null;
+}
+
+/**
+ * The pane's own unit when it qualifies, so the chip offers what the pane's Play runs.
+ * Else the file's only unit that qualifies (a wrapper after its helper); with two, none.
+ */
+function paneUnitOrOnlyOne(
+  file: FileAnalysis,
+  { working }: TopFileQuestion,
+  qualifies: (u: AnalyzedUnit) => boolean,
+): AnalyzedUnit | undefined {
+  const onScreen = working ? unitOnScreen(file, working) : undefined;
+  if (onScreen && qualifies(onScreen)) return onScreen;
+  const candidates = file.units.filter(qualifies);
+  return candidates.length === 1 ? candidates[0] : undefined;
 }
 
 /** The testbench the pane shows (else the file's first), unless Start runs it already. */
@@ -170,6 +202,10 @@ function suggestionFor({ question, file, graph }: Offer, unit: AnalyzedUnit): To
   const base = suggestionBase(file, unit);
   const boardPorts = activeBoardPorts(unit, question.boardPorts);
   if (boardPorts.length > 0) return { kind: 'board-design', ...base, boardPorts: boardPorts.slice(0, MAX_PORTS_NAMED) };
+  // GHDL runs a VHDL entity on its own only without ports; Icarus any module without a board port.
+  if (file.language === 'vhdl' && unit.hasPorts) {
+    return { kind: 'ported-testbench', ...base, ports: unit.portNames.slice(0, MAX_PORTS_NAMED) };
+  }
   const dutKey = question.dutOf.get(keyOf(file, unit));
   return { kind: 'testbench', ...base, dutName: (dutKey && graph.get(dutKey)?.name) ?? null };
 }
@@ -243,8 +279,6 @@ function runFileIds({ project, topFileId }: TopFileQuestion): Set<string> {
   return new Set(files.filter((f) => isCompiled(f) || f.fileId === topFileId).map((f) => f.fileId));
 }
 
-const INCLUDE = /`include\s+"([^"]+)"/g;
-
 /**
  * The Verilog headers a source includes, directly or through another included header,
  * by file name: Icarus compiles a header only there, so one nobody includes never runs.
@@ -254,8 +288,8 @@ function includedHeaders(files: readonly FileAnalysis[]): Set<string> {
   const included = new Set<string>();
   const pending = files.filter((f) => f.language === 'verilog' && !isVerilogHeader(f.name));
   for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
-    const names = [...file.content.matchAll(INCLUDE)].map((m) => m[1].split('/').pop() ?? m[1]);
-    for (const header of names.map((name) => byName.get(name)).filter((h): h is FileAnalysis => h !== undefined)) {
+    const headers = activeIncludes(file.content).map((name) => byName.get(name));
+    for (const header of headers.filter((h): h is FileAnalysis => h !== undefined)) {
       if (!included.has(header.name)) pending.push(header);
       included.add(header.name);
     }

@@ -57,7 +57,12 @@ export function runningTopOf(
 ): RunningTop | null {
   if (!topFile) return null;
   const { unitName, runTarget } = routeRun(analysisOf(topFile.id), topUnit);
-  return { label: runTarget ? `${topFile.name} › ${runTarget}` : topFile.name, key: `${topFile.id} › ${unitName}` };
+  return { label: topRunLabel(topFile.name, runTarget), key: `${topFile.id} › ${unitName}` };
+}
+
+/** "Top: alu.v › alu_tb" when Start names the unit it runs (§ 4.10), else the file alone. */
+export function topRunLabel(fileName: string, runTarget: string | null): string {
+  return runTarget ? `${fileName} › ${runTarget}` : fileName;
 }
 
 export interface TopFileSuggestionApi {
