@@ -67,6 +67,6 @@ describe('TopFileDialog', () => {
   });
 
   test('says where Don’t ask me again is undone', () => {
-    expect(textOf('lab1.vhd')).toContain('Turn it back on in Settings › Simulation.');
+    expect(textOf('lab1.vhd')).toContain('Turn it back on in Settings › General.');
   });
 });

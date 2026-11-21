@@ -15,7 +15,7 @@ export const TOP_FILE_TEXT = {
   whereToChangeIt: 'You can change the Top-File any time with the dot beside a file name in Files.',
   cancel: 'Cancel',
   dontAskAgain: "Don't ask me again",
-  turnBackOn: 'Turn it back on in Settings › Simulation.',
+  turnBackOn: 'Turn it back on in Settings › General.',
   makeTop: 'Make Top-File',
   dismiss: 'Not now',
   settingTitle: 'Top-File',

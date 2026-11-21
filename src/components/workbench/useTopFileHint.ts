@@ -5,7 +5,7 @@ import type { Setting } from './settings/settingsSections';
 import { useStoredSwitch, type StoredSwitch } from './useStoredSwitch';
 
 /**
- * Settings › Simulation › Top-File › *Suggest the Top-File*: Start asks before it runs
+ * Settings › General › Top-File › *Suggest the Top-File*: Start asks before it runs
  * another file than the board design on screen, and that file's pane offers to make it
  * top (topFileSuggestion.ts). The question's *Don't ask me again* turns it off too. The
  * student's choice is kept in this browser; until they make one, `settings.json`'s

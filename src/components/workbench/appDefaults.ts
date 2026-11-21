@@ -29,7 +29,7 @@ export interface AppDefaults {
    */
   readonly synthesisToolCheck?: boolean;
   /**
-   * Settings › Simulation › Top-File › *Suggest the Top-File* (useTopFileHint.ts); only when
+   * Settings › General › Top-File › *Suggest the Top-File* (useTopFileHint.ts); only when
    * the file sets it — built in, it is on.
    */
   readonly topFileHint?: boolean;

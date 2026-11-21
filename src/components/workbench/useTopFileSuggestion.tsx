@@ -15,7 +15,7 @@ export interface AnalyzedProject {
 }
 
 export interface TopFileSuggestionOptions {
-  /** Settings › Simulation › *Suggest the Top-File*. */
+  /** Settings › General › *Suggest the Top-File*. */
   readonly hint: Setting<boolean>;
   readonly topFileId: string | null;
   /** What Start runs as things are; null when no file is the Top-File. */

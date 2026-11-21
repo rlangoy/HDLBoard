@@ -2277,7 +2277,7 @@ export function Workbench() {
                 section={settingsPage.section}
                 onSectionChange={settingsPage.select}
                 onClose={settingsPage.close}
-                general={{ languages: { value: preferredLanguages, onChange: handlePreferredLanguagesChange }, keepProject }}
+                general={{ languages: { value: preferredLanguages, onChange: handlePreferredLanguagesChange }, keepProject, topFileHint }}
                 boardIo={{
                   board: {
                     boards: catalog,
@@ -2290,7 +2290,7 @@ export function Workbench() {
                   bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
                 }}
                 editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
-                simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, topFileHint, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
                   check: { status: updateCheck.status, onCheck: updateCheck.checkNow },

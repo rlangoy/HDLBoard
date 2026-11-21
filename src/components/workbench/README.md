@@ -914,7 +914,7 @@ port of the active board, which no other design and nothing in the current top's
 hierarchy instantiates (`topFileSuggestion.ts`). The same suggestion shows earlier,
 as `TopFileChip` in the rightmost pane header, unless the testbench chip is
 there. *Start lab1.vhd* and the chip's × leave the file alone until the Top-File
-changes. Settings › Simulation › *Suggest the Top-File* (`useTopFileHint.ts`,
+changes. Settings › General › *Suggest the Top-File* (`useTopFileHint.ts`,
 `settings.json` key `topFileHint`) turns both off. Play never asks: it makes its
 own file top.
 
