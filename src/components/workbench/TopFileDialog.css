@@ -1,0 +1,35 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (C) 2026 Rune Langøy */
+
+/* The Top-File question (TopFileDialog.tsx): two sentences, the hint, the checkbox. */
+
+.wb-topfile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--wb-text);
+}
+
+.wb-topfile > p {
+  margin: 0;
+}
+
+.wb-topfile__stop {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.wb-topfile__stop input {
+  margin: 3px 0 0;
+  accent-color: var(--wb-accent);
+}
+
+.wb-topfile__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--wb-text-muted);
+}

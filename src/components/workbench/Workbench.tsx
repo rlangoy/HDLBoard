@@ -86,6 +86,8 @@ import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
+import { useTopFileHint } from './useTopFileHint';
+import { useTopFileSuggestion } from './useTopFileSuggestion';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -376,6 +378,7 @@ export function Workbench() {
   const designCheckMode = useDesignCheckMode();
   // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's too at Start (VHDL).
   const synthesisToolCheck = useSynthesisToolCheck();
+  const topFileHint = useTopFileHint();
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
@@ -1717,10 +1720,19 @@ export function Workbench() {
 
   // The Start button runs the file named as "Top:" — show it (Files panel
   // highlight and pane header), so what runs is what shows.
-  const handleStart = () => {
+  const startCurrentTop = () => {
     if (topFileId === null) startRun(null);
     else runFile(topFileId);
   };
+
+  /** Make the file top and run it. Only Start asks first: a pane's Play makes its own file top already. */
+  const startAsTop = (fileId: string) => {
+    makeTop(fileId);
+    runFile(fileId);
+  };
+
+  // Start may first ask whether the file on screen should be the Top-File (useTopFileSuggestion).
+  const handleStart = () => topSuggestion.start();
 
   /** Play in a pane header: exactly that pane's unit (§ 4.10). */
   const handleRunPane = (pane: PaneRole, target: PaneTarget) => {
@@ -1795,6 +1807,23 @@ export function Workbench() {
   };
 
   restoreOverridesRef.current = tb.restoreOverrides;
+
+  const topSuggestion = useTopFileSuggestion({
+    hint: topFileHint,
+    topFileId,
+    topFileName: files.find((f) => f.id === topFileId)?.name ?? null,
+    shownFileId: activeFileId,
+    boardPorts,
+    shownProject: { project: tb.designView.corrected, overrides: tb.overrides },
+    projectNow: () => {
+      const { view, overrides } = tb.designViewNow();
+      return { project: view.corrected, overrides };
+    },
+    simulating: isSimulating,
+    onMakeTop: handleSetTopFile,
+    onStartTop: startCurrentTop,
+    onStartFile: startAsTop,
+  });
 
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
@@ -2143,6 +2172,7 @@ export function Workbench() {
       )}
       {tb.roleConflictDialog}
       {unsavedQuestion.dialog}
+      {topSuggestion.dialog}
       {runChoice && (
         <RunTestbenchDialog
           designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
@@ -2234,7 +2264,7 @@ export function Workbench() {
               onDismissDiagnostics={dismissInEditor}
               onShowLineDiagnostics={designCheck.showLine}
               projectFiles={files}
-              split={tb.editorSplit(fileMenu, designCheck.badgeFor)}
+              split={tb.editorSplit(fileMenu, designCheck.badgeFor, topSuggestion.chip)}
               emptyProject={
                 files.length === 0 && (
                   <EmptyProject onExamples={(activeBoard.origin === 'built-in' || hasExamples(activeBoard)) ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
@@ -2260,7 +2290,7 @@ export function Workbench() {
                   bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
                 }}
                 editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
-                simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
+                simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, topFileHint, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
                   check: { status: updateCheck.status, onCheck: updateCheck.checkNow },

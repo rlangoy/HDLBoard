@@ -905,8 +905,20 @@ shows; a `waveGet` for a run whose session is gone answers `onNone`.
 
 `handleStart` (the card's Start button) shows the file with the blue dot
 (Files panel highlight and pane header), then runs it; `handleRunPane` (Play in
-a pane header) first makes that pane's file top, then does the same. Both go
-through `startRun`, which:
+a pane header) first makes that pane's file top, then does the same.
+
+Before that, Start may ask a question (`useTopFileSuggestion.tsx`). If the file in
+the focused pane looks like the Top-File and isn't it, `TopFileDialog` asks
+*Make lab2.vhd the Top-File?*. "Looks like the Top-File" means a design with a
+port of the active board, which no other design and nothing in the current top's
+hierarchy instantiates (`topFileSuggestion.ts`). The same suggestion shows earlier,
+as `TopFileChip` in the rightmost pane header, unless the testbench chip is
+there. *Start lab1.vhd* and the chip's × leave the file alone until the Top-File
+changes. Settings › Simulation › *Suggest the Top-File* (`useTopFileHint.ts`,
+`settings.json` key `topFileHint`) turns both off. Play never asks: it makes its
+own file top.
+
+Both go through `startRun`, which:
 
 1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file
    as `runFileId` (the pane showing it shows Stop while it runs), blanks the

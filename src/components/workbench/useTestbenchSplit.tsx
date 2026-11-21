@@ -65,8 +65,11 @@ export interface TestbenchSplit {
   readonly showFile: (fileId: string, event: PairEvent, options?: ShowOptions) => void;
   readonly focusPane: (pane: PaneRole) => void;
   readonly onFileDeleted: (id: string) => void;
-  /** CodeEditor's panes, with their headers and the chip; none while nothing is shown. */
-  readonly editorSplit: (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge']) => SplitEditorProps | undefined;
+  /**
+   * CodeEditor's panes, with their headers and the chip; none while nothing is shown. The
+   * testbench chip wins over `otherChip` (the Top-File's): one chip at a time.
+   */
+  readonly editorSplit: (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], otherChip?: ReactNode) => SplitEditorProps | undefined;
   /** The question asked when a role change would put two designs or two testbenches side by side; null otherwise. */
   readonly roleConflictDialog: ReactNode;
   /** The project as the design check sees it (docs/impl_sim_only_warnings.md § 4). */
@@ -191,7 +194,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
     showFile(pair.anchorId, 'open');
   });
 
-  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge']) => editorPropsFor(
+  const editorSplit = (fileMenu: FileMenuProps, designCheckBadge?: ModelContext['designCheckBadge'], otherChip?: ReactNode) => editorPropsFor(
     {
       project: analysis.current,
       overrides: overrides.value,
@@ -211,7 +214,7 @@ export function useTestbenchSplit(options: TestbenchSplitOptions): TestbenchSpli
       designCheckBadge,
     },
     split,
-    chip,
+    chip ?? otherChip,
   );
 
   return {

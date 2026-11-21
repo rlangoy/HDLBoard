@@ -131,6 +131,16 @@ describe('Simulation', () => {
   test('shows waveform recording as a switch that is off', () => {
     expect(render('simulation')).toMatch(/<input type="checkbox" role="switch" class="wb-settings-switch__input"\/>/);
   });
+
+  const withTopFileHint = (on: boolean) => render('simulation', { simulation: { recordWaves: setting(false), topFileHint: setting(on) } });
+
+  test('shows the Top-File card when the workbench passes the setting', () => {
+    expect(cardTitles(withTopFileHint(true))).toEqual(['Top-File', 'Waveforms']);
+  });
+
+  test('shows Suggest the Top-File as a switch that is on', () => {
+    expect(withTopFileHint(true)).toMatch(/checked=""[^]*?<strong>Suggest the Top-File<\/strong>/);
+  });
 });
 
 describe('Updates', () => {

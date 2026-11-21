@@ -3,6 +3,7 @@
 
 import { PageCard } from '../page/PageCard';
 import { DESIGN_CHECK_TEXT } from '../simOnly/designCheckText';
+import { TOP_FILE_TEXT } from '../topFileText';
 import type { DesignCheckMode } from '../simOnly/types';
 import { ChoiceCard, ChoiceList, type Choice } from './ChoiceCard';
 import { SettingSwitch } from './SettingSwitch';
@@ -13,6 +14,8 @@ export interface SimulationSectionProps {
   designCheck?: Setting<DesignCheckMode>;
   /** *Synthesis* also runs GHDL's own check at Start, for VHDL (docs/impl_sim_only_warnings.md § 7); off by default. */
   toolCheck?: Setting<boolean>;
+  /** Start and the pane header offer the board design on screen as the Top-File (useTopFileHint.ts); on by default. */
+  topFileHint?: Setting<boolean>;
   /** Waveforms are recorded for testbench runs (docs/waveform_viewer_spec.md FR-1); on by default. */
   recordWaves: Setting<boolean>;
 }
@@ -41,11 +44,16 @@ function designCheckChoices(mode: DesignCheckMode, toolCheck: Setting<boolean> |
   ];
 }
 
-/** Settings › Simulation: what a run checks the design for, and what it records. */
-export function SimulationSection({ designCheck, toolCheck, recordWaves }: SimulationSectionProps) {
+/** Settings › Simulation: what a run checks the design for, what Start runs, and what it records. */
+export function SimulationSection({ designCheck, toolCheck, topFileHint, recordWaves }: SimulationSectionProps) {
   return (
     <>
       {designCheck && <ChoiceCard title={DESIGN_CHECK_TEXT.title} choices={designCheckChoices(designCheck.value, toolCheck)} setting={designCheck} />}
+      {topFileHint && (
+        <PageCard title={TOP_FILE_TEXT.settingTitle} wide>
+          <SettingSwitch label={TOP_FILE_TEXT.settingLabel} description={TOP_FILE_TEXT.settingDescription} setting={topFileHint} />
+        </PageCard>
+      )}
       <PageCard title="Waveforms" wide>
         <SettingSwitch
           label="Record waveforms for testbench runs"
