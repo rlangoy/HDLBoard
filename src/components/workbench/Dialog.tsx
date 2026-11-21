@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useRef,
+  type RefObject,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
@@ -45,13 +46,14 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = `${useId()}-title`;
+  const opener = useOpener(open);
 
   useEffect(() => {
     if (!open) return undefined;
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = opener.current;
     closeRef.current?.focus();
     return () => previous?.focus?.();
-  }, [open]);
+  }, [open, opener]);
 
   if (!open) return null;
 
@@ -113,6 +115,21 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
       </div>
     </div>
   );
+}
+
+/**
+ * The element that had focus when the dialog opened, read while the dialog renders: by
+ * the time an effect runs, an `autoFocus` button in the footer already has the focus,
+ * and focus would go back to that button instead of to the control that opened it.
+ */
+function useOpener(open: boolean): RefObject<HTMLElement | null> {
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  // No document when the dialog is rendered to markup (the tests): there is nothing to give focus back to.
+  const focused = typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null);
+  if (open && !wasOpen.current) opener.current = focused;
+  wasOpen.current = open;
+  return opener;
 }
 
 export default Dialog;

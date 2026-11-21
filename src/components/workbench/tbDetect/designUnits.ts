@@ -242,11 +242,24 @@ function verilogHeader(code: string, from: number, limit: number): { ports: Inst
   if (code[i] === '#') i = skipBalanced(code, code.indexOf('(', i));
   let end = i;
   while (end < limit && code[end] !== ';') end = code[end] === '(' ? skipBalanced(code, end) : end + 1;
-  const ports = portNames(code.slice(i, end), i, isVerilogReservedWord);
+  const ports = portNames(withoutRangesAndValues(code.slice(i, end)), i, isVerilogReservedWord);
   return { ports, end: Math.min(end + 1, limit) };
 }
 
-const LEADING_NOISE = /^\s*(?:(?:[A-Za-z_]\w*)\s*:(?!:)|:\s*[A-Za-z_]\w*)/;
+/**
+ * A port list with its ranges (`[SW-1:0]`) and default values (`= N`) blanked, the
+ * length kept so offsets still hold: a name in them is a parameter, never a port.
+ */
+function withoutRangesAndValues(list: string): string {
+  const blank = (text: string) => ' '.repeat(text.length);
+  return list.replace(/\[[^\]]*\]/g, blank).replace(/=[^,)]*/g, blank);
+}
+
+/** The keywords whose `( … )` condition comes before the statement they guard, as in `generate if (W > 0) begin`. */
+const CONDITION_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'case', 'while', 'repeat']);
+
+// A statement label (`u1:`), or the name after `begin :`; `begin` itself is a keyword, not a label.
+const LEADING_NOISE = /^\s*(?:(?!begin\b)(?:[A-Za-z_]\w*)\s*:(?!:)|:\s*[A-Za-z_]\w*)/;
 
 function verilogInstances(code: string, body: Range, lineOf: LineOf): Instance[] {
   const instances: Instance[] = [];
@@ -267,7 +280,7 @@ function instanceIn(statement: string): { name: string; offset: number } | undef
     const noise = LEADING_NOISE.exec(rest);
     if (noise) rest = rest.slice(noise[0].length);
     const word = /^\s*([A-Za-z_]\w*)/.exec(rest);
-    if (word && isVerilogReservedWord(word[1])) rest = rest.slice(word[0].length);
+    if (word && isVerilogReservedWord(word[1])) rest = afterCondition(rest.slice(word[0].length), word[1]);
     changed = rest !== before;
   }
   const head = /^\s*([A-Za-z_]\w*)\s*/.exec(rest);
@@ -277,6 +290,13 @@ function instanceIn(statement: string): { name: string; offset: number } | undef
   const tail = /^\s*[A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)?\(/.exec(rest.slice(i));
   if (!tail) return undefined;
   return { name: head[1], offset: statement.length - rest.length + head[0].search(/\S/) };
+}
+
+/** `rest` after the `( … )` condition of `keyword`, when it has one. */
+function afterCondition(rest: string, keyword: string): string {
+  const open = rest.search(/\S/);
+  if (!CONDITION_WORDS.has(keyword) || rest[open] !== '(') return rest;
+  return rest.slice(skipBalanced(rest, open));
 }
 
 function skipParameterOverride(text: string, i: number): number {

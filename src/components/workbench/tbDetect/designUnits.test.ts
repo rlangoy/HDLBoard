@@ -81,6 +81,23 @@ describe('Verilog units', () => {
     expect(m.blocks[0]).toMatchObject({ label: 'stim', named: true });
   });
 
+  test('a parameter in a port range is not a port', () => {
+    expect(units('verilog', 'module m #(parameter SW = 8)(input [SW-1:0] data);\nendmodule')[0].portNames).toEqual(['data']);
+  });
+
+  test('a parameter in a default value is not a port', () => {
+    expect(units('verilog', 'module m #(parameter N = 1)(output reg [3:0] q = N);\nendmodule')[0].portNames).toEqual(['q']);
+  });
+
+  test('an instance inside a generate if is found', () => {
+    const src = 'module top(input [9:0] SW);\ngenerate if (1) begin : enabled\n  child u_child (.SW(SW));\nend endgenerate\nendmodule';
+    expect(units('verilog', src)[0].instances.map((i) => i.name)).toEqual(['child']);
+  });
+
+  test('a statement after an if condition is not an instance', () => {
+    expect(units('verilog', 'module m;\nalways @* if (a) q = b(c);\nendmodule')[0].instances).toEqual([]);
+  });
+
   test('two modules in one file', () => {
     expect(units('verilog', fixture('verilog/alu_tb.v')).map((m) => [m.name, m.hasPorts])).toEqual([
       ['alu', true],

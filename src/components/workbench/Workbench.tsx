@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
-import { boardDesignPortNames } from '../../boards/boardPorts';
+import { boardDesignPortNames, portKeysOf } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
@@ -88,6 +88,7 @@ import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editor
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import { useTopFileHint } from './useTopFileHint';
 import { useTopFileSuggestion } from './useTopFileSuggestion';
+import type { TopUnit } from './topFileSuggestion';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -1712,8 +1713,8 @@ export function Workbench() {
    * testbench unit runs if it has one (the remembered unit while it exists), else
    * its design — naming the unit only when the file holds more than one (B7).
    */
-  const runFile = (id: string) => {
-    const route = routeRun(tb.fileAnalysis(id), id === topFileId ? topUnit : null);
+  const runFile = (id: string, rememberedUnit: string | null = id === topFileId ? topUnit : null) => {
+    const route = routeRun(tb.fileAnalysis(id), rememberedUnit);
     tb.showFile(id, 'run', { pane: route.pane, unitName: route.unitName });
     checkAndRun(id, route.runTarget, route.unitName, route.pane);
   };
@@ -1725,11 +1726,18 @@ export function Workbench() {
     else runFile(topFileId);
   };
 
-  /** Make the file top and run it. Only Start asks first: a pane's Play makes its own file top already. */
-  const startAsTop = (fileId: string) => {
-    makeTop(fileId);
-    runFile(fileId);
+  /**
+   * The unit becomes top, named when its file holds more than one unit (as a pane's Play
+   * names it), so Start runs that unit and not a testbench or helper beside it.
+   */
+  const makeTopUnit = ({ fileId, unitName }: TopUnit) => {
+    if (isSimulating) return;
+    setTopFileId(fileId);
+    setTopUnit(routeRun(tb.fileAnalysis(fileId), unitName).runTarget);
   };
+
+  /** Make the unit top and run exactly it. Only Start asks first: a pane's Play makes its own file top already. */
+  const startUnitAsTop = ({ fileId, unitName }: TopUnit) => runFile(fileId, unitName);
 
   // Start may first ask whether the file on screen should be the Top-File (useTopFileSuggestion).
   const handleStart = () => topSuggestion.start();
@@ -1773,6 +1781,8 @@ export function Workbench() {
 
   // The names that make a unit a board design rather than a testbench follow the active board (§ 6.9).
   const boardPorts = useMemo(() => boardDesignPortNames(activeBoard), [activeBoard]);
+  // The Top-File offer names only the active board's own ports: the legacy names above are for roles.
+  const activeBoardPorts = useMemo(() => portKeysOf(activeBoard), [activeBoard]);
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1811,18 +1821,19 @@ export function Workbench() {
   const topSuggestion = useTopFileSuggestion({
     hint: topFileHint,
     topFileId,
+    topUnit,
     topFileName: files.find((f) => f.id === topFileId)?.name ?? null,
     shownFileId: activeFileId,
-    boardPorts,
-    shownProject: { project: tb.designView.corrected, overrides: tb.overrides },
+    boardPorts: activeBoardPorts,
+    shownProject: { project: tb.designView.corrected, overrides: tb.overrides, parts: tb.designView.parts },
     projectNow: () => {
       const { view, overrides } = tb.designViewNow();
-      return { project: view.corrected, overrides };
+      return { project: view.corrected, overrides, parts: view.parts };
     },
     simulating: isSimulating,
-    onMakeTop: handleSetTopFile,
+    onMakeTop: makeTopUnit,
     onStartTop: startCurrentTop,
-    onStartFile: startAsTop,
+    onStartUnit: startUnitAsTop,
   });
 
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in

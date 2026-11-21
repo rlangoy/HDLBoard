@@ -3,16 +3,19 @@
 
 /**
  * Whether the file on screen looks like the Top-File while another file (or none) is
- * marked top: Start would run something else than the student is working on. A file
- * qualifies when it is a design that drives the board itself (a board port, not a
- * testbench), no other design uses it, and the current top's hierarchy does not use it
- * either: a sub-entity, or the DUT of a testbench that is top, never qualifies. Pure.
+ * marked top: Start would run something else than the student is working on. A unit
+ * qualifies when it is a design that drives the active board itself (one of its port
+ * names, not a testbench) and no design uses it: neither another design of the project
+ * nor the unit Start runs now, at any depth. A sub-entity, or the DUT of a testbench
+ * that is top, never qualifies. Pure.
  */
 
+import { routeRun } from './editorView';
 import { hasTopDot } from './fileKinds';
-import { effectiveFile } from './tbDetect/pairing';
-import type { AnalyzedUnit, FileAnalysis, Language, ProjectAnalysis, TestbenchOverrides } from './tbDetect/types';
+import type { ProjectParts } from './simOnly/types';
 import { definedUnitKey, unitRefKey } from './simOnly/unitRef';
+import { effectiveFile } from './tbDetect/pairing';
+import type { AnalyzedUnit, FileAnalysis, Instance, Language, ProjectAnalysis, TestbenchOverrides } from './tbDetect/types';
 
 /** How many board ports the question names as its evidence: "uses SW, KEY and LEDR". */
 export const MAX_PORTS_NAMED = 3;
@@ -23,21 +26,34 @@ export interface DeclinedFiles {
   readonly with: (fileId: string) => DeclinedFiles;
 }
 
-export interface TopFileQuestion {
-  /** The analysis with the role correction applied, as the run decisions use it. */
+/** The project as the run decisions read it. */
+export interface MarkedProject {
+  /** The analysis with the role correction applied. */
   readonly project: ProjectAnalysis;
+  /** The student's *Treat as testbench / design* marks. */
   readonly overrides: TestbenchOverrides;
-  /** Lower case, from `boardDesignPortNames`: the active board's names. */
+  /** The design check's parts: they hold the architectures written in another file than their entity. */
+  readonly parts: ProjectParts;
+}
+
+export interface TopFileQuestion extends MarkedProject {
+  /** The active board's own port names, lower case (`portKeysOf`), not the legacy ones every board accepts. */
   readonly boardPorts: ReadonlySet<string>;
   readonly shownFileId: string | null;
   readonly topFileId: string | null;
+  /** The unit of the Top-File that Start runs, when one was chosen; null lets Start choose. */
+  readonly topUnit: string | null;
   readonly declined: DeclinedFiles;
 }
 
-export interface TopFileSuggestion {
+/** A unit to run as top: what both the chip and the question act on. */
+export interface TopUnit {
   readonly fileId: string;
-  readonly fileName: string;
   readonly unitName: string;
+}
+
+export interface TopFileSuggestion extends TopUnit {
+  readonly fileName: string;
   readonly unitKind: AnalyzedUnit['kind'];
   /** The board ports the unit declares, as written, at most MAX_PORTS_NAMED. */
   readonly boardPorts: readonly string[];
@@ -47,11 +63,11 @@ export const NO_DECLINED_FILES: DeclinedFiles = declinedFiles(new Set());
 
 export function topFileSuggestion(question: TopFileQuestion): TopFileSuggestion | null {
   const shownFile = candidateFile(question);
-  const unit = shownFile && boardDesignUnit(shownFile);
-  if (!shownFile || !unit) return null;
-  const key = unitRefKey(shownFile.fileId, shownFile.language, unit.name);
-  const isPartOfADesign = isInTopHierarchy(question, key) || isInstantiatedByADesign(question, key);
-  return isPartOfADesign ? null : suggestionFor(shownFile, unit, question.boardPorts);
+  if (!shownFile) return null;
+  const used = unitsUsedByDesigns(question);
+  const isRoot = (unit: AnalyzedUnit) => !used.has(unitRefKey(shownFile.fileId, shownFile.language, unit.name));
+  const unit = shownFile.units.find((u) => drivesTheBoard(u, question.boardPorts) && isRoot(u));
+  return unit ? suggestionFor(shownFile, unit, question.boardPorts) : null;
 }
 
 function declinedFiles(fileIds: ReadonlySet<string>): DeclinedFiles {
@@ -69,77 +85,103 @@ function candidateFile({ project, overrides, shownFileId, topFileId, declined }:
   return isOffered ? file : undefined;
 }
 
-/** The file's first unit that drives the board itself; a testbench never does, even with board names. */
-function boardDesignUnit(file: FileAnalysis): AnalyzedUnit | undefined {
-  return file.units.find((unit) => unit.hasBoardPorts && unit.role === 'rtl');
+/** A design (never a testbench) that declares a port of the active board. */
+function drivesTheBoard(unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): boolean {
+  return unit.role === 'rtl' && activeBoardPorts(unit, boardPorts).length > 0;
 }
 
-/** Whether `unitKey` is the top file's own unit or one its hierarchy instantiates, at any depth. */
-function isInTopHierarchy({ project, overrides, topFileId }: TopFileQuestion, unitKey: string): boolean {
-  const topFile = topFileId === null ? undefined : effectiveFile(project, overrides, topFileId);
-  if (!topFile) return false;
-  const roots = topFile.units.map((unit) => unitRefKey(topFile.fileId, topFile.language, unit.name));
-  return instantiatedFrom({ project, overrides }, roots).has(unitKey);
+function activeBoardPorts(unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): string[] {
+  return unit.portNames.filter((port) => boardPorts.has(port.toLowerCase()));
 }
 
 /**
- * Whether another design uses the unit: then it is a part, and its parent is the top
- * candidate (Vivado's automatic hierarchy picks a root the same way). A testbench that
- * instantiates it does not count; testing a board design is no reason to keep it off top.
+ * Every unit a design instantiates, and every unit the run's unit reaches: these are
+ * parts, and their parent is the top candidate (Vivado's automatic hierarchy picks a
+ * root the same way). A testbench that is not top does not count: testing a board
+ * design is no reason to keep it off top.
  */
-function isInstantiatedByADesign(marked: MarkedProject, unitKey: string): boolean {
-  const { project } = marked;
-  const designs = [...unitsByKey(marked).entries()].filter(([key, entry]) => key !== unitKey && entry.unit.role === 'rtl');
-  return designs.some(([, entry]) => instancesOf(project, entry).includes(unitKey));
+function unitsUsedByDesigns(question: TopFileQuestion): Set<string> {
+  const graph = instanceGraph(question);
+  const used = new Set<string>();
+  for (const [key, node] of graph) {
+    if (node.role === 'rtl') node.targets.filter((target) => target !== key).forEach((target) => used.add(target));
+  }
+  for (const key of reachableFrom(graph, runUnitKey(question))) used.add(key);
+  return used;
 }
 
-/** Every unit reachable from `roots` through the instances the simulator sees, the roots included. */
-function instantiatedFrom(marked: MarkedProject, roots: readonly string[]): Set<string> {
-  const { project } = marked;
-  const units = unitsByKey(marked);
+/** The key of the unit Start runs now, as Start chooses it; none without a Top-File. */
+function runUnitKey({ project, overrides, topFileId, topUnit }: TopFileQuestion): string | undefined {
+  const topFile = topFileId === null ? undefined : effectiveFile(project, overrides, topFileId);
+  const unitName = routeRun(topFile, topUnit).unitName;
+  return topFile && unitName !== null ? unitRefKey(topFile.fileId, topFile.language, unitName) : undefined;
+}
+
+/** Every unit reachable from `root` through the instances the simulator sees, the root included. */
+function reachableFrom(graph: ReadonlyMap<string, GraphNode>, root: string | undefined): Set<string> {
   const seen = new Set<string>();
-  const pending = [...roots];
+  const pending = root === undefined ? [] : [root];
   for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
     if (seen.has(key)) continue;
     seen.add(key);
-    pending.push(...instancesOf(project, units.get(key)));
+    pending.push(...(graph.get(key)?.targets ?? []));
   }
   return seen;
 }
 
-/** The analysis and the student's role marks, which every role decision here reads together. */
-type MarkedProject = Pick<TopFileQuestion, 'project' | 'overrides'>;
-
-interface KeyedUnit {
-  readonly language: Language;
-  readonly unit: AnalyzedUnit;
+interface GraphNode {
+  readonly role: AnalyzedUnit['role'];
+  /** The keys of the units it instantiates, in its own file or in an architecture written elsewhere. */
+  readonly targets: readonly string[];
 }
 
-/** The project's units by key, with the student's *Treat as testbench / design* marks applied. */
-function unitsByKey({ project, overrides }: MarkedProject): Map<string, KeyedUnit> {
-  const units = new Map<string, KeyedUnit>();
+/** Each unit with its role (the student's marks applied) and the units it instantiates. */
+function instanceGraph({ project, overrides, parts }: MarkedProject): Map<string, GraphNode> {
+  const graph = new Map<string, GraphNode>();
   const files = [...project.byFile.keys()].map((fileId) => effectiveFile(project, overrides, fileId));
   for (const file of files.filter((f): f is FileAnalysis => f !== undefined)) {
-    for (const unit of file.units) units.set(unitRefKey(file.fileId, file.language, unit.name), { language: file.language, unit });
+    for (const unit of file.units) {
+      const targets = keysOf(project, file.language, unit.instances);
+      graph.set(unitRefKey(file.fileId, file.language, unit.name), { role: unit.role, targets });
+    }
   }
-  return units;
+  for (const foreign of foreignArchitectures({ project, overrides, parts })) {
+    const node = graph.get(foreign.ownerKey);
+    if (node) graph.set(foreign.ownerKey, { ...node, targets: [...node.targets, ...foreign.targets] });
+  }
+  return graph;
 }
 
-/** The keys of the units `entry` instantiates; a VHDL design may instantiate a Verilog module and back. */
-function instancesOf(project: ProjectAnalysis, entry: KeyedUnit | undefined): string[] {
-  if (!entry) return [];
-  const otherLanguage: Language = entry.language === 'vhdl' ? 'verilog' : 'vhdl';
-  const keyOf = (name: string) => definedUnitKey(project, entry.language, name) ?? definedUnitKey(project, otherLanguage, name);
-  return entry.unit.instances.map((instance) => keyOf(instance.name)).filter((key): key is string => key !== undefined);
+/**
+ * The instances in VHDL architectures written in another file than their entity: they
+ * belong to the entity. One in a file the student marked *Treat as testbench* does not.
+ */
+function foreignArchitectures({ project, overrides, parts }: MarkedProject): { ownerKey: string; targets: string[] }[] {
+  return [...parts].flatMap(([fileId, fileParts]) => {
+    const language = project.byFile.get(fileId)?.language;
+    if (language === undefined || overrides.roles[fileId] === 'tb') return [];
+    return fileParts
+      .filter((part) => !part.ownsUnit)
+      .flatMap((part) => {
+        const ownerKey = definedUnitKey(project, language, part.unitName);
+        return ownerKey === undefined ? [] : [{ ownerKey, targets: keysOf(project, language, part.instances) }];
+      });
+  });
+}
+
+/** The keys of the instantiated units; a VHDL design may instantiate a Verilog module and back. */
+function keysOf(project: ProjectAnalysis, language: Language, instances: readonly Instance[]): string[] {
+  const otherLanguage: Language = language === 'vhdl' ? 'verilog' : 'vhdl';
+  const keyOf = (name: string) => definedUnitKey(project, language, name) ?? definedUnitKey(project, otherLanguage, name);
+  return instances.map((instance) => keyOf(instance.name)).filter((key): key is string => key !== undefined);
 }
 
 function suggestionFor(file: FileAnalysis, unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): TopFileSuggestion {
-  const named = unit.portNames.filter((port) => boardPorts.has(port.toLowerCase()));
   return {
     fileId: file.fileId,
     fileName: file.name,
     unitName: unit.name,
     unitKind: unit.kind,
-    boardPorts: named.slice(0, MAX_PORTS_NAMED),
+    boardPorts: activeBoardPorts(unit, boardPorts).slice(0, MAX_PORTS_NAMED),
   };
 }
