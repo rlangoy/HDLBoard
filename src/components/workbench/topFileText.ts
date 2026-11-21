@@ -15,7 +15,7 @@ export const TOP_FILE_TEXT = {
   cancel: 'Cancel',
   dontAskAgain: "Don't ask me again",
   turnBackOn: 'Turn it back on in Settings › General.',
-  makeTop: 'Make Top-File',
+  makeTop: 'Set as Top File',
   dismiss: 'Not now',
   settingTitle: 'Top-File',
   settingLabel: 'Suggest the Top-File',
@@ -86,7 +86,7 @@ export const startAsItIs = (topFileName: string | null): string =>
   topFileName === null ? 'Start without a Top-File' : `Start ${topFileName}`;
 
 /** The chip's button for a screen reader, which does not see its tooltip. */
-export const makeTopLabel = (label: string): string => `Make ${label} the Top-File`;
+export const makeTopLabel = (label: string): string => `Set ${label} as the Top-File`;
 
 export const chipTitle = (suggestion: TopFileSuggestion): string =>
   `${looksLikeTheTop(suggestion)} ${whatTheTopFileIs(suggestion)}`;

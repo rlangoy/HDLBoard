@@ -393,12 +393,44 @@
   color: var(--wb-accent-dark-ink);
 }
 
-.wb-tbchip__dot {
+/* Folds to its ⓘ when the header is tight: the chip gives up its room before
+ * anything else, and once the button is narrower than icon + label, the label
+ * wraps onto a second line that the fixed height clips away. The words never
+ * break and the header never overflows; the full reason stays in the tooltip. */
+.wb-tbchip--top {
+  flex: 0 1000 auto;
+  min-width: 54px; /* ⓘ and × always stay */
+  padding: 0 3px;
+  overflow: hidden;
+}
+
+.wb-tbchip__fold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  column-gap: 5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 8px 0 3px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wb-tbchip__icon {
   flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--wb-accent);
+  width: 14px;
+  height: 14px;
+  margin: 3px 0;
+  color: var(--wb-accent);
+}
+
+.wb-tbchip__label {
+  line-height: 20px;
+}
+
+.wb-tbchip__dismiss {
+  flex: none;
 }
 
 /* ---- narrow panes (docs/cleanup_file_tabs.md § 5.3) ---------------
