@@ -167,14 +167,14 @@ const architectureUsing = (entity: string, child: string) =>
     `architecture rtl of ${entity} is\nbegin\n  u_${child}: entity work.${child} port map (LEDR => LEDR, SW => SW, CLOCK_50 => CLOCK_50);\nend architecture;\n`,
   );
 
-describe('review: the unit the offer names and runs', () => {
+describe('the unit the offer names and runs', () => {
   test('is the wrapper, not a board-facing helper declared before it in the same file', () => {
     const helperFirst = source('lab2.vhd', `${boardDesign('helper').content}\n${boardDesignUsing('lab2', 'helper').content}`);
     expect(suggest({ files: [LAB1, helperFirst], shown: 'lab2.vhd', top: 'lab1.vhd' })?.unitName).toBe('lab2');
   });
 });
 
-describe('review: the hierarchy of the Top-File', () => {
+describe('the hierarchy of the Top-File', () => {
   test('includes an architecture written in another file than its entity', () => {
     const files = [entityOnly('lab1'), architectureUsing('lab1', 'child'), boardDesign('child')];
     expect(suggest({ files, shown: 'child.vhd', top: 'lab1.vhd' })).toBeNull();
@@ -192,7 +192,7 @@ describe('review: the hierarchy of the Top-File', () => {
   });
 });
 
-describe('review: the board ports named as evidence', () => {
+describe('the board ports named as evidence', () => {
   test('are the active board’s own: DE1-SoC names on a Basys 3 are no reason to offer', () => {
     const de1Names = source('old.vhd', vhdlDesign('old', 'CLOCK_50 : in std_logic; HEX0_N : out std_logic_vector(6 downto 0)', ''));
     expect(suggest({ files: [LAB1, de1Names], shown: 'old.vhd', top: 'lab1.vhd', board: builtInBoard('basys3') })).toBeNull();

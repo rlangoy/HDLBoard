@@ -70,35 +70,54 @@ export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFile
   return {
     start,
     chip: chipSuggestion && (
-      <TopFileChip suggestion={chipSuggestion} onMakeTop={() => makeTopIfStillSuggested(chipSuggestion)} onDismiss={() => declined.add(chipSuggestion.fileId)} />
+      <TopFileChip
+        suggestion={chipSuggestion}
+        onMakeTop={() => makeTopIfStillSuggested(chipSuggestion)}
+        onDismiss={() => declined.add(chipSuggestion.fileId)}
+      />
     ),
-    dialog: asked && <AskedDialog suggestion={asked} options={options} declined={declined} onDone={() => setAsked(null)} />,
+    dialog: asked && (
+      <Question
+        suggestion={asked}
+        topFileName={options.topFileName}
+        onStartSuggested={options.onStartUnit}
+        onStartTop={options.onStartTop}
+        onDecline={declined.add}
+        onStopAsking={() => options.hint.onChange(false)}
+        onClose={() => setAsked(null)}
+      />
+    ),
   };
 }
 
-interface AskedDialogProps {
+interface QuestionProps {
   readonly suggestion: TopFileSuggestion;
-  readonly options: TopFileSuggestionOptions;
-  readonly declined: Declined;
-  readonly onDone: () => void;
+  readonly topFileName: string | null;
+  readonly onStartSuggested: (unit: TopUnit) => void;
+  readonly onStartTop: () => void;
+  /** Keeps the file off the Top-File until the Top-File changes. */
+  readonly onDecline: (fileId: string) => void;
+  readonly onStopAsking: () => void;
+  readonly onClose: () => void;
 }
 
-function AskedDialog({ suggestion, options, declined, onDone }: AskedDialogProps) {
+/** The question at Start: each answer closes it first, then starts what was chosen. */
+function Question({ suggestion, topFileName, onStartSuggested, onStartTop, onDecline, onStopAsking, onClose }: QuestionProps) {
   return (
     <TopFileDialog
       suggestion={suggestion}
-      topFileName={options.topFileName}
+      topFileName={topFileName}
       onMakeTopAndStart={() => {
-        onDone();
-        options.onStartUnit(suggestion);
+        onClose();
+        onStartSuggested(suggestion);
       }}
       onStartAsItIs={() => {
-        onDone();
-        declined.add(suggestion.fileId);
-        options.onStartTop();
+        onClose();
+        onDecline(suggestion.fileId);
+        onStartTop();
       }}
-      onStopAsking={() => options.hint.onChange(false)}
-      onClose={onDone}
+      onStopAsking={onStopAsking}
+      onClose={onClose}
     />
   );
 }

@@ -136,7 +136,8 @@ interface GraphNode {
 }
 
 /** Each unit with its role (the student's marks applied) and the units it instantiates. */
-function instanceGraph({ project, overrides, parts }: MarkedProject): Map<string, GraphNode> {
+function instanceGraph(marked: MarkedProject): Map<string, GraphNode> {
+  const { project, overrides } = marked;
   const graph = new Map<string, GraphNode>();
   const files = [...project.byFile.keys()].map((fileId) => effectiveFile(project, overrides, fileId));
   for (const file of files.filter((f): f is FileAnalysis => f !== undefined)) {
@@ -145,7 +146,7 @@ function instanceGraph({ project, overrides, parts }: MarkedProject): Map<string
       graph.set(unitRefKey(file.fileId, file.language, unit.name), { role: unit.role, targets });
     }
   }
-  for (const foreign of foreignArchitectures({ project, overrides, parts })) {
+  for (const foreign of foreignArchitectures(marked)) {
     const node = graph.get(foreign.ownerKey);
     if (node) graph.set(foreign.ownerKey, { ...node, targets: [...node.targets, ...foreign.targets] });
   }

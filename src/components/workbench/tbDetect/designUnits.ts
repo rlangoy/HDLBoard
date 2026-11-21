@@ -255,9 +255,6 @@ function withoutRangesAndValues(list: string): string {
   return list.replace(/\[[^\]]*\]/g, blank).replace(/=[^,)]*/g, blank);
 }
 
-/** The keywords whose `( … )` condition comes before the statement they guard, as in `generate if (W > 0) begin`. */
-const CONDITION_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'case', 'while', 'repeat']);
-
 // A statement label (`u1:`), or the name after `begin :`; `begin` itself is a keyword, not a label.
 const LEADING_NOISE = /^\s*(?:(?!begin\b)(?:[A-Za-z_]\w*)\s*:(?!:)|:\s*[A-Za-z_]\w*)/;
 
@@ -291,6 +288,9 @@ function instanceIn(statement: string): { name: string; offset: number } | undef
   if (!tail) return undefined;
   return { name: head[1], offset: statement.length - rest.length + head[0].search(/\S/) };
 }
+
+/** The keywords whose `( … )` condition comes before the statement they guard, as in `generate if (W > 0) begin`. */
+const CONDITION_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'case', 'while', 'repeat']);
 
 /** `rest` after the `( … )` condition of `keyword`, when it has one. */
 function afterCondition(rest: string, keyword: string): string {

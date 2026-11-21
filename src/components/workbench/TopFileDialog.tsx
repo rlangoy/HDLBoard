@@ -25,7 +25,8 @@ export interface TopFileDialogProps {
  * (or none) is it (topFileSuggestion.ts). The likely wish, making it top, is the
  * default button; either Start button applies *Don't ask me again*, Cancel does not.
  */
-export function TopFileDialog({ suggestion, topFileName, onMakeTopAndStart, onStartAsItIs, onStopAsking, onClose }: TopFileDialogProps) {
+export function TopFileDialog(props: TopFileDialogProps) {
+  const { suggestion, topFileName, onMakeTopAndStart, onStartAsItIs, onStopAsking, onClose } = props;
   const [stopAsking, setStopAsking] = useState(false);
   const thenStart = (start: () => void) => () => {
     if (stopAsking) onStopAsking();

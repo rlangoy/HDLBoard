@@ -24,7 +24,13 @@ export function TopFileChip({ suggestion, onMakeTop, onDismiss }: TopFileChipPro
       <button type="button" className="wb-tbchip__open" onClick={onMakeTop}>
         {TOP_FILE_TEXT.makeTop}
       </button>
-      <button type="button" className="wb-tbchip__dismiss" aria-label={TOP_FILE_TEXT.dismiss} title={TOP_FILE_TEXT.dismiss} onClick={onDismiss}>
+      <button
+        type="button"
+        className="wb-tbchip__dismiss"
+        aria-label={TOP_FILE_TEXT.dismiss}
+        title={TOP_FILE_TEXT.dismiss}
+        onClick={onDismiss}
+      >
         ×
       </button>
     </div>
