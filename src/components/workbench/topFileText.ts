@@ -55,7 +55,12 @@ const TEXT_OF_EACH_KIND: TextOfEachKind = {
 };
 
 /** The text of the suggestion's own kind. */
-function textOf<S extends TopFileSuggestion>(suggestion: S): { readonly whatTheTopFileIs: string; readonly evidence: string } {
+interface OfferText {
+  readonly whatTheTopFileIs: string;
+  readonly evidence: string;
+}
+
+function textOf<S extends TopFileSuggestion>(suggestion: S): OfferText {
   // The table is indexed by the same kind the suggestion carries, so its entry reads this suggestion.
   const text = TEXT_OF_EACH_KIND[suggestion.kind] as unknown as KindText<S>;
   return { whatTheTopFileIs: text.whatTheTopFileIs, evidence: text.evidence(suggestion) };

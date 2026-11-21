@@ -9,7 +9,7 @@ import type { FileAnalysis } from './tbDetect/types';
 import { TopFileChip } from './TopFileChip';
 import { TopFileDialog } from './TopFileDialog';
 import {
-  NO_DECLINED_UNITS, topFileSuggestion, type DeclinedUnits, type MarkedProject, type TopFileSuggestion, type TopUnit,
+  NO_DECLINED_UNITS, topFileSuggestion, type BoardNames, type DeclinedUnits, type MarkedProject, type TopFileSuggestion, type TopUnit,
 } from './topFileSuggestion';
 
 export interface TopFileSuggestionOptions {
@@ -22,10 +22,7 @@ export interface TopFileSuggestionOptions {
   readonly running: RunningTop | null;
   /** The pane the offer is about: the testbench pane while one is on screen, else the design pane. */
   readonly working: WorkingPane | null;
-  /** The active board's own port names, lower case (`portKeysOf`). */
-  readonly boardPorts: ReadonlySet<string>;
-  /** The names a board run wires, lower case (`boardRunPortNames`). */
-  readonly wiredPorts: ReadonlySet<string>;
+  readonly board: BoardNames;
   /** As the code reads at this render: for showing the chip. */
   readonly shownProject: MarkedProject;
   /** As the code reads this moment, the analysis flushed: for every decision, the chip's click too. */
@@ -81,11 +78,11 @@ export interface TopFileSuggestionApi {
  * or the chip's ×, is not offered again until the Top-File changes; that is never stored.
  */
 export function useTopFileSuggestion(options: TopFileSuggestionOptions): TopFileSuggestionApi {
-  const { boardPorts, wiredPorts, working, topFileId, topUnit } = options;
+  const { board, working, topFileId, topUnit } = options;
   const declined = useDeclinedUnits(options.running);
   const [asked, setAsked] = useState<TopFileSuggestion | null>(null);
   const suggestionIn = (marked: MarkedProject) =>
-    topFileSuggestion({ ...marked, boardPorts, wiredPorts, working, topFileId, topUnit, declined: declined.units });
+    topFileSuggestion({ ...marked, board, working, topFileId, topUnit, declined: declined.units });
   const isOffering = options.hint.value && !options.simulating;
 
   const start = () => {

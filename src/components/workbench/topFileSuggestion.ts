@@ -58,11 +58,16 @@ export function markedProjectOf(view: DesignView, overrides: TestbenchOverrides)
   return { project: view.corrected, overrides, parts: view.parts, dutOf: view.hardware.dutOf };
 }
 
+/** The board's port names, as the offer reads them: lower case, as both languages match them. */
+export interface BoardNames {
+  /** The active board's own names (`portKeysOf`), not the legacy ones every board accepts: a design with one is offered. */
+  readonly own: ReadonlySet<string>;
+  /** The names a board run wires (`boardRunPortNames`): the board's, and the legacy `rst` with a reset button. */
+  readonly wired: ReadonlySet<string>;
+}
+
 export interface TopFileQuestion extends MarkedProject {
-  /** The active board's own port names, lower case (`portKeysOf`), not the legacy ones every board accepts. */
-  readonly boardPorts: ReadonlySet<string>;
-  /** The names a board run wires, lower case (`boardRunPortNames`): the board's, and the legacy `rst` with a reset button. */
-  readonly wiredPorts: ReadonlySet<string>;
+  readonly board: BoardNames;
   /** The pane the student works in; null while no file is shown. */
   readonly working: WorkingPane | null;
   readonly topFileId: string | null;
@@ -130,8 +135,8 @@ function unitOnScreen(file: FileAnalysis, working: WorkingPane): AnalyzedUnit | 
 
 /**
  * The working pane's file, when it is a design source a run can start from (no header)
- * whose units the editor reads as the simulator compiles them: a Verilog file whose
- * `ifdef tests a macro from elsewhere may compile another module than the one offered.
+ * whose units the editor reads as the simulator compiles them: in a Verilog file with
+ * conditional compilation, an included macro or -D may make Icarus compile another module.
  */
 function workingFile({ project, overrides, working }: TopFileQuestion): FileAnalysis | undefined {
   const file = working ? effectiveFile(project, overrides, working.fileId) : undefined;
@@ -195,7 +200,7 @@ function boardDesignOffer(offer: Offer): TopFileSuggestion | null {
   if (uncertain) return null;
   const used = instantiatedByDesigns(graph);
   const isRoot = (key: string) => !used.has(key) && !running.has(key);
-  const qualifies = (u: AnalyzedUnit) => drivesTheBoard(u, question.boardPorts) && isRoot(keyOf(file, u));
+  const qualifies = (u: AnalyzedUnit) => drivesTheBoard(u, question.board.own) && isRoot(keyOf(file, u));
   const unit = paneUnitOrOnlyOne(file, question, qualifies);
   return unit ? suggestionFor(offer, unit) : null;
 }
@@ -230,7 +235,7 @@ function testbenchOffer(offer: Offer): TopFileSuggestion | null {
 function suggestionFor({ question, file, hierarchy }: Offer, unit: AnalyzedUnit): TopFileSuggestion {
   const base = suggestionBase(file, unit);
   // The ports a board run wires, the legacy `rst` too: what the student will see on the board.
-  const wired = activeBoardPorts(unit, question.wiredPorts);
+  const wired = portsAmong(unit, question.board.wired);
   if (wired.length > 0) return { kind: 'board-design', ...base, boardPorts: wired.slice(0, MAX_PORTS_NAMED) };
   // GHDL runs a VHDL entity on its own only without ports; Icarus any module without a board port.
   if (file.language === 'vhdl' && unit.hasPorts) {
@@ -253,12 +258,13 @@ function suggestionBase(file: FileAnalysis, unit: AnalyzedUnit): SuggestionBase 
 const keyOf = (file: FileAnalysis, unit: AnalyzedUnit): string => unitRefKey(file.fileId, file.language, unit.name);
 
 /** A design (never a testbench) that declares a port of the active board. */
-function drivesTheBoard(unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): boolean {
-  return unit.role === 'rtl' && activeBoardPorts(unit, boardPorts).length > 0;
+function drivesTheBoard(unit: AnalyzedUnit, boardNames: ReadonlySet<string>): boolean {
+  return unit.role === 'rtl' && portsAmong(unit, boardNames).length > 0;
 }
 
-function activeBoardPorts(unit: AnalyzedUnit, boardPorts: ReadonlySet<string>): string[] {
-  return unit.portNames.filter((port) => boardPorts.has(port.toLowerCase()));
+/** The unit's ports, as written, whose names are among `names` (lower case). */
+function portsAmong(unit: AnalyzedUnit, names: ReadonlySet<string>): string[] {
+  return unit.portNames.filter((port) => names.has(port.toLowerCase()));
 }
 
 /** Every unit a design instantiates (not one only a testbench does). */

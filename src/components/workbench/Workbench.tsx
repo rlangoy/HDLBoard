@@ -1784,9 +1784,8 @@ export function Workbench() {
 
   // The names that make a unit a board design rather than a testbench follow the active board (§ 6.9).
   const boardPorts = useMemo(() => boardDesignPortNames(activeBoard), [activeBoard]);
-  // The Top-File offer names only the active board's own ports: the legacy names above are for roles.
-  const activeBoardPorts = useMemo(() => portKeysOf(activeBoard), [activeBoard]);
-  const boardRunPorts = useMemo(() => boardRunPortNames(activeBoard), [activeBoard]);
+  // The Top-File offer reads the active board's own names: the legacy names above are for roles.
+  const boardNames = useMemo(() => ({ own: portKeysOf(activeBoard), wired: boardRunPortNames(activeBoard) }), [activeBoard]);
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1832,8 +1831,7 @@ export function Workbench() {
     topUnit,
     running: runningTop,
     working: tb.workingPane,
-    boardPorts: activeBoardPorts,
-    wiredPorts: boardRunPorts,
+    board: boardNames,
     shownProject: markedProjectOf(tb.designView, tb.overrides),
     projectNow: () => {
       const { view, overrides } = tb.designViewNow();
@@ -2045,7 +2043,8 @@ export function Workbench() {
   const showInFolder = desktopBridge()?.showInFolder;
 
   // While a run compiles or runs, what it started; once stopped, what the next Start runs.
-  const topFileName = (isSimulating ? runLabel : null) ?? runningTop?.label ?? TOP_LEVEL_ENTITY;
+  const startedLabel = isSimulating ? runLabel : null;
+  const topFileName = startedLabel ?? runningTop?.label ?? TOP_LEVEL_ENTITY;
 
 
   return (
