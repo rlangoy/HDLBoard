@@ -102,6 +102,14 @@ export function topAfterDelete(files: readonly Pick<VhdlFile, 'id' | 'folder'>[]
   return files.find((file) => file.id !== deletedId && file.folder === deleted.folder)?.id ?? null;
 }
 
+/**
+ * A Verilog header (`.vh`): compiled only where a `.v` source `include`s it, never on
+ * its own (server/src/engines/verilogEngine.ts), so it cannot be what a run starts from.
+ */
+export function isVerilogHeader(name: string): boolean {
+  return /\.vh$/i.test(name);
+}
+
 /** Whether the folder's files can be marked as the top of a run (the blue dot). */
 export function hasTopDot(folder: Folder): boolean {
   return folder === 'vhdl' || folder === 'verilog';

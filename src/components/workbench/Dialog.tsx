@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useRef,
+  type MutableRefObject,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
@@ -45,13 +46,18 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = `${useId()}-title`;
+  const { opener, inside } = useFocusAnchors(open);
 
+  // Each setup puts focus in the dialog, each cleanup gives it back to the opener. Strict
+  // Mode runs setup, cleanup, setup: the second setup must take the focus back again, or
+  // it stays on the opener and Escape (handled on the dialog) never arrives.
   useEffect(() => {
     if (!open) return undefined;
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
+    const previous = opener.current;
+    inside.current ??= focusedWithin(dialogRef.current);
+    (closeRef.current ?? inside.current)?.focus();
     return () => previous?.focus?.();
-  }, [open]);
+  }, [open, opener, inside]);
 
   if (!open) return null;
 
@@ -113,6 +119,40 @@ export function Dialog({ open, onClose, title, subtitle, icon, describedBy, size
       </div>
     </div>
   );
+}
+
+interface FocusAnchors {
+  /** What had focus when the dialog opened: focus goes back there when it closes. */
+  readonly opener: MutableRefObject<HTMLElement | null>;
+  /** What first had focus inside the dialog (an `autoFocus` button or field), once known. */
+  readonly inside: MutableRefObject<HTMLElement | null>;
+}
+
+/**
+ * The opener is read while the dialog renders: by the time an effect runs, an `autoFocus`
+ * button in the footer already has the focus, and focus would go back to that button
+ * instead of to the control that opened the dialog. Both are forgotten at each opening.
+ */
+function useFocusAnchors(open: boolean): FocusAnchors {
+  const opener = useRef<HTMLElement | null>(null);
+  const inside = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) {
+    opener.current = focusedElement();
+    inside.current = null;
+  }
+  wasOpen.current = open;
+  return { opener, inside };
+}
+
+/** No document when the dialog is rendered to markup (the tests): nothing has focus. */
+function focusedElement(): HTMLElement | null {
+  return typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null);
+}
+
+function focusedWithin(dialog: HTMLElement | null): HTMLElement | null {
+  const focused = focusedElement();
+  return focused && dialog?.contains(focused) ? focused : null;
 }
 
 export default Dialog;

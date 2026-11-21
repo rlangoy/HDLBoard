@@ -136,6 +136,10 @@ describe('routeRun (D24)', () => {
     expect(routeRun(file, 'ALU')).toEqual({ unitName: 'alu', pane: 'rtl', runTarget: 'alu' });
     expect(routeRun(file, 'gone').unitName).toBe('alu_tb');
   });
+
+  test('names a unit chosen by name even when it is the only one the editor sees', () => {
+    expect(routeRun(analyzeFile(fixtureFile('vhdl/counter.vhd'), TEST_BOARD_PORTS), 'counter').runTarget).toBe('counter');
+  });
 });
 
 test('narrowView: Both shows the focused pane only when the column cannot split (§ 4.9)', () => {

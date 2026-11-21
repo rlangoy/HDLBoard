@@ -60,13 +60,27 @@ export interface ModelContext {
 export const otherPane = (pane: PaneRole): PaneRole => (pane === 'tb' ? 'rtl' : 'tb');
 export const paneFile = (d: EditorDisplay, pane: PaneRole): string | undefined => d.pair[pane]?.fileId;
 
+/** A chip for the end of one pane's header. */
+export interface PaneChip {
+  readonly pane: PaneRole;
+  readonly node: ReactNode;
+}
+
+export interface HeaderChips {
+  /** § 4.7's testbench suggestion, at the end of the rightmost header. */
+  readonly suggestion: ReactNode;
+  /** The Top-File offer, on the pane it is about; the suggestion wins where both would sit. */
+  readonly top: PaneChip | null;
+}
+
 /** The panes for what is shown, or none while nothing is (an empty project). */
-export function editorPropsFor(ctx: ModelContext, split: EditorSplit, chip: ReactNode): SplitEditorProps | undefined {
+export function editorPropsFor(ctx: ModelContext, split: EditorSplit, chips: HeaderChips): SplitEditorProps | undefined {
   const d = ctx.display;
   if (!d) return undefined;
   const shown = narrowView(d.view, d.focusedPane, split.canSplit);
   const rightmost: PaneRole = shown === 'tb' ? 'tb' : 'rtl';
-  const endOf = (pane: PaneRole) => (pane === rightmost ? chip : null);
+  const topChipOf = (pane: PaneRole) => (pane === chips.top?.pane ? chips.top.node : null);
+  const endOf = (pane: PaneRole) => (pane === rightmost ? chips.suggestion : null) ?? topChipOf(pane);
   const viewControl: PaneViewControl = { pinned: ctx.pinned, canSplit: split.canSplit, onPin: ctx.onPin, onUseSetting: ctx.onUseSetting };
   return {
     view: d.view,

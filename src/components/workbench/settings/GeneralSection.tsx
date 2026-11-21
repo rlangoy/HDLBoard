@@ -9,6 +9,7 @@ import { useThemeState } from '../../../theme/useTheme';
 import { EXAMPLE_LANGUAGES, LANGUAGE_LABEL } from '../examples';
 import { withLanguageToggled, type PreferredLanguages } from '../languagePrefs';
 import { APP_NAME } from '../project';
+import { TOP_FILE_TEXT } from '../topFileText';
 import { PageCard } from '../page/PageCard';
 import { SettingSwitch } from './SettingSwitch';
 import type { Setting } from './settingsSections';
@@ -20,14 +21,17 @@ export interface GeneralSectionProps {
   languages: Setting<PreferredLanguages>;
   /** The desktop app's project storage; null in a browser. */
   keepProject: KeepProjectSetting | null;
+  /** Start and the pane header offer the board design on screen as the Top-File (useTopFileHint.ts); on by default. */
+  topFileHint?: Setting<boolean>;
 }
 
-/** Settings › General: how HDLBoard looks and the languages you work in. */
-export function GeneralSection({ languages, keepProject }: GeneralSectionProps) {
+/** Settings › General: how HDLBoard looks, the languages you work in, and help with the Top-File. */
+export function GeneralSection({ languages, keepProject, topFileHint }: GeneralSectionProps) {
   return (
     <>
       <AppearanceCard />
       <LanguagesCard languages={languages} />
+      {topFileHint && <TopFileCard topFileHint={topFileHint} />}
       {keepProject && <DesktopSessionCard keepProject={keepProject} />}
     </>
   );
@@ -105,6 +109,15 @@ function DesktopSessionCard({ keepProject }: { keepProject: KeepProjectSetting }
         setting={keepProject.setting}
       />
       {keepProject.saveFailed && <p className="wb-settings__note wb-settings__note--error" role="alert">The setting could not be saved.</p>}
+    </PageCard>
+  );
+}
+
+/** For a student who does not know the Top-File yet (topFileSuggestion.ts). */
+function TopFileCard({ topFileHint }: { topFileHint: Setting<boolean> }) {
+  return (
+    <PageCard title={TOP_FILE_TEXT.settingTitle} wide>
+      <SettingSwitch label={TOP_FILE_TEXT.settingLabel} description={TOP_FILE_TEXT.settingDescription} setting={topFileHint} />
     </PageCard>
   );
 }

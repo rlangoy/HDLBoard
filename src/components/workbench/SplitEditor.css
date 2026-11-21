@@ -386,6 +386,21 @@
   background: transparent;
 }
 
+/* The Top-File chip (TopFileChip.tsx): the Top-File's blue, and the dot Files marks it with. */
+.wb-tbchip--top {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  color: var(--wb-accent-dark-ink);
+}
+
+.wb-tbchip__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wb-accent);
+}
+
 /* ---- narrow panes (docs/cleanup_file_tabs.md § 5.3) ---------------
  * Below 280 px the badge and the region navigator lose their
  * words and the header tightens, so the file name keeps what room there is.

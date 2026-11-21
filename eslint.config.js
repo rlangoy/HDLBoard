@@ -130,6 +130,20 @@ const NEW_CODE = [
   // Simulation-only code in designs: the design check (docs/impl_sim_only_warnings.md).
   'src/components/workbench/simOnly/**/*.ts',
   'src/components/workbench/simOnly/**/*.tsx',
+  // Suggesting the Top-File at Start and in the pane header.
+  'src/components/workbench/topFileSuggestion.ts',
+  'src/components/workbench/topFileSuggestion.test.ts',
+  'src/components/workbench/topFileText.ts',
+  'src/components/workbench/TopFileDialog.tsx',
+  'src/components/workbench/TopFileDialog.test.tsx',
+  'src/components/workbench/TopFileChip.tsx',
+  'src/components/workbench/useTopFileHint.ts',
+  'src/components/workbench/useTopFileHint.test.ts',
+  'src/components/workbench/useTopFileSuggestion.tsx',
+  'src/components/workbench/useTopFileSuggestion.test.ts',
+  'src/components/workbench/verilogDirectiveScan.ts',
+  'src/components/workbench/verilogDirectiveScan.test.ts',
+  'src/components/workbench/useStoredSwitch.ts',
 ];
 
 const MAX_FUNCTION_LINES = 40;

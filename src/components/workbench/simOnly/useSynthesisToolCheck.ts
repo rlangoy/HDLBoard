@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
-import { useEffect, useState } from 'react';
-import { loadAppDefaults } from '../appDefaults';
 import type { Setting } from '../settings/settingsSections';
-import { loadStoredChoice, saveStoredChoice } from '../storedChoice';
+import { useStoredSwitch, type StoredSwitch } from '../useStoredSwitch';
 
 /**
  * Settings › Simulation › Design check › *Synthesis*: the live quick check alone, or also
@@ -23,28 +21,13 @@ export function synthesisToolCheckInEffect(choice: boolean | null, startupDefaul
   return choice ?? startupDefault ?? DEFAULT_SYNTHESIS_TOOL_CHECK;
 }
 
+const SYNTHESIS_TOOL_CHECK: StoredSwitch = {
+  key: SYNTHESIS_TOOL_CHECK_KEY,
+  startupDefaultOf: (defaults) => defaults.synthesisToolCheck,
+  inEffect: synthesisToolCheckInEffect,
+};
+
 /** The tool check's setting, and how to change it; a choice made in another tab is followed. */
 export function useSynthesisToolCheck(): Setting<boolean> {
-  // Kept in state as well as storage, so a choice made this session holds even when storage is blocked.
-  const [choice, setChoice] = useState(() => loadStoredChoice(SYNTHESIS_TOOL_CHECK_KEY));
-  const [startupDefault, setStartupDefault] = useState<boolean | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void loadAppDefaults().then(({ defaults }) => {
-      if (!cancelled) setStartupDefault(defaults.synthesisToolCheck ?? DEFAULT_SYNTHESIS_TOOL_CHECK);
-    });
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === SYNTHESIS_TOOL_CHECK_KEY || event.key === null) setChoice(loadStoredChoice(SYNTHESIS_TOOL_CHECK_KEY));
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
-  const onChange = (on: boolean) => {
-    saveStoredChoice(SYNTHESIS_TOOL_CHECK_KEY, on);
-    setChoice(on);
-  };
-  return { value: synthesisToolCheckInEffect(choice, startupDefault), onChange };
+  return useStoredSwitch(SYNTHESIS_TOOL_CHECK);
 }

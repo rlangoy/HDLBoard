@@ -16,6 +16,17 @@ export type EditorView = 'tb' | 'both' | 'rtl';
 export type PairEvent = 'open' | 'run';
 export type PaneRole = 'tb' | 'rtl';
 
+/**
+ * The pane whose unit the student works on, for the Top-File offer: the testbench pane
+ * while one is on screen (in a dual view too), else the design pane.
+ */
+export interface WorkingPane {
+  readonly pane: PaneRole;
+  readonly fileId: string;
+  /** As the code reads now; null when the file declares no unit. */
+  readonly unitName: string | null;
+}
+
 /** In a column too narrow for two panes, Both shows the focused pane only (§ 4.9). */
 export const narrowView = (view: EditorView, focusedPane: PaneRole, canSplit: boolean): EditorView =>
   view === 'both' && !canSplit ? focusedPane : view;
@@ -98,13 +109,17 @@ export interface RunRoute {
 /**
  * B4 / D24: which unit a Start or tab Play runs, and which pane gets focus.
  * topUnit still declared in the file -> that unit; else the first testbench unit;
- * else the first design unit. runTarget is null when the file declares one unit.
+ * else the first design unit. runTarget names the unit when the file declares more
+ * than one, and always when it was chosen by name: the backend may see a unit the
+ * editor does not (a module behind an inactive `ifdef), or one added to the file later.
  */
 export function routeRun(file: FileAnalysis | undefined, topUnit: string | null): RunRoute {
   const units = file?.units ?? [];
-  const unit = findUnit(file, topUnit) ?? units.find((u) => u.role === 'tb') ?? units[0];
+  const chosen = findUnit(file, topUnit);
+  const unit = chosen ?? units.find((u) => u.role === 'tb') ?? units[0];
   if (!unit) return { unitName: null, pane: 'rtl', runTarget: null };
-  return { unitName: unit.name, pane: unit.role, runTarget: units.length > 1 ? unit.name : null };
+  const isNamed = chosen !== undefined || units.length > 1;
+  return { unitName: unit.name, pane: unit.role, runTarget: isNamed ? unit.name : null };
 }
 
 /** Which pane shows `fileId` in `pair`, preferring the pane whose unit is `unitName` in a self pair. */

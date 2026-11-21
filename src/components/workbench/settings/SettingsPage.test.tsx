@@ -109,6 +109,23 @@ describe('General', () => {
   });
 });
 
+describe('General › Top-File', () => {
+  const withTopFileHint = (on: boolean) =>
+    render('general', { general: { languages: PROPS.general.languages, keepProject: null, topFileHint: setting(on) } });
+
+  test('is a card after Languages when the workbench passes the setting', () => {
+    expect(cardTitles(withTopFileHint(true))).toEqual(['Appearance', 'Languages', 'Top-File']);
+  });
+
+  test('shows Suggest the Top-File as a switch that is on', () => {
+    expect(withTopFileHint(true)).toMatch(/role="switch" class="wb-settings-switch__input" checked=""[^]*?<strong>Suggest the Top-File<\/strong>/);
+  });
+
+  test('is no longer under Simulation', () => {
+    expect(cardTitles(render('simulation'))).not.toContain('Top-File');
+  });
+});
+
 describe('Board & I/O', () => {
   test('selects the layout in use', () => {
     expect(render('board')).toMatch(/wb-settings-layout is-selected"><input type="radio"[^>]*checked="" value="two-columns"/);

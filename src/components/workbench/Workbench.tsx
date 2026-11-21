@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { BUILT_IN_CATALOG, DEFAULT_BOARD, findBoard } from '../../boards/boardCatalog';
 import { foreignBoardNames } from '../../boards/boardMatch';
-import { boardDesignPortNames } from '../../boards/boardPorts';
+import { boardDesignPortNames, boardRunPortNames, portKeysOf } from '../../boards/boardPorts';
 import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
@@ -86,6 +86,9 @@ import { nextRevealId, type RevealRequest } from './useRevealLine';
 import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
+import { useTopFileHint } from './useTopFileHint';
+import { runningTopOf, topRunLabel, useTopFileSuggestion } from './useTopFileSuggestion';
+import { markedProjectOf, type TopUnit } from './topFileSuggestion';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
 import { findUnit } from './tbDetect/analyzeProject';
@@ -378,6 +381,7 @@ export function Workbench() {
   const designCheckMode = useDesignCheckMode();
   // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's too at Start (VHDL).
   const synthesisToolCheck = useSynthesisToolCheck();
+  const topFileHint = useTopFileHint();
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
   const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
@@ -426,6 +430,8 @@ export function Workbench() {
   const [runFileId, setRunFileId] = useState<string | null>(null);
   // …and the unit it runs, so only the pane showing that unit shows Stop (B5).
   const [runUnitName, setRunUnitName] = useState<string | null>(null);
+  // …and how the Top line named it at Start: an edit during the run must not rename what runs.
+  const [runLabel, setRunLabel] = useState<string | null>(null);
   // "Create testbench" for this design file: the New File dialog makes a testbench paired with it.
   const [newTestbenchFor, setNewTestbenchFor] = useState<string | null>(null);
   // A design run the board cannot drive, with the testbench units that could run it instead (§ 4.10).
@@ -1622,6 +1628,7 @@ export function Workbench() {
     setRunUnitName(unitName);
     blankBoard();
     const topFile = files.find((f) => f.id === fileId);
+    setRunLabel(topFile ? topRunLabel(topFile.name, runTarget) : null);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     const runFiles = filesForRun(files, topFile?.name);
     startDiagnosticsRun({ files: runFiles });
@@ -1711,18 +1718,34 @@ export function Workbench() {
    * testbench unit runs if it has one (the remembered unit while it exists), else
    * its design — naming the unit only when the file holds more than one (B7).
    */
-  const runFile = (id: string) => {
-    const route = routeRun(tb.fileAnalysis(id), id === topFileId ? topUnit : null);
+  const runFile = (id: string, rememberedUnit: string | null = id === topFileId ? topUnit : null) => {
+    const route = routeRun(tb.fileAnalysis(id), rememberedUnit);
     tb.showFile(id, 'run', { pane: route.pane, unitName: route.unitName });
     checkAndRun(id, route.runTarget, route.unitName, route.pane);
   };
 
   // The Start button runs the file named as "Top:" — show it (Files panel
   // highlight and pane header), so what runs is what shows.
-  const handleStart = () => {
+  const startCurrentTop = () => {
     if (topFileId === null) startRun(null);
     else runFile(topFileId);
   };
+
+  /**
+   * The unit becomes top by name, so Start runs that unit: not a testbench added to the
+   * file later, and not a helper the backend sees behind an inactive `ifdef.
+   */
+  const makeTopUnit = ({ fileId, unitName }: TopUnit) => {
+    if (isSimulating) return;
+    setTopFileId(fileId);
+    setTopUnit(unitName);
+  };
+
+  /** Make the unit top and run exactly it. Only Start asks first: a pane's Play makes its own file top already. */
+  const startUnitAsTop = ({ fileId, unitName }: TopUnit) => runFile(fileId, unitName);
+
+  // Start may first ask whether the file on screen should be the Top-File (useTopFileSuggestion).
+  const handleStart = () => topSuggestion.start();
 
   /** Play in a pane header: exactly that pane's unit (§ 4.10). */
   const handleRunPane = (pane: PaneRole, target: PaneTarget) => {
@@ -1763,6 +1786,8 @@ export function Workbench() {
 
   // The names that make a unit a board design rather than a testbench follow the active board (§ 6.9).
   const boardPorts = useMemo(() => boardDesignPortNames(activeBoard), [activeBoard]);
+  // The Top-File offer reads the active board's own names: the legacy names above are for roles.
+  const boardNames = useMemo(() => ({ own: portKeysOf(activeBoard), wired: boardRunPortNames(activeBoard) }), [activeBoard]);
 
   // The testbench split (docs/impl_split_screen.md): pairing, view, panes, overrides.
   const tb = useTestbenchSplit({
@@ -1797,6 +1822,28 @@ export function Workbench() {
   };
 
   restoreOverridesRef.current = tb.restoreOverrides;
+
+  // What Start runs now, resolved as Start resolves it, so the "Top:" line and the question's
+  // *Start …* button name the unit that really runs: "alu.v › alu_tb" when Start names it (§ 4.10).
+  const runningTop = runningTopOf(files.find((f) => f.id === topFileId), topUnit, tb.shownFileAnalysis);
+
+  const topSuggestion = useTopFileSuggestion({
+    hint: topFileHint,
+    topFileId,
+    topUnit,
+    running: runningTop,
+    working: tb.workingPane,
+    board: boardNames,
+    shownProject: markedProjectOf(tb.designView, tb.overrides),
+    projectNow: () => {
+      const { view, overrides } = tb.designViewNow();
+      return markedProjectOf(view, overrides);
+    },
+    simulating: isSimulating,
+    onMakeTop: makeTopUnit,
+    onStartTop: startCurrentTop,
+    onStartUnit: startUnitAsTop,
+  });
 
   // The design check (docs/impl_sim_only_warnings.md): live warnings on lines that only work in
   // simulation, merged with the run's markers, and the SIM-only group of the files.
@@ -1997,9 +2044,9 @@ export function Workbench() {
   });
   const showInFolder = desktopBridge()?.showInFolder;
 
-  const topName = files.find((f) => f.id === topFileId)?.name ?? TOP_LEVEL_ENTITY;
-  // "Top: alu.v › alu_tb" when a unit was chosen (§ 4.10).
-  const topFileName = topUnit ? `${topName} › ${topUnit}` : topName;
+  // While a run compiles or runs, what it started; once stopped, what the next Start runs.
+  const startedLabel = isSimulating ? runLabel : null;
+  const topFileName = startedLabel ?? runningTop?.label ?? TOP_LEVEL_ENTITY;
 
 
   return (
@@ -2145,6 +2192,7 @@ export function Workbench() {
       )}
       {tb.roleConflictDialog}
       {unsavedQuestion.dialog}
+      {topSuggestion.dialog}
       {runChoice && (
         <RunTestbenchDialog
           designName={files.find((f) => f.id === runChoice.fileId)?.name ?? ''}
@@ -2236,7 +2284,7 @@ export function Workbench() {
               onDismissDiagnostics={dismissInEditor}
               onShowLineDiagnostics={designCheck.showLine}
               projectFiles={files}
-              split={tb.editorSplit(fileMenu, designCheck.badgeFor)}
+              split={tb.editorSplit(fileMenu, designCheck.badgeFor, topSuggestion.chip)}
               emptyProject={
                 files.length === 0 && (
                   <EmptyProject onExamples={(activeBoard.origin === 'built-in' || hasExamples(activeBoard)) ? () => setOverlay('examples') : undefined} onNewFile={handleNewFile} onUpload={showOpenDialog} />
@@ -2249,7 +2297,7 @@ export function Workbench() {
                 section={settingsPage.section}
                 onSectionChange={settingsPage.select}
                 onClose={settingsPage.close}
-                general={{ languages: { value: preferredLanguages, onChange: handlePreferredLanguagesChange }, keepProject }}
+                general={{ languages: { value: preferredLanguages, onChange: handlePreferredLanguagesChange }, keepProject, topFileHint }}
                 boardIo={{
                   board: {
                     boards: catalog,

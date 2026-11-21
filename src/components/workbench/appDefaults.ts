@@ -28,6 +28,11 @@ export interface AppDefaults {
    * (docs/impl_sim_only_warnings.md § 7); only when the file sets it — built in, it is off.
    */
   readonly synthesisToolCheck?: boolean;
+  /**
+   * Settings › General › Top-File › *Suggest the Top-File* (useTopFileHint.ts); only when
+   * the file sets it — built in, it is on.
+   */
+  readonly topFileHint?: boolean;
 }
 
 export const BUILT_IN_DEFAULTS: AppDefaults = { bouncyButtons: true };
@@ -47,6 +52,7 @@ const SETTING_TYPES: { readonly [K in keyof AppDefaults]-?: SettingType } = {
   bouncyButtons: 'boolean',
   designCheck: 'designCheck',
   synthesisToolCheck: 'boolean',
+  topFileHint: 'boolean',
 };
 const TYPE_TEXT: Readonly<Record<SettingType, string>> = { boolean: 'true or false', designCheck: '"synthesis" or "simulation"' };
 const IS_TYPE: Readonly<Record<SettingType, (value: unknown) => boolean>> = {

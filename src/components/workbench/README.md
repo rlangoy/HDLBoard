@@ -905,8 +905,23 @@ shows; a `waveGet` for a run whose session is gone answers `onNone`.
 
 `handleStart` (the card's Start button) shows the file with the blue dot
 (Files panel highlight and pane header), then runs it; `handleRunPane` (Play in
-a pane header) first makes that pane's file top, then does the same. Both go
-through `startRun`, which:
+a pane header) first makes that pane's file top, then does the same.
+
+Before that, Start may ask a question (`useTopFileSuggestion.tsx`). If the unit on
+screen looks like the Top-File and Start would run something else, `TopFileDialog`
+asks *Make lab2.vhd the Top-File?* (`topFileSuggestion.ts`). The split's
+`workingPane` decides what is on screen: the testbench pane while one is shown,
+alone or beside its design, else the design pane. A testbench there is offered
+unless Start runs it already. A design is offered when it has a port of the active
+board and no other design, nor the current top's hierarchy, instantiates it. The
+same offer shows earlier, as `TopFileChip` in that pane's header (the testbench
+suggestion chip wins where both would sit). *Start lab1.vhd* and the chip's ×
+leave the unit alone until the Top-File changes. The Waveform button is not
+affected: it still runs the testbench on screen. Settings › General › *Suggest the Top-File* (`useTopFileHint.ts`,
+`settings.json` key `topFileHint`) turns both off. Play never asks: it makes its
+own file top.
+
+Both go through `startRun`, which:
 
 1. Resets `elapsedSeconds`, sets `status` to `'compiling'`, records the file
    as `runFileId` (the pane showing it shows Stop while it runs), blanks the
