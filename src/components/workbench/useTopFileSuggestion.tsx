@@ -59,7 +59,7 @@ export function runningTopOf(
   return { label: topRunLabel(topFile.name, runTarget), key: `${topFile.id} › ${unitName}` };
 }
 
-/** "Top: alu.v › alu_tb" when Start names the unit it runs (§ 4.10), else the file alone. */
+/** "alu.v › alu_tb" when Start names the unit it runs (§ 4.10), else the file alone: the question's *Start …* button. */
 export function topRunLabel(fileName: string, runTarget: string | null): string {
   return runTarget ? `${fileName} › ${runTarget}` : fileName;
 }

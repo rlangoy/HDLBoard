@@ -344,7 +344,7 @@ unchanged).
 
 After routing, the pane of the unit that runs gets focus and its header shows
 Stop (B5). Pressing Play in a pane makes that file top **and** records its unit
-(`topUnit`, § 6.6). The Simulation card shows it: *Top: alu.v › alu_tb*. The
+(`topUnit`, § 6.6). The Simulation card shows the file alone: *Top: alu.v*. The
 Explorer's blue dot may now sit on a `work/` file, but only when it got there
 from a TB pane; the dot's own click still offers only `vhdl/` and `verilog/`
 files (`hasTopDot` unchanged).
