@@ -534,8 +534,9 @@ interface SimulationCardProps {
 The card at the top of the sidebar: a circular play glyph (decoration
 only) and "Simulation" heading, a status pill (dot + label) on the right, one full-width button
 that is *either* Start (blue) or Stop (red) — never both — and a footer
-line reading `Elapsed: HH:MM:SS | Top: <name>`, where `<name>` is the
-`topFile` prop.
+line reading `🕒 HH:MM:SS | Top: <name>`, where `<name>` is the
+`topFile` prop. The clock icon names the time; a screen reader hears
+"Elapsed:" instead.
 
 Purely presentational: the button is disabled while `compiling`, shows
 Start when `stopped` or `compiling`, and Stop once `running`; the status
