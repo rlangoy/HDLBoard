@@ -67,6 +67,12 @@ describe('a file that looks like the Top-File', () => {
     expect(suggest({ files: [LAB1, LAB2, testbenchOf('lab2')], shown: 'lab2.vhd', top: 'lab1.vhd' })?.fileId).toBe('lab2.vhd');
   });
 
+  test('is a board design only a file the student marked Treat as testbench instantiates', () => {
+    const files = [LAB1, LAB2, boardDesignUsing('wrapper', 'lab2')];
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'wrapper.vhd': 'tb' } };
+    expect(suggest({ files, shown: 'lab2.vhd', top: 'lab1.vhd', overrides })?.fileId).toBe('lab2.vhd');
+  });
+
   test('can be a Verilog module', () => {
     const lab3 = verilogBoardDesign('lab3');
     expect(suggest({ files: [LAB1, lab3], shown: 'lab3.v', top: 'lab1.vhd' })?.fileId).toBe('lab3.v');
@@ -95,6 +101,12 @@ describe('no suggestion', () => {
   test('for a sub-entity of another design, which is not the top either', () => {
     const files = [LAB1, boardDesignUsing('lab2', 'child'), boardDesign('child')];
     expect(suggest({ files, shown: 'child.vhd', top: 'lab1.vhd' })).toBeNull();
+  });
+
+  test('for a child of a file the student marked Treat as design', () => {
+    const files = [LAB1, testbenchOf('lab2'), LAB2];
+    const overrides: TestbenchOverrides = { ...EMPTY_OVERRIDES, roles: { 'lab2_tb.vhd': 'rtl' } };
+    expect(suggest({ files, shown: 'lab2.vhd', top: 'lab1.vhd', overrides })).toBeNull();
   });
 
   test('for the design the top testbench tests', () => {

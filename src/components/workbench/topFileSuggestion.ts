@@ -50,7 +50,7 @@ export function topFileSuggestion(question: TopFileQuestion): TopFileSuggestion 
   const unit = shownFile && boardDesignUnit(shownFile);
   if (!shownFile || !unit) return null;
   const key = unitRefKey(shownFile.fileId, shownFile.language, unit.name);
-  const isPartOfADesign = isInTopHierarchy(question, key) || isInstantiatedByADesign(question.project, key);
+  const isPartOfADesign = isInTopHierarchy(question, key) || isInstantiatedByADesign(question, key);
   return isPartOfADesign ? null : suggestionFor(shownFile, unit, question.boardPorts);
 }
 
@@ -79,7 +79,7 @@ function isInTopHierarchy({ project, overrides, topFileId }: TopFileQuestion, un
   const topFile = topFileId === null ? undefined : effectiveFile(project, overrides, topFileId);
   if (!topFile) return false;
   const roots = topFile.units.map((unit) => unitRefKey(topFile.fileId, topFile.language, unit.name));
-  return instantiatedFrom(project, roots).has(unitKey);
+  return instantiatedFrom({ project, overrides }, roots).has(unitKey);
 }
 
 /**
@@ -87,14 +87,16 @@ function isInTopHierarchy({ project, overrides, topFileId }: TopFileQuestion, un
  * candidate (Vivado's automatic hierarchy picks a root the same way). A testbench that
  * instantiates it does not count; testing a board design is no reason to keep it off top.
  */
-function isInstantiatedByADesign(project: ProjectAnalysis, unitKey: string): boolean {
-  const designs = [...unitsByKey(project).entries()].filter(([key, entry]) => key !== unitKey && entry.unit.role === 'rtl');
+function isInstantiatedByADesign(marked: MarkedProject, unitKey: string): boolean {
+  const { project } = marked;
+  const designs = [...unitsByKey(marked).entries()].filter(([key, entry]) => key !== unitKey && entry.unit.role === 'rtl');
   return designs.some(([, entry]) => instancesOf(project, entry).includes(unitKey));
 }
 
 /** Every unit reachable from `roots` through the instances the simulator sees, the roots included. */
-function instantiatedFrom(project: ProjectAnalysis, roots: readonly string[]): Set<string> {
-  const units = unitsByKey(project);
+function instantiatedFrom(marked: MarkedProject, roots: readonly string[]): Set<string> {
+  const { project } = marked;
+  const units = unitsByKey(marked);
   const seen = new Set<string>();
   const pending = [...roots];
   for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
@@ -105,14 +107,19 @@ function instantiatedFrom(project: ProjectAnalysis, roots: readonly string[]): S
   return seen;
 }
 
+/** The analysis and the student's role marks, which every role decision here reads together. */
+type MarkedProject = Pick<TopFileQuestion, 'project' | 'overrides'>;
+
 interface KeyedUnit {
   readonly language: Language;
   readonly unit: AnalyzedUnit;
 }
 
-function unitsByKey(project: ProjectAnalysis): Map<string, KeyedUnit> {
+/** The project's units by key, with the student's *Treat as testbench / design* marks applied. */
+function unitsByKey({ project, overrides }: MarkedProject): Map<string, KeyedUnit> {
   const units = new Map<string, KeyedUnit>();
-  for (const file of project.byFile.values()) {
+  const files = [...project.byFile.keys()].map((fileId) => effectiveFile(project, overrides, fileId));
+  for (const file of files.filter((f): f is FileAnalysis => f !== undefined)) {
     for (const unit of file.units) units.set(unitRefKey(file.fileId, file.language, unit.name), { language: file.language, unit });
   }
   return units;
