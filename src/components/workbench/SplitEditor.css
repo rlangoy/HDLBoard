@@ -393,18 +393,58 @@
   color: var(--wb-accent-dark-ink);
 }
 
-/* Folds as the header gets tight, giving up its room before anything else:
- * first the label goes, then the ×, and the ⓘ always stays. The label and the
- * × wrap onto a second line that the fixed height clips away, so the words never
- * break and the header never overflows. The full reason stays in the tooltip,
- * and the ⓘ still sets the Top File. */
-.wb-tbchip--top {
+/* Folds in steps as the header gets tight (useFold in TopFileChip.tsx), giving up
+ * its room before anything else: first the label goes, leaving a 36 px gap
+ * between the ⓘ and the ×; then the × goes, and the ⓘ always stays. The slot
+ * shrinks smoothly and is see-through; the chip sits at its right end, so the
+ * room it gives up reads as the header's own space. The words never break and
+ * the header never overflows. The full reason stays in the tooltip, and the ⓘ
+ * still sets the Top File. */
+.wb-tbchip-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: end;
+  align-items: center;
   flex: 0 1000 auto;
-  column-gap: 4px;
-  box-sizing: border-box;
   min-width: 28px; /* the ⓘ */
-  padding: 0 3px;
   overflow: hidden;
+}
+
+.wb-tbchip-slot > * {
+  grid-area: 1 / 1;
+}
+
+/* The full chip, unseen, so the slot asks for its full width whatever the fold. */
+.wb-tbchip__sizer {
+  visibility: hidden;
+}
+
+.wb-tbchip--top {
+  flex: none;
+  gap: 0;
+  box-sizing: border-box;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+
+.wb-tbchip--top > * {
+  flex: none;
+}
+
+.wb-tbchip--top .wb-tbchip__label {
+  margin: 0 2px 0 4px;
+}
+
+.wb-tbchip--top[data-fold] .wb-tbchip__label {
+  display: none;
+}
+
+.wb-tbchip--top[data-fold='label'] .wb-tbchip__dismiss {
+  margin-left: 36px;
+}
+
+.wb-tbchip--top[data-fold='all'] .wb-tbchip__dismiss {
+  display: none;
 }
 
 .wb-tbchip__info {
@@ -419,21 +459,6 @@
   width: 14px;
   height: 14px;
   color: var(--wb-accent);
-}
-
-/* Reversed so the label, last in the markup, is the first to wrap away. */
-.wb-tbchip__rest {
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: row-reverse;
-  flex-wrap: wrap;
-  align-items: center;
-  align-content: flex-start;
-  gap: 0 2px;
-  min-width: 0;
-  height: 20px;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 /* ---- narrow panes (docs/cleanup_file_tabs.md § 5.3) ---------------
