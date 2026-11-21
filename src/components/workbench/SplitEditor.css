@@ -399,11 +399,12 @@
  * shrinks smoothly and is see-through; the chip sits at its right end, so the
  * room it gives up reads as the header's own space. The words never break and
  * the header never overflows. The full reason stays in the tooltip, and the ⓘ
- * still sets the Top File. */
+ * still sets the Top File. `safe`: should the chip ever be wider than the slot (before
+ * the fold has run), it overflows at its × end, so the ⓘ is the part that shows. */
 .wb-tbchip-slot {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  justify-items: end;
+  justify-items: safe end;
   align-items: center;
   flex: 0 1000 auto;
   min-width: 28px; /* the ⓘ */

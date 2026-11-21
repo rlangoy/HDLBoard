@@ -64,7 +64,12 @@ export function SimulationCard({ status, elapsedSeconds, topFile, onStart, onSto
       <div className="wb-simcard__meta">
         <span className="wb-icon wb-icon--clock" aria-hidden="true" />
         <span className="wb-simcard__label-text">
-          Elapsed: {formatElapsed(elapsedSeconds)} <span className="wb-simcard__sep">|</span> Top:{' '}
+          {/* The clock says what the time is; a screen reader, which skips the icon, hears it. */}
+          <span title="Elapsed time">
+            <span className="wb-sr-only">Elapsed: </span>
+            {formatElapsed(elapsedSeconds)}
+          </span>{' '}
+          <span className="wb-simcard__sep">|</span> Top:{' '}
           <strong className="wb-simcard__top">{topFile}</strong>
         </span>
       </div>

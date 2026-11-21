@@ -68,6 +68,10 @@ const FIT_SLACK_PX = 0.5;
  * header gives it (its natural width is the hidden full-size copy's), so folding never
  * changes the slot's size and never feeds back. The step is set on the chip straight from
  * the observer, before the frame is painted.
+ *
+ * The label step is measured each time rather than once: a chip that mounts unlaid-out
+ * (in a hidden pane) would read 0. It is skipped when it is no narrower than the full chip
+ * (a short label), so the chip never outgrows the sizer and the slot never follows it.
  */
 function useFold() {
   const slotRef = useRef<HTMLDivElement>(null);
@@ -78,12 +82,16 @@ function useFold() {
     const sizer = sizerRef.current;
     const chip = chipRef.current;
     if (!slot || !sizer || !chip || typeof ResizeObserver === 'undefined') return undefined;
-    chip.dataset.fold = 'label';
-    const foldedWidth = chip.getBoundingClientRect().width; // no text, so no font changes it
     const fold = () => {
       const room = slot.getBoundingClientRect().width + FIT_SLACK_PX;
-      if (room >= sizer.getBoundingClientRect().width) delete chip.dataset.fold;
-      else chip.dataset.fold = room >= foldedWidth ? 'label' : 'all';
+      const fullWidth = sizer.getBoundingClientRect().width;
+      if (room >= fullWidth) {
+        delete chip.dataset.fold;
+        return;
+      }
+      chip.dataset.fold = 'label';
+      const labelFoldedWidth = chip.getBoundingClientRect().width;
+      if (room < labelFoldedWidth || labelFoldedWidth >= fullWidth) chip.dataset.fold = 'all';
     };
     fold();
     const observer = new ResizeObserver(fold);

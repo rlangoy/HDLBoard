@@ -87,7 +87,7 @@ import type { PaneRun } from './EditorPaneHeader';
 import { routeRun, runTargetFor, withCurrentUnit, type PaneRole } from './editorView';
 import { RunTestbenchDialog } from './RunTestbenchDialog';
 import { useTopFileHint } from './useTopFileHint';
-import { runningTopOf, topRunLabel, useTopFileSuggestion } from './useTopFileSuggestion';
+import { runningTopOf, useTopFileSuggestion } from './useTopFileSuggestion';
 import { markedProjectOf, type TopUnit } from './topFileSuggestion';
 import type { TestbenchChoice } from './splitModel';
 import { EMPTY_OVERRIDES, type PaneTarget } from './tbDetect/types';
@@ -430,8 +430,8 @@ export function Workbench() {
   const [runFileId, setRunFileId] = useState<string | null>(null);
   // …and the unit it runs, so only the pane showing that unit shows Stop (B5).
   const [runUnitName, setRunUnitName] = useState<string | null>(null);
-  // …and how the Top line named it at Start: an edit during the run must not rename what runs.
-  const [runLabel, setRunLabel] = useState<string | null>(null);
+  // …and its file's name as the Top line showed it at Start: a rename during the run must not rename what runs.
+  const [runTopName, setRunTopName] = useState<string | null>(null);
   // "Create testbench" for this design file: the New File dialog makes a testbench paired with it.
   const [newTestbenchFor, setNewTestbenchFor] = useState<string | null>(null);
   // A design run the board cannot drive, with the testbench units that could run it instead (§ 4.10).
@@ -1628,7 +1628,7 @@ export function Workbench() {
     setRunUnitName(unitName);
     blankBoard();
     const topFile = files.find((f) => f.id === fileId);
-    setRunLabel(topFile ? topRunLabel(topFile.name, runTarget) : null);
+    setRunTopName(topFile?.name ?? null);
     // The same selection `run` sends, so the markers' line numbers match what the compiler saw.
     const runFiles = filesForRun(files, topFile?.name);
     startDiagnosticsRun({ files: runFiles });
@@ -1706,7 +1706,7 @@ export function Workbench() {
     else runAsTop(fileId, runTarget, unitName);
   };
 
-  /** The file becomes top — the blue dot and "Top: file › unit" — and runs. Only once a run really starts. */
+  /** The file becomes top — the blue dot and "Top: file" — and runs. Only once a run really starts. */
   const runAsTop = (fileId: string, runTarget: string | null, unitName: string | null) => {
     setTopFileId(fileId);
     setTopUnit(runTarget);
@@ -1823,9 +1823,11 @@ export function Workbench() {
 
   restoreOverridesRef.current = tb.restoreOverrides;
 
-  // What Start runs now, resolved as Start resolves it, so the "Top:" line and the question's
-  // *Start …* button name the unit that really runs: "alu.v › alu_tb" when Start names it (§ 4.10).
-  const runningTop = runningTopOf(files.find((f) => f.id === topFileId), topUnit, tb.shownFileAnalysis);
+  // What Start runs now, resolved as Start resolves it, so the question's *Start …* button names
+  // the unit that really runs: "alu.v › alu_tb" when Start names it (§ 4.10). The "Top:" line
+  // shows the file's name alone.
+  const topFile = files.find((f) => f.id === topFileId);
+  const runningTop = runningTopOf(topFile, topUnit, tb.shownFileAnalysis);
 
   const topSuggestion = useTopFileSuggestion({
     hint: topFileHint,
@@ -2045,8 +2047,8 @@ export function Workbench() {
   const showInFolder = desktopBridge()?.showInFolder;
 
   // While a run compiles or runs, what it started; once stopped, what the next Start runs.
-  const startedLabel = isSimulating ? runLabel : null;
-  const topFileName = startedLabel ?? runningTop?.label ?? TOP_LEVEL_ENTITY;
+  const startedName = isSimulating ? runTopName : null;
+  const topFileName = startedName ?? topFile?.name ?? TOP_LEVEL_ENTITY;
 
 
   return (
