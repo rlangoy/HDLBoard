@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# Builds the snap (linuxSnap/build.sh), installs and tests it, and attaches
+# it to a GitHub release. The sibling of build-linux.yml, which builds the
+# AppImage from the same AppDir.
+#
+#   git tag v1.2.4      && git push origin v1.2.4       -> draft release (+ store edge)
+#   Actions -> "Build Linux snap" -> Run workflow       -> artifact only
+#
+# The version comes from the tag (v1.2.4 -> 1.2.4), stamped into every
+# package.json on the runner only, as in build-linux.yml. A pre-release
+# version (1.2.4-rc1) gives a devel-grade snap.
+#
+# Snap Store: once the name is registered and the repository has a
+# SNAPCRAFT_STORE_CREDENTIALS secret (snapcraft export-login, see
+# linuxSnap/README.md), a tag also uploads the snap to the store's edge
+# channel. Nothing is ever released to beta/candidate/stable from here:
+# promote by hand, as the GitHub release is published by hand.
+
+name: Build Linux snap
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (x.y.z or x.y.z-pre). Empty: package.json's own version."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-snap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-snap:
+    name: Build and test the snap
+    # 22.04, as build-linux.yml: the simulators inside are built natively here.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            winInstaller/electron/package-lock.json
+
+      - name: Determine version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${REF_TYPE}" == tag ]]; then
+            version="${REF_NAME#v}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="$(node -p "require('./package.json').version")"
+          fi
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'${version}' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc1"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$([[ "${version}" == *-* ]] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "snap=hdlboard_${version}_amd64.snap" >> "${GITHUB_OUTPUT}"
+          echo "HDLBoard version: ${version} (commit ${GITHUB_SHA})"
+
+      - name: Stamp version into package.json files
+        run: node tools/bump-version.mjs "${{ steps.version.outputs.version }}"
+
+      # The same key as build-linux.yml, so the simulator trees built by
+      # either workflow are reused by the other.
+      - name: Cache GHDL, Icarus Verilog and the AppImage runtime
+        uses: actions/cache@v6
+        with:
+          path: linuxAppImage/vendor
+          key: linux-vendor-ubuntu22.04-x86_64-${{ hashFiles('linuxAppImage/fetch-ghdl.sh', 'linuxAppImage/build-iverilog.sh', 'linuxAppImage/build.sh') }}
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/electron
+          key: electron-linux-x64-${{ hashFiles('winInstaller/electron/package-lock.json') }}
+
+      - name: Install build packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential gnat autoconf gperf bison flex zlib1g-dev libbz2-dev \
+            squashfs-tools xvfb
+          # libreadline-dev may be preinstalled on the runner; Icarus must not link it.
+          sudo apt-get remove -y -qq libreadline-dev || true
+
+      # snapcraft builds core24 snaps in an LXD container. Docker on the
+      # runner sets the FORWARD policy to DROP, which would cut that
+      # container off from the archive; build.sh reaches LXD through `sg lxd`.
+      - name: Install snapcraft and LXD
+        run: |
+          sudo snap install snapcraft --classic
+          sudo snap install lxd 2> /dev/null || sudo snap refresh lxd
+          sudo lxd waitready
+          sudo lxd init --auto
+          sudo usermod -a -G lxd "${USER}"
+          sudo iptables -P FORWARD ACCEPT
+          snapcraft --version
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      - name: Build the snap
+        run: linuxSnap/build.sh --simulators native
+
+      - name: Install the snap
+        run: |
+          (cd linuxSnap/output && sha256sum -c "${{ steps.version.outputs.snap }}.sha256")
+          sudo snap install --dangerous "linuxSnap/output/${{ steps.version.outputs.snap }}"
+          snap connections hdlboard
+
+      - name: Smoke test of the installed snap
+        run: linuxSnap/smoke-test.sh
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.snap }}
+          path: |
+            linuxSnap/output/${{ steps.version.outputs.snap }}
+            linuxSnap/output/${{ steps.version.outputs.snap }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+      # As build-linux.yml: create the draft if missing; if another workflow
+      # won that race, upload into the draft it made.
+      - name: Attach snap to GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          SNAP: ${{ steps.version.outputs.snap }}
+        run: |
+          out=linuxSnap/output
+          files=("${out}/${SNAP}" "${out}/${SNAP}.sha256")
+          if ! gh release view "${TAG}" > /dev/null 2>&1; then
+            flags=(--draft --verify-tag --generate-notes --title "HDLBoard ${VERSION}")
+            [[ "${PRERELEASE}" == true ]] && flags+=(--prerelease)
+            if gh release create "${TAG}" "${files[@]}" "${flags[@]}"; then
+              echo "Created draft release ${TAG}"
+              exit 0
+            fi
+            echo "Creating the release failed - another workflow probably made it first; uploading into it"
+          fi
+          for attempt in 1 2 3 4 5; do
+            gh release upload "${TAG}" "${files[@]}" --clobber && exit 0
+            echo "Upload attempt ${attempt} failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not upload to release ${TAG}"
+          exit 1
+
+      - name: Check for Snap Store credentials
+        id: store
+        if: github.ref_type == 'tag'
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [[ -n "${SNAPCRAFT_STORE_CREDENTIALS}" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No SNAPCRAFT_STORE_CREDENTIALS secret - not uploading to the Snap Store"
+          fi
+
+      - name: Upload to the Snap Store (edge)
+        if: steps.store.outputs.enabled == 'true'
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: snapcraft upload --release=edge "linuxSnap/output/${{ steps.version.outputs.snap }}"

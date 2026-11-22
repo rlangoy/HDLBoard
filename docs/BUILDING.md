@@ -218,6 +218,22 @@ The output is `linuxAppImage/output/HDLBoard-<version>-x86_64.AppImage` and its
 `.sha256`. Details:
 [`linuxAppImage/README.md`](../linuxAppImage/README.md).
 
+## Building the Linux snap
+
+With everything the AppImage needs, plus snapcraft and LXD
+(`sudo snap install snapcraft --classic`, `sudo snap install lxd && sudo lxd init --auto`,
+and your user in the `lxd` group), from the repository root:
+
+```sh
+scripts/build-linux-snap.sh
+```
+
+It builds the AppImage first and packs the same AppDir into
+`linuxSnap/output/hdlboard_<version>_amd64.snap`. `--skip-appimage-build` repacks
+only the snap. To test it: `sudo snap install --dangerous linuxSnap/output/hdlboard_*.snap`
+then `linuxSnap/smoke-test.sh`. Details, and how to publish to the Snap Store:
+[`linuxSnap/README.md`](../linuxSnap/README.md).
+
 ### Bumping the version
 
 One command sets the version in all three `package.json` files and their lockfiles.

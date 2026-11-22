@@ -30,7 +30,14 @@ case "${HDLBOARD_SANDBOX:-auto}" in
   on)  sandbox_ok=1; HDLBOARD_SANDBOX_REASON="HDLBOARD_SANDBOX=on" ;;
   off) sandbox_ok=0; HDLBOARD_SANDBOX_REASON="HDLBOARD_SANDBOX=off" ;;
   *)
-    if unshare --user --map-root-user /bin/true 2> /dev/null; then
+    # The snap (linuxSnap/) runs this same script under strict confinement,
+    # which never grants Chromium a user namespace: snapd's AppArmor and
+    # seccomp profile is the sandbox there, so do not probe for one. (Only
+    # when this script is the snap's own: an AppImage started from a terminal
+    # in some other snap inherits SNAP too.)
+    if [ -n "${SNAP:-}" ] && [ "${HERE}" = "${SNAP}" ]; then
+      sandbox_ok=0; HDLBOARD_SANDBOX_REASON="snap ${SNAP_NAME}: strict confinement instead of Chromium's sandbox"
+    elif unshare --user --map-root-user /bin/true 2> /dev/null; then
       sandbox_ok=1; HDLBOARD_SANDBOX_REASON="user namespaces available"
     else
       sandbox_ok=0; HDLBOARD_SANDBOX_REASON="user namespaces unavailable (unshare --user --map-root-user failed)"

@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# Template: linuxSnap/build.sh fills in @VERSION@ and @GRADE@ and writes the
+# result to output/project/snap/snapcraft.yaml. Nothing is compiled here: the
+# snap is the AppImage's AppDir (linuxAppImage/build.sh, already checked
+# there), dumped as is, so the snap and the AppImage ship the same files.
+
+name: hdlboard
+title: HDLBoard
+version: "@VERSION@"
+summary: VHDL and Verilog simulator with an interactive virtual FPGA board
+# The description, and the links below it, come from the AppStream metainfo
+# (adopt-info + parse-info), the same text software centres show for the AppImage.
+adopt-info: hdlboard
+license: GPL-2.0-only
+website: https://rlangoy.github.io/HDLBoard/
+source-code: https://github.com/rlangoy/HDLBoard
+issues: https://github.com/rlangoy/HDLBoard/issues
+contact: https://github.com/rlangoy/HDLBoard/issues
+icon: hdlboard.png
+
+# core24 is Ubuntu 24.04. The simulators are built on 22.04 (glibc 2.35) and
+# run on any newer glibc, so they need nothing from the base beyond glibc,
+# libstdc++, zlib, bzip2 and /bin/sh, all of which core24 has.
+base: core24
+grade: @GRADE@
+confinement: strict
+platforms:
+  amd64:
+
+apps:
+  hdlboard:
+    # The AppImage's own launcher: it adds --no-sandbox (it recognises the
+    # snap, whose confinement replaces Chromium's sandbox) and sends
+    # Chromium's stderr chatter to logs/chromium.log.
+    command: AppRun
+    # GTK 3, fonts, themes, Mesa and the desktop-launch wrapper, from the
+    # shared gnome-46-2404 content snap instead of inside this one.
+    extensions: [gnome]
+    common-id: io.github.rlangoy.HDLBoard
+    desktop: usr/share/applications/io.github.rlangoy.HDLBoard.desktop
+    plugs:
+      # The backend listens on 127.0.0.1:9010-9019 and the window loads from it;
+      # GitHub sign-in and publishing reach github.com.
+      - network
+      - network-bind
+      # Chromium's shared memory and the other things a browser engine needs.
+      # No allow-sandbox: that would need a manual store review, and strict
+      # confinement already confines the renderer.
+      - browser-support
+      # A projects folder chosen anywhere in the home folder, or on a USB stick
+      # (removable-media is not connected automatically: snap connect hdlboard:removable-media).
+      - home
+      - removable-media
+      # safeStorage keeps the GitHub token in the desktop keyring (libsecret).
+      # Not connected automatically; without it the token is simply not kept.
+      - password-manager-service
+
+parts:
+  hdlboard:
+    plugin: dump
+    source: app
+    parse-info: [usr/share/metainfo/io.github.rlangoy.HDLBoard.metainfo.xml]
+    # Electron's libraries that neither core24 nor the gnome extension carry.
+    stage-packages:
+      - libnss3
+      - libnspr4
+      - libasound2t64
+    prime:
+      - -usr/share/doc
+      - -usr/share/man
+      - -usr/share/lintian
