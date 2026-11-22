@@ -2099,7 +2099,7 @@ export function Workbench() {
       <AboutDialog
         open={dialog === 'about'}
         onClose={() => setDialog(null)}
-        updates={{ status: updateCheck.status, onCheck: updateCheck.checkNow }}
+        updates={{ managedBy: updateCheck.managedBy, status: updateCheck.status, onCheck: updateCheck.checkNow }}
       />
       {overwriteAsk && (
         <OverwriteDialog
@@ -2313,7 +2313,7 @@ export function Workbench() {
                 simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
-                  check: { status: updateCheck.status, onCheck: updateCheck.checkNow },
+                  check: { managedBy: updateCheck.managedBy, status: updateCheck.status, onCheck: updateCheck.checkNow },
                 }}
               />
             )}

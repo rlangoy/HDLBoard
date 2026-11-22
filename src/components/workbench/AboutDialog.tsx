@@ -16,6 +16,8 @@ export interface AboutDialogProps {
 }
 
 export interface UpdateCheckView {
+  /** Who keeps this copy up to date ('the Snap Store'): said instead of a status and a button. */
+  readonly managedBy?: string | null;
   readonly status: UpdateStatus;
   /** Asks GitHub now, even with the start-up check off: the user asked. */
   readonly onCheck: () => void;
@@ -53,7 +55,8 @@ function UpdateStatusMessage({ status }: { status: UpdateStatus }) {
  * Whether this is the latest version, and a button to find out (again). The button
  * stays while a check runs, inert, so a keyboard user's focus stays on it.
  */
-export function UpdateStatusText({ status, onCheck }: UpdateCheckView) {
+export function UpdateStatusText({ managedBy, status, onCheck }: UpdateCheckView) {
+  if (managedBy) return <>New versions are installed automatically by {managedBy}.</>;
   const checking = status.kind === 'checking';
   return (
     <>

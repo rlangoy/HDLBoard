@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { desktopBridge } from './desktop';
+import { desktopBridge, updatesManagedBy } from './desktop';
 import { errorText } from './errorText';
 import { fetchLatestRelease, type Release } from './latestRelease';
 import { isNewerVersion } from './releaseVersion';
@@ -13,6 +13,8 @@ import { loadStoredChoice, saveStoredChoice } from './storedChoice';
  * latest release when it starts. The user's choice is kept in this browser, like
  * the dialog's other preferences; until they make one, it is on in the Windows
  * app, which has no other way to hear of a new version, and off in a browser.
+ * In the snap there is no check at all: snapd installs new versions itself, and a
+ * release found on GitHub reaches the Snap Store only later (updatesManagedBy).
  */
 
 const STORAGE_KEY = 'hdlboard.updates.check';
@@ -39,7 +41,9 @@ export function defaultUpdateCheck(): boolean {
   return desktopBridge() !== undefined;
 }
 
+/** Off, whatever was stored, where something else keeps the app up to date. */
 export function updateCheckEnabled(): boolean {
+  if (updatesManagedBy() !== null) return false;
   return loadUpdateCheckChoice() ?? defaultUpdateCheck();
 }
 
@@ -60,6 +64,8 @@ export function statusOfRelease(latest: Release, runningVersion: string): Update
 }
 
 export interface UpdateCheck {
+  /** Who keeps this copy up to date ('the Snap Store'), or null when the user does: then nothing here asks GitHub. */
+  readonly managedBy: string | null;
   readonly enabled: boolean;
   /** Turning it on checks at once. */
   readonly setEnabled: (on: boolean) => void;
@@ -75,6 +81,7 @@ export function useUpdateCheck(
   fetchRelease: () => Promise<Release> = fetchLatestRelease,
 ): UpdateCheck {
   // Kept in state as well as storage, so a choice made this session holds even when storage is blocked.
+  const [managedBy] = useState(updatesManagedBy);
   const [enabled, setEnabledState] = useState(updateCheckEnabled);
   const [status, setStatus] = useState<UpdateStatus>({ kind: 'unchecked' });
   const [newerRelease, setNewerRelease] = useState<Release | null>(null);
@@ -104,10 +111,11 @@ export function useUpdateCheck(
   }, [checkNow]);
 
   const setEnabled = useCallback((on: boolean) => {
+    if (managedBy !== null) return;
     saveUpdateCheckChoice(on);
     setEnabledState(on);
     if (on) checkNow();
-  }, [checkNow]);
+  }, [checkNow, managedBy]);
 
-  return { enabled, setEnabled, status, newerRelease, checkNow };
+  return { managedBy, enabled, setEnabled, status, newerRelease, checkNow };
 }

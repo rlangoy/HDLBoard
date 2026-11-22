@@ -158,6 +158,15 @@ describe('Updates', () => {
   test('offers a check now', () => {
     expect(textOf(render('updates'))).toContain('Check now');
   });
+
+  test('in the snap, says the Snap Store updates it, with no switch or check', () => {
+    const managed = { checkAtStartUp: setting(false), check: { managedBy: 'the Snap Store', status: { kind: 'unchecked' as const }, onCheck: ignore } };
+    const text = textOf(render('updates', { updates: managed }));
+    expect(text).toContain('HDLBoard 1.6.3');
+    expect(text).toContain('installed automatically by the Snap Store');
+    expect(text).not.toContain('Check for updates');
+    expect(text).not.toContain('Check now');
+  });
 });
 
 describe('Help & feedback', () => {
