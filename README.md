@@ -36,7 +36,7 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 |---|---|---|
 | **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
-| **Linux app** | Working offline on Ubuntu 22.04/24.04 or Linux Mint 21/22 (64-bit x86). One AppImage file, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Linux app** | Working offline on Ubuntu 22.04/24.04 or Linux Mint 21/22 (64-bit x86). One AppImage file or a snap, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
 
@@ -64,11 +64,28 @@ Ubuntu 22.04 compatibility applies to builds from the updated packaging in this 
 - **Your files:** Settings, saved projects and the logs (`logs/backend.log`, `logs/chromium.log`) are in `~/.config/HDLBoard`.
 - **Updating:** Download the new file and delete the old one. Deleting the AppImage leaves your settings and projects in place.
 - **Sandbox:** On a default Ubuntu 24.04 or Mint 22 desktop the app starts without Chromium's OS sandbox, because Ubuntu blocks what it needs for programs that are not installed as packages. The window still shows only HDLBoard's own page. [linuxAppImage/README.md](linuxAppImage/README.md#the-chromium-sandbox) explains this and has an AppArmor profile for lab administrators.
-- **No menu entry and no automatic updates.** To add HDLBoard to the application menu, use a tool such as Gear Lever or AppImageLauncher.
+- **No menu entry and no automatic updates.** To add HDLBoard to the application menu, use a tool such as Gear Lever or AppImageLauncher. Or install the snap instead.
+
+#### Or install the snap
+
+The same app is also a strictly confined snap, `hdlboard_<version>_amd64.snap`, on the [Releases page](https://github.com/rlangoy/HDLBoard/releases). Unlike the AppImage, it adds HDLBoard to the application menu.
+
+```sh
+sudo snap install --dangerous hdlboard_<version>_amd64.snap
+```
+
+`--dangerous` is needed because the file does not come from the Snap Store. Start HDLBoard from the application menu, or with `snap run hdlboard`.
+
+- **Your files:** Settings, projects and logs are in `~/snap/hdlboard/current/.config/HDLBoard/`, and are kept when you update.
+- **Projects folder:** Any folder in your home folder works. For projects on a USB stick, run `sudo snap connect hdlboard:removable-media` once.
+- **GitHub sign-in:** To keep the GitHub token in the desktop keyring, run `sudo snap connect hdlboard:password-manager-service` once.
+- **Updating:** Install the new `.snap` file the same way. A snap installed from a file is not updated automatically.
+- **Removing:** `sudo snap remove hdlboard`.
+- [linuxSnap/README.md](linuxSnap/README.md) has the details.
 
 ## What is HDLBoard?
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a Windows app. You don't need an FPGA board, a cable or a vendor toolchain.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a desktop app for Windows and Linux. You don't need an FPGA board, a cable or a vendor toolchain.
 
 Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
 
@@ -88,7 +105,7 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 | Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
 | Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual board |
 | Synthesis and bitstream for real hardware | No | Yes | No |
-| Setup | None | Large install, licence for some tools | **None** (browser), or a small Windows installer |
+| Setup | None | Large install, licence for some tools | **None** (browser), or a desktop app for Windows or Linux |
 
 HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus or Vivado and the real board.
 
@@ -195,6 +212,7 @@ HDLBoard does not do synthesis. Because it uses the board's real pin names, thou
 - [waveform_viewer_spec.md](docs/waveform_viewer_spec.md) — the waveform viewer: requirements, formats and implementation
 - [winInstaller/README.md](winInstaller/README.md) — the Windows desktop build
 - [linuxAppImage/README.md](linuxAppImage/README.md) — the Linux AppImage build
+- [linuxSnap/README.md](linuxSnap/README.md) — the Linux snap build
 
 ## Support and contributing
 
@@ -217,7 +235,7 @@ HDLBoard builds on the work of many open-source projects. Thank you to all of th
 | [electron-builder](https://www.electron.build/) and [NSIS](https://nsis.sourceforge.io/) | The Windows installer | MIT; zlib/libpng-style |
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |
 
-The license texts of the bundled simulators are installed with the Windows app and shown by its installer. In the Linux AppImage they are under `resources/` (`resources/licenses/README.txt` lists them); run `./HDLBoard-*.AppImage --appimage-extract` to read them.
+The license texts of the bundled simulators are installed with the Windows app and shown by its installer. In the Linux AppImage they are under `resources/` (`resources/licenses/README.txt` lists them); run `./HDLBoard-*.AppImage --appimage-extract` to read them. In the snap they are in `/snap/hdlboard/current/resources/`.
 
 DE1-SoC and DE10-Lite are products of [Terasic Technologies](https://www.terasic.com.tw/). Basys 3 and Nexys A7 are products of [Digilent](https://digilent.com/). HDLBoard is an independent teaching tool and is not affiliated with or endorsed by Terasic or Digilent.
 
