@@ -2,6 +2,7 @@
 
 [![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
 [![GitHub Release](https://badgen.net/github/release/rlangoy/HDLBoard)](https://github.com/rlangoy/HDLBoard/releases/latest)
+[![hdlboard](https://snapcraft.io/hdlboard/badge.svg)](https://snapcraft.io/hdlboard)
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
 **Write VHDL or Verilog. Watch it light up.**
