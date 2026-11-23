@@ -276,6 +276,12 @@ p { margin: 0; }
 .split-text .split-note { font-size: 1.0625rem; }
 .split-text .text-link { font-size: 1.0625rem; }
 
+/* ---------- Simulation-only design check ---------- */
+.sim-only { background: var(--surface); }
+.sim-example { min-width: 0; margin: 0; border: 1px solid var(--line-strong); border-radius: 16px; background: #f8fafc; box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.3); overflow: hidden; }
+.sim-example img { display: block; width: 100%; height: auto; }
+.sim-example figcaption { padding: 14px 20px; border-top: 1px solid #f4d49a; background: #fff8e9; color: #713f12; font-size: 1rem; line-height: 1.5; }
+
 /* ---------- Waveform: viewer screenshot, then the report figure on a page ---------- */
 .waveform { background: var(--surface); }  /* sets it apart from the testbench section above */
 .waveform-intro { gap: 24px; }

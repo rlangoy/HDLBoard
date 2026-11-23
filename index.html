@@ -220,6 +220,26 @@
     </div>
   </section>
 
+  <section class="split sim-only" id="sim-only" aria-labelledby="sim-only-heading">
+    <div class="wrap split-grid">
+      <div class="split-text">
+        <h2 id="sim-only-heading">Works in simulation. What about the FPGA?</h2>
+        <p>Some VHDL and Verilog can run in a simulator but cannot be built for a real board. HDLBoard checks your design as you type and marks simulation-only code before you move to hardware.</p>
+        <ul class="checks">
+          <li class="is-yes">See a SIM-only badge and a warning at the affected line</li>
+          <li class="is-yes">Learn why the code needs to change for hardware</li>
+          <li class="is-yes">Keep simulating while you explore and fix your design</li>
+        </ul>
+        <p class="split-note">Testbenches are meant for simulation, so they are not warned about. You can also choose Simulation only in the Design check settings.</p>
+      </div>
+      <figure class="sim-example">
+        <img src="assets/sim-only.png" width="550" height="405" loading="lazy"
+             alt="HDLBoard editor showing a SIM-only badge and warnings on two VHDL wait for 500 ms statements: wait for only works in simulation" />
+        <figcaption><strong>Why the warning?</strong> A timed wait works in simulation, but an FPGA needs clocked logic to create a delay.</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section class="split testbench" id="testbench" aria-labelledby="testbench-heading">
     <div class="wrap">
       <div class="center testbench-intro">
