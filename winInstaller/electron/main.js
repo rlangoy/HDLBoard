@@ -218,6 +218,16 @@ function fromApp(event) {
   if (!isAppUrl(url)) throw new Error(`IPC refused from ${url}`);
 }
 
+/**
+ * Who installs new versions of this copy, when it is not the user: snapd for the
+ * snap (linuxSnap/), which sets $SNAP. The renderer then leaves GitHub alone
+ * (src/components/workbench/useUpdateCheck.ts), since a release found there
+ * reaches the Snap Store later and is installed by snapd, not downloaded by hand.
+ */
+function updatesManagedByArgument() {
+  return process.env.SNAP ? ['--hdlboard-updates-managed-by=snap'] : [];
+}
+
 /** Whether `url` is on the page this copy of the app serves itself, on the port its backend got (backendPort.js). */
 function isAppUrl(url) {
   return appOrigin !== null && url.startsWith(appOrigin);
@@ -734,7 +744,11 @@ app.whenReady().then(async () => {
       // whether project storage is on this launch, and which port this
       // copy's backend got.
       preload: paths.preload,
-      additionalArguments: [`--hdlboard-backend-port=${backend.port}`, ...(persistProjects ? ['--hdlboard-persist'] : [])],
+      additionalArguments: [
+        `--hdlboard-backend-port=${backend.port}`,
+        ...(persistProjects ? ['--hdlboard-persist'] : []),
+        ...updatesManagedByArgument(),
+      ],
     },
   });
 

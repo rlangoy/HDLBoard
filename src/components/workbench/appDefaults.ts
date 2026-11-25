@@ -89,7 +89,10 @@ function parseEntries(entries: readonly [string, unknown][]): ParsedDefaults {
   return { defaults: defaults as unknown as AppDefaults, warnings };
 }
 
-/** The defaults to start with; never throws. Not cached, so an edited file is read on the next start. */
+/**
+ * The defaults to start with; never throws. Not cached, so an edited file is read on the
+ * next start; useAppDefaults.ts reads it once per page load.
+ */
 export async function loadAppDefaults(fetchText: (url: string) => Promise<FetchedText> = fetchBoardFile): Promise<ParsedDefaults> {
   let fetched: FetchedText;
   try {

@@ -10,14 +10,14 @@ afterEach(() => vi.unstubAllGlobals());
 const RELEASE: Release = { version: '1.6.2', name: 'HDLBoard 1.6.2', url: 'https://github.com/rlangoy/HDLBoard/releases/tag/v1.6.2' };
 
 /** A window with working storage; `desktop` adds the Windows app's bridge. */
-function stubWindow({ desktop }: { desktop: boolean }): void {
+function stubWindow({ desktop, updatesManagedBy }: { desktop: boolean; updatesManagedBy?: string }): void {
   const values = new Map<string, string>();
   vi.stubGlobal('window', {
     localStorage: {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
     },
-    hdlboard: desktop ? { enabled: true } : undefined,
+    hdlboard: desktop ? { enabled: true, updatesManagedBy } : undefined,
   });
 }
 
@@ -41,6 +41,17 @@ describe('the start-up check', () => {
   test("follows the user's choice over the browser default", () => {
     stubWindow({ desktop: false });
     saveUpdateCheckChoice(true);
+    expect(updateCheckEnabled()).toBe(true);
+  });
+
+  test('is off in the snap, which snapd keeps up to date, even when the user turned it on', () => {
+    stubWindow({ desktop: true, updatesManagedBy: 'snap' });
+    saveUpdateCheckChoice(true);
+    expect(updateCheckEnabled()).toBe(false);
+  });
+
+  test('ignores an updater it does not know', () => {
+    stubWindow({ desktop: true, updatesManagedBy: 'something-else' });
     expect(updateCheckEnabled()).toBe(true);
   });
 

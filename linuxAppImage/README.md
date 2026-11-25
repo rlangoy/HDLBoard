@@ -127,6 +127,8 @@ a default desktop. (This build machine, Ubuntu 25.10, has the same restriction.)
 `--no-sandbox` only if that fails. This happens on every start, whether double-clicked or started from a terminal.
 `backend.log` records the outcome (`chromium sandbox: on`, or `off (--no-sandbox) - <reason>`).
 `HDLBOARD_SANDBOX=on|off` overrides the probe.
+The snap ([linuxSnap/](../linuxSnap/README.md)) uses this same `AppRun`; there it skips the probe, since strict
+confinement never grants the user namespace, and always adds `--no-sandbox`.
 
 **The trade-off.** Without the OS sandbox, a renderer compromised by a Chromium bug would run with the student's
 own rights. That risk is small here, because the window never leaves HDLBoard's own origin. Kept as on Windows:

@@ -18,6 +18,7 @@ import { encodeStim, type BoardInputs } from '../../boards/boardShape';
 import { loadBoardLayout, saveBoardLayout, subscribeBoardLayout, type BoardLayout } from './boardLayoutPreference';
 import { buttonBounce, defaultIoDisplaySettings, withPanelOrder } from '../../project/displaySettings';
 import { bouncingStims, createButtonRandoms } from './bouncyButtons';
+import { useAppDefaults } from './useAppDefaults';
 import { useBouncyOption } from './useBouncyOption';
 import { DESIGN_CHECK_OFF } from './simOnly/simOnlyText';
 import { useDesignCheck } from './simOnly/useDesignCheck';
@@ -376,15 +377,17 @@ export function Workbench() {
   // Never empty: with no other project open, the workspace is the Default project (defaultProject).
   const [project, setProject] = useState<OpenProject>(freshStart.project);
   const catalog = useBoards(project.boardConfig, project.board);
+  // settings.json, read once: the start-up default of the settings below (null while it loads).
+  const appDefaults = useAppDefaults();
   // With bouncy pushbuttons switched off in Settings the project's choice is kept but not used.
-  const bouncyOption = useBouncyOption();
-  const designCheckMode = useDesignCheckMode();
+  const bouncyButtons = useBouncyOption(appDefaults);
+  const designCheckMode = useDesignCheckMode(appDefaults);
   // Settings › Simulation › Design check › Synthesis: the quick check alone, or GHDL's too at Start (VHDL).
-  const synthesisToolCheck = useSynthesisToolCheck();
-  const topFileHint = useTopFileHint();
+  const synthesisToolCheck = useSynthesisToolCheck(appDefaults);
+  const topFileHint = useTopFileHint(appDefaults);
   // Settings › Updates: the bell in the header while a newer release is out.
   const updateCheck = useUpdateCheck();
-  const activeBounce = bouncyOption.enabled ? buttonBounce(project.displaySettings) : 'none';
+  const activeBounce = bouncyButtons.value ? buttonBounce(project.displaySettings) : 'none';
   // The open project's board is the active one: what the board panel shows and the simulation uses.
   const { board: activeBoard, installed: boardInstalled } = findBoard(catalog, project.board);
   // Bumped whenever another project replaces the open one: the waveform of the old one goes (waveform spec § 8.7).
@@ -2101,7 +2104,7 @@ export function Workbench() {
       <AboutDialog
         open={dialog === 'about'}
         onClose={() => setDialog(null)}
-        updates={{ status: updateCheck.status, onCheck: updateCheck.checkNow }}
+        updates={{ managedBy: updateCheck.managedBy, status: updateCheck.status, onCheck: updateCheck.checkNow }}
       />
       {overwriteAsk && (
         <OverwriteDialog
@@ -2309,13 +2312,13 @@ export function Workbench() {
                     onViewSettings: () => setOverlay('boardSettings'),
                   },
                   layout: { value: boardLayout, onChange: changeBoardLayout },
-                  bouncyButtons: { value: bouncyOption.enabled, onChange: bouncyOption.setEnabled },
+                  bouncyButtons,
                 }}
                 editor={{ split: { value: tb.split.prefs.preference, onChange: tb.split.setPreference } }}
                 simulation={{ designCheck: designCheckMode, toolCheck: synthesisToolCheck, recordWaves: { value: waveView.waveform.recording, onChange: waveView.waveform.setRecording } }}
                 updates={{
                   checkAtStartUp: { value: updateCheck.enabled, onChange: updateCheck.setEnabled },
-                  check: { status: updateCheck.status, onCheck: updateCheck.checkNow },
+                  check: { managedBy: updateCheck.managedBy, status: updateCheck.status, onCheck: updateCheck.checkNow },
                 }}
               />
             )}
@@ -2428,7 +2431,7 @@ export function Workbench() {
                 inputs={boardIo.inputs}
                 onInputsChange={handleBoardInputsChange}
                 buttonBounce={activeBounce}
-                onButtonBounceChange={bouncyOption.enabled
+                onButtonBounceChange={bouncyButtons.value
                   ? (bounce) => setProject((current) => ({ ...current, displaySettings: { ...current.displaySettings, pushbuttons: { bounce } } }))
                   : undefined}
                 panelOrder={project.displaySettings?.panelOrder}

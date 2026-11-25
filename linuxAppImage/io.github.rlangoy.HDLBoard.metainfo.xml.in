@@ -5,22 +5,15 @@
 <component type="desktop-application">
   <id>io.github.rlangoy.HDLBoard</id>
   <name>HDLBoard</name>
-  <summary>Write VHDL or Verilog and watch it run on a virtual FPGA board</summary>
+  <summary>VHDL and Verilog simulator with an interactive virtual FPGA board</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0-only</project_license>
   <developer id="io.github.rlangoy">
     <name>Rune Langøy</name>
   </developer>
   <description>
-    <p>
-      HDLBoard is a free VHDL and Verilog simulator with an interactive virtual FPGA board.
-      Flip the switches and press the buttons while your design runs, and watch the LEDs and
-      7-segment displays respond.
-    </p>
-    <p>
-      GHDL and Icarus Verilog are included, so it works offline with nothing else to install.
-      Designs can be checked with self-checking testbenches and inspected in a waveform viewer.
-    </p>
+    <p>HDLBoard is a free VHDL and Verilog simulator with an interactive virtual FPGA board. Flip the switches and press the buttons while your design runs, and watch the LEDs and 7-segment displays respond.</p>
+    <p>GHDL and Icarus Verilog are included, so it works offline with nothing else to install. Designs can be checked with self-checking testbenches and inspected in a waveform viewer.</p>
   </description>
   <launchable type="desktop-id">io.github.rlangoy.HDLBoard.desktop</launchable>
   <url type="homepage">https://rlangoy.github.io/HDLBoard/</url>

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import type { AppDefaults } from './appDefaults';
 import type { Setting } from './settings/settingsSections';
-import { useStoredSwitch, type StoredSwitch } from './useStoredSwitch';
+import { storedSwitch, useStoredSetting } from './useStoredSetting';
 
 /**
  * Settings › General › Top-File › *Suggest the Top-File*: Start asks before it runs
@@ -22,12 +23,12 @@ export function topFileHintInEffect(choice: boolean | null, startupDefault: bool
   return choice ?? startupDefault ?? DEFAULT_TOP_FILE_HINT;
 }
 
-const TOP_FILE_HINT: StoredSwitch = {
+const TOP_FILE_HINT = storedSwitch({
   key: TOP_FILE_HINT_KEY,
   startupDefaultOf: (defaults) => defaults.topFileHint,
   inEffect: topFileHintInEffect,
-};
+});
 
-export function useTopFileHint(): Setting<boolean> {
-  return useStoredSwitch(TOP_FILE_HINT);
+export function useTopFileHint(appDefaults: AppDefaults | null): Setting<boolean> {
+  return useStoredSetting(TOP_FILE_HINT, appDefaults);
 }

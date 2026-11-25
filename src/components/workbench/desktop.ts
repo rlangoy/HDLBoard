@@ -33,6 +33,11 @@ export interface HdlBoardBridge {
    * one when another copy already has it (winInstaller/electron/backendPort.js).
    */
   readonly backendPort?: number;
+  /**
+   * Who installs new versions of this copy, when it is not the user: 'snap' in the
+   * snap, which snapd keeps up to date (main.js updatesManagedByArgument).
+   */
+  readonly updatesManagedBy?: string;
   /** Takes effect after a restart. */
   setEnabled(enabled: boolean): Promise<boolean>;
   /** Present only while storage is enabled — feature-detect on these. */
@@ -185,4 +190,13 @@ function parseOverrides(raw: unknown, known: (id: unknown) => id is string): Tes
   const roles = entries(r.roles).filter(([id, role]) => known(id) && ROLES.includes(role as UnitRole));
   const pairs = entries(r.pairs).filter(([design, tb]) => known(design) && known(tb));
   return { roles: Object.fromEntries(roles), pairs: Object.fromEntries(pairs), ...parseSimModels(r.simModels, known) };
+}
+
+/** The names of the updaters the bridge can report, as the Updates settings show them. */
+const UPDATERS: Readonly<Record<string, string>> = { snap: 'the Snap Store' };
+
+/** Who keeps this copy up to date ('the Snap Store'), or null when the user does. */
+export function updatesManagedBy(): string | null {
+  const updater = desktopBridge()?.updatesManagedBy;
+  return (updater !== undefined && UPDATERS[updater]) || null;
 }

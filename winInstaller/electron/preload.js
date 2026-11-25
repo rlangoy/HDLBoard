@@ -24,9 +24,17 @@ function backendPortArgument() {
   return arg === undefined ? undefined : Number(arg.slice(prefix.length));
 }
 
+/** Who installs new versions when it is not the user ('snap'), from main.js's switch; undefined otherwise. */
+function updatesManagedByArgument() {
+  const prefix = '--hdlboard-updates-managed-by=';
+  const arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg === undefined ? undefined : arg.slice(prefix.length);
+}
+
 const api = {
   enabled,
   backendPort: backendPortArgument(),
+  updatesManagedBy: updatesManagedByArgument(),
   /** Stored in <userData>/settings.json; takes effect on the next launch. */
   setEnabled: (value) => ipcRenderer.invoke('hdlboard:set-enabled', value === true),
 };

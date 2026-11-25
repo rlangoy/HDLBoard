@@ -14,11 +14,16 @@ export interface UpdatesSectionProps {
   check: UpdateCheckView;
 }
 
-/** Settings › Updates: the version running here, and whether to look for a newer one. */
+/**
+ * Settings › Updates: the version running here, and whether to look for a newer one;
+ * just the version and who updates it where that is not the user (the snap).
+ */
 export function UpdatesSection({ checkAtStartUp, check }: UpdatesSectionProps) {
   return (
     <PageCard title="Updates" wide>
-      <SettingSwitch label="Check for updates" description="Check GitHub for a new release at startup." setting={checkAtStartUp} />
+      {!check.managedBy && (
+        <SettingSwitch label="Check for updates" description="Check GitHub for a new release at startup." setting={checkAtStartUp} />
+      )}
       <p className="wb-settings-version" aria-live="polite">
         <strong>{APP_NAME} {__APP_VERSION__}</strong> &middot; <UpdateStatusText {...check} />
       </p>
