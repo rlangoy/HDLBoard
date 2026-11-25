@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Rune Langøy
 
+import type { AppDefaults } from '../appDefaults';
 import type { Setting } from '../settings/settingsSections';
-import { useStoredSwitch, type StoredSwitch } from '../useStoredSwitch';
+import { storedSwitch, useStoredSetting } from '../useStoredSetting';
 
 /**
  * Settings › Simulation › Design check › *Synthesis*: the live quick check alone, or also
@@ -21,13 +22,13 @@ export function synthesisToolCheckInEffect(choice: boolean | null, startupDefaul
   return choice ?? startupDefault ?? DEFAULT_SYNTHESIS_TOOL_CHECK;
 }
 
-const SYNTHESIS_TOOL_CHECK: StoredSwitch = {
+const SYNTHESIS_TOOL_CHECK = storedSwitch({
   key: SYNTHESIS_TOOL_CHECK_KEY,
   startupDefaultOf: (defaults) => defaults.synthesisToolCheck,
   inEffect: synthesisToolCheckInEffect,
-};
+});
 
-/** The tool check's setting, and how to change it; a choice made in another tab is followed. */
-export function useSynthesisToolCheck(): Setting<boolean> {
-  return useStoredSwitch(SYNTHESIS_TOOL_CHECK);
+/** The tool check's setting, and how to change it. */
+export function useSynthesisToolCheck(appDefaults: AppDefaults | null): Setting<boolean> {
+  return useStoredSetting(SYNTHESIS_TOOL_CHECK, appDefaults);
 }
