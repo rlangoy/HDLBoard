@@ -39,7 +39,7 @@ CONFIGURE_OPTIONS="--prefix=/opt/hdlboard-iverilog"
 NO_READLINE="ac_cv_lib_readline_readline=no ac_cv_lib_readline_add_history=no ac_cv_lib_history_add_history=no ac_cv_header_readline_readline_h=no ac_cv_header_readline_history_h=no ac_cv_lib_termcap_tputs=no"
 
 TREE_DIR="${VENDOR_DIR}/iverilog"
-STAMP="iverilog ${IVERILOG_VERSION} (${IVERILOG_TAG}, built on macos-${MACHO_ARCH} from source, macOS ${MIN_MACOS}+, configure ${CONFIGURE_OPTIONS}, no readline)"
+STAMP="iverilog ${IVERILOG_VERSION} (${IVERILOG_TAG}, built on macos-${MACHO_ARCH} from source, macOS ${MIN_MACOS}+, configure ${CONFIGURE_OPTIONS}, no readline, driver/main.c includes mach-o/dyld.h)"
 
 force=false
 [[ "${1:-}" == "--force" ]] && force=true
@@ -80,6 +80,18 @@ tar -xzf "${DOWNLOAD_DIR}/${SOURCE_FILE}" -C "${work}"
 src="${work}/iverilog-${IVERILOG_TAG#v}"
 [[ -f "${src}/configure.ac" ]] || { echo "No configure.ac in ${src} - the tarball layout changed." >&2; exit 1; }
 
+# Icarus 13.0's driver calls _NSGetExecutablePath on macOS without including
+# <mach-o/dyld.h>. Older compilers only warned about the implicit declaration;
+# clang in C23 mode (configure picks -std=gnu23) refuses it. The one include
+# it is missing, before the first one it has. (Only the fallback that finds the
+# tree without -B uses it; the backend always passes -B.)
+driver="${src}/driver/main.c"
+grep -q '_NSGetExecutablePath' "${driver}" || { echo "driver/main.c changed - check the patch below." >&2; exit 1; }
+if ! grep -q 'mach-o/dyld.h' "${driver}"; then
+  awk '!done && /^#include </ { print "#ifdef __APPLE__\n#include <mach-o/dyld.h> /* HDLBoard: for _NSGetExecutablePath */\n#endif"; done = 1 } { print }' \
+    "${driver}" > "${driver}.patched" && mv "${driver}.patched" "${driver}"
+fi
+
 echo "Configuring (${CONFIGURE_OPTIONS}, macOS ${MIN_MACOS}+) ..."
 cd "${src}"
 sh autoconf.sh > /dev/null
@@ -109,6 +121,7 @@ Source: ${SOURCE_URL}
 SHA-256 (${SOURCE_FILE}): ${SOURCE_SHA256}
 Repository at this tag: https://github.com/steveicarus/iverilog/tree/${IVERILOG_TAG}
 Configure options: ${CONFIGURE_OPTIONS} (readline and termcap left out)
+Patch: driver/main.c includes <mach-o/dyld.h>, which upstream 13.0 forgot (_NSGetExecutablePath)
 Optional libraries: zlib, bzip2 (from macOS)
 Built on: macOS $(sw_vers -productVersion) $(uname -m), $(clang --version | head -n 1), MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS}
 Bundled libraries: none
