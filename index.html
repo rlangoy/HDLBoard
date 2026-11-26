@@ -93,8 +93,35 @@
         </a>
         <span>Linux · AppImage · x86-64</span>
         </div>
+        <div class="hero-action">
+        <a class="btn btn-outline btn-lg" id="mac-download" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.8.0/HDLBoard-1.8.0-arm64.dmg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+          Download for Mac
+        </a>
+        <span><span id="mac-download-chip">Apple silicon</span> · <a id="mac-download-other" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.8.0/HDLBoard-1.8.0-x64.dmg">Intel Mac</a></span>
+        </div>
       </div>
     </div>
+    <script>
+      // Every Mac browser says "Intel Mac OS X", so the Mac button defaults to Apple silicon,
+      // what most Macs have, with the Intel build linked beneath it. Chrome and Edge can tell
+      // the processor apart (User-Agent Client Hints); when one says Intel, the two swap
+      // places. Safari and Firefox cannot tell, and keep the default.
+      (function () {
+        var uaData = navigator.userAgentData;
+        if (!uaData || uaData.platform !== 'macOS' || !uaData.getHighEntropyValues) return;
+        uaData.getHighEntropyValues(['architecture']).then(function (hints) {
+          if (hints.architecture !== 'x86') return;
+          var button = document.getElementById('mac-download');
+          var other = document.getElementById('mac-download-other');
+          var appleSilicon = button.href;
+          button.href = other.href;
+          other.href = appleSilicon;
+          other.textContent = 'Apple silicon';
+          document.getElementById('mac-download-chip').textContent = 'Intel Mac';
+        }).catch(function () {});
+      })();
+    </script>
 
     <video class="hero-shot" controls muted playsinline width="1280" height="720" style="width: calc(100% - 34px); height: auto; max-width: 1191px;" aria-label="HDLBoard demonstration">
       <source src="assets/demo.webm" type="video/webm" />
@@ -124,7 +151,7 @@
       <div class="band-item">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 6 2 12 8 18"/><polyline points="16 6 22 12 16 18"/></svg>
         <h3>Real VHDL and Verilog</h3>
-        <p>The same code you would put on a real FPGA, run by GHDL (VHDL-2008) and Icarus Verilog. The Windows app ships GHDL 5.0.1 and Icarus 13.0.</p>
+        <p>The same code you would put on a real FPGA, run by GHDL (VHDL-2008) and Icarus Verilog. The Windows, Mac and Linux apps ship GHDL 6.0.0 and Icarus 13.0.</p>
       </div>
       <div class="band-item">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>
@@ -398,7 +425,7 @@
         <p>Save your projects to GitHub Gists, open them from anywhere, and share your work with teammates or your teacher.</p>
         <ul class="checks">
           <li class="is-yes">One-click save to the cloud</li>
-          <li class="is-yes">Open the same project from any browser or the Windows app</li>
+          <li class="is-yes">Open the same project from any browser or the desktop app</li>
           <li class="is-yes">Share a link so others can open and run your design</li>
         </ul>
       </div>
@@ -444,6 +471,15 @@
           <a class="btn btn-ghost-dark btn-sm" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.8.0/HDLBoard-1.8.0-x86_64.AppImage"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>Download</a>
         </li>
         <li class="path">
+          <span class="path-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 18.5h20l-1.5 1.5h-17z"/></svg></span>
+          <h3>Mac</h3>
+          <p>Drag the app to Applications. Allow it once in System Settings › Privacy &amp; Security.</p>
+          <div class="path-buttons">
+            <a class="btn btn-ghost-dark btn-sm" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.8.0/HDLBoard-1.8.0-arm64.dmg"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>Apple silicon</a>
+            <a class="btn btn-ghost-dark btn-sm" href="https://github.com/rlangoy/HDLBoard/releases/download/v1.8.0/HDLBoard-1.8.0-x64.dmg"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>Intel</a>
+          </div>
+        </li>
+        <li class="path">
           <span class="path-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M12 6.5l4 2.2v4.1l-4 2.2-4-2.2V8.7z"/><path d="M8 8.7l4 2.2 4-2.2M12 10.9v4.1"/></svg></span>
           <h3>VirtualBox</h3>
           <p>Run a ready-made virtual machine.</p>
@@ -486,7 +522,7 @@
           <ul class="checks">
             <li class="is-no">No synthesis, timing analysis or bitstream: use Quartus for the real board</li>
             <li class="is-no">Board profiles simulate their configured switches, buttons, LEDs and displays, not every peripheral on the physical board</li>
-            <li class="is-no">In the browser, your work starts fresh every time you reload. Save to GitHub or download your files to keep them. (The Windows app preserves them automatically.)</li>
+            <li class="is-no">In the browser, your work starts fresh every time you reload. Save to GitHub or download your files to keep them. (The desktop app preserves them automatically.)</li>
           </ul>
         </div>
       </div>
