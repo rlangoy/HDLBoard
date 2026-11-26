@@ -1,0 +1,314 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Rune Langøy
+#
+# Builds the macOS app as two DMGs, one per processor (macDmg/build.sh), tests
+# them, and attaches them to a GitHub release. The sibling of build-linux.yml
+# and build-snap.yml.
+#
+#   git tag v1.2.4      && git push origin v1.2.4       -> draft release
+#   Actions -> "Build macOS app" -> Run workflow        -> artifacts only
+#
+# The version comes from the tag (v1.2.4 -> 1.2.4), stamped into every
+# package.json on the runner only, as in build-linux.yml.
+#
+# A Mac builds only its own processor's app: arm64 on macos-15 (Apple silicon),
+# x64 on macos-15-intel. Each DMG is built on macOS 15, the oldest macOS GitHub
+# still offers, and its smoke test runs again on macOS 26, the newest.
+#
+# Signing: ad hoc, unless the repository has the Developer ID secrets
+# (MACOS_CERTIFICATE_P12, MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY);
+# then the app is signed for notarization, and with the App Store Connect API
+# key secrets (APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID) it is
+# also notarized and stapled. See macDmg/README.md "Notarization".
+
+name: Build macOS app
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (x.y.z or x.y.z-pre). Empty: package.json's own version."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mac-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  build-mac:
+    name: Build and test the ${{ matrix.arch }} DMG
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-15 }
+          - { arch: x64, runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # The scripts run under the bash 3.2 a stock Mac has, not a newer bash the
+      # runner may carry, so CI catches what would break on a maintainer's Mac.
+      - name: Use macOS's own bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/system-bash"
+          ln -sf /bin/bash "${RUNNER_TEMP}/system-bash/bash"
+          echo "${RUNNER_TEMP}/system-bash" >> "${GITHUB_PATH}"
+
+      - name: Commit
+        run: echo "Building ${GITHUB_SHA} (${GITHUB_REF}) on $(sw_vers -productVersion) $(uname -m)"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            winInstaller/electron/package-lock.json
+
+      - name: Determine version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          if [[ "${REF_TYPE}" == tag ]]; then
+            version="${REF_NAME#v}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="$(node -p "require('./package.json').version")"
+          fi
+          if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'${version}' is not a version (x.y.z or x.y.z-pre); tag releases as v1.2.4 or v1.2.4-rc1"
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$([[ "${version}" == *-* ]] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+          echo "dmg=HDLBoard-${version}-${ARCH}.dmg" >> "${GITHUB_OUTPUT}"
+          echo "HDLBoard version: ${version}"
+
+      - name: Stamp version into package.json files
+        run: node tools/bump-version.mjs "${{ steps.version.outputs.version }}"
+
+      # The sources are pinned and checksum-verified, so the scripts that pin
+      # them are the cache key.
+      - name: Cache GHDL and Icarus Verilog
+        uses: actions/cache@v6
+        with:
+          path: macDmg/vendor
+          key: mac-vendor-${{ matrix.arch }}-${{ hashFiles('macDmg/common.sh', 'macDmg/fetch-ghdl.sh', 'macDmg/build-iverilog.sh') }}
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-mac-${{ matrix.arch }}-${{ hashFiles('winInstaller/electron/package-lock.json') }}
+
+      - name: Install build tools
+        run: |
+          brew install bison autoconf gperf
+          xcode-select -p
+          clang --version | head -n 1
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      - name: Check for signing secrets
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          if [[ -n "${MACOS_CERTIFICATE_P12}" && -n "${MACOS_CERTIFICATE_PASSWORD}" && -n "${MACOS_SIGN_IDENTITY}" ]]; then
+            echo "sign=true" >> "${GITHUB_OUTPUT}"
+            if [[ -n "${APPLE_API_KEY_P8}" && -n "${APPLE_API_KEY_ID}" && -n "${APPLE_API_ISSUER_ID}" ]]; then
+              echo "notarize=true" >> "${GITHUB_OUTPUT}"
+            else
+              echo "No App Store Connect API key secrets - signing with the Developer ID, not notarizing"
+            fi
+          else
+            echo "No Developer ID secrets - the app is signed ad hoc (macDmg/README.md)"
+          fi
+
+      # A keychain of its own for this job, deleted at the end.
+      - name: Import the Developer ID certificate
+        if: steps.signing.outputs.sign == 'true'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="${RUNNER_TEMP}/hdlboard-signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          security create-keychain -p "${password}" "${keychain}"
+          security set-keychain-settings -lut 21600 "${keychain}"
+          security unlock-keychain -p "${password}" "${keychain}"
+          printf '%s' "${MACOS_CERTIFICATE_P12}" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security import "${RUNNER_TEMP}/certificate.p12" -k "${keychain}" -P "${MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${password}" "${keychain}" > /dev/null
+          security list-keychains -d user -s "${keychain}" $(security list-keychains -d user | tr -d '"')
+          echo "KEYCHAIN=${keychain}" >> "${GITHUB_ENV}"
+
+      - name: Build the DMG
+        env:
+          MAC_SIGN_IDENTITY: ${{ steps.signing.outputs.sign == 'true' && secrets.MACOS_SIGN_IDENTITY || '' }}
+        run: macDmg/build.sh
+
+      - name: Simulator versions
+        run: |
+          echo "Commit: ${GITHUB_SHA}"
+          echo "--- GHDL ---";   cat "macDmg/vendor/${{ matrix.arch }}/ghdl/VERSION.txt"
+          echo "--- Icarus ---"; cat "macDmg/vendor/${{ matrix.arch }}/iverilog/VERSION.txt"
+          ls -l macDmg/output/*.dmg*
+
+      - name: Notarize and staple
+        if: steps.signing.outputs.notarize == 'true'
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          export APPLE_API_KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "${APPLE_API_KEY_P8}" > "${APPLE_API_KEY_PATH}"
+          macDmg/notarize.sh "macDmg/output/${{ steps.version.outputs.dmg }}"
+          rm -f "${APPLE_API_KEY_PATH}"
+
+      # As build-linux.yml: the backend's own tests against the simulators in the
+      # DMG, with a skipped simulator test counting as a failure.
+      - name: Backend tests against the packaged simulators
+        timeout-minutes: 25
+        env:
+          DMG: macDmg/output/${{ steps.version.outputs.dmg }}
+          HDLBOARD_REQUIRE_SIMULATORS: "1"
+        run: |
+          (cd macDmg/output && shasum -a 256 -c "${DMG##*/}.sha256")
+          mnt="${RUNNER_TEMP}/hdlboard-dmg"
+          mkdir -p "${mnt}"
+          hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "${mnt}" "${DMG}"
+          trap 'hdiutil detach "${mnt}" -force -quiet || true' EXIT
+          export GHDL_DIR="${mnt}/HDLBoard.app/Contents/Resources/ghdl"
+          export IVERILOG_DIR="${mnt}/HDLBoard.app/Contents/Resources/iverilog"
+          cd server
+          npm test
+          npm run test:integration
+
+      - name: Packaged smoke test
+        run: macDmg/smoke-test.sh ${{ steps.signing.outputs.notarize == 'true' && '--expect-notarized' || '' }} "macDmg/output/${{ steps.version.outputs.dmg }}"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.dmg }}
+          path: |
+            macDmg/output/${{ steps.version.outputs.dmg }}
+            macDmg/output/${{ steps.version.outputs.dmg }}.sha256
+          if-no-files-found: error
+          # Already compressed (UDZO); zipping it again only costs time.
+          compression-level: 0
+
+      # As build-linux.yml: create the draft if missing; if another workflow, or
+      # the other processor's job, won that race, upload into the draft it made.
+      # The simulator source tarballs are attached by build-linux.yml.
+      - name: Attach DMG to GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          DMG: ${{ steps.version.outputs.dmg }}
+        run: |
+          out=macDmg/output
+          files=("${out}/${DMG}" "${out}/${DMG}.sha256")
+          if ! gh release view "${TAG}" > /dev/null 2>&1; then
+            flags=(--draft --verify-tag --generate-notes --title "HDLBoard ${VERSION}")
+            [[ "${PRERELEASE}" == true ]] && flags+=(--prerelease)
+            if gh release create "${TAG}" "${files[@]}" "${flags[@]}"; then
+              echo "Created draft release ${TAG}"
+              exit 0
+            fi
+            echo "Creating the release failed - another workflow probably made it first; uploading into it"
+          fi
+          for attempt in 1 2 3 4 5; do
+            gh release upload "${TAG}" "${files[@]}" --clobber && exit 0
+            echo "Upload attempt ${attempt} failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not upload to release ${TAG}"
+          exit 1
+
+      - name: Remove the signing keychain
+        if: always() && env.KEYCHAIN != ''
+        run: security delete-keychain "${KEYCHAIN}" || true
+
+  test-macos-26:
+    name: Test the ${{ matrix.arch }} DMG on macOS 26
+    needs: build-mac
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-26 }
+          - { arch: x64, runner: macos-26-intel }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use macOS's own bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/system-bash"
+          ln -sf /bin/bash "${RUNNER_TEMP}/system-bash/bash"
+          echo "${RUNNER_TEMP}/system-bash" >> "${GITHUB_PATH}"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: HDLBoard-*-${{ matrix.arch }}.dmg
+          path: macDmg/output
+          merge-multiple: true
+      - name: Prepare smoke test
+        run: |
+          npm ci --prefix server
+          npm run build --prefix server
+      # Run from the DMG itself this time, as a student does who never drags it
+      # to Applications. Gatekeeper's verdict is printed, not required: an ad hoc
+      # build needs the student's one-time approval.
+      - name: Verify checksum and run packaged VHDL and Verilog
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          cd macDmg/output
+          dmg="$(ls HDLBoard-*-"${ARCH}".dmg)"
+          shasum -a 256 -c "${dmg}.sha256"
+          cd ../..
+          macDmg/smoke-test.sh --mounted "macDmg/output/${dmg}"

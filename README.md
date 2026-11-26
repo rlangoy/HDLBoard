@@ -9,7 +9,7 @@
 
 A free online simulator with a virtual FPGA board. Flip the switches while your design runs, and watch the LEDs respond.
 
-**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows/Linux App](https://github.com/rlangoy/HDLBoard/releases)** 
+**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows/Linux/macOS App](https://github.com/rlangoy/HDLBoard/releases)** 
 
 [![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
 
@@ -17,7 +17,7 @@ A free online simulator with a virtual FPGA board. Flip the switches while your 
 
 ### Try it in one minute
 
-1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows/Linux app.
+1. Open the [online simulator](https://hdlboard.onrender.com/) or start the Windows, macOS or Linux app.
 2. The starter design already connects the switches to the LEDs:
 
    ```vhdl
@@ -38,6 +38,7 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 | **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Linux app** | Working offline on Ubuntu 22.04/24.04 or Linux Mint 21/22 (64-bit x86). One AppImage file or a snap, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Mac app** | Working offline on a Mac with Apple silicon (macOS 14+) or an Intel processor (macOS 12+). One disk image per kind of Mac, GHDL and Icarus Verilog included, from the first release after 1.8.0. It is not notarized by Apple, so allow it once with **Open Anyway**. See [Installing on macOS](#installing-on-macos). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
 
@@ -84,9 +85,42 @@ sudo snap install --dangerous hdlboard_<version>_amd64.snap
 - **Removing:** `sudo snap remove hdlboard`.
 - [linuxSnap/README.md](linuxSnap/README.md) has the details.
 
+### Installing on macOS
+
+The Mac app is a disk image on the [Releases page](https://github.com/rlangoy/HDLBoard/releases), one for each kind of Mac. The first release with them is the first after 1.8.0.
+
+| File | For |
+|---|---|
+| `HDLBoard-<version>-arm64.dmg` | Apple silicon (M1 and later), macOS 14 Sonoma or later |
+| `HDLBoard-<version>-x64.dmg` | Intel processors, macOS 12 Monterey or later |
+
+To see which you have, choose Apple menu › **About This Mac**: it shows *Chip* (Apple M…) or *Processor* (Intel).
+
+1. Download the `.dmg` for your Mac and double-click it.
+2. Drag **HDLBoard** onto **Applications**, then eject the disk image.
+3. Start HDLBoard from Applications or Launchpad.
+
+**The first start.** HDLBoard is not notarized by Apple, since that needs a paid developer account. So macOS blocks it the first time:
+
+- **macOS 15 Sequoia and 26 Tahoe:** macOS says *"HDLBoard" Not Opened*. Click **Done**. Open **System Settings › Privacy & Security**, scroll down to *"HDLBoard" was blocked…*, click **Open Anyway** and confirm with your password.
+- **macOS 14 and earlier:** right-click HDLBoard in Applications, choose **Open**, then **Open** again.
+- **Or, in Terminal:** `xattr -dr com.apple.quarantine /Applications/HDLBoard.app`
+
+macOS asks again after each update.
+
+**Good to know**
+
+- **Offline:** Once installed, it needs no network and nothing else, not even Xcode or Homebrew. It includes GHDL 6.0.0 and Icarus Verilog 13.0, and never uses a GHDL or Icarus installed with Homebrew.
+- **Check the download:** Put the `.sha256` file from the release beside the DMG and run `shasum -a 256 -c HDLBoard-*.dmg.sha256` in Terminal. It should print `OK`.
+- **Your files:** Settings, saved projects and the log (`logs/backend.log`) are in `~/Library/Application Support/HDLBoard`. The projects folder is *Documents › HDLBoard Projects* unless you choose another; macOS asks once before HDLBoard opens Documents.
+- **GitHub sign-in:** The token is kept in your keychain. When macOS asks whether HDLBoard may use *HDLBoard Safe Storage*, choose **Always Allow**.
+- **Updating:** Download the new DMG and drag HDLBoard onto Applications again, choosing **Replace**. Your settings and projects stay.
+- **Removing:** Drag HDLBoard from Applications to the Trash.
+- [macDmg/README.md](macDmg/README.md) has the details.
+
 ## What is HDLBoard?
 
-HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a desktop app for Windows and Linux. You don't need an FPGA board, a cable or a vendor toolchain.
+HDLBoard is a free, open-source **online VHDL and Verilog simulator** for learning digital logic and FPGA design. It combines real HDL simulation with interactive virtual FPGA boards: **Terasic DE1-SoC and DE10-Lite**, **Digilent Basys 3 and Nexys A7**, a generic Default board, and configurable custom boards. Write real HDL, then flip the switches and press the buttons *while the simulation runs*, and watch the LEDs and 7-segment displays respond to your design. It runs in your browser with nothing to install, or as a desktop app for Windows, macOS and Linux. You don't need an FPGA board, a cable or a vendor toolchain.
 
 Built for **students and teachers** in first digital-logic and FPGA courses, and for **hobbyists** who want to try HDL before buying hardware. HDLBoard covers the step between "my code compiles" and "my code does what I meant".
 
@@ -106,7 +140,7 @@ Built for **students and teachers** in first digital-logic and FPGA courses, and
 | Real HDL simulator | Yes | Yes | **Yes** (GHDL, Icarus Verilog) |
 | Interact with the design while it runs | No (you read waveforms or the console) | Only on a physical board | **Yes**, on a virtual board |
 | Synthesis and bitstream for real hardware | No | Yes | No |
-| Setup | None | Large install, licence for some tools | **None** (browser), or a desktop app for Windows or Linux |
+| Setup | None | Large install, licence for some tools | **None** (browser), or a desktop app for Windows, macOS or Linux |
 
 HDLBoard is meant for the first weeks of HDL learning. When a design behaves the way you meant it to, take it to Quartus or Vivado and the real board.
 
@@ -231,7 +265,7 @@ HDLBoard builds on the work of many open-source projects. Thank you to all of th
 | [Icarus Verilog](https://github.com/steveicarus/iverilog) | Compiles and simulates Verilog. The Windows build uses the [MSYS2](https://www.msys2.org/) packages, with GNU Readline, zlib, bzip2, termcap, winpthreads and the GCC runtime. The Linux build is compiled from the upstream source | GPL-2.0-or-later (Readline GPL-3.0-or-later; GCC runtime with the Runtime Library Exception) |
 | [React](https://react.dev/) | The user interface | MIT |
 | [ws](https://github.com/websockets/ws) | The WebSocket link between browser and simulator | MIT |
-| [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows and Linux desktop apps | MIT (Chromium: BSD-style) |
+| [Electron](https://www.electronjs.org/) (with Chromium and Node.js) | The Windows, macOS and Linux desktop apps | MIT (Chromium: BSD-style) |
 | [AppImage type2-runtime](https://github.com/AppImage/type2-runtime) | Starts the Linux AppImage | MIT |
 | [electron-builder](https://www.electron.build/) and [NSIS](https://nsis.sourceforge.io/) | The Windows installer | MIT; zlib/libpng-style |
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/), [esbuild](https://esbuild.github.io/), [Vitest](https://vitest.dev/), [ESLint](https://eslint.org/) | Building and testing | MIT, Apache-2.0 |

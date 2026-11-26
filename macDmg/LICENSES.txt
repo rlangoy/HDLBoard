@@ -1,0 +1,40 @@
+HDLBoard for macOS - where the license texts are
+================================================
+
+Paths are relative to HDLBoard.app/Contents/Resources/. To read them, in
+Finder: right-click HDLBoard.app, Show Package Contents, Contents, Resources.
+
+  HDLBoard                licenses/HDLBoard-LICENSE.txt
+                          GPL-2.0-only. Source: https://github.com/rlangoy/HDLBoard
+
+  GHDL 6.0.0              ghdl/COPYING
+                          GPL-2.0-or-later. Source: https://github.com/ghdl/ghdl/tree/v6.0.0
+                          (ghdl-v6.0.0.tar.gz, attached to each HDLBoard release).
+                          Apple silicon: GHDL's own release build (llvm-jit backend).
+                          Intel: built from that source tarball (mcode backend).
+                          ghdl/VERSION.txt says which.
+  IEEE VHDL libraries     ghdl/lib/ghdl/src/ieee2008/LICENSE (and the header of each
+                          file under ghdl/lib/ghdl/src/)
+
+  Linked into ghdl:
+  LLVM (Apple silicon)    licenses/LLVM-LICENSE.txt
+                          Apache-2.0 WITH LLVM-exception. https://llvm.org/
+  zstd (Apple silicon)    licenses/zstd-LICENSE.txt
+                          BSD-3-Clause. https://github.com/facebook/zstd
+  GNAT runtime            licenses/GPL-3.0.txt with
+                          licenses/GCC-RUNTIME-LIBRARY-EXCEPTION.txt
+                          (the Ada runtime, linked into ghdl, and on Intel also
+                          ghdl/bin/libgcc_s.1.1.dylib). From GCC 14.2.0, built by
+                          https://github.com/alire-project/GNAT-FSF-builds;
+                          source: https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/
+
+  Icarus Verilog 13.0     iverilog/COPYING
+                          GPL-2.0-or-later. Built from the unmodified source tarball
+                          named in iverilog/VERSION.txt; the same tarball is attached
+                          to each HDLBoard release on GitHub.
+
+  Electron, Chromium,     licenses/LICENSE.electron.txt and
+  Node.js                 licenses/LICENSES.chromium.html
+
+The simulators are run as separate programs. No other library is bundled
+with them (see ghdl/VERSION.txt and iverilog/VERSION.txt).

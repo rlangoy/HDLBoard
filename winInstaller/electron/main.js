@@ -22,10 +22,14 @@ const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { BACKEND_PORTS, isPortUnavailable, startOnFirstFreePort } = require('./backendPort');
 
-// Linux: ~/.config/HDLBoard (or $XDG_CONFIG_HOME/HDLBoard), the folder the
-// README names, rather than one named after the npm package. Windows keeps
-// the folder it has always used, so no installed copy loses its settings.
-if (process.platform === 'linux') app.setPath('userData', path.join(app.getPath('appData'), 'HDLBoard'));
+// Linux: ~/.config/HDLBoard (or $XDG_CONFIG_HOME/HDLBoard); macOS:
+// ~/Library/Application Support/HDLBoard. The folders the READMEs name, rather
+// than ones named after the npm package. Windows keeps the folder it has always
+// used, so no installed copy loses its settings. Chromium's own --user-data-dir
+// switch wins everywhere: the macOS smoke test starts the app with an empty one.
+const userDataSwitch = app.commandLine.getSwitchValue('user-data-dir');
+if (userDataSwitch) app.setPath('userData', path.resolve(userDataSwitch));
+else if (process.platform !== 'win32') app.setPath('userData', path.join(app.getPath('appData'), 'HDLBoard'));
 
 let backend = null;
 // Set once the backend listens, and kept after it stops: the page still saves on its way out.
@@ -632,19 +636,58 @@ function openInBrowser(url) {
 function showNoFreePortDialog() {
   const first = BACKEND_PORTS[0];
   const last = BACKEND_PORTS[BACKEND_PORTS.length - 1];
+  const causes = [
+    `${BACKEND_PORTS.length} copies of this app are already running — look for them in the ${process.platform === 'darwin' ? 'Dock' : 'taskbar'}`,
+    'development servers (scripts/start.sh, or "node server/dist/server.js") are running',
+    ...(process.platform === 'win32' ? ['Windows has reserved the ports (for Hyper-V or WSL)'] : []),
+  ];
   dialog.showErrorBox(
     `No free port for HDLBoard (${first}–${last})`,
     `HDLBoard needs one of the ports ${first}–${last}, but none of them is free.\n\n` +
       'The usual causes are:\n' +
-      `  • ${BACKEND_PORTS.length} copies of this app are already running — look for them in the taskbar;\n` +
-      `  • development servers (scripts/start.sh, or "node server/dist/server.js") are running;\n` +
-      '  • Windows has reserved the ports (for Hyper-V or WSL).\n\n' +
-      'Close a copy or a server and start the app again.',
+      causes.map((cause, i) => `  • ${cause}${i === causes.length - 1 ? '.' : ';'}\n`).join('') +
+      '\nClose a copy or a server and start the app again.',
   );
 }
 
+/**
+ * The renderer's own About dialog (AboutDialog.tsx), the one its header button
+ * opens: the menu only asks it to show. The event name is ABOUT_EVENT in src/.../project.ts.
+ */
+function showAboutDialog() {
+  if (mainWindow) {
+    mainWindow.webContents
+      .executeJavaScript("window.dispatchEvent(new CustomEvent('hdl-board:show-about'))")
+      .catch(() => {});
+  }
+}
+
+/**
+ * macOS puts the first menu under the app's name, and that is where a Mac user
+ * looks for About, Hide and Quit (⌘Q). Without it the File menu would take that
+ * place, and the app would have no Quit at all.
+ */
+function macAppMenu() {
+  return {
+    label: 'HDLBoard',
+    submenu: [
+      { label: 'About HDLBoard', click: showAboutDialog },
+      { type: 'separator' },
+      { role: 'services' },
+      { type: 'separator' },
+      { role: 'hide' },
+      { role: 'hideOthers' },
+      { role: 'unhide' },
+      { type: 'separator' },
+      { role: 'quit' },
+    ],
+  };
+}
+
 function buildMenu(logPath) {
+  const mac = process.platform === 'darwin';
   const template = [
+    ...(mac ? [macAppMenu()] : []),
     { role: 'fileMenu' },
     { role: 'editMenu' },
     { role: 'viewMenu' },
@@ -655,19 +698,8 @@ function buildMenu(logPath) {
           label: 'Open Logs Folder',
           click: () => shell.showItemInFolder(logPath),
         },
-        {
-          label: 'About',
-          // The dialog is the renderer's own (AboutDialog.tsx) — the same
-          // one its header button opens — so the menu just asks it to
-          // show. The event name is ABOUT_EVENT in src/.../project.ts.
-          click: () => {
-            if (mainWindow) {
-              mainWindow.webContents
-                .executeJavaScript("window.dispatchEvent(new CustomEvent('hdl-board:show-about'))")
-                .catch(() => {});
-            }
-          },
-        },
+        // On a Mac, About is in the app menu above.
+        ...(mac ? [] : [{ label: 'About', click: showAboutDialog }]),
       ],
     },
   ];
@@ -778,8 +810,8 @@ app.whenReady().then(async () => {
   await mainWindow.loadURL(appOrigin);
   console.log('window loaded');
 
-  if (process.platform === 'linux' && app.isPackaged) {
-    checkLinuxSimulators(paths, logPath).catch((err) => console.error(`simulator check failed: ${err && err.stack ? err.stack : err}`));
+  if (process.platform !== 'win32' && app.isPackaged) {
+    checkBundledSimulators(paths, logPath).catch((err) => console.error(`simulator check failed: ${err && err.stack ? err.stack : err}`));
   }
 });
 
@@ -807,13 +839,14 @@ function failureOf(exe, args) {
 
 /**
  * Starts each bundled simulator once (`--version`) after the window is up,
- * and names the one that cannot run: a tree that lost its execute bits, or a
- * library missing on this distribution, would otherwise only show as an
+ * and names the one that cannot run: a tree that lost its execute bits, a
+ * library missing on this Linux distribution, or, on macOS, a simulator that
+ * Gatekeeper or a broken signature stops, would otherwise only show as an
  * obscure failure on the first RUN. Never falls back to a system copy.
  * `vvp` stands in for Icarus: `iverilog -V` runs its compiler through `sh`
  * and needs the backend's own handling of an awkward install path.
  */
-async function checkLinuxSimulators(paths, logPath) {
+async function checkBundledSimulators(paths, logPath) {
   // What the backend will run: the bundled trees, unless --ghdl-exe / --iverilog-dir said otherwise.
   const ghdl = paths.ghdlDir ? path.join(paths.ghdlDir, 'bin', 'ghdl') : paths.ghdlExe;
   const vvp = paths.iverilogDir ? path.join(paths.iverilogDir, 'vvp') : undefined;
@@ -836,6 +869,8 @@ async function checkLinuxSimulators(paths, logPath) {
   }
 }
 
+// On macOS too, although Mac apps often stay open without a window: the backend
+// and its simulators live with this one window, so closing it ends HDLBoard.
 app.on('window-all-closed', () => app.quit());
 
 /**

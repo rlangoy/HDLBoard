@@ -26,3 +26,8 @@ docker-compose.yml text eol=lf
 # AppImage scripts also run from Windows bind mounts during Linux validation.
 linuxAppImage/*.sh text eol=lf
 linuxAppImage/AppRun text eol=lf
+
+# The macOS build scripts run under the bash 3.2 a Mac ships, which a CRLF
+# checkout breaks ("set -euo pipefail\r").
+macDmg/*.sh text eol=lf
+macDmg/*.plist text eol=lf

@@ -234,6 +234,27 @@ only the snap. To test it: `sudo snap install --dangerous linuxSnap/output/hdlbo
 then `linuxSnap/smoke-test.sh`. Details, and how to publish to the Snap Store:
 [`linuxSnap/README.md`](../linuxSnap/README.md).
 
+## Building the macOS app
+
+On a Mac with the Xcode Command Line Tools (`xcode-select --install`), Node 20+,
+and `bison`, `autoconf` and `gperf` from Homebrew (`brew install bison autoconf gperf`),
+from the repository root:
+
+```sh
+scripts/build-mac.sh
+```
+
+It checks those tools first and says how to install a missing one, then runs
+`macDmg/build.sh` and prints the DMG's path. It builds for the Mac's own
+processor only: `macDmg/output/HDLBoard-<version>-arm64.dmg` on Apple silicon,
+`HDLBoard-<version>-x64.dmg` on an Intel Mac, each with its `.sha256`.
+`--skip-app-build` repackages only. The app is signed ad hoc unless
+`MAC_SIGN_IDENTITY` names a Developer ID. To test it:
+`macDmg/smoke-test.sh macDmg/output/HDLBoard-*.dmg`.
+`.github/workflows/build-mac.yml` builds and tests both DMGs on GitHub's macOS
+runners. Details, and how to switch on notarization:
+[`macDmg/README.md`](../macDmg/README.md).
+
 ### Bumping the version
 
 One command sets the version in all three `package.json` files and their lockfiles.

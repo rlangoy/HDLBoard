@@ -6,11 +6,11 @@ const { join } = require('node:path');
 const { createHash } = require('node:crypto');
 const { downloadVerifiedArchive } = require('./install-electron-fallback.cjs');
 
-function fixture(t) {
+function fixture(t, target = 'linux-x64') {
   const dir = mkdtempSync(join(tmpdir(), 'hdlboard-electron-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const data = Buffer.from('verified archive');
-  const name = 'electron-v33.4.11-linux-x64.zip';
+  const name = `electron-v33.4.11-${target}.zip`;
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ version: '33.4.11' }));
   writeFileSync(join(dir, 'checksums.json'), JSON.stringify({ [name]: createHash('sha256').update(data).digest('hex') }));
   const cache = join(dir, 'cache');
@@ -36,6 +36,25 @@ test('a corrupt cache is replaced only after the API download matches the pinned
   });
   await downloadVerifiedArchive(f.dir, f.cache);
   assert.deepEqual(readFileSync(f.archive), f.data);
+});
+
+test('a macOS build fetches the archive for its own processor', async t => {
+  const f = fixture(t, 'darwin-arm64');
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (url.includes('/tags/')) {
+      return { ok: true, json: async () => ({ assets: [{ name: 'electron-v33.4.11-darwin-x64.zip', id: 1 }, { name: f.name, id: 2 }] }) };
+    }
+    assert.equal(url, 'https://api.github.com/repos/electron/electron/releases/assets/2');
+    return { ok: true, arrayBuffer: async () => f.data };
+  });
+  assert.equal(await downloadVerifiedArchive(f.dir, f.cache, 'darwin-arm64'), f.archive);
+  assert.deepEqual(readFileSync(f.archive), f.data);
+});
+
+test('a platform without a desktop build is refused before any download', async t => {
+  const f = fixture(t);
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('Unexpected network'); });
+  await assert.rejects(downloadVerifiedArchive(f.dir, f.cache, 'linux-arm64'), /No Electron download for linux-arm64/);
 });
 
 test('a mismatched download is rejected and never cached', async t => {

@@ -15,8 +15,13 @@ export interface RowMenuHandlers {
   /** The open project's name field, in the Active project section. */
   onRename: () => void;
   onDeleteFromGitHub: (entry: IndexEntry) => void;
-  /** Present only where a local project can be shown in Explorer (the Windows app). */
+  /** Present only where a local project can be shown in Explorer or Finder (the desktop app). */
   onShowInFolder?: (path: string) => void;
+}
+
+/** What the system's file manager is called where the app runs: Finder on a Mac, else Explorer. */
+export function showInFolderLabel(platform: string = typeof navigator === 'undefined' ? '' : navigator.platform): string {
+  return /^Mac/.test(platform) ? 'Show in Finder' : 'Show in Explorer';
 }
 
 /**
@@ -47,6 +52,6 @@ function itemActions(item: ProjectListItem, { onDeleteFromGitHub, onShowInFolder
   if (!onShowInFolder) return [];
   return [
     { label: 'Copy path', icon: <CopyIcon aria-hidden="true" />, onSelect: () => void copyText(item.location) },
-    { label: 'Show in Explorer', icon: <OpenInIcon aria-hidden="true" />, onSelect: () => onShowInFolder(item.location) },
+    { label: showInFolderLabel(), icon: <OpenInIcon aria-hidden="true" />, onSelect: () => onShowInFolder(item.location) },
   ];
 }
