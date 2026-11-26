@@ -97,7 +97,9 @@ the toolchain that gnatmake records. If a newer Xcode's linker fails on GNAT's o
 
 `build-iverilog.sh` builds **13.0** from the same pinned source tag as Linux (`v13_0`), with clang and Homebrew's
 bison. As on Linux, readline (on macOS that would be libedit) and termcap stay out, through configure's cache
-variables. `vvp` then links only macOS's own libraries, zlib and bzip2 among them. The flat tree is the same
+variables. `vvp` then links only macOS's own libraries, zlib and bzip2 among them. One patch: 13.0's
+`driver/main.c` calls `_NSGetExecutablePath` without including `<mach-o/dyld.h>`, which clang refuses in the C23
+mode configure picks, so the script adds the include (recorded in `VERSION.txt`). The flat tree is the same
 as on Linux, and the backend runs it as `iverilog -B<dir>` and `vvp -M<dir>`. A tree under a path with a space
 (`~/Downloads/HDL Board 2/HDLBoard.app`) is handled as on Linux: the backend links to it from the temporary
 folder (`posixLinkPath`).
@@ -235,7 +237,7 @@ right-click HDLBoard, *Show Package Contents*.
 
 | Date | System | What | Result |
 |---|---|---|---|
-| | GitHub Actions, macos-15 and macos-15-intel | `build-mac.yml`: build, backend tests against the packaged simulators, `smoke-test.sh` | not yet run |
-| | GitHub Actions, macos-26 and macos-26-intel | `smoke-test.sh --mounted` | not yet run |
+| 2026-11-26 | GitHub Actions, macos-15 (15.8.2 arm64) and macos-15-intel (15.7.9 x86_64), run 45787489308 | `build-mac.yml`: build with bash 3.2, `verify-simulators.sh`, backend tests against the simulators in the DMG (`HDLBOARD_REQUIRE_SIMULATORS=1`), `smoke-test.sh` from `…/HDL Board ø/` | Pass on both: DMG 124.9 MB (arm64) and 108.4 MB (x64); simulators 15/15; unit 780 pass, 2 Windows-only skips; integration 189 pass, 1 skip (I-V19, open-file limit); smoke test all checks |
+| 2026-11-26 | GitHub Actions, macos-26 and macos-26-intel | `smoke-test.sh --mounted` | Pass on both |
 | | macOS 14, Apple silicon (the arm64 minimum) | Runbook | not yet run: GitHub has no macOS 14 runner any more |
 | | A real Mac, Apple silicon and Intel | Runbook (Gatekeeper's Open Anyway, double-click, designs, ⌘Q) | not yet run |

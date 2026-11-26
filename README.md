@@ -38,7 +38,7 @@ Every board port is optional, so a first lab can declare only `SW` and `LEDR`.
 | **Online** | Trying it out, with nothing to install | [hdlboard.onrender.com](https://hdlboard.onrender.com/) |
 | **Windows app** | Working offline on your own PC. GHDL and Icarus Verilog are included. Every installer since 1.2.4 is built by GitHub Actions from this repository. It is not code-signed, so if SmartScreen warns, choose **More info → Run anyway**. | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Linux app** | Working offline on Ubuntu 22.04/24.04 or Linux Mint 21/22 (64-bit x86). One AppImage file or a snap, GHDL and Icarus Verilog included. See [Installing on Linux](#installing-on-linux). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
-| **Mac app** | Working offline on a Mac with Apple silicon (macOS 14+) or an Intel processor (macOS 12+). One disk image per kind of Mac, GHDL and Icarus Verilog included, from the first release after 1.8.0. It is not notarized by Apple, so allow it once with **Open Anyway**. See [Installing on macOS](#installing-on-macos). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
+| **Mac app** | Working offline on a Mac with Apple silicon (macOS 14+) or an Intel processor (macOS 12+). One disk image per kind of Mac, GHDL and Icarus Verilog included, from 1.8.0. It is not notarized by Apple, so allow it once with **Open Anyway**. See [Installing on macOS](#installing-on-macos). | [Releases page](https://github.com/rlangoy/HDLBoard/releases) |
 | **Self-hosted** | A classroom, lab or personal server (Docker on Linux, macOS or Windows/WSL) | [HOSTING.md](docs/HOSTING.md) |
 | **From source** | Development and contributing | [BUILDING.md](docs/BUILDING.md) |
 
@@ -87,7 +87,7 @@ sudo snap install --dangerous hdlboard_<version>_amd64.snap
 
 ### Installing on macOS
 
-The Mac app is a disk image on the [Releases page](https://github.com/rlangoy/HDLBoard/releases), one for each kind of Mac. The first release with them is the first after 1.8.0.
+The Mac app is a disk image on the [Releases page](https://github.com/rlangoy/HDLBoard/releases), one for each kind of Mac, from 1.8.0 on.
 
 | File | For |
 |---|---|
