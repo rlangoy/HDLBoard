@@ -43,15 +43,30 @@ else
   program=("${base[@]}" --entitlements "${MAC_DIR}/entitlements.plist")
 fi
 
+# A bundle's main executable (Contents/MacOS/<name>, or a framework's
+# Versions/<v>/<name>) is signed with its bundle below: signing it on its own
+# makes codesign treat it as the bundle, which fails while its helpers are unsigned.
+is_bundle_main() {
+  case "$1" in
+    */Contents/MacOS/*) return 0 ;;
+    *.framework/Versions/*/*)
+      local framework="${1%%.framework/Versions/*}"
+      [[ "${1##*/}" == "${framework##*/}" ]] ;;
+    *) return 1 ;;
+  esac
+}
+
 count=0
-while IFS= read -r -d '' f; do
+# Deepest first, so a framework's own libraries and helpers are signed before anything that seals them.
+while IFS= read -r f; do
+  is_bundle_main "$f" && continue
   # Programs get the entitlements; libraries and bundles loaded into them do not.
   case "$(file -b "$f")" in
     *executable*) codesign "${program[@]}" "$f" ;;
     *) codesign "${base[@]}" "$f" ;;
   esac
   count=$((count + 1))
-done < <(macho_files "${app}/Contents")
+done < <(macho_files "${app}/Contents" | tr '\0' '\n' | awk -F/ '{ print NF "\t" $0 }' | sort -rn | cut -f2-)
 
 # Frameworks and helper apps, deepest first. awk prefixes each path with its
 # depth; names hold spaces ("HDLBoard Helper (GPU).app") but no newlines.

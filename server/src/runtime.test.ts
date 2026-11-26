@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { BoundedOutput, createBatchHandle, createRunHandle, KILL_GRACE_MS, lineSplitter, MAX_COMMAND_OUTPUT_CHARS, outputCutNote, runCommand } from './runtime.js';
 import { makeTempDir } from './testSupport/sessionDir.js';
 
@@ -98,7 +99,9 @@ describe('runCommand', () => {
 
   test('runs in the working directory it is given', async () => {
     const result = await runCommand({ cmd: node, args: ['-e', 'console.log(process.cwd())'], cwd: cwdDir.path });
-    assert.equal(result.out.trim().toLowerCase(), cwdDir.path.toLowerCase());
+    // Both resolved: macOS's temporary folder is under /var, a link to /private/var, and the
+    // child reports the real path.
+    assert.equal(realpathSync(result.out.trim()).toLowerCase(), realpathSync(cwdDir.path).toLowerCase());
   });
 
   test('an abort kills a running command at once, not at its timeout', async () => {
