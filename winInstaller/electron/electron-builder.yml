@@ -42,11 +42,10 @@ extraResources:
   - from: resources/iverilog
     to: iverilog
 
-# HDLBoard's own GPL-2.0 text, installed so license.txt's reference
-# to it is true.
-extraFiles:
-  - from: ../../LICENSE
-    to: LICENSE
+# HDLBoard's own GPL-2.0 text, beside the program on Windows (so license.txt's
+# reference to it is true) and Linux, under `extraFiles` in those two sections.
+# Not here for all three: on macOS it would land in HDLBoard.app/Contents/, where
+# codesign accepts no loose file; the Mac app has it in Resources/licenses/.
 
 # Linux: electron-builder lays the app out (`dir`, in linux-unpacked/) and
 # linuxAppImage/build.sh packs that into the AppImage itself, for two things
@@ -63,6 +62,9 @@ linux:
   extraResources:
     - from: ../../LICENSE
       to: licenses/HDLBoard-LICENSE.txt
+  extraFiles:
+    - from: ../../LICENSE
+      to: LICENSE
 
 # macOS: electron-builder lays the app out (`dir`, in mac-arm64/ or mac/), and
 # macDmg/build.sh adds the license texts, sets the minimum macOS, signs it
@@ -88,6 +90,9 @@ mac:
 win:
   target: nsis
   icon: build/icon.ico
+  extraFiles:
+    - from: ../../LICENSE
+      to: LICENSE
   # Unsigned. SmartScreen will warn on first run; signing is a real cost
   # that is hard to justify for a course tool, so the README documents the
   # "More info -> Run anyway" flow instead.
