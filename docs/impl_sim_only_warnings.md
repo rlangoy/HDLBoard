@@ -155,6 +155,10 @@ alone.
   function is file I/O again: GHDL rejects the `line` variable (*variable with access type is not synthesizable*),
   and so does a `line` variable in a process. A **file** read there still counts (`file`, `file_open`, `readline`):
   Quartus builds a ROM filled from a file as zeros, without an error (§ 3.6).
+- File I/O of any kind in a function or procedure that code synthesis reads never calls: nothing in it runs.
+  riscv_vhdl's `otp_clocked` declares a file-reading `init_ram` whose call is commented out; Quartus builds it
+  (measured 2026-11-27). Its `rom_inferred` and `sram8_inferred_init` call theirs, and stay SIM-only: Quartus
+  builds both memories as zeros from a hex file of non-zero lines.
 - `q <= #1 d;` in an edge-triggered `always`: synthesis drops the delay and the register still changes at the edge,
   so it is the quiet `vlog-clocked-delay` (gutter `!`), not `vlog-delay`. Many designs write it to make waveforms
   readable. Measured 2026-11-27 with Quartus Prime 25.1 Lite: builds, no message. A `#` before a statement
@@ -240,7 +244,8 @@ a `case` on a concatenation (`case ({a, b})`) has the width of its parts; and a 
 every value, since synthesis takes the missing ones as don't-care. The mark is a directive comment after the
 selector or right before `case` (`// synopsys full_case`, `/* synthesis full_case */`; Quartus takes both), or the
 attribute `(* full_case *)` right before it; `blank.ts` records them, but not in an `ifdef branch the view leaves
-out, and not `full_case` as an attribute's value (`(* keep = "full_case" *)`).
+out or inside translate_off, and not `full_case` inside an attribute's quoted value (`(* keep = "full_case" *)`,
+`(* keep = "foo, full_case=bar" *)`).
 
 An `if` that reads only parameters, genvars, numbers and `$clog2` (`if (R == 2)`, `if (MODE == "COLROW")`) is decided
 while elaborating, one way for each instance. The check never evaluates it, neither from the parameters' defaults (an
@@ -249,7 +254,14 @@ compares unsigned). Each combination of a block's such conditions is walked with
 walks), and a variable that one combination keeps is a latch: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when
 R is not 2. A combination is not the defaults, so it is walked with the localparams of fixed value alone; a loop bound
 or width made of a parameter is unknown there, and what that loop writes is unsure (a signal of unknown width that
-it writes, as a whole). A variable a combination never assigns keeps nothing in it. Code review of 2026-11-27 (an
+it writes, as a whole), in that combination only: the branch a combination leaves out adds nothing unsure. A
+variable a combination never assigns keeps nothing in it. Conditions are told apart by their source as written, so
+`MODE == "A"` and `MODE == "B"` are two (the blanked code reads them alike). A `case` selector's width is the one no
+instance can change: `case ({s, a})` with `s` a parameter's width names every value only for its default. A
+condition on localparams no instance can change (no parameter in their value, no declared type or range) that is a
+name alone or an `==`/`!=` of non-negative values (`if (ON)`, `if (MODE == 2)`) is decided; nothing else is
+evaluated. When the combinations would cost more than 20 000 steps (statements and loop bits, as the first walk
+counts them, times the combinations), the first walk stands, each condition read as any other `if`. Code review of 2026-11-27 (an
 earlier version folded such conditions with the defaults); each case built with Quartus in
 `verilogQuartusCases.test.ts`.
 

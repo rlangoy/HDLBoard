@@ -25,6 +25,8 @@ export interface UnitText {
   readonly simOnlyRegions: readonly LineSpan[];
   /** Verilog: file offsets of the `full_case` marks in active code (`blank.ts`); the design check's latch rule reads them. */
   readonly fullCase?: FullCaseMarks;
+  /** The file as written, same offsets as `code` (comments and strings kept); the design check's latch rule reads its conditions. */
+  readonly source?: string;
 }
 
 export interface DetectionRule {

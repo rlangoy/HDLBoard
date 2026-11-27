@@ -54,8 +54,9 @@ export function blankSource(language: Language, source: string, view: SourceView
   const marks = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
   const pre = preprocessVerilog(chars.join(''), lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
-  // A mark in an `ifdef branch the view leaves out marks nothing.
-  const active = (at: number) => !pre.inactive.some((r) => at >= r.from && at < r.to);
+  // A mark in an `ifdef branch the view leaves out, or inside translate_off, marks nothing.
+  const hidden = (at: number) => pragmas.regions.some((r) => lineOf(at) >= r.start && lineOf(at) <= r.end);
+  const active = (at: number) => !pre.inactive.some((r) => at >= r.from && at < r.to) && !hidden(at);
   const fullCase = { directives: marks.directives.filter(active), attributes: marks.attributes.filter(active) };
   return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start), fullCase };
 }
@@ -130,9 +131,26 @@ function vhdlString(src: string, chars: string[], i: number): number {
 const DIRECTIVE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)((?:[ \t]+[A-Za-z_]\w*)+)/i;
 const isFullCaseComment = (comment: string): boolean =>
   (DIRECTIVE_COMMENT.exec(comment)?.[1].trim().split(/\s+/) ?? []).some((word) => word.toLowerCase() === 'full_case');
-/** `full_case` as an attribute's name, `(* parallel_case, full_case *)`, not as a value: `(* keep = "full_case" *)`. */
+/** An attribute's items, `a, b = "x, y"` is two: its commas outside quoted values. */
+function attributeItems(inside: string): string[] {
+  const items: string[] = [];
+  let [from, quoted] = [0, false];
+  for (let i = 0; i < inside.length; i++) {
+    if (inside[i] === '"') quoted = !quoted;
+    else if (inside[i] === ',' && !quoted) {
+      items.push(inside.slice(from, i));
+      from = i + 1;
+    }
+  }
+  return [...items, inside.slice(from)];
+}
+
+/**
+ * `full_case` as an attribute's name, `(* parallel_case, full_case *)`, not inside a value:
+ * `(* keep = "full_case" *)`, `(* keep = "foo, full_case=bar" *)`.
+ */
 const isFullCaseAttribute = (attribute: string): boolean =>
-  attribute.slice(2, -2).split(',').some((item) => /^\s*full_case\s*(?:=|$)/i.test(item));
+  attributeItems(attribute.slice(2, -2)).some((item) => /^\s*full_case\s*(?:=|$)/i.test(item));
 
 /** Lexes Verilog; returns where its `full_case` marks start. */
 function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): FullCaseMarks {

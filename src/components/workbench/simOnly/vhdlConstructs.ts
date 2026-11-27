@@ -12,7 +12,7 @@ import { bracketed, topLevel, unwrapped } from './brackets';
 import { blockAt, inside, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
 import { conjuncts, EVENT_OPERAND, testsLevelOf } from './vhdlEdges';
-import { elaborationFunctions } from './vhdlElaboration';
+import { elaborationFunctions, uncalledSubprograms } from './vhdlElaboration';
 import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
@@ -88,11 +88,14 @@ const TEXT_OUTPUT = [/\bvariable\s+\w+(?:\s*,\s*\w+)*\s*:\s*line\b/gi, /\bwritel
  * Quartus builds the constant without the file's contents.
  */
 function fileOperations(t: UnitText): number[] {
-  const files = [FILE_DECLARATION, FILE_CALL].flatMap((p) => linesOf(t, p));
+  const files = [FILE_DECLARATION, FILE_CALL].flatMap((p) => matchesIn(t, p));
   const output = TEXT_OUTPUT.flatMap((p) => matchesIn(t, p));
-  if (output.length === 0) return files;
-  const once = elaborationFunctions(t);
-  return [...files, ...output.filter(([at]) => !inside(at, once)).map(([at]) => t.lineOf(at))];
+  if (files.length === 0 && output.length === 0) return [];
+  // A subprogram nothing calls runs nowhere; a function only constants call may print, not read files.
+  const uncalled = uncalledSubprograms(t);
+  const once = output.length === 0 ? [] : elaborationFunctions(t);
+  const kept = [...files.filter(([at]) => !inside(at, uncalled)), ...output.filter(([at]) => !inside(at, uncalled) && !inside(at, once))];
+  return kept.map(([at]) => t.lineOf(at));
 }
 
 const ENV_CALL = /\bstd\.env\.(?:stop|finish)\b/gi;

@@ -12,7 +12,8 @@ import type { UnitText } from '../tbDetect/rules';
 import { escapeRegExp } from './constructText';
 import { ALL_BITS, vhdlBits } from './bits';
 import type { Found } from './constructs';
-import { eventDirectionOf } from './vhdlEdges';
+import { unwrapped } from './brackets';
+import { conjuncts, EVENT_OPERAND, eventDirectionOf } from './vhdlEdges';
 import { vhdlConcatFeedback, vhdlWiringBounds, type BoundsOf } from './vhdlWiring';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
@@ -36,9 +37,16 @@ function edgeOf(m: RegExpMatchArray): Edge {
   return { clock: tidy(calledClock), kind: call.toLowerCase() === 'rising_edge' ? 'rising' : 'falling' };
 }
 
-/** A `clk'event` takes its direction from the level of `clk` tested beside it: `(clk'event and clk = '0')` is the falling edge. */
+/**
+ * A `clk'event` takes its direction from the level of `clk` tested beside it: `(clk'event and
+ * clk = '0')` is the falling edge. Only when the event is itself one of the condition's
+ * `and`s: in `((clk'event or en = '1') and clk = '1')` the `or` can bypass the event, and
+ * Quartus refuses it (Error 10397).
+ */
 function withDirection(edge: Edge, condition: string): Edge {
   if (edge.kind !== 'event') return edge;
+  const isEvent = (operand: string) => tidy(EVENT_OPERAND.exec(operand)?.[1] ?? '').toLowerCase() === edge.clock.toLowerCase();
+  if (!conjuncts(unwrapped(condition)).some(isEvent)) return edge;
   return { clock: edge.clock, kind: eventDirectionOf(edge.clock, condition) ?? 'event' };
 }
 

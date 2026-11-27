@@ -70,7 +70,7 @@ export function unitText(scan: ScannedFile, unit: DesignUnit): UnitText {
   const slice = scan.code.slice(base, end);
   const local = unit.ranges.map((r) => ({ from: r.from - base, to: r.to - base }));
   const code = unit.ranges.length === 1 ? slice : keepRanges(slice, local);
-  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCase: scan.fullCase };
+  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCase: scan.fullCase, source: scan.file.content };
 }
 
 const ARCHITECTURE_OF = /\barchitecture\s+\w+\s+of\s+(\w+)\s+is\b/gi;

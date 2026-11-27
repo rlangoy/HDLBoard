@@ -79,6 +79,26 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    'two if guards on different strings of one parameter (Warning 10240 in an instance with #(.MODE("B")))',
+    'module t #(parameter MODE = "A") (input d, en, output reg q);\n  always @* begin\n    if (MODE == "A") q = d;\n    if (MODE == "B") if (en) q = d;\n  end\nendmodule',
+    [2],
+  ],
+  [
+    'a latch in the branch W = 1 takes, beside a loop in the other (Warning 10240)',
+    'module t #(parameter W = 1) (input [W-1:0] d, input en, output reg [W-1:0] q);\n  integer i;\n  always @* if (W == 1) begin if (en) q = d; end else for (i = 0; i < W; i = i + 1) q[i] = d[i];\nendmodule',
+    [3],
+  ],
+  [
+    'a case whose selector a parameter widens: four labels miss values with #(.S(2)) (Warning 10240)',
+    "module t #(parameter S = 1) (input [S-1:0] s, input a, b, c, output reg x);\n  always @* case ({s, a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = ~b;\n    2'b11: x = ~c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'an if on a localparam no instance can change: only its branch is built (no latch)',
+    'module t (input d, e, output reg q);\n  localparam ON = 1;\n  always @* if (ON) q = d; else if (e) q = d;\nendmodule',
+    [],
+  ],
+  [
     '// synopsys full_case on a case that misses a value (no latch)',
     "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s) // synopsys full_case\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
     [],
@@ -106,6 +126,16 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
   [
     'full_case as an attribute value, (* keep = "full_case" *) (Warnings 10270, 10240)',
     "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* keep = \"full_case\" *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'a full_case directive inside translate_off (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s)\n// synthesis translate_off\n    // synthesis full_case\n// synthesis translate_on\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'full_case inside a quoted attribute value, (* keep = "foo, full_case=bar" *) (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* keep = \"foo, full_case=bar\" *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
     [2],
   ],
   [

@@ -19,7 +19,7 @@
  * other loop may run no time.
  */
 
-import { bracketed, closingBracket, topLevel, topLevelItems } from './brackets';
+import { bracketed, closingBracket, topLevel, topLevelItems, unwrapped } from './brackets';
 import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
 import { NO_FULL_CASE, type FullCaseMarks } from '../tbDetect/blank';
 import type { BitRange } from './verilogDeclarations';
@@ -67,6 +67,17 @@ export interface StatementContext {
   readonly decisions?: ReadonlyMap<string, boolean>;
   /** Filled while walking: the elaboration conditions met, by their text without blanks. */
   readonly elaborationConditions?: Set<string>;
+  /**
+   * The source of `text` as written, same offsets: comments and strings kept. Conditions are
+   * told apart by it: `MODE == "A"` and `MODE == "B"` are blanked alike.
+   */
+  readonly source?: string;
+  /** Values no instance can change (`verilogFixedConstants`): a condition of them alone is decided. */
+  readonly fixedConstants?: Bindings;
+  /** Declared ranges no instance can change: a `case` selector's width, for whether its labels name every value. */
+  readonly selectorRangeOf?: (name: string) => BitRange | undefined;
+  /** Counts the work of a walk: statements, and bits of loops followed. */
+  readonly work?: { steps: number };
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
@@ -187,6 +198,7 @@ function followedBits(ctx: StatementContext, name: string, index: string): strin
   const bindings = everyBinding(ctx.loops, ctx.constants, MAX_LOOP_RUNS);
   if (bindings === undefined) return undefined;
   const bits: string[] = [];
+  if (ctx.work) ctx.work.steps += bindings.length;
   for (const b of bindings) {
     const range = indexRange(index, b);
     const named = range && bitsOf(name, range);
@@ -279,10 +291,42 @@ function isElaborationCondition(ctx: StatementContext, condition: string): boole
   return names.every((name) => ELABORATION_FUNCTION.test(name) || fixed.has(name) || ctx.constants.has(name));
 }
 
+/** `ON`, `MODE == 2`, `2 != W`: a name or a decimal number, compared for equality. */
+const SIMPLE_EQUALITY = /^([A-Za-z_]\w*|\d+)\s*(===|!==|==|!=)\s*([A-Za-z_]\w*|\d+)$/;
+const SINGLE_NAME = /^[A-Za-z_]\w*$/;
+
+/**
+ * The value of a condition on values no instance can change, when its meaning is plain: a
+ * localparam of fixed value alone, or two of them (or a decimal number) compared with `==`
+ * or `!=`, all of them non-negative so neither width nor sign can change the answer. Anything
+ * else is undefined: Verilog's operator rules are not evaluated (`!2 == 1` is `(!2) == 1`).
+ */
+function fixedValue(condition: string, fixed: Bindings | undefined): boolean | undefined {
+  if (fixed === undefined) return undefined;
+  const c = unwrapped(condition);
+  const valueOf = (token: string) => (/^\d+$/.test(token) ? Number(token) : fixed.get(token));
+  const known = (v: number | undefined): v is number => v !== undefined && v >= 0 && Number.isSafeInteger(v);
+  if (SINGLE_NAME.test(c)) {
+    const v = valueOf(c);
+    return known(v) ? v !== 0 : undefined;
+  }
+  const m = SIMPLE_EQUALITY.exec(c);
+  if (!m) return undefined;
+  const [a, b] = [valueOf(m[1]), valueOf(m[3])];
+  if (!known(a) || !known(b)) return undefined;
+  return m[2].startsWith('=') ? a === b : a !== b;
+}
+
+/** The condition at `at` as written, without blanks: its strings are part of it (`MODE=="A"`). */
+const conditionKey = (ctx: StatementContext, condition: string, at: number): string =>
+  (ctx.source?.slice(at, at + condition.length) ?? condition).replace(/\s+/g, '');
+
 /** The branch an elaboration condition takes in the configuration being walked; undefined when it is not decided. */
-function elaborationDecision(ctx: StatementContext, condition: string): boolean | undefined {
+function elaborationDecision(ctx: StatementContext, condition: string, at: number): boolean | undefined {
   if (!isElaborationCondition(ctx, condition)) return undefined;
-  const key = condition.replace(/\s+/g, '');
+  const fixed = fixedValue(condition, ctx.fixedConstants);
+  if (fixed !== undefined) return fixed;
+  const key = conditionKey(ctx, condition, at);
   ctx.elaborationConditions?.add(key);
   return ctx.decisions?.get(key);
 }
@@ -290,14 +334,18 @@ function elaborationDecision(ctx: StatementContext, condition: string): boolean 
 /**
  * An `if` assigns what both branches assign on every path. An elaboration condition
  * decided for the configuration being walked (`keptTargets`) is the branch it picks: the
- * other is never built in that configuration.
+ * other is never built in that configuration, and what it leaves unsure does not count.
  */
 function ifStatement(ctx: StatementContext, i: number): Assigned {
   const condition = parentheses(ctx.text, i);
-  const then = statementAssigns(ctx, condition.after);
+  const [thenUnsure, elseUnsure] = [new Set<string>(), new Set<string>()];
+  const then = statementAssigns({ ...ctx, unsure: thenUnsure }, condition.after);
   const next = skipBlanks(ctx.text, then.end);
-  const otherwise = wordAt(ctx.text, next) === 'else' ? statementAssigns(ctx, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
-  const decided = elaborationDecision(ctx, condition.inside);
+  const hasElse = wordAt(ctx.text, next) === 'else';
+  const otherwise = hasElse ? statementAssigns({ ...ctx, unsure: elseUnsure }, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
+  const decided = elaborationDecision(ctx, condition.inside, condition.after - condition.inside.length - 1);
+  for (const target of decided === false ? [] : thenUnsure) ctx.unsure.add(target);
+  for (const target of decided === true ? [] : elseUnsure) ctx.unsure.add(target);
   if (decided !== undefined) return { ...(decided ? then : otherwise), end: otherwise.end };
   return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
 }
@@ -410,6 +458,12 @@ function markedFullCase(ctx: StatementContext, caseAt: number, firstItemAt: numb
   return directives.some((p) => (p >= caseAt && p < firstItemAt) || rightBefore(p)) || attributes.some(rightBefore);
 }
 
+/** Whether the labels name every value of the selector, at its width as no instance can change it (an overridden parameter may widen it). */
+function labelsNameEveryValue(ctx: StatementContext, selector: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
+  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf);
+  return namesEveryValue(labels.items, { width, constants: ctx.constants, kind: labels.kind });
+}
+
 function caseStatement(ctx: StatementContext, i: number): Assigned {
   const { text } = ctx;
   const selector = parentheses(text, i);
@@ -427,7 +481,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
-  const complete = hasDefault || fullCase || namesEveryValue(labels, { width: selectorWidth(selector.inside, ctx.rangeOf), constants: ctx.constants, kind: wordAt(text, i) as CaseKind });
+  const complete = hasDefault || fullCase || labelsNameEveryValue(ctx, selector.inside, { items: labels, kind: wordAt(text, i) as CaseKind });
   const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }
@@ -506,6 +560,7 @@ export function statementAssigns(ctx: StatementContext, from: number): Assigned 
   const i = skipBlanks(ctx.text, from);
   if (i >= ctx.text.length) return { end: ctx.text.length, some: NOTHING, every: NOTHING };
   if (ctx.text[i] === ';') return { end: i + 1, some: NOTHING, every: NOTHING };
+  if (ctx.work) ctx.work.steps++;
   return (STATEMENT_BY_KEYWORD.get(wordAt(ctx.text, i)) ?? simpleStatement)(ctx, i);
 }
 
@@ -521,29 +576,51 @@ export function notAlwaysAssigned(ctx: StatementContext, assigned: Assigned): st
 /** How many elaboration conditions a block may have for every combination of them to be walked (2^6 walks). */
 const MAX_ELABORATION_CONDITIONS = 6;
 
+/**
+ * How much work all the combinations of a block may take together, counted as the first
+ * walk counts it (statements and loop bits) times the combinations. Past it, the first
+ * walk's answer stands: each condition read as any other `if`.
+ */
+const MAX_COMBINATION_WORK = 20_000;
+
 /** What an instance cannot change: the localparams of fixed value, and the ranges declared with them. */
 export type FixedView = Pick<StatementContext, 'constants' | 'rangeOf'>;
 
 /**
- * What the statement at the start of `ctx.text` assigns, and the targets some path leaves
- * unassigned in some configuration of the module. Each combination of its elaboration
- * conditions (`if (R == 2)`) is walked with them decided, since an instance may set the
- * parameters either way: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when R is not 2.
- * A configuration is not the defaults, so it is walked with `fixed` alone: a loop bound or
- * width made of a parameter is unknown there, and what it writes unsure. A target one
- * configuration never assigns keeps nothing there. With more conditions than can be
- * combined, each is read as any other `if`.
+ * The targets some path of `assigned` leaves unassigned, but not those the check is unsure
+ * of: a bit `unsure` names, or a signal of unknown width (no bits) that a loop the check
+ * cannot follow writes.
+ */
+function surelyKept(ctx: StatementContext, assigned: Assigned, unsure: ReadonlySet<string>): string[] {
+  const unsureSignals = new Set([...unsure].map(signalOf));
+  return notAlwaysAssigned(ctx, assigned).filter((t) => !unsure.has(t) && !(t === signalOf(t) && unsureSignals.has(t)));
+}
+
+/**
+ * What the statement at the start of `ctx.text` assigns, and the targets some path surely
+ * leaves unassigned in some configuration of the module. Each combination of its
+ * elaboration conditions (`if (R == 2)`) is walked with them decided, since an instance may
+ * set the parameters either way: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when R
+ * is not 2. A configuration is not the defaults, so it is walked with `fixed` alone: a loop
+ * bound or width made of a parameter is unknown there, and what it writes unsure in that
+ * configuration only. A target one configuration never assigns keeps nothing there. With
+ * more conditions, or more work, than can be combined, each is read as any other `if`.
  */
 export function keptTargets(ctx: StatementContext, fixed: FixedView): { assigned: Assigned; kept: string[] } {
-  const conditions = new Set<string>();
-  const assigned = statementAssigns({ ...ctx, decisions: undefined, elaborationConditions: conditions }, 0);
+  const [conditions, unsure, work] = [new Set<string>(), new Set<string>(), { steps: 0 }];
+  const assigned = statementAssigns({ ...ctx, decisions: undefined, elaborationConditions: conditions, unsure, work }, 0);
   const keys = [...conditions];
-  if (keys.length === 0 || keys.length > MAX_ELABORATION_CONDITIONS) return { assigned, kept: notAlwaysAssigned(ctx, assigned) };
+  const combinations = 2 ** keys.length;
+  if (keys.length === 0 || keys.length > MAX_ELABORATION_CONDITIONS || work.steps * combinations > MAX_COMBINATION_WORK) {
+    return { assigned, kept: surelyKept(ctx, assigned, unsure) };
+  }
   const kept = new Set<string>();
-  const configuration = { ...ctx, ...fixed };
-  for (let n = 0; n < 2 ** keys.length; n++) {
+  const configuration = { ...ctx, ...fixed, selectorRangeOf: fixed.rangeOf, work: undefined };
+  for (let n = 0; n < combinations; n++) {
     const decisions = new Map(keys.map((key, bit) => [key, (n & (1 << bit)) !== 0]));
-    for (const target of notAlwaysAssigned(configuration, statementAssigns({ ...configuration, decisions }, 0))) kept.add(target);
+    const unsureHere = new Set<string>();
+    const walk = statementAssigns({ ...configuration, decisions, unsure: unsureHere }, 0);
+    for (const target of surelyKept(configuration, walk, unsureHere)) kept.add(target);
   }
   return { assigned, kept: [...kept] };
 }

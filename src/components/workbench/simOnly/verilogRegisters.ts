@@ -19,7 +19,8 @@ import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 import { declaredRanges, verilogConstants, verilogElaborationNames, verilogFixedConstants, verilogSignalNames } from './verilogDeclarations';
 import { concatenationCycles, splitAssignment, type Declarations } from './verilogDriverParts';
-import { keptTargets, signalOf, statementEnd, type StatementContext } from './verilogStatements';
+import type { Bindings } from './constantIndex';
+import { keptTargets, signalOf, statementEnd, type FixedView, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
 
@@ -477,26 +478,38 @@ function readsItsOwnBits(value: string, name: string, index: string): boolean {
  * whatever order the lines are in (`y <= x; x <= a;`). An `always_latch` is a latch on
  * purpose.
  */
+/** What the module tells the statement walk: its constants and ranges, by default and as no instance can change them. */
+interface ModuleFacts {
+  readonly constants: Bindings;
+  readonly rangeOf: StatementContext['rangeOf'];
+  readonly fixedNames: ReadonlySet<string>;
+  readonly fixed: FixedView;
+}
+
+/** The walk of one block's body, which starts at file offset `bodyAt`: its `full_case` marks and source at the body's offsets. */
+function blockContext(t: UnitText, facts: ModuleFacts, { body, bodyAt }: Pick<AlwaysBlock, 'body' | 'bodyAt'>): StatementContext {
+  const local = (offsets: readonly number[] | undefined) => (offsets ?? []).map((p) => p - bodyAt);
+  return {
+    text: body, rangeOf: facts.rangeOf, constants: facts.constants, loops: new Map(), unsure: new Set(), fixedNames: facts.fixedNames,
+    fullCase: { directives: local(t.fullCase?.directives), attributes: local(t.fullCase?.attributes) },
+    source: t.source?.slice(bodyAt, bodyAt + body.length), fixedConstants: facts.fixed.constants, selectorRangeOf: facts.fixed.rangeOf,
+  };
+}
+
 export function verilogLevelStorage(t: UnitText): Found[] {
   const constants = verilogConstants(t.code);
   const rangeOf = declaredRanges(t.code, constants);
-  const fixedNames = verilogElaborationNames(t.code);
   const fixedConstants = verilogFixedConstants(t.code);
   const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
+  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
-    const local = (offsets: readonly number[]) => offsets.map((p) => p - bodyAt);
-    const fullCase = { directives: local(t.fullCase?.directives ?? []), attributes: local(t.fullCase?.attributes ?? []) };
     const feedback = nonblockingTargets(body).flatMap((m) => {
       const value = assignedValue(body, m);
       return concatenationCycles(m[1] + m[2], value, { constants, rangeOf }) ?? (readsItsOwnBits(value, m[1], m[2]) ? [m[1]] : []);
     });
-    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set(), fixedNames, fullCase };
-    const { assigned, kept: notAssigned } = keptTargets(ctx, fixed);
-    // A signal of unknown width (no bits) that a loop the check cannot follow writes is unsure as a whole.
-    const unsureSignals = new Set([...ctx.unsure].map(signalOf));
-    const isUnsure = (target: string) => ctx.unsure.has(target) || (target === signalOf(target) && unsureSignals.has(target));
-    const unassigned = notAssigned.filter((target) => !isUnsure(target)).map(signalOf);
+    const { assigned, kept: notAssigned } = keptTargets(blockContext(t, facts, { body, bodyAt }), fixed);
+    const unassigned = notAssigned.map(signalOf);
     const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter((name) => feedback.includes(name))], sameName);
     return kept.length === 0 ? [] : [{ line: block.span.start, register: problem('latch', kept, []) }];
   });

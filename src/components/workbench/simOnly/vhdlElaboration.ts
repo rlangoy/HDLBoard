@@ -20,6 +20,8 @@ interface Subprogram extends Range {
   readonly name: string;
   /** A function with a body; a procedure or a declaration alone is never evaluated once. */
   readonly isFunctionBody: boolean;
+  /** A function or procedure with a body, not a declaration alone. */
+  readonly hasBody: boolean;
 }
 
 const SUBPROGRAM_NAME = /^(function|procedure)\s+(\w+)/i;
@@ -34,8 +36,9 @@ function subprogramsOf(t: UnitText): Subprogram[] {
       const text = t.code.slice(region.start, region.end);
       const header = SUBPROGRAM_NAME.exec(text);
       if (!header) return [];
-      const isFunctionBody = header[1].toLowerCase() === 'function' && /\bbegin\b/i.test(text);
-      return [{ name: header[2].toLowerCase(), isFunctionBody, from: t.base + region.start, to: t.base + region.end }];
+      const hasBody = /\bbegin\b/i.test(text);
+      const isFunctionBody = header[1].toLowerCase() === 'function' && hasBody;
+      return [{ name: header[2].toLowerCase(), isFunctionBody, hasBody, from: t.base + region.start, to: t.base + region.end }];
     });
 }
 
@@ -52,6 +55,16 @@ function callsOf(t: UnitText, body: Subprogram): number[] {
 /** The innermost subprogram around file offset `at`, if any. */
 function innermostAt(subprograms: readonly Subprogram[], at: number): Subprogram | undefined {
   return subprograms.filter((s) => inside(at, [s])).sort((a, b) => b.from - a.from)[0];
+}
+
+/**
+ * The bodies of the functions and procedures that code synthesis reads never calls: nothing
+ * in them runs, neither while elaborating nor on the board. riscv_vhdl's `otp_clocked`
+ * declares an `init_ram` that reads a file, but its call is commented out
+ * (`signal ram : ram_type;-- := init_ram(init_file);`); Quartus builds it.
+ */
+export function uncalledSubprograms(t: UnitText): readonly Range[] {
+  return subprogramsOf(t).filter((s) => s.hasBody && callsOf(t, s).length === 0);
 }
 
 /**

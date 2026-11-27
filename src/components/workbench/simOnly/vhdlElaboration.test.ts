@@ -52,6 +52,33 @@ describe('a function that prints while it computes a constant is not file I/O', 
   });
 });
 
+describe('a subprogram nothing calls runs nowhere', () => {
+  test("riscv_vhdl otp_clocked: a file-reading init_ram whose call is commented out (Quartus builds it)", () => {
+    const load = [
+      'type ram_t is array (0 to 3) of std_logic_vector(7 downto 0);',
+      'impure function init_ram(file_name : in string) return ram_t is',
+      '  file ram_file : text open read_mode is file_name;',
+      '  variable l : line;',
+      '  variable r : ram_t;',
+      'begin',
+      '  readline(ram_file, l);',
+      '  return r;',
+      'end function;',
+      'signal ram : ram_t;-- := init_ram("ram.hex");',
+    ].join('\n');
+    expect(fileIoLines(design(load))).toEqual([]);
+  });
+
+  test('a procedure that writes a line, never called', () => {
+    expect(fileIoLines(design('procedure say is\n  variable l : line;\nbegin\n  write(l, 1);\n  writeline(output, l);\nend procedure;'))).toEqual([]);
+  });
+
+  test('the same procedure, called from a process, is file I/O', () => {
+    const content = design('procedure say is\n  variable l : line;\nbegin\n  write(l, 1);\n  writeline(output, l);\nend procedure;', 'process (CLOCK_50)\nbegin\n  say;\nend process;');
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+});
+
 describe('file I/O that still is', () => {
   test('a line variable in a process', () => {
     const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  write(l, 1);\n  writeline(output, l);\nend process;';
