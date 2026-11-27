@@ -1,15 +1,14 @@
-# HDLBoard — free online VHDL & Verilog simulator with an interactive FPGA board
+# HDLBoard - free VHDL & Verilog simulator with an interactive FPGA board
 
 [![Try Online](https://img.shields.io/badge/Try%20Online-brightgreen)](https://hdlboard.onrender.com/)
 [![GitHub Release](https://badgen.net/github/release/rlangoy/HDLBoard)](https://github.com/rlangoy/HDLBoard/releases/latest)
 [![hdlboard](https://snapcraft.io/hdlboard/badge.svg)](https://snapcraft.io/hdlboard)
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
-**Write VHDL or Verilog. Watch it light up.**
+A free VHDL and Verilog simulator with an interactive virtual FPGA board.<br> 
 
-A free online simulator with a virtual FPGA board. Flip the switches while your design runs, and watch the LEDs respond.
+**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows/Linux/macOS App](https://github.com/rlangoy/HDLBoard/releases)** <br>
 
-**[Try it online](https://hdlboard.onrender.com/)** or simply **[Download the Windows/Linux/macOS App](https://github.com/rlangoy/HDLBoard/releases)** 
 
 [![Animated preview of the HDLBoard demonstration](assets/demo.gif)](https://github.com/rlangoy/HDLBoard/raw/refs/heads/main/assets/demo.mp4)
 
