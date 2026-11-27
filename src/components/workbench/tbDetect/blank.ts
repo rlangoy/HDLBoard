@@ -400,8 +400,11 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
   const inactive: InactiveRange[] = [];
   const defines: MacroDefinition[] = [];
   let activeFrom = 0;
+  // A directive in a macro's text runs where the macro is used, not here: `` `define SET `define OMIT `` defines SET only.
+  let textEnd = 0;
   for (const match of code.matchAll(DIRECTIVE)) {
     const at = match.index ?? 0;
+    if (at < textEnd) continue;
     const wasActive = isActive(state.stack);
     if (match[4] !== undefined) {
       // An included file may define or undefine any macro: none is sure after one that may be read. It stays code.
@@ -423,6 +426,7 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
       const params = textStart === afterName ? [] : code.slice(afterName + 1, textStart - 1).split(',').map((p) => p.trim().replace(/\s*=[\s\S]*$/, ''));
       defines.push({ name: match[2], text, params, from: at, to: end, active: wasActive });
       if (wasActive) blankRange(chars, at + match[0].length, end);
+      textEnd = end;
     }
     activeFrom = at + match[0].length;
   }

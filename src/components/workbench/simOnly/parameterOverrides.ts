@@ -131,12 +131,27 @@ class Macros {
 interface Source {
   readonly code: string;
   readonly inDefine: (at: number) => boolean;
+  /** `code` with every macro's `` `define `` blanked, offsets kept. */
+  readonly withoutDefines: () => string;
 }
 
 const sourceOf = (scan: ScannedFile): Source => ({
   code: scan.everyBranch,
   inDefine: (at) => scan.defines.some((d) => at >= d.from && at < d.to),
+  withoutDefines: () => blankedRanges(scan.everyBranch, scan.defines),
 });
+
+/** `code` with each range (sorted, from its start to its end) blanked. */
+function blankedRanges(code: string, ranges: readonly { readonly from: number; readonly to: number }[]): string {
+  let out = '';
+  let last = 0;
+  for (const { from, to } of [...ranges].sort((a, b) => a.from - b.from)) {
+    if (from < last) continue;
+    out += code.slice(last, from) + ' '.repeat(to - from);
+    last = to;
+  }
+  return out + code.slice(last);
+}
 
 /**
  * Every instance in `scope` with its module, those of an instantiation that declares
@@ -155,7 +170,8 @@ function instancesIn(scope: string, macros: Macros): { readonly module: string; 
       names.push(instance[1]);
       close = closingBracket(scope, next.lastIndex - 1);
     }
-    const modules = macros.modulesAt(scope, m.index ?? 0, m[1]);
+    // `` `ifdef A child `else other `endif u (…) `` reads as `child other u (…)`: u may be of either.
+    const modules = namesBefore(scope, m.index ?? 0, m[1]).flatMap((word) => macros.modulesAt(scope, word.at, word.text));
     return modules.flatMap((module) => names.map((name) => ({ module, name })));
   });
 }
@@ -203,15 +219,16 @@ function pathTargets(path: readonly string[], local: InstanceIndex | undefined, 
 
 /** The `defparam`s of one file, each module's with its own instances and those outside any module with none. */
 function fileDefparamTargets(source: Source, project: Project): string[] {
-  const modules = [...source.code.matchAll(MODULE)].map((m) => ({ from: m.index ?? 0, text: m[0] }));
-  const statementsIn = (text: string, offset: number) =>
-    [...text.matchAll(DEFPARAM)].filter((s) => !source.inDefine(offset + (s.index ?? 0))).map((s) => s[1]);
+  if (!DEFPARAM_WORD.test(source.code)) return [];
+  // Macro texts blanked first: `` `define KEYWORD defparam `` would otherwise run to the `;` of the next real one.
+  const code = source.withoutDefines();
+  const modules = [...code.matchAll(MODULE)].map((m) => ({ from: m.index ?? 0, text: m[0] }));
   const inModules = modules.flatMap((module) => {
-    const statements = statementsIn(module.text, module.from);
+    const statements = [...module.text.matchAll(DEFPARAM)].map((s) => s[1]);
     return statements.length === 0 ? [] : defparamTargets(statements, instanceIndex([module.text], project.macros), project);
   });
-  const outside = [...source.code.matchAll(DEFPARAM)]
-    .filter((s) => !modules.some((m) => (s.index ?? 0) >= m.from && (s.index ?? 0) < m.from + m.text.length) && !source.inDefine(s.index ?? 0))
+  const outside = [...code.matchAll(DEFPARAM)]
+    .filter((s) => !modules.some((m) => (s.index ?? 0) >= m.from && (s.index ?? 0) < m.from + m.text.length))
     .map((s) => s[1]);
   return [...inModules, ...defparamTargets(outside, undefined, project)];
 }
@@ -232,14 +249,45 @@ function macroTargets(source: Source, project: Project): string[] {
 /** The modules one use of an overriding macro reaches (see `macroTargets`), from each text it may expand to. */
 function useTargets(code: string, project: Project, use: RegExpExecArray | RegExpMatchArray): string[] {
   if (project.macros.emitsDefparam(use[1])) throw new Unresolved();
-  const outer = precedingToken(code, use.index ?? 0);
   return project.macros.expansions(use[1]).flatMap((text) =>
     [...text.matchAll(HASH)].flatMap((hash) => {
       const before = precedingToken(text, hash.index ?? 0);
       // A `#` that starts the text follows what stands before the use.
-      return before.text === '' ? hashTargets(code, outer, project) : hashTargets(text, before, project);
+      return before.text === '' ? modulesBefore(code, use.index ?? 0, project) : hashTargets(text, before, project);
     }),
   );
+}
+
+/**
+ * The modules before a use at `at` that its leading `#` overrides: each name before it
+ * (an `ifdef may put several there, see `namesBefore`), or the modules a macro call before
+ * it names (`` `CELL(0) `P `` with `` `define CELL(x) child ``). After `=`, `<=`, `;` or any
+ * other `)` (`@(posedge c) `DLY q = d`) the `#` is a delay.
+ */
+function modulesBefore(code: string, at: number, project: Project): string[] {
+  const before = precedingToken(code, at);
+  if (before.text === ')') return macroCallBefore(code, before.at, project.macros);
+  if (!/^[A-Za-z_]\w*$/.test(before.text)) return [];
+  return namesBefore(code, before.at, before.text).flatMap((name) => hashTargets(code, name, project));
+}
+
+/** The modules a macro called with the arguments that end at `close` may name; none when no macro call ends there. */
+function macroCallBefore(code: string, close: number, macros: Macros): string[] {
+  const open = openingBracket(code, close);
+  if (open < 0) return [];
+  const name = precedingToken(code, open);
+  const isMacro = /^[A-Za-z_]\w*$/.test(name.text) && code[name.at - 1] === '`' && !DIRECTIVES.has(name.text);
+  return isMacro ? macros.leadingNames(name.text) : [];
+}
+
+/** The `(` that the `)` at `close` closes, read backwards; -1 when none does. */
+function openingBracket(code: string, close: number): number {
+  let depth = 0;
+  for (let at = close; at >= 0; at--) {
+    if (code[at] === ')') depth++;
+    else if (code[at] === '(' && --depth === 0) return at;
+  }
+  return -1;
 }
 
 /** A `#` that may start an override: `#(`, `#5`, `#P`, ``#`P``. */

@@ -282,6 +282,41 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    '`CELL(0) `P(1) u with `define CELL(x) child and `define P(v) #(.R(v)): the override follows a macro call (Warning 10240)',
+    `\`define CELL(x) child\n\`define P(v) #(.R(v))\n${CHILD}\nmodule t (input d, e, output q);\n  \`CELL(0) \`P(1) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [4],
+  ],
+  [
+    '`ifdef USE_CHILD child `else other `endif u, then defparam u.R = 1: with a header that defines USE_CHILD, child is overridden (Warning 10240)',
+    `\`include "r3_hdr.vh"\n${CHILD}\nmodule other #(parameter R = 2) (input d, e, output q); assign q = d; endmodule\nmodule t (input d, e, output q);\n\`ifdef USE_CHILD\n  child\n\`else\n  other\n\`endif\n  u (.d(d), .e(e), .q(q));\n  defparam u.R = 1;\nendmodule`,
+    [3],
+  ],
+  [
+    '`define SET `define OMIT_LATCH defines SET only: `ifndef OMIT_LATCH takes the override (Warning 10240)',
+    `\`define SET \`define OMIT_LATCH\n${CHILD}\nmodule t (input d, e, output q);\n\`ifndef OMIT_LATCH\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`else\n  child u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
+    [3],
+  ],
+  [
+    'case (mem[i]) of integer mem [0:1], labels 0 and 1: a word is 32 bits (Warning 10240)',
+    'module t (input i, input a, b, output reg x);\n  integer mem [0:1];\n  initial begin mem[0] = 0; mem[1] = 5; end\n  always @* case (mem[i])\n    0: x = a;\n    1: x = b;\n  endcase\nendmodule',
+    [4],
+  ],
+  [
+    'a generate block whose localparam time ON = 0 shadows localparam ON = 1 (Warning 10240)',
+    'module t (input d, en, output reg q);\n  localparam ON = 1;\n  generate if (1) begin : g\n    localparam time ON = 0;\n    always @* if (ON) q = d; else if (en) q = d;\n  end endgenerate\nendmodule',
+    [5],
+  ],
+  [
+    '`define KEYWORD defparam before a real defparam u.R = 1: the macro text hides nothing (Warning 10240)',
+    `\`define KEYWORD defparam\n${CHILD}\nmodule t (input d, e, output q);\n  child u (.d(d), .e(e), .q(q));\n  defparam u.R = 1;\nendmodule`,
+    [3],
+  ],
+  [
+    "wire [W-1:0] sel with localparam signed [7:0] W = 2: W - 1 is 1, and 2'd0 to 2'd3 name every value (no latch)",
+    "module t (input [1:0] s, input [3:0] v, output reg x);\n  localparam signed [7:0] W = 2;\n  wire [W-1:0] sel = s;\n  always @* case (sel)\n    2'd0: x = v[0];\n    2'd1: x = v[1];\n    2'd2: x = v[2];\n    2'd3: x = v[3];\n  endcase\nendmodule",
+    [],
+  ],
+  [
     "case (mem[idx]) of wire [W-1:0] mem [0:1], W 3 by an override: four 2-bit labels miss values (Warning 10240)",
     "module sub #(parameter W = 2) (input [W-1:0] a, b, input idx, input [3:0] v, output reg x);\n  wire [W-1:0] mem [0:1];\n  assign mem[0] = a;\n  assign mem[1] = b;\n  always @* case (mem[idx])\n    2'd0: x = v[0];\n    2'd1: x = v[1];\n    2'd2: x = v[2];\n    2'd3: x = v[3];\n  endcase\nendmodule\nmodule t (input [2:0] a, b, input idx, input [3:0] v, output x);\n  sub #(.W(3)) u (.a(a), .b(b), .idx(idx), .v(v), .x(x));\nendmodule",
     [5],

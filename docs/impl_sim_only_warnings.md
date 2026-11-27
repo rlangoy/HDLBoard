@@ -277,7 +277,11 @@ x or z digits, or wider than 64 bits, is not computed (`[99999999999999999:0]`, 
 stop the check); and a name declared twice (each `generate` block its own `ON`), or also declared as a variable or
 net outside the functions and tasks (`reg ON`, `time ON`, `tri ON`), is not folded; a function's or task's own
 `localparam` is no module constant, and an expression of more than 1000 tokens is not computed (its terms are walked
-recursively). An `` `include `` makes no macro sure: its header may define or undefine any. Indexes, widths and loop bounds
+recursively); a parameter whose type is not read (`localparam time ON = 0`) still declares its name. An
+`` `include `` makes no macro sure: its header may define or undefine any; a directive inside a macro's text runs
+where the macro is used, not where it is defined. An `integer` array's word is 32 bits, a `time` array's 64.
+Known limit: the check reads `` `ifdef SYNTHESIS `` as if SYNTHESIS were defined, but Quartus does not define it;
+code that differs between the two branches (a parameter default, a block) is checked as the SYNTHESIS branch has it. Indexes, widths and loop bounds
 (`constantIndex.ts`) read those values; their own arithmetic is computed only where no width rule can change it (an
 unsigned constant beside a 32-bit integer, no step below zero; `$clog2` of one unsigned constant). A word of an array
 of vectors has the word's width (`casez (mem[0])` of `wire [1:0] mem [0:0]` is two bits), a bit select of any index

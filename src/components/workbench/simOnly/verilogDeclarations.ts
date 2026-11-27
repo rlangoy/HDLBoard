@@ -80,6 +80,7 @@ function parameterItems(code: string): ParameterItem[] {
   return [...code.matchAll(PARAMETER)].filter((m) => !inBody(m.index ?? 0)).flatMap((m) => {
     const at = m.index ?? 0;
     const inHeader = header !== undefined && at >= header.from && at < header.to;
+    const isLocal = (keyword: string) => keyword === 'localparam' || (header !== undefined && !inHeader);
     let declaration = { keyword: m[0], type: '' };
     let itemAt = at + m[0].length;
     return topLevelItems(parameterList(code, itemAt)).flatMap((item, k) => {
@@ -87,16 +88,24 @@ function parameterItems(code: string): ParameterItem[] {
       itemAt += item.length + 1; // the item and its comma
       const parameter = PARAMETER_ITEM.exec(item);
       if (!parameter) {
-        // Its type is not read, so neither are those of the items after it.
+        // Its type is not read, so neither are those of the items after it; its name still declares one (`localparam time ON = 0`).
         if (k === 0) declaration = { keyword: m[0], type: UNREAD_TYPE };
-        return [];
+        return unreadItem(item, start, isLocal(declaration.keyword));
       }
       if (parameter[1] !== undefined || k === 0) declaration = { keyword: parameter[1] ?? m[0], type: parameter[2].trim() };
-      const local = declaration.keyword === 'localparam' || (header !== undefined && !inHeader);
       const nameAt = start + item.search(new RegExp(`\\b${parameter[3]}\\s*=`));
-      return [{ name: parameter[3], value: parameter[4], local, type: declaration.type, at: nameAt }];
+      return [{ name: parameter[3], value: parameter[4], local: isLocal(declaration.keyword), type: declaration.type, at: nameAt }];
     });
   });
+}
+
+/**
+ * An item whose type is not read (`time ON = 0`, `real X = 1.5`): its name, so that a second
+ * `ON` is not taken for the only one, and no value.
+ */
+function unreadItem(item: string, start: number, local: boolean): ParameterItem[] {
+  const named = /([A-Za-z_]\w*)\s*=(?!=)/.exec(item);
+  return named ? [{ name: named[1], value: '', local, type: UNREAD_TYPE, at: start + (named.index ?? 0) }] : [];
 }
 
 /**
@@ -220,7 +229,23 @@ function widthOf(ranges: readonly string[], constants: Bindings): number | undef
  * an array of no width here; `reg q [0:3]`, an array of bits, is none.
  */
 export function verilogWordArrays(code: string, constants: Bindings = new Map()): WordArrays {
-  return new Map([...code.matchAll(DECLARATION)].flatMap((m) => wordsOf(m, constants)));
+  return new Map([...[...code.matchAll(DECLARATION)].flatMap((m) => wordsOf(m, constants)), ...integerWords(code)]);
+}
+
+/** `integer` and `time` variables: 32 and 64 bits wide. */
+const INTEGER_ARRAY = /\b(integer|time)\b([^;]*)/g;
+const VARIABLE_WIDTH: Readonly<Record<string, number>> = { integer: 32, time: 64 };
+
+/** The arrays of `integer`s and `time`s (`integer mem [0:1]`: `mem[i]` is a 32-bit word). */
+function integerWords(code: string): [string, number | undefined][] {
+  return [...code.matchAll(INTEGER_ARRAY)]
+    .filter((m) => !/^(?:parameter|localparam)$/.test(wordBefore(code, m.index ?? 0)))
+    .flatMap((m) =>
+      declaredItems(m[2]).flatMap(({ name, unpacked }): [string, number | undefined][] => {
+        if (unpacked === 0) return [];
+        return [[name, unpacked === 1 ? VARIABLE_WIDTH[m[1]] : undefined]];
+      }),
+    );
 }
 
 /** The arrays of vectors one declaration declares, each with its word's width. */

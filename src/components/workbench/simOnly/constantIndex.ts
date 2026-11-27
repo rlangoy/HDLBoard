@@ -18,8 +18,8 @@ export type Bindings = ReadonlyMap<string, number>;
  * rules could change. An unsigned one (`localparam A = 4'hF`, `localparam [7:0] W = 4`) takes
  * part in arithmetic only beside a 32-bit integer operand, every step non-negative (`W - 1`
  * is computed in 32 bits: 3; `A + B` of two 4-bit values wraps in 4 bits, so is not). A
- * signed one (`localparam signed [3:0] S = -2`) is read only as a whole expression (`q[S]`,
- * a case label `S:`).
+ * signed one (`localparam signed [3:0] S = -2`) is read as a whole expression (`q[S]`, a case
+ * label `S:`) and in arithmetic beside a 32-bit integer and no unsigned constant (`S + 1`).
  */
 const UNSIGNED = '\u0000unsigned:';
 const ALONE = '\u0000alone:';
@@ -64,18 +64,23 @@ function arithmeticValue(tokens: readonly string[], bindings: Bindings): number 
 interface Context {
   usedInteger: boolean;
   usedUnsigned: boolean;
+  /** A signed constant of a width of its own (`localparam signed [7:0] W`). */
+  usedSigned: boolean;
   negative: boolean;
   /** An operator was applied: a lone operand (`$clog2(DEPTH)`) has no arithmetic to wrap. */
   arithmetic: boolean;
 }
 
-const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, negative: false, arithmetic: false };
+const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, usedSigned: false, negative: false, arithmetic: false };
 
 /**
  * An unsigned constant makes the whole context unsigned: its arithmetic is plain only in at
- * least 32 bits (beside an integer operand) and with no step below zero. Alone, it is its value.
+ * least 32 bits (beside an integer operand) and with no step below zero. A signed one of its
+ * own width is plain beside an integer and no unsigned one (`W - 1` is signed, 32 bits wide;
+ * beside an unsigned one it would be read unsigned, from its own bits). Alone, either is its value.
  */
-const widthSafe = (c: Context): boolean => !c.usedUnsigned || !c.arithmetic || (c.usedInteger && !c.negative);
+const widthSafe = (c: Context): boolean =>
+  !c.arithmetic || ((!c.usedUnsigned || (c.usedInteger && !c.negative)) && (!c.usedSigned || (c.usedInteger && !c.usedUnsigned)));
 
 interface Reader extends Context {
   readonly tokens: readonly string[];
@@ -165,8 +170,8 @@ const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => number | undefined> = new
 ]);
 
 /**
- * A name's value in arithmetic: an integer, or an unsigned constant (the context notes which);
- * a signed one is none. A negative integer is noted too: beside an unsigned constant Verilog
+ * A name's value in arithmetic: an integer, an unsigned constant or a signed one of its own
+ * width (the context notes which). A negative integer is noted too: beside an unsigned constant Verilog
  * reads it unsigned (`N % W` with `N = -3` and `localparam [7:0] W = 4` is 1, not -3).
  */
 function nameValue(r: Reader, name: string): number | undefined {
@@ -177,8 +182,13 @@ function nameValue(r: Reader, name: string): number | undefined {
     return integer;
   }
   const unsigned = r.bindings.get(UNSIGNED + name);
-  if (unsigned !== undefined) r.usedUnsigned = true;
-  return unsigned;
+  if (unsigned !== undefined) {
+    r.usedUnsigned = true;
+    return unsigned;
+  }
+  const signed = r.bindings.get(ALONE + name);
+  if (signed !== undefined) r.usedSigned = true;
+  return signed;
 }
 
 function factor(r: Reader): number | undefined {
