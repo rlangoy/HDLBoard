@@ -46,6 +46,12 @@ describe('a function that prints while it computes a constant is not file I/O', 
     expect(fileIoLines(design(`function f return natural;\n${PRINTS('f')}\nconstant C : natural := f;`))).toEqual([]);
   });
 
+  test('a call before a trailing -- synthesis translate_off on its line is read: f runs in the design (GHDL rejects the line variable)', () => {
+    const body = "LEDR(1) <= '1' when f = 5 else '0'; -- synthesis translate_off\nLEDR(2) <= '0';\n-- synthesis translate_on";
+    const content = design(PRINTS('f'), body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
   test('a call that synthesis never reads', () => {
     const body = "process (CLOCK_50)\nbegin\n  --synthesis translate_off\n  LEDR(1) <= '1' when f = 5 else '0';\n  --synthesis translate_on\nend process;";
     expect(fileIoLines(design(`${PRINTS('f')}\nconstant C : natural := f;`, body))).toEqual([]);

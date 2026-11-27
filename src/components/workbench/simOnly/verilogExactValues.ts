@@ -3,193 +3,212 @@
 
 /**
  * The values of a Verilog module's constants exactly as Verilog computes them, or none
- * (docs/impl_sim_only_warnings.md § 3.4). Only what Verilog's width and sign rules cannot
- * change is computed: one literal (`2'b10`, `4'hF`), one earlier constant, or arithmetic on
- * 32-bit integers (unsized decimal numbers, integer constants and `$clog2` of them), unsigned
- * constants beside them (`W - 1` with `localparam [7:0] W = 4`, computed in 32 bits), every
- * step in range and, with an unsigned constant, none below zero. `32'hffff_ffff + 32'd1` is
- * 0 in Verilog and no value here; `$clog2(A + B)` of two 4-bit constants adds them in 4 bits,
- * and is none either. A declared `integer` type or `[msb:lsb]` range then cuts the value as
- * Verilog does (`localparam [0:0] ON = 2` is 0). Pure.
+ * (docs/impl_sim_only_warnings.md § 3.4). Numbers (`10`, `2'b10`, `4'hF`, `4'sd3`), earlier
+ * constants, `+ - * / %`, parentheses and `$clog2`, by Verilog's width and sign rules: an
+ * expression is as wide as its widest operand (an unsized decimal number and an `integer`
+ * are 32 bits) and signed only when every operand is, every step wrapping to that width.
+ * `2'd1 + 2'd1` is 2, `4'hF + 4'h1` is 0 in 4 bits, `32'hffff_ffff + 32'd1` is 0, and
+ * `$clog2(A + B)` adds two 4-bit constants in 4 bits. A declared `integer` type or
+ * `[msb:lsb]` range makes the expression at least as wide as the type, as an assignment, and
+ * cuts the value to it: `localparam [0:0] ON = 2` is 0, `localparam [8:0] P = 8'hFF + 8'h01`
+ * is 256 (Quartus 25.1 Lite, measured 2026-11-27). Pure.
  */
 
-import { aloneKey, clog2, integerValue, unsignedKey, type Bindings } from './constantIndex';
+import { aloneKey, clog2, unsignedKey, type Bindings } from './constantIndex';
 
 /**
- * A constant's value and kind: a 32-bit signed `integer`, whose arithmetic is plain while in
- * range; `unsigned`, of a width of its own (`4'hF`, `[7:0]`), plain only beside an integer
- * and above zero; `signed` of a width of its own, read only alone.
+ * A constant's value, as a number of its kind (a 32-bit signed `integer`, or an `unsigned` or
+ * `signed` one of a width of its own), and its width in bits.
  */
 interface Exact {
   readonly value: bigint;
   readonly kind: 'integer' | 'unsigned' | 'signed';
+  readonly width: number;
 }
 
 /** An `integer`, and an unsized decimal number, is 32 bits wide and signed. */
 const INTEGER_WIDTH = 32;
-const INT_MIN = -(BigInt(2) ** BigInt(INTEGER_WIDTH - 1));
 const INT_MAX = BigInt(2) ** BigInt(INTEGER_WIDTH - 1) - BigInt(1);
 const ZERO = BigInt(0);
-const inIntegerRange = (v: bigint): boolean => v >= INT_MIN && v <= INT_MAX;
+/**
+ * The widest operand computed. A value is at most a safe integer in the end, so a wider one
+ * changes nothing a fixed constant keeps; one of absurd width (`[99999999999999999:0]`,
+ * invalid HDL being edited) is not computed at all.
+ */
+const MAX_WIDTH = 64;
 
-const SINGLE_NAME = /^[A-Za-z_]\w*$/;
-const SINGLE_LITERAL = /^\d*\s*'([sS]?)[bBoOdDhH]\s*[0-9a-fA-F_]+$/;
-const TOKEN = /\d[\d_]*|\$?[A-Za-z_]\w*|[-+*/%()]|\S/g;
+const TOKEN = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+|\d[\d_]*|\$?[A-Za-z_]\w*|[-+*/%()]|\S/g;
+const BASED = /^(\d*)\s*'([sS]?)([bBoOdDhH])\s*([0-9a-fA-F_]+)$/;
+const VALID_DIGITS: Readonly<Record<string, RegExp>> = { b: /^[01]+$/, o: /^[0-7]+$/, d: /^\d+$/, h: /^[0-9a-f]+$/i };
+const PREFIX: Readonly<Record<string, string>> = { b: '0b', o: '0o', d: '', h: '0x' };
 
-/** What an expression context used: a 32-bit integer operand, an unsigned constant, a negative step. */
-interface Context {
-  usedInteger: boolean;
-  usedUnsigned: boolean;
-  negative: boolean;
-  /** An operator was applied: a lone operand (`$clog2(DEPTH)`) has no arithmetic to wrap. */
-  arithmetic: boolean;
+/** An operand: its bits (`value` read unsigned, below 2^width), its width, and whether it is signed. */
+interface Operand {
+  readonly bits: bigint;
+  readonly width: number;
+  readonly signed: boolean;
 }
 
-const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, negative: false, arithmetic: false };
-
-/** An unsigned constant makes the context unsigned: plain only in at least 32 bits (beside an integer) and never below zero; alone, it is its value. */
-const widthSafe = (c: Context): boolean => !c.usedUnsigned || !c.arithmetic || (c.usedInteger && !c.negative);
-
-interface Reader extends Context {
-  readonly tokens: readonly string[];
-  at: number;
-  readonly known: ReadonlyMap<string, Exact>;
-}
+/** An expression read: an operand, a negation, or two terms joined by an operator. */
+type Term = { readonly operand: Operand } | { readonly negated: Term } | { readonly operator: string; readonly left: Term; readonly right: Term };
 
 const OPERATION: Readonly<Record<string, (a: bigint, b: bigint) => bigint | undefined>> = {
   '+': (a, b) => a + b,
   '-': (a, b) => a - b,
   '*': (a, b) => a * b,
-  // BigInt division truncates toward zero, and the remainder takes the dividend's sign, as in Verilog.
+  // BigInt division truncates toward zero, and the remainder takes the dividend's sign, as in Verilog; by zero is x.
   '/': (a, b) => (b === ZERO ? undefined : a / b),
   '%': (a, b) => (b === ZERO ? undefined : a % b),
 };
 
-/** A step's result, `undefined` when it left the 32-bit range; a negative one is noted in the context. */
-function inRange(r: Reader, next: bigint | undefined): bigint | undefined {
-  r.arithmetic = true;
-  if (next === undefined || !inIntegerRange(next)) return undefined;
-  if (next < ZERO) r.negative = true;
-  return next;
+interface Reader {
+  readonly tokens: readonly string[];
+  at: number;
+  readonly known: ReadonlyMap<string, Exact>;
 }
 
-/** Terms joined by the operators of one level; undefined as soon as a step leaves the 32-bit range. */
-function chain(r: Reader, operators: string, operand: (r: Reader) => bigint | undefined): bigint | undefined {
-  let value = operand(r);
-  while (value !== undefined && operators.includes(r.tokens[r.at] ?? '#')) {
+/** Terms joined by the operators of one level, left to right. */
+function chain(r: Reader, operators: string, operand: (r: Reader) => Term | undefined): Term | undefined {
+  let term = operand(r);
+  while (term !== undefined && operators.includes(r.tokens[r.at] ?? '#')) {
     const operator = r.tokens[r.at++];
     const right = operand(r);
-    value = inRange(r, right === undefined ? undefined : OPERATION[operator](value, right));
+    term = right === undefined ? undefined : { operator, left: term, right };
   }
-  return value;
+  return term;
 }
 
-const sum = (r: Reader): bigint | undefined => chain(r, '+-', product);
-const product = (r: Reader): bigint | undefined => chain(r, '*/%', factor);
+const sum = (r: Reader): Term | undefined => chain(r, '+-', product);
+const product = (r: Reader): Term | undefined => chain(r, '*/%', factor);
 
-/** `( … )` after its opening parenthesis: the value inside, and the closing one read. */
-function parenthesized(r: Reader): bigint | undefined {
-  const value = sum(r);
-  return r.tokens[r.at++] === ')' ? value : undefined;
+/** `( … )` after its opening parenthesis: the term inside, and the closing one read. */
+function parenthesized(r: Reader): Term | undefined {
+  const term = sum(r);
+  return r.tokens[r.at++] === ')' ? term : undefined;
 }
 
-/** `$clog2( … )` after its name: its argument a context of its own, as wide as its operands alone; its result an integer. */
-function clog2Call(r: Reader): bigint | undefined {
+/** `$clog2( … )` after its name: its argument an expression of its own width; its result an integer. */
+function clog2Call(r: Reader): Term | undefined {
   if (r.tokens[r.at++] !== '(') return undefined;
-  const inner: Reader = { ...r, ...FRESH_CONTEXT };
-  const value = parenthesized(inner);
-  r.at = inner.at;
-  const bits = value === undefined || !widthSafe(inner) ? undefined : clog2(Number(value));
-  if (bits === undefined) return undefined;
-  r.usedInteger = true;
-  return BigInt(bits);
+  const argument = parenthesized(r);
+  const value = argument && evaluate(argument);
+  const bits = value === undefined ? undefined : clog2(Number(numberOf(value)));
+  return bits === undefined ? undefined : { operand: integerOperand(BigInt(bits)) };
 }
 
 /** The factors that start with a token of their own: a negation, parentheses, `$clog2( … )`. */
-const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => bigint | undefined> = new Map([
+const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => Term | undefined> = new Map([
   ['-', (r: Reader) => {
-    const value = factor(r);
-    r.arithmetic = true;
-    if (value === undefined || !inIntegerRange(-value)) return undefined;
-    if (-value < ZERO) r.negative = true;
-    return -value;
+    const negated = factor(r);
+    return negated && { negated };
   }],
   ['(', parenthesized],
   ['$clog2', clog2Call],
 ]);
 
-/** An unsized decimal number, a 32-bit signed integer; undefined when it does not fit. */
-function decimal(r: Reader, token: string): bigint | undefined {
+const integerOperand = (value: bigint): Operand => ({ bits: BigInt.asUintN(INTEGER_WIDTH, value), width: INTEGER_WIDTH, signed: true });
+
+/** A number as written: an unsized decimal (a 32-bit integer), or a based literal of its own width; none with x or z digits. */
+function literal(token: string): Operand | undefined {
+  if (!/^\d[\d_]*$/.test(token)) return basedLiteral(token);
   const value = BigInt(token.replace(/_/g, ''));
-  r.usedInteger = true;
-  return value <= INT_MAX ? value : undefined;
+  return value <= INT_MAX ? integerOperand(value) : undefined;
 }
 
-/**
- * A constant in arithmetic: an integer, or an unsigned one (the context notes which); a signed
- * one of its own width is none. A negative value is noted too: beside an unsigned constant
- * Verilog reads it unsigned (`N % W` with `N = -3` and `W` 8-bit unsigned is 1, not 0).
- */
-function named(r: Reader, token: string): bigint | undefined {
-  const constant = r.known.get(token);
-  if (constant?.kind === 'integer') r.usedInteger = true;
-  else if (constant?.kind === 'unsigned') r.usedUnsigned = true;
-  else return undefined;
-  if (constant.value < ZERO) r.negative = true;
-  return constant.value;
+/** `4'hF`, `2'b10`, `4'sd3`, `'hF` (at least 32 bits). */
+function basedLiteral(token: string): Operand | undefined {
+  const based = BASED.exec(token);
+  if (!based) return undefined;
+  const digits = based[4].replace(/_/g, '');
+  const base = based[3].toLowerCase();
+  if (!VALID_DIGITS[base].test(digits)) return undefined;
+  const raw = BigInt(PREFIX[base] + digits);
+  const width = based[1] ? Number(based[1]) : Math.max(INTEGER_WIDTH, raw.toString(2).length);
+  return isWidth(width) ? { bits: BigInt.asUintN(width, raw), width, signed: based[2] !== '' } : undefined;
 }
 
-function factor(r: Reader): bigint | undefined {
+const isWidth = (width: number): boolean => Number.isSafeInteger(width) && width >= 1 && width <= MAX_WIDTH;
+
+function factor(r: Reader): Term | undefined {
   const token = r.tokens[r.at++];
   if (token === undefined) return undefined;
   const form = FACTOR_FORMS.get(token);
   if (form) return form(r);
-  return /^\d/.test(token) ? decimal(r, token) : named(r, token);
+  const constant = r.known.get(token);
+  const operand = constant ? { bits: BigInt.asUintN(constant.width, constant.value), width: constant.width, signed: constant.kind !== 'unsigned' } : literal(token);
+  return operand && { operand };
 }
 
-/** One based literal (`4'hF`, `'b1`, `4'sd3`): unsigned unless written signed. */
-function literalExact(literal: string, signed: boolean): Exact | undefined {
-  const value = integerValue(literal, new Map());
-  return value === undefined ? undefined : { value: BigInt(value), kind: signed ? 'signed' : 'unsigned' };
+/** The operands of a term, those inside `$clog2` not among them: they make an expression of their own. */
+function operandsOf(term: Term): Operand[] {
+  if ('operand' in term) return [term.operand];
+  if ('negated' in term) return operandsOf(term.negated);
+  return [...operandsOf(term.left), ...operandsOf(term.right)];
 }
 
-/** An arithmetic expression, a context of its own: unsigned when an unsigned constant is in it, else an integer. */
-function arithmeticExact(text: string, known: ReadonlyMap<string, Exact>): Exact | undefined {
-  const tokens = text.match(TOKEN) ?? [];
-  const reader: Reader = { tokens, at: 0, known, ...FRESH_CONTEXT };
-  const value = sum(reader);
-  if (value === undefined || reader.at !== tokens.length || !widthSafe(reader)) return undefined;
-  return { value, kind: reader.usedUnsigned ? 'unsigned' : 'integer' };
+/** The value of `term` in an expression `width` bits wide, signed or not, every step wrapped to it. */
+function valueIn(term: Term, width: number, signed: boolean): bigint | undefined {
+  const wrap = (v: bigint) => (signed ? BigInt.asIntN(width, v) : BigInt.asUintN(width, v));
+  if ('operand' in term) return signed ? BigInt.asIntN(term.operand.width, term.operand.bits) : term.operand.bits;
+  if ('negated' in term) {
+    const value = valueIn(term.negated, width, signed);
+    return value === undefined ? undefined : wrap(-value);
+  }
+  const left = valueIn(term.left, width, signed);
+  const right = valueIn(term.right, width, signed);
+  const result = left === undefined || right === undefined ? undefined : OPERATION[term.operator](left, right);
+  return result === undefined ? undefined : wrap(result);
 }
 
-/** The value of a constant's expression, before any declared type cuts it. */
-function expressionValue(text: string, known: ReadonlyMap<string, Exact>): Exact | undefined {
-  const t = text.trim();
-  if (SINGLE_NAME.test(t)) return known.get(t);
-  const literal = SINGLE_LITERAL.exec(t);
-  return literal ? literalExact(t, literal[1] !== '') : arithmeticExact(t, known);
+/** An expression's value as Verilog has it, at least `atLeast` bits wide (an assignment's width). */
+function evaluate(term: Term, atLeast = 0): Operand | undefined {
+  const operands = operandsOf(term);
+  const width = Math.max(atLeast, ...operands.map((o) => o.width));
+  const signed = operands.every((o) => o.signed);
+  const value = valueIn(term, width, signed);
+  return value === undefined ? undefined : { bits: BigInt.asUintN(width, value), width, signed };
 }
+
+/** An operand as the number it is: signed ones may be negative. */
+const numberOf = (o: Operand): bigint => (o.signed ? BigInt.asIntN(o.width, o.bits) : o.bits);
+
+/** A value of its kind: a signed 32-bit one is an integer. */
+const exactOf = (o: Operand): Exact => ({ value: numberOf(o), kind: o.signed ? (o.width === INTEGER_WIDTH ? 'integer' : 'signed') : 'unsigned', width: o.width });
 
 const RANGE_TYPE = /^(signed|unsigned)?\s*\[\s*(\d+)\s*:\s*(\d+)\s*\]$/;
-/**
- * The widest declared range a value is cut to here. A value is at most a safe integer, so a
- * wider range cuts nothing but a negative value, which no fixed constant keeps; a range of
- * absurd width (`[99999999999999999:0]`, invalid HDL being edited) is not computed at all.
- */
-const MAX_TYPED_WIDTH = 64;
 
-/** The value as a constant of the declared type has it: `integer` is 32-bit signed, `[1:0]` two bits, unsigned unless `signed`. */
-function withType(exact: Exact, type: string): Exact | undefined {
+/** What a declared type makes of a value: `integer` 32-bit signed, `[1:0]` two bits, unsigned unless `signed`; none for another type. */
+function typeOf(type: string): { readonly width: number; readonly signed: boolean } | undefined {
   const t = type.trim().replace(/\s+/g, ' ');
-  if (t === '') return exact;
-  if (t === 'integer') return { value: BigInt.asIntN(INTEGER_WIDTH, exact.value), kind: 'integer' };
+  if (t === 'integer') return { width: INTEGER_WIDTH, signed: true };
   const range = RANGE_TYPE.exec(t);
   if (!range) return undefined;
   const width = Math.abs(Number(range[2]) - Number(range[3])) + 1;
-  if (!Number.isSafeInteger(width) || width < 1 || width > MAX_TYPED_WIDTH) return undefined;
-  return range[1] === 'signed'
-    ? { value: BigInt.asIntN(width, exact.value), kind: 'signed' }
-    : { value: BigInt.asUintN(width, exact.value), kind: 'unsigned' };
+  return isWidth(width) ? { width, signed: range[1] === 'signed' } : undefined;
+}
+
+/** A constant's expression read whole, or none. */
+function parsed(text: string, known: ReadonlyMap<string, Exact>): Term | undefined {
+  const tokens = text.trim().match(TOKEN) ?? [];
+  const reader: Reader = { tokens, at: 0, known };
+  const term = sum(reader);
+  return reader.at === tokens.length ? term : undefined;
+}
+
+/** The value of a constant's expression, cut to its declared type (see the module comment). */
+function constantValue(text: string, type: string, known: ReadonlyMap<string, Exact>): Exact | undefined {
+  const term = parsed(text, known);
+  const alone = term && evaluate(term);
+  if (term === undefined || alone === undefined) return undefined;
+  return type.trim() === '' ? exactOf(alone) : typedValue(term, type);
+}
+
+/** A typed constant's value: its expression as wide as the type at least (as an assignment), cut to the type. */
+function typedValue(term: Term, type: string): Exact | undefined {
+  const declared = typeOf(type);
+  const assigned = declared && evaluate(term, declared.width);
+  if (declared === undefined || assigned === undefined) return undefined;
+  return exactOf({ bits: BigInt.asUintN(declared.width, assigned.bits), width: declared.width, signed: declared.signed });
 }
 
 const KEY_OF: Readonly<Record<Exact['kind'], (name: string) => string>> = { integer: (name) => name, unsigned: unsignedKey, signed: aloneKey };
@@ -203,9 +222,8 @@ export function exactValues(items: readonly { name: string; value: string; type:
   const known = new Map<string, Exact>();
   for (const { name, value, type } of items) {
     if (known.has(name)) continue;
-    const computed = expressionValue(value, known);
-    const typed = computed && withType(computed, type);
-    if (typed && Number.isSafeInteger(Number(typed.value))) known.set(name, typed);
+    const exact = constantValue(value, type, known);
+    if (exact && Number.isSafeInteger(Number(exact.value))) known.set(name, exact);
   }
   return new Map([...known].map(([name, exact]) => [KEY_OF[exact.kind](name), Number(exact.value)]));
 }

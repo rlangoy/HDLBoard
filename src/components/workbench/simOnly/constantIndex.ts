@@ -167,7 +167,7 @@ const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => number | undefined> = new
 /**
  * A name's value in arithmetic: an integer, or an unsigned constant (the context notes which);
  * a signed one is none. A negative integer is noted too: beside an unsigned constant Verilog
- * reads it unsigned (`N % W` with `N = -3` and `W` 8-bit unsigned is 1, not 0).
+ * reads it unsigned (`N % W` with `N = -3` and `localparam [7:0] W = 4` is 1, not -3).
  */
 function nameValue(r: Reader, name: string): number | undefined {
   const integer = r.bindings.get(name);

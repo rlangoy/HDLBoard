@@ -60,7 +60,15 @@ export interface FullCaseMarks {
 
 export const NO_FULL_CASE: FullCaseMarks = { directives: [], attributes: [] };
 
-const TRANSLATE = /^(?:--|\/\/)\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/i;
+/**
+ * A translate_off or translate_on comment. VHDL's, like the language, in any case
+ * (`-- SYNTHESIS TRANSLATE_OFF`); Verilog's only lowercase: Quartus 25.1 Lite builds what
+ * `// SYNTHESIS TRANSLATE_OFF` or `// synthesis TRANSLATE_OFF` encloses (measured 2026-11-27).
+ */
+const TRANSLATE: Readonly<Record<Language, RegExp>> = {
+  vhdl: /^--\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/i,
+  verilog: /^\/\/\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/,
+};
 
 /**
  * `simulation` evaluates `ifdef as the simulator does (SYNTHESIS undefined); `synthesis` as
@@ -70,7 +78,7 @@ export type SourceView = 'simulation' | 'synthesis';
 
 export function blankSource(language: Language, source: string, view: SourceView = 'simulation'): BlankedSource {
   const lineOf = lineIndex(source);
-  const pragmas = new PragmaRegions(lineOf);
+  const pragmas = new PragmaRegions(lineOf, source, TRANSLATE[language]);
   const chars = source.split('');
   if (language === 'vhdl') {
     lexVhdl(source, chars, pragmas, view);
@@ -117,21 +125,28 @@ class PragmaRegions {
   readonly offsets: Range[] = [];
   private openAt: number | undefined;
   private openOffset = 0;
-  constructor(private readonly lineOf: LineOf) {}
+  constructor(
+    private readonly lineOf: LineOf,
+    private readonly source: string,
+    private readonly translate: RegExp,
+  ) {}
 
   comment(text: string, offset: number): void {
-    const found = TRANSLATE.exec(text);
+    const found = this.translate.exec(text);
     if (!found) return;
     const line = this.lineOf(offset);
     if (found[1].toLowerCase() === 'off') {
-      if (this.openAt === undefined) this.openOffset = offset;
-      this.openAt ??= line;
+      if (this.openAt !== undefined) return;
+      this.openOffset = offset;
+      // `LEDR <= load(sw); -- synthesis translate_off`: the code before the comment is built, the region starts on the next line.
+      const lineStart = this.source.lastIndexOf('\n', offset - 1) + 1;
+      this.openAt = this.source.slice(lineStart, offset).trim() === '' ? line : line + 1;
     } else this.close(line, offset);
   }
 
   close(line: number, offset: number): void {
     if (this.openAt === undefined) return;
-    this.regions.push({ start: this.openAt, end: line });
+    if (this.openAt <= line) this.regions.push({ start: this.openAt, end: line });
     this.offsets.push({ from: this.openOffset, to: offset });
     this.openAt = undefined;
   }
@@ -183,9 +198,14 @@ function vhdlString(src: string, chars: string[], i: number): number {
  * The words of a directive comment, `// synopsys parallel_case full_case` or
  * `/* synthesis full_case *\/`: the directive's own words, up to the first other character.
  */
-const DIRECTIVE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)((?:[ \t]+[A-Za-z_]\w*)+)/i;
+const DIRECTIVE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)((?:[ \t]+[A-Za-z_]\w*)+)/;
+/**
+ * Verilog's directive comments are lowercase: Quartus 25.1 Lite infers the latch of
+ * `// SYNOPSYS full_case` and of `// synopsys FULL_CASE` (Warning 10335, unrecognized),
+ * honoring only `// synopsys full_case` (measured 2026-11-27).
+ */
 const isFullCaseComment = (comment: string): boolean =>
-  (DIRECTIVE_COMMENT.exec(comment)?.[1].trim().split(/\s+/) ?? []).some((word) => word.toLowerCase() === 'full_case');
+  (DIRECTIVE_COMMENT.exec(comment)?.[1].trim().split(/\s+/) ?? []).some((word) => word === 'full_case');
 /**
  * Where a string or comment that starts at `i` ends, or undefined when none starts there.
  * A string ends at its closing quote (`\"` stays inside it) or with its line.

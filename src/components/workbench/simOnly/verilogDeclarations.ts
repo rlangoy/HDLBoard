@@ -18,6 +18,9 @@ export interface BitRange {
   readonly lsb: number;
 }
 
+/** A module's arrays of vectors, each with the width of one word, undefined when not known (`verilogWordArrays`). */
+export type WordArrays = ReadonlyMap<string, number | undefined>;
+
 const PARAMETER = /\b(?:parameter|localparam)\b/g;
 /** `[keyword] [type] name = value`; a range may hold one level of brackets (`[BITS[0]:0]`). */
 const PARAMETER_ITEM = /^\s*(?:(parameter|localparam)\s+)?((?:(?:integer|signed|unsigned)\s+)?(?:\[(?:[^[\]]|\[[^\]]*\])*\]\s*)?)([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
@@ -114,17 +117,25 @@ function unambiguous(items: readonly ParameterItem[], code: string): ParameterIt
   return declarations.filter((item) => declared.get(item.name) === 1 && !variables.has(item.name));
 }
 
-/** `integer` declaring variables, not the type of a `parameter integer N`. */
-const VARIABLE_INTEGER = /(?<!\b(?:parameter|localparam)\s+)\b(?:integer|time|realtime|real)\b([^;]*)/g;
+/**
+ * The other declarations of variables and nets (`DECLARATION` has `reg`, `wire`, `logic` and
+ * the ports): `integer`, `time`, `real`, the other net kinds (`tri ON`) and
+ * SystemVerilog's variable types. Not the type of a `parameter integer N`.
+ */
+const OTHER_DECLARATION =
+  /(?<!\b(?:parameter|localparam)\s+)\b(?:integer|time|realtime|real|tri0|tri1|triand|trior|trireg|tri|wand|wor|supply0|supply1|uwire|bit|byte|shortint|int|longint|shortreal)\b([^;]*)/g;
+/** What may stand before a declaration's names: `signed`, `vectored`, ranges (`tri [3:0] ON`). */
+const DECLARATION_PREFIX = /^\s*(?:(?:signed|unsigned|vectored|scalared)\b\s*|\[[^\]]*\]\s*)*/;
 
 /**
  * The names the module declares as variables or nets, anywhere: a named block's `reg ON`
- * shadows a module's `localparam ON` there, so a name in both is read as no constant.
+ * or a generate block's `tri ON` shadows a module's `localparam ON` there, so a name in
+ * both is read as no constant.
  */
 function variableNames(code: string): ReadonlySet<string> {
   const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3]).map((d) => d.name));
-  const integers = [...code.matchAll(VARIABLE_INTEGER)].flatMap((m) => declaredNames(m[1]).map((d) => d.name));
-  return new Set([...declared, ...integers]);
+  const others = [...code.matchAll(OTHER_DECLARATION)].flatMap((m) => declaredNames(m[1].replace(DECLARATION_PREFIX, '')).map((d) => d.name));
+  return new Set([...declared, ...others]);
 }
 
 /**
@@ -175,19 +186,58 @@ function rangeOf(range: string, constants: Bindings): BitRange | undefined {
   return high === undefined || low === undefined ? undefined : { msb: high, lsb: low };
 }
 
+/** `q`, `q [0:3]`, `q [0:3][0:1]`: a declared name and its unpacked ranges. */
+const DECLARED_ITEM = /^\s*([A-Za-z_]\w*)\s*((?:\[[^\]]*\]\s*)*)(?:=[\s\S]*)?$/;
+const rangesIn = (text: string): string[] => [...text.matchAll(/\[([^\]]*)\]/g)].map((r) => r[1]);
+
+/** The bits of a vector of these ranges (`[3:0][7:0]` is 32), none when one is not known. */
+function widthOf(ranges: readonly string[], constants: Bindings): number | undefined {
+  let width = 1;
+  for (const range of ranges) {
+    const r = rangeOf(range, constants);
+    if (r === undefined) return undefined;
+    width *= Math.abs(r.msb - r.lsb) + 1;
+  }
+  return width;
+}
+
 /**
- * The module's arrays of vectors (`wire [1:0] busword [0:3]`, and SystemVerilog's packed
- * `logic [3:0][7:0] bytes`): `busword[0]` is a word of them, not a bit.
+ * The module's arrays of vectors, each with the width of one word when known:
+ * `wire [1:0] busword [0:3]` (`busword[0]` is 2 bits, not one), SystemVerilog's packed
+ * `logic [3:0][7:0] bytes` (`bytes[i]` is 8). `reg [7:0] m [0:3][0:3]` is one too, `m[i]`
+ * an array of no width here; `reg q [0:3]`, an array of bits, is none.
  */
-export function verilogWordArrays(code: string): ReadonlySet<string> {
-  return new Set(
-    [...code.matchAll(DECLARATION)].flatMap((m) => {
-      if (m[2] === undefined) return [];
-      const morePacked = /^\s*(?:\[[^\]]*\]\s*)+/.exec(m[3]);
-      if (morePacked) return declaredNames(m[3].slice(morePacked[0].length)).map((d) => d.name);
-      return declaredNames(m[3]).filter((d) => d.unpacked !== undefined).map((d) => d.name);
-    }),
-  );
+export function verilogWordArrays(code: string, constants: Bindings = new Map()): WordArrays {
+  return new Map([...code.matchAll(DECLARATION)].flatMap((m) => wordsOf(m, constants)));
+}
+
+/** The arrays of vectors one declaration declares, each with its word's width. */
+function wordsOf(m: RegExpMatchArray, constants: Bindings): [string, number | undefined][] {
+  const morePacked = /^\s*(?:\[[^\]]*\]\s*)+/.exec(m[3])?.[0] ?? '';
+  const packed = m[2] === undefined ? [] : [m[2], ...rangesIn(morePacked)];
+  return declaredItems(m[3].slice(morePacked.length)).flatMap(({ name, unpacked }) => {
+    const word = wordRanges(packed, unpacked);
+    if (word === undefined) return [[name, undefined]];
+    return word.length === 0 ? [] : [[name, widthOf(word, constants)]];
+  });
+}
+
+/**
+ * The ranges of what `name[i]` selects: after one unpacked range the packed vector; with none,
+ * what the first packed range selects (empty for a plain vector: a bit); with more, an array.
+ */
+const wordRanges = (packed: readonly string[], unpacked: number): readonly string[] | undefined =>
+  [packed.slice(1), packed][unpacked];
+
+/** The names a declaration's list declares, each with how many unpacked ranges it has. */
+function declaredItems(list: string): { readonly name: string; readonly unpacked: number }[] {
+  const items: { name: string; unpacked: number }[] = [];
+  for (const item of topLevelItems(list)) {
+    const declared = DECLARED_ITEM.exec(item);
+    if (!declared || DECLARATION_WORD.test(declared[1])) break;
+    items.push({ name: declared[1], unpacked: rangesIn(declared[2]).length });
+  }
+  return items;
 }
 
 /** The ranges the module declares (`input sel` is bit 0, `input [N-1:0] sel` bits N-1 to 0), first declaration first. */

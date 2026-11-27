@@ -22,7 +22,7 @@
 import { bracketed, closingBracket, topLevel, topLevelItems, unwrapped } from './brackets';
 import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, valueOfName, type Bindings } from './constantIndex';
 import { NO_FULL_CASE, type FullCaseMarks } from '../tbDetect/blank';
-import type { BitRange } from './verilogDeclarations';
+import type { BitRange, WordArrays } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
 export interface Assigned {
@@ -91,13 +91,14 @@ export interface StatementContext {
   readonly selectorRangeOf?: (name: string) => BitRange | undefined;
   /** The module's declared signals, ports included: a selector of them has a width synthesis knows. */
   readonly signals?: ReadonlySet<string>;
-  /** The module's arrays of vectors: an element of one is a word, not a bit (`verilogWordArrays`). */
-  readonly wordArrays?: ReadonlySet<string>;
+  /** The module's arrays of vectors, each with its word's width when known: an element of one is a word, not a bit (`verilogWordArrays`). */
+  readonly wordArrays?: WordArrays;
   /** Counts the work of a walk: statements, and bits of loops followed. */
   readonly work?: { steps: number };
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
+const NO_WORDS: WordArrays = new Map();
 /** How wide a selector may be for its values to be counted: 2^8 labels at most. */
 const MAX_COUNTED_WIDTH = 8;
 /** How wide a wildcard case label may be for its pattern to be built. */
@@ -398,7 +399,7 @@ const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
  * of an array of vectors (`busword[0]` of `wire [1:0] busword [0:0]`) is a word, of a width
  * not counted here.
  */
-function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], wordArrays: ReadonlySet<string>): number | undefined {
+function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], wordArrays: WordArrays): number | undefined {
   const s = unwrapped(selector).replace(/\s+/g, '');
   if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
     const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf, wordArrays));
@@ -410,12 +411,14 @@ function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], w
 
 /**
  * The width of `s[3]` or `s[i]` (one bit, whatever the index), `s[3:0]` (4) or `s[i +: 2]`
- * (2); none for a word of an array of vectors, or any other form.
+ * (2); a word of an array of vectors has the word's width (`mem[0]` of `wire [1:0] mem [0:0]`
+ * is 2); none for any other form.
  */
-function selectionWidth(s: string, wordArrays: ReadonlySet<string>): number | undefined {
+function selectionWidth(s: string, wordArrays: WordArrays): number | undefined {
   const selection = /^([A-Za-z_]\w*)\[([^[\]]*)\]$/.exec(s);
-  if (selection === null || wordArrays.has(selection[1])) return undefined;
+  if (selection === null) return undefined;
   const index = selection[2];
+  if (wordArrays.has(selection[1])) return index.includes(':') ? undefined : wordArrays.get(selection[1]);
   const indexed = /^[^:]*[+-]:(\d+)$/.exec(index);
   if (indexed) return Number(indexed[1]);
   const part = /^(\d+):(\d+)$/.exec(index);
@@ -533,7 +536,7 @@ function selectorSignals(selector: string): string[] | undefined {
 function labelsNameEveryValue(ctx: StatementContext, written: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
   const selector = unwrapped(written); // `casez ((s))` reads `s`
   if (labels.items.some((label) => matchesAnyValue(label, labels.kind))) return true;
-  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf, ctx.wordArrays ?? NOTHING);
+  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf, ctx.wordArrays ?? NO_WORDS);
   if (width === undefined && ofDeclaredSignals(ctx, selector)) return false;
   return namesEveryValue(labels.items, { width, constants: ctx.fixedConstants ?? ctx.constants, kind: labels.kind });
 }

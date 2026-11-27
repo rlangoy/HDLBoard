@@ -292,6 +292,56 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    '`ifdef USE_A child_a `else child_b `endif #(.R(1)) u: a header that defines USE_A makes it child_a overridden (Warning 10240)',
+    `module child_a #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule child_b #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule t (input d, e, output q);\n\`ifdef USE_A\n  child_a\n\`else\n  child_b\n\`endif\n  #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [2, 5],
+  ],
+  [
+    'defparam u.R = 1 in a fragment `include puts inside the module: outside any module, it reaches every instance u (Warning 10240)',
+    `defparam u.R = 1;\n${CHILD}\nmodule t (input d, e, output q);\n  child u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    'child `PASS(#(.R(1))) u with `define PASS(x) x: the override is a macro argument (Warning 10240)',
+    `\`define PASS(x) x\n${CHILD}\nmodule t (input d, e, output q);\n  child \`PASS(#(.R(1))) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    'child #`R u with `define R 1: a macro as the override value (Warning 10240)',
+    `\`define R 1\n${CHILD}\nmodule t (input d, e, output q);\n  child #\`R u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    "casez (mem[0]) of wire [1:0] mem [0:0], the one label 2'b??: a word is two bits (no latch)",
+    "module t (input [1:0] s, input a, output reg x);\n  wire [1:0] mem [0:0];\n  assign mem[0] = s;\n  always @* casez (mem[0])\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    'a generate block whose tri ON shadows localparam ON = 1 (Warning 10240)',
+    'module t (input d, en, output reg q);\n  localparam ON = 1;\n  generate if (1) begin : g\n    tri ON;\n    assign ON = en;\n    always @* if (ON) q = d;\n  end endgenerate\nendmodule',
+    [6],
+  ],
+  [
+    '// synopsys FULL_CASE: Verilog directives are lowercase (Warnings 10335, unrecognized; 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s) // synopsys FULL_CASE\n    2'b00: x = a;\n    2'b01: x = b;\n    2'b10: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    '// SYNOPSYS full_case: the keyword is lowercase too (Warning 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s) // SYNOPSYS full_case\n    2'b00: x = a;\n    2'b01: x = b;\n    2'b10: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    '// SYNTHESIS TRANSLATE_OFF hides nothing in Verilog: Quartus builds the latch inside (Warning 10240)',
+    'module t (input d, e, output reg q);\n// SYNTHESIS TRANSLATE_OFF\n  always @* if (e) q = d;\n// SYNTHESIS TRANSLATE_ON\nendmodule',
+    [3],
+  ],
+  [
+    "localparam [8:0] P = 8'hFF + 8'h01 is 256, as wide as its type (Quartus takes the P == 256 branch, Info 10041 for q[2])",
+    "module t (input d, e, output reg [7:0] q);\n  localparam [8:0] P = 8'hFF + 8'h01;\n  generate if (P == 0) begin : is_0\n    always @* q[1] = d;\n  end else if (P == 256) begin : is_256\n    always @* if (e) q[2] = d;\n  end else begin : other\n    always @* q[3] = d;\n  end endgenerate\nendmodule",
+    [6],
+  ],
+  [
     'USE_DEFAULT defined under `ifndef BOARD_CONFIG: with a header that defines BOARD_CONFIG, Quartus takes the `else override (Warning 10240)',
     `\`ifndef BOARD_CONFIG\n\`define USE_DEFAULT\n\`endif\n${CHILD}\nmodule t (input d, e, output q);\n\`ifdef USE_DEFAULT\n  child u (.d(d), .e(e), .q(q));\n\`else\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
     [5],

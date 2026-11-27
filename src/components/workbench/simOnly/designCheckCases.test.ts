@@ -384,6 +384,11 @@ describe('tri-state drivers', () => {
     expect(driversIn('top.v', vlog(body))).toEqual(['LEDR@2', 'LEDR@3']);
   });
 
+  test("a width of sized literals, N = 2'd1 + 2'd1: {a, 1'bz} drives w[1], so assign w[1] = b is a second driver (Quartus: Error 10031)", () => {
+    const body = "localparam N = 2'd1 + 2'd1;\nwire [N-1:0] w;\nassign w = {SW[0], 1'bz};\nassign w[1] = SW[1];\nassign LEDR[1:0] = w;";
+    expect(driversIn('top.v', vlog(body).replace('output reg [9:0] LEDR', 'output [9:0] LEDR'))).toEqual(['w@4', 'w@5']);
+  });
+
   test("a concatenation target with 'Z' on one item drives the other", () => {
     const body = "always @(posedge CLOCK_50) {LEDR[1], LEDR[0]} <= {1'bz, SW[0]};\nalways @(posedge CLOCK_50) LEDR[1] <= SW[1];";
     expect(driversIn('top.v', vlog(body))).toEqual([]);
