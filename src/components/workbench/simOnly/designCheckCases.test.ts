@@ -447,6 +447,18 @@ describe("VHDL: an if on clk'event", () => {
   test("clk'event and clk = '1' is the template", () => {
     expect(findingsIn([['top.vhd', vhdl(processWith("CLOCK_50'event and CLOCK_50 = '1'"))]])).toEqual([]);
   });
+
+  // Issue #48: GHDL --synth builds these, but the check reads the condition with its `if`
+  // still in front, so the parentheses are never unwrapped and the level test is missed.
+  // Marked `fails` until the fix: drop `.fails` then.
+  test.fails("(clk'event and clk='1') in parentheses is the template (#48)", () => {
+    const empty = "process (CLOCK_50)\nbegin\n   if (CLOCK_50'event and CLOCK_50='1') then\n   end if;\nend process;\nLEDR <= (others => '0');";
+    const elsif = "process (CLOCK_50, SW)\nbegin\nif (SW(0) = '1') then\nLEDR <= (others => '0');\nelsif (CLOCK_50'event and CLOCK_50 = '1') then\nLEDR <= SW;\nend if;\nend process;";
+    expect(findingsIn([['top.vhd', vhdl(empty)]])).toEqual([]);
+    expect(findingsIn([['top.vhd', vhdl(processWith("(CLOCK_50'event and CLOCK_50='1')"))]])).toEqual([]);
+    expect(findingsIn([['top.vhd', vhdl(processWith("('1' = CLOCK_50 and CLOCK_50'event)"))]])).toEqual([]);
+    expect(findingsIn([['top.vhd', vhdl(elsif)]])).toEqual([]);
+  });
 });
 
 describe('Verilog: the clocked branch after the resets', () => {
