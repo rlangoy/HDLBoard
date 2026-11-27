@@ -20,6 +20,14 @@ export interface BlankedSource {
   readonly simOnlyRegions: readonly LineSpan[];
   /** Verilog: the `full_case` marks in code the view keeps. */
   readonly fullCase: FullCaseMarks;
+  /** Verilog: the `` `define ``s of code the view keeps, in order; one in an `ifdef branch it leaves out is none. */
+  readonly defines: readonly MacroDefinition[];
+}
+
+/** `` `define NAME text ``: its name, and its text as the view reads it (comments blanked; a `(args)` list and `\`-continued lines included). */
+export interface MacroDefinition {
+  readonly name: string;
+  readonly text: string;
 }
 
 /**
@@ -49,7 +57,7 @@ export function blankSource(language: Language, source: string, view: SourceView
   if (language === 'vhdl') {
     lexVhdl(source, chars, pragmas, view);
     pragmas.close(lineOf(source.length));
-    return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCase: NO_FULL_CASE };
+    return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCase: NO_FULL_CASE, defines: [] };
   }
   const marks = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
@@ -58,7 +66,8 @@ export function blankSource(language: Language, source: string, view: SourceView
   const hidden = (at: number) => pragmas.regions.some((r) => lineOf(at) >= r.start && lineOf(at) <= r.end);
   const active = (at: number) => !pre.inactive.some((r) => at >= r.from && at < r.to) && !hidden(at);
   const fullCase = { directives: marks.directives.filter(active), attributes: marks.attributes.filter(active) };
-  return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start), fullCase };
+  const simOnlyRegions = [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start);
+  return { code: pre.code, simOnlyRegions, fullCase, defines: pre.defines };
 }
 
 /** translate_off .. translate_on, from the line comments that carry them. */
@@ -131,26 +140,60 @@ function vhdlString(src: string, chars: string[], i: number): number {
 const DIRECTIVE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)((?:[ \t]+[A-Za-z_]\w*)+)/i;
 const isFullCaseComment = (comment: string): boolean =>
   (DIRECTIVE_COMMENT.exec(comment)?.[1].trim().split(/\s+/) ?? []).some((word) => word.toLowerCase() === 'full_case');
-/** An attribute's items, `a, b = "x, y"` is two: its commas outside quoted values. */
+/**
+ * Where a string or comment that starts at `i` ends, or undefined when none starts there.
+ * A string ends at its closing quote (`\"` stays inside it) or with its line.
+ */
+function skipStringOrComment(text: string, i: number): number | undefined {
+  if (text[i] === '/' && text[i + 1] === '*') {
+    const end = text.indexOf('*/', i + 2);
+    return end < 0 ? text.length : end + 2;
+  }
+  if (text[i] === '/' && text[i + 1] === '/') {
+    const end = text.indexOf('\n', i);
+    return end < 0 ? text.length : end;
+  }
+  if (text[i] !== '"') return undefined;
+  let j = i + 1;
+  while (j < text.length && text[j] !== '"' && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+  return text[j] === '"' ? j + 1 : j;
+}
+
+const BRACKET_DEPTH: Readonly<Record<string, number>> = { '(': 1, '[': 1, '{': 1, ')': -1, ']': -1, '}': -1 };
+
+/**
+ * An attribute's items: its commas at the top level, outside strings, comments and brackets.
+ * `a, b = "x, y"`, `keep = {1'b0, c}` and `keep = 1 /*, d *\/` are each one item per name.
+ */
 function attributeItems(inside: string): string[] {
   const items: string[] = [];
-  let [from, quoted] = [0, false];
-  for (let i = 0; i < inside.length; i++) {
-    if (inside[i] === '"') quoted = !quoted;
-    else if (inside[i] === ',' && !quoted) {
+  let [from, depth, i] = [0, 0, 0];
+  while (i < inside.length) {
+    const skipped = skipStringOrComment(inside, i);
+    if (skipped !== undefined) {
+      i = skipped;
+      continue;
+    }
+    depth += BRACKET_DEPTH[inside[i]] ?? 0;
+    if (inside[i] === ',' && depth === 0) {
       items.push(inside.slice(from, i));
       from = i + 1;
     }
+    i++;
   }
   return [...items, inside.slice(from)];
 }
 
+/** An item's text without its comments: `/* x *\/ full_case` names `full_case`. */
+const withoutComments = (item: string): string => item.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+
 /**
- * `full_case` as an attribute's name, `(* parallel_case, full_case *)`, not inside a value:
- * `(* keep = "full_case" *)`, `(* keep = "foo, full_case=bar" *)`.
+ * `full_case` as an attribute's name, `(* parallel_case, full_case *)`, not inside a value,
+ * an expression or a comment: `(* keep = "foo, full_case=bar" *)`,
+ * `(* keep = {1'b0, full_case == 1'b1} *)`, `(* keep = 1 /*, full_case = foo *\/ *)`.
  */
 const isFullCaseAttribute = (attribute: string): boolean =>
-  attributeItems(attribute.slice(2, -2)).some((item) => /^\s*full_case\s*(?:=|$)/i.test(item));
+  attributeItems(attribute.slice(2, -2)).some((item) => /^\s*full_case\s*(?:=|$)/i.test(withoutComments(item)));
 
 /** Lexes Verilog; returns where its `full_case` marks start. */
 function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): FullCaseMarks {
@@ -180,10 +223,16 @@ function verilogString(src: string, chars: string[], i: number): number {
   return blanked(chars, i, j);
 }
 
-/** `(* full_case *)`; `@(*)` never gets here. */
+/** `(* full_case *)`, up to the first `*)` outside its strings and comments (`(* keep = "a*)b" *)` is one); `@(*)` never gets here. */
 function attribute(src: string, chars: string[], i: number): number {
-  const end = src.indexOf('*)', i + 2);
-  return blanked(chars, i, end < 0 ? src.length : end + 2);
+  let j = i + 2;
+  while (j < src.length) {
+    const skipped = skipStringOrComment(src, j);
+    if (skipped !== undefined) j = skipped;
+    else if (src[j] === '*' && src[j + 1] === ')') return blanked(chars, i, j + 2);
+    else j++;
+  }
+  return blanked(chars, i, src.length);
 }
 
 /* ------------------------------ Shared ------------------------------ */
@@ -225,10 +274,25 @@ interface Branch {
  * (an unknown macro is undefined, as with iverilog without -D) and blanks the
  * inactive branches. An active `ifndef SYNTHESIS branch is a sim-only region.
  */
-function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): { code: string; regions: LineSpan[]; inactive: Range[] } {
+/** Where a `` `define `` at `at` ends: its line, and each line after one that ends with `\` (a continued macro text). */
+function defineEnd(code: string, at: number): number {
+  let end = endOfLine(code, at);
+  while (end < code.length && /\\[ \t\r]*$/.test(code.slice(at, end))) end = endOfLine(code, end + 1);
+  return end;
+}
+
+interface Preprocessed {
+  readonly code: string;
+  readonly regions: LineSpan[];
+  readonly inactive: Range[];
+  readonly defines: MacroDefinition[];
+}
+
+function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): Preprocessed {
   const chars = code.split('');
   const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[] };
   const inactive: Range[] = [];
+  const defines: MacroDefinition[] = [];
   let activeFrom = 0;
   for (const match of code.matchAll(DIRECTIVE)) {
     const at = match.index ?? 0;
@@ -240,14 +304,18 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     directive(state, match[1] ?? match[3], match[2], lineOf(at), wasActive);
     // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
     blankRange(chars, at, at + match[0].length);
-    if (match[1] === 'define' && wasActive) blankRange(chars, at + match[0].length, endOfLine(code, at));
+    if (match[1] === 'define' && wasActive) {
+      const end = defineEnd(code, at);
+      defines.push({ name: match[2], text: code.slice(at + match[0].length, end).replace(/\\[ \t\r]*\n/g, ' ') });
+      blankRange(chars, at + match[0].length, end);
+    }
     activeFrom = at + match[0].length;
   }
   if (!isActive(state.stack)) {
     blankRange(chars, activeFrom, code.length);
     inactive.push({ from: activeFrom, to: code.length });
   }
-  return { code: chars.join(''), regions: state.regions, inactive };
+  return { code: chars.join(''), regions: state.regions, inactive, defines };
 }
 
 /** Offsets `from` (included) to `to` (excluded). */

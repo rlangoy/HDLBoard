@@ -58,13 +58,26 @@ function innermostAt(subprograms: readonly Subprogram[], at: number): Subprogram
 }
 
 /**
- * The bodies of the functions and procedures that code synthesis reads never calls: nothing
- * in them runs, neither while elaborating nor on the board. riscv_vhdl's `otp_clocked`
- * declares an `init_ram` that reads a file, but its call is commented out
- * (`signal ram : ram_type;-- := init_ram(init_file);`); Quartus builds it.
+ * The bodies of the functions and procedures that code synthesis reads never calls, also
+ * through others: every call of one is inside another such body (a helper nothing calls,
+ * or each other). Nothing in them runs, neither while elaborating nor on the board.
+ * riscv_vhdl's `otp_clocked` declares an `init_ram` that reads a file, but its call is
+ * commented out (`signal ram : ram_type;-- := init_ram(init_file);`); Quartus builds it.
  */
 export function uncalledSubprograms(t: UnitText): readonly Range[] {
-  return subprogramsOf(t).filter((s) => s.hasBody && callsOf(t, s).length === 0);
+  const bodies = subprogramsOf(t).filter((s) => s.hasBody);
+  const calls = new Map(bodies.map((body) => [body, callsOf(t, body)]));
+  // Start from every body and drop the ones called from code that runs, until none is.
+  const uncalled = new Set(bodies);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const body of uncalled) {
+      if ((calls.get(body) ?? []).every((at) => inside(at, [...uncalled]))) continue;
+      uncalled.delete(body);
+      changed = true;
+    }
+  }
+  return [...uncalled];
 }
 
 /**

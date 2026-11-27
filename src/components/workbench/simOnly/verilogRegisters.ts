@@ -484,6 +484,7 @@ interface ModuleFacts {
   readonly rangeOf: StatementContext['rangeOf'];
   readonly fixedNames: ReadonlySet<string>;
   readonly fixed: FixedView;
+  readonly signals: ReadonlySet<string>;
 }
 
 /** The walk of one block's body, which starts at file offset `bodyAt`: its `full_case` marks and source at the body's offsets. */
@@ -493,15 +494,16 @@ function blockContext(t: UnitText, facts: ModuleFacts, { body, bodyAt }: Pick<Al
     text: body, rangeOf: facts.rangeOf, constants: facts.constants, loops: new Map(), unsure: new Set(), fixedNames: facts.fixedNames,
     fullCase: { directives: local(t.fullCase?.directives), attributes: local(t.fullCase?.attributes) },
     source: t.source?.slice(bodyAt, bodyAt + body.length), fixedConstants: facts.fixed.constants, selectorRangeOf: facts.fixed.rangeOf,
+    signals: facts.signals,
   };
 }
 
 export function verilogLevelStorage(t: UnitText): Found[] {
   const constants = verilogConstants(t.code);
   const rangeOf = declaredRanges(t.code, constants);
-  const fixedConstants = verilogFixedConstants(t.code);
+  const fixedConstants = verilogFixedConstants(t.code, t.parametersFixed);
   const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
-  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed };
+  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code) };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
     const feedback = nonblockingTargets(body).flatMap((m) => {

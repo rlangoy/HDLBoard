@@ -17,6 +17,20 @@ const latchesIn = (content: string): number[] =>
 
 const B0 = "1'b0";
 
+/**
+ * A top module that instantiates `instance` (the module and its overrides, `t #(.R(1))`) as
+ * `u`. A module nothing overrides is built with its defaults; one an instance overrides is
+ * checked for every value its parameters may take (parameterOverrides.ts).
+ */
+const top = (instance: string, ports: string, connections: string): string =>
+  `module top (${ports});\n  ${instance} u (${connections});\nendmodule`;
+
+const WIDENED_CASE =
+  "module t #(parameter S = 1) (input [S-1:0] s, input a, b, c, output reg x);\n  always @* case ({s, a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = ~b;\n    2'b11: x = ~c;\n  endcase\nendmodule";
+/** A module whose `q` keeps its value unless R is 2. */
+const CHILD = 'module child #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule';
+const MOVED_LABEL ='module t #(parameter B = 1) (input s, a, b, output reg x);\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule';
+
 const LATCHES: [label: string, module: string, lines: number[]][] = [
   [
     'one bit per always in a generate for (no latch)',
@@ -54,8 +68,13 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [2],
   ],
   [
-    'an if on a parameter an instance may override (no latch with R = 2; Warning 10240 in an instance with #(.R(1)))',
+    'an if on a parameter nothing overrides: R = 2 picks the branch (no latch)',
     'module t #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule',
+    [],
+  ],
+  [
+    'the same module, and a top that instantiates it with #(.R(1)) (Warning 10240)',
+    `module t #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\n${top('t #(.R(1))', 'input d, e, output q', '.d(d), .e(e), .q(q)')}`,
     [2],
   ],
   [
@@ -79,8 +98,8 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
-    'two if guards on different strings of one parameter (Warning 10240 in an instance with #(.MODE("B")))',
-    'module t #(parameter MODE = "A") (input d, en, output reg q);\n  always @* begin\n    if (MODE == "A") q = d;\n    if (MODE == "B") if (en) q = d;\n  end\nendmodule',
+    'two if guards on different strings of one parameter, a top with #(.MODE("B")) (Warning 10240)',
+    `module t #(parameter MODE = "A") (input d, en, output reg q);\n  always @* begin\n    if (MODE == "A") q = d;\n    if (MODE == "B") if (en) q = d;\n  end\nendmodule\n${top('t #(.MODE("B"))', 'input d, en, output q', '.d(d), .en(en), .q(q)')}`,
     [2],
   ],
   [
@@ -89,14 +108,154 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [3],
   ],
   [
-    'a case whose selector a parameter widens: four labels miss values with #(.S(2)) (Warning 10240)',
-    "module t #(parameter S = 1) (input [S-1:0] s, input a, b, c, output reg x);\n  always @* case ({s, a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = ~b;\n    2'b11: x = ~c;\n  endcase\nendmodule",
+    'a case on {s, a} with s one bit wide by default: four labels name every value (no latch)',
+    WIDENED_CASE,
+    [],
+  ],
+  [
+    'the same case, and a top that widens s with #(.S(2)): four labels miss values (Warning 10240)',
+    `${WIDENED_CASE}\n${top('t #(.S(2))', 'input [1:0] s, input a, b, c, output x', '.s(s), .a(a), .b(b), .c(c), .x(x)')}`,
     [2],
   ],
   [
     'an if on a localparam no instance can change: only its branch is built (no latch)',
     'module t (input d, e, output reg q);\n  localparam ON = 1;\n  always @* if (ON) q = d; else if (e) q = d;\nendmodule',
     [],
+  ],
+  [
+    "a localparam that wraps: 32'hffff_ffff + 32'd1 is 0, so if (ON) takes the else (Warning 10240)",
+    "module t (input d, en, output reg q);\n  localparam ON = 32'hffff_ffff + 32'd1;\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule",
+    [3],
+  ],
+  [
+    'the range of a localparam list holds for each item: [0:0] makes ON = 2 a 0 (Warnings 10230, 10240)',
+    'module t (input d, en, output reg q);\n  localparam [0:0] FIRST = 0, ON = 2;\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule',
+    [3],
+  ],
+  [
+    "a casez whose selector width is a parameter, one wildcard label for half the values (Warnings 10270, 10240)",
+    "module t #(parameter W = 2) (input [W-1:0] s, input a, output reg x);\n  always @* casez (s)\n    2'b0?: x = a;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'a case label that is a parameter, B = 1 by default: 0 and B name every value (no latch)',
+    MOVED_LABEL,
+    [],
+  ],
+  [
+    'the same case, and a top that moves B with #(.B(2)) (Warnings 10199, 10270, 10240)',
+    `${MOVED_LABEL}\n${top('t #(.B(2))', 'input s, a, b, output x', '.s(s), .a(a), .b(b), .x(x)')}`,
+    [2],
+  ],
+  [
+    'a body parameter of a module without a parameter port list, overridden by #(.B(2)) (Warning 10240)',
+    `module t (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule\n${top('t #(.B(2))', 'input s, a, b, output x', '.s(s), .a(a), .b(b), .x(x)')}`,
+    [3],
+  ],
+  [
+    'the same parameter, overridden by a defparam of an instance in the same file (Warning 10240)',
+    `module t (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule\n${top('t', 'input s, a, b, output x', '.s(s), .a(a), .b(b), .x(x)').replace('endmodule', '  defparam u.B = 2;\nendmodule')}`,
+    [3],
+  ],
+  [
+    'two generate blocks declaring their own ON: the second one, 0, leaves r unassigned when en is low (Warning 10240)',
+    'module t (input d, en, output reg q, output reg r);\n  generate\n    if (1) begin : g1\n      localparam [0:0] ON = 1;\n      always @* q = d;\n    end\n    if (1) begin : g2\n      localparam [0:0] ON = 0;\n      always @* if (ON) r = d; else if (en) r = d;\n    end\n  endgenerate\nendmodule',
+    [9],
+  ],
+  [
+    'a defparam resolved in its own module: two modules each have an instance u (Warning 10240 in child)',
+    'module child #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule other #(parameter R = 2) (input d, output q);\n  assign q = d;\nendmodule\nmodule a (input d, output q);\n  other u (.d(d), .q(q));\nendmodule\nmodule t (input d, e, output q, p);\n  a ua (.d(d), .q(p));\n  child u (.d(d), .e(e), .q(q));\n  defparam u.R = 1;\nendmodule',
+    [2],
+  ],
+  [
+    'an override passed through a macro, child `CHILD_PARAM u (…) (Warning 10240)',
+    '`define CHILD_PARAM #(.R(1))\nmodule child #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule t (input d, e, output q);\n  child `CHILD_PARAM u (.d(d), .e(e), .q(q));\nendmodule',
+    [3],
+  ],
+  [
+    "a bit index of $clog2(32'hffff_ffff + 32'd1): the sum wraps to 0, so q[I] and q[32] are two bits (Warning 10240)",
+    "module t (input d, en, output reg [32:0] q);\n  localparam I = $clog2(32'hffff_ffff + 32'd1);\n  always @* if (en) q[I] = d; else q[32] = d;\nendmodule",
+    [3],
+  ],
+  [
+    'an override passed through a macro alias, `define OUTER `INNER (Warning 10240)',
+    `\`define INNER #(.R(1))\n\`define OUTER \`INNER\n${CHILD}\nmodule t (input d, e, output q);\n  child \`OUTER u (.d(d), .e(e), .q(q));\nendmodule`,
+    [4],
+  ],
+  [
+    'an override macro defined in the active branch, an empty one in an `ifdef branch that is not compiled (Warning 10240)',
+    `\`ifdef FOO\n\`define CHILD_PARAM\n\`else\n\`define CHILD_PARAM #(.R(1))\n\`endif\n${CHILD}\nmodule t (input d, e, output q);\n  child \`CHILD_PARAM u (.d(d), .e(e), .q(q));\nendmodule`,
+    [7],
+  ],
+  [
+    'a defparam inside a generate block, another u in the block before it (Warning 10240 in child)',
+    `${CHILD}\nmodule other #(parameter R = 2) (input d, output q);\n  assign q = d;\nendmodule\nmodule t (input d, e, output q, p);\n  generate\n    if (1) begin : g1\n      other u (.d(d), .q(p));\n    end\n    if (1) begin : g2\n      child u (.d(d), .e(e), .q(q));\n      defparam u.R = 1;\n    end\n  endgenerate\nendmodule`,
+    [2],
+  ],
+  [
+    "a bit index of $clog2(A + B) with A = 4'hf and B = 4'h1: the 4-bit sum is not 16, so q[I] and q[4] are two bits (Warning 10240)",
+    "module t (input d, en, output reg [4:0] q);\n  localparam A = 4'hf, B = 4'h1;\n  localparam I = $clog2(A + B);\n  always @* if (en) q[I] = d; else q[4] = d;\nendmodule",
+    [4],
+  ],
+  [
+    'a loop bound W-1 with localparam [7:0] W = 4: computed in 32 bits, 3, so q[0..2] are kept when en is low (Warning 10240)',
+    'module t (input [3:0] d, input en, output reg [3:0] q);\n  localparam [7:0] W = 4;\n  integer i;\n  always @* if (en) for (i = 0; i < W-1; i = i + 1) q[i] = d[i];\nendmodule',
+    [4],
+  ],
+  [
+    'a bit index N % W with integer N = -3 and [7:0] W = 3: unsigned, so 1, not 0 (Warning 10240, latches on q[0] and q[1])',
+    'module t (input d, en, output reg [3:0] q);\n  localparam integer N = -3;\n  localparam [7:0] W = 3;\n  localparam I = N % W;\n  always @* if (en) q[I] = d; else q[0] = d;\nendmodule',
+    [5],
+  ],
+  [
+    'an override in a macro continued on the next line with \\ (Warning 10240)',
+    `\`define CHILD_PARAM \\\n  #(.R(1))\n${CHILD}\nmodule t (input d, e, output q);\n  child \`CHILD_PARAM u (.d(d), .e(e), .q(q));\nendmodule`,
+    [4],
+  ],
+  [
+    'a macro alias that expands to two modules around a redefinition of what it names (Warning 10240 in both)',
+    'module childa #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule childb #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\n`define INNER childa #(.R(1))\n`define OUTER `INNER\nmodule t (input d, e, output q, p);\n  `OUTER ua (.d(d), .e(e), .q(q));\n`define INNER childb #(.R(1))\n  `OUTER ub (.d(d), .e(e), .q(p));\nendmodule',
+    [2, 5],
+  ],
+  [
+    'a defparam g.u.R for the second instance of child v (…), u (…); and another u elsewhere (Warning 10240 in child)',
+    `${CHILD}\nmodule other #(parameter R = 2) (input d, output q);\n  assign q = d;\nendmodule\nmodule t (input d, e, output q, q1, p);\n  generate\n    if (1) begin : g\n      child v (.d(d), .e(e), .q(q1)), u (.d(d), .e(e), .q(q));\n    end\n  endgenerate\n  other u (.d(d), .q(p));\n  defparam g.u.R = 1;\nendmodule`,
+    [2],
+  ],
+  [
+    "a casez on a selector in parentheses, casez ((s)), W = $clog2(4) and only 2'b0? (Warnings 10270, 10240)",
+    "module t #(parameter W = $clog2(4)) (input [W-1:0] s, input a, output reg x);\n  always @* casez ((s))\n    2'b0?: x = a;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    "a casez whose one label is all wildcards, 2'b?? for s[W-1:0] with W = $clog2(4) (no latch)",
+    "module t #(parameter W = $clog2(4)) (input [W-1:0] s, input a, output reg x);\n  always @* casez (s)\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    "an unsized all-wildcard label, 'b?, with a top that sets W = 5 (Warning 10270, no latch)",
+    `module t #(parameter W = 2) (input [W-1:0] s, input a, output reg x);\n  always @* casez (s)\n    'b?: x = a;\n  endcase\nendmodule\n${top('t #(.W(5))', 'input [4:0] s, input a, output x', '.s(s), .a(a), .x(x)')}`,
+    [],
+  ],
+  [
+    "a casez on s[W-1:0] with W = $clog2(4), one wildcard label for half the values (Warnings 10270, 10240)",
+    "module t #(parameter W = $clog2(4)) (input [W-1:0] s, input a, output reg x);\n  always @* casez (s)\n    2'b0?: x = a;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'a body parameter of a module with a parameter port list is local (Warning 10222; #(.B(2)) is Error 10213): no latch',
+    'module t #(parameter W = 1) (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule',
+    [],
+  ],
+  [
+    'a state machine on typed localparams that name every state, no default (no latch)',
+    "module t (input clk, reset, go, output reg [1:0] o);\n  localparam [1:0] S0 = 2'b00, S1 = 2'b01, S2 = 2'b10, S3 = 2'b11;\n  reg [1:0] state, next;\n  always @(posedge clk) if (reset) state <= S0; else state <= next;\n  always @* case (state)\n    S0: next = go ? S1 : S0;\n    S1: next = S2;\n    S2: next = S3;\n    S3: next = S0;\n  endcase\n  always @* o = state;\nendmodule",
+    [],
+  ],
+  [
+    'strings told apart by their spaces: MODE == "AB" and MODE == "A B", a top with #(.MODE("A B")) (Warning 10240)',
+    `module t #(parameter MODE = "AB") (input d, en, output reg q);\n  always @* begin\n    if (MODE == "AB") q = d;\n    if (MODE == "A B") if (en) q = d;\n  end\nendmodule\n${top('t #(.MODE("A B"))', 'input d, en, output q', '.d(d), .en(en), .q(q)')}`,
+    [2],
   ],
   [
     '// synopsys full_case on a case that misses a value (no latch)',
@@ -139,6 +298,21 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [2],
   ],
   [
+    'an escaped quote inside an attribute value, (* keep = "foo\\", full_case=bar" *) (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* keep = \"foo\\\", full_case=bar\" *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'full_case inside a braced attribute value, (* keep = {1\'b0, full_case == 1\'b1} *) (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  localparam full_case = 1;\n  always @* (* keep = {1'b0, full_case == 1'b1} *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [3],
+  ],
+  [
+    'full_case inside a comment in an attribute, (* keep = 1 /*, full_case = foo */ *) (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* keep = 1 /*, full_case = foo */ *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
     '// synopsys parallel_case alone (Warnings 10270, 10240)',
     "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s) // synopsys parallel_case\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
     [2],
@@ -158,6 +332,14 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
 describe('Verilog latches, as Quartus builds them', () => {
   test.each(LATCHES)('%s', (_label, module, lines) => {
     expect(latchesIn(module)).toEqual(lines);
+  });
+});
+
+describe('invalid HDL being edited does not stop the check', () => {
+  test('a localparam of absurd range, [99999999999999999:0] (Quartus: Warning 10259, constant value overflow)', () => {
+    const module = 'module t (input d, en, output reg q);\n  localparam [99999999999999999:0] ON = 1;\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule';
+    // ON is not computed, so both of its branches are checked: the else keeps q.
+    expect(latchesIn(module)).toEqual([3]);
   });
 });
 

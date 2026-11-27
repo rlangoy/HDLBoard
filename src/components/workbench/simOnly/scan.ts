@@ -10,7 +10,7 @@
  * content is unchanged. Pure.
  */
 
-import { blankSource, type FullCaseMarks } from '../tbDetect/blank';
+import { blankSource, type FullCaseMarks, type MacroDefinition } from '../tbDetect/blank';
 import { designUnits } from '../tbDetect/designUnits';
 import { keepRanges, lineIndex, type LineOf } from '../tbDetect/lines';
 import type { UnitText } from '../tbDetect/rules';
@@ -31,6 +31,8 @@ export interface ScannedFile {
   readonly hidden: readonly LineSpan[];
   /** Verilog: where the `full_case` marks of active code start (`blank.ts`). */
   readonly fullCase: FullCaseMarks;
+  /** Verilog: the `` `define ``s of active code, in order (`blank.ts`). */
+  readonly defines: readonly MacroDefinition[];
   readonly units: readonly ScannedUnit[];
 }
 
@@ -47,7 +49,7 @@ export function scannedFile(file: FileAnalysis): ScannedFile {
 function scanFile(file: FileAnalysis): ScannedFile {
   // As synthesis reads it: `ifdef SYNTHESIS code is checked, `ifndef SYNTHESIS (and the else of `ifdef SYNTHESIS) is not.
   const blanked = blankSource(file.language, file.content, 'synthesis');
-  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCase: blanked.fullCase };
+  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCase: blanked.fullCase, defines: blanked.defines };
   const own = synthesisUnits(file, blanked.code).map((unit) => ({ unit, ownsUnit: true }));
   const foreign = foreignArchitectures(base).map((unit) => ({ unit, ownsUnit: false }));
   return { ...base, units: [...own, ...foreign] };
@@ -64,13 +66,13 @@ function synthesisUnits(file: FileAnalysis, code: string): readonly DesignUnit[]
 export const isHidden = (line: number, hidden: readonly LineSpan[]): boolean => hidden.some((s) => line >= s.start && line <= s.end);
 
 /** The unit's slice of the file, gaps between its ranges blanked (as analyzeFile builds it for the rules). */
-export function unitText(scan: ScannedFile, unit: DesignUnit): UnitText {
+export function unitText(scan: ScannedFile, unit: DesignUnit, project: { readonly parametersFixed?: boolean } = {}): UnitText {
   const base = Math.min(...unit.ranges.map((r) => r.from));
   const end = Math.max(...unit.ranges.map((r) => r.to));
   const slice = scan.code.slice(base, end);
   const local = unit.ranges.map((r) => ({ from: r.from - base, to: r.to - base }));
   const code = unit.ranges.length === 1 ? slice : keepRanges(slice, local);
-  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCase: scan.fullCase, source: scan.file.content };
+  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCase: scan.fullCase, source: scan.file.content, parametersFixed: project.parametersFixed };
 }
 
 const ARCHITECTURE_OF = /\barchitecture\s+\w+\s+of\s+(\w+)\s+is\b/gi;

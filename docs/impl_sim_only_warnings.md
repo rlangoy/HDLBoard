@@ -155,7 +155,8 @@ alone.
   function is file I/O again: GHDL rejects the `line` variable (*variable with access type is not synthesizable*),
   and so does a `line` variable in a process. A **file** read there still counts (`file`, `file_open`, `readline`):
   Quartus builds a ROM filled from a file as zeros, without an error (§ 3.6).
-- File I/O of any kind in a function or procedure that code synthesis reads never calls: nothing in it runs.
+- File I/O of any kind in a function or procedure that code synthesis reads never calls, also through others (a
+  file-reading function called only by a helper nothing calls): nothing in it runs.
   riscv_vhdl's `otp_clocked` declares a file-reading `init_ram` whose call is commented out; Quartus builds it
   (measured 2026-11-27). Its `rom_inferred` and `sram8_inferred_init` call theirs, and stay SIM-only: Quartus
   builds both memories as zeros from a hex file of non-zero lines.
@@ -247,23 +248,44 @@ attribute `(* full_case *)` right before it; `blank.ts` records them, but not in
 out or inside translate_off, and not `full_case` inside an attribute's quoted value (`(* keep = "full_case" *)`,
 `(* keep = "foo, full_case=bar" *)`).
 
+**Parameters.** A module's parameters have their default values when nothing in the project can override them
+(`parameterOverrides.ts`): no instance of it with `#( … )` or `#2`, no `defparam` that reaches it, no macro that may pass
+an override (`` `define P #(.R(1)) ``, `child `P u (…)`), no VHDL `generic map` on it. A `defparam u.R` reaches every
+instance named `u` in the module that holds it (two `generate` blocks may each have one); a deeper path (`g2.u.R`,
+`ua.u.R`), every instance of that name in the project. Macros are the `` `define ``s of active code, as `blank.ts`
+evaluates `` `ifdef `` (one in a branch the view leaves out is none), expanded through each other (`` `define OUTER
+`INNER ``). What cannot be resolved (no instance of the name, a macro whose expansion holds `#` used anywhere but
+after a module name or as a delay) counts as overriding every module. A `parameter` in the body of
+a module with a parameter port list is local and cannot be overridden (Verilog-2005 § 12.2; Quartus Warning 10222,
+Error 10213 for `#(.B(2))`, Error 10130 for a `defparam`). Constants are computed exactly as Verilog computes them or
+not at all (`verilogExactValues.ts`): one literal, one earlier constant, or arithmetic and `$clog2` on 32-bit integers
+whose every step stays in range (`32'hffff_ffff + 32'd1` wraps to 0 in Verilog, so it is not computed); a declared
+`integer` type or `[msb:lsb]` range cuts the value, and holds for every item of its list (`localparam [0:0] FIRST = 0,
+ON = 2;` makes `ON` a 0); a range wider than 64 bits is not computed (`[99999999999999999:0]`, invalid HDL being
+edited, must not stop the check); and a name declared twice (each `generate` block its own `ON`) is not folded.
+Indexes, widths and loop bounds (`constantIndex.ts`) are computed the same careful way: arithmetic with a based literal
+in it is not (`$clog2(32'hffff_ffff + 32'd1)` is `$clog2(0)` in Verilog), nor a step outside a 32-bit integer.
+
 An `if` that reads only parameters, genvars, numbers and `$clog2` (`if (R == 2)`, `if (MODE == "COLROW")`) is decided
-while elaborating, one way for each instance. The check never evaluates it, neither from the parameters' defaults (an
-instance may override them: `#(.R(1))`) nor with Verilog's operator rules (`!2 == 1` is `(!2) == 1`, `4'shF < 4'h1`
-compares unsigned). Each combination of a block's such conditions is walked with them decided (up to six, 64
-walks), and a variable that one combination keeps is a latch: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when
-R is not 2. A combination is not the defaults, so it is walked with the localparams of fixed value alone; a loop bound
-or width made of a parameter is unknown there, and what that loop writes is unsure (a signal of unknown width that
-it writes, as a whole), in that combination only: the branch a combination leaves out adds nothing unsure. A
-variable a combination never assigns keeps nothing in it. Conditions are told apart by their source as written, so
-`MODE == "A"` and `MODE == "B"` are two (the blanked code reads them alike). A `case` selector's width is the one no
-instance can change: `case ({s, a})` with `s` a parameter's width names every value only for its default. A
-condition on localparams no instance can change (no parameter in their value, no declared type or range) that is a
-name alone or an `==`/`!=` of non-negative values (`if (ON)`, `if (MODE == 2)`) is decided; nothing else is
-evaluated. When the combinations would cost more than 20 000 steps (statements and loop bits, as the first walk
-counts them, times the combinations), the first walk stands, each condition read as any other `if`. Code review of 2026-11-27 (an
-earlier version folded such conditions with the defaults); each case built with Quartus in
-`verilogQuartusCases.test.ts`.
+while elaborating, one way for each instance. A name alone or an `==`/`!=` of fixed non-negative values within a
+32-bit integer (`if (ON)`, `if (R == 2)` with `R` not overridden) is decided; nothing else is evaluated with Verilog's
+operator rules (`!2 == 1` is `(!2) == 1`, `4'shF < 4'h1` compares unsigned). Each combination of a block's other such
+conditions is walked with them decided (up to six, 64 walks), and a variable that one combination keeps is a latch:
+`if (R == 2) q = d; else if (e) q = d;` keeps `q` in an instance with `#(.R(1))`. A combination is walked with the
+fixed constants alone; a loop bound or width made of an overridable parameter is unknown there, and what that loop
+writes is unsure (a signal of unknown width that it writes, as a whole), in that combination only: the branch a
+combination leaves out adds nothing unsure. A variable a combination never assigns keeps nothing in it. Conditions
+are told apart by their source as written, blanks dropped outside strings only: `MODE == "A"`, `MODE == "B"` and
+`MODE == "A B"` are three (the blanked code reads them alike). When the combinations would cost more than 20 000
+steps (statements and loop bits, as the first walk counts them, times the combinations), the first walk stands, each
+condition read as any other `if`.
+
+A `case` names every value when its selector's width and its labels are fixed: `case ({s, a})` with `s` as wide as
+an overridden parameter, or a label `B:` an instance may move, does not. Its selector is read without parentheses
+(`casez ((s))`). A selector of declared signals whose width the check cannot compute still has a width synthesis
+knows, so the wildcard fallback (a `casez` with a wildcard label taken as complete) does not apply to it; an unsized
+label of wildcards only (`'b?`) matches every value of any width. Code reviews of 2026-11-27; each case built with
+Quartus in `verilogQuartusCases.test.ts`.
 
 Still a latch, though Quartus builds none: a state machine's `case` without `default` whose missing states cannot be
 reached (Quartus extracts the state machine; the check cannot see which states are reachable). A `wait until` is a clocked process when its condition has one

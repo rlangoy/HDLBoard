@@ -20,7 +20,7 @@
  */
 
 import { bracketed, closingBracket, topLevel, topLevelItems, unwrapped } from './brackets';
-import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
+import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, valueOfName, type Bindings } from './constantIndex';
 import { NO_FULL_CASE, type FullCaseMarks } from '../tbDetect/blank';
 import type { BitRange } from './verilogDeclarations';
 
@@ -76,6 +76,8 @@ export interface StatementContext {
   readonly fixedConstants?: Bindings;
   /** Declared ranges no instance can change: a `case` selector's width, for whether its labels name every value. */
   readonly selectorRangeOf?: (name: string) => BitRange | undefined;
+  /** The module's declared signals, ports included: a selector of them has a width synthesis knows. */
+  readonly signals?: ReadonlySet<string>;
   /** Counts the work of a walk: statements, and bits of loops followed. */
   readonly work?: { steps: number };
 }
@@ -291,6 +293,9 @@ function isElaborationCondition(ctx: StatementContext, condition: string): boole
   return names.every((name) => ELABORATION_FUNCTION.test(name) || fixed.has(name) || ctx.constants.has(name));
 }
 
+/** The largest 32-bit signed integer: an unsized decimal number above it is not a plain integer in Verilog. */
+const MAX_INTEGER = 2_147_483_647;
+
 /** `ON`, `MODE == 2`, `2 != W`: a name or a decimal number, compared for equality. */
 const SIMPLE_EQUALITY = /^([A-Za-z_]\w*|\d+)\s*(===|!==|==|!=)\s*([A-Za-z_]\w*|\d+)$/;
 const SINGLE_NAME = /^[A-Za-z_]\w*$/;
@@ -304,8 +309,9 @@ const SINGLE_NAME = /^[A-Za-z_]\w*$/;
 function fixedValue(condition: string, fixed: Bindings | undefined): boolean | undefined {
   if (fixed === undefined) return undefined;
   const c = unwrapped(condition);
-  const valueOf = (token: string) => (/^\d+$/.test(token) ? Number(token) : fixed.get(token));
-  const known = (v: number | undefined): v is number => v !== undefined && v >= 0 && Number.isSafeInteger(v);
+  const valueOf = (token: string) => (/^\d+$/.test(token) ? Number(token) : valueOfName(fixed, token));
+  // Non-negative and within a 32-bit integer: no width or sign rule changes a comparison of such values.
+  const known = (v: number | undefined): v is number => v !== undefined && v >= 0 && v <= MAX_INTEGER;
   if (SINGLE_NAME.test(c)) {
     const v = valueOf(c);
     return known(v) ? v !== 0 : undefined;
@@ -317,9 +323,19 @@ function fixedValue(condition: string, fixed: Bindings | undefined): boolean | u
   return m[2].startsWith('=') ? a === b : a !== b;
 }
 
-/** The condition at `at` as written, without blanks: its strings are part of it (`MODE=="A"`). */
-const conditionKey = (ctx: StatementContext, condition: string, at: number): string =>
-  (ctx.source?.slice(at, at + condition.length) ?? condition).replace(/\s+/g, '');
+/** A string literal, `\"` and `\\` inside it included. */
+const STRING_LITERAL = /"(?:[^"\\\n]|\\.)*"/g;
+
+/**
+ * The condition at `at` as written, its blanks dropped outside its strings: `MODE == "A"`
+ * and `MODE=="A"` are one condition, `MODE == "AB"` and `MODE == "A B"` two.
+ */
+function conditionKey(ctx: StatementContext, condition: string, at: number): string {
+  const written = ctx.source?.slice(at, at + condition.length) ?? condition;
+  const strings = written.match(STRING_LITERAL) ?? [];
+  const outside = written.split(STRING_LITERAL).map((part) => part.replace(/\s+/g, ''));
+  return outside.map((part, k) => part + (strings[k] ?? '')).join('');
+}
 
 /** The branch an elaboration condition takes in the configuration being walked; undefined when it is not decided. */
 function elaborationDecision(ctx: StatementContext, condition: string, at: number): boolean | undefined {
@@ -358,7 +374,7 @@ const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
  * or a concatenation of those and sized numbers (`{a[24], b[24]}` is two bits).
  */
 function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): number | undefined {
-  const s = selector.replace(/\s+/g, '');
+  const s = unwrapped(selector).replace(/\s+/g, '');
   if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
     const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf));
     return widths.every((w) => w !== undefined) ? widths.reduce<number>((sum, w) => sum + (w ?? 0), 0) : undefined;
@@ -458,10 +474,40 @@ function markedFullCase(ctx: StatementContext, caseAt: number, firstItemAt: numb
   return directives.some((p) => (p >= caseAt && p < firstItemAt) || rightBefore(p)) || attributes.some(rightBefore);
 }
 
-/** Whether the labels name every value of the selector, at its width as no instance can change it (an overridden parameter may widen it). */
-function labelsNameEveryValue(ctx: StatementContext, selector: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
+/** The signals a selector reads, whole or in part: `s`, `s[W-1:0]`, `{a, b[1], 2'b0}`; undefined for any other form. */
+function selectorSignals(selector: string): string[] | undefined {
+  const s = unwrapped(selector);
+  if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
+    const parts = topLevelItems(s.slice(1, -1)).map((item) => (SIZED_LITERAL.test(item.replace(/\s+/g, '')) ? [] : selectorSignals(item)));
+    return parts.some((p) => p === undefined) ? undefined : parts.flatMap((p) => p ?? []);
+  }
+  const m = /^([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/.exec(s);
+  return m ? [m[1]] : undefined;
+}
+
+/**
+ * Whether the labels name every value of the selector as no instance can change them: the
+ * selector's width with fixed ranges (an overridden parameter may widen it), the labels with
+ * fixed constants (an overridden parameter may move one: `B:` with `#(.B(2))`). A selector of
+ * declared signals has a width synthesis knows even when the check cannot compute it
+ * (`[W-1:0]` with `W = $clog2(4)`, or a parameter an instance overrides): the labels may name
+ * only part of its values, so the wildcard fallback of `namesEveryValue` does not apply.
+ */
+function labelsNameEveryValue(ctx: StatementContext, written: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
+  const selector = unwrapped(written); // `casez ((s))` reads `s`
+  if (labels.items.some((label) => matchesAnyValue(label, labels.kind))) return true;
   const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf);
-  return namesEveryValue(labels.items, { width, constants: ctx.constants, kind: labels.kind });
+  const signals = width === undefined ? selectorSignals(selector) : undefined;
+  if (signals !== undefined && signals.length > 0 && signals.every((name) => ctx.signals?.has(name))) return false;
+  return namesEveryValue(labels.items, { width, constants: ctx.fixedConstants ?? ctx.constants, kind: labels.kind });
+}
+
+/** An unsized label of wildcard digits only, `'b?` or `'hz` in a casez (`x` too in a casex): it matches a selector of any width up to 32 bits. */
+function matchesAnyValue(label: string, kind: CaseKind): boolean {
+  const m = WILDCARD_LABEL.exec(label.trim())?.groups;
+  if (!m || m.size !== '' || kind === 'case') return false;
+  const wildcard = kind === 'casex' ? /^[?zx_]+$/i : /^[?z_]+$/i;
+  return wildcard.test(m.digits);
 }
 
 function caseStatement(ctx: StatementContext, i: number): Assigned {

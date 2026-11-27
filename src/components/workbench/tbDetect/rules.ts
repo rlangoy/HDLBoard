@@ -27,6 +27,11 @@ export interface UnitText {
   readonly fullCase?: FullCaseMarks;
   /** The file as written, same offsets as `code` (comments and strings kept); the design check's latch rule reads its conditions. */
   readonly source?: string;
+  /**
+   * Nothing in the project overrides this Verilog module's parameters (`parameterOverrides.ts`):
+   * their defaults are their values. Absent, an instance may give them any value.
+   */
+  readonly parametersFixed?: boolean;
 }
 
 export interface DetectionRule {

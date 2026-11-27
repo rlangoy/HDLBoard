@@ -69,6 +69,46 @@ describe('a subprogram nothing calls runs nowhere', () => {
     expect(fileIoLines(design(load))).toEqual([]);
   });
 
+  test('a file-reading function called only by a helper nothing calls (Quartus builds it)', () => {
+    const chain = [
+      'type rom_t is array (0 to 3) of std_logic_vector(7 downto 0);',
+      'impure function load(name : string) return rom_t is',
+      '  file f : text open read_mode is name;',
+      '  variable l : line;',
+      '  variable r : rom_t;',
+      'begin',
+      '  readline(f, l);',
+      '  return r;',
+      'end function;',
+      'impure function helper return rom_t is',
+      'begin',
+      '  return load("rom.txt");',
+      'end function;',
+    ].join('\n');
+    expect(fileIoLines(design(chain))).toEqual([]);
+  });
+
+  test('the same chain, the helper giving a constant its value, is file I/O', () => {
+    const chain = [
+      'type rom_t is array (0 to 3) of std_logic_vector(7 downto 0);',
+      'impure function load(name : string) return rom_t is',
+      '  file f : text open read_mode is name;',
+      '  variable l : line;',
+      '  variable r : rom_t;',
+      'begin',
+      '  readline(f, l);',
+      '  return r;',
+      'end function;',
+      'impure function helper return rom_t is',
+      'begin',
+      '  return load("rom.txt");',
+      'end function;',
+      'constant ROM : rom_t := helper;',
+    ].join('\n');
+    const content = design(chain);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'file f :', 'readline('));
+  });
+
   test('a procedure that writes a line, never called', () => {
     expect(fileIoLines(design('procedure say is\n  variable l : line;\nbegin\n  write(l, 1);\n  writeline(output, l);\nend procedure;'))).toEqual([]);
   });
