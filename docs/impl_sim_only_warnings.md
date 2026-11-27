@@ -155,6 +155,14 @@ alone.
   function is file I/O again: GHDL rejects the `line` variable (*variable with access type is not synthesizable*),
   and so does a `line` variable in a process. A **file** read there still counts (`file`, `file_open`, `readline`):
   Quartus builds a ROM filled from a file as zeros, without an error (§ 3.6).
+- `q <= #1 d;` in an edge-triggered `always`: synthesis drops the delay and the register still changes at the edge,
+  so it is the quiet `vlog-clocked-delay` (gutter `!`), not `vlog-delay`. Many designs write it to make waveforms
+  readable. Measured 2026-11-27 with Quartus Prime 25.1 Lite: builds, no message. A `#` before a statement
+  (`#10 q = 1;`, `always @(a) #1 x = a;`) is still `vlog-delay`, though Quartus drops that delay too: the
+  simulation waits there, the board does not.
+- `$time` printed by `$display`, `$write`, `$monitor` or `$strobe`: console output, already the quiet `vlog-display`.
+  Quartus Warning 10175 (*ignoring unsupported system task*). `$time` the design reads (`if ($time > 0)`) is still
+  `vlog-time`: Quartus Error 10174.
 - A `shared variable` of an array type written from two clocked processes: Quartus's true dual-port RAM template
   ([Quartus Prime Pro user guide, *True Dual-Port Synchronous RAM*](https://docs.altera.com/r/docs/683082/25.1/quartus-prime-pro-edition-user-guide/true-dual-port-synchronous-ram)).
   Tested: GHDL 6.0 synthesizes it with `-frelaxed` or `--std=93`. Without either, VHDL-2008 analysis already
@@ -225,7 +233,15 @@ The design check reads the code as synthesis does (`blankSource(…, 'synthesis'
 register only where their bits can meet (`LEDR(0)` and `LEDR(1)` are two registers, `bits.ts`); code inside
 `translate_off` takes part in no comparison. A latch is a variable that some path through the block leaves unassigned (an
 `if` without `else`, a `case` without `default`; the block is walked as statements), or one assigned from itself; a
-variable every path assigns is plain logic, in any order. A `wait until` is a clocked process when its condition has one
+variable every path assigns is plain logic, in any order. As Quartus builds them (measured 2026-11-27 on the gplgpu
+project, where 221 of 223 latch findings were false, and in `verilogQuartusCases.test.ts`): an index of genvars and
+parameters the check cannot work out (`q[i]` in a `generate for`, `q[W-1:E]`) names the same bits on every path;
+an `if` on constants only (`if (WIDTH == 2)`) is the branch it picks, the other is never built; a `case` on a
+concatenation (`case ({a, b})`) has the width of its parts; and a `case` marked `full_case`
+(`// synopsys full_case`, `/* synthesis full_case */`, `(* full_case *)`) names every value, since synthesis takes
+the missing ones as don't-care (`blank.ts` finds the directives in the comments it blanks). Still a latch, though
+Quartus builds none: a state machine's `case` without `default` whose missing states cannot be reached (Quartus
+extracts the state machine; the check cannot see which states are reachable), and an `if` on a string parameter. A `wait until` is a clocked process when its condition has one
 edge, in parentheses or with an enable joined by `and`, and no `for`, `or` or `on` (Quartus Prime 25.1 Lite builds
 `wait until (rising_edge(clk))` and `wait until rising_edge(clk) and en = '1'`). Verilog names are compared with
 case (`q` and `Q` are two registers), VHDL names without; a write inside `translate_off` takes part in no comparison.

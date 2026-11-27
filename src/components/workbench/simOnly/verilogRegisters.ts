@@ -17,7 +17,7 @@ import { escapeRegExp } from './constructText';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { declaredRanges, verilogConstants, verilogSignalNames } from './verilogDeclarations';
+import { declaredRanges, verilogConstants, verilogElaborationNames, verilogSignalNames } from './verilogDeclarations';
 import { concatenationCycles, splitAssignment, type Declarations } from './verilogDriverParts';
 import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type StatementContext } from './verilogStatements';
 
@@ -42,6 +42,8 @@ interface AlwaysBlock {
   readonly latch: boolean;
   /** The block's statement, after `always @( … )`, as synthesis reads it (translate_off blanked). */
   readonly body: string;
+  /** The file offset where `body` starts. */
+  readonly bodyAt: number;
 }
 
 /** The unit's `always` blocks that synthesis sees: one inside translate_off takes part in no comparison. */
@@ -52,9 +54,12 @@ function alwaysBlocks(t: UnitText): AlwaysBlock[] {
     const head = SENSITIVITY.exec(text);
     if (block.kind !== 'always' || !head) return [];
     const events = [...(head[2] ?? '').matchAll(EDGE_EVENT)].map((m): EdgeEvent => ({ signal: tidy(m[2]), direction: m[1] === 'posedge' ? 'rising' : 'falling' }));
-    return [{ block, events, edges: events.map((e) => e.signal), latch: head[1] === '_latch', body: text.slice(head[0].length) }];
+    return [{ block, events, edges: events.map((e) => e.signal), latch: head[1] === '_latch', body: text.slice(head[0].length), bodyAt: block.from + head[0].length }];
   });
 }
+
+/** The `always` blocks synthesis sees that run on a clock edge: `always @(posedge clk …)`. */
+export const edgeTriggeredBlocks = (t: UnitText): CodeBlock[] => alwaysBlocks(t).filter((a) => a.events.length > 0).map((a) => a.block);
 
 /** One `if` of the chain the statement starts with: its condition, and the branch it guards. */
 interface ChainedIf {
@@ -475,13 +480,15 @@ function readsItsOwnBits(value: string, name: string, index: string): boolean {
 export function verilogLevelStorage(t: UnitText): Found[] {
   const constants = verilogConstants(t.code);
   const rangeOf = declaredRanges(t.code, constants);
-  return alwaysBlocks(t).flatMap(({ block, edges, latch, body }) => {
+  const fixedNames = verilogElaborationNames(t.code);
+  return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
+    const fullCaseAt = (t.fullCaseAt ?? []).map((p) => p - bodyAt);
     const feedback = nonblockingTargets(body).flatMap((m) => {
       const value = assignedValue(body, m);
       return concatenationCycles(m[1] + m[2], value, { constants, rangeOf }) ?? (readsItsOwnBits(value, m[1], m[2]) ? [m[1]] : []);
     });
-    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set() };
+    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set(), fixedNames, fullCaseAt };
     const assigned = statementAssigns(ctx, 0);
     const unassigned = notAlwaysAssigned(ctx, assigned).filter((bit) => !ctx.unsure.has(bit)).map(signalOf);
     const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter((name) => feedback.includes(name))], sameName);

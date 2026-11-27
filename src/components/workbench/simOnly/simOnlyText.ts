@@ -76,6 +76,7 @@ export const CONSTRUCT_TEXT: Readonly<Record<SimOnlyConstructId, ConstructText>>
   'vlog-level-storage': { headline: 'This `always` keeps a value without a clock edge: the FPGA makes a latch, not a register.', explanation: [ALLOWED, VERILOG_ALLOWED, LATCH_FIX].join('\n') },
   'vlog-assign-delay': { headline: 'The `#` delay is ignored on the hardware.', explanation: 'Synthesis drops the delay, so on the board the wire changes at once. Only the simulation shows the delay.' },
   'vlog-display': { headline: '`$display` only prints in simulation.', explanation: 'Synthesis ignores it. It is harmless; the board just never prints it.' },
+  'vlog-clocked-delay': { headline: 'The `#` delay only shows in simulation.', explanation: 'Synthesis ignores a delay in `q <= #1 d;`. On the board the register still changes at the clock edge, as in the simulation, so it is harmless. Some designs write it to make waveforms easier to read.' },
   'sim-clock': { headline: 'This clock only exists in the simulator: the board has no such pin.', explanation: "HDLBoard adds a slow clock so a design can count slowly enough to watch. The FPGA board has no such clock pin. On the board, use the board's own clock and count its cycles." },
   'synth-check': { headline: 'Synthesis cannot build this line as written.', explanation: 'The synthesis check at Start found it. Its own message is in the problem card.' },
 };
@@ -237,6 +238,7 @@ export const CONSTRUCT_TITLE: Readonly<Record<SimOnlyConstructId, string>> = {
   'vlog-level-storage': 'latch',
   'vlog-assign-delay': 'assign #',
   'vlog-display': '$display',
+  'vlog-clocked-delay': '<= # delay',
   'sim-clock': 'simulator clock',
   'synth-check': 'synthesis check',
 };

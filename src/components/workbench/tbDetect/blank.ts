@@ -18,6 +18,11 @@ export interface BlankedSource {
   readonly code: string;
   /** Lines (1-based) of translate_off..translate_on and `ifndef SYNTHESIS regions. */
   readonly simOnlyRegions: readonly LineSpan[];
+  /**
+   * Verilog: where each `full_case` directive (`// synopsys full_case`) or attribute
+   * (`(* full_case *)`) starts. Synthesis takes the `case` it marks as naming every value.
+   */
+  readonly fullCaseAt: readonly number[];
 }
 
 const TRANSLATE = /^(?:--|\/\/)\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/i;
@@ -32,12 +37,15 @@ export function blankSource(language: Language, source: string, view: SourceView
   const lineOf = lineIndex(source);
   const pragmas = new PragmaRegions(lineOf);
   const chars = source.split('');
-  if (language === 'vhdl') lexVhdl(source, chars, pragmas, view);
-  else lexVerilog(source, chars, pragmas);
+  if (language === 'vhdl') {
+    lexVhdl(source, chars, pragmas, view);
+    pragmas.close(lineOf(source.length));
+    return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCaseAt: [] };
+  }
+  const fullCaseAt = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
-  if (language === 'vhdl') return { code: chars.join(''), simOnlyRegions: pragmas.regions };
   const pre = preprocessVerilog(chars.join(''), lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
-  return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start) };
+  return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start), fullCaseAt };
 }
 
 /** translate_off .. translate_on, from the line comments that carry them. */
@@ -103,16 +111,28 @@ function vhdlString(src: string, chars: string[], i: number): number {
 
 /* ------------------------------ Verilog ----------------------------- */
 
-function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): void {
+/** `// synopsys full_case`, `/* synthesis parallel_case full_case *\/`: a directive in a comment. */
+const FULL_CASE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)\b[^\n]*?\bfull_case\b/i;
+/** `(* full_case *)`, `(* parallel_case, full_case *)`. */
+const FULL_CASE_ATTRIBUTE = /\bfull_case\b/i;
+
+/** Lexes Verilog; returns where a `full_case` directive or attribute starts. */
+function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): number[] {
+  const fullCase: number[] = [];
   let i = 0;
   while (i < src.length) {
     const c = src[i];
-    if (c === '/' && src[i + 1] === '/') i = lineComment(src, chars, pragmas, i);
-    else if (c === '/' && src[i + 1] === '*') i = blockComment(src, chars, i);
-    else if (c === '"') i = verilogString(src, chars, i);
-    else if (c === '(' && src[i + 1] === '*' && src[i + 2] !== ')') i = attribute(src, chars, i);
-    else i++;
+    const from = i;
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      i = src[i + 1] === '/' ? lineComment(src, chars, pragmas, i) : blockComment(src, chars, i);
+      if (FULL_CASE_COMMENT.test(src.slice(from, i))) fullCase.push(from);
+    } else if (c === '"') i = verilogString(src, chars, i);
+    else if (c === '(' && src[i + 1] === '*' && src[i + 2] !== ')') {
+      i = attribute(src, chars, i);
+      if (FULL_CASE_ATTRIBUTE.test(src.slice(from, i))) fullCase.push(from);
+    } else i++;
   }
+  return fullCase;
 }
 
 function verilogString(src: string, chars: string[], i: number): number {

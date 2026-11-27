@@ -22,6 +22,8 @@ export interface UnitText {
   /** Line of a file offset. */
   readonly lineOf: LineOf;
   readonly simOnlyRegions: readonly LineSpan[];
+  /** Verilog: file offsets of `full_case` directives and attributes (`blank.ts`); the design check's latch rule reads them. */
+  readonly fullCaseAt?: readonly number[];
 }
 
 export interface DetectionRule {

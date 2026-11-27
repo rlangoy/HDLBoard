@@ -19,8 +19,9 @@
  * other loop may run no time.
  */
 
-import { bracketed, topLevel, topLevelItems } from './brackets';
+import { bracketed, closingBracket, topLevel, topLevelItems } from './brackets';
 import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
+import { constantCondition } from './verilogConditions';
 import type { BitRange } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
@@ -47,6 +48,17 @@ export interface StatementContext {
    * quiet. The other bits of the signal are judged as usual.
    */
   readonly unsure: Set<string>;
+  /**
+   * The names fixed when synthesis elaborates the module but not known to the check: its
+   * genvars (one value in each copy a `generate` loop makes) and parameters. An index made
+   * of them (`q[i]`, `q[W-1:E]`) names the same bits on every path.
+   */
+  readonly fixedNames?: ReadonlySet<string>;
+  /**
+   * Offsets in `text` where a `full_case` directive or attribute starts (`blank.ts`).
+   * Synthesis takes the `case` it marks as naming every value: it builds no latch for it.
+   */
+  readonly fullCaseAt?: readonly number[];
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
@@ -176,11 +188,28 @@ function followedBits(ctx: StatementContext, name: string, index: string): strin
   return bits;
 }
 
+const NAME = /[A-Za-z_]\w*/g;
+
+/**
+ * `q[i]` with `i` a genvar, `q[W-1:E]` with parameters of a value the check cannot work out
+ * (an index of such names, constants and numbers): bits fixed before running, in each copy
+ * of a `generate` loop. They are named by the index as written, so two paths that write
+ * `q[i]` both cover it; they are never a run-time value.
+ */
+function fixedBits(ctx: StatementContext, name: string, index: string): string | undefined {
+  const names = index.match(NAME) ?? [];
+  const fixed = ctx.fixedNames;
+  if (fixed === undefined || names.length === 0 || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
+  return `${name}[${index.replace(/\s+/g, '')}]`;
+}
+
 /**
  * `q[?]`: a bit known only while running. When the index uses a loop variable (`q[f(i)]`,
  * or loops too many to follow), the loop may well write every bit: the check is unsure.
  */
 function unknownBit(ctx: StatementContext, name: string, index: string): string[] {
+  const fixed = fixedBits(ctx, name, index);
+  if (fixed !== undefined) return [fixed];
   const usesALoop = [...ctx.loops.keys()].some((loop) => new RegExp(`\\b${loop}\\b`).test(index));
   const bit = `${name}${UNKNOWN_BIT}`;
   if (usesALoop) ctx.unsure.add(bit);
@@ -225,17 +254,34 @@ function blockStatement(ctx: StatementContext, i: number): Assigned {
   return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)) };
 }
 
+/**
+ * An `if` assigns what both branches assign on every path. A condition of constants only
+ * (`if (WIDTH == 2)`) is decided by synthesis: the branch it picks is the statement, and the
+ * other is never built.
+ */
 function ifStatement(ctx: StatementContext, i: number): Assigned {
-  const then = statementAssigns(ctx, parentheses(ctx.text, i).after);
+  const condition = parentheses(ctx.text, i);
+  const then = statementAssigns(ctx, condition.after);
   const next = skipBlanks(ctx.text, then.end);
-  if (wordAt(ctx.text, next) !== 'else') return { end: then.end, some: then.some, every: NOTHING };
-  const otherwise = statementAssigns(ctx, next + 'else'.length);
+  const otherwise = wordAt(ctx.text, next) === 'else' ? statementAssigns(ctx, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
+  const decided = constantCondition(condition.inside, ctx.constants);
+  if (decided !== undefined) return { ...(decided ? then : otherwise), end: otherwise.end };
   return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
 }
 
-/** The width of a case selector: a declared signal, one bit of it, or a constant part of it. */
+/** A sized number in a concatenation: `2'b01`, `4'hF`. */
+const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
+
+/**
+ * The width of a case selector: a declared signal, one bit of it, a constant part of it,
+ * or a concatenation of those and sized numbers (`{a[24], b[24]}` is two bits).
+ */
 function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): number | undefined {
   const s = selector.replace(/\s+/g, '');
+  if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
+    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf));
+    return widths.every((w) => w !== undefined) ? widths.reduce<number>((sum, w) => sum + (w ?? 0), 0) : undefined;
+  }
   const whole = /^[A-Za-z_]\w*$/.test(s) ? rangeOf(s) : undefined;
   if (whole) return Math.abs(whole.msb - whole.lsb) + 1;
   if (/^[A-Za-z_]\w*\[\d+\]$/.test(s)) return 1;
@@ -319,6 +365,14 @@ function defaultEnd(text: string, i: number): number {
   return text[after] === ':' ? after : i + 'default'.length - 1;
 }
 
+/**
+ * A `case` marked `full_case`: `case (s) // synopsys full_case` (the directive between the
+ * selector and the first item), or `(* full_case *) case (s)` (the attribute right before it).
+ */
+function markedFullCase(ctx: StatementContext, caseAt: number, firstItemAt: number): boolean {
+  return (ctx.fullCaseAt ?? []).some((p) => p >= 0 && ((p >= caseAt && p < firstItemAt) || (p < caseAt && ctx.text.slice(p, caseAt).trim() === '')));
+}
+
 function caseStatement(ctx: StatementContext, i: number): Assigned {
   const { text } = ctx;
   const selector = parentheses(text, i);
@@ -326,6 +380,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
   const labels: string[] = [];
   let hasDefault = false;
   let j = skipBlanks(text, selector.after);
+  const fullCase = markedFullCase(ctx, i, j);
   while (j < text.length && wordAt(text, j) !== 'endcase') {
     const isDefault = wordAt(text, j) === 'default';
     const labelEnd = isDefault ? defaultEnd(text, j) : caseLabelEnd(text, j);
@@ -335,7 +390,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
-  const complete = hasDefault || namesEveryValue(labels, { width: selectorWidth(selector.inside, ctx.rangeOf), constants: ctx.constants, kind: wordAt(text, i) as CaseKind });
+  const complete = hasDefault || fullCase || namesEveryValue(labels, { width: selectorWidth(selector.inside, ctx.rangeOf), constants: ctx.constants, kind: wordAt(text, i) as CaseKind });
   const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }

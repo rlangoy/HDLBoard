@@ -54,6 +54,18 @@ export function verilogConstants(code: string): Bindings {
 }
 
 const INTEGER = /\b(?:integer|genvar)\b([^;]*)/g;
+const GENVAR = /\bgenvar\b([^;]*)/g;
+
+/**
+ * The names fixed when synthesis elaborates the module, whether or not the check knows
+ * their value: its genvars (`genvar i, j;`, `for (genvar k = 0; …)`) and its parameters
+ * and localparams.
+ */
+export function verilogElaborationNames(code: string): ReadonlySet<string> {
+  const genvars = [...code.matchAll(GENVAR)].flatMap((m) => m[1].split(',').map((item) => /^\s*([A-Za-z_]\w*)/.exec(item)?.[1]));
+  const parameters = parameterItems(code).map((p) => p.name);
+  return new Set([...genvars, ...parameters].filter((name): name is string => name !== undefined));
+}
 
 /** The signals the module declares, ports included: what a value reads when it is no constant. */
 export function verilogSignalNames(code: string): ReadonlySet<string> {
