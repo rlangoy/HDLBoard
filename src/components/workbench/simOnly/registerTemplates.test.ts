@@ -82,6 +82,7 @@ const EVENT_CONDITIONS: [label: string, process: string, problems: string[]][] =
   ["(a'event and d='1'), no level of a (Error 10397)", edgeIf("(a'event and d='1')"), ['11 both-edges']],
   ["(a'event or a='1') (Error 10633)", edgeIf("(a'event or a='1')"), ['11 both-edges']],
   ["(a'event and a='1') or d='1' (Error 10626)", edgeIf("(a'event and a='1') or d='1'"), ['11 both-edges']],
+  ["((a'event or d='1') and a='1'), the or bypasses the event (Error 10397)", edgeIf("((a'event or d='1') and a='1')"), ['11 both-edges']],
   ["elsif (b='1') after (a'event and a='1') (Error 10818)", P("if (a'event and a='1') then\nx <= c;\nelsif (b='1') then\nx <= '0';\nend if;"), ['13 outside-edge']],
   ["(a'event and a='1') then elsif rising_edge(a), the same edge (accepted)", P("if (a'event and a='1') then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
   ["(a'event and a='1') then elsif (a'event and a='0') (Error 10819)", P("if (a'event and a='1') then\nx <= c;\nelsif (a'event and a='0') then\nx <= d;\nend if;"), ['13 both-edges']],

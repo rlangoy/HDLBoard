@@ -9,6 +9,7 @@
  */
 
 import { RULE_TEXT } from '../testbenchText';
+import type { FullCaseMarks } from './blank';
 import type { LineOf } from './lines';
 import type { DesignUnit, Language, LineSpan, RuleId } from './types';
 
@@ -22,6 +23,15 @@ export interface UnitText {
   /** Line of a file offset. */
   readonly lineOf: LineOf;
   readonly simOnlyRegions: readonly LineSpan[];
+  /** Verilog: file offsets of the `full_case` marks in active code (`blank.ts`); the design check's latch rule reads them. */
+  readonly fullCase?: FullCaseMarks;
+  /** The file as written, same offsets as `code` (comments and strings kept); the design check's latch rule reads its conditions. */
+  readonly source?: string;
+  /**
+   * Nothing in the project overrides this Verilog module's parameters (`parameterOverrides.ts`):
+   * their defaults are their values. Absent, an instance may give them any value.
+   */
+  readonly parametersFixed?: boolean;
 }
 
 export interface DetectionRule {

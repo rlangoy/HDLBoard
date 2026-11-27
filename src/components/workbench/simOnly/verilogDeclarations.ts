@@ -8,8 +8,9 @@
  * `N` is known). Read from blanked code. Pure.
  */
 
-import { topLevelItems } from './brackets';
+import { bracketed, topLevelItems } from './brackets';
 import { integerValue, type Bindings } from './constantIndex';
+import { exactValues } from './verilogExactValues';
 
 /** A declared range: `[7:0]` is msb 7, lsb 0; a scalar is 0, 0. */
 export interface BitRange {
@@ -18,7 +19,7 @@ export interface BitRange {
 }
 
 const PARAMETER = /\b(?:parameter|localparam)\b/g;
-const PARAMETER_ITEM = /^\s*(?:(?:parameter|localparam)\s+)?(?:(?:integer|signed|unsigned)\s+)?(?:\[[^\]]*\]\s*)?([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
+const PARAMETER_ITEM = /^\s*(?:(parameter|localparam)\s+)?((?:(?:integer|signed|unsigned)\s+)?(?:\[[^\]]*\]\s*)?)([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
 
 /** The text after a `parameter` keyword up to its `;`, or the `)` that closes a `#( … )` list. */
 function parameterList(code: string, from: number): string {
@@ -33,27 +34,104 @@ function parameterList(code: string, from: number): string {
   return code.slice(from);
 }
 
-/** Each parameter and localparam of the module, as written: its name and its value's text. */
-function parameterItems(code: string): { name: string; value: string }[] {
-  return [...code.matchAll(PARAMETER)].flatMap((m) =>
-    topLevelItems(parameterList(code, (m.index ?? 0) + m[0].length)).flatMap((item) => {
-      const parameter = PARAMETER_ITEM.exec(item);
-      return parameter ? [{ name: parameter[1], value: parameter[2] }] : [];
-    }),
-  );
+interface ParameterItem {
+  readonly name: string;
+  /** Its value's text. */
+  readonly value: string;
+  /** No instance can override it. */
+  readonly local: boolean;
+  /** Its declared type or range, as written (`[0:0]`, `integer`); empty when none. */
+  readonly type: string;
+  /** Where its name is declared in the code: one declaration read through two keyword lists is one. */
+  readonly at: number;
 }
 
-/** The module's parameters and localparams with a value made of numbers and earlier ones: `N = 8`, `W = N * 2`. */
+/** `module m #(`: where the module's parameter port list opens. */
+const PARAMETER_PORT_LIST = /\bmodule\s+[A-Za-z_]\w*\s*#\s*\(/;
+
+/** The module's parameter port list `#( … )`, when it declares any. */
+function parameterPortList(code: string): { readonly from: number; readonly to: number } | undefined {
+  const m = PARAMETER_PORT_LIST.exec(code);
+  if (!m) return undefined;
+  const open = m.index + m[0].length - 1;
+  const inside = bracketed(code, open);
+  return inside.includes('=') ? { from: open, to: open + inside.length + 1 } : undefined;
+}
+
+/**
+ * Each parameter and localparam of the module, as written. An item without its own
+ * keyword belongs to the declaration before it, type and range included
+ * (`localparam [0:0] FIRST = 0, ON = 2;` declares both one bit wide). A `parameter` in the
+ * body of a module with a parameter port list is local (Verilog-2005 § 12.2; Quartus
+ * Warning 10222, and Errors 10213 and 10130 for `#(.B(2))` and `defparam`).
+ */
+function parameterItems(code: string): ParameterItem[] {
+  const header = parameterPortList(code);
+  return [...code.matchAll(PARAMETER)].flatMap((m) => {
+    const at = m.index ?? 0;
+    const inHeader = header !== undefined && at >= header.from && at < header.to;
+    let declaration = { keyword: m[0], type: '' };
+    let itemAt = at + m[0].length;
+    return topLevelItems(parameterList(code, itemAt)).flatMap((item, k) => {
+      const start = itemAt;
+      itemAt += item.length + 1; // the item and its comma
+      const parameter = PARAMETER_ITEM.exec(item);
+      if (!parameter) return [];
+      if (parameter[1] !== undefined || k === 0) declaration = { keyword: parameter[1] ?? m[0], type: parameter[2].trim() };
+      const local = declaration.keyword === 'localparam' || (header !== undefined && !inHeader);
+      const nameAt = start + item.search(new RegExp(`\\b${parameter[3]}\\s*=`));
+      return [{ name: parameter[3], value: parameter[4], local, type: declaration.type, at: nameAt }];
+    });
+  });
+}
+
+/**
+ * The module's parameters and localparams with a value made of numbers and earlier ones:
+ * `N = 8`, `W = N * 2`, exactly as Verilog computes them (`verilogExactValues.ts`). A
+ * parameter has its default value, which an instance may override.
+ */
 export function verilogConstants(code: string): Bindings {
-  const constants = new Map<string, number>();
-  for (const { name, value } of parameterItems(code)) {
-    const known = integerValue(value, constants);
-    if (known !== undefined && !constants.has(name)) constants.set(name, known);
-  }
-  return constants;
+  return exactValues(unambiguous(parameterItems(code)));
+}
+
+/**
+ * Each declaration once (one read through two keyword lists is one), and none of a name
+ * declared twice: two `generate` blocks may each declare their own `ON`, and the
+ * module-wide value would be the wrong one in the other block.
+ */
+function unambiguous(items: readonly ParameterItem[]): ParameterItem[] {
+  const declarations = [...new Map(items.map((item) => [item.at, item])).values()];
+  const declared = new Map<string, number>();
+  for (const { name } of declarations) declared.set(name, (declared.get(name) ?? 0) + 1);
+  return declarations.filter((item) => declared.get(item.name) === 1);
+}
+
+/**
+ * The constants no instance can change, with their value exactly as Verilog computes it
+ * (`verilogExactValues.ts`): the module's local ones, and its parameters too when nothing
+ * in the project overrides them (`parametersFixed`). Made of numbers and earlier such
+ * constants (`localparam W = 8 * 2`, not `localparam W = N * 2` with `N` an overridable
+ * parameter). One Verilog's width rules could change (`32'hffff_ffff + 32'd1`) has none,
+ * and so has a name declared twice (two `generate` blocks may each declare their own
+ * `ON`): the module-wide value would be the wrong one in the other block.
+ */
+export function verilogFixedConstants(code: string, parametersFixed = false): Bindings {
+  return exactValues(unambiguous(parameterItems(code)).filter((item) => item.local || parametersFixed));
 }
 
 const INTEGER = /\b(?:integer|genvar)\b([^;]*)/g;
+const GENVAR = /\bgenvar\b([^;]*)/g;
+
+/**
+ * The names fixed when synthesis elaborates the module, whether or not the check knows
+ * their value: its genvars (`genvar i, j;`, `for (genvar k = 0; …)`) and its parameters
+ * and localparams.
+ */
+export function verilogElaborationNames(code: string): ReadonlySet<string> {
+  const genvars = [...code.matchAll(GENVAR)].flatMap((m) => m[1].split(',').map((item) => /^\s*([A-Za-z_]\w*)/.exec(item)?.[1]));
+  const parameters = parameterItems(code).map((p) => p.name);
+  return new Set([...genvars, ...parameters].filter((name): name is string => name !== undefined));
+}
 
 /** The signals the module declares, ports included: what a value reads when it is no constant. */
 export function verilogSignalNames(code: string): ReadonlySet<string> {

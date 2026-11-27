@@ -63,6 +63,7 @@ const VERILOG_CASES: Record<string, [positive: string, negative: string]> = {
   'vlog-level-storage': [vlog('always @(SW[0]) if (SW[0]) LEDR <= LEDR + 1;'), vlog('always @(SW) LEDR <= SW;')],
   'vlog-assign-delay': [vlog('wire [9:0] y;\nassign #5 y = SW;'), vlog('wire [9:0] y;\nassign y = SW;')],
   'vlog-display': [vlog('always @(posedge CLOCK_50) $display("%b", SW);'), vlog('always @(posedge CLOCK_50) LEDR <= SW;')],
+  'vlog-clocked-delay': [vlog('always @(posedge CLOCK_50) LEDR <= #1 SW;'), vlog('always @(posedge CLOCK_50) LEDR <= SW;')],
 };
 
 describe('every construct is tested and has its text', () => {
@@ -104,6 +105,8 @@ const NOT_SIM_ONLY: [string, string, string][] = [
   ['real in a constant', 'top.vhd', vhdl("LEDR(0) <= '1';", 'constant N : natural := integer(ceil(log2(real(10))));')],
   ['an initial ROM in Verilog', 'top.v', vlog('reg [9:0] rom [0:3];\ninitial begin rom[0] = 10\'h3ff; rom[1] = 0; end\nalways @(posedge CLOCK_50) LEDR <= rom[SW[1:0]];')],
   ['a clocked always block', 'top.v', vlog('always @(posedge CLOCK_50) begin\n  LEDR <= SW;\nend')],
+  ['a <= #1 delay in a clocked block (Quartus drops the delay)', 'top.v', vlog('always @(posedge CLOCK_50 or negedge SW[9])\n  if (~SW[9]) LEDR <= 0;\n  else LEDR <= #1 SW;')],
+  ['$time printed by $write (Quartus Warning 10175: ignored)', 'top.v', vlog('always @(posedge CLOCK_50) begin\n  LEDR <= SW;\n  if (SW[0]) $write($time);\nend')],
 ];
 
 describe('code that runs on the FPGA gets no finding (§ 3.3)', () => {

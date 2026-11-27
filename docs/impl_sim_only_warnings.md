@@ -147,6 +147,27 @@ alone.
 - `assert` on constants or generics, e.g. a parameter range check: ignored by synthesis but harmless. It stays quiet.
 - Anything inside `translate_off/on` or `` `ifndef SYNTHESIS `` (S6).
 - `use std.textio.all;` with no file, no `line` variable and no read/write: nothing happens, nothing to warn (S10).
+- A `line` variable and `writeline` in a function that only computes a constant, or a signal's type or initial
+  value, directly or through another such function: synthesis evaluates it once, while the design is elaborated,
+  and builds none of it (`vhdlElaboration.ts`). PoC's `arith_addw` prints its block layout this way
+  (`constant BLOCKS : integer_vector := compute_blocks;`). Measured 2026-11-27: Quartus Prime 25.1 Lite and
+  GHDL 6.0.0 `--synth` both build it, with the writes in translate_off or not. Called from a process, the same
+  function is file I/O again: GHDL rejects the `line` variable (*variable with access type is not synthesizable*),
+  and so does a `line` variable in a process. A **file** read there still counts (`file`, `file_open`, `readline`):
+  Quartus builds a ROM filled from a file as zeros, without an error (§ 3.6).
+- File I/O of any kind in a function or procedure that code synthesis reads never calls, also through others (a
+  file-reading function called only by a helper nothing calls): nothing in it runs.
+  riscv_vhdl's `otp_clocked` declares a file-reading `init_ram` whose call is commented out; Quartus builds it
+  (measured 2026-11-27). Its `rom_inferred` and `sram8_inferred_init` call theirs, and stay SIM-only: Quartus
+  builds both memories as zeros from a hex file of non-zero lines.
+- `q <= #1 d;` in an edge-triggered `always`: synthesis drops the delay and the register still changes at the edge,
+  so it is the quiet `vlog-clocked-delay` (gutter `!`), not `vlog-delay`. Many designs write it to make waveforms
+  readable. Measured 2026-11-27 with Quartus Prime 25.1 Lite: builds, no message. A `#` before a statement
+  (`#10 q = 1;`, `always @(a) #1 x = a;`) is still `vlog-delay`, though Quartus drops that delay too: the
+  simulation waits there, the board does not.
+- `$time` printed by `$display`, `$write`, `$monitor` or `$strobe`: console output, already the quiet `vlog-display`.
+  Quartus Warning 10175 (*ignoring unsupported system task*). `$time` the design reads (`if ($time > 0)`) is still
+  `vlog-time`: Quartus Error 10174.
 - A `shared variable` of an array type written from two clocked processes: Quartus's true dual-port RAM template
   ([Quartus Prime Pro user guide, *True Dual-Port Synchronous RAM*](https://docs.altera.com/r/docs/683082/25.1/quartus-prime-pro-edition-user-guide/true-dual-port-synchronous-ram)).
   Tested: GHDL 6.0 synthesizes it with `-frelaxed` or `--std=93`. Without either, VHDL-2008 analysis already
@@ -217,7 +238,57 @@ The design check reads the code as synthesis does (`blankSource(…, 'synthesis'
 register only where their bits can meet (`LEDR(0)` and `LEDR(1)` are two registers, `bits.ts`); code inside
 `translate_off` takes part in no comparison. A latch is a variable that some path through the block leaves unassigned (an
 `if` without `else`, a `case` without `default`; the block is walked as statements), or one assigned from itself; a
-variable every path assigns is plain logic, in any order. A `wait until` is a clocked process when its condition has one
+variable every path assigns is plain logic, in any order. As Quartus builds them (measured 2026-11-27 on the gplgpu
+project, where 221 of 223 latch findings were false, and in `verilogQuartusCases.test.ts`): an index of genvars and
+parameters the check cannot work out (`q[i]` in a `generate for`, `q[W-1:E]`) names the same bits on every path;
+a `case` on a concatenation (`case ({a, b})`) has the width of its parts; and a `case` marked `full_case` names
+every value, since synthesis takes the missing ones as don't-care. The mark is a directive comment after the
+selector or right before `case` (`// synopsys full_case`, `/* synthesis full_case */`; Quartus takes both), or the
+attribute `(* full_case *)` right before it; `blank.ts` records them, but not in an `ifdef branch the view leaves
+out or inside translate_off, and not `full_case` inside an attribute's quoted value (`(* keep = "full_case" *)`,
+`(* keep = "foo, full_case=bar" *)`).
+
+**Parameters.** A module's parameters have their default values when nothing in the project can override them
+(`parameterOverrides.ts`): no instance of it with `#( … )` or `#2`, no `defparam` that reaches it, no macro that may pass
+an override (`` `define P #(.R(1)) ``, `child `P u (…)`), no VHDL `generic map` on it. A `defparam u.R` reaches every
+instance named `u` in the module that holds it (two `generate` blocks may each have one); a deeper path (`g2.u.R`,
+`ua.u.R`), every instance of that name in the project. Macros are the `` `define ``s of active code, as `blank.ts`
+evaluates `` `ifdef `` (one in a branch the view leaves out is none), expanded through each other (`` `define OUTER
+`INNER ``). What cannot be resolved (no instance of the name, a macro whose expansion holds `#` used anywhere but
+after a module name or as a delay) counts as overriding every module. A `parameter` in the body of
+a module with a parameter port list is local and cannot be overridden (Verilog-2005 § 12.2; Quartus Warning 10222,
+Error 10213 for `#(.B(2))`, Error 10130 for a `defparam`). Constants are computed exactly as Verilog computes them or
+not at all (`verilogExactValues.ts`): one literal, one earlier constant, or arithmetic and `$clog2` on 32-bit integers
+whose every step stays in range (`32'hffff_ffff + 32'd1` wraps to 0 in Verilog, so it is not computed); a declared
+`integer` type or `[msb:lsb]` range cuts the value, and holds for every item of its list (`localparam [0:0] FIRST = 0,
+ON = 2;` makes `ON` a 0); a range wider than 64 bits is not computed (`[99999999999999999:0]`, invalid HDL being
+edited, must not stop the check); and a name declared twice (each `generate` block its own `ON`) is not folded.
+Indexes, widths and loop bounds (`constantIndex.ts`) are computed the same careful way: arithmetic with a based literal
+in it is not (`$clog2(32'hffff_ffff + 32'd1)` is `$clog2(0)` in Verilog), nor a step outside a 32-bit integer.
+
+An `if` that reads only parameters, genvars, numbers and `$clog2` (`if (R == 2)`, `if (MODE == "COLROW")`) is decided
+while elaborating, one way for each instance. A name alone or an `==`/`!=` of fixed non-negative values within a
+32-bit integer (`if (ON)`, `if (R == 2)` with `R` not overridden) is decided; nothing else is evaluated with Verilog's
+operator rules (`!2 == 1` is `(!2) == 1`, `4'shF < 4'h1` compares unsigned). Each combination of a block's other such
+conditions is walked with them decided (up to six, 64 walks), and a variable that one combination keeps is a latch:
+`if (R == 2) q = d; else if (e) q = d;` keeps `q` in an instance with `#(.R(1))`. A combination is walked with the
+fixed constants alone; a loop bound or width made of an overridable parameter is unknown there, and what that loop
+writes is unsure (a signal of unknown width that it writes, as a whole), in that combination only: the branch a
+combination leaves out adds nothing unsure. A variable a combination never assigns keeps nothing in it. Conditions
+are told apart by their source as written, blanks dropped outside strings only: `MODE == "A"`, `MODE == "B"` and
+`MODE == "A B"` are three (the blanked code reads them alike). When the combinations would cost more than 20 000
+steps (statements and loop bits, as the first walk counts them, times the combinations), the first walk stands, each
+condition read as any other `if`.
+
+A `case` names every value when its selector's width and its labels are fixed: `case ({s, a})` with `s` as wide as
+an overridden parameter, or a label `B:` an instance may move, does not. Its selector is read without parentheses
+(`casez ((s))`). A selector of declared signals whose width the check cannot compute still has a width synthesis
+knows, so the wildcard fallback (a `casez` with a wildcard label taken as complete) does not apply to it; an unsized
+label of wildcards only (`'b?`) matches every value of any width. Code reviews of 2026-11-27; each case built with
+Quartus in `verilogQuartusCases.test.ts`.
+
+Still a latch, though Quartus builds none: a state machine's `case` without `default` whose missing states cannot be
+reached (Quartus extracts the state machine; the check cannot see which states are reachable). A `wait until` is a clocked process when its condition has one
 edge, in parentheses or with an enable joined by `and`, and no `for`, `or` or `on` (Quartus Prime 25.1 Lite builds
 `wait until (rising_edge(clk))` and `wait until rising_edge(clk) and en = '1'`). Verilog names are compared with
 case (`q` and `Q` are two registers), VHDL names without; a write inside `translate_off` takes part in no comparison.
@@ -327,6 +398,19 @@ the student's design simulates in HDLBoard and Quartus Lite refuses it. The row 
 4. Look for other VHDL-2008 constructs the two tools treat differently (`process (all)` needs the VHDL-2008 setting
    in Quartus; Quartus Lite's VHDL-2008 support is partial), and whether a Quartus project created for the DE1-SoC
    turns VHDL-2008 on at all.
+
+**Measured difference: a ROM filled from a file**, found 2026-11-27 while checking PoC's `arith_addw` (§ 3.3):
+an `impure function` opens a text file with `file f : text open read_mode is "rom.txt";`, reads it with
+`readline`/`read`, and its result is a constant ROM.
+
+| Tool | Result |
+|---|---|
+| Quartus Prime 25.1 Lite, VHDL-2008 | builds **without the file's contents**, and without an error: every output stuck at GND (Warning 13410), the address inputs drive nothing (21074) |
+| GHDL 6.0.0, `--synth --std=08` | reads the file: *found ROM "n9", width: 8 bits, depth: 4* |
+| Vivado | not measured. UG901's RAM coding examples fill a RAM from a file this way |
+
+**What the check does today:** `vhdl-file-io` on the file's lines, so the design is SIM-only on every board. On the
+DE1-SoC that is right. On the Basys 3 and Nexys A7 it may be a false finding, to be measured with item 1.
 
 ## 4. Which code is hardware
 

@@ -19,8 +19,9 @@
  * other loop may run no time.
  */
 
-import { bracketed, topLevel, topLevelItems } from './brackets';
-import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
+import { bracketed, closingBracket, topLevel, topLevelItems, unwrapped } from './brackets';
+import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, valueOfName, type Bindings } from './constantIndex';
+import { NO_FULL_CASE, type FullCaseMarks } from '../tbDetect/blank';
 import type { BitRange } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
@@ -47,6 +48,38 @@ export interface StatementContext {
    * quiet. The other bits of the signal are judged as usual.
    */
   readonly unsure: Set<string>;
+  /**
+   * The names fixed when synthesis elaborates the module but not known to the check: its
+   * genvars (one value in each copy a `generate` loop makes) and parameters. An index made
+   * of them (`q[i]`, `q[W-1:E]`) names the same bits on every path.
+   */
+  readonly fixedNames?: ReadonlySet<string>;
+  /**
+   * Offsets in `text` where `full_case` marks start (`blank.ts`). Synthesis takes the `case`
+   * one marks as naming every value: it builds no latch for it.
+   */
+  readonly fullCase?: FullCaseMarks;
+  /**
+   * Elaboration conditions (`if (R == 2)`, `if (i == 0)` in a generate copy) decided for one
+   * configuration of the module, by their text without blanks. A condition not in the map
+   * is read as any other `if`: either branch may run.
+   */
+  readonly decisions?: ReadonlyMap<string, boolean>;
+  /** Filled while walking: the elaboration conditions met, by their text without blanks. */
+  readonly elaborationConditions?: Set<string>;
+  /**
+   * The source of `text` as written, same offsets: comments and strings kept. Conditions are
+   * told apart by it: `MODE == "A"` and `MODE == "B"` are blanked alike.
+   */
+  readonly source?: string;
+  /** Values no instance can change (`verilogFixedConstants`): a condition of them alone is decided. */
+  readonly fixedConstants?: Bindings;
+  /** Declared ranges no instance can change: a `case` selector's width, for whether its labels name every value. */
+  readonly selectorRangeOf?: (name: string) => BitRange | undefined;
+  /** The module's declared signals, ports included: a selector of them has a width synthesis knows. */
+  readonly signals?: ReadonlySet<string>;
+  /** Counts the work of a walk: statements, and bits of loops followed. */
+  readonly work?: { steps: number };
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
@@ -167,6 +200,7 @@ function followedBits(ctx: StatementContext, name: string, index: string): strin
   const bindings = everyBinding(ctx.loops, ctx.constants, MAX_LOOP_RUNS);
   if (bindings === undefined) return undefined;
   const bits: string[] = [];
+  if (ctx.work) ctx.work.steps += bindings.length;
   for (const b of bindings) {
     const range = indexRange(index, b);
     const named = range && bitsOf(name, range);
@@ -176,11 +210,28 @@ function followedBits(ctx: StatementContext, name: string, index: string): strin
   return bits;
 }
 
+const NAME = /[A-Za-z_]\w*/g;
+
+/**
+ * `q[i]` with `i` a genvar, `q[W-1:E]` with parameters of a value the check cannot work out
+ * (an index of such names, constants and numbers): bits fixed before running, in each copy
+ * of a `generate` loop. They are named by the index as written, so two paths that write
+ * `q[i]` both cover it; they are never a run-time value.
+ */
+function fixedBits(ctx: StatementContext, name: string, index: string): string | undefined {
+  const names = index.match(NAME) ?? [];
+  const fixed = ctx.fixedNames;
+  if (fixed === undefined || names.length === 0 || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
+  return `${name}[${index.replace(/\s+/g, '')}]`;
+}
+
 /**
  * `q[?]`: a bit known only while running. When the index uses a loop variable (`q[f(i)]`,
  * or loops too many to follow), the loop may well write every bit: the check is unsure.
  */
 function unknownBit(ctx: StatementContext, name: string, index: string): string[] {
+  const fixed = fixedBits(ctx, name, index);
+  if (fixed !== undefined) return [fixed];
   const usesALoop = [...ctx.loops.keys()].some((loop) => new RegExp(`\\b${loop}\\b`).test(index));
   const bit = `${name}${UNKNOWN_BIT}`;
   if (usesALoop) ctx.unsure.add(bit);
@@ -225,17 +276,109 @@ function blockStatement(ctx: StatementContext, i: number): Assigned {
   return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)) };
 }
 
+/** A number as written, `4'hF`, `1'b0`: its letters are no names. */
+const BASED_NUMBER = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+/g;
+/** The system functions synthesis computes while elaborating. */
+const ELABORATION_FUNCTION = /^\$(?:clog2|bits|size)$/;
+
+/**
+ * A condition synthesis decides while elaborating, one way for each instance: it reads
+ * only parameters, genvars, numbers and `$clog2`. Its value is not taken from the
+ * parameters' defaults, since an instance may override them (`#(.R(1))`).
+ */
+function isElaborationCondition(ctx: StatementContext, condition: string): boolean {
+  const fixed = ctx.fixedNames;
+  if (fixed === undefined) return false;
+  const names = condition.replace(BASED_NUMBER, ' ').match(/\$?[A-Za-z_]\w*/g) ?? [];
+  return names.every((name) => ELABORATION_FUNCTION.test(name) || fixed.has(name) || ctx.constants.has(name));
+}
+
+/** The largest 32-bit signed integer: an unsized decimal number above it is not a plain integer in Verilog. */
+const MAX_INTEGER = 2_147_483_647;
+
+/** `ON`, `MODE == 2`, `2 != W`: a name or a decimal number, compared for equality. */
+const SIMPLE_EQUALITY = /^([A-Za-z_]\w*|\d+)\s*(===|!==|==|!=)\s*([A-Za-z_]\w*|\d+)$/;
+const SINGLE_NAME = /^[A-Za-z_]\w*$/;
+
+/**
+ * The value of a condition on values no instance can change, when its meaning is plain: a
+ * localparam of fixed value alone, or two of them (or a decimal number) compared with `==`
+ * or `!=`, all of them non-negative so neither width nor sign can change the answer. Anything
+ * else is undefined: Verilog's operator rules are not evaluated (`!2 == 1` is `(!2) == 1`).
+ */
+function fixedValue(condition: string, fixed: Bindings | undefined): boolean | undefined {
+  if (fixed === undefined) return undefined;
+  const c = unwrapped(condition);
+  const valueOf = (token: string) => (/^\d+$/.test(token) ? Number(token) : valueOfName(fixed, token));
+  // Non-negative and within a 32-bit integer: no width or sign rule changes a comparison of such values.
+  const known = (v: number | undefined): v is number => v !== undefined && v >= 0 && v <= MAX_INTEGER;
+  if (SINGLE_NAME.test(c)) {
+    const v = valueOf(c);
+    return known(v) ? v !== 0 : undefined;
+  }
+  const m = SIMPLE_EQUALITY.exec(c);
+  if (!m) return undefined;
+  const [a, b] = [valueOf(m[1]), valueOf(m[3])];
+  if (!known(a) || !known(b)) return undefined;
+  return m[2].startsWith('=') ? a === b : a !== b;
+}
+
+/** A string literal, `\"` and `\\` inside it included. */
+const STRING_LITERAL = /"(?:[^"\\\n]|\\.)*"/g;
+
+/**
+ * The condition at `at` as written, its blanks dropped outside its strings: `MODE == "A"`
+ * and `MODE=="A"` are one condition, `MODE == "AB"` and `MODE == "A B"` two.
+ */
+function conditionKey(ctx: StatementContext, condition: string, at: number): string {
+  const written = ctx.source?.slice(at, at + condition.length) ?? condition;
+  const strings = written.match(STRING_LITERAL) ?? [];
+  const outside = written.split(STRING_LITERAL).map((part) => part.replace(/\s+/g, ''));
+  return outside.map((part, k) => part + (strings[k] ?? '')).join('');
+}
+
+/** The branch an elaboration condition takes in the configuration being walked; undefined when it is not decided. */
+function elaborationDecision(ctx: StatementContext, condition: string, at: number): boolean | undefined {
+  if (!isElaborationCondition(ctx, condition)) return undefined;
+  const fixed = fixedValue(condition, ctx.fixedConstants);
+  if (fixed !== undefined) return fixed;
+  const key = conditionKey(ctx, condition, at);
+  ctx.elaborationConditions?.add(key);
+  return ctx.decisions?.get(key);
+}
+
+/**
+ * An `if` assigns what both branches assign on every path. An elaboration condition
+ * decided for the configuration being walked (`keptTargets`) is the branch it picks: the
+ * other is never built in that configuration, and what it leaves unsure does not count.
+ */
 function ifStatement(ctx: StatementContext, i: number): Assigned {
-  const then = statementAssigns(ctx, parentheses(ctx.text, i).after);
+  const condition = parentheses(ctx.text, i);
+  const [thenUnsure, elseUnsure] = [new Set<string>(), new Set<string>()];
+  const then = statementAssigns({ ...ctx, unsure: thenUnsure }, condition.after);
   const next = skipBlanks(ctx.text, then.end);
-  if (wordAt(ctx.text, next) !== 'else') return { end: then.end, some: then.some, every: NOTHING };
-  const otherwise = statementAssigns(ctx, next + 'else'.length);
+  const hasElse = wordAt(ctx.text, next) === 'else';
+  const otherwise = hasElse ? statementAssigns({ ...ctx, unsure: elseUnsure }, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
+  const decided = elaborationDecision(ctx, condition.inside, condition.after - condition.inside.length - 1);
+  for (const target of decided === false ? [] : thenUnsure) ctx.unsure.add(target);
+  for (const target of decided === true ? [] : elseUnsure) ctx.unsure.add(target);
+  if (decided !== undefined) return { ...(decided ? then : otherwise), end: otherwise.end };
   return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
 }
 
-/** The width of a case selector: a declared signal, one bit of it, or a constant part of it. */
+/** A sized number in a concatenation: `2'b01`, `4'hF`. */
+const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
+
+/**
+ * The width of a case selector: a declared signal, one bit of it, a constant part of it,
+ * or a concatenation of those and sized numbers (`{a[24], b[24]}` is two bits).
+ */
 function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): number | undefined {
-  const s = selector.replace(/\s+/g, '');
+  const s = unwrapped(selector).replace(/\s+/g, '');
+  if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
+    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf));
+    return widths.every((w) => w !== undefined) ? widths.reduce<number>((sum, w) => sum + (w ?? 0), 0) : undefined;
+  }
   const whole = /^[A-Za-z_]\w*$/.test(s) ? rangeOf(s) : undefined;
   if (whole) return Math.abs(whole.msb - whole.lsb) + 1;
   if (/^[A-Za-z_]\w*\[\d+\]$/.test(s)) return 1;
@@ -319,6 +462,54 @@ function defaultEnd(text: string, i: number): number {
   return text[after] === ':' ? after : i + 'default'.length - 1;
 }
 
+/**
+ * A `case` marked `full_case`: `case (s) // synopsys full_case` (the directive between the
+ * selector and the first item, or right before `case`: Quartus takes both), or
+ * `(* full_case *) case (s)` (the attribute right before it).
+ */
+function markedFullCase(ctx: StatementContext, caseAt: number, firstItemAt: number): boolean {
+  const { directives, attributes } = ctx.fullCase ?? NO_FULL_CASE;
+  // The marks are blanked: only blanks stand between one right before `case` and the `case`.
+  const rightBefore = (p: number) => p >= 0 && p < caseAt && ctx.text.slice(p, caseAt).trim() === '';
+  return directives.some((p) => (p >= caseAt && p < firstItemAt) || rightBefore(p)) || attributes.some(rightBefore);
+}
+
+/** The signals a selector reads, whole or in part: `s`, `s[W-1:0]`, `{a, b[1], 2'b0}`; undefined for any other form. */
+function selectorSignals(selector: string): string[] | undefined {
+  const s = unwrapped(selector);
+  if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
+    const parts = topLevelItems(s.slice(1, -1)).map((item) => (SIZED_LITERAL.test(item.replace(/\s+/g, '')) ? [] : selectorSignals(item)));
+    return parts.some((p) => p === undefined) ? undefined : parts.flatMap((p) => p ?? []);
+  }
+  const m = /^([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/.exec(s);
+  return m ? [m[1]] : undefined;
+}
+
+/**
+ * Whether the labels name every value of the selector as no instance can change them: the
+ * selector's width with fixed ranges (an overridden parameter may widen it), the labels with
+ * fixed constants (an overridden parameter may move one: `B:` with `#(.B(2))`). A selector of
+ * declared signals has a width synthesis knows even when the check cannot compute it
+ * (`[W-1:0]` with `W = $clog2(4)`, or a parameter an instance overrides): the labels may name
+ * only part of its values, so the wildcard fallback of `namesEveryValue` does not apply.
+ */
+function labelsNameEveryValue(ctx: StatementContext, written: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
+  const selector = unwrapped(written); // `casez ((s))` reads `s`
+  if (labels.items.some((label) => matchesAnyValue(label, labels.kind))) return true;
+  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf);
+  const signals = width === undefined ? selectorSignals(selector) : undefined;
+  if (signals !== undefined && signals.length > 0 && signals.every((name) => ctx.signals?.has(name))) return false;
+  return namesEveryValue(labels.items, { width, constants: ctx.fixedConstants ?? ctx.constants, kind: labels.kind });
+}
+
+/** An unsized label of wildcard digits only, `'b?` or `'hz` in a casez (`x` too in a casex): it matches a selector of any width up to 32 bits. */
+function matchesAnyValue(label: string, kind: CaseKind): boolean {
+  const m = WILDCARD_LABEL.exec(label.trim())?.groups;
+  if (!m || m.size !== '' || kind === 'case') return false;
+  const wildcard = kind === 'casex' ? /^[?zx_]+$/i : /^[?z_]+$/i;
+  return wildcard.test(m.digits);
+}
+
 function caseStatement(ctx: StatementContext, i: number): Assigned {
   const { text } = ctx;
   const selector = parentheses(text, i);
@@ -326,6 +517,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
   const labels: string[] = [];
   let hasDefault = false;
   let j = skipBlanks(text, selector.after);
+  const fullCase = markedFullCase(ctx, i, j);
   while (j < text.length && wordAt(text, j) !== 'endcase') {
     const isDefault = wordAt(text, j) === 'default';
     const labelEnd = isDefault ? defaultEnd(text, j) : caseLabelEnd(text, j);
@@ -335,7 +527,7 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     items.push(item);
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
-  const complete = hasDefault || namesEveryValue(labels, { width: selectorWidth(selector.inside, ctx.rangeOf), constants: ctx.constants, kind: wordAt(text, i) as CaseKind });
+  const complete = hasDefault || fullCase || labelsNameEveryValue(ctx, selector.inside, { items: labels, kind: wordAt(text, i) as CaseKind });
   const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
   return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
 }
@@ -414,6 +606,7 @@ export function statementAssigns(ctx: StatementContext, from: number): Assigned 
   const i = skipBlanks(ctx.text, from);
   if (i >= ctx.text.length) return { end: ctx.text.length, some: NOTHING, every: NOTHING };
   if (ctx.text[i] === ';') return { end: i + 1, some: NOTHING, every: NOTHING };
+  if (ctx.work) ctx.work.steps++;
   return (STATEMENT_BY_KEYWORD.get(wordAt(ctx.text, i)) ?? simpleStatement)(ctx, i);
 }
 
@@ -424,4 +617,56 @@ export const statementEnd = (text: string, from: number): number =>
 /** The targets some path leaves unassigned: each may keep its value. */
 export function notAlwaysAssigned(ctx: StatementContext, assigned: Assigned): string[] {
   return [...assigned.some].filter((target) => !covers(ctx, assigned.every, target));
+}
+
+/** How many elaboration conditions a block may have for every combination of them to be walked (2^6 walks). */
+const MAX_ELABORATION_CONDITIONS = 6;
+
+/**
+ * How much work all the combinations of a block may take together, counted as the first
+ * walk counts it (statements and loop bits) times the combinations. Past it, the first
+ * walk's answer stands: each condition read as any other `if`.
+ */
+const MAX_COMBINATION_WORK = 20_000;
+
+/** What an instance cannot change: the localparams of fixed value, and the ranges declared with them. */
+export type FixedView = Pick<StatementContext, 'constants' | 'rangeOf'>;
+
+/**
+ * The targets some path of `assigned` leaves unassigned, but not those the check is unsure
+ * of: a bit `unsure` names, or a signal of unknown width (no bits) that a loop the check
+ * cannot follow writes.
+ */
+function surelyKept(ctx: StatementContext, assigned: Assigned, unsure: ReadonlySet<string>): string[] {
+  const unsureSignals = new Set([...unsure].map(signalOf));
+  return notAlwaysAssigned(ctx, assigned).filter((t) => !unsure.has(t) && !(t === signalOf(t) && unsureSignals.has(t)));
+}
+
+/**
+ * What the statement at the start of `ctx.text` assigns, and the targets some path surely
+ * leaves unassigned in some configuration of the module. Each combination of its
+ * elaboration conditions (`if (R == 2)`) is walked with them decided, since an instance may
+ * set the parameters either way: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when R
+ * is not 2. A configuration is not the defaults, so it is walked with `fixed` alone: a loop
+ * bound or width made of a parameter is unknown there, and what it writes unsure in that
+ * configuration only. A target one configuration never assigns keeps nothing there. With
+ * more conditions, or more work, than can be combined, each is read as any other `if`.
+ */
+export function keptTargets(ctx: StatementContext, fixed: FixedView): { assigned: Assigned; kept: string[] } {
+  const [conditions, unsure, work] = [new Set<string>(), new Set<string>(), { steps: 0 }];
+  const assigned = statementAssigns({ ...ctx, decisions: undefined, elaborationConditions: conditions, unsure, work }, 0);
+  const keys = [...conditions];
+  const combinations = 2 ** keys.length;
+  if (keys.length === 0 || keys.length > MAX_ELABORATION_CONDITIONS || work.steps * combinations > MAX_COMBINATION_WORK) {
+    return { assigned, kept: surelyKept(ctx, assigned, unsure) };
+  }
+  const kept = new Set<string>();
+  const configuration = { ...ctx, ...fixed, selectorRangeOf: fixed.rangeOf, work: undefined };
+  for (let n = 0; n < combinations; n++) {
+    const decisions = new Map(keys.map((key, bit) => [key, (n & (1 << bit)) !== 0]));
+    const unsureHere = new Set<string>();
+    const walk = statementAssigns({ ...configuration, decisions, unsure: unsureHere }, 0);
+    for (const target of surelyKept(configuration, walk, unsureHere)) kept.add(target);
+  }
+  return { assigned, kept: [...kept] };
 }
