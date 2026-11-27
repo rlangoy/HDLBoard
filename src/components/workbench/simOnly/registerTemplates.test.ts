@@ -18,20 +18,24 @@ const PORTS = 'a, b, c, d : in std_logic; q, r : out std_logic';
 const vhdl = (process: string) => vhdlDesign('t', PORTS, `${process}\nq <= '0'; r <= '0';`);
 const vlog = (body: string) => `module t(input a, b, c, d, output reg x = 0, output reg y = 0);\n${body}\nendmodule\n`;
 
-/** Lines of the flip-flop findings that keep a one-file project off the board (a quiet one builds, from latches). */
-const linesIn = (name: string, content: string): number[] =>
+/** The flip-flop findings that keep a one-file project off the board (a quiet one builds, from latches). */
+const offTheBoardIn = (name: string, content: string) =>
   checkOf([source(name, content)]).findings
-    .filter((f) => ['vhdl-edge-template', 'vlog-edge-template', 'vlog-level-storage'].includes(f.construct) && f.tier !== 'quiet')
-    .map((f) => f.line);
+    .filter((f) => ['vhdl-edge-template', 'vlog-edge-template', 'vlog-level-storage'].includes(f.construct) && f.tier !== 'quiet');
+
+const linesIn = (name: string, content: string): number[] => offTheBoardIn(name, content).map((f) => f.line);
+
+/** Each VHDL finding as `line kind`, so a row checks what is wrong as well as where. */
+const problemsIn = (content: string): string[] => offTheBoardIn('t.vhd', content).map((f) => `${f.line} ${f.register?.kind}`);
 
 const P = (body: string) => `process (a, b, c)\nbegin\n${body}\nend process;`;
 /** The process starts on line 9 of `vhdl()`, so its first statement is on line 11. */
-const VHDL: [label: string, process: string, lines: number[]][] = [
-  ['two edges in one if/elsif (Error 10820)', P("if falling_edge(b) then\nx <= '0';\nelsif falling_edge(a) then\nx <= '1';\nend if;"), [13]],
-  ['both edges of one clock (Error 10819)', P("if rising_edge(a) then\nx <= c;\nelsif falling_edge(a) then\nx <= d;\nend if;"), [13]],
-  ['an elsif after the edge (Error 10818)', P("if rising_edge(a) then\nx <= c;\nelsif b = '1' then\nx <= '0';\nend if;"), [13]],
-  ['an else after the edge (Error 10818)', P("if rising_edge(a) then\nx <= c;\nelse\nx <= '0';\nend if;"), [13]],
-  ['two edges in one condition (Error 10628)', P("if rising_edge(a) and rising_edge(b) then\nx <= c;\nend if;"), [11]],
+const VHDL: [label: string, process: string, problems: string[]][] = [
+  ['two edges in one if/elsif (Error 10820)', P("if falling_edge(b) then\nx <= '0';\nelsif falling_edge(a) then\nx <= '1';\nend if;"), ['13 two-clocks']],
+  ['both edges of one clock (Error 10819)', P("if rising_edge(a) then\nx <= c;\nelsif falling_edge(a) then\nx <= d;\nend if;"), ['13 both-edges']],
+  ['an elsif after the edge (Error 10818)', P("if rising_edge(a) then\nx <= c;\nelsif b = '1' then\nx <= '0';\nend if;"), ['13 outside-edge']],
+  ['an else after the edge (Error 10818)', P("if rising_edge(a) then\nx <= c;\nelse\nx <= '0';\nend if;"), ['13 outside-edge']],
+  ['two edges in one condition (Error 10628)', P("if rising_edge(a) and rising_edge(b) then\nx <= c;\nend if;"), ['11 combined-edges']],
   ['an asynchronous reset (accepted)', P("if b = '0' then\nx <= '0';\nelsif falling_edge(a) then\nx <= c;\nend if;"), []],
   ['a reset and a set (accepted)', P("if b = '1' then\nx <= '0';\nelsif c = '1' then\nx <= '1';\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
   ['an enable in the edge condition (accepted)', P("if rising_edge(a) and b = '1' then\nx <= c;\nend if;"), []],
@@ -40,13 +44,21 @@ const VHDL: [label: string, process: string, lines: number[]][] = [
   ["clk'event and clk = '1' with a reset (accepted)", P("if b = '1' then\nx <= '0';\nelsif a'event and a = '1' then\nx <= c;\nend if;"), []],
   ['an if / else inside the edge (accepted)', P("if rising_edge(a) then\nif b = '1' then\nx <= c;\nelse\nx <= d;\nend if;\nend if;"), []],
   ['when / else inside the edge (accepted)', P("if rising_edge(a) then\nx <= c when b = '1' else d;\nend if;"), []],
+  ['the same edge twice in one if/elsif (accepted)', P("if rising_edge(a) then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
+  ['the same edge again after an enable (accepted)', P("if rising_edge(a) and b = '1' then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
+  ["an edge of another clock inside the edge (Error 10821)", P("if rising_edge(a) then\nif rising_edge(b) then\nx <= c;\nend if;\nend if;"), ['12 two-clocks']],
+  ["an edge of another clock inside the edge after a reset (Error 10821)", P("if b = '1' then\nx <= '0';\nelsif rising_edge(a) then\nif rising_edge(d) then\nx <= c;\nend if;\nend if;"), ['14 two-clocks']],
+  ["the same clock's edge inside its edge (accepted)", P("if rising_edge(a) then\nif rising_edge(a) then\nx <= c;\nend if;\nend if;"), []],
+  ["the other edge of the clock inside its edge (accepted)", P("if rising_edge(a) then\nif falling_edge(a) then\nx <= c;\nend if;\nend if;"), []],
 ];
 
 /** An edge condition: its process starts on line 9 of `vhdl()`, so the `if` is on line 11. */
 const edgeIf = (condition: string) => P(`if ${condition} then\nx <= c;\nend if;`);
+/** Two `if`s that both assign `x`: the second `if` is on line 14. */
+const twoIfs = (first: string, second: string) => P(`if ${first} then\nx <= c;\nend if;\nif ${second} then\nx <= d;\nend if;`);
 
 /** `clk'event` in the condition, written as students write it (#48): in parentheses, in any order, in any case. */
-const EVENT_CONDITIONS: [label: string, process: string, lines: number[]][] = [
+const EVENT_CONDITIONS: [label: string, process: string, problems: string[]][] = [
   ["(a'event and a='1') (accepted)", edgeIf("(a'event and a='1')"), []],
   ["(a'event and a='1') with an empty body (accepted)", P("if (a'event and a='1') then\nend if;"), []],
   ["elsif (a'event and a='1') after a reset (accepted)", P("if b = '1' then\nx <= '0';\nelsif (a'event and a='1') then\nx <= c;\nend if;"), []],
@@ -58,15 +70,27 @@ const EVENT_CONDITIONS: [label: string, process: string, lines: number[]][] = [
   ["( a'event and a = '1' ) with spaces (accepted)", edgeIf("( a'event and a = '1' )"), []],
   ["IF (A'EVENT AND A='1') THEN in upper case (accepted)", P("IF (A'EVENT AND A='1') THEN\nx <= c;\nEND IF;"), []],
   ["(a'event and a='0'), the falling edge (accepted)", edgeIf("(a'event and a='0')"), []],
+  ["(a'event and a/='0'), the rising edge (accepted)", edgeIf("(a'event and a/='0')"), []],
+  ["(a'event and a/='1'), the falling edge (accepted)", edgeIf("(a'event and a/='1')"), []],
   ["(a'event and a='1' and d='1'), an enable (accepted)", edgeIf("(a'event and a='1' and d='1')"), []],
   ["(rising_edge(a) and d='1'), an enable (accepted)", edgeIf("(rising_edge(a) and d='1')"), []],
   ["an if inside (a'event and a='1') (accepted)", P("if (a'event and a='1') then\nif d = '1' then\nx <= c;\nend if;\nend if;"), []],
-  ["(a'event) alone (Error 10633)", edgeIf("(a'event)"), [11]],
-  ["a'event alone (Error 10633)", edgeIf("a'event"), [11]],
-  ["(a'event and d='1'), no level of a (Error 10397)", edgeIf("(a'event and d='1')"), [11]],
-  ["(a'event or a='1') (Error 10633)", edgeIf("(a'event or a='1')"), [11]],
-  ["(a'event and a='1') or d='1' (Error 10626)", edgeIf("(a'event and a='1') or d='1'"), [11]],
-  ["elsif (b='1') after (a'event and a='1') (Error 10818)", P("if (a'event and a='1') then\nx <= c;\nelsif (b='1') then\nx <= '0';\nend if;"), [13]],
+  ["(a'event) alone (Error 10633)", edgeIf("(a'event)"), ['11 both-edges']],
+  ["a'event alone (Error 10633)", edgeIf("a'event"), ['11 both-edges']],
+  ["(a'event and d='1'), no level of a (Error 10397)", edgeIf("(a'event and d='1')"), ['11 both-edges']],
+  ["(a'event or a='1') (Error 10633)", edgeIf("(a'event or a='1')"), ['11 both-edges']],
+  ["(a'event and a='1') or d='1' (Error 10626)", edgeIf("(a'event and a='1') or d='1'"), ['11 both-edges']],
+  ["elsif (b='1') after (a'event and a='1') (Error 10818)", P("if (a'event and a='1') then\nx <= c;\nelsif (b='1') then\nx <= '0';\nend if;"), ['13 outside-edge']],
+  ["(a'event and a='1') then elsif rising_edge(a), the same edge (accepted)", P("if (a'event and a='1') then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
+  ["(a'event and a='1') then elsif (a'event and a='0') (Error 10819)", P("if (a'event and a='1') then\nx <= c;\nelsif (a'event and a='0') then\nx <= d;\nend if;"), ['13 both-edges']],
+  ["(a'event and a='0') then elsif rising_edge(a) (Error 10819)", P("if (a'event and a='0') then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), ['13 both-edges']],
+  ["two ifs on x: rising_edge(a), then (a'event and a='0') (Error 10819)", twoIfs('rising_edge(a)', "(a'event and a='0')"), ['14 both-edges']],
+  ["two ifs on x: (a'event and a='1'), then (a'event and a='0') (Error 10819)", twoIfs("(a'event and a='1')", "(a'event and a='0')"), ['14 both-edges']],
+  ["two ifs on x: (a'event and a/='0'), then (a'event and a='0') (Error 10819)", twoIfs("(a'event and a/='0')", "(a'event and a='0')"), ['14 both-edges']],
+  ["two ifs on x: (a'event and a='1'), then rising_edge(a) (accepted)", twoIfs("(a'event and a='1')", 'rising_edge(a)'), []],
+  ["two ifs on x: (a'event and a='1'), then (b'event and b='1') (Error 10820)", twoIfs("(a'event and a='1')", "(b'event and b='1')"), ['14 two-clocks']],
+  ["(b'event and b='1') inside (a'event and a='1') (Error 10821)", P("if (a'event and a='1') then\nif (b'event and b='1') then\nx <= c;\nend if;\nend if;"), ['12 two-clocks']],
+  ["(a'event and a='1') inside (a'event and a='1') (accepted)", P("if (a'event and a='1') then\nif (a'event and a='1') then\nx <= c;\nend if;\nend if;"), []],
 ];
 
 const VERILOG: [label: string, body: string, lines: number[]][] = [
@@ -81,11 +105,11 @@ const VERILOG: [label: string, body: string, lines: number[]][] = [
 ];
 
 describe('VHDL: an if Quartus can build a flip-flop from', () => {
-  test.each(VHDL)('%s', (_label, process, lines) => expect(linesIn('t.vhd', vhdl(process))).toEqual(lines));
+  test.each(VHDL)('%s', (_label, process, problems) => expect(problemsIn(vhdl(process))).toEqual(problems));
 });
 
 describe("VHDL: an if on clk'event, as Quartus reads it", () => {
-  test.each(EVENT_CONDITIONS)('%s', (_label, process, lines) => expect(linesIn('t.vhd', vhdl(process))).toEqual(lines));
+  test.each(EVENT_CONDITIONS)('%s', (_label, process, problems) => expect(problemsIn(vhdl(process))).toEqual(problems));
 });
 
 describe('Verilog: an always Quartus can build a flip-flop from', () => {

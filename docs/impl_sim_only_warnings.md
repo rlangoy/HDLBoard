@@ -195,12 +195,19 @@ counted and reset in the simulator, and Quartus refused it. Measured with **Quar
 | `if (a'event or a='1')` | Error 10633 | `vhdl-edge-template`, kind `both-edges` |
 | `if (a'event and a='1') or d='1'` | Error 10626 | `vhdl-edge-template`, kind `both-edges` |
 | `if (a'event and a='1') … elsif (b='1')` | Error 10818 | `vhdl-edge-template`, kind `outside-edge` (before the fix also a false *both edges*) |
+| The direction of a `'event` (measured 2026-11-27, after a code review): `(a'event and a/='0')` is the rising edge and `(a'event and a/='1')` the falling one; two `if`s assigning one signal on `rising_edge(a)` and `(a'event and a='0')`, on `(a'event and a='1')` and `(a'event and a='0')`, or on `(a'event and a/='0')` and `(a'event and a='0')`; `(a'event and a='1') … elsif (a'event and a='0')`; `(a'event and a='0') … elsif rising_edge(a)` | the `/=` forms build; the others Error 10819 | the `/=` forms no finding; the others kind `both-edges`. Before, a `'event` had no direction, so the two-`if` cases passed as RTL |
+| The same edge again: `if rising_edge(a) … elsif rising_edge(a)`, also after an enable (`rising_edge(a) and b = '1'`) or with a `'event` (`(a'event and a='1') … elsif rising_edge(a)`); two `if`s on `(a'event and a='1')` and `rising_edge(a)` | builds (the second branch runs only when the first does not) | no finding (it was a false *outside-edge*, or *both edges* with a `'event`) |
+| An edge of another clock inside an edge's branch: `if rising_edge(a) then if rising_edge(b)`, also after a reset, and `(b'event and b='1')` inside `(a'event and a='1')` | Error 10821: *can't infer register … because its behavior does not match any supported register model* | kind `two-clocks`, on the inner `if` (it was missed) |
+| The same clock's edge inside its edge, either direction | builds | no finding |
 | `always @(negedge a or negedge b) if (!b) …`, `always @(posedge a or posedge b or posedge c) if (b) … else if (c) …`, `always @(a or b) x <= a & b;` | accepted | no finding |
 
 The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and flags a branch that has two edges in
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
 branch. A condition is read from after its `if` or `elsif`, so parentheses around it are the condition's own: a
-`clk'event` needs a level test of `clk` among its `and`s, parenthesized or not (#48). Checked on the *FPGA Prototyping* book projects
+`clk'event` needs a level test of `clk` among its `and`s, parenthesized or not (#48), and that level gives it its
+direction (`clk = '1'` or `clk /= '0'` is the rising edge), so it is compared with other edges like `rising_edge`.
+A branch on the same edge as the one before it is accepted; an `if` on another clock's edge inside an edge's branch
+is a second clock. Checked on the *FPGA Prototyping* book projects
 for HDLBoard as HDLBoard opens them: before the fix 85 of the 118 that Quartus synthesizes were
 SIM-only for a false *both edges*, after it none; `bookStyle.test.ts` keeps HDLBoard's own fixtures in that style
 (tests/fixtures/vhdl/book-style, built by Quartus) RTL. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
