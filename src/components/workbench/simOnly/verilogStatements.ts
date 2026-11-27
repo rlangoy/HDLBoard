@@ -21,7 +21,7 @@
 
 import { bracketed, closingBracket, topLevel, topLevelItems } from './brackets';
 import { everyBinding, integerValue, UNSIZED_LITERAL_WIDTH, type Bindings } from './constantIndex';
-import { constantCondition } from './verilogConditions';
+import { NO_FULL_CASE, type FullCaseMarks } from '../tbDetect/blank';
 import type { BitRange } from './verilogDeclarations';
 
 /** What a statement assigns, on some path and on every path through it. */
@@ -55,10 +55,18 @@ export interface StatementContext {
    */
   readonly fixedNames?: ReadonlySet<string>;
   /**
-   * Offsets in `text` where a `full_case` directive or attribute starts (`blank.ts`).
-   * Synthesis takes the `case` it marks as naming every value: it builds no latch for it.
+   * Offsets in `text` where `full_case` marks start (`blank.ts`). Synthesis takes the `case`
+   * one marks as naming every value: it builds no latch for it.
    */
-  readonly fullCaseAt?: readonly number[];
+  readonly fullCase?: FullCaseMarks;
+  /**
+   * Elaboration conditions (`if (R == 2)`, `if (i == 0)` in a generate copy) decided for one
+   * configuration of the module, by their text without blanks. A condition not in the map
+   * is read as any other `if`: either branch may run.
+   */
+  readonly decisions?: ReadonlyMap<string, boolean>;
+  /** Filled while walking: the elaboration conditions met, by their text without blanks. */
+  readonly elaborationConditions?: Set<string>;
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
@@ -254,17 +262,42 @@ function blockStatement(ctx: StatementContext, i: number): Assigned {
   return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)) };
 }
 
+/** A number as written, `4'hF`, `1'b0`: its letters are no names. */
+const BASED_NUMBER = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-FxXzZ?_]+/g;
+/** The system functions synthesis computes while elaborating. */
+const ELABORATION_FUNCTION = /^\$(?:clog2|bits|size)$/;
+
 /**
- * An `if` assigns what both branches assign on every path. A condition of constants only
- * (`if (WIDTH == 2)`) is decided by synthesis: the branch it picks is the statement, and the
- * other is never built.
+ * A condition synthesis decides while elaborating, one way for each instance: it reads
+ * only parameters, genvars, numbers and `$clog2`. Its value is not taken from the
+ * parameters' defaults, since an instance may override them (`#(.R(1))`).
+ */
+function isElaborationCondition(ctx: StatementContext, condition: string): boolean {
+  const fixed = ctx.fixedNames;
+  if (fixed === undefined) return false;
+  const names = condition.replace(BASED_NUMBER, ' ').match(/\$?[A-Za-z_]\w*/g) ?? [];
+  return names.every((name) => ELABORATION_FUNCTION.test(name) || fixed.has(name) || ctx.constants.has(name));
+}
+
+/** The branch an elaboration condition takes in the configuration being walked; undefined when it is not decided. */
+function elaborationDecision(ctx: StatementContext, condition: string): boolean | undefined {
+  if (!isElaborationCondition(ctx, condition)) return undefined;
+  const key = condition.replace(/\s+/g, '');
+  ctx.elaborationConditions?.add(key);
+  return ctx.decisions?.get(key);
+}
+
+/**
+ * An `if` assigns what both branches assign on every path. An elaboration condition
+ * decided for the configuration being walked (`keptTargets`) is the branch it picks: the
+ * other is never built in that configuration.
  */
 function ifStatement(ctx: StatementContext, i: number): Assigned {
   const condition = parentheses(ctx.text, i);
   const then = statementAssigns(ctx, condition.after);
   const next = skipBlanks(ctx.text, then.end);
   const otherwise = wordAt(ctx.text, next) === 'else' ? statementAssigns(ctx, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
-  const decided = constantCondition(condition.inside, ctx.constants);
+  const decided = elaborationDecision(ctx, condition.inside);
   if (decided !== undefined) return { ...(decided ? then : otherwise), end: otherwise.end };
   return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
 }
@@ -367,10 +400,14 @@ function defaultEnd(text: string, i: number): number {
 
 /**
  * A `case` marked `full_case`: `case (s) // synopsys full_case` (the directive between the
- * selector and the first item), or `(* full_case *) case (s)` (the attribute right before it).
+ * selector and the first item, or right before `case`: Quartus takes both), or
+ * `(* full_case *) case (s)` (the attribute right before it).
  */
 function markedFullCase(ctx: StatementContext, caseAt: number, firstItemAt: number): boolean {
-  return (ctx.fullCaseAt ?? []).some((p) => p >= 0 && ((p >= caseAt && p < firstItemAt) || (p < caseAt && ctx.text.slice(p, caseAt).trim() === '')));
+  const { directives, attributes } = ctx.fullCase ?? NO_FULL_CASE;
+  // The marks are blanked: only blanks stand between one right before `case` and the `case`.
+  const rightBefore = (p: number) => p >= 0 && p < caseAt && ctx.text.slice(p, caseAt).trim() === '';
+  return directives.some((p) => (p >= caseAt && p < firstItemAt) || rightBefore(p)) || attributes.some(rightBefore);
 }
 
 function caseStatement(ctx: StatementContext, i: number): Assigned {
@@ -479,4 +516,34 @@ export const statementEnd = (text: string, from: number): number =>
 /** The targets some path leaves unassigned: each may keep its value. */
 export function notAlwaysAssigned(ctx: StatementContext, assigned: Assigned): string[] {
   return [...assigned.some].filter((target) => !covers(ctx, assigned.every, target));
+}
+
+/** How many elaboration conditions a block may have for every combination of them to be walked (2^6 walks). */
+const MAX_ELABORATION_CONDITIONS = 6;
+
+/** What an instance cannot change: the localparams of fixed value, and the ranges declared with them. */
+export type FixedView = Pick<StatementContext, 'constants' | 'rangeOf'>;
+
+/**
+ * What the statement at the start of `ctx.text` assigns, and the targets some path leaves
+ * unassigned in some configuration of the module. Each combination of its elaboration
+ * conditions (`if (R == 2)`) is walked with them decided, since an instance may set the
+ * parameters either way: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when R is not 2.
+ * A configuration is not the defaults, so it is walked with `fixed` alone: a loop bound or
+ * width made of a parameter is unknown there, and what it writes unsure. A target one
+ * configuration never assigns keeps nothing there. With more conditions than can be
+ * combined, each is read as any other `if`.
+ */
+export function keptTargets(ctx: StatementContext, fixed: FixedView): { assigned: Assigned; kept: string[] } {
+  const conditions = new Set<string>();
+  const assigned = statementAssigns({ ...ctx, decisions: undefined, elaborationConditions: conditions }, 0);
+  const keys = [...conditions];
+  if (keys.length === 0 || keys.length > MAX_ELABORATION_CONDITIONS) return { assigned, kept: notAlwaysAssigned(ctx, assigned) };
+  const kept = new Set<string>();
+  const configuration = { ...ctx, ...fixed };
+  for (let n = 0; n < 2 ** keys.length; n++) {
+    const decisions = new Map(keys.map((key, bit) => [key, (n & (1 << bit)) !== 0]));
+    for (const target of notAlwaysAssigned(configuration, statementAssigns({ ...configuration, decisions }, 0))) kept.add(target);
+  }
+  return { assigned, kept: [...kept] };
 }

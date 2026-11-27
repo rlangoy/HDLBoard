@@ -236,12 +236,25 @@ register only where their bits can meet (`LEDR(0)` and `LEDR(1)` are two registe
 variable every path assigns is plain logic, in any order. As Quartus builds them (measured 2026-11-27 on the gplgpu
 project, where 221 of 223 latch findings were false, and in `verilogQuartusCases.test.ts`): an index of genvars and
 parameters the check cannot work out (`q[i]` in a `generate for`, `q[W-1:E]`) names the same bits on every path;
-an `if` on constants only (`if (WIDTH == 2)`) is the branch it picks, the other is never built; a `case` on a
-concatenation (`case ({a, b})`) has the width of its parts; and a `case` marked `full_case`
-(`// synopsys full_case`, `/* synthesis full_case */`, `(* full_case *)`) names every value, since synthesis takes
-the missing ones as don't-care (`blank.ts` finds the directives in the comments it blanks). Still a latch, though
-Quartus builds none: a state machine's `case` without `default` whose missing states cannot be reached (Quartus
-extracts the state machine; the check cannot see which states are reachable), and an `if` on a string parameter. A `wait until` is a clocked process when its condition has one
+a `case` on a concatenation (`case ({a, b})`) has the width of its parts; and a `case` marked `full_case` names
+every value, since synthesis takes the missing ones as don't-care. The mark is a directive comment after the
+selector or right before `case` (`// synopsys full_case`, `/* synthesis full_case */`; Quartus takes both), or the
+attribute `(* full_case *)` right before it; `blank.ts` records them, but not in an `ifdef branch the view leaves
+out, and not `full_case` as an attribute's value (`(* keep = "full_case" *)`).
+
+An `if` that reads only parameters, genvars, numbers and `$clog2` (`if (R == 2)`, `if (MODE == "COLROW")`) is decided
+while elaborating, one way for each instance. The check never evaluates it, neither from the parameters' defaults (an
+instance may override them: `#(.R(1))`) nor with Verilog's operator rules (`!2 == 1` is `(!2) == 1`, `4'shF < 4'h1`
+compares unsigned). Each combination of a block's such conditions is walked with them decided (up to six, 64
+walks), and a variable that one combination keeps is a latch: `if (R == 2) q = d; else if (e) q = d;` keeps `q` when
+R is not 2. A combination is not the defaults, so it is walked with the localparams of fixed value alone; a loop bound
+or width made of a parameter is unknown there, and what that loop writes is unsure (a signal of unknown width that
+it writes, as a whole). A variable a combination never assigns keeps nothing in it. Code review of 2026-11-27 (an
+earlier version folded such conditions with the defaults); each case built with Quartus in
+`verilogQuartusCases.test.ts`.
+
+Still a latch, though Quartus builds none: a state machine's `case` without `default` whose missing states cannot be
+reached (Quartus extracts the state machine; the check cannot see which states are reachable). A `wait until` is a clocked process when its condition has one
 edge, in parentheses or with an enable joined by `and`, and no `for`, `or` or `on` (Quartus Prime 25.1 Lite builds
 `wait until (rising_edge(clk))` and `wait until rising_edge(clk) and en = '1'`). Verilog names are compared with
 case (`q` and `Q` are two registers), VHDL names without; a write inside `translate_off` takes part in no comparison.

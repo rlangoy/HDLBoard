@@ -18,12 +18,21 @@ export interface BlankedSource {
   readonly code: string;
   /** Lines (1-based) of translate_off..translate_on and `ifndef SYNTHESIS regions. */
   readonly simOnlyRegions: readonly LineSpan[];
-  /**
-   * Verilog: where each `full_case` directive (`// synopsys full_case`) or attribute
-   * (`(* full_case *)`) starts. Synthesis takes the `case` it marks as naming every value.
-   */
-  readonly fullCaseAt: readonly number[];
+  /** Verilog: the `full_case` marks in code the view keeps. */
+  readonly fullCase: FullCaseMarks;
 }
+
+/**
+ * Where `full_case` marks start. Synthesis takes the `case` one marks as naming every
+ * value: a directive comment after its selector (`case (s) // synopsys full_case`), or an
+ * attribute right before it (`(* full_case *) case (s)`).
+ */
+export interface FullCaseMarks {
+  readonly directives: readonly number[];
+  readonly attributes: readonly number[];
+}
+
+export const NO_FULL_CASE: FullCaseMarks = { directives: [], attributes: [] };
 
 const TRANSLATE = /^(?:--|\/\/)\s*(?:pragma|synthesis|synopsys)\s+translate_(off|on)\b/i;
 
@@ -40,12 +49,15 @@ export function blankSource(language: Language, source: string, view: SourceView
   if (language === 'vhdl') {
     lexVhdl(source, chars, pragmas, view);
     pragmas.close(lineOf(source.length));
-    return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCaseAt: [] };
+    return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCase: NO_FULL_CASE };
   }
-  const fullCaseAt = lexVerilog(source, chars, pragmas);
+  const marks = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
   const pre = preprocessVerilog(chars.join(''), lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
-  return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start), fullCaseAt };
+  // A mark in an `ifdef branch the view leaves out marks nothing.
+  const active = (at: number) => !pre.inactive.some((r) => at >= r.from && at < r.to);
+  const fullCase = { directives: marks.directives.filter(active), attributes: marks.attributes.filter(active) };
+  return { code: pre.code, simOnlyRegions: [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start), fullCase };
 }
 
 /** translate_off .. translate_on, from the line comments that carry them. */
@@ -111,28 +123,33 @@ function vhdlString(src: string, chars: string[], i: number): number {
 
 /* ------------------------------ Verilog ----------------------------- */
 
-/** `// synopsys full_case`, `/* synthesis parallel_case full_case *\/`: a directive in a comment. */
-const FULL_CASE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)\b[^\n]*?\bfull_case\b/i;
-/** `(* full_case *)`, `(* parallel_case, full_case *)`. */
-const FULL_CASE_ATTRIBUTE = /\bfull_case\b/i;
+/**
+ * The words of a directive comment, `// synopsys parallel_case full_case` or
+ * `/* synthesis full_case *\/`: the directive's own words, up to the first other character.
+ */
+const DIRECTIVE_COMMENT = /^(?:\/\/|\/\*)\s*(?:synopsys|synthesis|pragma)((?:[ \t]+[A-Za-z_]\w*)+)/i;
+const isFullCaseComment = (comment: string): boolean =>
+  (DIRECTIVE_COMMENT.exec(comment)?.[1].trim().split(/\s+/) ?? []).some((word) => word.toLowerCase() === 'full_case');
+/** `full_case` as an attribute's name, `(* parallel_case, full_case *)`, not as a value: `(* keep = "full_case" *)`. */
+const isFullCaseAttribute = (attribute: string): boolean =>
+  attribute.slice(2, -2).split(',').some((item) => /^\s*full_case\s*(?:=|$)/i.test(item));
 
-/** Lexes Verilog; returns where a `full_case` directive or attribute starts. */
-function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): number[] {
-  const fullCase: number[] = [];
+/** Lexes Verilog; returns where its `full_case` marks start. */
+function lexVerilog(src: string, chars: string[], pragmas: PragmaRegions): FullCaseMarks {
+  const directives: number[] = [];
+  const attributes: number[] = [];
   let i = 0;
   while (i < src.length) {
-    const c = src[i];
     const from = i;
-    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+    if (src[i] === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
       i = src[i + 1] === '/' ? lineComment(src, chars, pragmas, i) : blockComment(src, chars, i);
-      if (FULL_CASE_COMMENT.test(src.slice(from, i))) fullCase.push(from);
-    } else if (c === '"') i = verilogString(src, chars, i);
-    else if (c === '(' && src[i + 1] === '*' && src[i + 2] !== ')') {
+      if (isFullCaseComment(src.slice(from, i))) directives.push(from);
+    } else if (src[i] === '(' && src[i + 1] === '*' && src[i + 2] !== ')') {
       i = attribute(src, chars, i);
-      if (FULL_CASE_ATTRIBUTE.test(src.slice(from, i))) fullCase.push(from);
-    } else i++;
+      if (isFullCaseAttribute(src.slice(from, i))) attributes.push(from);
+    } else i = src[i] === '"' ? verilogString(src, chars, i) : i + 1;
   }
-  return fullCase;
+  return { directives, attributes };
 }
 
 function verilogString(src: string, chars: string[], i: number): number {
@@ -190,22 +207,35 @@ interface Branch {
  * (an unknown macro is undefined, as with iverilog without -D) and blanks the
  * inactive branches. An active `ifndef SYNTHESIS branch is a sim-only region.
  */
-function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): { code: string; regions: LineSpan[] } {
+function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): { code: string; regions: LineSpan[]; inactive: Range[] } {
   const chars = code.split('');
   const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[] };
+  const inactive: Range[] = [];
   let activeFrom = 0;
   for (const match of code.matchAll(DIRECTIVE)) {
     const at = match.index ?? 0;
     const wasActive = isActive(state.stack);
-    if (!wasActive) blankRange(chars, activeFrom, at);
+    if (!wasActive) {
+      blankRange(chars, activeFrom, at);
+      inactive.push({ from: activeFrom, to: at });
+    }
     directive(state, match[1] ?? match[3], match[2], lineOf(at), wasActive);
     // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
     blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define' && wasActive) blankRange(chars, at + match[0].length, endOfLine(code, at));
     activeFrom = at + match[0].length;
   }
-  if (!isActive(state.stack)) blankRange(chars, activeFrom, code.length);
-  return { code: chars.join(''), regions: state.regions };
+  if (!isActive(state.stack)) {
+    blankRange(chars, activeFrom, code.length);
+    inactive.push({ from: activeFrom, to: code.length });
+  }
+  return { code: chars.join(''), regions: state.regions, inactive };
+}
+
+/** Offsets `from` (included) to `to` (excluded). */
+interface Range {
+  readonly from: number;
+  readonly to: number;
 }
 
 const isActive = (stack: readonly Branch[]): boolean => stack.length === 0 || stack[stack.length - 1].active;

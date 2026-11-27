@@ -54,6 +54,31 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [2],
   ],
   [
+    'an if on a parameter an instance may override (no latch with R = 2; Warning 10240 in an instance with #(.R(1)))',
+    'module t #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule',
+    [2],
+  ],
+  [
+    'an if on numbers the check need not evaluate: (!2) == 1 is false (Warning 10240)',
+    'module t (input d, e, output reg q);\n  always @* if (!2 == 1) q = d; else if (e) q = d;\nendmodule',
+    [2],
+  ],
+  [
+    "an if on numbers of mixed signedness: 4'shF < 4'h1 compares unsigned, false (Warning 10240)",
+    "module t (input d, e, output reg q);\n  always @* if (4'shF < 4'h1) q = d; else if (e) q = d;\nendmodule",
+    [2],
+  ],
+  [
+    'an if/else if on a string parameter: complete, or no assignment at all, for every value (no latch, also with ROWCOL and OTHER)',
+    'module t #(parameter MODE = "COLROW") (input a, b, output reg x, output reg y);\n  always @* begin\n    if (MODE == "COLROW") begin x = a; y = b; end\n    else if (MODE == "ROWCOL") begin x = b; y = a; end\n  end\nendmodule',
+    [],
+  ],
+  [
+    'a loop bounded by a parameter in the other branch of an if on it (no latch, with W = 1 or #(.W(4)))',
+    'module t #(parameter W = 1) (input [W-1:0] a, b, input e, output reg [W-1:0] x);\n  integer i;\n  always @* if (W == 1) x = e ? a : b; else for (i = 0; i < W; i = i + 1) x[i] = a[i] ^ b[i];\nendmodule',
+    [],
+  ],
+  [
     '// synopsys full_case on a case that misses a value (no latch)',
     "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s) // synopsys full_case\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
     [],
@@ -67,6 +92,21 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     '(* full_case *) before the case (no latch)',
     "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* full_case *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
     [],
+  ],
+  [
+    '// synopsys full_case on the line before the case (no latch)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @*\n    // synopsys full_case\n    case (s)\n      2'd0: x = a;\n      2'd1: x = b;\n      2'd2: x = c;\n    endcase\nendmodule",
+    [],
+  ],
+  [
+    'a full_case directive in an `ifdef branch that is not compiled (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* case (s)\n`ifdef FOO\n    // synthesis full_case\n`endif\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
+    'full_case as an attribute value, (* keep = "full_case" *) (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* keep = \"full_case\" *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
   ],
   [
     '// synopsys parallel_case alone (Warnings 10270, 10240)',

@@ -18,7 +18,7 @@ export interface BitRange {
 }
 
 const PARAMETER = /\b(?:parameter|localparam)\b/g;
-const PARAMETER_ITEM = /^\s*(?:(?:parameter|localparam)\s+)?(?:(?:integer|signed|unsigned)\s+)?(?:\[[^\]]*\]\s*)?([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
+const PARAMETER_ITEM = /^\s*(?:(parameter|localparam)\s+)?(?:(?:integer|signed|unsigned)\s+)?(?:\[[^\]]*\]\s*)?([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
 
 /** The text after a `parameter` keyword up to its `;`, or the `)` that closes a `#( … )` list. */
 function parameterList(code: string, from: number): string {
@@ -33,20 +33,35 @@ function parameterList(code: string, from: number): string {
   return code.slice(from);
 }
 
-/** Each parameter and localparam of the module, as written: its name and its value's text. */
-function parameterItems(code: string): { name: string; value: string }[] {
+/** Each parameter and localparam of the module, as written: its name, its value's text, and whether an instance may override it. */
+function parameterItems(code: string): { name: string; value: string; local: boolean }[] {
   return [...code.matchAll(PARAMETER)].flatMap((m) =>
     topLevelItems(parameterList(code, (m.index ?? 0) + m[0].length)).flatMap((item) => {
       const parameter = PARAMETER_ITEM.exec(item);
-      return parameter ? [{ name: parameter[1], value: parameter[2] }] : [];
+      return parameter ? [{ name: parameter[2], value: parameter[3], local: (parameter[1] ?? m[0]) === 'localparam' }] : [];
     }),
   );
 }
 
-/** The module's parameters and localparams with a value made of numbers and earlier ones: `N = 8`, `W = N * 2`. */
+/**
+ * The module's parameters and localparams with a value made of numbers and earlier ones:
+ * `N = 8`, `W = N * 2`. A parameter has its default value, which an instance may override.
+ */
 export function verilogConstants(code: string): Bindings {
+  return knownValues(parameterItems(code));
+}
+
+/**
+ * The localparams whose value no instance can change: made of numbers and earlier such
+ * localparams (`localparam W = 8 * 2`, not `localparam W = N * 2` with `N` a parameter).
+ */
+export function verilogFixedConstants(code: string): Bindings {
+  return knownValues(parameterItems(code).filter((item) => item.local));
+}
+
+function knownValues(items: readonly { name: string; value: string }[]): Bindings {
   const constants = new Map<string, number>();
-  for (const { name, value } of parameterItems(code)) {
+  for (const { name, value } of items) {
     const known = integerValue(value, constants);
     if (known !== undefined && !constants.has(name)) constants.set(name, known);
   }

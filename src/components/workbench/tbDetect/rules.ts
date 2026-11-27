@@ -9,6 +9,7 @@
  */
 
 import { RULE_TEXT } from '../testbenchText';
+import type { FullCaseMarks } from './blank';
 import type { LineOf } from './lines';
 import type { DesignUnit, Language, LineSpan, RuleId } from './types';
 
@@ -22,8 +23,8 @@ export interface UnitText {
   /** Line of a file offset. */
   readonly lineOf: LineOf;
   readonly simOnlyRegions: readonly LineSpan[];
-  /** Verilog: file offsets of `full_case` directives and attributes (`blank.ts`); the design check's latch rule reads them. */
-  readonly fullCaseAt?: readonly number[];
+  /** Verilog: file offsets of the `full_case` marks in active code (`blank.ts`); the design check's latch rule reads them. */
+  readonly fullCase?: FullCaseMarks;
 }
 
 export interface DetectionRule {

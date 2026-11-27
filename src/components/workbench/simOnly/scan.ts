@@ -10,7 +10,7 @@
  * content is unchanged. Pure.
  */
 
-import { blankSource } from '../tbDetect/blank';
+import { blankSource, type FullCaseMarks } from '../tbDetect/blank';
 import { designUnits } from '../tbDetect/designUnits';
 import { keepRanges, lineIndex, type LineOf } from '../tbDetect/lines';
 import type { UnitText } from '../tbDetect/rules';
@@ -29,8 +29,8 @@ export interface ScannedFile {
   readonly lineOf: LineOf;
   /** translate_off .. translate_on and `ifndef SYNTHESIS regions. */
   readonly hidden: readonly LineSpan[];
-  /** Verilog: where `full_case` directives and attributes start (`blank.ts`). */
-  readonly fullCaseAt: readonly number[];
+  /** Verilog: where the `full_case` marks of active code start (`blank.ts`). */
+  readonly fullCase: FullCaseMarks;
   readonly units: readonly ScannedUnit[];
 }
 
@@ -47,7 +47,7 @@ export function scannedFile(file: FileAnalysis): ScannedFile {
 function scanFile(file: FileAnalysis): ScannedFile {
   // As synthesis reads it: `ifdef SYNTHESIS code is checked, `ifndef SYNTHESIS (and the else of `ifdef SYNTHESIS) is not.
   const blanked = blankSource(file.language, file.content, 'synthesis');
-  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCaseAt: blanked.fullCaseAt };
+  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCase: blanked.fullCase };
   const own = synthesisUnits(file, blanked.code).map((unit) => ({ unit, ownsUnit: true }));
   const foreign = foreignArchitectures(base).map((unit) => ({ unit, ownsUnit: false }));
   return { ...base, units: [...own, ...foreign] };
@@ -70,7 +70,7 @@ export function unitText(scan: ScannedFile, unit: DesignUnit): UnitText {
   const slice = scan.code.slice(base, end);
   const local = unit.ranges.map((r) => ({ from: r.from - base, to: r.to - base }));
   const code = unit.ranges.length === 1 ? slice : keepRanges(slice, local);
-  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCaseAt: scan.fullCaseAt };
+  return { unit, code, base, lineOf: scan.lineOf, simOnlyRegions: scan.hidden, fullCase: scan.fullCase };
 }
 
 const ARCHITECTURE_OF = /\barchitecture\s+\w+\s+of\s+(\w+)\s+is\b/gi;

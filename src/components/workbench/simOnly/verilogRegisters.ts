@@ -17,9 +17,9 @@ import { escapeRegExp } from './constructText';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { declaredRanges, verilogConstants, verilogElaborationNames, verilogSignalNames } from './verilogDeclarations';
+import { declaredRanges, verilogConstants, verilogElaborationNames, verilogFixedConstants, verilogSignalNames } from './verilogDeclarations';
 import { concatenationCycles, splitAssignment, type Declarations } from './verilogDriverParts';
-import { notAlwaysAssigned, signalOf, statementAssigns, statementEnd, type StatementContext } from './verilogStatements';
+import { keptTargets, signalOf, statementEnd, type StatementContext } from './verilogStatements';
 
 const sameName = SAME_NAME.verilog;
 
@@ -481,16 +481,22 @@ export function verilogLevelStorage(t: UnitText): Found[] {
   const constants = verilogConstants(t.code);
   const rangeOf = declaredRanges(t.code, constants);
   const fixedNames = verilogElaborationNames(t.code);
+  const fixedConstants = verilogFixedConstants(t.code);
+  const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
-    const fullCaseAt = (t.fullCaseAt ?? []).map((p) => p - bodyAt);
+    const local = (offsets: readonly number[]) => offsets.map((p) => p - bodyAt);
+    const fullCase = { directives: local(t.fullCase?.directives ?? []), attributes: local(t.fullCase?.attributes ?? []) };
     const feedback = nonblockingTargets(body).flatMap((m) => {
       const value = assignedValue(body, m);
       return concatenationCycles(m[1] + m[2], value, { constants, rangeOf }) ?? (readsItsOwnBits(value, m[1], m[2]) ? [m[1]] : []);
     });
-    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set(), fixedNames, fullCaseAt };
-    const assigned = statementAssigns(ctx, 0);
-    const unassigned = notAlwaysAssigned(ctx, assigned).filter((bit) => !ctx.unsure.has(bit)).map(signalOf);
+    const ctx: StatementContext = { text: body, rangeOf, constants, loops: new Map(), unsure: new Set(), fixedNames, fullCase };
+    const { assigned, kept: notAssigned } = keptTargets(ctx, fixed);
+    // A signal of unknown width (no bits) that a loop the check cannot follow writes is unsure as a whole.
+    const unsureSignals = new Set([...ctx.unsure].map(signalOf));
+    const isUnsure = (target: string) => ctx.unsure.has(target) || (target === signalOf(target) && unsureSignals.has(target));
+    const unassigned = notAssigned.filter((target) => !isUnsure(target)).map(signalOf);
     const kept = unique([...unassigned, ...[...assigned.some].map(signalOf).filter((name) => feedback.includes(name))], sameName);
     return kept.length === 0 ? [] : [{ line: block.span.start, register: problem('latch', kept, []) }];
   });
