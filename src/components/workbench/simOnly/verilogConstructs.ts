@@ -30,14 +30,16 @@ function clockedDelays(t: UnitText): number[] {
  * `vlog-clocked-delay` instead (§ 3.3).
  */
 function delays(t: UnitText): number[] {
-  const quiet = clockedDelays(t);
-  const isQuiet = new Set(quiet);
-  const loudLines = new Set(matchesIn(t, DELAY).filter(([at]) => !isQuiet.has(at)).map(([at]) => t.lineOf(at)));
+  const isQuiet = new Set(clockedDelays(t));
+  // Only a delay in an always or initial block, as the rule reads them: a module header's `#(` on the same line is none.
+  const blocks = t.unit.blocks.filter((b) => b.kind === 'always' || b.kind === 'initial');
+  const loudLines = new Set(matchesIn(t, DELAY).filter(([at]) => !isQuiet.has(at) && inside(at, blocks)).map(([at]) => t.lineOf(at)));
   return ruleById('vlog-delay').find(t).filter((line) => loudLines.has(line));
 }
 
 /** `$display(…)`, `$write(…)`, `$monitor(…)`, `$strobe(…)`: what they print. */
-const PRINT_CALL = /\$(?:display|write|monitor|strobe)[bho]?\s*\(/g;
+// Not the end of a name: `$` is a Verilog name character (`log$display` is a function of the design).
+const PRINT_CALL = /(?<![\w$])\$(?:display|write|monitor|strobe)[bho]?\s*\(/g;
 const TIME = /\$(?:time|stime|realtime)\b/g;
 
 /** `$time` used by the design (`if ($time > 0)`); printed by `$display` or `$write` it is console output, which synthesis skips. */

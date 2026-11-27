@@ -17,7 +17,7 @@ import { escapeRegExp } from './constructText';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type EdgeDirection, type Target } from './registerShared';
 import { isHidden } from './scan';
 import type { RegisterProblem, RegisterProblemKind } from './types';
-import { declaredRanges, verilogConstants, verilogElaborationNames, verilogFixedConstants, verilogSignalNames } from './verilogDeclarations';
+import { declaredRanges, verilogConstants, verilogElaborationNames, verilogFixedConstants, verilogSignalNames, verilogWordArrays, type WordArrays } from './verilogDeclarations';
 import { concatenationCycles, splitAssignment, type Declarations } from './verilogDriverParts';
 import type { Bindings } from './constantIndex';
 import { keptTargets, signalOf, statementEnd, type FixedView, type StatementContext } from './verilogStatements';
@@ -485,6 +485,7 @@ interface ModuleFacts {
   readonly fixedNames: ReadonlySet<string>;
   readonly fixed: FixedView;
   readonly signals: ReadonlySet<string>;
+  readonly wordArrays: WordArrays;
 }
 
 /** The walk of one block's body, which starts at file offset `bodyAt`: its `full_case` marks and source at the body's offsets. */
@@ -494,16 +495,20 @@ function blockContext(t: UnitText, facts: ModuleFacts, { body, bodyAt }: Pick<Al
     text: body, rangeOf: facts.rangeOf, constants: facts.constants, loops: new Map(), unsure: new Set(), fixedNames: facts.fixedNames,
     fullCase: { directives: local(t.fullCase?.directives), attributes: local(t.fullCase?.attributes) },
     source: t.source?.slice(bodyAt, bodyAt + body.length), fixedConstants: facts.fixed.constants, selectorRangeOf: facts.fixed.rangeOf,
-    signals: facts.signals,
+    signals: facts.signals, wordArrays: facts.wordArrays,
   };
 }
 
 export function verilogLevelStorage(t: UnitText): Found[] {
+  // The defaults name the bits a block writes (`q[N-1:0]` and `q[N]` are all of `q[N:0]`); a
+  // condition on a parameter is walked for every value it may take, with `fixed` (keptTargets).
+  // Known miss: an override that makes two of those bits one or two (`q[I]` and `q[1]`, with
+  // `I = $clog2(DEPTH)`, are one bit by default and two with DEPTH 4).
   const constants = verilogConstants(t.code);
   const rangeOf = declaredRanges(t.code, constants);
   const fixedConstants = verilogFixedConstants(t.code, t.parametersFixed);
   const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
-  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code) };
+  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code), wordArrays: verilogWordArrays(t.code, fixedConstants) };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
     const feedback = nonblockingTargets(body).flatMap((m) => {

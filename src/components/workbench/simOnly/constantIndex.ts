@@ -8,6 +8,8 @@
  * function, `x` or `z` digits, arithmetic Verilog's widths could change) is not known. Pure.
  */
 
+import { unwrapped } from './brackets';
+
 /** The values of the names in scope at one point: constants and loop variables. */
 export type Bindings = ReadonlyMap<string, number>;
 
@@ -16,8 +18,8 @@ export type Bindings = ReadonlyMap<string, number>;
  * rules could change. An unsigned one (`localparam A = 4'hF`, `localparam [7:0] W = 4`) takes
  * part in arithmetic only beside a 32-bit integer operand, every step non-negative (`W - 1`
  * is computed in 32 bits: 3; `A + B` of two 4-bit values wraps in 4 bits, so is not). A
- * signed one (`localparam signed [3:0] S = -2`) is read only as a whole expression (`q[S]`,
- * a case label `S:`).
+ * signed one (`localparam signed [3:0] S = -2`) is read as a whole expression (`q[S]`, a case
+ * label `S:`) and in arithmetic beside a 32-bit integer and no unsigned constant (`S + 1`).
  */
 const UNSIGNED = '\u0000unsigned:';
 const ALONE = '\u0000alone:';
@@ -31,6 +33,12 @@ export const valueOfName = (bindings: Bindings, name: string): number | undefine
 const TOKEN = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-F_]+|\d+|\$?[A-Za-z_]\w*|[-+*/%()]|\S/g;
 /** `8'd10`, `4'hF`, `'b1010`: digits only. */
 const BASED = /^(?<size>\d*)\s*'(?<signed>s?)(?<base>[bodh])\s*(?<digits>[0-9a-f_]+)$/i;
+/**
+ * The most tokens an expression computed has. It is read recursively (parentheses,
+ * `$clog2`): a generated expression nested thousands deep would overflow the stack.
+ */
+const MAX_TOKENS = 1000;
+const tooLong = (expression: string): boolean => (expression.match(TOKEN) ?? []).length > MAX_TOKENS;
 /** An unsized based literal (`'hF`) has at least this many bits. */
 export const UNSIZED_LITERAL_WIDTH = 32;
 const VALID_DIGITS: Readonly<Record<string, RegExp>> = { b: /^[01]+$/, o: /^[0-7]+$/, d: /^\d+$/, h: /^[0-9a-f]+$/i };
@@ -44,7 +52,9 @@ const PREFIX: Readonly<Record<string, string>> = { b: '0b', o: '0o', d: '', h: '
  * sum wraps to 0 in 32 bits) it is not computed; a based literal alone is.
  */
 export function integerValue(expression: string, bindings: Bindings): number | undefined {
-  const tokens = expression.match(TOKEN) ?? [];
+  if (tooLong(expression)) return undefined;
+  // `(W)` is `W`: parentheses around the whole of it make no arithmetic.
+  const tokens = unwrapped(expression).match(TOKEN) ?? [];
   if (tokens.length === 1 && /^[A-Za-z_]/.test(tokens[0])) return valueOfName(bindings, tokens[0]);
   if (tokens.length > 1 && tokens.some((token) => token.includes("'"))) return undefined;
   return arithmeticValue(tokens, bindings);
@@ -61,16 +71,23 @@ function arithmeticValue(tokens: readonly string[], bindings: Bindings): number 
 interface Context {
   usedInteger: boolean;
   usedUnsigned: boolean;
+  /** A signed constant of a width of its own (`localparam signed [7:0] W`). */
+  usedSigned: boolean;
   negative: boolean;
+  /** An operator was applied: a lone operand (`$clog2(DEPTH)`) has no arithmetic to wrap. */
+  arithmetic: boolean;
 }
 
-const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, negative: false };
+const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, usedSigned: false, negative: false, arithmetic: false };
 
 /**
  * An unsigned constant makes the whole context unsigned: its arithmetic is plain only in at
- * least 32 bits (beside an integer operand) and with no step below zero.
+ * least 32 bits (beside an integer operand) and with no step below zero. A signed one of its
+ * own width is plain beside an integer and no unsigned one (`W - 1` is signed, 32 bits wide;
+ * beside an unsigned one it would be read unsigned, from its own bits). Alone, either is its value.
  */
-const widthSafe = (c: Context): boolean => !c.usedUnsigned || (c.usedInteger && !c.negative);
+const widthSafe = (c: Context): boolean =>
+  !c.arithmetic || ((!c.usedUnsigned || (c.usedInteger && !c.negative)) && (!c.usedSigned || (c.usedInteger && !c.usedUnsigned)));
 
 interface Reader extends Context {
   readonly tokens: readonly string[];
@@ -97,6 +114,7 @@ function chain(r: Reader, operators: string, operand: (r: Reader) => number | un
   while (value !== undefined && operators.includes(r.tokens[r.at] ?? '#')) {
     const operator = r.tokens[r.at++];
     const right = operand(r);
+    r.arithmetic = true;
     const next = right === undefined ? undefined : OPERATION[operator](value, right);
     value = inIntegerRange(next) ? next : undefined;
     if (value !== undefined && value < 0) r.negative = true;
@@ -150,6 +168,7 @@ function clog2Call(r: Reader): number | undefined {
 const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => number | undefined> = new Map([
   ['-', (r: Reader) => {
     const value = factor(r);
+    r.arithmetic = true;
     if (value !== undefined && -value < 0) r.negative = true;
     return value === undefined ? undefined : -value;
   }],
@@ -158,9 +177,9 @@ const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => number | undefined> = new
 ]);
 
 /**
- * A name's value in arithmetic: an integer, or an unsigned constant (the context notes which);
- * a signed one is none. A negative integer is noted too: beside an unsigned constant Verilog
- * reads it unsigned (`N % W` with `N = -3` and `W` 8-bit unsigned is 1, not 0).
+ * A name's value in arithmetic: an integer, an unsigned constant or a signed one of its own
+ * width (the context notes which). A negative integer is noted too: beside an unsigned constant Verilog
+ * reads it unsigned (`N % W` with `N = -3` and `localparam [7:0] W = 4` is 1, not -3).
  */
 function nameValue(r: Reader, name: string): number | undefined {
   const integer = r.bindings.get(name);
@@ -170,8 +189,13 @@ function nameValue(r: Reader, name: string): number | undefined {
     return integer;
   }
   const unsigned = r.bindings.get(UNSIGNED + name);
-  if (unsigned !== undefined) r.usedUnsigned = true;
-  return unsigned;
+  if (unsigned !== undefined) {
+    r.usedUnsigned = true;
+    return unsigned;
+  }
+  const signed = r.bindings.get(ALONE + name);
+  if (signed !== undefined) r.usedSigned = true;
+  return signed;
 }
 
 function factor(r: Reader): number | undefined {

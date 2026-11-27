@@ -12,7 +12,8 @@
 
 import type { UnitText } from '../tbDetect/rules';
 import { regionsIn } from '../vhdlScopes';
-import { inside, matchesIn, type Range } from './constructText';
+import { closingBracket } from './brackets';
+import { inside, matchesIn, wordBefore, type Range } from './constructText';
 import { isHidden } from './scan';
 
 interface Subprogram extends Range {
@@ -22,23 +23,51 @@ interface Subprogram extends Range {
   readonly isFunctionBody: boolean;
   /** A function or procedure with a body, not a declaration alone. */
   readonly hasBody: boolean;
+  /**
+   * Declared inside an architecture (its declarations or a process): seen only there, so
+   * every call of it is in this unit's code. One in an entity's declarations may be called
+   * from an architecture in another file, which this unit's code does not hold.
+   */
+  readonly local: boolean;
 }
 
 const SUBPROGRAM_NAME = /^(function|procedure)\s+(\w+)/i;
+const ARCHITECTURE = /\barchitecture\s+(\w+)\s+of\s+\w+\s+is\b/gi;
+
+/** Where the unit's architectures are, in its code: from `architecture a of e is` to its `end architecture` or `end a`. */
+function architectureRegions(code: string): Range[] {
+  return [...code.matchAll(ARCHITECTURE)].map((m) => {
+    const from = m.index ?? 0;
+    const end = new RegExp(`\\bend\\s+(?:architecture\\b|${m[1]}\\b)`, 'i').exec(code.slice(from));
+    return { from, to: end ? from + end.index + end[0].length : code.length };
+  });
+}
 /** Declarations evaluated once, at elaboration: `constant C : T := …;`, `signal s : T(…) := …;`. */
 const ONCE_DECLARATION = /\b(?:constant|signal)\s+\w+(?:\s*,\s*\w+)*\s*:[^;]*;/gi;
 
 /** Every function and procedure of the unit, at file offsets. */
+/** `generic ( … )` lists (not `generic map`): a `function op … is <>` there is a formal, no body. */
+function genericLists(code: string): Range[] {
+  return [...code.matchAll(/\bgeneric\s*\(/gi)].map((m) => {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const close = closingBracket(code, open);
+    return { from: open, to: close < 0 ? code.length : close };
+  });
+}
+
 function subprogramsOf(t: UnitText): Subprogram[] {
+  const architectures = architectureRegions(t.code);
+  const generics = genericLists(t.code);
   return regionsIn(t.code.split('\n'))
-    .filter((region) => region.kind === 'subprogram')
+    .filter((region) => region.kind === 'subprogram' && !inside(region.start, generics))
     .flatMap((region) => {
       const text = t.code.slice(region.start, region.end);
       const header = SUBPROGRAM_NAME.exec(text);
       if (!header) return [];
       const hasBody = /\bbegin\b/i.test(text);
       const isFunctionBody = header[1].toLowerCase() === 'function' && hasBody;
-      return [{ name: header[2].toLowerCase(), isFunctionBody, hasBody, from: t.base + region.start, to: t.base + region.end }];
+      const local = inside(region.start, architectures);
+      return [{ name: header[2].toLowerCase(), isFunctionBody, hasBody, local, from: t.base + region.start, to: t.base + region.end }];
     });
 }
 
@@ -47,7 +76,8 @@ function subprogramsOf(t: UnitText): Subprogram[] {
  * calls. The name a header declares is none (`function f` of a declaration before the body).
  */
 function callsOf(t: UnitText, body: Subprogram): number[] {
-  return matchesIn(t, new RegExp(`(?<!\\b(?:function|procedure)\\s+)\\b${body.name}\\b`, 'gi'))
+  return matchesIn(t, new RegExp(`\\b${body.name}\\b`, 'gi'))
+    .filter(([at]) => !/^(?:function|procedure)$/i.test(wordBefore(t.code, at - t.base)))
     .map(([at]) => at)
     .filter((at) => !inside(at, [body]) && !isHidden(t.lineOf(at), t.simOnlyRegions));
 }
@@ -65,7 +95,7 @@ function innermostAt(subprograms: readonly Subprogram[], at: number): Subprogram
  * commented out (`signal ram : ram_type;-- := init_ram(init_file);`); Quartus builds it.
  */
 export function uncalledSubprograms(t: UnitText): readonly Range[] {
-  const bodies = subprogramsOf(t).filter((s) => s.hasBody);
+  const bodies = subprogramsOf(t).filter((s) => s.hasBody && s.local);
   const calls = new Map(bodies.map((body) => [body, callsOf(t, body)]));
   // Start from every body and drop the ones called from code that runs, until none is.
   const uncalled = new Set(bodies);
@@ -88,7 +118,7 @@ export function uncalledSubprograms(t: UnitText): readonly Range[] {
  */
 export function elaborationFunctions(t: UnitText): readonly Range[] {
   const subprograms = subprogramsOf(t);
-  const bodies = subprograms.filter((s) => s.isFunctionBody);
+  const bodies = subprograms.filter((s) => s.isFunctionBody && s.local);
   if (bodies.length === 0) return [];
   const once = matchesIn(t, ONCE_DECLARATION).map(([at, m]) => ({ from: at, to: at + m[0].length }));
   const calls = new Map(bodies.map((body) => [body, callsOf(t, body)]));

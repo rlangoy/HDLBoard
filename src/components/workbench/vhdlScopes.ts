@@ -131,17 +131,34 @@ function pairedBodies(boundaries: readonly Boundary[], fileEnd: number): Region[
   return regions;
 }
 
-/** Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration that has none. */
+/**
+ * After `is`, what makes no body: VHDL-2008's instantiation `function f is new work.p.g
+ * generic map (…);` and a generic formal's default, `is <>` or a subprogram's name
+ * (`function op (…) return t is increment;`). A body's `is` is followed by declarations or
+ * `begin`, never by one name and then `;` or `)`.
+ */
+const NO_BODY_AFTER_IS = /\s*(?:<>|new\b|[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*\s*[;)])/iy;
+
+/**
+ * Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration
+ * that has none, and so does the `)` that closes the generic list a formal stands in.
+ */
 function afterHeader(code: string, from: number): { readonly body: boolean; readonly at: number } {
   let depth = 0;
   for (let i = from; i < code.length; i++) {
     const char = code[i];
     if (char === '(') depth++;
-    else if (char === ')') depth--;
+    else if (char === ')' && --depth < 0) return { body: false, at: i };
     else if (depth === 0 && char === ';') return { body: false, at: i + 1 };
-    else if (depth === 0 && isWordAt(code, i, IS)) return { body: true, at: i + IS.length };
+    else if (depth === 0 && isWordAt(code, i, IS) && !followedBy(NO_BODY_AFTER_IS, code, i + IS.length)) return { body: true, at: i + IS.length };
   }
   return { body: false, at: code.length };
+}
+
+/** Whether the sticky `pattern` matches `code` at `at`. */
+function followedBy(pattern: RegExp, code: string, at: number): boolean {
+  pattern.lastIndex = at;
+  return pattern.test(code);
 }
 
 /** `word` stands alone at `at`: not the end of `this` nor the start of `island`. */

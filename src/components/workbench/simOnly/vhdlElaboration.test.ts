@@ -46,6 +46,12 @@ describe('a function that prints while it computes a constant is not file I/O', 
     expect(fileIoLines(design(`function f return natural;\n${PRINTS('f')}\nconstant C : natural := f;`))).toEqual([]);
   });
 
+  test('a call before a trailing -- synthesis translate_off on its line is read: f runs in the design (GHDL rejects the line variable)', () => {
+    const body = "LEDR(1) <= '1' when f = 5 else '0'; -- synthesis translate_off\nLEDR(2) <= '0';\n-- synthesis translate_on";
+    const content = design(PRINTS('f'), body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
   test('a call that synthesis never reads', () => {
     const body = "process (CLOCK_50)\nbegin\n  --synthesis translate_off\n  LEDR(1) <= '1' when f = 5 else '0';\n  --synthesis translate_on\nend process;";
     expect(fileIoLines(design(`${PRINTS('f')}\nconstant C : natural := f;`, body))).toEqual([]);
@@ -107,6 +113,78 @@ describe('a subprogram nothing calls runs nowhere', () => {
     ].join('\n');
     const content = design(chain);
     expect(fileIoLines(content)).toEqual(linesWith(content, 'file f :', 'readline('));
+  });
+
+  test("a function an entity declares is seen by its architectures in other files: the call there counts (Quartus builds the ROM from the file's contents, or none)", () => {
+    const entity = [
+      'library ieee;',
+      'use ieee.std_logic_1164.all;',
+      'use std.textio.all;',
+      'entity top is',
+      `  port (${BOARD_PORTS});`,
+      '  type rom_t is array (0 to 3) of std_logic_vector(9 downto 0);',
+      '  impure function load(name : string) return rom_t is',
+      '    file f : text open read_mode is name;',
+      '    variable l : line;',
+      '    variable r : rom_t;',
+      '  begin',
+      '    readline(f, l);',
+      '    return r;',
+      '  end function;',
+      'end entity;',
+    ].join('\n');
+    const architecture = 'architecture rtl of top is\n  constant ROM : rom_t := load("rom.txt");\nbegin\n  LEDR <= ROM(0);\nend architecture;';
+    const lines = checkOf([source('e.vhd', entity), source('a.vhd', architecture)]).findings
+      .filter((f) => f.construct === 'vhdl-file-io' && f.fileId === 'e.vhd')
+      .map((f) => f.line);
+    expect(lines).toEqual(linesWith(entity, 'file f :', 'variable l : line', 'readline('));
+  });
+
+  test('a generic formal with a named default (is increment) in an unused procedure has no body: the process after it keeps its file I/O', () => {
+    const unused = [
+      'function increment (x : natural) return natural is begin return x + 1; end function;',
+      'procedure unused is',
+      '  function apply generic (function op (x : natural) return natural is increment) parameter (x : natural) return natural is',
+      '  begin',
+      '    return op(x);',
+      '  end function;',
+      'begin',
+      '  null;',
+      'end procedure;',
+    ].join('\n');
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(unused, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
+  test('a named default written with blanks around its dots (is work . helper_pkg . incr) is no body either', () => {
+    const unused = [
+      'procedure unused is',
+      '  function apply generic (function op (x : natural) return natural is work . helper_pkg . incr) parameter (x : natural) return natural is',
+      '  begin',
+      '    return op(x);',
+      '  end function;',
+      'begin',
+      '  null;',
+      'end procedure;',
+    ].join('\n');
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(unused, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
+  test('function unused is new work.p.generic_id generic map (…) has no body: the process after it keeps its file I/O (GHDL 6.0 rejects the line variable)', () => {
+    const instance = 'function unused is new work.p.generic_id generic map (N => 1);';
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(instance, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
+  test('a generic subprogram of a component is a formal, no body: the process after it keeps its file I/O (GHDL rejects the line variable)', () => {
+    const component = 'component c is\n  generic (function op (x : integer) return integer is <>);\nend component;';
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(component, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
   });
 
   test('a procedure that writes a line, never called', () => {

@@ -24,7 +24,7 @@ export function designView(raw: ProjectAnalysis, overrides: TestbenchOverrides):
   const cached = cache.get(raw);
   if (cached?.overrides === overrides) return cached.view;
   const portsOf = entityPorts(raw);
-  const overridden = overriddenModules(raw);
+  const overridden = overriddenModules(raw, overrides.roles);
   const parts = new Map([...raw.byFile].map(([id, file]) => [id, partsOf(file, portsOf, overridden)]));
   const hardware = hardwareView(raw, overrides, parts);
   const view: DesignView = { raw, corrected: withHardwareRoles(raw, hardware), parts, hardware };
