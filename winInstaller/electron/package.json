@@ -1,7 +1,7 @@
 {
   "name": "hdl-board-desktop",
   "private": true,
-  "version": "1.8.0",
+  "version": "1.8.1",
   "license": "GPL-2.0-only",
   "description": "Windows desktop shell for HDLBoard — packages the frontend, the simulation backend, GHDL and Icarus Verilog into one installer",
   "author": "Rune Langøy",
@@ -10,7 +10,8 @@
     "start": "electron .",
     "test": "node --test backendPort.test.js",
     "dist": "electron-builder --win",
-    "dist:linux": "electron-builder --linux dir"
+    "dist:linux": "electron-builder --linux dir",
+    "dist:mac": "electron-builder --mac dir"
   },
   "devDependencies": {
     "electron": "^33.2.1",

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: GPL-2.0-only
+  Copyright (C) 2026 Rune Langøy
+
+  Entitlements for a Developer ID build with the hardened runtime, which
+  notarization requires (macDmg/sign.sh). An ad hoc build has no hardened
+  runtime and does not use them. Every program generates machine code at run
+  time: V8 in Electron and its helpers, LLVM's JIT in GHDL on Apple silicon
+  (MAP_JIT), and GHDL's mcode backend on Intel (plain writable, executable memory).
+  Library validation stays on: everything loaded is signed with the same identity.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

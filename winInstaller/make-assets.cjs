@@ -7,6 +7,7 @@
  *
  *   electron/build/icon.ico            app + installer icon, 7 sizes
  *   electron/build/icon.png            Linux AppImage icon, 512x512
+ *   electron/build/icon-mac.png        macOS app icon, 1024x1024 on Apple's icon grid
  *   electron/build/installerSidebar.bmp  NSIS welcome/finish panel, 164x314
  *
  * Run with Electron, not Node:
@@ -36,6 +37,7 @@ const here = __dirname;
 const buildDir = join(here, 'electron', 'build');
 const icoPath = join(buildDir, 'icon.ico');
 const pngPath = join(buildDir, 'icon.png');
+const macPngPath = join(buildDir, 'icon-mac.png');
 const bmpPath = join(buildDir, 'installerSidebar.bmp');
 
 // Windows picks the nearest size for each context: 16 in title bars, 32 in
@@ -45,6 +47,12 @@ const SIZES = [16, 24, 32, 48, 64, 128, 256];
 // The size the AppImage and its .desktop entry carry; desktops scale it down.
 const LINUX_ICON_SIZE = 512;
 const MASTER = 1024;
+// Apple's grid for macOS 11+ app icons: on a 1024 px canvas the rounded tile is
+// 824 px, centred, with a corner radius of about 185 px. The margin holds the
+// tile's shadow, as in every other icon in the Dock. electron-builder turns
+// this PNG into the app's .icns on the Mac.
+const MAC_TILE = 824;
+const MAC_RADIUS = 185;
 
 // Fixed by NSIS's MUI welcome/finish page bitmap slot.
 const SIDEBAR_W = 164;
@@ -212,8 +220,27 @@ app.whenReady().then(async () => {
   writeFileSync(icoPath, buildIco(pngs));
   console.log(`icon.ico             (${SIZES.join(', ')} px)`);
   writeFileSync(pngPath, master.resize({ width: LINUX_ICON_SIZE, height: LINUX_ICON_SIZE, quality: 'best' }).toPNG());
-  iconWin.destroy();
   console.log(`icon.png             (${LINUX_ICON_SIZE} px)`);
+
+  // --- icon-mac.png ----------------------------------------------------
+  const macIcon = await render(
+    iconWin,
+    `<!doctype html><html><body style="margin:0;background:transparent">
+       <div style="width:${MASTER}px;height:${MASTER}px;display:flex;align-items:center;justify-content:center">
+         <div style="
+           width:${MAC_TILE}px;height:${MAC_TILE}px;box-sizing:border-box;
+           padding:${Math.round(MAC_TILE * ICON_INSET)}px;border-radius:${MAC_RADIUS}px;
+           background:linear-gradient(160deg, ${BRAND_LIGHT} 0%, ${BRAND_DARK} 100%);
+           box-shadow:0 10px 24px rgba(0,0,0,.28);">
+           ${TWO_TONE_LOGO_SVG}
+         </div>
+       </div>
+       <style>svg{width:100%;height:100%;display:block}</style>
+     </body></html>`,
+  );
+  writeFileSync(macPngPath, macIcon.toPNG());
+  iconWin.destroy();
+  console.log(`icon-mac.png         (${MASTER} px)`);
 
   // --- installerSidebar.bmp --------------------------------------------
   const w = SIDEBAR_W * SIDEBAR_SCALE;

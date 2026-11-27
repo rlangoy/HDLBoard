@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 Rune Langøy
 #
-# Packaging for the desktop builds (Windows installer, Linux AppImage). Everything under `resources/`
-# is produced by ../build.ps1 and is gitignored — never hand-edited.
+# Packaging for the desktop builds (Windows installer, Linux AppImage and snap, macOS app). Everything
+# under `resources/` is produced by ../build.ps1, linuxAppImage/build.sh or macDmg/build.sh and is
+# gitignored — never hand-edited.
 
 appId: no.usn.hdl-board
 productName: HDLBoard
@@ -41,11 +42,10 @@ extraResources:
   - from: resources/iverilog
     to: iverilog
 
-# HDLBoard's own GPL-2.0 text, installed so license.txt's reference
-# to it is true.
-extraFiles:
-  - from: ../../LICENSE
-    to: LICENSE
+# HDLBoard's own GPL-2.0 text, beside the program on Windows (so license.txt's
+# reference to it is true) and Linux, under `extraFiles` in those two sections.
+# Not here for all three: on macOS it would land in HDLBoard.app/Contents/, where
+# codesign accepts no loose file; the Mac app has it in Resources/licenses/.
 
 # Linux: electron-builder lays the app out (`dir`, in linux-unpacked/) and
 # linuxAppImage/build.sh packs that into the AppImage itself, for two things
@@ -62,10 +62,37 @@ linux:
   extraResources:
     - from: ../../LICENSE
       to: licenses/HDLBoard-LICENSE.txt
+  extraFiles:
+    - from: ../../LICENSE
+      to: LICENSE
+
+# macOS: electron-builder lays the app out (`dir`, in mac-arm64/ or mac/), and
+# macDmg/build.sh adds the license texts, sets the minimum macOS, signs it
+# (macDmg/sign.sh) and packs the DMG itself. See macDmg/README.md.
+mac:
+  target: dir
+  # 1024 px with Apple's icon margin (make-assets.cjs); converted to .icns here.
+  icon: build/icon-mac.png
+  category: public.app-category.education
+  # sign.sh signs, once the simulators and licenses are in the app: a signature
+  # made here would be broken by those additions.
+  identity: null
+  extraResources:
+    - from: ../../LICENSE
+      to: licenses/HDLBoard-LICENSE.txt
+  # The reason macOS shows the first time HDLBoard opens a file in one of these places.
+  extendInfo:
+    NSDocumentsFolderUsageDescription: HDLBoard keeps your projects in Documents › HDLBoard Projects, unless you choose another folder.
+    NSDesktopFolderUsageDescription: HDLBoard opens and saves the projects you keep on the Desktop.
+    NSDownloadsFolderUsageDescription: HDLBoard opens the project files you download.
+    NSRemovableVolumesUsageDescription: HDLBoard opens and saves projects on a USB stick or other external drive.
 
 win:
   target: nsis
   icon: build/icon.ico
+  extraFiles:
+    - from: ../../LICENSE
+      to: LICENSE
   # Unsigned. SmartScreen will warn on first run; signing is a real cost
   # that is hard to justify for a course tool, so the README documents the
   # "More info -> Run anyway" flow instead.

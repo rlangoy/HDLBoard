@@ -37,8 +37,14 @@ async function playStep(client: WsTestClient, step: ScenarioStep): Promise<void>
   }
 }
 
-/** Plays every step and returns the board as it stood when each one was satisfied — what parity tests compare. */
+/**
+ * Plays every step and returns the board as it stood when each one was satisfied — what parity tests compare.
+ * A step's timing window counts from when the board is live, its first STATE, not from READY: a simulator that
+ * compiles the design as it starts (GHDL's llvm-jit takes most of a second) shows nothing until then, and
+ * pacing counts its time from that moment too (session.ts `pacingDue`).
+ */
 export async function playBoardScenario(client: WsTestClient, steps: readonly ScenarioStep[]): Promise<BoardState[]> {
+  await client.untilState(() => true, DEFAULT_STEP_TIMEOUT_MS);
   const reached: BoardState[] = [];
   for (const step of steps) {
     await playStep(client, step);

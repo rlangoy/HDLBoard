@@ -13,6 +13,7 @@ import {
   promises as fs,
   closeSync,
   constants as fsConstants,
+  existsSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -232,7 +233,8 @@ export class Session {
   private outputPollTimer: NodeJS.Timeout | null = null;
   private pacingTimer: NodeJS.Timeout | null = null;
   private pacingFd: number | null = null;
-  private runStartTime = 0;
+  /** When this run's simulation showed its first sign of life (`pacingDue`); null before. */
+  private simulationStartTime: number | null = null;
   /**
    * Bumped per run so `heartbeatPath()` is unique to it. Deleting a shared
    * heartbeat file instead would be a race, not a fix: `RESET` kills the
@@ -774,7 +776,7 @@ export class Session {
 
   /**
    * Real-time pacing (§ 5.13): tops the testbench's pacing FIFO up to one
-   * grant per `PACING_STEP_MS` of real time since the run started. Grants
+   * grant per `PACING_STEP_MS` of real time since the simulation started (`pacingDue`). Grants
    * only ever let the simulation proceed, so a tick that fires late (a
    * loaded or CPU-capped machine) holds the simulation back instead of
    * letting it run ahead — the failure mode of § 5.9's pause-when-ahead
@@ -784,7 +786,7 @@ export class Session {
    * `onExit`: a stale tick must not act on whatever replaced this run.
    */
   private startPacing(handle: RunHandle): void {
-    this.runStartTime = Date.now();
+    this.simulationStartTime = null;
     let granted = 0;
     const tick = () => {
       if (this.run !== handle || this.pacingFd === null) return;
@@ -795,7 +797,7 @@ export class Session {
       } catch {
         // No heartbeat yet — nothing consumed.
       }
-      const due = Math.floor((Date.now() - this.runStartTime) / PACING_STEP_MS);
+      const due = this.pacingDue();
       const target = Math.min(due, consumed + PACING_MAX_OUTSTANDING);
       if (target > granted) {
         try {
@@ -811,7 +813,7 @@ export class Session {
 
   /**
    * `startPacing`, for `plan.pacing === 'stdin'` (Windows): the same schedule —
-   * one grant per `PACING_STEP_MS` of real time since the run started,
+   * one grant per `PACING_STEP_MS` of real time since the simulation started (`pacingDue`),
    * never more than `PACING_MAX_OUTSTANDING` ahead of what the testbench
    * has consumed — delivered through the child's stdin instead of a FIFO.
    * Kept separate rather than folded into `startPacing` so the POSIX path
@@ -823,7 +825,7 @@ export class Session {
    * for want of room.
    */
   private startStdinPacing(handle: RunHandle): void {
-    this.runStartTime = Date.now();
+    this.simulationStartTime = null;
     let granted = 0;
     const tick = () => {
       if (this.run !== handle) return;
@@ -836,7 +838,7 @@ export class Session {
         // refuses a read of a file held open for writing more readily than
         // POSIX does) — either way, treat it as nothing consumed yet.
       }
-      const due = Math.floor((Date.now() - this.runStartTime) / PACING_STEP_MS);
+      const due = this.pacingDue();
       const target = Math.min(due, consumed + PACING_MAX_OUTSTANDING);
       if (target > granted) {
         handle.grantPacing(target - granted);
@@ -845,6 +847,23 @@ export class Session {
       this.pacingTimer = setTimeout(tick, PACING_CHECK_MS);
     };
     tick();
+  }
+
+  /**
+   * The grants due by now: one per `PACING_STEP_MS` of real time since the
+   * simulation itself started — its first board line or heartbeat, which both
+   * testbenches write before they wait for a grant — not since the process was
+   * spawned. A simulator that compiles the design as it starts (GHDL's llvm-jit
+   * on Apple silicon takes most of a second, mcode a little) would otherwise be
+   * owed that compile time as a burst of grants, and race through it faster
+   * than `output.txt` is polled, so short-lived board states never showed.
+   */
+  private pacingDue(): number {
+    if (this.simulationStartTime === null) {
+      if (!existsSync(this.outputPath()) && !existsSync(this.heartbeatPath())) return 0;
+      this.simulationStartTime = Date.now();
+    }
+    return Math.floor((Date.now() - this.simulationStartTime) / PACING_STEP_MS);
   }
 
   private stopPacing(): void {

@@ -1,14 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Download the same locked Electron binary via GitHub's asset API when the
 // normal release download endpoint fails. Never trust the download's own hash.
+// Used by linuxAppImage/build.sh and macDmg/build.sh:
+//   node install-electron-fallback.cjs [cache directory]
 const { createHash } = require('node:crypto');
 const { readFileSync, mkdirSync, writeFileSync } = require('node:fs');
 const { resolve, join } = require('node:path');
 const { createRequire } = require('node:module');
 
-async function downloadVerifiedArchive(electronDir, cacheDir) {
+/** The builds that use this, by `${process.platform}-${process.arch}`, and the program in each archive (Electron's path.txt). */
+const TARGETS = {
+  'linux-x64': 'electron',
+  'darwin-arm64': 'Electron.app/Contents/MacOS/Electron',
+  'darwin-x64': 'Electron.app/Contents/MacOS/Electron',
+};
+
+async function downloadVerifiedArchive(electronDir, cacheDir, target = 'linux-x64') {
+  if (!(target in TARGETS)) throw new Error(`No Electron download for ${target}`);
   const { version } = JSON.parse(readFileSync(join(electronDir, 'package.json')));
-  const name = `electron-v${version}-linux-x64.zip`;
+  const name = `electron-v${version}-${target}.zip`;
   const checksums = JSON.parse(readFileSync(join(electronDir, 'checksums.json')));
   const expected = checksums[name];
   if (!/^[a-f0-9]{64}$/.test(expected ?? '')) throw new Error(`No pinned checksum for ${name}`);
@@ -38,14 +48,16 @@ async function downloadVerifiedArchive(electronDir, cacheDir) {
   return archive;
 }
 
-async function install() {
-  if (process.platform !== 'linux' || process.arch !== 'x64') throw new Error('Linux x64 only');
+async function install(cacheDir = resolve(__dirname, 'vendor/downloads')) {
+  const target = `${process.platform}-${process.arch}`;
+  if (!(target in TARGETS)) throw new Error(`Linux x64 and macOS only, not ${target}`);
   const electronDir = resolve(__dirname, '../winInstaller/electron/node_modules/electron');
-  const archive = await downloadVerifiedArchive(electronDir, resolve(__dirname, 'vendor/downloads'));
+  const archive = await downloadVerifiedArchive(electronDir, resolve(cacheDir), target);
   const requireDesktop = createRequire(join(electronDir, 'package.json'));
+  // extract-zip, as Electron's own install.js uses: it keeps the app bundle's symlinks.
   await requireDesktop('extract-zip')(archive, { dir: join(electronDir, 'dist') });
-  writeFileSync(join(electronDir, 'path.txt'), 'electron');
+  writeFileSync(join(electronDir, 'path.txt'), TARGETS[target]);
 }
 
-module.exports = { downloadVerifiedArchive };
-if (require.main === module) install().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = { downloadVerifiedArchive, TARGETS };
+if (require.main === module) install(process.argv[2]).catch(error => { console.error(error); process.exitCode = 1; });
