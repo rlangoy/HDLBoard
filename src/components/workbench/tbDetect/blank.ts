@@ -322,7 +322,7 @@ function blanked(chars: string[], from: number, to: number): number {
 
 /* -------------------- Verilog conditional compilation -------------------- */
 
-const DIRECTIVE = /`(?:(define|undef|ifdef|ifndef|elsif)\b[ \t]*(\w*)|(else|endif)\b)/g;
+const DIRECTIVE = /`(?:(define|undef|ifdef|ifndef|elsif)\b[ \t]*(\w*)|(else|endif)\b|(include)\b)/g;
 
 interface Branch {
   readonly parentActive: boolean;
@@ -403,6 +403,11 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
   for (const match of code.matchAll(DIRECTIVE)) {
     const at = match.index ?? 0;
     const wasActive = isActive(state.stack);
+    if (match[4] !== undefined) {
+      // An included file may define or undefine any macro: none is sure after one that may be read. It stays code.
+      if (wasActive || !surelyInactive(state)) state.sure.clear();
+      continue;
+    }
     if (!wasActive) {
       blankRange(chars, activeFrom, at);
       inactive.push({ from: activeFrom, to: at, surely: surelyInactive(state) });

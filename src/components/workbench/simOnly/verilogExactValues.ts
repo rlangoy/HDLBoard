@@ -187,9 +187,17 @@ function typeOf(type: string): { readonly width: number; readonly signed: boolea
   return isWidth(width) ? { width, signed: range[1] === 'signed' } : undefined;
 }
 
+/**
+ * The most tokens an expression computed has. Its terms nest as deep as it has operators,
+ * and are walked recursively: a generated `localparam` of 10 000 additions would overflow
+ * the stack and stop the whole check.
+ */
+const MAX_TOKENS = 1000;
+
 /** A constant's expression read whole, or none. */
 function parsed(text: string, known: ReadonlyMap<string, Exact>): Term | undefined {
   const tokens = text.trim().match(TOKEN) ?? [];
+  if (tokens.length > MAX_TOKENS) return undefined;
   const reader: Reader = { tokens, at: 0, known };
   const term = sum(reader);
   return reader.at === tokens.length ? term : undefined;

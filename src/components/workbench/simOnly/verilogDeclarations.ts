@@ -74,7 +74,10 @@ function parameterPortList(code: string): { readonly from: number; readonly to: 
  */
 function parameterItems(code: string): ParameterItem[] {
   const header = parameterPortList(code);
-  return [...code.matchAll(PARAMETER)].flatMap((m) => {
+  // A function's or task's own `localparam i` is no module constant: a generate loop's `genvar i` stays one.
+  const bodies = [...code.matchAll(SUBPROGRAM_BODY)].map((b) => ({ from: b.index ?? 0, to: (b.index ?? 0) + b[0].length }));
+  const inBody = (at: number) => bodies.some((b) => at >= b.from && at < b.to);
+  return [...code.matchAll(PARAMETER)].filter((m) => !inBody(m.index ?? 0)).flatMap((m) => {
     const at = m.index ?? 0;
     const inHeader = header !== undefined && at >= header.from && at < header.to;
     let declaration = { keyword: m[0], type: '' };

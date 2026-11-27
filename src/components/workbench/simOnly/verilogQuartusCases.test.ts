@@ -282,6 +282,26 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    "case (mem[idx]) of wire [W-1:0] mem [0:1], W 3 by an override: four 2-bit labels miss values (Warning 10240)",
+    "module sub #(parameter W = 2) (input [W-1:0] a, b, input idx, input [3:0] v, output reg x);\n  wire [W-1:0] mem [0:1];\n  assign mem[0] = a;\n  assign mem[1] = b;\n  always @* case (mem[idx])\n    2'd0: x = v[0];\n    2'd1: x = v[1];\n    2'd2: x = v[2];\n    2'd3: x = v[3];\n  endcase\nendmodule\nmodule t (input [2:0] a, b, input idx, input [3:0] v, output x);\n  sub #(.W(3)) u (.a(a), .b(b), .idx(idx), .v(v), .x(x));\nendmodule",
+    [5],
+  ],
+  [
+    '`ifdef X `A `else `B `endif #(.R(1)) u, the module names macros: with X defined by a header, child_a is overridden (Warning 10240)',
+    `\`define A child_a\n\`define B child_b\nmodule child_a #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule child_b #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule t (input d, e, output q);\n\`ifdef X\n  \`A\n\`else\n  \`B\n\`endif\n  #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [4, 7],
+  ],
+  [
+    '`define X, then an `include whose header undefines it: Quartus takes the `else override (Warning 10240)',
+    `\`define X\n\`include "n5_hdr.vh"\n${CHILD}\nmodule t (input d, e, output q);\n\`ifdef X\n  child u (.d(d), .e(e), .q(q));\n\`else\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
+    [4],
+  ],
+  [
+    "a function's own localparam i = 1 beside a generate loop's genvar i: the i = 0 copy keeps q[0] (Info 10041 for q[0])",
+    "module t (input [1:0] d, input en, output reg [1:0] q);\n  genvar i;\n  generate for (i = 0; i < 2; i = i + 1) begin : g\n    always @* if (i) q[i] = d[i]; else if (en) q[i] = d[i];\n  end endgenerate\n  function integer f;\n    input integer x;\n    localparam i = 1;\n    begin\n      f = x + i;\n    end\n  endfunction\nendmodule",
+    [4],
+  ],
+  [
     "gplgpu alt_mem_ddrx_rdata_path: genvar i in a generate loop and a function's own integer i: q[i] on both branches (no latch)",
     "module t #(parameter N = 4) (input [N-1:0] d, e, output reg [N-1:0] q);\n  genvar i;\n  generate for (i = 0; i < N; i = i + 1) begin : g\n    always @* if (e[i]) q[i] = d[i]; else q[i] = 1'b0;\n  end endgenerate\n  function integer log2;\n    input [31:0] value;\n    integer i;\n    begin\n      log2 = 0;\n      for (i = 0; 2**i < value; i = i + 1) log2 = i + 1;\n    end\n  endfunction\nendmodule",
     [],
@@ -543,6 +563,12 @@ describe('invalid HDL being edited does not stop the check', () => {
   test('a localparam of absurd range, [99999999999999999:0] (Quartus: Warning 10259, constant value overflow)', () => {
     const module = 'module t (input d, en, output reg q);\n  localparam [99999999999999999:0] ON = 1;\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule';
     // ON is not computed, so both of its branches are checked: the else keeps q.
+    expect(latchesIn(module)).toEqual([3]);
+  });
+
+  test('a generated localparam of 10 000 additions is not computed, and stops nothing', () => {
+    const sum = Array.from({ length: 10_000 }, () => '1').join(' + ');
+    const module = `module t (input d, en, output reg q);\n  localparam ON = ${sum};\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule`;
     expect(latchesIn(module)).toEqual([3]);
   });
 });

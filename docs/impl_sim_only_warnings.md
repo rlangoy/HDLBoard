@@ -275,7 +275,9 @@ expression at least as wide as the type and cuts the value to it (`localparam [8
 Quartus), and holds for every item of its list (`localparam [0:0] FIRST = 0, ON = 2;` makes `ON` a 0); a value with
 x or z digits, or wider than 64 bits, is not computed (`[99999999999999999:0]`, invalid HDL being edited, must not
 stop the check); and a name declared twice (each `generate` block its own `ON`), or also declared as a variable or
-net outside the functions and tasks (`reg ON`, `time ON`, `tri ON`), is not folded. Indexes, widths and loop bounds
+net outside the functions and tasks (`reg ON`, `time ON`, `tri ON`), is not folded; a function's or task's own
+`localparam` is no module constant, and an expression of more than 1000 tokens is not computed (its terms are walked
+recursively). An `` `include `` makes no macro sure: its header may define or undefine any. Indexes, widths and loop bounds
 (`constantIndex.ts`) read those values; their own arithmetic is computed only where no width rule can change it (an
 unsigned constant beside a 32-bit integer, no step below zero; `$clog2` of one unsigned constant). A word of an array
 of vectors has the word's width (`casez (mem[0])` of `wire [1:0] mem [0:0]` is two bits), a bit select of any index

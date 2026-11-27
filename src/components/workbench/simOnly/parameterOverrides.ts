@@ -338,10 +338,11 @@ function verilogTargets(scan: ScannedFile, project: Project): string[] {
  * no module).
  */
 function namesBefore(code: string, at: number, name: string): { readonly text: string; readonly at: number }[] {
+  // A macro's name starts at its backtick: `` `ifdef X `A `else `B `endif #(…) `` is `A and `B.
+  const tokenStart = (offset: number) => (code[offset - 1] === '`' ? offset - 1 : offset);
   const names = [{ text: name, at }];
-  for (let before = precedingToken(code, at); /^[A-Za-z_]\w*$/.test(before.text); before = precedingToken(code, before.at)) {
+  for (let before = precedingToken(code, tokenStart(at)); /^[A-Za-z_]\w*$/.test(before.text); before = precedingToken(code, tokenStart(before.at))) {
     names.push(before);
-    if (code[before.at - 1] === '`') break;
   }
   return names;
 }

@@ -140,6 +140,13 @@ describe('a subprogram nothing calls runs nowhere', () => {
     expect(lines).toEqual(linesWith(entity, 'file f :', 'variable l : line', 'readline('));
   });
 
+  test('function unused is new work.p.generic_id generic map (…) has no body: the process after it keeps its file I/O (GHDL 6.0 rejects the line variable)', () => {
+    const instance = 'function unused is new work.p.generic_id generic map (N => 1);';
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(instance, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
   test('a generic subprogram of a component is a formal, no body: the process after it keeps its file I/O (GHDL rejects the line variable)', () => {
     const component = 'component c is\n  generic (function op (x : integer) return integer is <>);\nend component;';
     const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';

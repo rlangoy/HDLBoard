@@ -508,7 +508,7 @@ export function verilogLevelStorage(t: UnitText): Found[] {
   const rangeOf = declaredRanges(t.code, constants);
   const fixedConstants = verilogFixedConstants(t.code, t.parametersFixed);
   const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
-  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code), wordArrays: verilogWordArrays(t.code, constants) };
+  const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code), wordArrays: verilogWordArrays(t.code, fixedConstants) };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];
     const feedback = nonblockingTargets(body).flatMap((m) => {
