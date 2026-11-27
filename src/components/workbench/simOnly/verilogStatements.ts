@@ -703,7 +703,8 @@ export type FixedView = Pick<StatementContext, 'constants' | 'rangeOf'>;
  * of it keeps it whatever the loop does: `if (en) begin q = d; for (…) q[i] = …; end`.
  */
 function surelyKept(ctx: StatementContext, assigned: Assigned, unsure: ReadonlySet<string>): string[] {
-  const unsureSignals = new Set([...unsure].map(signalOf));
+  // Only a bit the check cannot name (`q[?]`) may be any of them; an unsure `q[0]` leaves the rest of `q` sure.
+  const unsureSignals = new Set([...unsure].filter((t) => t.endsWith(UNKNOWN_BIT)).map(signalOf));
   const unsureWhole = (t: string) => t === signalOf(t) && unsureSignals.has(t) && assigned.cover.has(t);
   return notAlwaysAssigned(ctx, assigned).filter((t) => !unsure.has(t) && !unsureWhole(t));
 }

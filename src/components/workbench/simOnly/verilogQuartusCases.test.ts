@@ -283,6 +283,31 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    'if (MODE == 1) q = d; else if (c) q = d; else repeat (1) q[0] = d[0], N 5 by an override: q[4:1] are kept (Info 10041 for q[1] to q[4])',
+    'module sub #(parameter N = 1, MODE = 0) (input c, input [N-1:0] d, output reg [N-1:0] q);\n  always @* if (MODE == 1) q = d; else if (c) q = d; else repeat (1) q[0] = d[0];\nendmodule\nmodule t (input c, input [4:0] d, output [4:0] q);\n  sub #(.N(5)) u (.c(c), .d(d), .q(q));\nendmodule',
+    [2],
+  ],
+  [
+    "a function's own reg [0:0] mem [1:0] beside the module's reg [1:0] mem [1:0]: case (mem[i]) with 0 and 1 misses values (Warning 10240)",
+    'module t (input i, input [1:0] a, b, input x0, x1, output reg x);\n  reg [1:0] mem [1:0];\n  always @* begin mem[0] = a; mem[1] = b; end\n  always @* case (mem[i])\n    0: x = x0;\n    1: x = x1;\n  endcase\n  function f;\n    input k;\n    reg [0:0] mem [1:0];\n    begin\n      mem[0] = k;\n      f = mem[0];\n    end\n  endfunction\nendmodule',
+    [4],
+  ],
+  [
+    'a translate_off inside `ifdef SYNTHESIS: Quartus does not define it, skips the pragma and builds the override after `endif (Warning 10240)',
+    `${CHILD}\nmodule t (input d, e, output q);\n\`ifdef SYNTHESIS\n// synthesis translate_off\n\`endif\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [2],
+  ],
+  [
+    '`define SKIP_PARAMS inside translate_off: Quartus never defines it, so `ifndef SKIP_PARAMS takes the override (Warning 10240)',
+    `// synthesis translate_off\n\`define SKIP_PARAMS\n// synthesis translate_on\n${CHILD}\nmodule t (input d, e, output q);\n\`ifndef SKIP_PARAMS\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`else\n  child u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
+    [5],
+  ],
+  [
+    'child `HASH (.R(1)) u with `define HASH #: the # ends the macro, the override follows the use (Warning 10240)',
+    `\`define HASH #\n${CHILD}\nmodule t (input d, e, output q);\n  child \`HASH (.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
     'a translate_off inside a left-out `ifndef X is no pragma: the override after its `endif is built (Warning 10240)',
     `\`define X\n${CHILD}\nmodule t (input d, e, output q);\n\`ifndef X\n// synthesis translate_off\n\`endif\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
     [3],
@@ -652,6 +677,12 @@ describe('invalid HDL being edited does not stop the check', () => {
     expect(latchesIn(module)).toEqual([3]);
   });
 
+  test('a port range of $clog2 nested 5000 deep is not computed, and stops nothing', () => {
+    const nested = `${'$clog2('.repeat(5000)}4${')'.repeat(5000)}`;
+    const module = `module t (input [${nested}:0] s, input d, en, output reg q);\n  always @* if (en) q = d;\nendmodule`;
+    expect(latchesIn(module)).toEqual([2]);
+  });
+
   test('a generated localparam of 10 000 additions is not computed, and stops nothing', () => {
     const sum = Array.from({ length: 10_000 }, () => '1').join(' + ');
     const module = `module t (input d, en, output reg q);\n  localparam ON = ${sum};\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule`;
@@ -705,6 +736,11 @@ describe("a testbench's overrides change no synthesized module", () => {
 
   test('a testbench nothing instantiates, with sub #(.B(2)) dut: sub keeps its default (no latch)', () => {
     expect(latches([source('sub.v', design), source('sub_tb.v', bench)])).toEqual([]);
+  });
+
+  test('a testbench the top instantiates under `ifndef SYNTHESIS may be built: its override counts (Quartus builds it, Warning 10240)', () => {
+    const top = 'module t (input s, a, b, output x);\n  sub u (.s(s), .a(a), .b(b), .x(x));\n`ifndef SYNTHESIS\n  sub_tb tb ();\n`endif\nendmodule';
+    expect(latches([source('sub.v', design), source('sub_tb.v', bench), source('t.v', top)])).toEqual(['sub.v@3']);
   });
 
   test('a file the student marked as a testbench is left out too', () => {

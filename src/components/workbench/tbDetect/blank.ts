@@ -88,8 +88,8 @@ export function blankSource(language: Language, source: string, view: SourceView
   const marks = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length), source.length);
   const lexed = chars.join('');
-  const pre = preprocessVerilog(lexed, lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
-  const everyBranch = possibleCode(lexed, pre.inactive, pragmas.offsets);
+  const pre = preprocessVerilog(lexed, lineOf, view === 'synthesis' ? ['SYNTHESIS'] : [], pragmas.offsets);
+  const everyBranch = possibleCode(lexed, pre, pragmas.offsets);
   // A mark in an `ifdef branch the view leaves out, inside translate_off, or in a macro's text marks nothing.
   const hidden = (at: number) => pragmas.regions.some((r) => lineOf(at) >= r.start && lineOf(at) <= r.end);
   const inMacro = (at: number) => pre.defines.some((d) => at >= d.from && at < d.to);
@@ -110,11 +110,11 @@ const CONDITIONAL_DIRECTIVE = /`(?:(?:ifdef|ifndef|elsif|undef)\b[ \t]*\w*|(?:el
  * conditional directives themselves are blanked: `` child `ifndef X #(.R(1)) `endif u ``
  * reads as `child #(.R(1)) u`.
  */
-function possibleCode(lexed: string, inactive: readonly InactiveRange[], translateOff: readonly Range[]): string {
+function possibleCode(lexed: string, pre: Pick<Preprocessed, 'inactive' | 'unsure'>, translateOff: readonly Range[]): string {
   const chars = lexed.split('');
-  for (const r of inactive) if (r.surely) blankRange(chars, r.from, r.to);
-  // A translate_off in a branch that may be left out may be no pragma at all: what follows its `endif may be built.
-  const mayBeLeftOut = (at: number) => inactive.some((r) => at >= r.from && at < r.to);
+  for (const r of pre.inactive) if (r.surely) blankRange(chars, r.from, r.to);
+  // A translate_off in a branch that may be left out (the view's, or one on SYNTHESIS it reads) may be no pragma at all.
+  const mayBeLeftOut = (at: number) => [...pre.inactive, ...pre.unsure].some((r) => at >= r.from && at < r.to);
   for (const r of translateOff) if (!mayBeLeftOut(r.from)) blankRange(chars, r.from, r.to);
   for (const m of lexed.matchAll(CONDITIONAL_DIRECTIVE)) blankRange(chars, m.index ?? 0, (m.index ?? 0) + m[0].length);
   return chars.join('');
@@ -395,13 +395,16 @@ interface Preprocessed {
   readonly code: string;
   readonly regions: LineSpan[];
   readonly inactive: InactiveRange[];
+  /** Code the view reads in a branch a tool may leave out (`` `ifdef SYNTHESIS ``, which Quartus does not define). */
+  readonly unsure: Range[];
   readonly defines: MacroDefinition[];
 }
 
-function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): Preprocessed {
+function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[], translateOff: readonly Range[]): Preprocessed {
   const chars = code.split('');
   const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[], sure: new Set<string>() };
   const inactive: InactiveRange[] = [];
+  const unsure: Range[] = [];
   const defines: MacroDefinition[] = [];
   let activeFrom = 0;
   // A directive in a macro's text runs where the macro is used, not here: `` `define SET `define OMIT `` defines SET only.
@@ -418,8 +421,10 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     if (!wasActive) {
       blankRange(chars, activeFrom, at);
       inactive.push({ from: activeFrom, to: at, surely: surelyInactive(state) });
-    }
-    directive(state, match[1] ?? match[3], match[2], lineOf(at), wasActive);
+    } else if (!surelyHeld(state)) unsure.push({ from: activeFrom, to: at });
+    // A `define in translate_off may never run (Quartus skips it): it makes its macro unsure.
+    const translated = translateOff.some((r) => at >= r.from && at < r.to);
+    directive(state, match[1] ?? match[3], match[2], lineOf(at), { active: wasActive, translated });
     // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
     blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define') {
@@ -437,9 +442,12 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
   if (!isActive(state.stack)) {
     blankRange(chars, activeFrom, code.length);
     inactive.push({ from: activeFrom, to: code.length, surely: surelyInactive(state) });
-  }
-  return { code: chars.join(''), regions: state.regions, inactive, defines };
+  } else if (!surelyHeld(state)) unsure.push({ from: activeFrom, to: code.length });
+  return { code: chars.join(''), regions: state.regions, inactive, unsure, defines };
 }
+
+/** Whether every branch around is surely the one a tool takes: none tests SYNTHESIS, or a macro an included file may change. */
+const surelyHeld = (state: PreState): boolean => state.stack.every((b) => b.surelyTaken || b.names.every((name) => state.sure.has(name)));
 
 /** Offsets `from` (included) to `to` (excluded). */
 interface Range {
@@ -465,8 +473,10 @@ interface PreState {
   readonly sure: Set<string>;
 }
 
-function directive(state: PreState, word: string, name: string, line: number, active: boolean): void {
-  noteDefinition(state, word, name, active);
+function directive(state: PreState, word: string, name: string, line: number, where: { readonly active: boolean; readonly translated: boolean }): void {
+  const { active } = where;
+  // In translate_off, a definition is one that may not run: its macro is unsure, never sure.
+  noteDefinition(state, word, name, active && !where.translated);
   const top = state.stack[state.stack.length - 1];
   if (word === 'define' && active) state.defines.add(name);
   else if (word === 'undef' && active) state.defines.delete(name);

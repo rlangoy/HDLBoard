@@ -229,7 +229,9 @@ function widthOf(ranges: readonly string[], constants: Bindings): number | undef
  * `logic [3:0][7:0] bytes` (`bytes[i]` is 8). `reg [7:0] m [0:3][0:3]` is one too, `m[i]`
  * an array of no width here; `reg q [0:3]`, an array of bits, is none.
  */
-export function verilogWordArrays(code: string, constants: Bindings = new Map()): WordArrays {
+export function verilogWordArrays(module: string, constants: Bindings = new Map()): WordArrays {
+  // A function's own `reg [0:0] mem [1:0]` is no module array: the module's `mem` keeps its width.
+  const code = module.replace(SUBPROGRAM_BODY, ' ');
   const vectors = [...code.matchAll(DECLARATION), ...code.matchAll(NET_DECLARATION)].flatMap((m) => wordsOf(m, constants));
   return new Map([...vectors, ...integerWords(code)]);
 }

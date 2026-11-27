@@ -282,7 +282,7 @@ function macroTargets(source: Source, project: Project): string[] {
 function useTargets(code: string, project: Project, use: RegExpExecArray | RegExpMatchArray): string[] {
   if (project.macros.emitsDefparam(use[1])) throw new Unresolved();
   return project.macros.expansions(use[1]).flatMap((text) =>
-    [...text.matchAll(HASH)].flatMap((hash) => {
+    [...text.matchAll(EXPANSION_HASH)].flatMap((hash) => {
       const before = precedingToken(text, hash.index ?? 0);
       // A `#` that starts the text follows what stands before the use.
       return before.text === '' ? modulesBefore(code, use.index ?? 0, project) : hashTargets(text, before, project);
@@ -324,6 +324,8 @@ function openingBracket(code: string, close: number): number {
 
 /** A `#` that may start an override: `#(`, `#5`, `#P`, ``#`P``. */
 const HASH = /#\s*[\w(`]/g;
+/** In a macro's text, also a `#` that ends it: with `` `define HASH # ``, `` child `HASH (.R(1)) u `` is an override. */
+const EXPANSION_HASH = /#\s*(?:[\w(`]|$)/g;
 
 /**
  * The modules the `#` after `before` overrides. After a name: that module (or each one a
@@ -451,7 +453,9 @@ function testbenchFiles(files: readonly FileAnalysis[], roles: TestbenchOverride
   const name = new RegExp(`\\b(?:${[...owner.keys()].map(escapeRegExp).join('|')})\\b`, 'gi');
   const named = new Set<string>();
   for (const file of files) {
-    for (const m of scannedFile(file).code.matchAll(name)) {
+    // Every branch, as the override search reads them: an `ifndef SYNTHESIS instance of the testbench may be built.
+    const scan = scannedFile(file);
+    for (const m of (file.language === 'verilog' ? scan.everyBranch : scan.code).matchAll(name)) {
       const of = owner.get(m[0].toLowerCase());
       if (of !== undefined && of !== file.fileId) named.add(of);
     }

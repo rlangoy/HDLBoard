@@ -33,6 +33,12 @@ export const valueOfName = (bindings: Bindings, name: string): number | undefine
 const TOKEN = /\d*\s*'[sS]?[bBoOdDhH]\s*[0-9a-fA-F_]+|\d+|\$?[A-Za-z_]\w*|[-+*/%()]|\S/g;
 /** `8'd10`, `4'hF`, `'b1010`: digits only. */
 const BASED = /^(?<size>\d*)\s*'(?<signed>s?)(?<base>[bodh])\s*(?<digits>[0-9a-f_]+)$/i;
+/**
+ * The most tokens an expression computed has. It is read recursively (parentheses,
+ * `$clog2`): a generated expression nested thousands deep would overflow the stack.
+ */
+const MAX_TOKENS = 1000;
+const tooLong = (expression: string): boolean => (expression.match(TOKEN) ?? []).length > MAX_TOKENS;
 /** An unsized based literal (`'hF`) has at least this many bits. */
 export const UNSIZED_LITERAL_WIDTH = 32;
 const VALID_DIGITS: Readonly<Record<string, RegExp>> = { b: /^[01]+$/, o: /^[0-7]+$/, d: /^\d+$/, h: /^[0-9a-f]+$/i };
@@ -46,6 +52,7 @@ const PREFIX: Readonly<Record<string, string>> = { b: '0b', o: '0o', d: '', h: '
  * sum wraps to 0 in 32 bits) it is not computed; a based literal alone is.
  */
 export function integerValue(expression: string, bindings: Bindings): number | undefined {
+  if (tooLong(expression)) return undefined;
   // `(W)` is `W`: parentheses around the whole of it make no arithmetic.
   const tokens = unwrapped(expression).match(TOKEN) ?? [];
   if (tokens.length === 1 && /^[A-Za-z_]/.test(tokens[0])) return valueOfName(bindings, tokens[0]);
