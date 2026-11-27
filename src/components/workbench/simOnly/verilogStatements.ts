@@ -91,6 +91,8 @@ export interface StatementContext {
   readonly selectorRangeOf?: (name: string) => BitRange | undefined;
   /** The module's declared signals, ports included: a selector of them has a width synthesis knows. */
   readonly signals?: ReadonlySet<string>;
+  /** The module's arrays of vectors: an element of one is a word, not a bit (`verilogWordArrays`). */
+  readonly wordArrays?: ReadonlySet<string>;
   /** Counts the work of a walk: statements, and bits of loops followed. */
   readonly work?: { steps: number };
 }
@@ -116,14 +118,18 @@ const bitsOf = (name: string, { msb, lsb }: BitRange): string[] | undefined => {
 };
 
 /**
- * Whether `assigned` covers the target: the target, or its whole signal. A `q[?]` is
- * covered only by the whole of `q`: writing a bit known only while running leaves the
- * others as they were, even on every path.
+ * Whether `assigned` covers the target: the target, or its whole signal. A bit known only
+ * while running (`q[?]`) or fixed while elaborating (`q[I]`) is also covered by every
+ * declared bit of `q` (`q = d;` before `if (en) q[I] = …`). Writing such a bit leaves the
+ * others as they were, so it covers no numbered bit, even on every path.
  */
 function covers(ctx: StatementContext, assigned: ReadonlySet<string>, target: string): boolean {
   const signal = signalOf(target);
-  if (assigned.has(signal)) return true;
-  if (!target.endsWith(UNKNOWN_BIT)) return assigned.has(target);
+  // `q[?]` written on every path may be another bit on each run: it does not cover itself.
+  if (assigned.has(signal) || (assigned.has(target) && !target.endsWith(UNKNOWN_BIT))) return true;
+  // A bit known by number is covered only by itself; one known only while running (`q[?]`) or
+  // fixed while elaborating (`q[I]`, `q[i]`) by every declared bit of its signal.
+  if (target === signal || /\[-?\d+\]$/.test(target)) return false;
   const range = ctx.rangeOf(signal);
   const bits = range === undefined ? undefined : bitsOf(signal, range);
   return bits !== undefined && bits.every((bit) => assigned.has(bit));
@@ -235,7 +241,7 @@ const NAME = /[A-Za-z_]\w*/g;
 function fixedBits(ctx: StatementContext, name: string, index: string): string | undefined {
   const names = index.match(NAME) ?? [];
   const fixed = ctx.fixedNames;
-  if (fixed === undefined || names.length === 0 || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
+  if (fixed === undefined || index.includes('`') || names.length === 0 || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
   return `${name}[${index.replace(/\s+/g, '')}]`;
 }
 
@@ -302,7 +308,8 @@ const ELABORATION_FUNCTION = /^\$(?:clog2|bits|size)$/;
  */
 function isElaborationCondition(ctx: StatementContext, condition: string): boolean {
   const fixed = ctx.fixedNames;
-  if (fixed === undefined) return false;
+  // A macro may stand for a signal (`` if (`ON) `` with `` `define ON en ``): a run-time condition.
+  if (fixed === undefined || condition.includes('`')) return false;
   const names = condition.replace(BASED_NUMBER, ' ').match(/\$?[A-Za-z_]\w*/g) ?? [];
   return names.every((name) => ELABORATION_FUNCTION.test(name) || fixed.has(name) || ctx.constants.has(name));
 }
@@ -385,16 +392,24 @@ const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
 
 /**
  * The width of a case selector: a declared signal, one bit of it, a constant part of it,
- * or a concatenation of those and sized numbers (`{a[24], b[24]}` is two bits).
+ * or a concatenation of those and sized numbers (`{a[24], b[24]}` is two bits). An element
+ * of an array of vectors (`busword[0]` of `wire [1:0] busword [0:0]`) is a word, of a width
+ * not counted here.
  */
-function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf']): number | undefined {
+function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], wordArrays: ReadonlySet<string>): number | undefined {
   const s = unwrapped(selector).replace(/\s+/g, '');
   if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
-    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf));
+    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf, wordArrays));
     return widths.every((w) => w !== undefined) ? widths.reduce<number>((sum, w) => sum + (w ?? 0), 0) : undefined;
   }
   const whole = /^[A-Za-z_]\w*$/.test(s) ? rangeOf(s) : undefined;
-  if (whole) return Math.abs(whole.msb - whole.lsb) + 1;
+  return whole ? Math.abs(whole.msb - whole.lsb) + 1 : selectionWidth(s, wordArrays);
+}
+
+/** The width of `s[3]` (1) or `s[3:0]` (4); none for a word of an array of vectors, or any other form. */
+function selectionWidth(s: string, wordArrays: ReadonlySet<string>): number | undefined {
+  const selected = /^([A-Za-z_]\w*)\[/.exec(s)?.[1];
+  if (selected === undefined || wordArrays.has(selected)) return undefined;
   if (/^[A-Za-z_]\w*\[\d+\]$/.test(s)) return 1;
   const part = /^[A-Za-z_]\w*\[(\d+):(\d+)\]$/.exec(s);
   return part ? Math.abs(Number(part[1]) - Number(part[2])) + 1 : undefined;
@@ -510,10 +525,15 @@ function selectorSignals(selector: string): string[] | undefined {
 function labelsNameEveryValue(ctx: StatementContext, written: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
   const selector = unwrapped(written); // `casez ((s))` reads `s`
   if (labels.items.some((label) => matchesAnyValue(label, labels.kind))) return true;
-  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf);
-  const signals = width === undefined ? selectorSignals(selector) : undefined;
-  if (signals !== undefined && signals.length > 0 && signals.every((name) => ctx.signals?.has(name))) return false;
+  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf, ctx.wordArrays ?? NOTHING);
+  if (width === undefined && ofDeclaredSignals(ctx, selector)) return false;
   return namesEveryValue(labels.items, { width, constants: ctx.fixedConstants ?? ctx.constants, kind: labels.kind });
+}
+
+/** A selector made of the module's declared signals: synthesis knows its width. */
+function ofDeclaredSignals(ctx: StatementContext, selector: string): boolean {
+  const signals = selectorSignals(selector);
+  return signals !== undefined && signals.length > 0 && signals.every((name) => ctx.signals?.has(name) ?? false);
 }
 
 /** An unsized label of wildcard digits only, `'b?` or `'hz` in a casez (`x` too in a casex): it matches a selector of any width up to 32 bits. */

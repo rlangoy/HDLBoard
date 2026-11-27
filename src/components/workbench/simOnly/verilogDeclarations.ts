@@ -19,7 +19,10 @@ export interface BitRange {
 }
 
 const PARAMETER = /\b(?:parameter|localparam)\b/g;
-const PARAMETER_ITEM = /^\s*(?:(parameter|localparam)\s+)?((?:(?:integer|signed|unsigned)\s+)?(?:\[[^\]]*\]\s*)?)([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
+/** `[keyword] [type] name = value`; a range may hold one level of brackets (`[BITS[0]:0]`). */
+const PARAMETER_ITEM = /^\s*(?:(parameter|localparam)\s+)?((?:(?:integer|signed|unsigned)\s+)?(?:\[(?:[^[\]]|\[[^\]]*\])*\]\s*)?)([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/;
+/** The type of a declaration whose first item cannot be read: its other items are not computed either. */
+const UNREAD_TYPE = '?';
 
 /** The text after a `parameter` keyword up to its `;`, or the `)` that closes a `#( … )` list. */
 function parameterList(code: string, from: number): string {
@@ -76,7 +79,11 @@ function parameterItems(code: string): ParameterItem[] {
       const start = itemAt;
       itemAt += item.length + 1; // the item and its comma
       const parameter = PARAMETER_ITEM.exec(item);
-      if (!parameter) return [];
+      if (!parameter) {
+        // Its type is not read, so neither are those of the items after it.
+        if (k === 0) declaration = { keyword: m[0], type: UNREAD_TYPE };
+        return [];
+      }
       if (parameter[1] !== undefined || k === 0) declaration = { keyword: parameter[1] ?? m[0], type: parameter[2].trim() };
       const local = declaration.keyword === 'localparam' || (header !== undefined && !inHeader);
       const nameAt = start + item.search(new RegExp(`\\b${parameter[3]}\\s*=`));
@@ -143,9 +150,10 @@ const GENVAR = /\bgenvar\b([^;]*)/g;
  */
 export function verilogElaborationNames(code: string): ReadonlySet<string> {
   const genvars = [...code.matchAll(GENVAR)].flatMap((m) => m[1].split(',').map((item) => /^\s*([A-Za-z_]\w*)/.exec(item)?.[1]));
+  const parameters = parameterItems(code).map((p) => p.name);
+  // A name a block also declares as a variable (`reg i` beside `genvar i`) may be the variable there.
   const variables = variableNames(code);
-  const parameters = parameterItems(code).map((p) => p.name).filter((name) => !variables.has(name));
-  return new Set([...genvars, ...parameters].filter((name): name is string => name !== undefined));
+  return new Set([...genvars, ...parameters].filter((name): name is string => name !== undefined && !variables.has(name)));
 }
 
 /** The signals the module declares, ports included: what a value reads when it is no constant. */
@@ -168,6 +176,11 @@ function rangeOf(range: string, constants: Bindings): BitRange | undefined {
 }
 
 /** The ranges the module declares (`input sel` is bit 0, `input [N-1:0] sel` bits N-1 to 0), first declaration first. */
+/** The module's arrays of vectors (`wire [1:0] busword [0:3]`): `busword[0]` is a word of them, not a bit. */
+export function verilogWordArrays(code: string): ReadonlySet<string> {
+  return new Set([...code.matchAll(DECLARATION)].flatMap((m) => (m[2] === undefined ? [] : declaredNames(m[3]).filter((d) => d.unpacked !== undefined).map((d) => d.name))));
+}
+
 export function declaredRanges(code: string, constants: Bindings = verilogConstants(code)): (name: string) => BitRange | undefined {
   const ranges = new Map<string, BitRange>();
   for (const m of code.matchAll(DECLARATION)) {

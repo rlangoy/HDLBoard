@@ -8,6 +8,8 @@
  * function, `x` or `z` digits, arithmetic Verilog's widths could change) is not known. Pure.
  */
 
+import { unwrapped } from './brackets';
+
 /** The values of the names in scope at one point: constants and loop variables. */
 export type Bindings = ReadonlyMap<string, number>;
 
@@ -44,7 +46,8 @@ const PREFIX: Readonly<Record<string, string>> = { b: '0b', o: '0o', d: '', h: '
  * sum wraps to 0 in 32 bits) it is not computed; a based literal alone is.
  */
 export function integerValue(expression: string, bindings: Bindings): number | undefined {
-  const tokens = expression.match(TOKEN) ?? [];
+  // `(W)` is `W`: parentheses around the whole of it make no arithmetic.
+  const tokens = unwrapped(expression).match(TOKEN) ?? [];
   if (tokens.length === 1 && /^[A-Za-z_]/.test(tokens[0])) return valueOfName(bindings, tokens[0]);
   if (tokens.length > 1 && tokens.some((token) => token.includes("'"))) return undefined;
   return arithmeticValue(tokens, bindings);

@@ -291,6 +291,17 @@ interface Branch {
  * (an unknown macro is undefined, as with iverilog without -D) and blanks the
  * inactive branches. An active `ifndef SYNTHESIS branch is a sim-only region.
  */
+/**
+ * Where a macro's text starts, `afterName` being just past its name: after its parameter
+ * list when one follows the name directly (`` `define CELL(x) child ``), else right there
+ * (`` `define P (a) `` is a text that starts with a parenthesis).
+ */
+function macroTextStart(code: string, afterName: number, end: number): number {
+  if (code[afterName] !== '(') return afterName;
+  const close = code.indexOf(')', afterName);
+  return close < 0 || close >= end ? afterName : close + 1;
+}
+
 /** Where a `` `define `` at `at` ends: its line, and each line after one that ends with `\` (a continued macro text). */
 function defineEnd(code: string, at: number): number {
   let end = endOfLine(code, at);
@@ -323,7 +334,8 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define') {
       const end = defineEnd(code, at);
-      defines.push({ name: match[2], text: code.slice(at + match[0].length, end).replace(/\\[ \t\r]*\n/g, ' '), from: at, to: end, active: wasActive });
+      const text = code.slice(macroTextStart(code, at + match[0].length, end), end).replace(/\\[ \t\r]*\n/g, ' ');
+      defines.push({ name: match[2], text, from: at, to: end, active: wasActive });
       if (wasActive) blankRange(chars, at + match[0].length, end);
     }
     activeFrom = at + match[0].length;

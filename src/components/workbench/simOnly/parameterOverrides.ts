@@ -43,8 +43,6 @@ const MACRO_USE = /`([A-Za-z_]\w*)/g;
 const MAX_EXPANSION_DEPTH = 8;
 /** How many texts one macro may expand to before it counts as unresolved. */
 const MAX_EXPANSIONS = 64;
-/** Words a macro use may follow that are no module name. */
-const NOT_A_MODULE = new Set(['begin', 'end', 'else', 'assign', 'always', 'initial', 'generate', 'endgenerate', 'module', 'endmodule']);
 
 /** Something that may override any module's parameters was found. */
 class Unresolved extends Error {}
@@ -163,8 +161,10 @@ function defparamTargets(module: string, project: Project): string[] {
 
 /**
  * The modules the uses of overriding macros in `source` reach: `child `PARAMS u (…)` the
- * module before it, `` `define CHILD child #(…) `` the module its expansion starts with. A
- * use after `=` or `<=` is a delay (`q <= `DLY d;`); any other use reaches every module.
+ * module before it, when it is one of the project or a macro; else the module its expansion
+ * starts with (`` `define CHILD child #(…) ``, also after a block label: `begin : g `CHILD
+ * u (…)`). A use after `=` or `<=` is a delay (`q <= `DLY d;`); any other use reaches every
+ * module.
  */
 function macroTargets(source: Source, project: Project): string[] {
   if (project.overriding.length === 0) return [];
@@ -174,8 +174,26 @@ function macroTargets(source: Source, project: Project): string[] {
     const before = source.code.slice(0, use.index).trimEnd();
     if (/<?=$/.test(before)) return [];
     const preceding = /([A-Za-z_]\w*)$/.exec(before);
-    if (preceding !== null && !NOT_A_MODULE.has(preceding[1])) return project.macros.modulesAt(before, preceding.index, preceding[1]);
+    const isMacro = preceding !== null && before[preceding.index - 1] === '`';
+    if (preceding !== null && (isMacro || project.moduleNames.has(preceding[1]))) return project.macros.modulesAt(before, preceding.index, preceding[1]);
     return project.macros.leadingNames(use[1]);
+  });
+}
+
+/** `` `CELL(0) #(…) ``: a macro called with arguments, whose `)` an override may follow. */
+const MACRO_CALL = /`([A-Za-z_]\w*)\s*\(/g;
+
+/**
+ * The modules a macro called with arguments names when an override follows its call:
+ * `` `CELL(0) #(.R(1)) u (…) `` with `` `define CELL(x) child ``.
+ */
+function macroCallTargets(source: Source, macros: Macros): string[] {
+  return [...source.code.matchAll(MACRO_CALL)].flatMap((call) => {
+    const at = call.index ?? 0;
+    if (source.inDefine(at) || DIRECTIVES.has(call[1])) return [];
+    const close = closingBracket(source.code, at + call[0].length - 1);
+    if (close < 0 || !/^\s*#\s*[\w(]/.test(source.code.slice(close + 1))) return [];
+    return macros.leadingNames(call[1]);
   });
 }
 
@@ -184,6 +202,8 @@ interface Project {
   readonly overriding: readonly string[];
   /** Every Verilog module of the project, its every branch. */
   readonly modules: readonly string[];
+  /** The names of those modules. */
+  readonly moduleNames: ReadonlySet<string>;
 }
 
 interface Found {
@@ -198,7 +218,7 @@ function verilogTargets(scan: ScannedFile, project: Project): string[] {
     .filter((m) => !source.inDefine(m.index ?? 0))
     .flatMap((m) => project.macros.modulesAt(source.code, m.index ?? 0, m[1]));
   const byDefparam = [...source.code.matchAll(MODULE)].flatMap((module) => defparamTargets(module[0], project));
-  return [...byHash, ...byDefparam, ...macroTargets(source, project)];
+  return [...byHash, ...byDefparam, ...macroTargets(source, project), ...macroCallTargets(source, project.macros)];
 }
 
 function overriddenIn(file: FileAnalysis, project: Project, found: Found): void {
@@ -217,7 +237,8 @@ export function overriddenModules(raw: ProjectAnalysis): OverriddenModules {
   const modules = verilog.flatMap((scan) => [...scan.everyBranch.matchAll(MODULE)].map((m) => m[0]));
   const found: Found = { verilog: new Set(), vhdl: new Set() };
   try {
-    const project: Project = { macros, overriding: macros.overriding(), modules };
+    const moduleNames = new Set(modules.map((m) => /\bmodule\s+([A-Za-z_]\w*)/.exec(m)?.[1] ?? ''));
+    const project: Project = { macros, overriding: macros.overriding(), modules, moduleNames };
     for (const file of files) overriddenIn(file, project, found);
   } catch (e) {
     if (e instanceof Unresolved) return ALL_OVERRIDDEN;

@@ -238,6 +238,46 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [2],
   ],
   [
+    'an override macro used right after a named generate block, begin : gen_block (Warning 10240)',
+    `\`define CHILD child #(.R(1))\n${CHILD}\nmodule t (input d, e, output q);\n  generate if (1) begin : gen_block\n    \`CHILD u (.d(d), .e(e), .q(q));\n  end endgenerate\nendmodule`,
+    [3],
+  ],
+  [
+    'a module named by a macro call with arguments, `CELL(0) #(.R(1)) u (Warning 10240)',
+    `\`define CELL(x) child\n${CHILD}\nmodule t (input d, e, output q);\n  \`CELL(0) #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    "a case on {busword[0], a}, busword an array of 2-bit words: three bits, four 2-bit labels (Warnings 10270, 10240)",
+    "module t (input [1:0] w, input a, b, c, d, output reg x);\n  wire [1:0] busword [0:0];\n  assign busword[0] = w;\n  always @* case ({busword[0], a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = d;\n    2'b11: x = ~d;\n  endcase\nendmodule",
+    [4],
+  ],
+  [
+    'a named block whose reg i shadows genvar i (Warning 10240)',
+    'module t (input d, gate, output reg q);\n  genvar i;\n  always @* begin : blk\n    reg i;\n    i = gate;\n    if (i) q = d;\n  end\nendmodule',
+    [3],
+  ],
+  [
+    'an if on a macro, `ON, that names a signal though a localparam ON exists (Warning 10240)',
+    '`define ON en\nmodule t (input d, en, output reg q);\n  localparam ON = 1;\n  always @* if (`ON) q = d;\nendmodule',
+    [4],
+  ],
+  [
+    'a localparam list typed [BITS[0]:0]: its range holds for ON = 2 too, a 0 (Warnings 10230, 10240)',
+    "module t (input d, en, output reg q);\n  localparam [1:0] BITS = 2'b00;\n  localparam [BITS[0]:0] FIRST = 0, ON = 2;\n  always @* if (ON) q = d; else if (en) q = d;\nendmodule",
+    [4],
+  ],
+  [
+    'every bit of q assigned, then q[I] with I = 1 << 1 when en is high (no latch)',
+    'module t (input [3:0] d, input en, output reg [3:0] q);\n  localparam I = 1 << 1;\n  always @* begin\n    q = d;\n    if (en) q[I] = ~d[I];\n  end\nendmodule',
+    [],
+  ],
+  [
+    "a casez on s[(W):0] with localparam [1:0] W = 1 and the label 2'b?? (no latch)",
+    "module t (input [(W):0] s, input a, output reg x);\n  localparam [1:0] W = 1;\n  always @* casez (s)\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
     'an override in a macro continued on the next line with \\ (Warning 10240)',
     `\`define CHILD_PARAM \\\n  #(.R(1))\n${CHILD}\nmodule t (input d, e, output q);\n  child \`CHILD_PARAM u (.d(d), .e(e), .q(q));\nendmodule`,
     [4],
@@ -382,6 +422,11 @@ const BOARD = 'input CLOCK_50, input [9:0] SW, output reg [9:0] LEDR';
 describe('delays and $time, as Quartus builds them', () => {
   test('q <= #1 d in a clocked block: a quiet note (Quartus drops the delay, no message)', () => {
     const module = `module t (${BOARD});\n  always @(posedge CLOCK_50 or negedge SW[9])\n    if (!SW[9]) LEDR <= 0;\n    else LEDR <= #1 SW;\nendmodule`;
+    expect(constructsIn(module)).toEqual([['vlog-clocked-delay', 'quiet']]);
+  });
+
+  test('a parameter list #(…) on the same line as a clocked q <= #1 d is no delay (Quartus builds it)', () => {
+    const module = `module t #(parameter N = 1) (${BOARD}); always @(posedge CLOCK_50) LEDR <= #1 SW; endmodule`;
     expect(constructsIn(module)).toEqual([['vlog-clocked-delay', 'quiet']]);
   });
 
