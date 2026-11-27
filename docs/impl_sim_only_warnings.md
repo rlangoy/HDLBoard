@@ -278,6 +278,56 @@ actual of a port map is a read. The clock comes from the active board (`CheckInp
 only* nothing is checked. The examples that show the slow clock (`blinkTest`, the Basys 3 and Nexys A7
 `keyCounter7Seg`) are SIM-only on purpose, and a test says so.
 
+### 3.6 Quartus and Vivado: where the tools differ (to investigate)
+
+The design check is calibrated against **Quartus Prime 25.1 Lite** alone: every "accepted" or "Error …" in § 3.4
+and in `registerTemplates.test.ts` is a Quartus run. HDLBoard's boards are built with two tools, though: the DE1-SoC
+with Quartus, the Basys 3 and Nexys A7 with **Vivado** (no Vivado is installed on the development PC, so no Vivado
+result has been measured). Where the two disagree, one verdict cannot be right for every board.
+
+**Measured difference: a conditional assignment inside a process** (VHDL-2008 sequential conditional signal
+assignment), found 2026-11-27 while checking a code review against Quartus:
+
+```vhdl
+process (a)
+begin
+  if rising_edge(a) then
+    x <= c when b = '1' else d;   -- VHDL-2008: when … else as a sequential statement
+  end if;
+end process;
+```
+
+| Tool | Result |
+|---|---|
+| Quartus Prime 25.1 Lite, VHDL-1993 (its default) | Error 10500: *VHDL syntax error … near text "when"; expecting ";"* |
+| Quartus Prime 25.1 Lite, VHDL-2008 (`VHDL_INPUT_VERSION VHDL_2008` in the .qsf) | the same Error 10500. The setting did take effect: `process (all)` fails without it (Error 10887) and builds with it |
+| GHDL 6.0.0, `--synth --std=08` (as HDLBoard runs it) | synthesizes |
+| GHDL 6.0.0, `--std=93c` | *conditional signal assignment in sequential statement not allowed before VHDL 2008* |
+| Vivado | **not measured.** AMD lists its synthesis support in [UG901, *Supported VHDL-2008 Features*](https://docs.amd.com/r/2023.2-English/ug901-vivado-synthesis/Supported-VHDL-2008-Features); whether this construct is on it is still to be checked |
+| Quartus Prime Pro | not measured. Intel's [article 000096722](https://www.intel.com/content/www/us/en/support/programmable/articles/000096722.html) reports that Pro accepts this construct but builds a register with an enable instead of the registered multiplexer the code describes |
+
+Forum reports of Error 10500 for the same construct in Quartus Lite ([Altera community](https://community.altera.com/discussions/quartus-prime/vhdl-2008-error-10500-in-conditional-assignment/295184))
+agree with the measurement.
+
+**What the check does today:** no finding, so the design is RTL on every board. On the DE1-SoC that is wrong:
+the student's design simulates in HDLBoard and Quartus Lite refuses it. The row "when / else inside the edge" in
+`registerTemplates.test.ts` keeps today's behaviour and names the Quartus result in its label.
+
+**To investigate (future development):**
+
+1. Measure the construct with Vivado (Basys 3 and Nexys A7 projects) and with Quartus Prime Standard and Pro.
+2. Decide how a tool-dependent verdict is shown. Options: a finding on Quartus boards only (the check would need to
+   know the active board's tool: `CheckInput` has the board's simulator clock but not its toolchain, and no board
+   definition records one yet); a `quiet`
+   note on every board that names the difference; or no finding, as today.
+3. Re-run § 3.4's register rules with Vivado. They are Quartus results only: for example the latch-emulated
+   asynchronous load (Quartus Warning 13004), an edge inside another clock's edge (Error 10821) and the same edge
+   twice in one `if`/`elsif` (builds in Quartus). Vivado's verdicts and messages ([Synth 8-…]) may differ, and the
+   check's wording names no tool for that reason (§ 3.4).
+4. Look for other VHDL-2008 constructs the two tools treat differently (`process (all)` needs the VHDL-2008 setting
+   in Quartus; Quartus Lite's VHDL-2008 support is partial), and whether a Quartus project created for the DE1-SoC
+   turns VHDL-2008 on at all.
+
 ## 4. Which code is hardware
 
 One pure function decides it for everything that needs to know: the live warnings, the code groups, pairing, and the
@@ -816,3 +866,6 @@ Steps 1–2 are independent of each other; 3 and 4 need both; 5–8 need 3 and 4
    "Simulation-only design" in the tooltip.
 5. Should the Files panel be able to group or filter files by code group (RTL / SIM-only / TB)? Not planned; the
    icons are enough for the project sizes HDLBoard sees.
+6. The check is calibrated against Quartus only, but the Basys 3 and Nexys A7 are built with Vivado. Where the tools
+   disagree (measured so far: `when … else` inside a process, refused by Quartus Lite, accepted by GHDL), should
+   the verdict depend on the board's tool? To investigate; see § 3.6.

@@ -43,7 +43,9 @@ const VHDL: [label: string, process: string, problems: string[]][] = [
   ['the same clock in two ifs (accepted)', P("if rising_edge(a) then\nx <= c;\nend if;\nif rising_edge(a) then\ny <= d;\nend if;"), []],
   ["clk'event and clk = '1' with a reset (accepted)", P("if b = '1' then\nx <= '0';\nelsif a'event and a = '1' then\nx <= c;\nend if;"), []],
   ['an if / else inside the edge (accepted)', P("if rising_edge(a) then\nif b = '1' then\nx <= c;\nelse\nx <= d;\nend if;\nend if;"), []],
-  ['when / else inside the edge (accepted)', P("if rising_edge(a) then\nx <= c when b = '1' else d;\nend if;"), []],
+  // Not a Quartus pass: Quartus Lite refuses it (VHDL-2008 included), GHDL accepts it, Vivado is unmeasured.
+  // The check gives no finding today; docs/impl_sim_only_warnings.md § 3.6 asks what it should do.
+  ['when / else inside the edge (Quartus Lite: Error 10500; GHDL accepts it)', P("if rising_edge(a) then\nx <= c when b = '1' else d;\nend if;"), []],
   ['the same edge twice in one if/elsif (accepted)', P("if rising_edge(a) then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
   ['the same edge again after an enable (accepted)', P("if rising_edge(a) and b = '1' then\nx <= c;\nelsif rising_edge(a) then\nx <= d;\nend if;"), []],
   ["an edge of another clock inside the edge (Error 10821)", P("if rising_edge(a) then\nif rising_edge(b) then\nx <= c;\nend if;\nend if;"), ['12 two-clocks']],
