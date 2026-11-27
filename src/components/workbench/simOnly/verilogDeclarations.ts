@@ -245,7 +245,7 @@ function integerWords(code: string): [string, number | undefined][] {
   return [...code.matchAll(INTEGER_ARRAY)]
     .filter((m) => !/^(?:parameter|localparam)$/.test(wordBefore(code, m.index ?? 0)))
     .flatMap((m) =>
-      declaredItems(m[2]).flatMap(({ name, unpacked }): [string, number | undefined][] => {
+      declaredItems(m[2].replace(DECLARATION_PREFIX, '')).flatMap(({ name, unpacked }): [string, number | undefined][] => {
         if (unpacked === 0) return [];
         return [[name, unpacked === 1 ? VARIABLE_WIDTH[m[1]] : undefined]];
       }),

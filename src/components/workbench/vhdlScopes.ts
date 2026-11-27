@@ -137,7 +137,7 @@ function pairedBodies(boundaries: readonly Boundary[], fileEnd: number): Region[
  * (`function op (…) return t is increment;`). A body's `is` is followed by declarations or
  * `begin`, never by one name and then `;` or `)`.
  */
-const NO_BODY_AFTER_IS = /\s*(?:<>|new\b|[A-Za-z_][\w.]*\s*[;)])/iy;
+const NO_BODY_AFTER_IS = /\s*(?:<>|new\b|[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*\s*[;)])/iy;
 
 /**
  * Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration

@@ -113,7 +113,9 @@ const CONDITIONAL_DIRECTIVE = /`(?:(?:ifdef|ifndef|elsif|undef)\b[ \t]*\w*|(?:el
 function possibleCode(lexed: string, inactive: readonly InactiveRange[], translateOff: readonly Range[]): string {
   const chars = lexed.split('');
   for (const r of inactive) if (r.surely) blankRange(chars, r.from, r.to);
-  for (const r of translateOff) blankRange(chars, r.from, r.to);
+  // A translate_off in a branch that may be left out may be no pragma at all: what follows its `endif may be built.
+  const mayBeLeftOut = (at: number) => inactive.some((r) => at >= r.from && at < r.to);
+  for (const r of translateOff) if (!mayBeLeftOut(r.from)) blankRange(chars, r.from, r.to);
   for (const m of lexed.matchAll(CONDITIONAL_DIRECTIVE)) blankRange(chars, m.index ?? 0, (m.index ?? 0) + m[0].length);
   return chars.join('');
 }
@@ -336,6 +338,8 @@ interface Branch {
   readonly laterBranchesSimOnly: boolean;
   /** The macros the chain has tested so far: `ifdef A … elsif B` is A and B. */
   readonly names: string[];
+  /** The chain's first branch is surely taken (`ifdef LOCAL`, LOCAL surely defined): every later one is surely left out. */
+  readonly surelyTaken: boolean;
 }
 
 /**
@@ -347,7 +351,7 @@ interface Branch {
  */
 function surelyInactive(state: PreState): boolean {
   const deciding = state.stack.find((b) => !b.active);
-  return deciding !== undefined && deciding.names.every((name) => state.sure.has(name));
+  return deciding !== undefined && (deciding.surelyTaken || deciding.names.every((name) => state.sure.has(name)));
 }
 
 /** Whether every branch around is surely the one taken: each tests only macros the file surely defines. */
@@ -483,7 +487,8 @@ function openBranch(state: PreState, word: string, name: string, line: number, p
   const isSynthesis = name === 'SYNTHESIS' && !state.defines.has(name);
   const simOnly = active && word === 'ifndef' && isSynthesis;
   const laterBranchesSimOnly = word === 'ifdef' && isSynthesis;
-  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined, laterBranchesSimOnly, names: [name] });
+  const surelyTaken = word === 'ifdef' && holds && state.sure.has(name);
+  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined, laterBranchesSimOnly, names: [name], surelyTaken });
 }
 
 function nextBranch(top: Branch, holds: boolean, name: string | undefined): void {

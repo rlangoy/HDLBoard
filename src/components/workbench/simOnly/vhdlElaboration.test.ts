@@ -157,6 +157,22 @@ describe('a subprogram nothing calls runs nowhere', () => {
     expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
   });
 
+  test('a named default written with blanks around its dots (is work . helper_pkg . incr) is no body either', () => {
+    const unused = [
+      'procedure unused is',
+      '  function apply generic (function op (x : natural) return natural is work . helper_pkg . incr) parameter (x : natural) return natural is',
+      '  begin',
+      '    return op(x);',
+      '  end function;',
+      'begin',
+      '  null;',
+      'end procedure;',
+    ].join('\n');
+    const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';
+    const content = design(unused, body);
+    expect(fileIoLines(content)).toEqual(linesWith(content, 'variable l : line', 'writeline('));
+  });
+
   test('function unused is new work.p.generic_id generic map (…) has no body: the process after it keeps its file I/O (GHDL 6.0 rejects the line variable)', () => {
     const instance = 'function unused is new work.p.generic_id generic map (N => 1);';
     const body = 'process (CLOCK_50)\n  variable l : line;\nbegin\n  if rising_edge(CLOCK_50) then\n    write(l, 1);\n    writeline(output, l);\n  end if;\nend process;';

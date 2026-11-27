@@ -38,7 +38,8 @@ function delays(t: UnitText): number[] {
 }
 
 /** `$display(…)`, `$write(…)`, `$monitor(…)`, `$strobe(…)`: what they print. */
-const PRINT_CALL = /\$(?:display|write|monitor|strobe)[bho]?\s*\(/g;
+// Not the end of a name: `$` is a Verilog name character (`log$display` is a function of the design).
+const PRINT_CALL = /(?<![\w$])\$(?:display|write|monitor|strobe)[bho]?\s*\(/g;
 const TIME = /\$(?:time|stime|realtime)\b/g;
 
 /** `$time` used by the design (`if ($time > 0)`); printed by `$display` or `$write` it is console output, which synthesis skips. */

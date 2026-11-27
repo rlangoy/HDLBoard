@@ -20,7 +20,7 @@
  */
 
 import type { MacroDefinition } from '../tbDetect/blank';
-import type { FileAnalysis, ProjectAnalysis } from '../tbDetect/types';
+import type { FileAnalysis, ProjectAnalysis, TestbenchOverrides } from '../tbDetect/types';
 import { closingBracket } from './brackets';
 import { escapeRegExp, wordBefore } from './constructText';
 import { scannedFile, type ScannedFile } from './scan';
@@ -436,8 +436,32 @@ function overriddenIn(file: FileAnalysis, project: Project, found: Found): void 
   for (const target of verilogTargets(scan, project)) found.verilog.add(target);
 }
 
-export function overriddenModules(raw: ProjectAnalysis): OverriddenModules {
-  const files = [...raw.byFile.values()];
+/**
+ * The files synthesis never builds: those the student marked as testbenches, and those whose
+ * every unit the analysis takes for a testbench that no other file names (a simulation top:
+ * no instance of the design can be one). Their instances' overrides change no synthesized
+ * module (`top_tb` with `top #(.B(2)) dut`). A testbench another file names may be built
+ * after all (the board design may instantiate it), so it still counts.
+ */
+function testbenchFiles(files: readonly FileAnalysis[], roles: TestbenchOverrides['roles']): ReadonlySet<string> {
+  const marked = files.filter((f) => roles[f.fileId] === 'tb').map((f) => f.fileId);
+  const detected = files.filter((f) => roles[f.fileId] === undefined && f.units.length > 0 && f.units.every((u) => u.role === 'tb'));
+  const owner = new Map(detected.flatMap((f) => f.units.map((u) => [u.name.toLowerCase(), f.fileId] as const)));
+  if (owner.size === 0) return new Set(marked);
+  const name = new RegExp(`\\b(?:${[...owner.keys()].map(escapeRegExp).join('|')})\\b`, 'gi');
+  const named = new Set<string>();
+  for (const file of files) {
+    for (const m of scannedFile(file).code.matchAll(name)) {
+      const of = owner.get(m[0].toLowerCase());
+      if (of !== undefined && of !== file.fileId) named.add(of);
+    }
+  }
+  return new Set([...marked, ...detected.map((f) => f.fileId).filter((id) => !named.has(id))]);
+}
+
+export function overriddenModules(raw: ProjectAnalysis, roles: TestbenchOverrides['roles'] = {}): OverriddenModules {
+  const never = testbenchFiles([...raw.byFile.values()], roles);
+  const files = [...raw.byFile.values()].filter((f) => !never.has(f.fileId));
   const verilog = files.filter((f) => f.language === 'verilog').map((f) => scannedFile(f));
   const macros = new Macros(verilog.flatMap((scan) => scan.defines));
   const modules = verilog.flatMap((scan) => [...scan.everyBranch.matchAll(MODULE)].map((m) => m[0]));

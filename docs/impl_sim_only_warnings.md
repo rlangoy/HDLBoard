@@ -258,7 +258,11 @@ The search reads every `` `ifdef `` branch the file alone cannot rule out, with 
 (`` child `ifndef X #(.R(1)) `endif u `` is one instance, and `` `ifdef A child_a `else child_b `endif #(.R(1)) ``
 overrides both): a branch on a macro an included file may define, one on a macro defined under such a branch, and
 one on SYNTHESIS, which Quartus does not define (it builds an instance in `` `ifndef SYNTHESIS ``). Only a branch on
-a macro the file surely defines is left out, and translate_off from its comment to translate_on. Every `` `define ``
+a macro the file surely defines is left out (and an `` `elsif `` or `` `else `` after a branch surely taken), and
+translate_off from its comment to translate_on, unless the comment stands in a branch that may be left out. A
+testbench changes no module synthesis builds, so its file is not searched: one the student marked as a testbench, and
+one whose every unit the analysis takes for a testbench that no other file names (`top_tb` with `top #(.B(2)) dut`;
+a testbench another file names may be part of the design). Every `` `define ``
 in any branch is one of a macro's texts, expanded through each other; each `#` in an expansion names the module before
 it (`` `define PAIR other v (…); child #(.R(1)) u (…); `` overrides `child`), one that starts it the module before
 the use, and one after `=`, `<=`, `)` or a keyword is a delay (`` always `TICK clk = ~clk; ``). What cannot be

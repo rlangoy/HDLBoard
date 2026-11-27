@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Rune Langøy
 
 import { describe, expect, test } from 'vitest';
+import { EMPTY_OVERRIDES } from '../tbDetect/types';
 import { checkOf, source } from './simOnly.testSupport';
 import type { SimOnlyConstructId } from './types';
 
@@ -279,6 +280,26 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
   [
     "a casez on s[(W):0] with localparam [1:0] W = 1 and the label 2'b?? (no latch)",
     "module t (input [(W):0] s, input a, output reg x);\n  localparam [1:0] W = 1;\n  always @* casez (s)\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    'a translate_off inside a left-out `ifndef X is no pragma: the override after its `endif is built (Warning 10240)',
+    `\`define X\n${CHILD}\nmodule t (input d, e, output q);\n\`ifndef X\n// synthesis translate_off\n\`endif\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    'case (mem[i]) of int unsigned mem [0:1], labels 0 and 1: a word is 32 bits (Warning 10240)',
+    'module t (input i, input a, b, output reg x);\n  int unsigned mem [0:1];\n  initial begin mem[0] = 0; mem[1] = 5; end\n  always @* case (mem[i])\n    0: x = a;\n    1: x = b;\n  endcase\nendmodule',
+    [4],
+  ],
+  [
+    "casez (s[i +: W]) with localparam W = 2, labels 2'b0? and 2'b1?: two bits, every value (no latch)",
+    "module t (input [3:0] s, input [1:0] i, input a, b, output reg x);\n  localparam W = 2;\n  always @* casez (s[i +: W])\n    2'b0?: x = a;\n    2'b1?: x = b;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    '`ifdef LOCAL, LOCAL defined in the file: the `elsif CONFIG override after it is never built (no latch)',
+    `\`define LOCAL\n${CHILD}\nmodule t (input d, e, output q);\n\`ifdef LOCAL\n  child u (.d(d), .e(e), .q(q));\n\`elsif CONFIG\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
     [],
   ],
   [
@@ -667,5 +688,29 @@ describe('delays and $time, as Quartus builds them', () => {
   test('$time read by the design stays SIM-only (Error 10174)', () => {
     const module = 'module t (input clk, d, output reg q);\n  always @(posedge clk)\n    if ($time > 0) q <= d;\nendmodule';
     expect(constructsIn(module)).toEqual([['vlog-time', 'never']]);
+  });
+
+  test('$time passed to a function named log$display is read by the design: no print (Error 10174)', () => {
+    const module = 'module t (output [63:0] q);\n  function [63:0] log$display;\n    input [63:0] v;\n    log$display = v;\n  endfunction\n  assign q = log$display($time);\nendmodule';
+    expect(constructsIn(module)).toContainEqual(['vlog-time', 'never']);
+  });
+});
+
+describe("a testbench's overrides change no synthesized module", () => {
+  /** Complete only while B is 1: Quartus builds it with its default, no latch. */
+  const design = "module sub (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule";
+  const bench = "module sub_tb;\n  reg s, a, b;\n  wire x;\n  sub #(.B(2)) dut (.s(s), .a(a), .b(b), .x(x));\n  initial begin\n    s = 0; a = 0; b = 1;\n    #10 $finish;\n  end\nendmodule";
+  const latches = (files: ReturnType<typeof source>[], overrides = EMPTY_OVERRIDES) =>
+    checkOf(files, overrides).findings.filter((f) => f.construct === 'vlog-level-storage' && f.tier !== 'quiet').map((f) => `${f.fileId}@${f.line}`);
+
+  test('a testbench nothing instantiates, with sub #(.B(2)) dut: sub keeps its default (no latch)', () => {
+    expect(latches([source('sub.v', design), source('sub_tb.v', bench)])).toEqual([]);
+  });
+
+  test('a file the student marked as a testbench is left out too', () => {
+    const other = "module other (input s, a, b, output x);\n  sub #(.B(2)) u (.s(s), .a(a), .b(b), .x(x));\nendmodule";
+    const marked = { ...EMPTY_OVERRIDES, roles: { 'other.v': 'tb' as const } };
+    expect(latches([source('sub.v', design), source('other.v', other)], marked)).toEqual([]);
+    expect(latches([source('sub.v', design), source('other.v', other)])).toEqual(['sub.v@3']);
   });
 });

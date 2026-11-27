@@ -399,31 +399,43 @@ const SIZED_LITERAL = /^(\d+)'[sS]?[bBoOdDhH][0-9a-fA-FxXzZ?_]+$/;
  * of an array of vectors (`busword[0]` of `wire [1:0] busword [0:0]`) is a word, of a width
  * not counted here.
  */
-function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], wordArrays: WordArrays): number | undefined {
+/** What a selector's width is read with: declared ranges, word arrays, and the constants no instance can change. */
+interface SelectorFacts {
+  readonly rangeOf: StatementContext['rangeOf'];
+  readonly wordArrays: WordArrays;
+  readonly constants: Bindings;
+}
+
+function selectorWidth(selector: string, facts: SelectorFacts): number | undefined {
   const s = unwrapped(selector).replace(/\s+/g, '');
   if (s.startsWith('{') && closingBracket(s, 0) === s.length - 1) {
-    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, rangeOf, wordArrays));
+    const widths = topLevelItems(s.slice(1, -1)).map((item) => Number(SIZED_LITERAL.exec(item)?.[1]) || selectorWidth(item, facts));
     return widths.every((w) => w !== undefined) ? widths.reduce<number>((sum, w) => sum + (w ?? 0), 0) : undefined;
   }
-  const whole = /^[A-Za-z_]\w*$/.test(s) ? rangeOf(s) : undefined;
-  return whole ? Math.abs(whole.msb - whole.lsb) + 1 : selectionWidth(s, wordArrays);
+  const whole = /^[A-Za-z_]\w*$/.test(s) ? facts.rangeOf(s) : undefined;
+  return whole ? Math.abs(whole.msb - whole.lsb) + 1 : selectionWidth(s, facts);
 }
 
 /**
- * The width of `s[3]` or `s[i]` (one bit, whatever the index), `s[3:0]` (4) or `s[i +: 2]`
- * (2); a word of an array of vectors has the word's width (`mem[0]` of `wire [1:0] mem [0:0]`
- * is 2); none for any other form.
+ * The width of `s[3]` or `s[i]` (one bit, whatever the index), `s[3:0]` or `s[W-1:0]` (its
+ * bounds' distance), `s[i +: 2]` or `s[i +: W]` (2 with `W = 2`); a word of an array of vectors
+ * has the word's width (`mem[0]` of `wire [1:0] mem [0:0]` is 2); none for any other form.
  */
-function selectionWidth(s: string, wordArrays: WordArrays): number | undefined {
+function selectionWidth(s: string, facts: SelectorFacts): number | undefined {
   const selection = /^([A-Za-z_]\w*)\[([^[\]]*)\]$/.exec(s);
   if (selection === null) return undefined;
   const index = selection[2];
-  if (wordArrays.has(selection[1])) return index.includes(':') ? undefined : wordArrays.get(selection[1]);
-  const indexed = /^[^:]*[+-]:(\d+)$/.exec(index);
-  if (indexed) return Number(indexed[1]);
-  const part = /^(\d+):(\d+)$/.exec(index);
-  if (part) return Math.abs(Number(part[1]) - Number(part[2])) + 1;
-  return index.includes(':') ? undefined : 1;
+  if (facts.wordArrays.has(selection[1])) return index.includes(':') ? undefined : facts.wordArrays.get(selection[1]);
+  const indexed = /^[^:]*[+-]:(.+)$/.exec(index);
+  return indexed ? integerValue(indexed[1], facts.constants) : partWidth(index, facts.constants);
+}
+
+/** `3:0` or `W-1:0` is its bounds' distance, one index alone one bit; none when a bound is not known. */
+function partWidth(index: string, constants: Bindings): number | undefined {
+  const [msb, lsb, ...more] = topLevelItems(index, ':');
+  if (lsb === undefined) return 1;
+  const [high, low] = [integerValue(msb, constants), integerValue(lsb, constants)];
+  return more.length > 0 || high === undefined || low === undefined ? undefined : Math.abs(high - low) + 1;
 }
 
 type CaseKind = 'case' | 'casez' | 'casex';
@@ -536,7 +548,7 @@ function selectorSignals(selector: string): string[] | undefined {
 function labelsNameEveryValue(ctx: StatementContext, written: string, labels: { readonly items: readonly string[]; readonly kind: CaseKind }): boolean {
   const selector = unwrapped(written); // `casez ((s))` reads `s`
   if (labels.items.some((label) => matchesAnyValue(label, labels.kind))) return true;
-  const width = selectorWidth(selector, ctx.selectorRangeOf ?? ctx.rangeOf, ctx.wordArrays ?? NO_WORDS);
+  const width = selectorWidth(selector, { rangeOf: ctx.selectorRangeOf ?? ctx.rangeOf, wordArrays: ctx.wordArrays ?? NO_WORDS, constants: ctx.fixedConstants ?? ctx.constants });
   if (width === undefined && ofDeclaredSignals(ctx, selector)) return false;
   return namesEveryValue(labels.items, { width, constants: ctx.fixedConstants ?? ctx.constants, kind: labels.kind });
 }
