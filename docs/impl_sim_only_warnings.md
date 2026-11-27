@@ -147,6 +147,14 @@ alone.
 - `assert` on constants or generics, e.g. a parameter range check: ignored by synthesis but harmless. It stays quiet.
 - Anything inside `translate_off/on` or `` `ifndef SYNTHESIS `` (S6).
 - `use std.textio.all;` with no file, no `line` variable and no read/write: nothing happens, nothing to warn (S10).
+- A `line` variable and `writeline` in a function that only computes a constant, or a signal's type or initial
+  value, directly or through another such function: synthesis evaluates it once, while the design is elaborated,
+  and builds none of it (`vhdlElaboration.ts`). PoC's `arith_addw` prints its block layout this way
+  (`constant BLOCKS : integer_vector := compute_blocks;`). Measured 2026-11-27: Quartus Prime 25.1 Lite and
+  GHDL 6.0.0 `--synth` both build it, with the writes in translate_off or not. Called from a process, the same
+  function is file I/O again: GHDL rejects the `line` variable (*variable with access type is not synthesizable*),
+  and so does a `line` variable in a process. A **file** read there still counts (`file`, `file_open`, `readline`):
+  Quartus builds a ROM filled from a file as zeros, without an error (§ 3.6).
 - A `shared variable` of an array type written from two clocked processes: Quartus's true dual-port RAM template
   ([Quartus Prime Pro user guide, *True Dual-Port Synchronous RAM*](https://docs.altera.com/r/docs/683082/25.1/quartus-prime-pro-edition-user-guide/true-dual-port-synchronous-ram)).
   Tested: GHDL 6.0 synthesizes it with `-frelaxed` or `--std=93`. Without either, VHDL-2008 analysis already
@@ -327,6 +335,19 @@ the student's design simulates in HDLBoard and Quartus Lite refuses it. The row 
 4. Look for other VHDL-2008 constructs the two tools treat differently (`process (all)` needs the VHDL-2008 setting
    in Quartus; Quartus Lite's VHDL-2008 support is partial), and whether a Quartus project created for the DE1-SoC
    turns VHDL-2008 on at all.
+
+**Measured difference: a ROM filled from a file**, found 2026-11-27 while checking PoC's `arith_addw` (§ 3.3):
+an `impure function` opens a text file with `file f : text open read_mode is "rom.txt";`, reads it with
+`readline`/`read`, and its result is a constant ROM.
+
+| Tool | Result |
+|---|---|
+| Quartus Prime 25.1 Lite, VHDL-2008 | builds **without the file's contents**, and without an error: every output stuck at GND (Warning 13410), the address inputs drive nothing (21074) |
+| GHDL 6.0.0, `--synth --std=08` | reads the file: *found ROM "n9", width: 8 bits, depth: 4* |
+| Vivado | not measured. UG901's RAM coding examples fill a RAM from a file this way |
+
+**What the check does today:** `vhdl-file-io` on the file's lines, so the design is SIM-only on every board. On the
+DE1-SoC that is right. On the Basys 3 and Nexys A7 it may be a false finding, to be measured with item 1.
 
 ## 4. Which code is hardware
 

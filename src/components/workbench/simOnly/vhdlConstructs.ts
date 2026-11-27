@@ -9,9 +9,10 @@
 
 import { withoutUseClauses, type UnitText } from '../tbDetect/rules';
 import { bracketed, topLevel, unwrapped } from './brackets';
-import { blockAt, linesOf, matchesIn, statementFrom } from './constructText';
+import { blockAt, inside, linesOf, matchesIn, statementFrom } from './constructText';
 import { construct, fromRule, type SimOnlyConstruct } from './constructs';
 import { conjuncts, EVENT_OPERAND, testsLevelOf } from './vhdlEdges';
+import { elaborationFunctions } from './vhdlElaboration';
 import { vhdlEdgeTemplate } from './vhdlRegisters';
 import { isHidden } from './scan';
 
@@ -76,10 +77,23 @@ function waitUntilLines(t: UnitText): number[] {
 }
 
 const FILE_DECLARATION = /\bfile\s+\w+(?:\s*,\s*\w+)*\s*:/gi;
-const LINE_VARIABLE = /\bvariable\s+\w+(?:\s*,\s*\w+)*\s*:\s*line\b/gi;
-const FILE_CALL = /\b(?:readline|writeline|file_open|file_close|endfile)\s*\(/gi;
+const FILE_CALL = /\b(?:readline|file_open|file_close|endfile)\s*\(/gi;
+/** Text built in a `line` and printed: harmless where synthesis only evaluates it once. */
+const TEXT_OUTPUT = [/\bvariable\s+\w+(?:\s*,\s*\w+)*\s*:\s*line\b/gi, /\bwriteline\s*\(/gi];
 
-const fileOperations = (t: UnitText): number[] => [FILE_DECLARATION, LINE_VARIABLE, FILE_CALL].flatMap((p) => linesOf(t, p));
+/**
+ * Files, and text built in a `line` variable. A function evaluated only at elaboration
+ * (a constant's value) may build and print text: Quartus and GHDL both synthesize it,
+ * and the text never reaches the hardware (§ 3.3). Reading a file there still counts:
+ * Quartus builds the constant without the file's contents.
+ */
+function fileOperations(t: UnitText): number[] {
+  const files = [FILE_DECLARATION, FILE_CALL].flatMap((p) => linesOf(t, p));
+  const output = TEXT_OUTPUT.flatMap((p) => matchesIn(t, p));
+  if (output.length === 0) return files;
+  const once = elaborationFunctions(t);
+  return [...files, ...output.filter(([at]) => !inside(at, once)).map(([at]) => t.lineOf(at))];
+}
 
 const ENV_CALL = /\bstd\.env\.(?:stop|finish)\b/gi;
 const USES_ENV = /\buse\s+std\.env\b/i;
