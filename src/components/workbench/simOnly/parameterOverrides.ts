@@ -22,7 +22,7 @@
 import type { MacroDefinition } from '../tbDetect/blank';
 import type { FileAnalysis, ProjectAnalysis } from '../tbDetect/types';
 import { closingBracket } from './brackets';
-import { escapeRegExp } from './constructText';
+import { escapeRegExp, wordBefore } from './constructText';
 import { scannedFile, type ScannedFile } from './scan';
 
 /** Whether something in the project may override the parameters of the module of this name. */
@@ -31,8 +31,10 @@ export type OverriddenModules = (moduleName: string) => boolean;
 /** Every module may be overridden: what a check without the project assumes. */
 export const ALL_OVERRIDDEN: OverriddenModules = () => true;
 
-/** `sub #(.W(2)) u (…)`, `sub #2 u (…)`, ``sub #`W u (…)``: a name before `#`, not the one a module header declares. */
-const VERILOG_OVERRIDE = /(?<!\bmodule\s+)\b([A-Za-z_]\w*)\s*#\s*[\w(`]/g;
+/** `sub #(.W(2)) u (…)`, `sub #2 u (…)`, ``sub #`W u (…)``: a name before `#` (not the one a module header declares, see `HEADER_WORDS`). */
+const VERILOG_OVERRIDE = /\b([A-Za-z_]\w*)\s*#\s*[\w(`]/g;
+/** The words before a module header's name, whose `#( … )` declares parameters. */
+const HEADER_WORDS = new Set(['module', 'macromodule']);
 const DEFPARAM = /\bdefparam\b([^;]*);/g;
 /** `u: entity work.sub generic map`, `u: sub generic map`, `u: component sub generic map`. */
 const VHDL_GENERIC_MAP = /:\s*(?:entity\s+\w+\s*\.\s*|component\s+)?([A-Za-z_]\w*)(?:\s*\(\s*\w+\s*\))?\s+generic\s+map\b/gi;
@@ -323,7 +325,7 @@ interface Found {
 function verilogTargets(scan: ScannedFile, project: Project): string[] {
   const source = sourceOf(scan);
   const byHash = [...source.code.matchAll(VERILOG_OVERRIDE)]
-    .filter((m) => !source.inDefine(m.index ?? 0))
+    .filter((m) => !source.inDefine(m.index ?? 0) && !HEADER_WORDS.has(wordBefore(source.code, m.index ?? 0)))
     .flatMap((m) => namesBefore(source.code, m.index ?? 0, m[1]).flatMap((name) => project.macros.modulesAt(source.code, name.at, name.text)));
   return [...byHash, ...fileDefparamTargets(source, project), ...macroTargets(source, project), ...macroCallTargets(source, project.macros)];
 }

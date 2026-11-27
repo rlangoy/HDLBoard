@@ -282,9 +282,14 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
-    'q[I] with I = $clog2(DEPTH), DEPTH 4 by an override: q[2] and q[1] on the two branches (Info 10041 for q[1], q[2])',
-    `${CLOG2_SUB}\nmodule t (input d, en, output [2:1] q);\n  sub #(.DEPTH(4)) u (.d(d), .en(en), .q(q));\nendmodule`,
-    [3],
+    "gplgpu alt_mem_ddrx_rdata_path: genvar i in a generate loop and a function's own integer i: q[i] on both branches (no latch)",
+    "module t #(parameter N = 4) (input [N-1:0] d, e, output reg [N-1:0] q);\n  genvar i;\n  generate for (i = 0; i < N; i = i + 1) begin : g\n    always @* if (e[i]) q[i] = d[i]; else q[i] = 1'b0;\n  end endgenerate\n  function integer log2;\n    input [31:0] value;\n    integer i;\n    begin\n      log2 = 0;\n      for (i = 0; 2**i < value; i = i + 1) log2 = i + 1;\n    end\n  endfunction\nendmodule",
+    [],
+  ],
+  [
+    'q[N-1:0] and q[N] of an overridden module, N 6: every bit of q[N:0] (no latch)',
+    "module sub #(parameter N = 4) (input c, input [N:1] d, output reg [N:0] q);\n  always @* begin\n    if (c) begin\n      q[N-1:0] = d;\n      q[N] = 1'b0;\n    end else\n      q = {d, 1'b1};\n  end\nendmodule\nmodule t (input c, input [6:1] d, output [6:0] q);\n  sub #(.N(6)) u (.c(c), .d(d), .q(q));\nendmodule",
+    [],
   ],
   [
     'q[I] with I = $clog2(DEPTH), DEPTH 2 by default: q[1] on both branches (no latch)',

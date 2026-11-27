@@ -10,6 +10,7 @@
 
 import { bracketed, topLevelItems } from './brackets';
 import { integerValue, type Bindings } from './constantIndex';
+import { wordBefore } from './constructText';
 import { exactValues } from './verilogExactValues';
 
 /** A declared range: `[7:0]` is msb 7, lsb 0; a scalar is 0, 0. */
@@ -120,21 +121,29 @@ function unambiguous(items: readonly ParameterItem[], code: string): ParameterIt
 /**
  * The other declarations of variables and nets (`DECLARATION` has `reg`, `wire`, `logic` and
  * the ports): `integer`, `time`, `real`, the other net kinds (`tri ON`) and
- * SystemVerilog's variable types. Not the type of a `parameter integer N`.
+ * SystemVerilog's variable types. Not the type of a `parameter integer N` (see `variableNames`).
  */
 const OTHER_DECLARATION =
-  /(?<!\b(?:parameter|localparam)\s+)\b(?:integer|time|realtime|real|tri0|tri1|triand|trior|trireg|tri|wand|wor|supply0|supply1|uwire|bit|byte|shortint|int|longint|shortreal)\b([^;]*)/g;
+  /\b(?:integer|time|realtime|real|tri0|tri1|triand|trior|trireg|tri|wand|wor|supply0|supply1|uwire|bit|byte|shortint|int|longint|shortreal)\b([^;]*)/g;
 /** What may stand before a declaration's names: `signed`, `vectored`, ranges (`tri [3:0] ON`). */
 const DECLARATION_PREFIX = /^\s*(?:(?:signed|unsigned|vectored|scalared)\b\s*|\[[^\]]*\]\s*)*/;
 
+/** A function's or a task's body: what it declares lives only there. */
+const SUBPROGRAM_BODY = /\bfunction\b[\s\S]*?\bendfunction\b|\btask\b[\s\S]*?\bendtask\b/g;
+
 /**
- * The names the module declares as variables or nets, anywhere: a named block's `reg ON`
- * or a generate block's `tri ON` shadows a module's `localparam ON` there, so a name in
- * both is read as no constant.
+ * The names the module declares as variables or nets, anywhere but in its functions and
+ * tasks: a named block's `reg ON` or a generate block's `tri ON` shadows a module's
+ * `localparam ON` there, so a name in both is read as no constant. A function's
+ * `integer i` shadows nothing the latch walk reads (no always block is in a function):
+ * a generate loop's `genvar i` stays one (gplgpu alt_mem_ddrx_rdata_path, `log2`).
  */
-function variableNames(code: string): ReadonlySet<string> {
+function variableNames(module: string): ReadonlySet<string> {
+  const code = module.replace(SUBPROGRAM_BODY, ' ');
   const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3]).map((d) => d.name));
-  const others = [...code.matchAll(OTHER_DECLARATION)].flatMap((m) => declaredNames(m[1].replace(DECLARATION_PREFIX, '')).map((d) => d.name));
+  const others = [...code.matchAll(OTHER_DECLARATION)]
+    .filter((m) => !/^(?:parameter|localparam)$/.test(wordBefore(code, m.index ?? 0)))
+    .flatMap((m) => declaredNames(m[1].replace(DECLARATION_PREFIX, '')).map((d) => d.name));
   return new Set([...declared, ...others]);
 }
 

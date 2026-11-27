@@ -36,3 +36,17 @@ export const blockText = (t: UnitText, block: Range): string => t.code.slice(blo
 
 /** `text` as a literal inside a regular expression. */
 export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The word right before offset `at` in `text`, past blanks (`module` before `child` in
+ * `module child #(…)`), or '' when none stands there. A loop, not a look-behind with an
+ * unbounded `\s+` (`(?<!\bmodule\s+)`): run over the 700 files of gplgpu, whose Altera
+ * simulation libraries are up to 10 MB, such a pattern overflowed the stack in `matchAll`.
+ */
+export function wordBefore(text: string, at: number): string {
+  let end = at;
+  while (end > 0 && /\s/.test(text[end - 1])) end--;
+  let start = end;
+  while (start > 0 && /\w/.test(text[start - 1])) start--;
+  return text.slice(start, end);
+}

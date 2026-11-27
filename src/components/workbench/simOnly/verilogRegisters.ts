@@ -500,11 +500,14 @@ function blockContext(t: UnitText, facts: ModuleFacts, { body, bodyAt }: Pick<Al
 }
 
 export function verilogLevelStorage(t: UnitText): Found[] {
-  // Only values no instance can change: the parameters' defaults too when nothing in the project
-  // overrides them, else not even for a block without parameter guards (`q[I]`, `I = $clog2(DEPTH)`).
+  // The defaults name the bits a block writes (`q[N-1:0]` and `q[N]` are all of `q[N:0]`); a
+  // condition on a parameter is walked for every value it may take, with `fixed` (keptTargets).
+  // Known miss: an override that makes two of those bits one or two (`q[I]` and `q[1]`, with
+  // `I = $clog2(DEPTH)`, are one bit by default and two with DEPTH 4).
+  const constants = verilogConstants(t.code);
+  const rangeOf = declaredRanges(t.code, constants);
   const fixedConstants = verilogFixedConstants(t.code, t.parametersFixed);
   const fixed = { constants: fixedConstants, rangeOf: declaredRanges(t.code, fixedConstants) };
-  const { constants, rangeOf } = fixed;
   const facts: ModuleFacts = { constants, rangeOf, fixedNames: verilogElaborationNames(t.code), fixed, signals: verilogSignalNames(t.code), wordArrays: verilogWordArrays(t.code, constants) };
   return alwaysBlocks(t).flatMap(({ block, edges, latch, body, bodyAt }) => {
     if (edges.length > 0 || latch) return [];

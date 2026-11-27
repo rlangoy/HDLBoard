@@ -13,7 +13,7 @@
 import type { UnitText } from '../tbDetect/rules';
 import { regionsIn } from '../vhdlScopes';
 import { closingBracket } from './brackets';
-import { inside, matchesIn, type Range } from './constructText';
+import { inside, matchesIn, wordBefore, type Range } from './constructText';
 import { isHidden } from './scan';
 
 interface Subprogram extends Range {
@@ -76,7 +76,8 @@ function subprogramsOf(t: UnitText): Subprogram[] {
  * calls. The name a header declares is none (`function f` of a declaration before the body).
  */
 function callsOf(t: UnitText, body: Subprogram): number[] {
-  return matchesIn(t, new RegExp(`(?<!\\b(?:function|procedure)\\s+)\\b${body.name}\\b`, 'gi'))
+  return matchesIn(t, new RegExp(`\\b${body.name}\\b`, 'gi'))
+    .filter(([at]) => !/^(?:function|procedure)$/i.test(wordBefore(t.code, at - t.base)))
     .map(([at]) => at)
     .filter((at) => !inside(at, [body]) && !isHidden(t.lineOf(at), t.simOnlyRegions));
 }

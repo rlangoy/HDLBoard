@@ -252,19 +252,41 @@ out or inside translate_off, and not `full_case` inside an attribute's quoted va
 (`parameterOverrides.ts`): no instance of it with `#( … )` or `#2`, no `defparam` that reaches it, no macro that may pass
 an override (`` `define P #(.R(1)) ``, `child `P u (…)`), no VHDL `generic map` on it. A `defparam u.R` reaches every
 instance named `u` in the module that holds it (two `generate` blocks may each have one); a deeper path (`g2.u.R`,
-`ua.u.R`), every instance of that name in the project. Macros are the `` `define ``s of active code, as `blank.ts`
-evaluates `` `ifdef `` (one in a branch the view leaves out is none), expanded through each other (`` `define OUTER
-`INNER ``). What cannot be resolved (no instance of the name, a macro whose expansion holds `#` used anywhere but
-after a module name or as a delay) counts as overriding every module. A `parameter` in the body of
+`ua.u.R`), every instance of that name in the project, and so does one outside any module (a fragment an
+`` `include `` puts inside one); every instance is indexed once, so a netlist of thousands of `defparam`s stays fast.
+The search reads every `` `ifdef `` branch the file alone cannot rule out, with the directives blanked
+(`` child `ifndef X #(.R(1)) `endif u `` is one instance, and `` `ifdef A child_a `else child_b `endif #(.R(1)) ``
+overrides both): a branch on a macro an included file may define, one on a macro defined under such a branch, and
+one on SYNTHESIS, which Quartus does not define (it builds an instance in `` `ifndef SYNTHESIS ``). Only a branch on
+a macro the file surely defines is left out, and translate_off from its comment to translate_on. Every `` `define ``
+in any branch is one of a macro's texts, expanded through each other; each `#` in an expansion names the module before
+it (`` `define PAIR other v (…); child #(.R(1)) u (…); `` overrides `child`), one that starts it the module before
+the use, and one after `=`, `<=`, `)` or a keyword is a delay (`` always `TICK clk = ~clk; ``). What cannot be
+resolved counts as overriding every module: no instance of a `defparam`'s name, a macro that emits a `defparam`,
+a `#` after a function-like macro's formal (`` `define INST(M) M #(.R(1)) u ``) or in a macro's argument
+(`` child `PASS(#(.R(1))) u ``). A `parameter` in the body of
 a module with a parameter port list is local and cannot be overridden (Verilog-2005 § 12.2; Quartus Warning 10222,
 Error 10213 for `#(.B(2))`, Error 10130 for a `defparam`). Constants are computed exactly as Verilog computes them or
-not at all (`verilogExactValues.ts`): one literal, one earlier constant, or arithmetic and `$clog2` on 32-bit integers
-whose every step stays in range (`32'hffff_ffff + 32'd1` wraps to 0 in Verilog, so it is not computed); a declared
-`integer` type or `[msb:lsb]` range cuts the value, and holds for every item of its list (`localparam [0:0] FIRST = 0,
-ON = 2;` makes `ON` a 0); a range wider than 64 bits is not computed (`[99999999999999999:0]`, invalid HDL being
-edited, must not stop the check); and a name declared twice (each `generate` block its own `ON`) is not folded.
-Indexes, widths and loop bounds (`constantIndex.ts`) are computed the same careful way: arithmetic with a based literal
-in it is not (`$clog2(32'hffff_ffff + 32'd1)` is `$clog2(0)` in Verilog), nor a step outside a 32-bit integer.
+not at all (`verilogExactValues.ts`): numbers, earlier constants, `+ - * / %` and `$clog2`, by Verilog's width and
+sign rules: an expression is as wide as its widest operand (an unsized decimal and an `integer` are 32 bits) and
+signed only when every operand is, each step wrapped to that width (`2'd1 + 2'd1` is 2, `32'hffff_ffff + 32'd1` is 0,
+`N % W` with `N = -3` and `localparam [7:0] W = 8` is 5); a declared `integer` type or `[msb:lsb]` range makes the
+expression at least as wide as the type and cuts the value to it (`localparam [8:0] P = 8'hFF + 8'h01` is 256 in
+Quartus), and holds for every item of its list (`localparam [0:0] FIRST = 0, ON = 2;` makes `ON` a 0); a value with
+x or z digits, or wider than 64 bits, is not computed (`[99999999999999999:0]`, invalid HDL being edited, must not
+stop the check); and a name declared twice (each `generate` block its own `ON`), or also declared as a variable or
+net outside the functions and tasks (`reg ON`, `time ON`, `tri ON`), is not folded. Indexes, widths and loop bounds
+(`constantIndex.ts`) read those values; their own arithmetic is computed only where no width rule can change it (an
+unsigned constant beside a 32-bit integer, no step below zero; `$clog2` of one unsigned constant). A word of an array
+of vectors has the word's width (`casez (mem[0])` of `wire [1:0] mem [0:0]` is two bits), a bit select of any index
+one bit. Verilog's directive comments are lowercase only: Quartus ignores `// synopsys FULL_CASE`,
+`// SYNOPSYS full_case` and `// SYNTHESIS TRANSLATE_OFF` (Warning 10335 for an unknown one), and the check does too;
+VHDL's are read in any case, as Quartus does. Code before a trailing translate_off on its line is built.
+
+Known miss: the bits a block writes are named with the parameters' defaults, so an override that makes two of them
+one or two is not seen (`q[I]` and `q[1]` with `I = $clog2(DEPTH)` are one bit by default, two with `DEPTH` 4, and
+Quartus infers latches for both). Naming them with the fixed constants alone instead made a false latch of the far
+commoner `q[N-1:0] = …; q[N] = 0;` in every overridden module (gplgpu's DDR3 controller, Quartus builds none).
 
 An `if` that reads only parameters, genvars, numbers and `$clog2` (`if (R == 2)`, `if (MODE == "COLROW")`) is decided
 while elaborating, one way for each instance. A name alone or an `==`/`!=` of fixed non-negative values within a
