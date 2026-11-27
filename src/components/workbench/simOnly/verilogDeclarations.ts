@@ -152,7 +152,8 @@ const SUBPROGRAM_BODY = /\bfunction\b[\s\S]*?\bendfunction\b|\btask\b[\s\S]*?\be
  */
 function variableNames(module: string): ReadonlySet<string> {
   const code = module.replace(SUBPROGRAM_BODY, ' ');
-  const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3]).map((d) => d.name));
+  // `logic [0:0][0:0] ON`: the packed ranges after the first stand before the names.
+  const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3].replace(/^\s*(?:\[[^\]]*\]\s*)+/, '')).map((d) => d.name));
   const others = [...code.matchAll(OTHER_DECLARATION)]
     .filter((m) => !/^(?:parameter|localparam)$/.test(wordBefore(code, m.index ?? 0)))
     .flatMap((m) => declaredNames(m[1].replace(DECLARATION_PREFIX, '')).map((d) => d.name));
@@ -229,14 +230,17 @@ function widthOf(ranges: readonly string[], constants: Bindings): number | undef
  * an array of no width here; `reg q [0:3]`, an array of bits, is none.
  */
 export function verilogWordArrays(code: string, constants: Bindings = new Map()): WordArrays {
-  return new Map([...[...code.matchAll(DECLARATION)].flatMap((m) => wordsOf(m, constants)), ...integerWords(code)]);
+  const vectors = [...code.matchAll(DECLARATION), ...code.matchAll(NET_DECLARATION)].flatMap((m) => wordsOf(m, constants));
+  return new Map([...vectors, ...integerWords(code)]);
 }
 
-/** `integer` and `time` variables: 32 and 64 bits wide. */
-const INTEGER_ARRAY = /\b(integer|time)\b([^;]*)/g;
-const VARIABLE_WIDTH: Readonly<Record<string, number>> = { integer: 32, time: 64 };
+/** The other net kinds and SystemVerilog's `bit`, with `DECLARATION`'s groups: `tri [1:0] mem [0:1]`. */
+const NET_DECLARATION = /\b(?:tri0|tri1|triand|trior|trireg|tri|wand|wor|supply0|supply1|uwire|bit)\b((?:\s+(?:signed|unsigned|vectored|scalared))*)\s*(?:\[([^\]]*)\])?([^;()]*)/g;
+/** The variables of a width of their own: `integer` and SystemVerilog's `int` are 32 bits, `time` 64. */
+const INTEGER_ARRAY = /\b(integer|time|int|shortint|longint|byte)\b([^;]*)/g;
+const VARIABLE_WIDTH: Readonly<Record<string, number>> = { integer: 32, time: 64, int: 32, shortint: 16, longint: 64, byte: 8 };
 
-/** The arrays of `integer`s and `time`s (`integer mem [0:1]`: `mem[i]` is a 32-bit word). */
+/** The arrays of `integer`s, `time`s and the like (`integer mem [0:1]`: `mem[i]` is a 32-bit word). */
 function integerWords(code: string): [string, number | undefined][] {
   return [...code.matchAll(INTEGER_ARRAY)]
     .filter((m) => !/^(?:parameter|localparam)$/.test(wordBefore(code, m.index ?? 0)))

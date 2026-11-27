@@ -133,9 +133,11 @@ function pairedBodies(boundaries: readonly Boundary[], fileEnd: number): Region[
 
 /**
  * After `is`, what makes no body: VHDL-2008's instantiation `function f is new work.p.g
- * generic map (…);` and a generic formal's default `function op (…) return t is <>`.
+ * generic map (…);` and a generic formal's default, `is <>` or a subprogram's name
+ * (`function op (…) return t is increment;`). A body's `is` is followed by declarations or
+ * `begin`, never by one name and then `;` or `)`.
  */
-const NO_BODY_AFTER_IS = /\s*(?:<>|new\b)/iy;
+const NO_BODY_AFTER_IS = /\s*(?:<>|new\b|[A-Za-z_][\w.]*\s*[;)])/iy;
 
 /**
  * Past a subprogram's name and parameters: `is` starts its body, `;` ends a declaration

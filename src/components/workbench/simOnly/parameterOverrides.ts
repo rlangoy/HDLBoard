@@ -120,9 +120,10 @@ class Macros {
     const expansions = this.expansions(name);
     if (expansions.length === 0) throw new Unresolved();
     return expansions.map((text) => {
-      const leading = /^\s*([A-Za-z_]\w*)/.exec(text)?.[1];
-      if (leading === undefined) throw new Unresolved();
-      return leading;
+      // `` `define CELL(s) child``s ``: the name is pasted from an argument the check does not follow.
+      const leading = /^\s*([A-Za-z_]\w*)(``)?/.exec(text);
+      if (leading === null || leading[2] !== undefined) throw new Unresolved();
+      return leading[1];
     });
   }
 }
@@ -157,7 +158,38 @@ function blankedRanges(code: string, ranges: readonly { readonly from: number; r
  * Every instance in `scope` with its module, those of an instantiation that declares
  * several included: `child v (…), u (…);` is `v` and `u`, both of `child`.
  */
-function instancesIn(scope: string, macros: Macros): { readonly module: string; readonly name: string }[] {
+function instancesIn(scope: string, macros: Macros): Instance[] {
+  return [...literalInstances(scope, macros), ...macroInstances(scope, macros)];
+}
+
+interface Instance {
+  readonly module: string;
+  readonly name: string;
+}
+
+/** The instances of each macro's texts, read once per macro. */
+const MACRO_INSTANCES = new WeakMap<Macros, Map<string, Instance[]>>();
+
+/**
+ * The instances the macros used in `scope` put there: with `` `define INST child u (…); ``,
+ * a `defparam u.R` beside `` `INST `` reaches `child`.
+ */
+function macroInstances(scope: string, macros: Macros): Instance[] {
+  const cache = MACRO_INSTANCES.get(macros) ?? new Map<string, Instance[]>();
+  MACRO_INSTANCES.set(macros, cache);
+  const names = new Set([...scope.matchAll(MACRO_USE)].map((use) => use[1]).filter((name) => !DIRECTIVES.has(name)));
+  return [...names].flatMap((name) => {
+    let instances = cache.get(name);
+    if (instances === undefined) {
+      instances = macros.expansions(name).flatMap((text) => literalInstances(text, macros));
+      cache.set(name, instances);
+    }
+    return instances;
+  });
+}
+
+/** The instances written out in `scope`. */
+function literalInstances(scope: string, macros: Macros): Instance[] {
   return [...scope.matchAll(INSTANTIATION)].flatMap((m) => {
     if (NOT_AN_INSTANTIATION.has(m[1])) return [];
     const names = [m[2]];

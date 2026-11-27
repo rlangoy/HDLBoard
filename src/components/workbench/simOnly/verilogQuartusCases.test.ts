@@ -282,6 +282,36 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [],
   ],
   [
+    '`define INST child u (…); used beside defparam u.R = 1, while another module has other u (…): u is child here (Warning 10240)',
+    `\`define INST child u (.d(d), .e(e), .q(q));\n${CHILD}\nmodule other #(parameter R = 2) (input d, e, output q); assign q = d; endmodule\nmodule holder (input d, e, output q);\n  other u (.d(d), .e(e), .q(q));\nendmodule\nmodule t (input d, e, output q, r);\n  \`INST\n  defparam u.R = 1;\n  holder h (.d(d), .e(e), .q(r));\nendmodule`,
+    [3],
+  ],
+  [
+    'case (mem[i]) of tri [1:0] mem [0:1], labels 0 and 1: a word is two bits (Warning 10240)',
+    'module t (input i, input [1:0] a, b, input x0, x1, output reg x);\n  tri [1:0] mem [0:1];\n  assign mem[0] = a;\n  assign mem[1] = b;\n  always @* case (mem[i])\n    0: x = x0;\n    1: x = x1;\n  endcase\nendmodule',
+    [5],
+  ],
+  [
+    'a named block whose logic [0:0][0:0] ON shadows localparam ON = 1 (Quartus: Error 10166 under always_comb, a latch)',
+    'module t (input d, en, output reg q);\n  localparam ON = 1;\n  always @* begin : blk\n    logic [0:0][0:0] ON;\n    ON = en;\n    if (ON) q = d;\n  end\nendmodule',
+    [3],
+  ],
+  [
+    'localparam [W-1:0] ZERO = 0, ONE = 1 with localparam W = 1: the labels ZERO and ONE name both values (no latch)',
+    'module t (input s, input a, b, output reg x);\n  localparam W = 1;\n  localparam [W-1:0] ZERO = 0, ONE = 1;\n  always @* case (s)\n    ZERO: x = a;\n    ONE: x = b;\n  endcase\nendmodule',
+    [],
+  ],
+  [
+    '`CELL(2) #(.R(1)) u with `define CELL(s) child``s: the pasted name is not followed, every module counts as overridden (Warning 10240)',
+    `\`define CELL(s) child\`\`s\nmodule child2 #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule\nmodule t (input d, e, output q);\n  \`CELL(2) #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    "localparam [2:0] ZERO = 2'd0 / (2'd3 + 2'd1): 3 bits wide, the divisor is 4 and ZERO is 0 (no latch)",
+    "module t (input s, input a, b, output reg x);\n  localparam [2:0] ZERO = 2'd0 / (2'd3 + 2'd1);\n  always @* case (s)\n    ZERO: x = a;\n    1: x = b;\n  endcase\nendmodule",
+    [],
+  ],
+  [
     '`CELL(0) `P(1) u with `define CELL(x) child and `define P(v) #(.R(v)): the override follows a macro call (Warning 10240)',
     `\`define CELL(x) child\n\`define P(v) #(.R(v))\n${CHILD}\nmodule t (input d, e, output q);\n  \`CELL(0) \`P(1) u (.d(d), .e(e), .q(q));\nendmodule`,
     [4],

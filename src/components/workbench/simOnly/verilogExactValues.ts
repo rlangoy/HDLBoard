@@ -175,16 +175,27 @@ const numberOf = (o: Operand): bigint => (o.signed ? BigInt.asIntN(o.width, o.bi
 /** A value of its kind: a signed 32-bit one is an integer. */
 const exactOf = (o: Operand): Exact => ({ value: numberOf(o), kind: o.signed ? (o.width === INTEGER_WIDTH ? 'integer' : 'signed') : 'unsigned', width: o.width });
 
-const RANGE_TYPE = /^(signed|unsigned)?\s*\[\s*(\d+)\s*:\s*(\d+)\s*\]$/;
+const RANGE_TYPE = /^(signed|unsigned)?\s*\[([^:\]]+):([^:\]]+)\]$/;
 
-/** What a declared type makes of a value: `integer` 32-bit signed, `[1:0]` two bits, unsigned unless `signed`; none for another type. */
-function typeOf(type: string): { readonly width: number; readonly signed: boolean } | undefined {
+/**
+ * What a declared type makes of a value: `integer` 32-bit signed, `[1:0]` two bits, unsigned
+ * unless `signed`; none for another type. A bound may use earlier constants (`[W-1:0]`).
+ */
+function typeOf(type: string, known: ReadonlyMap<string, Exact>): { readonly width: number; readonly signed: boolean } | undefined {
   const t = type.trim().replace(/\s+/g, ' ');
   if (t === 'integer') return { width: INTEGER_WIDTH, signed: true };
   const range = RANGE_TYPE.exec(t);
-  if (!range) return undefined;
-  const width = Math.abs(Number(range[2]) - Number(range[3])) + 1;
+  const [msb, lsb] = range ? [boundOf(range[2], known), boundOf(range[3], known)] : [];
+  if (range === null || msb === undefined || lsb === undefined) return undefined;
+  const width = Math.abs(Number(msb - lsb)) + 1;
   return isWidth(width) ? { width, signed: range[1] === 'signed' } : undefined;
+}
+
+/** A range bound's value, from numbers and earlier constants. */
+function boundOf(text: string, known: ReadonlyMap<string, Exact>): bigint | undefined {
+  const term = parsed(text, known);
+  const value = term && evaluate(term);
+  return value && numberOf(value);
 }
 
 /**
@@ -206,14 +217,19 @@ function parsed(text: string, known: ReadonlyMap<string, Exact>): Term | undefin
 /** The value of a constant's expression, cut to its declared type (see the module comment). */
 function constantValue(text: string, type: string, known: ReadonlyMap<string, Exact>): Exact | undefined {
   const term = parsed(text, known);
-  const alone = term && evaluate(term);
-  if (term === undefined || alone === undefined) return undefined;
-  return type.trim() === '' ? exactOf(alone) : typedValue(term, type);
+  if (term === undefined) return undefined;
+  if (type.trim() !== '') return typedValue(term, type, known);
+  const alone = evaluate(term);
+  return alone && exactOf(alone);
 }
 
-/** A typed constant's value: its expression as wide as the type at least (as an assignment), cut to the type. */
-function typedValue(term: Term, type: string): Exact | undefined {
-  const declared = typeOf(type);
+/**
+ * A typed constant's value: its expression as wide as the type at least (as an assignment), cut
+ * to the type; never at its own width first (`localparam [2:0] Z = 2'd0 / (2'd3 + 2'd1)` divides
+ * by 4, not by 0).
+ */
+function typedValue(term: Term, type: string, known: ReadonlyMap<string, Exact>): Exact | undefined {
+  const declared = typeOf(type, known);
   const assigned = declared && evaluate(term, declared.width);
   if (declared === undefined || assigned === undefined) return undefined;
   return exactOf({ bits: BigInt.asUintN(declared.width, assigned.bits), width: declared.width, signed: declared.signed });
