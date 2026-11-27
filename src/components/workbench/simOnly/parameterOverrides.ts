@@ -50,9 +50,12 @@ class Unresolved extends Error {}
 /** `sub u (`, `sub #(…) u (`, `sub #2 u [3:0] (`: the start of an instantiation, its module and its first instance. */
 const INSTANTIATION = /\b([A-Za-z_]\w*)\s+(?:#\s*(?:\([^;]*?\)|\w+)\s*)?([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?\(/g;
 /** `, v (` or `, v [3:0] (`: the next instance of the same instantiation. */
-const NEXT_INSTANCE = /^\s*,\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?\(/;
+const NEXT_INSTANCE = /\s*,\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?\(/;
 /** Words an instantiation's first word cannot be. */
 const NOT_AN_INSTANTIATION = new Set(['module', 'macromodule', 'function', 'task', 'primitive']);
+/** What a function-like macro's formal becomes in its text: no name starts with it. */
+const FORMAL = '\u0000';
+const DEFPARAM_WORD = /\bdefparam\b/;
 /** Compiler directives: `` `define F(a) … `` is no instance of a module `define`. */
 const DIRECTIVES = new Set(['define', 'undef', 'ifdef', 'ifndef', 'elsif', 'else', 'endif', 'include', 'timescale', 'resetall', 'celldefine', 'endcelldefine', 'default_nettype', 'line', 'pragma']);
 
@@ -60,8 +63,16 @@ const DIRECTIVES = new Set(['define', 'undef', 'ifdef', 'ifndef', 'elsif', 'else
 class Macros {
   private readonly texts = new Map<string, string[]>();
 
+  /**
+   * A function-like macro's formals are replaced by a mark no name starts with: what
+   * `` `define INST(M) M #(.R(1)) `` names depends on the call's argument, unknown here.
+   */
   constructor(definitions: readonly MacroDefinition[]) {
-    for (const { name, text } of definitions) this.texts.set(name, [...(this.texts.get(name) ?? []), text]);
+    for (const { name, text, params } of definitions) {
+      const formals = params.filter((p) => /^[A-Za-z_]\w*$/.test(p));
+      const unbound = formals.length === 0 ? text : text.replace(new RegExp(`\\b(?:${formals.join('|')})\\b`, 'g'), FORMAL);
+      this.texts.set(name, [...(this.texts.get(name) ?? []), unbound]);
+    }
   }
 
   /**
@@ -86,9 +97,14 @@ class Macros {
     return texts;
   }
 
-  /** The macros whose expansion holds `#`: a use of one may pass an override. */
+  /** The macros whose expansion holds `#` or a `defparam`: a use of one may pass an override. */
   overriding(): string[] {
-    return [...this.texts.keys()].filter((name) => this.expansions(name).some((text) => text.includes('#')));
+    return [...this.texts.keys()].filter((name) => this.expansions(name).some((text) => text.includes('#') || DEFPARAM_WORD.test(text)));
+  }
+
+  /** Whether a use of the macro may emit a `defparam`, whose path the check does not follow through the expansion. */
+  emitsDefparam(name: string): boolean {
+    return this.expansions(name).some((text) => DEFPARAM_WORD.test(text));
   }
 
   /** The module a name at `at` in `code` stands for: itself, or each module a macro there may expand to (`` `CELL ``); a directive stands for none. */
@@ -128,10 +144,14 @@ function instancesIn(scope: string, macros: Macros): { readonly module: string; 
   return [...scope.matchAll(INSTANTIATION)].flatMap((m) => {
     if (NOT_AN_INSTANTIATION.has(m[1])) return [];
     const names = [m[2]];
-    let close = closingBracket(scope, (m.index ?? 0) + m[0].length - 1);
-    for (let next = NEXT_INSTANCE.exec(scope.slice(close + 1)); close >= 0 && next; next = NEXT_INSTANCE.exec(scope.slice(close + 1))) {
-      names.push(next[1]);
-      close = closingBracket(scope, close + 1 + next[0].length - 1);
+    // Read at each `)` in place (a sticky search), never copying the text after it.
+    const next = new RegExp(NEXT_INSTANCE.source, 'y');
+    for (let close = closingBracket(scope, (m.index ?? 0) + m[0].length - 1); close >= 0; ) {
+      next.lastIndex = close + 1;
+      const instance = next.exec(scope);
+      if (instance === null) break;
+      names.push(instance[1]);
+      close = closingBracket(scope, next.lastIndex - 1);
     }
     const modules = macros.modulesAt(scope, m.index ?? 0, m[1]);
     return modules.flatMap((module) => names.map((name) => ({ module, name })));
@@ -169,15 +189,31 @@ function defparamTargets(module: string, project: Project): string[] {
 function macroTargets(source: Source, project: Project): string[] {
   if (project.overriding.length === 0) return [];
   const uses = new RegExp(`\`(${project.overriding.map(escapeRegExp).join('|')})\\b`, 'g');
-  return [...source.code.matchAll(uses)].flatMap((use) => {
-    if (source.inDefine(use.index ?? 0)) return [];
-    const before = source.code.slice(0, use.index).trimEnd();
-    if (/<?=$/.test(before)) return [];
-    const preceding = /([A-Za-z_]\w*)$/.exec(before);
-    const isMacro = preceding !== null && before[preceding.index - 1] === '`';
-    if (preceding !== null && (isMacro || project.moduleNames.has(preceding[1]))) return project.macros.modulesAt(before, preceding.index, preceding[1]);
-    return project.macros.leadingNames(use[1]);
-  });
+  return [...source.code.matchAll(uses)].flatMap((use) => (source.inDefine(use.index ?? 0) ? [] : useTargets(source.code, project, use)));
+}
+
+/** The modules one use of an overriding macro reaches (see `macroTargets`). */
+function useTargets(code: string, project: Project, use: RegExpExecArray | RegExpMatchArray): string[] {
+  if (project.macros.emitsDefparam(use[1])) throw new Unresolved();
+  const before = precedingToken(code, use.index ?? 0);
+  if (before.text === '=' || before.text === '<=') return [];
+  const isModule = /^[A-Za-z_]\w*$/.test(before.text) && (code[before.at - 1] === '`' || project.moduleNames.has(before.text));
+  return isModule ? project.macros.modulesAt(code, before.at, before.text) : project.macros.leadingNames(use[1]);
+}
+
+/**
+ * The token right before `at`, past blanks: a name, `<=`, `=`, or one other character.
+ * Read backwards from `at`, never the whole text before it: a file of thousands of macro
+ * uses stays linear.
+ */
+function precedingToken(code: string, at: number): { readonly text: string; readonly at: number } {
+  let end = at;
+  while (end > 0 && /\s/.test(code[end - 1])) end--;
+  let start = end;
+  while (start > 0 && /\w/.test(code[start - 1])) start--;
+  if (start < end && /[A-Za-z_]/.test(code[start])) return { text: code.slice(start, end), at: start };
+  if (code.slice(end - 2, end) === '<=') return { text: '<=', at: end - 2 };
+  return { text: code.slice(end - 1, end), at: end - 1 };
 }
 
 /** `` `CELL(0) #(…) ``: a macro called with arguments, whose `)` an override may follow. */
@@ -192,8 +228,10 @@ function macroCallTargets(source: Source, macros: Macros): string[] {
     const at = call.index ?? 0;
     if (source.inDefine(at) || DIRECTIVES.has(call[1])) return [];
     const close = closingBracket(source.code, at + call[0].length - 1);
-    if (close < 0 || !/^\s*#\s*[\w(]/.test(source.code.slice(close + 1))) return [];
-    return macros.leadingNames(call[1]);
+    if (close < 0) return [];
+    const followedByOverride = /\s*#\s*[\w(]/y;
+    followedByOverride.lastIndex = close + 1;
+    return followedByOverride.test(source.code) ? macros.leadingNames(call[1]) : [];
   });
 }
 

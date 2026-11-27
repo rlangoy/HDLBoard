@@ -239,9 +239,11 @@ const NAME = /[A-Za-z_]\w*/g;
  * `q[i]` both cover it; they are never a run-time value.
  */
 function fixedBits(ctx: StatementContext, name: string, index: string): string | undefined {
-  const names = index.match(NAME) ?? [];
+  // A based literal's letters are no names: `q[1'b0 + 1'b1]` is fixed, a constant the evaluator does not compute.
+  const names = index.replace(BASED_NUMBER, ' ').match(NAME) ?? [];
   const fixed = ctx.fixedNames;
-  if (fixed === undefined || index.includes('`') || names.length === 0 || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
+  if (fixed === undefined || index.includes('`') || !names.every((n) => fixed.has(n) || ctx.constants.has(n))) return undefined;
+  if (names.length === 0 && !/'/.test(index)) return undefined;
   return `${name}[${index.replace(/\s+/g, '')}]`;
 }
 

@@ -12,6 +12,7 @@
 
 import type { UnitText } from '../tbDetect/rules';
 import { regionsIn } from '../vhdlScopes';
+import { closingBracket } from './brackets';
 import { inside, matchesIn, type Range } from './constructText';
 import { isHidden } from './scan';
 
@@ -45,10 +46,20 @@ function architectureRegions(code: string): Range[] {
 const ONCE_DECLARATION = /\b(?:constant|signal)\s+\w+(?:\s*,\s*\w+)*\s*:[^;]*;/gi;
 
 /** Every function and procedure of the unit, at file offsets. */
+/** `generic ( … )` lists (not `generic map`): a `function op … is <>` there is a formal, no body. */
+function genericLists(code: string): Range[] {
+  return [...code.matchAll(/\bgeneric\s*\(/gi)].map((m) => {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const close = closingBracket(code, open);
+    return { from: open, to: close < 0 ? code.length : close };
+  });
+}
+
 function subprogramsOf(t: UnitText): Subprogram[] {
   const architectures = architectureRegions(t.code);
+  const generics = genericLists(t.code);
   return regionsIn(t.code.split('\n'))
-    .filter((region) => region.kind === 'subprogram')
+    .filter((region) => region.kind === 'subprogram' && !inside(region.start, generics))
     .flatMap((region) => {
       const text = t.code.slice(region.start, region.end);
       const header = SUBPROGRAM_NAME.exec(text);

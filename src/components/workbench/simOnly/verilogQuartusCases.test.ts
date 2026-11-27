@@ -27,6 +27,8 @@ const top = (instance: string, ports: string, connections: string): string =>
 
 const WIDENED_CASE =
   "module t #(parameter S = 1) (input [S-1:0] s, input a, b, c, output reg x);\n  always @* case ({s, a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = ~b;\n    2'b11: x = ~c;\n  endcase\nendmodule";
+/** A module whose case names every value of `s` only while its body parameter B is 1. */
+const SUB_B = 'module sub (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule';
 /** A module whose `q` keeps its value unless R is 2. */
 const CHILD = 'module child #(parameter R = 2) (input d, e, output reg q);\n  always @* if (R == 2) q = d; else if (e) q = d;\nendmodule';
 const MOVED_LABEL ='module t #(parameter B = 1) (input s, a, b, output reg x);\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule';
@@ -275,6 +277,36 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
   [
     "a casez on s[(W):0] with localparam [1:0] W = 1 and the label 2'b?? (no latch)",
     "module t (input [(W):0] s, input a, output reg x);\n  localparam [1:0] W = 1;\n  always @* casez (s)\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    'a macro whose formal names the module, `define INST(M) M #(.R(1)) u … and `INST(child) (Warning 10240)',
+    `\`define INST(M) M #(.R(1)) u (.d(d), .e(e), .q(q));\n${CHILD}\nmodule t (input d, e, output q);\n  \`INST(child)\nendmodule`,
+    [3],
+  ],
+  [
+    'a defparam a macro emits, `SET_PARAM(u) with `define SET_PARAM(inst) defparam inst.R = 1; (Warning 10240)',
+    `\`define SET_PARAM(inst) defparam inst.R = 1;\n${CHILD}\nmodule t (input d, e, output q);\n  child u (.d(d), .e(e), .q(q));\n  \`SET_PARAM(u)\nendmodule`,
+    [3],
+  ],
+  [
+    'an override inside translate_off: synthesis builds only the default instance (no latch)',
+    `${SUB_B}\nmodule t (input s, a, b, output x, y);\n  sub u (.s(s), .a(a), .b(b), .x(x));\n// synthesis translate_off\n  sub #(.B(2)) v (.s(s), .a(a), .b(b), .x(y));\n// synthesis translate_on\nendmodule`,
+    [],
+  ],
+  [
+    'an override inside `ifndef SYNTHESIS: Quartus does not define SYNTHESIS, so it builds it (Warnings 10199, 10270, 10240)',
+    `${SUB_B}\nmodule t (input s, a, b, output x, y);\n  sub u (.s(s), .a(a), .b(b), .x(x));\n\`ifndef SYNTHESIS\n  sub #(.B(2)) v (.s(s), .a(a), .b(b), .x(y));\n\`endif\nendmodule`,
+    [3],
+  ],
+  [
+    'a named block whose time ON shadows localparam ON = 1 (Warning 10240)',
+    'module t (input d, en, output reg q);\n  localparam ON = 1;\n  always @* begin : blk\n    time ON;\n    ON = en;\n    if (ON) q = d;\n  end\nendmodule',
+    [3],
+  ],
+  [
+    "q[0] and q[1'b0 + 1'b1] both assigned: a select of literals only is a fixed bit (no latch)",
+    "module t (input [1:0] d, output reg [1:0] q);\n  always @* begin\n    q[0] = d[0];\n    q[1'b0 + 1'b1] = d[1];\n  end\nendmodule",
     [],
   ],
   [

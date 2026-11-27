@@ -115,7 +115,7 @@ function unambiguous(items: readonly ParameterItem[], code: string): ParameterIt
 }
 
 /** `integer` declaring variables, not the type of a `parameter integer N`. */
-const VARIABLE_INTEGER = /(?<!\b(?:parameter|localparam)\s+)\binteger\b([^;]*)/g;
+const VARIABLE_INTEGER = /(?<!\b(?:parameter|localparam)\s+)\b(?:integer|time|realtime|real)\b([^;]*)/g;
 
 /**
  * The names the module declares as variables or nets, anywhere: a named block's `reg ON`

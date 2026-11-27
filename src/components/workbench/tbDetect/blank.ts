@@ -23,9 +23,11 @@ export interface BlankedSource {
   /** Verilog: every `` `define `` of the file, in order, each marked active or not in this view. */
   readonly defines: readonly MacroDefinition[];
   /**
-   * Verilog: the code with comments and strings blanked but every `ifdef branch kept, the
-   * directives too. A branch the view leaves out may test a macro an included file defines;
-   * the search for parameter overrides reads them all.
+   * Verilog: the code synthesis may read, comments and strings blanked: every `ifdef branch
+   * kept, the directives too, but those surely left out (on a macro the file defines) and
+   * translate_off regions. A branch on a macro the file does not define may be taken if an
+   * included file defines it, one on SYNTHESIS by Quartus; the search for parameter
+   * overrides reads them too.
    */
   readonly everyBranch: string;
 }
@@ -42,6 +44,8 @@ export interface MacroDefinition {
    * reads: the branch may test a macro an included file defines.
    */
   readonly active: boolean;
+  /** A function-like macro's formal parameters (`` `define INST(M) ``); none for another. */
+  readonly params: readonly string[];
 }
 
 /**
@@ -75,8 +79,9 @@ export function blankSource(language: Language, source: string, view: SourceView
   }
   const marks = lexVerilog(source, chars, pragmas);
   pragmas.close(lineOf(source.length));
-  const everyBranch = chars.join('');
-  const pre = preprocessVerilog(everyBranch, lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
+  const lexed = chars.join('');
+  const pre = preprocessVerilog(lexed, lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
+  const everyBranch = possibleCode(lexed, pre.inactive, pragmas.regions);
   // A mark in an `ifdef branch the view leaves out, inside translate_off, or in a macro's text marks nothing.
   const hidden = (at: number) => pragmas.regions.some((r) => lineOf(at) >= r.start && lineOf(at) <= r.end);
   const inMacro = (at: number) => pre.defines.some((d) => at >= d.from && at < d.to);
@@ -84,6 +89,20 @@ export function blankSource(language: Language, source: string, view: SourceView
   const fullCase = { directives: marks.directives.filter(active), attributes: marks.attributes.filter(active) };
   const simOnlyRegions = [...pragmas.regions, ...pre.regions].sort((a, b) => a.start - b.start);
   return { code: pre.code, simOnlyRegions, fullCase, defines: pre.defines, everyBranch };
+}
+
+/**
+ * The code synthesis may read: every `ifdef branch kept but those surely left out (on a
+ * macro the file itself defines), and no translate_off region. A branch that tests a macro
+ * the file does not define stays, an included file may define it; so does one on
+ * SYNTHESIS, which Quartus does not define.
+ */
+function possibleCode(lexed: string, inactive: readonly InactiveRange[], translateOff: readonly LineSpan[]): string {
+  const chars = lexed.split('');
+  for (const r of inactive) if (r.surely) blankRange(chars, r.from, r.to);
+  const lineStarts = [0, ...[...lexed.matchAll(/\n/g)].map((m) => (m.index ?? 0) + 1)];
+  for (const { start, end } of translateOff) blankRange(chars, lineStarts[start - 1] ?? lexed.length, lineStarts[end] ?? lexed.length);
+  return chars.join('');
 }
 
 /** translate_off .. translate_on, from the line comments that carry them. */
@@ -284,6 +303,19 @@ interface Branch {
    * the first are what simulation runs and synthesis skips, so they are sim-only.
    */
   readonly laterBranchesSimOnly: boolean;
+  /** The macros the chain has tested so far: `ifdef A … elsif B` is A and B. */
+  readonly names: string[];
+}
+
+/**
+ * Whether the code the stack leaves out is surely left out: the first branch that leaves
+ * it out tests only macros the file itself defines. One that tests an undefined macro may
+ * be taken after all, if an included file defines it; one on SYNTHESIS too, since Quartus
+ * does not define it (an `ifndef SYNTHESIS instance is built, measured 2026-11-27).
+ */
+function surelyInactive(state: PreState): boolean {
+  const deciding = state.stack.find((b) => !b.active);
+  return deciding !== undefined && deciding.names.every((name) => state.defines.has(name) && !state.predefined.has(name));
 }
 
 /**
@@ -312,14 +344,14 @@ function defineEnd(code: string, at: number): number {
 interface Preprocessed {
   readonly code: string;
   readonly regions: LineSpan[];
-  readonly inactive: Range[];
+  readonly inactive: InactiveRange[];
   readonly defines: MacroDefinition[];
 }
 
 function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): Preprocessed {
   const chars = code.split('');
-  const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[] };
-  const inactive: Range[] = [];
+  const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[], predefined: new Set(predefined) };
+  const inactive: InactiveRange[] = [];
   const defines: MacroDefinition[] = [];
   let activeFrom = 0;
   for (const match of code.matchAll(DIRECTIVE)) {
@@ -327,22 +359,25 @@ function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly st
     const wasActive = isActive(state.stack);
     if (!wasActive) {
       blankRange(chars, activeFrom, at);
-      inactive.push({ from: activeFrom, to: at });
+      inactive.push({ from: activeFrom, to: at, surely: surelyInactive(state) });
     }
     directive(state, match[1] ?? match[3], match[2], lineOf(at), wasActive);
     // The directive itself is no code: left in, `ifndef X would start the next statement (and hide an instance in it).
     blankRange(chars, at, at + match[0].length);
     if (match[1] === 'define') {
       const end = defineEnd(code, at);
-      const text = code.slice(macroTextStart(code, at + match[0].length, end), end).replace(/\\[ \t\r]*\n/g, ' ');
-      defines.push({ name: match[2], text, from: at, to: end, active: wasActive });
+      const afterName = at + match[0].length;
+      const textStart = macroTextStart(code, afterName, end);
+      const text = code.slice(textStart, end).replace(/\\[ \t\r]*\n/g, ' ');
+      const params = textStart === afterName ? [] : code.slice(afterName + 1, textStart - 1).split(',').map((p) => p.trim().replace(/\s*=[\s\S]*$/, ''));
+      defines.push({ name: match[2], text, params, from: at, to: end, active: wasActive });
       if (wasActive) blankRange(chars, at + match[0].length, end);
     }
     activeFrom = at + match[0].length;
   }
   if (!isActive(state.stack)) {
     blankRange(chars, activeFrom, code.length);
-    inactive.push({ from: activeFrom, to: code.length });
+    inactive.push({ from: activeFrom, to: code.length, surely: surelyInactive(state) });
   }
   return { code: chars.join(''), regions: state.regions, inactive, defines };
 }
@@ -353,12 +388,19 @@ interface Range {
   readonly to: number;
 }
 
+/** Code an `ifdef branch leaves out; `surely` when no included file can change that (`surelyInactive`). */
+interface InactiveRange extends Range {
+  readonly surely: boolean;
+}
+
 const isActive = (stack: readonly Branch[]): boolean => stack.length === 0 || stack[stack.length - 1].active;
 
 interface PreState {
   readonly defines: Set<string>;
   readonly stack: Branch[];
   readonly regions: LineSpan[];
+  /** The macros the view defines itself (SYNTHESIS): a tool may not (Quartus does not). */
+  readonly predefined: ReadonlySet<string>;
 }
 
 function directive(state: PreState, word: string, name: string, line: number, active: boolean): void {
@@ -370,7 +412,7 @@ function directive(state: PreState, word: string, name: string, line: number, ac
     closeSimOnly(state, top, line);
     if (word === 'endif') state.stack.pop();
     else {
-      nextBranch(top, word === 'else' || state.defines.has(name));
+      nextBranch(top, word === 'else' || state.defines.has(name), word === 'elsif' ? name : undefined);
       if (top.active && top.laterBranchesSimOnly) top.simOnlyFrom = line;
     }
   }
@@ -382,12 +424,13 @@ function openBranch(state: PreState, word: string, name: string, line: number, p
   const isSynthesis = name === 'SYNTHESIS' && !state.defines.has(name);
   const simOnly = active && word === 'ifndef' && isSynthesis;
   const laterBranchesSimOnly = word === 'ifdef' && isSynthesis;
-  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined, laterBranchesSimOnly });
+  state.stack.push({ parentActive, active, taken: holds, simOnlyFrom: simOnly ? line : undefined, laterBranchesSimOnly, names: [name] });
 }
 
-function nextBranch(top: Branch, holds: boolean): void {
+function nextBranch(top: Branch, holds: boolean, name: string | undefined): void {
   top.active = top.parentActive && !top.taken && holds;
   top.taken ||= holds;
+  if (name) top.names.push(name);
 }
 
 function closeSimOnly(state: PreState, top: Branch, line: number): void {
