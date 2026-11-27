@@ -208,6 +208,36 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
     [5],
   ],
   [
+    'a module named through a macro, `CELL #(.R(1)) u with `define CELL child (Warning 10240)',
+    `\`define CELL child\n${CHILD}\nmodule t (input d, e, output q);\n  \`CELL #(.R(1)) u (.d(d), .e(e), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    'an override in an `ifdef branch on a macro an included file defines (Warning 10240 with config.vh)',
+    `\`include "config.vh"\n${CHILD}\nmodule t (input d, e, output q);\n\`ifdef USE_OVERRIDE\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`else\n  child u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
+    [3],
+  ],
+  [
+    'a named block whose reg ON shadows localparam ON = 0 (Warning 10240)',
+    'module t (input d, en, output reg q);\n  localparam ON = 0;\n  always @* begin : blk\n    reg ON;\n    ON = en;\n    if (ON) q = d;\n  end\nendmodule',
+    [3],
+  ],
+  [
+    "a signal of a width the check cannot compute, written wholly and by a loop when en is high, not at all when it is low (Warning 10240)",
+    "module t (input [3:0] d, input en, output reg [3:0] q);\n  localparam W = 4'd2 + 4'd2;\n  reg [W-1:0] r;\n  integer i;\n  always @* if (en) begin r = d; for (i = 0; i < W; i = i + 1) r[i] = d[i]; end\n  always @* q = r;\nendmodule",
+    [5],
+  ],
+  [
+    '(* full_case *) in the text of a macro that is not used (Warnings 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @*\n`define UNUSED (* full_case *)\n    case (s)\n      2'd0: x = a;\n      2'd1: x = b;\n      2'd2: x = c;\n    endcase\nendmodule",
+    [2],
+  ],
+  [
+    '(* FULL_CASE *): attribute names are case-sensitive (Warning 10335, unrecognized; 10270, 10240)',
+    "module t (input [1:0] s, input a, b, c, output reg x);\n  always @* (* FULL_CASE *) case (s)\n    2'd0: x = a;\n    2'd1: x = b;\n    2'd2: x = c;\n  endcase\nendmodule",
+    [2],
+  ],
+  [
     'an override in a macro continued on the next line with \\ (Warning 10240)',
     `\`define CHILD_PARAM \\\n  #(.R(1))\n${CHILD}\nmodule t (input d, e, output q);\n  child \`CHILD_PARAM u (.d(d), .e(e), .q(q));\nendmodule`,
     [4],

@@ -31,8 +31,10 @@ export interface ScannedFile {
   readonly hidden: readonly LineSpan[];
   /** Verilog: where the `full_case` marks of active code start (`blank.ts`). */
   readonly fullCase: FullCaseMarks;
-  /** Verilog: the `` `define ``s of active code, in order (`blank.ts`). */
+  /** Verilog: every `` `define `` of the file, in order, active or not (`blank.ts`). */
   readonly defines: readonly MacroDefinition[];
+  /** Verilog: the code with every `ifdef branch kept (`blank.ts`), for the search for parameter overrides. */
+  readonly everyBranch: string;
   readonly units: readonly ScannedUnit[];
 }
 
@@ -49,7 +51,7 @@ export function scannedFile(file: FileAnalysis): ScannedFile {
 function scanFile(file: FileAnalysis): ScannedFile {
   // As synthesis reads it: `ifdef SYNTHESIS code is checked, `ifndef SYNTHESIS (and the else of `ifdef SYNTHESIS) is not.
   const blanked = blankSource(file.language, file.content, 'synthesis');
-  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCase: blanked.fullCase, defines: blanked.defines };
+  const base = { file, code: blanked.code, lineOf: lineIndex(blanked.code), hidden: blanked.simOnlyRegions, fullCase: blanked.fullCase, defines: blanked.defines, everyBranch: blanked.everyBranch };
   const own = synthesisUnits(file, blanked.code).map((unit) => ({ unit, ownsUnit: true }));
   const foreign = foreignArchitectures(base).map((unit) => ({ unit, ownsUnit: false }));
   return { ...base, units: [...own, ...foreign] };

@@ -8,19 +8,22 @@
  * them; one that something overrides is checked for every value its parameters may take.
  * Overrides are a Verilog instance with `#( … )` or `#2`, a `defparam`, a macro whose
  * expansion holds `#` (`child `PARAMS u (…)`), and a VHDL instance with a `generic map`.
- * A `defparam` reaches every instance of the name its path ends in: those of the module
- * that holds it for `u.R`, those of the whole project for a deeper path (`g2.u.R`,
- * `ua.u.R`). What cannot be resolved (no such instance, a macro used anywhere but after a
- * module name or as a delay) is taken to reach every module. Macros are the
- * `` `define ``s of active code (`blank.ts`), expanded through each other. Read from the
- * code synthesis sees; a testbench's override counts too. Pure.
+ * A module named through a macro (`` `CELL #(.R(1)) u (…) ``) is each module the macro may
+ * expand to. A `defparam` reaches every instance of the name its path ends in: those of the
+ * module that holds it for `u.R`, those of the whole project for a deeper path (`g2.u.R`,
+ * `ua.u.R`). What cannot be resolved (no such instance, an unknown macro, a macro used
+ * anywhere but after a module name or as a delay) is taken to reach every module.
+ *
+ * Every `ifdef branch is read, and every `` `define `` in any branch is one of a macro's
+ * texts: a branch the file alone leaves out may test a macro an included file defines, and
+ * synthesis may take it. Reading more can only find more overrides. Pure.
  */
 
 import type { MacroDefinition } from '../tbDetect/blank';
 import type { FileAnalysis, ProjectAnalysis } from '../tbDetect/types';
 import { closingBracket } from './brackets';
 import { escapeRegExp } from './constructText';
-import { scannedFile } from './scan';
+import { scannedFile, type ScannedFile } from './scan';
 
 /** Whether something in the project may override the parameters of the module of this name. */
 export type OverriddenModules = (moduleName: string) => boolean;
@@ -52,48 +55,10 @@ const INSTANTIATION = /\b([A-Za-z_]\w*)\s+(?:#\s*(?:\([^;]*?\)|\w+)\s*)?([A-Za-z
 const NEXT_INSTANCE = /^\s*,\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)?\(/;
 /** Words an instantiation's first word cannot be. */
 const NOT_AN_INSTANTIATION = new Set(['module', 'macromodule', 'function', 'task', 'primitive']);
+/** Compiler directives: `` `define F(a) … `` is no instance of a module `define`. */
+const DIRECTIVES = new Set(['define', 'undef', 'ifdef', 'ifndef', 'elsif', 'else', 'endif', 'include', 'timescale', 'resetall', 'celldefine', 'endcelldefine', 'default_nettype', 'line', 'pragma']);
 
-/**
- * Every instance in `scope` with its module, those of an instantiation that declares
- * several included: `child v (…), u (…);` is `v` and `u`, both of `child`.
- */
-function instancesIn(scope: string): { readonly module: string; readonly name: string }[] {
-  return [...scope.matchAll(INSTANTIATION)].flatMap((m) => {
-    if (NOT_AN_INSTANTIATION.has(m[1])) return [];
-    const instances = [{ module: m[1], name: m[2] }];
-    let close = closingBracket(scope, (m.index ?? 0) + m[0].length - 1);
-    for (let next = NEXT_INSTANCE.exec(scope.slice(close + 1)); close >= 0 && next; next = NEXT_INSTANCE.exec(scope.slice(close + 1))) {
-      instances.push({ module: m[1], name: next[1] });
-      close = closingBracket(scope, close + 1 + next[0].length - 1);
-    }
-    return instances;
-  });
-}
-
-/** The modules of every instance named `instance` in `scope`. */
-const instanceModules = (scope: string, instance: string): string[] =>
-  instancesIn(scope).filter((i) => i.name === instance).map((i) => i.module);
-
-/**
- * The modules the `defparam`s of `module` reach. `u.R` reaches every instance named `u`
- * in that module (two `generate` blocks may each have one); a deeper path, or a name the
- * module has no instance of, every instance of that name in the project.
- */
-function defparamTargets(module: string, allModules: readonly string[]): string[] {
-  return [...module.matchAll(DEFPARAM)].flatMap((statement) =>
-    statement[1].split(',').flatMap((assignment) => {
-      const path = PATH.exec(assignment)?.[1].split('.').map((s) => s.trim());
-      if (path === undefined) throw new Unresolved();
-      const instance = path[path.length - 2];
-      const local = path.length === 2 ? instanceModules(module, instance) : [];
-      const targets = local.length > 0 ? local : allModules.flatMap((m) => instanceModules(m, instance));
-      if (targets.length === 0) throw new Unresolved();
-      return targets;
-    }),
-  );
-}
-
-/** The project's macros: each name with the texts its active `` `define ``s give it. */
+/** The project's macros: each name with the texts its `` `define ``s give it. */
 class Macros {
   private readonly texts = new Map<string, string[]>();
 
@@ -127,27 +92,98 @@ class Macros {
   overriding(): string[] {
     return [...this.texts.keys()].filter((name) => this.expansions(name).some((text) => text.includes('#')));
   }
-}
 
-/**
- * The modules the uses of overriding macros in `code` reach: `child `PARAMS u (…)` the module
- * before it, `` `define CHILD child #(…) `` the module its expansion starts with. A use after
- * `=` or `<=` is a delay (`q <= `DLY d;`); any other use reaches every module.
- */
-function macroTargets(code: string, macros: Macros, overriding: readonly string[]): string[] {
-  if (overriding.length === 0) return [];
-  const uses = new RegExp(`\`(${overriding.map(escapeRegExp).join('|')})\\b`, 'g');
-  return [...code.matchAll(uses)].flatMap((use) => {
-    const before = code.slice(0, use.index).trimEnd();
-    if (/<?=$/.test(before)) return [];
-    const preceding = /([A-Za-z_]\w*)$/.exec(before)?.[1];
-    if (preceding !== undefined && !NOT_A_MODULE.has(preceding)) return [preceding];
-    return macros.expansions(use[1]).map((text) => {
-      const leading = /^\s*([A-Za-z_]\w*)\s*#/.exec(text)?.[1];
+  /** The module a name at `at` in `code` stands for: itself, or each module a macro there may expand to (`` `CELL ``); a directive stands for none. */
+  modulesAt(code: string, at: number, name: string): string[] {
+    if (code[at - 1] !== '`') return [name];
+    return DIRECTIVES.has(name) ? [] : this.leadingNames(name);
+  }
+
+  /** The module names a macro's expansions start with: `` `define CELL child `` is `child`. A macro that names none, or is unknown, is unresolved. */
+  leadingNames(name: string): string[] {
+    const expansions = this.expansions(name);
+    if (expansions.length === 0) throw new Unresolved();
+    return expansions.map((text) => {
+      const leading = /^\s*([A-Za-z_]\w*)/.exec(text)?.[1];
       if (leading === undefined) throw new Unresolved();
       return leading;
     });
+  }
+}
+
+/** One file's code for the search, and its macros' own texts, which are no code there. */
+interface Source {
+  readonly code: string;
+  readonly inDefine: (at: number) => boolean;
+}
+
+const sourceOf = (scan: ScannedFile): Source => ({
+  code: scan.everyBranch,
+  inDefine: (at) => scan.defines.some((d) => at >= d.from && at < d.to),
+});
+
+/**
+ * Every instance in `scope` with its module, those of an instantiation that declares
+ * several included: `child v (…), u (…);` is `v` and `u`, both of `child`.
+ */
+function instancesIn(scope: string, macros: Macros): { readonly module: string; readonly name: string }[] {
+  return [...scope.matchAll(INSTANTIATION)].flatMap((m) => {
+    if (NOT_AN_INSTANTIATION.has(m[1])) return [];
+    const names = [m[2]];
+    let close = closingBracket(scope, (m.index ?? 0) + m[0].length - 1);
+    for (let next = NEXT_INSTANCE.exec(scope.slice(close + 1)); close >= 0 && next; next = NEXT_INSTANCE.exec(scope.slice(close + 1))) {
+      names.push(next[1]);
+      close = closingBracket(scope, close + 1 + next[0].length - 1);
+    }
+    const modules = macros.modulesAt(scope, m.index ?? 0, m[1]);
+    return modules.flatMap((module) => names.map((name) => ({ module, name })));
   });
+}
+
+/**
+ * The modules the `defparam`s of `module` reach. `u.R` reaches every instance named `u`
+ * in that module (two `generate` blocks may each have one); a deeper path, or a name the
+ * module has no instance of, every instance of that name in the project.
+ */
+function defparamTargets(module: string, project: Project): string[] {
+  const instanceModules = (scope: string, instance: string) =>
+    instancesIn(scope, project.macros).filter((i) => i.name === instance).map((i) => i.module);
+  return [...module.matchAll(DEFPARAM)].flatMap((statement) =>
+    statement[1].split(',').flatMap((assignment) => {
+      const path = PATH.exec(assignment)?.[1].split('.').map((s) => s.trim());
+      if (path === undefined) throw new Unresolved();
+      const instance = path[path.length - 2];
+      const local = path.length === 2 ? instanceModules(module, instance) : [];
+      const targets = local.length > 0 ? local : project.modules.flatMap((m) => instanceModules(m, instance));
+      if (targets.length === 0) throw new Unresolved();
+      return targets;
+    }),
+  );
+}
+
+/**
+ * The modules the uses of overriding macros in `source` reach: `child `PARAMS u (…)` the
+ * module before it, `` `define CHILD child #(…) `` the module its expansion starts with. A
+ * use after `=` or `<=` is a delay (`q <= `DLY d;`); any other use reaches every module.
+ */
+function macroTargets(source: Source, project: Project): string[] {
+  if (project.overriding.length === 0) return [];
+  const uses = new RegExp(`\`(${project.overriding.map(escapeRegExp).join('|')})\\b`, 'g');
+  return [...source.code.matchAll(uses)].flatMap((use) => {
+    if (source.inDefine(use.index ?? 0)) return [];
+    const before = source.code.slice(0, use.index).trimEnd();
+    if (/<?=$/.test(before)) return [];
+    const preceding = /([A-Za-z_]\w*)$/.exec(before);
+    if (preceding !== null && !NOT_A_MODULE.has(preceding[1])) return project.macros.modulesAt(before, preceding.index, preceding[1]);
+    return project.macros.leadingNames(use[1]);
+  });
+}
+
+interface Project {
+  readonly macros: Macros;
+  readonly overriding: readonly string[];
+  /** Every Verilog module of the project, its every branch. */
+  readonly modules: readonly string[];
 }
 
 interface Found {
@@ -155,25 +191,33 @@ interface Found {
   readonly vhdl: Set<string>;
 }
 
-function overriddenIn(file: FileAnalysis, project: { macros: Macros; overriding: readonly string[]; modules: readonly string[] }, found: Found): void {
-  const { code } = scannedFile(file);
+/** The modules one Verilog file overrides: by `#`, by `defparam`, by macros. */
+function verilogTargets(scan: ScannedFile, project: Project): string[] {
+  const source = sourceOf(scan);
+  const byHash = [...source.code.matchAll(VERILOG_OVERRIDE)]
+    .filter((m) => !source.inDefine(m.index ?? 0))
+    .flatMap((m) => project.macros.modulesAt(source.code, m.index ?? 0, m[1]));
+  const byDefparam = [...source.code.matchAll(MODULE)].flatMap((module) => defparamTargets(module[0], project));
+  return [...byHash, ...byDefparam, ...macroTargets(source, project)];
+}
+
+function overriddenIn(file: FileAnalysis, project: Project, found: Found): void {
+  const scan = scannedFile(file);
   if (file.language === 'vhdl') {
-    for (const m of code.matchAll(VHDL_GENERIC_MAP)) found.vhdl.add(m[1].toLowerCase());
+    for (const m of scan.code.matchAll(VHDL_GENERIC_MAP)) found.vhdl.add(m[1].toLowerCase());
     return;
   }
-  for (const m of code.matchAll(VERILOG_OVERRIDE)) found.verilog.add(m[1]);
-  for (const module of code.matchAll(MODULE)) for (const target of defparamTargets(module[0], project.modules)) found.verilog.add(target);
-  for (const target of macroTargets(code, project.macros, project.overriding)) found.verilog.add(target);
+  for (const target of verilogTargets(scan, project)) found.verilog.add(target);
 }
 
 export function overriddenModules(raw: ProjectAnalysis): OverriddenModules {
   const files = [...raw.byFile.values()];
   const verilog = files.filter((f) => f.language === 'verilog').map((f) => scannedFile(f));
   const macros = new Macros(verilog.flatMap((scan) => scan.defines));
-  const modules = verilog.flatMap((scan) => [...scan.code.matchAll(MODULE)].map((m) => m[0]));
+  const modules = verilog.flatMap((scan) => [...scan.everyBranch.matchAll(MODULE)].map((m) => m[0]));
   const found: Found = { verilog: new Set(), vhdl: new Set() };
   try {
-    const project = { macros, overriding: macros.overriding(), modules };
+    const project: Project = { macros, overriding: macros.overriding(), modules };
     for (const file of files) overriddenIn(file, project, found);
   } catch (e) {
     if (e instanceof Unresolved) return ALL_OVERRIDDEN;

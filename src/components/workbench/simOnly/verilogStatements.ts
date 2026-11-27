@@ -31,7 +31,20 @@ export interface Assigned {
   /** Bits (`q[0]`), signals of unknown width (`q`), and bits known only while running (`q[?]`). */
   readonly some: ReadonlySet<string>;
   readonly every: ReadonlySet<string>;
+  /**
+   * The signals every path writes something of: wholly, a bit, or bits the check cannot
+   * follow (`q[?]`, a loop it cannot run). A whole signal whose width is not known is
+   * unsure only when every path may write it; a path that writes nothing of it keeps it.
+   */
+  readonly cover: ReadonlySet<string>;
 }
+
+/** The signals of `targets`: `q` for `q[0]` and `q[?]`. */
+const signalsOf = (targets: ReadonlySet<string>): Set<string> => new Set([...targets].map(signalOf));
+
+/** What every one of the sets holds, by name. */
+const common = (sets: readonly ReadonlySet<string>[]): Set<string> =>
+  sets.length === 0 ? new Set() : new Set([...sets[0]].filter((name) => sets.every((s) => s.has(name))));
 
 /** The code, the declared range of a signal when it is known, and the module's constants. */
 export interface StatementContext {
@@ -200,13 +213,14 @@ function followedBits(ctx: StatementContext, name: string, index: string): strin
   const bindings = everyBinding(ctx.loops, ctx.constants, MAX_LOOP_RUNS);
   if (bindings === undefined) return undefined;
   const bits: string[] = [];
-  if (ctx.work) ctx.work.steps += bindings.length;
   for (const b of bindings) {
     const range = indexRange(index, b);
     const named = range && bitsOf(name, range);
     if (!named) return undefined;
     bits.push(...named);
   }
+  // Every bit counts: `q[i +: 256]` over 256 runs is 65 536 of them.
+  if (ctx.work) ctx.work.steps += bits.length;
   return bits;
 }
 
@@ -257,7 +271,7 @@ function simpleStatement(ctx: StatementContext, i: number): Assigned {
   const semicolon = ctx.text.indexOf(';', i);
   const end = semicolon < 0 ? ctx.text.length : semicolon + 1;
   const assigned = new Set(assignedBits(ctx, ctx.text.slice(i, end)));
-  return { end, some: assigned, every: assigned };
+  return { end, some: assigned, every: assigned, cover: signalsOf(assigned) };
 }
 
 function blockStatement(ctx: StatementContext, i: number): Assigned {
@@ -273,7 +287,7 @@ function blockStatement(ctx: StatementContext, i: number): Assigned {
     parts.push(part);
     j = Math.max(part.end, j + 1);
   }
-  return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)) };
+  return { end: j + 'end'.length, some: union(parts.map((p) => p.some)), every: union(parts.map((p) => p.every)), cover: union(parts.map((p) => p.cover)) };
 }
 
 /** A number as written, `4'hF`, `1'b0`: its letters are no names. */
@@ -358,12 +372,12 @@ function ifStatement(ctx: StatementContext, i: number): Assigned {
   const then = statementAssigns({ ...ctx, unsure: thenUnsure }, condition.after);
   const next = skipBlanks(ctx.text, then.end);
   const hasElse = wordAt(ctx.text, next) === 'else';
-  const otherwise = hasElse ? statementAssigns({ ...ctx, unsure: elseUnsure }, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING };
+  const otherwise = hasElse ? statementAssigns({ ...ctx, unsure: elseUnsure }, next + 'else'.length) : { end: then.end, some: NOTHING, every: NOTHING, cover: NOTHING };
   const decided = elaborationDecision(ctx, condition.inside, condition.after - condition.inside.length - 1);
   for (const target of decided === false ? [] : thenUnsure) ctx.unsure.add(target);
   for (const target of decided === true ? [] : elseUnsure) ctx.unsure.add(target);
   if (decided !== undefined) return { ...(decided ? then : otherwise), end: otherwise.end };
-  return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]) };
+  return { end: otherwise.end, some: union([then.some, otherwise.some]), every: intersection(ctx, [then.every, otherwise.every]), cover: common([then.cover, otherwise.cover]) };
 }
 
 /** A sized number in a concatenation: `2'b01`, `4'hF`. */
@@ -528,8 +542,14 @@ function caseStatement(ctx: StatementContext, i: number): Assigned {
     j = skipBlanks(text, Math.max(item.end, j + 1));
   }
   const complete = hasDefault || fullCase || labelsNameEveryValue(ctx, selector.inside, { items: labels, kind: wordAt(text, i) as CaseKind });
-  const every = complete ? intersection(ctx, items.map((it) => it.every)) : NOTHING;
-  return { end: j + 'endcase'.length, some: union(items.map((it) => it.some)), every };
+  return { end: j + 'endcase'.length, ...caseItems(ctx, items, complete) };
+}
+
+/** What a case's items assign together: on every path only when the case names every value. */
+function caseItems(ctx: StatementContext, items: readonly Assigned[], complete: boolean): Omit<Assigned, 'end'> {
+  const some = union(items.map((it) => it.some));
+  if (!complete) return { some, every: NOTHING, cover: NOTHING };
+  return { some, every: intersection(ctx, items.map((it) => it.every)), cover: common(items.map((it) => it.cover)) };
 }
 
 const CONSTANT_FOR = /^\s*(?:(?:integer|int|genvar)\s+)?([A-Za-z_]\w*)\s*=\s*([^;]+);\s*([A-Za-z_]\w*)\s*(<=|<|>=|>|!=)\s*([^;]+);([^;]*)$/;
@@ -581,7 +601,8 @@ function loopStatement(ctx: StatementContext, i: number): Assigned {
   const inner = loop && values ? { ...ctx, loops: new Map([...ctx.loops, [loop.name, values]]) } : ctx;
   const body = statementAssigns(inner, header.after);
   if (!values) markUnsure(ctx, body.some);
-  return { end: body.end, some: body.some, every: loop?.runs ? body.every : NOTHING };
+  // A loop may write what its body writes: one the check cannot run may cover its targets.
+  return { end: body.end, some: body.some, every: loop?.runs ? body.every : NOTHING, cover: body.cover };
 }
 
 /** What a loop the check cannot run writes (bounds like `$clog2(N)`, `while`, `repeat`): it may be any of those bits. */
@@ -604,8 +625,8 @@ const STATEMENT_BY_KEYWORD: ReadonlyMap<string, (ctx: StatementContext, i: numbe
 /** What the statement at `from` assigns, on some path and on every path, and where it ends. */
 export function statementAssigns(ctx: StatementContext, from: number): Assigned {
   const i = skipBlanks(ctx.text, from);
-  if (i >= ctx.text.length) return { end: ctx.text.length, some: NOTHING, every: NOTHING };
-  if (ctx.text[i] === ';') return { end: i + 1, some: NOTHING, every: NOTHING };
+  if (i >= ctx.text.length) return { end: ctx.text.length, some: NOTHING, every: NOTHING, cover: NOTHING };
+  if (ctx.text[i] === ';') return { end: i + 1, some: NOTHING, every: NOTHING, cover: NOTHING };
   if (ctx.work) ctx.work.steps++;
   return (STATEMENT_BY_KEYWORD.get(wordAt(ctx.text, i)) ?? simpleStatement)(ctx, i);
 }
@@ -635,11 +656,13 @@ export type FixedView = Pick<StatementContext, 'constants' | 'rangeOf'>;
 /**
  * The targets some path of `assigned` leaves unassigned, but not those the check is unsure
  * of: a bit `unsure` names, or a signal of unknown width (no bits) that a loop the check
- * cannot follow writes.
+ * cannot follow writes, when every path may write it (`cover`). A path that writes nothing
+ * of it keeps it whatever the loop does: `if (en) begin q = d; for (…) q[i] = …; end`.
  */
 function surelyKept(ctx: StatementContext, assigned: Assigned, unsure: ReadonlySet<string>): string[] {
   const unsureSignals = new Set([...unsure].map(signalOf));
-  return notAlwaysAssigned(ctx, assigned).filter((t) => !unsure.has(t) && !(t === signalOf(t) && unsureSignals.has(t)));
+  const unsureWhole = (t: string) => t === signalOf(t) && unsureSignals.has(t) && assigned.cover.has(t);
+  return notAlwaysAssigned(ctx, assigned).filter((t) => !unsure.has(t) && !unsureWhole(t));
 }
 
 /**

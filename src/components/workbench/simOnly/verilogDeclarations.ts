@@ -91,7 +91,7 @@ function parameterItems(code: string): ParameterItem[] {
  * parameter has its default value, which an instance may override.
  */
 export function verilogConstants(code: string): Bindings {
-  return exactValues(unambiguous(parameterItems(code)));
+  return exactValues(unambiguous(parameterItems(code), code));
 }
 
 /**
@@ -99,11 +99,25 @@ export function verilogConstants(code: string): Bindings {
  * declared twice: two `generate` blocks may each declare their own `ON`, and the
  * module-wide value would be the wrong one in the other block.
  */
-function unambiguous(items: readonly ParameterItem[]): ParameterItem[] {
+function unambiguous(items: readonly ParameterItem[], code: string): ParameterItem[] {
   const declarations = [...new Map(items.map((item) => [item.at, item])).values()];
   const declared = new Map<string, number>();
   for (const { name } of declarations) declared.set(name, (declared.get(name) ?? 0) + 1);
-  return declarations.filter((item) => declared.get(item.name) === 1);
+  const variables = variableNames(code);
+  return declarations.filter((item) => declared.get(item.name) === 1 && !variables.has(item.name));
+}
+
+/** `integer` declaring variables, not the type of a `parameter integer N`. */
+const VARIABLE_INTEGER = /(?<!\b(?:parameter|localparam)\s+)\binteger\b([^;]*)/g;
+
+/**
+ * The names the module declares as variables or nets, anywhere: a named block's `reg ON`
+ * shadows a module's `localparam ON` there, so a name in both is read as no constant.
+ */
+function variableNames(code: string): ReadonlySet<string> {
+  const declared = [...code.matchAll(DECLARATION)].flatMap((m) => declaredNames(m[3]).map((d) => d.name));
+  const integers = [...code.matchAll(VARIABLE_INTEGER)].flatMap((m) => declaredNames(m[1]).map((d) => d.name));
+  return new Set([...declared, ...integers]);
 }
 
 /**
@@ -116,7 +130,7 @@ function unambiguous(items: readonly ParameterItem[]): ParameterItem[] {
  * `ON`): the module-wide value would be the wrong one in the other block.
  */
 export function verilogFixedConstants(code: string, parametersFixed = false): Bindings {
-  return exactValues(unambiguous(parameterItems(code)).filter((item) => item.local || parametersFixed));
+  return exactValues(unambiguous(parameterItems(code), code).filter((item) => item.local || parametersFixed));
 }
 
 const INTEGER = /\b(?:integer|genvar)\b([^;]*)/g;
@@ -129,7 +143,8 @@ const GENVAR = /\bgenvar\b([^;]*)/g;
  */
 export function verilogElaborationNames(code: string): ReadonlySet<string> {
   const genvars = [...code.matchAll(GENVAR)].flatMap((m) => m[1].split(',').map((item) => /^\s*([A-Za-z_]\w*)/.exec(item)?.[1]));
-  const parameters = parameterItems(code).map((p) => p.name);
+  const variables = variableNames(code);
+  const parameters = parameterItems(code).map((p) => p.name).filter((name) => !variables.has(name));
   return new Set([...genvars, ...parameters].filter((name): name is string => name !== undefined));
 }
 

@@ -109,6 +109,31 @@ describe('a subprogram nothing calls runs nowhere', () => {
     expect(fileIoLines(content)).toEqual(linesWith(content, 'file f :', 'readline('));
   });
 
+  test("a function an entity declares is seen by its architectures in other files: the call there counts (Quartus builds the ROM from the file's contents, or none)", () => {
+    const entity = [
+      'library ieee;',
+      'use ieee.std_logic_1164.all;',
+      'use std.textio.all;',
+      'entity top is',
+      `  port (${BOARD_PORTS});`,
+      '  type rom_t is array (0 to 3) of std_logic_vector(9 downto 0);',
+      '  impure function load(name : string) return rom_t is',
+      '    file f : text open read_mode is name;',
+      '    variable l : line;',
+      '    variable r : rom_t;',
+      '  begin',
+      '    readline(f, l);',
+      '    return r;',
+      '  end function;',
+      'end entity;',
+    ].join('\n');
+    const architecture = 'architecture rtl of top is\n  constant ROM : rom_t := load("rom.txt");\nbegin\n  LEDR <= ROM(0);\nend architecture;';
+    const lines = checkOf([source('e.vhd', entity), source('a.vhd', architecture)]).findings
+      .filter((f) => f.construct === 'vhdl-file-io' && f.fileId === 'e.vhd')
+      .map((f) => f.line);
+    expect(lines).toEqual(linesWith(entity, 'file f :', 'variable l : line', 'readline('));
+  });
+
   test('a procedure that writes a line, never called', () => {
     expect(fileIoLines(design('procedure say is\n  variable l : line;\nbegin\n  write(l, 1);\n  writeline(output, l);\nend procedure;'))).toEqual([]);
   });

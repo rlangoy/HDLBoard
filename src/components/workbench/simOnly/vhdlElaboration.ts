@@ -22,14 +22,31 @@ interface Subprogram extends Range {
   readonly isFunctionBody: boolean;
   /** A function or procedure with a body, not a declaration alone. */
   readonly hasBody: boolean;
+  /**
+   * Declared inside an architecture (its declarations or a process): seen only there, so
+   * every call of it is in this unit's code. One in an entity's declarations may be called
+   * from an architecture in another file, which this unit's code does not hold.
+   */
+  readonly local: boolean;
 }
 
 const SUBPROGRAM_NAME = /^(function|procedure)\s+(\w+)/i;
+const ARCHITECTURE = /\barchitecture\s+(\w+)\s+of\s+\w+\s+is\b/gi;
+
+/** Where the unit's architectures are, in its code: from `architecture a of e is` to its `end architecture` or `end a`. */
+function architectureRegions(code: string): Range[] {
+  return [...code.matchAll(ARCHITECTURE)].map((m) => {
+    const from = m.index ?? 0;
+    const end = new RegExp(`\\bend\\s+(?:architecture\\b|${m[1]}\\b)`, 'i').exec(code.slice(from));
+    return { from, to: end ? from + end.index + end[0].length : code.length };
+  });
+}
 /** Declarations evaluated once, at elaboration: `constant C : T := …;`, `signal s : T(…) := …;`. */
 const ONCE_DECLARATION = /\b(?:constant|signal)\s+\w+(?:\s*,\s*\w+)*\s*:[^;]*;/gi;
 
 /** Every function and procedure of the unit, at file offsets. */
 function subprogramsOf(t: UnitText): Subprogram[] {
+  const architectures = architectureRegions(t.code);
   return regionsIn(t.code.split('\n'))
     .filter((region) => region.kind === 'subprogram')
     .flatMap((region) => {
@@ -38,7 +55,8 @@ function subprogramsOf(t: UnitText): Subprogram[] {
       if (!header) return [];
       const hasBody = /\bbegin\b/i.test(text);
       const isFunctionBody = header[1].toLowerCase() === 'function' && hasBody;
-      return [{ name: header[2].toLowerCase(), isFunctionBody, hasBody, from: t.base + region.start, to: t.base + region.end }];
+      const local = inside(region.start, architectures);
+      return [{ name: header[2].toLowerCase(), isFunctionBody, hasBody, local, from: t.base + region.start, to: t.base + region.end }];
     });
 }
 
@@ -65,7 +83,7 @@ function innermostAt(subprograms: readonly Subprogram[], at: number): Subprogram
  * commented out (`signal ram : ram_type;-- := init_ram(init_file);`); Quartus builds it.
  */
 export function uncalledSubprograms(t: UnitText): readonly Range[] {
-  const bodies = subprogramsOf(t).filter((s) => s.hasBody);
+  const bodies = subprogramsOf(t).filter((s) => s.hasBody && s.local);
   const calls = new Map(bodies.map((body) => [body, callsOf(t, body)]));
   // Start from every body and drop the ones called from code that runs, until none is.
   const uncalled = new Set(bodies);
@@ -88,7 +106,7 @@ export function uncalledSubprograms(t: UnitText): readonly Range[] {
  */
 export function elaborationFunctions(t: UnitText): readonly Range[] {
   const subprograms = subprogramsOf(t);
-  const bodies = subprograms.filter((s) => s.isFunctionBody);
+  const bodies = subprograms.filter((s) => s.isFunctionBody && s.local);
   if (bodies.length === 0) return [];
   const once = matchesIn(t, ONCE_DECLARATION).map(([at, m]) => ({ from: at, to: at + m[0].length }));
   const calls = new Map(bodies.map((body) => [body, callsOf(t, body)]));
