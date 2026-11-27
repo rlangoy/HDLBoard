@@ -12,14 +12,14 @@ import type { UnitText } from '../tbDetect/rules';
 import { escapeRegExp } from './constructText';
 import { ALL_BITS, vhdlBits } from './bits';
 import type { Found } from './constructs';
-import { testsLevelOf } from './vhdlEdges';
+import { eventDirectionOf } from './vhdlEdges';
 import { vhdlConcatFeedback, vhdlWiringBounds, type BoundsOf } from './vhdlWiring';
 import { feedsBack, registerFound, SAME_NAME, type BitAlignment, type SelectedBits, synthesizedBlockText, tidy, twoClocks, unique, type Clocked, type Target } from './registerShared';
 import type { RegisterProblem, RegisterProblemKind } from './types';
 
 const sameName = SAME_NAME.vhdl;
 
-/** `event` is `clk'event`, which says no direction by itself. */
+/** `event` is a `clk'event` with no level test of `clk` beside it: it says no direction. */
 type EdgeKind = 'rising' | 'falling' | 'event';
 
 interface Edge {
@@ -36,7 +36,13 @@ function edgeOf(m: RegExpMatchArray): Edge {
   return { clock: tidy(calledClock), kind: call.toLowerCase() === 'rising_edge' ? 'rising' : 'falling' };
 }
 
-const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map(edgeOf);
+/** A `clk'event` takes its direction from the level of `clk` tested beside it: `(clk'event and clk = '0')` is the falling edge. */
+function withDirection(edge: Edge, condition: string): Edge {
+  if (edge.kind !== 'event') return edge;
+  return { clock: edge.clock, kind: eventDirectionOf(edge.clock, condition) ?? 'event' };
+}
+
+const edgesIn = (condition: string): Edge[] => [...condition.matchAll(EDGE_CALL)].map((m) => withDirection(edgeOf(m), condition));
 
 /** A signal or variable assigned as a statement: after `;`, `then`, `else`, `begin` or `=>`. */
 const VHDL_TARGET = /(?:^|;|\bthen\b|\belse\b|\bbegin\b|=>)\s*([A-Za-z_]\w*)\s*(\([^;]*?\))?\s*(?:<=|:=)/gi;
@@ -71,6 +77,8 @@ interface Chain {
   readonly levels: LevelBranch[];
   /** The level branch being read: its condition, and where its statements start. */
   open?: { readonly at: number; readonly condition: string; readonly from: number };
+  /** The clock edge of the branch being read, when its condition has one: an `if` inside sits on that edge. */
+  branchEdge?: Edge;
 }
 
 /** A finding at an offset of the process text. */
@@ -129,13 +137,24 @@ function violation(before: readonly Edge[], edges: readonly Edge[], at: number):
   // A branch without an edge after the edge (10818).
   if (!edge) return { at, kind: 'outside-edge', clocks: [first.clock] };
   if (!sameName(edge.clock, first.clock)) return { at, kind: 'two-clocks', clocks: [first.clock, edge.clock] };
-  // Both edges of one clock (10819); the same edge twice is a branch the register can't hold.
-  return { at, kind: edge.kind === first.kind ? 'outside-edge' : 'both-edges', clocks: [first.clock] };
+  // Both edges of one clock (10819). The same edge again builds: that branch runs only when the one before it does not.
+  return edge.kind === first.kind ? undefined : { at, kind: 'both-edges', clocks: [first.clock] };
+}
+
+/** The edge whose branch the innermost `if` sits in, if any. */
+const enclosingEdge = (w: Walk): Edge | undefined =>
+  w.chains.slice(0, -1).reverse().find((chain) => chain.branchEdge !== undefined)?.branchEdge;
+
+/** An edge of another clock inside an edge's branch (Quartus Error 10821); the same clock's edge there builds. */
+function edgeInsideEdge(outer: Edge | undefined, edges: readonly Edge[], at: number): Violation | undefined {
+  if (!outer) return undefined;
+  const other = edges.find((e) => !sameName(e.clock, outer.clock));
+  return other ? { at, kind: 'two-clocks', clocks: [outer.clock, other.clock] } : undefined;
 }
 
 /** `if clk'event then` with no level test of `clk`: the register would take both edges (Quartus Error 10633). */
-function eventWithoutLevel(edges: readonly Edge[], condition: string, at: number): Violation | undefined {
-  const bare = edges.find((e) => e.kind === 'event' && !testsLevelOf(e.clock, condition));
+function eventWithoutLevel(edges: readonly Edge[], at: number): Violation | undefined {
+  const bare = edges.find((e) => e.kind === 'event');
   return bare ? { at, kind: 'both-edges', clocks: [bare.clock] } : undefined;
 }
 
@@ -146,8 +165,12 @@ function endCondition(w: Walk, at: number): void {
   if (!chain || !open) return;
   const condition = w.text.slice(open.from, at);
   const edges = edgesIn(condition);
-  const bad = violation(chain.edges, edges, open.keywordAt) ?? eventWithoutLevel(edges, condition, open.keywordAt);
+  const bad =
+    violation(chain.edges, edges, open.keywordAt) ??
+    edgeInsideEdge(enclosingEdge(w), edges, open.keywordAt) ??
+    eventWithoutLevel(edges, open.keywordAt);
   if (bad) chain.bad.push(bad);
+  chain.branchEdge = edges[0];
   if (edges.length === 0 && chain.edges.length === 0) chain.open = { at: open.keywordAt, condition, from: at + 'then'.length };
   chain.edges.push(...edges);
   w.condition = undefined;
@@ -255,6 +278,7 @@ const STEP: Readonly<Record<string, (w: Walk, token: Token) => void>> = {
     const chain = innermostIf(w);
     if (!chain || w.conditionalAssignment) return;
     closeLevel(w, chain, at);
+    chain.branchEdge = undefined;
     if (chain.edges.length > 0) chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
   },
   'end if': (w, { at }) => {

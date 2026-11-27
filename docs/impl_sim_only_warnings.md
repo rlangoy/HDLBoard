@@ -195,12 +195,19 @@ counted and reset in the simulator, and Quartus refused it. Measured with **Quar
 | `if (a'event or a='1')` | Error 10633 | `vhdl-edge-template`, kind `both-edges` |
 | `if (a'event and a='1') or d='1'` | Error 10626 | `vhdl-edge-template`, kind `both-edges` |
 | `if (a'event and a='1') … elsif (b='1')` | Error 10818 | `vhdl-edge-template`, kind `outside-edge` (before the fix also a false *both edges*) |
+| The direction of a `'event` (measured 2026-11-27, after a code review): `(a'event and a/='0')` is the rising edge and `(a'event and a/='1')` the falling one; two `if`s assigning one signal on `rising_edge(a)` and `(a'event and a='0')`, on `(a'event and a='1')` and `(a'event and a='0')`, or on `(a'event and a/='0')` and `(a'event and a='0')`; `(a'event and a='1') … elsif (a'event and a='0')`; `(a'event and a='0') … elsif rising_edge(a)` | the `/=` forms build; the others Error 10819 | the `/=` forms no finding; the others kind `both-edges`. Before, a `'event` had no direction, so the two-`if` cases passed as RTL |
+| The same edge again: `if rising_edge(a) … elsif rising_edge(a)`, also after an enable (`rising_edge(a) and b = '1'`) or with a `'event` (`(a'event and a='1') … elsif rising_edge(a)`); two `if`s on `(a'event and a='1')` and `rising_edge(a)` | builds (the second branch runs only when the first does not) | no finding (it was a false *outside-edge*, or *both edges* with a `'event`) |
+| An edge of another clock inside an edge's branch: `if rising_edge(a) then if rising_edge(b)`, also after a reset, and `(b'event and b='1')` inside `(a'event and a='1')` | Error 10821: *can't infer register … because its behavior does not match any supported register model* | kind `two-clocks`, on the inner `if` (it was missed) |
+| The same clock's edge inside its edge, either direction | builds | no finding |
 | `always @(negedge a or negedge b) if (!b) …`, `always @(posedge a or posedge b or posedge c) if (b) … else if (c) …`, `always @(a or b) x <= a & b;` | accepted | no finding |
 
 The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and flags a branch that has two edges in
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
 branch. A condition is read from after its `if` or `elsif`, so parentheses around it are the condition's own: a
-`clk'event` needs a level test of `clk` among its `and`s, parenthesized or not (#48). Checked on the *FPGA Prototyping* book projects
+`clk'event` needs a level test of `clk` among its `and`s, parenthesized or not (#48), and that level gives it its
+direction (`clk = '1'` or `clk /= '0'` is the rising edge), so it is compared with other edges like `rising_edge`.
+A branch on the same edge as the one before it is accepted; an `if` on another clock's edge inside an edge's branch
+is a second clock. Checked on the *FPGA Prototyping* book projects
 for HDLBoard as HDLBoard opens them: before the fix 85 of the 118 that Quartus synthesizes were
 SIM-only for a false *both edges*, after it none; `bookStyle.test.ts` keeps HDLBoard's own fixtures in that style
 (tests/fixtures/vhdl/book-style, built by Quartus) RTL. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
@@ -270,6 +277,56 @@ declaration, code inside `translate_off`, and a unit without that port (a signal
 actual of a port map is a read. The clock comes from the active board (`CheckInput.simulatorClock`); with *Simulation
 only* nothing is checked. The examples that show the slow clock (`blinkTest`, the Basys 3 and Nexys A7
 `keyCounter7Seg`) are SIM-only on purpose, and a test says so.
+
+### 3.6 Quartus and Vivado: where the tools differ (to investigate)
+
+The design check is calibrated against **Quartus Prime 25.1 Lite** alone: every "accepted" or "Error …" in § 3.4
+and in `registerTemplates.test.ts` is a Quartus run. HDLBoard's boards are built with two tools, though: the DE1-SoC
+with Quartus, the Basys 3 and Nexys A7 with **Vivado** (no Vivado is installed on the development PC, so no Vivado
+result has been measured). Where the two disagree, one verdict cannot be right for every board.
+
+**Measured difference: a conditional assignment inside a process** (VHDL-2008 sequential conditional signal
+assignment), found 2026-11-27 while checking a code review against Quartus:
+
+```vhdl
+process (a)
+begin
+  if rising_edge(a) then
+    x <= c when b = '1' else d;   -- VHDL-2008: when … else as a sequential statement
+  end if;
+end process;
+```
+
+| Tool | Result |
+|---|---|
+| Quartus Prime 25.1 Lite, VHDL-1993 (its default) | Error 10500: *VHDL syntax error … near text "when"; expecting ";"* |
+| Quartus Prime 25.1 Lite, VHDL-2008 (`VHDL_INPUT_VERSION VHDL_2008` in the .qsf) | the same Error 10500. The setting did take effect: `process (all)` fails without it (Error 10887) and builds with it |
+| GHDL 6.0.0, `--synth --std=08` (as HDLBoard runs it) | synthesizes |
+| GHDL 6.0.0, `--std=93c` | *conditional signal assignment in sequential statement not allowed before VHDL 2008* |
+| Vivado | **not measured.** AMD lists its synthesis support in [UG901, *Supported VHDL-2008 Features*](https://docs.amd.com/r/2023.2-English/ug901-vivado-synthesis/Supported-VHDL-2008-Features); whether this construct is on it is still to be checked |
+| Quartus Prime Pro | not measured. Intel's [article 000096722](https://www.intel.com/content/www/us/en/support/programmable/articles/000096722.html) reports that Pro accepts this construct but builds a register with an enable instead of the registered multiplexer the code describes |
+
+Forum reports of Error 10500 for the same construct in Quartus Lite ([Altera community](https://community.altera.com/discussions/quartus-prime/vhdl-2008-error-10500-in-conditional-assignment/295184))
+agree with the measurement.
+
+**What the check does today:** no finding, so the design is RTL on every board. On the DE1-SoC that is wrong:
+the student's design simulates in HDLBoard and Quartus Lite refuses it. The row "when / else inside the edge" in
+`registerTemplates.test.ts` keeps today's behaviour and names the Quartus result in its label.
+
+**To investigate (future development):**
+
+1. Measure the construct with Vivado (Basys 3 and Nexys A7 projects) and with Quartus Prime Standard and Pro.
+2. Decide how a tool-dependent verdict is shown. Options: a finding on Quartus boards only (the check would need to
+   know the active board's tool: `CheckInput` has the board's simulator clock but not its toolchain, and no board
+   definition records one yet); a `quiet`
+   note on every board that names the difference; or no finding, as today.
+3. Re-run § 3.4's register rules with Vivado. They are Quartus results only: for example the latch-emulated
+   asynchronous load (Quartus Warning 13004), an edge inside another clock's edge (Error 10821) and the same edge
+   twice in one `if`/`elsif` (builds in Quartus). Vivado's verdicts and messages ([Synth 8-…]) may differ, and the
+   check's wording names no tool for that reason (§ 3.4).
+4. Look for other VHDL-2008 constructs the two tools treat differently (`process (all)` needs the VHDL-2008 setting
+   in Quartus; Quartus Lite's VHDL-2008 support is partial), and whether a Quartus project created for the DE1-SoC
+   turns VHDL-2008 on at all.
 
 ## 4. Which code is hardware
 
@@ -809,3 +866,6 @@ Steps 1–2 are independent of each other; 3 and 4 need both; 5–8 need 3 and 4
    "Simulation-only design" in the tooltip.
 5. Should the Files panel be able to group or filter files by code group (RTL / SIM-only / TB)? Not planned; the
    icons are enough for the project sizes HDLBoard sees.
+6. The check is calibrated against Quartus only, but the Basys 3 and Nexys A7 are built with Vivado. Where the tools
+   disagree (measured so far: `when … else` inside a process, refused by Quartus Lite, accepted by GHDL), should
+   the verdict depend on the board's tool? To investigate; see § 3.6.
