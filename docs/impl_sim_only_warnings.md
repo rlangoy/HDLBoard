@@ -189,11 +189,21 @@ counted and reset in the simulator, and Quartus refused it. Measured with **Quar
 | `always @(posedge up or posedge down) if (down) count <= count - 1; else count <= count + 1;` (the "reset" loads from the register: a second clock) | **Builds**, Warning 13004: *Presettable and clearable registers converted to equivalent circuits with latches. Registers power-up to an undefined state*; the board does not count | `vlog-edge-template`, kind `two-clocks` |
 | `always @(KEY_N[1:0])` keeping `count` and `key_prev` (the old Verilog example) | **Builds**, Warning 10240: *inferring latch(es) for variable "count", which holds its previous value* | `vlog-level-storage` (tier `ignored`: it builds, but the board does not behave like the simulation) |
 | `if b = '0' … elsif falling_edge(a)` (the new example), a reset and a set before the edge, `rising_edge(a) and b = '1'`, two `if`s on two clocks assigning two signals, the same clock in two `if`s, `a'event and a = '1'` | accepted | no finding (`registerTemplates.test.ts`, on vhdlRegisters.ts) |
+| `clk'event` written as textbooks write it (#48, measured 2026-11-27): `if (a'event and a='1')`, also with an empty body; `elsif (a'event and a='1')` after a reset, the reset in parentheses too; `if(` / `elsif(` with no space; `('1' = a and a'event)`, `(a='1' and a'event)`, `((a'event) and (a='1'))`; upper case; the falling edge `(a'event and a='0')`; an enable `(a'event and a='1' and d='1')` or `(rising_edge(a) and d='1')` | accepted (an enable inside the condition gives Warning 10492 when it is missing from the sensitivity list) | no finding. Before the fix every parenthesized form was a false *both edges* error |
+| `if (a'event)` and `if a'event` | Error 10633: *can't synthesize condition that contains an isolated 'EVENT predefined attribute* | `vhdl-edge-template`, kind `both-edges` |
+| `if (a'event and d='1')` (no level test of `a`) | Error 10397 | `vhdl-edge-template`, kind `both-edges` |
+| `if (a'event or a='1')` | Error 10633 | `vhdl-edge-template`, kind `both-edges` |
+| `if (a'event and a='1') or d='1'` | Error 10626 | `vhdl-edge-template`, kind `both-edges` |
+| `if (a'event and a='1') … elsif (b='1')` | Error 10818 | `vhdl-edge-template`, kind `outside-edge` (before the fix also a false *both edges*) |
 | `always @(negedge a or negedge b) if (!b) …`, `always @(posedge a or posedge b or posedge c) if (b) … else if (c) …`, `always @(a or b) x <= a & b;` | accepted | no finding |
 
 The VHDL matcher walks each process's `if` / `elsif` / `else` / `end if`, and flags a branch that has two edges in
 its condition, or comes after a branch with an edge in the same `if`. The `else` of `x <= a when c else b` is not a
-branch. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
+branch. A condition is read from after its `if` or `elsif`, so parentheses around it are the condition's own: a
+`clk'event` needs a level test of `clk` among its `and`s, parenthesized or not (#48). Checked on the *FPGA Prototyping* book projects
+for HDLBoard as HDLBoard opens them: before the fix 85 of the 118 that Quartus synthesizes were
+SIM-only for a false *both edges*, after it none; `bookStyle.test.ts` keeps HDLBoard's own fixtures in that style
+(tests/fixtures/vhdl/book-style, built by Quartus) RTL. The Verilog matchers read the sensitivity list: with two or more edges, the first `if` must name one of them;
 with none, a variable assigned with `<=` must not be read in the block (it keeps a value, so Quartus makes a latch).
 The design check reads the code as synthesis does (`blankSource(…, 'synthesis')`: SYNTHESIS defined), so an
 `ifdef SYNTHESIS branch is checked and its `else`, like `ifndef SYNTHESIS, is not. Two `if`s or blocks clash on a

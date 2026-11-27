@@ -42,6 +42,33 @@ const VHDL: [label: string, process: string, lines: number[]][] = [
   ['when / else inside the edge (accepted)', P("if rising_edge(a) then\nx <= c when b = '1' else d;\nend if;"), []],
 ];
 
+/** An edge condition: its process starts on line 9 of `vhdl()`, so the `if` is on line 11. */
+const edgeIf = (condition: string) => P(`if ${condition} then\nx <= c;\nend if;`);
+
+/** `clk'event` in the condition, written as students write it (#48): in parentheses, in any order, in any case. */
+const EVENT_CONDITIONS: [label: string, process: string, lines: number[]][] = [
+  ["(a'event and a='1') (accepted)", edgeIf("(a'event and a='1')"), []],
+  ["(a'event and a='1') with an empty body (accepted)", P("if (a'event and a='1') then\nend if;"), []],
+  ["elsif (a'event and a='1') after a reset (accepted)", P("if b = '1' then\nx <= '0';\nelsif (a'event and a='1') then\nx <= c;\nend if;"), []],
+  ["a reset in parentheses, then elsif (a'event and a='1') (accepted)", P("if (b='1') then\nx <= '0';\nelsif (a'event and a='1') then\nx <= c;\nend if;"), []],
+  ["if( and elsif( with no space (accepted)", P("if(b='1') then\nx <= '0';\nelsif(a'event and a='1') then\nx <= c;\nend if;"), []],
+  ["('1' = a and a'event) (accepted)", edgeIf("('1' = a and a'event)"), []],
+  ["(a='1' and a'event) (accepted)", edgeIf("(a='1' and a'event)"), []],
+  ["((a'event) and (a='1')) (accepted)", edgeIf("((a'event) and (a='1'))"), []],
+  ["( a'event and a = '1' ) with spaces (accepted)", edgeIf("( a'event and a = '1' )"), []],
+  ["IF (A'EVENT AND A='1') THEN in upper case (accepted)", P("IF (A'EVENT AND A='1') THEN\nx <= c;\nEND IF;"), []],
+  ["(a'event and a='0'), the falling edge (accepted)", edgeIf("(a'event and a='0')"), []],
+  ["(a'event and a='1' and d='1'), an enable (accepted)", edgeIf("(a'event and a='1' and d='1')"), []],
+  ["(rising_edge(a) and d='1'), an enable (accepted)", edgeIf("(rising_edge(a) and d='1')"), []],
+  ["an if inside (a'event and a='1') (accepted)", P("if (a'event and a='1') then\nif d = '1' then\nx <= c;\nend if;\nend if;"), []],
+  ["(a'event) alone (Error 10633)", edgeIf("(a'event)"), [11]],
+  ["a'event alone (Error 10633)", edgeIf("a'event"), [11]],
+  ["(a'event and d='1'), no level of a (Error 10397)", edgeIf("(a'event and d='1')"), [11]],
+  ["(a'event or a='1') (Error 10633)", edgeIf("(a'event or a='1')"), [11]],
+  ["(a'event and a='1') or d='1' (Error 10626)", edgeIf("(a'event and a='1') or d='1'"), [11]],
+  ["elsif (b='1') after (a'event and a='1') (Error 10818)", P("if (a'event and a='1') then\nx <= c;\nelsif (b='1') then\nx <= '0';\nend if;"), [13]],
+];
+
 const VERILOG: [label: string, body: string, lines: number[]][] = [
   ['the first if tests no edge (Error 10200)', 'always @(posedge a or posedge b) if (c) x <= 0; else x <= d;', [2]],
   ['a level always that keeps a value (Warning 10240, latches)', 'always @(a or b) if (a && !b) x <= ~x;', [2]],
@@ -55,6 +82,10 @@ const VERILOG: [label: string, body: string, lines: number[]][] = [
 
 describe('VHDL: an if Quartus can build a flip-flop from', () => {
   test.each(VHDL)('%s', (_label, process, lines) => expect(linesIn('t.vhd', vhdl(process))).toEqual(lines));
+});
+
+describe("VHDL: an if on clk'event, as Quartus reads it", () => {
+  test.each(EVENT_CONDITIONS)('%s', (_label, process, lines) => expect(linesIn('t.vhd', vhdl(process))).toEqual(lines));
 });
 
 describe('Verilog: an always Quartus can build a flip-flop from', () => {

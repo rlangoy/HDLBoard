@@ -79,6 +79,24 @@ interface FoundAt {
   readonly register: RegisterProblem;
 }
 
+/** A token of `IF_TOKEN`: where it starts and ends in the process text. */
+interface Token {
+  readonly at: number;
+  readonly end: number;
+}
+
+/**
+ * The condition of an `if` or `elsif` being read. Its text starts after the keyword, so
+ * `if (clk'event and clk = '1')` is read as the parenthesized condition it is (#48); its
+ * findings are reported on the keyword's line.
+ */
+interface OpenCondition {
+  readonly keywordAt: number;
+  readonly from: number;
+}
+
+const conditionAfter = (keyword: Token): OpenCondition => ({ keywordAt: keyword.at, from: keyword.end });
+
 interface Walk {
   readonly boundsOf: BoundsOf;
   /** The process as synthesis reads it (translate_off blanked). */
@@ -89,8 +107,8 @@ interface Walk {
   readonly found: FoundAt[];
   /** The process's outermost `if`s that have an edge, by their offset, in order. */
   readonly clocked: Clocked<number>[];
-  /** Where the condition being read starts, or -1. */
-  condition: number;
+  /** The condition being read, between its `if` or `elsif` and its `then`. */
+  condition?: OpenCondition;
   /** Inside `x <= a when c else b`, whose `else` is not a branch. */
   conditionalAssignment: boolean;
 }
@@ -124,14 +142,15 @@ function eventWithoutLevel(edges: readonly Edge[], condition: string, at: number
 /** A condition ends at its `then`: its edges are checked against the branches before it. */
 function endCondition(w: Walk, at: number): void {
   const chain = innermostIf(w);
-  if (!chain || w.condition < 0) return;
-  const condition = w.text.slice(w.condition, at);
+  const open = w.condition;
+  if (!chain || !open) return;
+  const condition = w.text.slice(open.from, at);
   const edges = edgesIn(condition);
-  const bad = violation(chain.edges, edges, w.condition) ?? eventWithoutLevel(edges, condition, w.condition);
+  const bad = violation(chain.edges, edges, open.keywordAt) ?? eventWithoutLevel(edges, condition, open.keywordAt);
   if (bad) chain.bad.push(bad);
-  if (edges.length === 0 && chain.edges.length === 0) chain.open = { at: w.condition, condition, from: at + 'then'.length };
+  if (edges.length === 0 && chain.edges.length === 0) chain.open = { at: open.keywordAt, condition, from: at + 'then'.length };
   chain.edges.push(...edges);
-  w.condition = -1;
+  w.condition = undefined;
   w.conditionalAssignment = false;
 }
 
@@ -222,23 +241,23 @@ function endIf(w: Walk, at: number): void {
   w.clocked.push({ part: chain.from, clock: edge.clock, edge: direction, targets: targetsWithBits(text) });
 }
 
-const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
-  if: (w, at) => {
-    w.chains.push({ from: at, edges: [], bad: [], levels: [] });
-    w.condition = at;
+const STEP: Readonly<Record<string, (w: Walk, token: Token) => void>> = {
+  if: (w, token) => {
+    w.chains.push({ from: token.at, edges: [], bad: [], levels: [] });
+    w.condition = conditionAfter(token);
   },
-  elsif: (w, at) => {
-    closeLevel(w, innermostIf(w), at);
-    w.condition = at;
+  elsif: (w, token) => {
+    closeLevel(w, innermostIf(w), token.at);
+    w.condition = conditionAfter(token);
   },
-  then: endCondition,
-  else: (w, at) => {
+  then: (w, { at }) => endCondition(w, at),
+  else: (w, { at }) => {
     const chain = innermostIf(w);
     if (!chain || w.conditionalAssignment) return;
     closeLevel(w, chain, at);
     if (chain.edges.length > 0) chain.bad.push({ at, kind: 'outside-edge', clocks: [chain.edges[0].clock] });
   },
-  'end if': (w, at) => {
+  'end if': (w, { at }) => {
     closeLevel(w, innermostIf(w), at);
     endIf(w, at);
   },
@@ -254,8 +273,11 @@ const STEP: Readonly<Record<string, (w: Walk, at: number) => void>> = {
 };
 
 function processViolations(text: string, context: Pick<Walk, 'signals' | 'boundsOf'>): FoundAt[] {
-  const walk: Walk = { text, ...context, chains: [], found: [], clocked: [], condition: -1, conditionalAssignment: false };
-  for (const m of text.matchAll(IF_TOKEN)) STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, m.index ?? 0);
+  const walk: Walk = { text, ...context, chains: [], found: [], clocked: [], conditionalAssignment: false };
+  for (const m of text.matchAll(IF_TOKEN)) {
+    const at = m.index ?? 0;
+    STEP[m[0].toLowerCase().replace(/\s+/g, ' ')](walk, { at, end: at + m[0].length });
+  }
   // Two `if`s of one process on two clocks, or both edges of one, that assign one signal (Quartus Errors 10820, 10819).
   const clashes = twoClocks(walk.clocked, sameName).map((c): FoundAt => ({ at: c.later, register: problem(c.kind, c.registers, c.clocks) }));
   return [...walk.found, ...clashes].sort((a, b) => a.at - b.at);
