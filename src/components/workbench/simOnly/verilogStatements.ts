@@ -408,13 +408,19 @@ function selectorWidth(selector: string, rangeOf: StatementContext['rangeOf'], w
   return whole ? Math.abs(whole.msb - whole.lsb) + 1 : selectionWidth(s, wordArrays);
 }
 
-/** The width of `s[3]` (1) or `s[3:0]` (4); none for a word of an array of vectors, or any other form. */
+/**
+ * The width of `s[3]` or `s[i]` (one bit, whatever the index), `s[3:0]` (4) or `s[i +: 2]`
+ * (2); none for a word of an array of vectors, or any other form.
+ */
 function selectionWidth(s: string, wordArrays: ReadonlySet<string>): number | undefined {
-  const selected = /^([A-Za-z_]\w*)\[/.exec(s)?.[1];
-  if (selected === undefined || wordArrays.has(selected)) return undefined;
-  if (/^[A-Za-z_]\w*\[\d+\]$/.test(s)) return 1;
-  const part = /^[A-Za-z_]\w*\[(\d+):(\d+)\]$/.exec(s);
-  return part ? Math.abs(Number(part[1]) - Number(part[2])) + 1 : undefined;
+  const selection = /^([A-Za-z_]\w*)\[([^[\]]*)\]$/.exec(s);
+  if (selection === null || wordArrays.has(selection[1])) return undefined;
+  const index = selection[2];
+  const indexed = /^[^:]*[+-]:(\d+)$/.exec(index);
+  if (indexed) return Number(indexed[1]);
+  const part = /^(\d+):(\d+)$/.exec(index);
+  if (part) return Math.abs(Number(part[1]) - Number(part[2])) + 1;
+  return index.includes(':') ? undefined : 1;
 }
 
 type CaseKind = 'case' | 'casez' | 'casex';

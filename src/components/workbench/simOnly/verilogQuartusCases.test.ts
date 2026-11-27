@@ -27,6 +27,8 @@ const top = (instance: string, ports: string, connections: string): string =>
 
 const WIDENED_CASE =
   "module t #(parameter S = 1) (input [S-1:0] s, input a, b, c, output reg x);\n  always @* case ({s, a})\n    2'b00: x = b;\n    2'b01: x = c;\n    2'b10: x = ~b;\n    2'b11: x = ~c;\n  endcase\nendmodule";
+/** A module that writes q[I] or q[1]: the same bit, and no latch, only while DEPTH is 2. */
+const CLOG2_SUB = 'module sub #(parameter DEPTH = 2) (input d, en, output reg [2:1] q);\n  localparam I = $clog2(DEPTH);\n  always @* if (en) q[I] = d; else q[1] = d;\nendmodule';
 /** A module whose case names every value of `s` only while its body parameter B is 1. */
 const SUB_B = 'module sub (input s, a, b, output reg x);\n  parameter B = 1;\n  always @* case (s)\n    0: x = a;\n    B: x = b;\n  endcase\nendmodule';
 /** A module whose `q` keeps its value unless R is 2. */
@@ -277,6 +279,51 @@ const LATCHES: [label: string, module: string, lines: number[]][] = [
   [
     "a casez on s[(W):0] with localparam [1:0] W = 1 and the label 2'b?? (no latch)",
     "module t (input [(W):0] s, input a, output reg x);\n  localparam [1:0] W = 1;\n  always @* casez (s)\n    2'b??: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    'q[I] with I = $clog2(DEPTH), DEPTH 4 by an override: q[2] and q[1] on the two branches (Info 10041 for q[1], q[2])',
+    `${CLOG2_SUB}\nmodule t (input d, en, output [2:1] q);\n  sub #(.DEPTH(4)) u (.d(d), .en(en), .q(q));\nendmodule`,
+    [3],
+  ],
+  [
+    'q[I] with I = $clog2(DEPTH), DEPTH 2 by default: q[1] on both branches (no latch)',
+    `${CLOG2_SUB}\nmodule t (input d, en, output [2:1] q);\n  sub u (.d(d), .en(en), .q(q));\nendmodule`,
+    [],
+  ],
+  [
+    'USE_DEFAULT defined under `ifndef BOARD_CONFIG: with a header that defines BOARD_CONFIG, Quartus takes the `else override (Warning 10240)',
+    `\`ifndef BOARD_CONFIG\n\`define USE_DEFAULT\n\`endif\n${CHILD}\nmodule t (input d, e, output q);\n\`ifdef USE_DEFAULT\n  child u (.d(d), .e(e), .q(q));\n\`else\n  child #(.R(1)) u (.d(d), .e(e), .q(q));\n\`endif\nendmodule`,
+    [5],
+  ],
+  [
+    'child, then #(.R(1)) inside `ifndef SYNTHESIS, then the instance name (Warning 10240)',
+    `${CHILD}\nmodule t (input d, e, output q);\n  child\n\`ifndef SYNTHESIS\n  #(.R(1))\n\`endif\n  u (.d(d), .e(e), .q(q));\nendmodule`,
+    [2],
+  ],
+  [
+    'a macro that instantiates other, then child #(.R(1)): the second module is overridden too (Warning 10240)',
+    `\`define PAIR other v (.a(d), .b()); child #(.R(1)) u (.d(d), .e(e), .q(q));\nmodule other (input a, output b); assign b = a; endmodule\n${CHILD}\nmodule t (input d, e, output q);\n  \`PAIR\nendmodule`,
+    [4],
+  ],
+  [
+    'an override before a trailing // synthesis translate_off on its line is built (Warning 10240)',
+    `${CHILD}\nmodule t (input d, e, output q, r);\n  child #(.R(1)) u (.d(d), .e(e), .q(q)); // synthesis translate_off\n  assign r = d;\n  // synthesis translate_on\nendmodule`,
+    [2],
+  ],
+  [
+    'a delay macro, always `TICK clk = ~clk with `define TICK #5, overrides nothing (no latch in child)',
+    `\`define TICK #5\n${CHILD}\nmodule t (input d, e, output q);\n  child u (.d(d), .e(e), .q(q));\n  reg clk;\n  initial clk = 0;\n  always \`TICK clk = ~clk;\nendmodule`,
+    [],
+  ],
+  [
+    "casez (s[i]) with the one label 1'b?: a variable index still selects one bit (no latch)",
+    "module t (input [3:0] s, input [1:0] i, input a, output reg x);\n  always @* casez (s[i])\n    1'b?: x = a;\n  endcase\nendmodule",
+    [],
+  ],
+  [
+    "$clog2 of one unsigned constant, localparam [7:0] DEPTH = 4: W is 2 and 2'b0?, 2'b1? name every value (no latch)",
+    "module t (input [1:0] s, input a, b, output reg x);\n  localparam [7:0] DEPTH = 4;\n  localparam W = $clog2(DEPTH);\n  wire [W-1:0] sel = s;\n  always @* casez (sel)\n    2'b0?: x = a;\n    2'b1?: x = b;\n  endcase\nendmodule",
     [],
   ],
   [

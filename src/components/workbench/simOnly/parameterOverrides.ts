@@ -192,13 +192,34 @@ function macroTargets(source: Source, project: Project): string[] {
   return [...source.code.matchAll(uses)].flatMap((use) => (source.inDefine(use.index ?? 0) ? [] : useTargets(source.code, project, use)));
 }
 
-/** The modules one use of an overriding macro reaches (see `macroTargets`). */
+/** The modules one use of an overriding macro reaches (see `macroTargets`), from each text it may expand to. */
 function useTargets(code: string, project: Project, use: RegExpExecArray | RegExpMatchArray): string[] {
   if (project.macros.emitsDefparam(use[1])) throw new Unresolved();
-  const before = precedingToken(code, use.index ?? 0);
-  if (before.text === '=' || before.text === '<=') return [];
-  const isModule = /^[A-Za-z_]\w*$/.test(before.text) && (code[before.at - 1] === '`' || project.moduleNames.has(before.text));
-  return isModule ? project.macros.modulesAt(code, before.at, before.text) : project.macros.leadingNames(use[1]);
+  const outer = precedingToken(code, use.index ?? 0);
+  return project.macros.expansions(use[1]).flatMap((text) =>
+    [...text.matchAll(HASH)].flatMap((hash) => {
+      const before = precedingToken(text, hash.index ?? 0);
+      // A `#` that starts the text follows what stands before the use.
+      return before.text === '' ? hashTargets(code, outer, project) : hashTargets(text, before, project);
+    }),
+  );
+}
+
+/** A `#` that may start an override: `#(`, `#5`, `#P`. */
+const HASH = /#\s*[\w(]/g;
+
+/**
+ * The modules the `#` after `before` overrides. After a name: that module (or each one a
+ * macro there may expand to), and after a keyword (`always #5`) a module of that name, which
+ * no project has. After `=`, `<=`, `)` or `;` it is a delay (`q <= #1 d`,
+ * `@(posedge c) #1 q = d`), and overrides nothing. After a function-like macro's formal
+ * (`M #(.R(1))` in `` `define INST(M) ``) the module is the argument, which the check does
+ * not follow: unresolved.
+ */
+function hashTargets(code: string, before: { readonly text: string; readonly at: number }, project: Project): string[] {
+  if (before.text === FORMAL) throw new Unresolved();
+  if (!/^[A-Za-z_]\w*$/.test(before.text)) return [];
+  return project.macros.modulesAt(code, before.at, before.text);
 }
 
 /**

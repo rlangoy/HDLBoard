@@ -74,14 +74,14 @@ export function blankSource(language: Language, source: string, view: SourceView
   const chars = source.split('');
   if (language === 'vhdl') {
     lexVhdl(source, chars, pragmas, view);
-    pragmas.close(lineOf(source.length));
+    pragmas.close(lineOf(source.length), source.length);
     return { code: chars.join(''), simOnlyRegions: pragmas.regions, fullCase: NO_FULL_CASE, defines: [], everyBranch: '' };
   }
   const marks = lexVerilog(source, chars, pragmas);
-  pragmas.close(lineOf(source.length));
+  pragmas.close(lineOf(source.length), source.length);
   const lexed = chars.join('');
   const pre = preprocessVerilog(lexed, lineOf, view === 'synthesis' ? ['SYNTHESIS'] : []);
-  const everyBranch = possibleCode(lexed, pre.inactive, pragmas.regions);
+  const everyBranch = possibleCode(lexed, pre.inactive, pragmas.offsets);
   // A mark in an `ifdef branch the view leaves out, inside translate_off, or in a macro's text marks nothing.
   const hidden = (at: number) => pragmas.regions.some((r) => lineOf(at) >= r.start && lineOf(at) <= r.end);
   const inMacro = (at: number) => pre.defines.some((d) => at >= d.from && at < d.to);
@@ -91,37 +91,48 @@ export function blankSource(language: Language, source: string, view: SourceView
   return { code: pre.code, simOnlyRegions, fullCase, defines: pre.defines, everyBranch };
 }
 
+/** A conditional directive with the name it tests: `` `ifdef X ``, `` `else ``, `` `endif ``. */
+const CONDITIONAL_DIRECTIVE = /`(?:(?:ifdef|ifndef|elsif|undef)\b[ \t]*\w*|(?:else|endif)\b)/g;
+
 /**
  * The code synthesis may read: every `ifdef branch kept but those surely left out (on a
- * macro the file itself defines), and no translate_off region. A branch that tests a macro
- * the file does not define stays, an included file may define it; so does one on
- * SYNTHESIS, which Quartus does not define.
+ * macro the file itself defines), and no translate_off region, from its comment to the
+ * translate_on one. A branch that tests a macro the file does not define stays, an included
+ * file may define it; so does one on SYNTHESIS, which Quartus does not define. The
+ * conditional directives themselves are blanked: `` child `ifndef X #(.R(1)) `endif u ``
+ * reads as `child #(.R(1)) u`.
  */
-function possibleCode(lexed: string, inactive: readonly InactiveRange[], translateOff: readonly LineSpan[]): string {
+function possibleCode(lexed: string, inactive: readonly InactiveRange[], translateOff: readonly Range[]): string {
   const chars = lexed.split('');
   for (const r of inactive) if (r.surely) blankRange(chars, r.from, r.to);
-  const lineStarts = [0, ...[...lexed.matchAll(/\n/g)].map((m) => (m.index ?? 0) + 1)];
-  for (const { start, end } of translateOff) blankRange(chars, lineStarts[start - 1] ?? lexed.length, lineStarts[end] ?? lexed.length);
+  for (const r of translateOff) blankRange(chars, r.from, r.to);
+  for (const m of lexed.matchAll(CONDITIONAL_DIRECTIVE)) blankRange(chars, m.index ?? 0, (m.index ?? 0) + m[0].length);
   return chars.join('');
 }
 
 /** translate_off .. translate_on, from the line comments that carry them. */
 class PragmaRegions {
   readonly regions: LineSpan[] = [];
+  /** The same regions by offset: from the translate_off comment to the translate_on one (code before it on its line is read). */
+  readonly offsets: Range[] = [];
   private openAt: number | undefined;
+  private openOffset = 0;
   constructor(private readonly lineOf: LineOf) {}
 
   comment(text: string, offset: number): void {
     const found = TRANSLATE.exec(text);
     if (!found) return;
     const line = this.lineOf(offset);
-    if (found[1].toLowerCase() === 'off') this.openAt ??= line;
-    else this.close(line);
+    if (found[1].toLowerCase() === 'off') {
+      if (this.openAt === undefined) this.openOffset = offset;
+      this.openAt ??= line;
+    } else this.close(line, offset);
   }
 
-  close(line: number): void {
+  close(line: number, offset: number): void {
     if (this.openAt === undefined) return;
     this.regions.push({ start: this.openAt, end: line });
+    this.offsets.push({ from: this.openOffset, to: offset });
     this.openAt = undefined;
   }
 }
@@ -309,13 +320,28 @@ interface Branch {
 
 /**
  * Whether the code the stack leaves out is surely left out: the first branch that leaves
- * it out tests only macros the file itself defines. One that tests an undefined macro may
- * be taken after all, if an included file defines it; one on SYNTHESIS too, since Quartus
- * does not define it (an `ifndef SYNTHESIS instance is built, measured 2026-11-27).
+ * it out tests only macros the file surely defines (see `PreState.sure`). One that tests an
+ * undefined macro may be taken after all, if an included file defines it; one on SYNTHESIS
+ * too, since Quartus does not define it (an `ifndef SYNTHESIS instance is built, measured
+ * 2026-11-27).
  */
 function surelyInactive(state: PreState): boolean {
   const deciding = state.stack.find((b) => !b.active);
-  return deciding !== undefined && deciding.names.every((name) => state.defines.has(name) && !state.predefined.has(name));
+  return deciding !== undefined && deciding.names.every((name) => state.sure.has(name));
+}
+
+/** Whether every branch around is surely the one taken: each tests only macros the file surely defines. */
+const surelyTaken = (state: PreState): boolean => state.stack.every((b) => b.names.every((name) => state.sure.has(name)));
+
+/**
+ * Notes what a `define or `undef does to the macros surely defined: one surely run makes its
+ * macro sure or not; one that may run (in a branch an included file could select) leaves it
+ * unsure. `USE_DEFAULT defined under `ifndef BOARD_CONFIG is not sure.
+ */
+function noteDefinition(state: PreState, word: string, name: string, active: boolean): void {
+  if (word !== 'define' && word !== 'undef') return;
+  if (active && word === 'define' && surelyTaken(state)) state.sure.add(name);
+  else if (active || !surelyInactive(state)) state.sure.delete(name);
 }
 
 /**
@@ -350,7 +376,7 @@ interface Preprocessed {
 
 function preprocessVerilog(code: string, lineOf: LineOf, predefined: readonly string[]): Preprocessed {
   const chars = code.split('');
-  const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[], predefined: new Set(predefined) };
+  const state = { defines: new Set<string>(predefined), stack: [] as Branch[], regions: [] as LineSpan[], sure: new Set<string>() };
   const inactive: InactiveRange[] = [];
   const defines: MacroDefinition[] = [];
   let activeFrom = 0;
@@ -399,11 +425,15 @@ interface PreState {
   readonly defines: Set<string>;
   readonly stack: Branch[];
   readonly regions: LineSpan[];
-  /** The macros the view defines itself (SYNTHESIS): a tool may not (Quartus does not). */
-  readonly predefined: ReadonlySet<string>;
+  /**
+   * The macros the file surely defines: by a `define surely run, no `undef that may run since.
+   * Not those the view defines itself (SYNTHESIS): a tool may not (Quartus does not).
+   */
+  readonly sure: Set<string>;
 }
 
 function directive(state: PreState, word: string, name: string, line: number, active: boolean): void {
+  noteDefinition(state, word, name, active);
   const top = state.stack[state.stack.length - 1];
   if (word === 'define' && active) state.defines.add(name);
   else if (word === 'undef' && active) state.defines.delete(name);

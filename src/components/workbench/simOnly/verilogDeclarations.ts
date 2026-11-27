@@ -175,12 +175,22 @@ function rangeOf(range: string, constants: Bindings): BitRange | undefined {
   return high === undefined || low === undefined ? undefined : { msb: high, lsb: low };
 }
 
-/** The ranges the module declares (`input sel` is bit 0, `input [N-1:0] sel` bits N-1 to 0), first declaration first. */
-/** The module's arrays of vectors (`wire [1:0] busword [0:3]`): `busword[0]` is a word of them, not a bit. */
+/**
+ * The module's arrays of vectors (`wire [1:0] busword [0:3]`, and SystemVerilog's packed
+ * `logic [3:0][7:0] bytes`): `busword[0]` is a word of them, not a bit.
+ */
 export function verilogWordArrays(code: string): ReadonlySet<string> {
-  return new Set([...code.matchAll(DECLARATION)].flatMap((m) => (m[2] === undefined ? [] : declaredNames(m[3]).filter((d) => d.unpacked !== undefined).map((d) => d.name))));
+  return new Set(
+    [...code.matchAll(DECLARATION)].flatMap((m) => {
+      if (m[2] === undefined) return [];
+      const morePacked = /^\s*(?:\[[^\]]*\]\s*)+/.exec(m[3]);
+      if (morePacked) return declaredNames(m[3].slice(morePacked[0].length)).map((d) => d.name);
+      return declaredNames(m[3]).filter((d) => d.unpacked !== undefined).map((d) => d.name);
+    }),
+  );
 }
 
+/** The ranges the module declares (`input sel` is bit 0, `input [N-1:0] sel` bits N-1 to 0), first declaration first. */
 export function declaredRanges(code: string, constants: Bindings = verilogConstants(code)): (name: string) => BitRange | undefined {
   const ranges = new Map<string, BitRange>();
   for (const m of code.matchAll(DECLARATION)) {

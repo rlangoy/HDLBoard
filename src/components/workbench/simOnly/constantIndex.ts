@@ -65,15 +65,17 @@ interface Context {
   usedInteger: boolean;
   usedUnsigned: boolean;
   negative: boolean;
+  /** An operator was applied: a lone operand (`$clog2(DEPTH)`) has no arithmetic to wrap. */
+  arithmetic: boolean;
 }
 
-const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, negative: false };
+const FRESH_CONTEXT: Readonly<Context> = { usedInteger: false, usedUnsigned: false, negative: false, arithmetic: false };
 
 /**
  * An unsigned constant makes the whole context unsigned: its arithmetic is plain only in at
- * least 32 bits (beside an integer operand) and with no step below zero.
+ * least 32 bits (beside an integer operand) and with no step below zero. Alone, it is its value.
  */
-const widthSafe = (c: Context): boolean => !c.usedUnsigned || (c.usedInteger && !c.negative);
+const widthSafe = (c: Context): boolean => !c.usedUnsigned || !c.arithmetic || (c.usedInteger && !c.negative);
 
 interface Reader extends Context {
   readonly tokens: readonly string[];
@@ -100,6 +102,7 @@ function chain(r: Reader, operators: string, operand: (r: Reader) => number | un
   while (value !== undefined && operators.includes(r.tokens[r.at] ?? '#')) {
     const operator = r.tokens[r.at++];
     const right = operand(r);
+    r.arithmetic = true;
     const next = right === undefined ? undefined : OPERATION[operator](value, right);
     value = inIntegerRange(next) ? next : undefined;
     if (value !== undefined && value < 0) r.negative = true;
@@ -153,6 +156,7 @@ function clog2Call(r: Reader): number | undefined {
 const FACTOR_FORMS: ReadonlyMap<string, (r: Reader) => number | undefined> = new Map([
   ['-', (r: Reader) => {
     const value = factor(r);
+    r.arithmetic = true;
     if (value !== undefined && -value < 0) r.negative = true;
     return value === undefined ? undefined : -value;
   }],
